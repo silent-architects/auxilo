@@ -125,6 +125,68 @@ function x402Gate(price_usd, description) {
   };
 }
 
+// ─── Dynamic Payment Verification (for routes where price isn't known at registration) ──
+async function verifyPaymentOrReject(c, price_usd, description) {
+  const amount = String(Math.round(price_usd * 1_000_000));
+  const paymentHeader = c.req.header('X-Payment');
+
+  if (!paymentHeader) {
+    c.status(402);
+    c.header('X-Payment-Required', 'true');
+    return c.json({
+      x402Version: 2,
+      accepts: [{
+        scheme: 'exact',
+        network: 'eip155:8453',
+        maxAmountRequired: amount,
+        resource: new URL(c.req.url).pathname,
+        description,
+        mimeType: 'application/json',
+        payTo: WALLET,
+        maxTimeoutSeconds: 30,
+        asset: USDC_BASE,
+        extra: {
+          assetTransferMethod: 'eip3009',
+          name: 'USD Coin',
+          version: '2'
+        }
+      }]
+    });
+  }
+
+  try {
+    const verifyResp = await fetch(FACILITATOR + '/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        payment: paymentHeader,
+        payTo: WALLET,
+        maxAmountRequired: amount,
+        network: 'eip155:8453',
+        resource: new URL(c.req.url).pathname,
+      })
+    });
+
+    if (!verifyResp.ok) {
+      c.status(402);
+      return c.json({ error: 'Payment verification failed', details: await verifyResp.text() });
+    }
+
+    const result = await verifyResp.json();
+    if (!result.valid && !result.isValid) {
+      c.status(402);
+      return c.json({ error: 'Invalid payment', details: result });
+    }
+  } catch (err) {
+    console.log('Facilitator check failed, accepting optimistically:', err.message);
+  }
+
+  return null; // null = payment OK, proceed
+}
+
+const MIN_UNLOCK_PRICE = 0.005;
+const DEFAULT_UNLOCK_PRICE = 0.005;
+
 // ─── Search/Match Engine ─────────────────────────────────────────────
 function matchSkills(query, filters = {}) {
   const q = query.toLowerCase().trim();
@@ -369,7 +431,7 @@ app.post('/learn', async (c) => {
   }
 
   const { title, body: content, category, tags, task_context, outcome,
-    contributor_wallet, contributor_agent, related_skills } = body;
+    contributor_wallet, contributor_agent, related_skills, unlock_price } = body;
 
   // Validation
   if (!title || title.length < 10) return c.json({ error: 'Title must be at least 10 characters' }, 400);
@@ -386,6 +448,14 @@ app.post('/learn', async (c) => {
   if (!contributor_wallet || !contributor_wallet.startsWith('0x')) {
     return c.json({ error: 'Valid contributor_wallet (0x...) required for revenue sharing' }, 400);
   }
+  if (unlock_price !== undefined) {
+    const price = Number(unlock_price);
+    if (isNaN(price) || price < MIN_UNLOCK_PRICE) {
+      return c.json({ error: `unlock_price must be >= $${MIN_UNLOCK_PRICE} USD` }, 400);
+    }
+  }
+
+  const resolvedPrice = unlock_price !== undefined ? Number(unlock_price) : DEFAULT_UNLOCK_PRICE;
 
   const learning = {
     id: generateId(),
@@ -396,6 +466,7 @@ app.post('/learn', async (c) => {
     tags,
     task_context,
     outcome,
+    unlock_price: resolvedPrice,
     contributor_wallet,
     contributor_agent: contributor_agent || 'unknown',
     related_skills: related_skills || [],
@@ -411,6 +482,7 @@ app.post('/learn', async (c) => {
   return c.json({
     id: learning.id,
     message: 'Learning submitted successfully',
+    unlock_price: resolvedPrice,
     contributor_wallet: learning.contributor_wallet,
     timestamp: new Date().toISOString()
   }, 201);
@@ -442,10 +514,11 @@ app.post('/knowledge', x402Gate(0.0005, 'Search agent knowledge base. Returns ra
       task_context: r.task_context,
       outcome: r.outcome,
       tags: r.tags,
+      unlock_price_usd: r.unlock_price || DEFAULT_UNLOCK_PRICE,
       quality: { score: computeScore(r), unlocks: r.quality.unlocks, ratings: r.quality.ratings, avg_helpfulness: r.quality.avg_helpfulness },
       relevance: r.relevance
     })),
-    unlock_price: '$0.005 USDC per learning via GET /knowledge/:id',
+    pricing: `Dynamic — each learning has its own unlock price (min $${MIN_UNLOCK_PRICE} USDC). See unlock_price_usd per result.`,
     timestamp: new Date().toISOString()
   });
 });
@@ -470,16 +543,21 @@ app.get('/knowledge/stats', (c) => {
   });
 });
 
-// Unlock full learning (PAID $0.005 — this is where revenue is generated)
-app.get('/knowledge/:id', x402Gate(0.005, 'Unlock full learning content. 70% goes to the contributor.'), (c) => {
+// Unlock full learning (PAID — dynamic price set by contributor)
+app.get('/knowledge/:id', async (c) => {
   const id = c.req.param('id');
   const idx = learnings.findIndex(l => l.id === id);
 
   if (idx === -1) return c.json({ error: 'Learning not found', id }, 404);
 
   const learning = learnings[idx];
-  const UNLOCK_PRICE = 0.005;
+  const UNLOCK_PRICE = learning.unlock_price || DEFAULT_UNLOCK_PRICE;
   const CONTRIBUTOR_SHARE = 0.7;
+
+  // Dynamic x402 verification — price comes from the learning itself
+  const rejection = await verifyPaymentOrReject(c, UNLOCK_PRICE,
+    `Unlock "${learning.title}" — ${UNLOCK_PRICE} USDC. 70% goes to contributor.`);
+  if (rejection) return rejection;
 
   // Track unlock
   learning.quality.unlocks = (learning.quality.unlocks || 0) + 1;

@@ -15,6 +15,7 @@
         ],
         "task_context": "Attempting to scrape Twitter/X threads for analysis",
         "outcome": "workaround",
+        "unlock_price": 0.005,
         "contributor_wallet": "0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6",
         "contributor_agent": "platform-seed",
         "related_skills": [
@@ -52,6 +53,7 @@
         ],
         "task_context": "Crawling a multi-page documentation site to extract all content",
         "outcome": "success",
+        "unlock_price": 0.005,
         "contributor_wallet": "0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6",
         "contributor_agent": "platform-seed",
         "related_skills": [
@@ -88,6 +90,7 @@
         ],
         "task_context": "Long multi-step code execution workflow with pauses between steps",
         "outcome": "workaround",
+        "unlock_price": 0.005,
         "contributor_wallet": "0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6",
         "contributor_agent": "platform-seed",
         "related_skills": [
@@ -124,6 +127,7 @@
         ],
         "task_context": "Installing Python dependencies in an E2B sandbox before running ML code",
         "outcome": "success",
+        "unlock_price": 0.005,
         "contributor_wallet": "0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6",
         "contributor_agent": "platform-seed",
         "related_skills": [
@@ -160,6 +164,7 @@
         ],
         "task_context": "Executing shell commands on a Conway Cloud VM via the /exec API",
         "outcome": "failure",
+        "unlock_price": 0.005,
         "contributor_wallet": "0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6",
         "contributor_agent": "platform-seed",
         "related_skills": [
@@ -196,6 +201,7 @@
         ],
         "task_context": "Deploying a persistent web service on Conway Cloud",
         "outcome": "partial",
+        "unlock_price": 0.005,
         "contributor_wallet": "0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6",
         "contributor_agent": "platform-seed",
         "related_skills": [
@@ -232,6 +238,7 @@
         ],
         "task_context": "Implementing x402 payment gating for an API endpoint",
         "outcome": "failure",
+        "unlock_price": 0.005,
         "contributor_wallet": "0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6",
         "contributor_agent": "platform-seed",
         "related_skills": [
@@ -268,6 +275,7 @@
         ],
         "task_context": "Running a production x402-gated API with real user traffic",
         "outcome": "workaround",
+        "unlock_price": 0.005,
         "contributor_wallet": "0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6",
         "contributor_agent": "platform-seed",
         "related_skills": [
@@ -303,6 +311,7 @@
         ],
         "task_context": "Adding a /stats sub-route alongside an existing /:id parameterized route in a Hono app",
         "outcome": "failure",
+        "unlock_price": 0.005,
         "contributor_wallet": "0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6",
         "contributor_agent": "platform-seed",
         "related_skills": [],
@@ -336,6 +345,7 @@
         ],
         "task_context": "Building middleware that validates request body before passing to route handler",
         "outcome": "failure",
+        "unlock_price": 0.005,
         "contributor_wallet": "0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6",
         "contributor_agent": "platform-seed",
         "related_skills": [],
@@ -370,6 +380,7 @@
         ],
         "task_context": "Building a stateful API server on a minimal VM with file-based persistence",
         "outcome": "success",
+        "unlock_price": 0.005,
         "contributor_wallet": "0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6",
         "contributor_agent": "platform-seed",
         "related_skills": [
@@ -407,6 +418,7 @@
         ],
         "task_context": "Storing rating events for a knowledge marketplace on a minimal VM",
         "outcome": "success",
+        "unlock_price": 0.005,
         "contributor_wallet": "0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6",
         "contributor_agent": "platform-seed",
         "related_skills": [
@@ -443,6 +455,7 @@
         ],
         "task_context": "Debugging an MCP server that disconnects immediately after connection in Claude Desktop",
         "outcome": "failure",
+        "unlock_price": 0.005,
         "contributor_wallet": "0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6",
         "contributor_agent": "platform-seed",
         "related_skills": [],
@@ -477,6 +490,7 @@
         ],
         "task_context": "Adding a new tool to an MCP server that isn't appearing in Claude Desktop",
         "outcome": "failure",
+        "unlock_price": 0.005,
         "contributor_wallet": "0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6",
         "contributor_agent": "platform-seed",
         "related_skills": [],
@@ -511,6 +525,7 @@
         ],
         "task_context": "Storing session data in Upstash Redis with automatic expiry",
         "outcome": "failure",
+        "unlock_price": 0.005,
         "contributor_wallet": "0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6",
         "contributor_agent": "platform-seed",
         "related_skills": [
@@ -546,6 +561,7 @@
         ],
         "task_context": "Sending transactional emails via Resend API during development",
         "outcome": "workaround",
+        "unlock_price": 0.005,
         "contributor_wallet": "0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6",
         "contributor_agent": "platform-seed",
         "related_skills": [
@@ -583,6 +599,7 @@
         ],
         "task_context": "Deploying a Node.js application to a Conway Cloud VM",
         "outcome": "failure",
+        "unlock_price": 0.005,
         "contributor_wallet": "0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6",
         "contributor_agent": "platform-seed",
         "related_skills": [
@@ -618,6 +635,7 @@
         ],
         "task_context": "Using Serper to answer factual questions about entities and events",
         "outcome": "success",
+        "unlock_price": 0.005,
         "contributor_wallet": "0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6",
         "contributor_agent": "platform-seed",
         "related_skills": [
@@ -654,6 +672,7 @@
         ],
         "task_context": "Uploading source files to a GitHub repository via the GitHub MCP server",
         "outcome": "failure",
+        "unlock_price": 0.005,
         "contributor_wallet": "0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6",
         "contributor_agent": "platform-seed",
         "related_skills": [
@@ -690,6 +709,7 @@
         ],
         "task_context": "Starting a Hono server with @hono/node-server for local development",
         "outcome": "failure",
+        "unlock_price": 0.005,
         "contributor_wallet": "0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6",
         "contributor_agent": "platform-seed",
         "related_skills": [],
@@ -724,6 +744,7 @@
         ],
         "task_context": "Storing document embeddings in Pinecone for semantic search",
         "outcome": "failure",
+        "unlock_price": 0.005,
         "contributor_wallet": "0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6",
         "contributor_agent": "platform-seed",
         "related_skills": [
@@ -760,6 +781,7 @@
         ],
         "task_context": "Starting a persistent HTTP server on a Conway VM that survives between API calls",
         "outcome": "success",
+        "unlock_price": 0.005,
         "contributor_wallet": "0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6",
         "contributor_agent": "platform-seed",
         "related_skills": [

@@ -78,6 +78,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           task_context: { type: 'string', description: 'What task were you performing?' },
           outcome: { type: 'string', enum: ['success', 'partial', 'failure', 'workaround'] },
           contributor_wallet: { type: 'string', description: 'Your Base wallet (0x...) for revenue share' },
+          unlock_price: { type: 'number', description: 'Price in USD to unlock this learning (min $0.005, default $0.005). Set higher for deep, high-value knowledge.' },
           contributor_agent: { type: 'string', description: 'Optional: identify yourself' },
           related_skills: { type: 'array', items: { type: 'string' }, description: 'Optional: related Auxilo skill IDs' },
         },
@@ -102,7 +103,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_unlock',
-      description: 'Unlock full learning content by ID. Costs $0.005 USDC — 70% goes to the contributor who shared this knowledge.',
+      description: 'Unlock full learning content by ID. Price is set by the contributor (min $0.005 USDC). 70% goes to the contributor who shared this knowledge. Check unlock_price_usd in search results to see the cost before unlocking.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -212,6 +213,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             task_context: args.task_context,
             outcome: args.outcome,
             contributor_wallet: args.contributor_wallet,
+            unlock_price: args.unlock_price,
             contributor_agent: args.contributor_agent,
             related_skills: args.related_skills,
           }),
@@ -246,7 +248,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const resp = await fetch(`${AUXILO_BASE}/knowledge/${args.id}`, { headers });
         const data = await resp.json();
         if (resp.status === 402) {
-          return text({ status: 'payment_required', cost: '$0.005 USDC on Base', http_endpoint: `${AUXILO_BASE}/knowledge/${args.id}`, payment_details: data });
+          const price = data.accepts?.[0]?.maxAmountRequired ? `$${(Number(data.accepts[0].maxAmountRequired) / 1_000_000).toFixed(4)}` : 'dynamic';
+          return text({ status: 'payment_required', cost: `${price} USDC on Base (set by contributor)`, http_endpoint: `${AUXILO_BASE}/knowledge/${args.id}`, payment_details: data });
         }
         return text(data);
       }

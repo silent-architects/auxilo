@@ -183,6 +183,10 @@
                     },
                     "relevance": {
                         "type": "number"
+                    },
+                    "unlock_price_usd": {
+                        "type": "number",
+                        "description": "Price to unlock this learning (set by contributor, min $0.005)"
                     }
                 }
             },
@@ -693,6 +697,12 @@
                                         "items": {
                                             "type": "string"
                                         }
+                                    },
+                                    "unlock_price": {
+                                        "type": "number",
+                                        "minimum": 0.005,
+                                        "default": 0.005,
+                                        "description": "Price in USD to unlock this learning (min $0.005). Set higher for deep, high-value knowledge. Contributors earn 70% of the unlock price."
                                     }
                                 }
                             }
@@ -803,8 +813,9 @@
                                                 "$ref": "#/components/schemas/LearningSnippet"
                                             }
                                         },
-                                        "unlock_price": {
-                                            "type": "string"
+                                        "pricing": {
+                                            "type": "string",
+                                            "description": "Dynamic — each learning has its own unlock price (min $0.005 USDC). See unlock_price_usd per result."
                                         },
                                         "timestamp": {
                                             "type": "string",
@@ -891,8 +902,8 @@
         },
         "/knowledge/{id}": {
             "get": {
-                "summary": "Unlock full learning (paid $0.005)",
-                "description": "Read full learning body. Costs $0.005 USDC — 70% ($0.0035) goes to the contributor.",
+                "summary": "Unlock full learning (dynamic price)",
+                "description": "Read full learning body. Price is set by the contributor (min $0.005 USDC). 70% goes to the contributor. Check unlock_price_usd in search results to see the cost before unlocking.",
                 "operationId": "unlockLearning",
                 "security": [
                     {
@@ -922,7 +933,7 @@
                         }
                     },
                     "402": {
-                        "description": "Payment required ($0.005 USDC)",
+                        "description": "Payment required (dynamic — price set by contributor, min $0.005 USDC)",
                         "content": {
                             "application/json": {
                                 "schema": {

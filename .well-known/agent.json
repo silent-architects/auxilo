@@ -53,7 +53,7 @@
         {
             "id": "knowledge-unlock",
             "name": "Unlock Full Learning",
-            "description": "Pay $0.005 USDC to read the full body of a learning. 70% goes to the contributor.",
+            "description": "Pay to read the full body of a learning. Price is set by the contributor (min $0.005 USDC). 70% goes to the contributor.",
             "tags": [
                 "unlock",
                 "payment",
@@ -166,8 +166,8 @@
             {
                 "path": "/knowledge/{id}",
                 "method": "GET",
-                "price_usd": 0.005,
-                "description": "Unlock full learning (70% to contributor)"
+                "price_usd": "dynamic (min 0.005)",
+                "description": "Unlock full learning — price set by contributor (70% to contributor)"
             }
         ]
     },
