@@ -1,0 +1,15 @@
+{
+  "name": "auxilo-mcp",
+  "version": "0.2.0",
+  "description": "MCP server for Auxilo — Agent Capability Discovery",
+  "main": "mcp-server.js",
+  "bin": {
+    "auxilo-mcp": "./mcp-server.js"
+  },
+  "scripts": {
+    "start": "node mcp-server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}

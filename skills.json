@@ -1,0 +1,602 @@
+[
+  {
+    "id": "web-to-markdown",
+    "name": "Web Page to Markdown",
+    "description": "Convert any web page URL to clean, structured Markdown. Strips ads, navigation, and boilerplate. Returns article content with headings, links, and images preserved.",
+    "category": "data-processing",
+    "tags": ["web scraping", "markdown", "content extraction", "html parsing", "readability"],
+    "type": "api",
+    "connection": {
+      "protocol": "rest",
+      "endpoint": "https://r.jina.ai/{url}",
+      "auth": "none",
+      "docs": "https://jina.ai/reader"
+    },
+    "pricing": { "model": "free", "cost_usd": "0", "note": "Free tier available, paid for high volume" },
+    "quality": { "reliability": 92, "verified": true },
+    "content_preview": "Jina Reader API. Prepend r.jina.ai/ to any URL. Returns clean Markdown. Handles JavaScript-rendered pages.",
+    "author": "Jina AI",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "firecrawl-scrape",
+    "name": "Firecrawl Web Scraper",
+    "description": "Full web scraping and crawling API. Extracts structured data from websites. Handles JavaScript rendering, pagination, and anti-bot measures. Returns Markdown or structured JSON.",
+    "category": "data-processing",
+    "tags": ["web scraping", "crawling", "structured data", "javascript rendering", "extraction"],
+    "type": "mcp_server",
+    "connection": {
+      "protocol": "mcp",
+      "endpoint": "npx -y firecrawl-mcp",
+      "auth": "api_key",
+      "docs": "https://docs.firecrawl.dev"
+    },
+    "pricing": { "model": "per_call", "cost_usd": "0.001", "note": "500 free credits, then pay-per-scrape" },
+    "quality": { "reliability": 90, "verified": true },
+    "content_preview": "MCP server for Firecrawl. Tools: scrape_url, crawl_url, search. Handles dynamic content and returns clean Markdown.",
+    "author": "Firecrawl",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "browserbase-browser",
+    "name": "Cloud Browser Automation",
+    "description": "Headless browser sessions in the cloud. Navigate pages, fill forms, click elements, take screenshots, extract data. Full Playwright/Puppeteer compatible API.",
+    "category": "web-interaction",
+    "tags": ["browser", "automation", "headless", "playwright", "puppeteer", "screenshots"],
+    "type": "mcp_server",
+    "connection": {
+      "protocol": "mcp",
+      "endpoint": "npx @anthropic/mcp-server-browserbase",
+      "auth": "api_key",
+      "docs": "https://docs.browserbase.com"
+    },
+    "pricing": { "model": "per_call", "cost_usd": "0.01", "note": "Per browser session minute" },
+    "quality": { "reliability": 88, "verified": true },
+    "content_preview": "Cloud-hosted browser sessions via MCP. Tools: create_session, navigate, screenshot, click, type, evaluate. Anti-detection built in.",
+    "author": "Browserbase",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "e2b-code-sandbox",
+    "name": "Sandboxed Code Execution",
+    "description": "Execute Python, JavaScript, or shell code in isolated cloud sandboxes. Full filesystem, pip/npm install, persistent sessions. Safe for untrusted code.",
+    "category": "code-execution",
+    "tags": ["sandbox", "code execution", "python", "javascript", "shell", "isolated"],
+    "type": "mcp_server",
+    "connection": {
+      "protocol": "mcp",
+      "endpoint": "npx @e2b/mcp-server",
+      "auth": "api_key",
+      "docs": "https://e2b.dev/docs"
+    },
+    "pricing": { "model": "per_call", "cost_usd": "0.005", "note": "Per sandbox session" },
+    "quality": { "reliability": 94, "verified": true },
+    "content_preview": "E2B sandbox MCP server. Tools: run_code, install_packages, read_file, write_file. Firecracker microVM isolation. Sessions persist for 5 minutes by default.",
+    "author": "E2B",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "resend-email",
+    "name": "Email Sending API",
+    "description": "Send transactional emails programmatically. Supports HTML and plain text, attachments, custom domains, and delivery tracking. Developer-focused email API.",
+    "category": "communication",
+    "tags": ["email", "smtp", "transactional", "notifications", "messaging"],
+    "type": "api",
+    "connection": {
+      "protocol": "rest",
+      "endpoint": "https://api.resend.com/emails",
+      "auth": "api_key",
+      "docs": "https://resend.com/docs"
+    },
+    "pricing": { "model": "per_call", "cost_usd": "0", "note": "100 emails/day free, then $0.00028/email" },
+    "quality": { "reliability": 96, "verified": true },
+    "content_preview": "POST to /emails with {from, to, subject, html}. Returns message ID. Supports React email templates. Webhook notifications for delivery events.",
+    "author": "Resend",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "upstash-redis",
+    "name": "Serverless Key-Value Store",
+    "description": "Serverless Redis with REST API. Persistent key-value storage accessible over HTTP. No connection management needed. Ideal for agent state and caching.",
+    "category": "storage-state",
+    "tags": ["redis", "key-value", "cache", "state", "persistence", "serverless"],
+    "type": "api",
+    "connection": {
+      "protocol": "rest",
+      "endpoint": "https://{your-endpoint}.upstash.io",
+      "auth": "api_key",
+      "docs": "https://upstash.com/docs/redis/overall/getstarted"
+    },
+    "pricing": { "model": "per_call", "cost_usd": "0", "note": "10K commands/day free, then pay-per-command" },
+    "quality": { "reliability": 98, "verified": true },
+    "content_preview": "REST API Redis. GET/SET/HSET/LPUSH etc via HTTP. No persistent connections. Perfect for stateless agents needing persistent state.",
+    "author": "Upstash",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "neon-postgres",
+    "name": "Serverless PostgreSQL",
+    "description": "Serverless Postgres database with HTTP query API. Scales to zero, branches for development, instant provisioning. Full SQL support over HTTP.",
+    "category": "storage-state",
+    "tags": ["postgres", "database", "sql", "serverless", "relational", "persistence"],
+    "type": "api",
+    "connection": {
+      "protocol": "rest",
+      "endpoint": "https://console.neon.tech/api/v2",
+      "auth": "api_key",
+      "docs": "https://neon.tech/docs"
+    },
+    "pricing": { "model": "free", "cost_usd": "0", "note": "Free tier: 0.5 GB storage, auto-suspend" },
+    "quality": { "reliability": 95, "verified": true },
+    "content_preview": "Neon serverless Postgres. HTTP API for queries. Branch databases for experiments. Auto-scales and auto-suspends. No connection pooling needed.",
+    "author": "Neon",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "github-mcp",
+    "name": "GitHub Repository Management",
+    "description": "Full GitHub API access via MCP. Create repos, manage issues, pull requests, files, branches. Read code, search repositories, manage workflows.",
+    "category": "code-execution",
+    "tags": ["github", "git", "repository", "issues", "pull requests", "code"],
+    "type": "mcp_server",
+    "connection": {
+      "protocol": "mcp",
+      "endpoint": "npx @anthropic/mcp-server-github",
+      "auth": "api_key",
+      "docs": "https://github.com/anthropics/mcp-servers"
+    },
+    "pricing": { "model": "free", "cost_usd": "0", "note": "Uses your GitHub token. API rate limits apply." },
+    "quality": { "reliability": 95, "verified": true },
+    "content_preview": "Official Anthropic MCP server for GitHub. Tools: create_repository, create_issue, create_pull_request, push_files, search_code, get_file_contents.",
+    "author": "Anthropic",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "cloudflare-workers",
+    "name": "Edge Function Deployment",
+    "description": "Deploy serverless functions to 300+ global edge locations. JavaScript/TypeScript/WASM. Built-in KV storage, D1 database, R2 object storage. x402 middleware available.",
+    "category": "code-execution",
+    "tags": ["serverless", "edge", "functions", "deploy", "cloudflare", "workers"],
+    "type": "api",
+    "connection": {
+      "protocol": "rest",
+      "endpoint": "https://api.cloudflare.com/client/v4",
+      "auth": "api_key",
+      "docs": "https://developers.cloudflare.com/workers"
+    },
+    "pricing": { "model": "per_call", "cost_usd": "0", "note": "100K requests/day free, then $0.30/million" },
+    "quality": { "reliability": 99, "verified": true },
+    "content_preview": "Deploy code to Cloudflare's edge. Workers KV for state, D1 for SQL, R2 for files. Native x402 support via cloudflare/x402 package.",
+    "author": "Cloudflare",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "conway-cloud-vm",
+    "name": "Agent-Native Cloud VM",
+    "description": "Full Linux VMs designed for AI agents. Provision, deploy code, execute commands — all via API with x402 payments. No human accounts needed. Firecracker microVM isolation.",
+    "category": "code-execution",
+    "tags": ["vm", "cloud", "compute", "linux", "agent", "x402", "conway"],
+    "type": "api",
+    "connection": {
+      "protocol": "x402",
+      "endpoint": "https://api.conway.tech/v1",
+      "auth": "x402",
+      "docs": "https://docs.conway.tech/cloud"
+    },
+    "pricing": { "model": "per_call", "cost_usd": "0.01", "note": "~$0.01-0.03/hr for minimal VM configs" },
+    "quality": { "reliability": 85, "verified": true },
+    "content_preview": "Conway Cloud. POST /sandboxes to create VM. /exec to run commands. /files to read/write. All paid via x402 USDC on Base. Agent-first infrastructure.",
+    "author": "Conway Research",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "conway-compute",
+    "name": "Multi-Model AI Inference",
+    "description": "Access frontier AI models (Claude, GPT, Gemini) through a single API with x402 payments. No API keys or accounts needed. Pay per token.",
+    "category": "content-generation",
+    "tags": ["ai", "inference", "llm", "claude", "gpt", "x402", "conway"],
+    "type": "api",
+    "connection": {
+      "protocol": "x402",
+      "endpoint": "https://api.conway.tech/v1/compute",
+      "auth": "x402",
+      "docs": "https://docs.conway.tech/compute"
+    },
+    "pricing": { "model": "per_call", "cost_usd": "0.01", "note": "Varies by model. Pay-per-token via x402." },
+    "quality": { "reliability": 85, "verified": true },
+    "content_preview": "Conway Compute. Single API for multiple frontier models. POST /compute/chat with model + messages. Paid via x402 USDC. No API keys required.",
+    "author": "Conway Research",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "stripe-x402",
+    "name": "Stripe Payment Processing (x402)",
+    "description": "Accept payments through Stripe with x402 protocol support. Process credit cards, subscriptions, and invoices. Traditional payment rails with agent-native interface.",
+    "category": "payment-financial",
+    "tags": ["payments", "stripe", "credit card", "subscriptions", "invoicing", "x402"],
+    "type": "api",
+    "connection": {
+      "protocol": "rest",
+      "endpoint": "https://api.stripe.com/v1",
+      "auth": "api_key",
+      "docs": "https://stripe.com/docs/api"
+    },
+    "pricing": { "model": "per_call", "cost_usd": "0", "note": "2.9% + $0.30 per transaction" },
+    "quality": { "reliability": 99, "verified": true },
+    "content_preview": "Stripe API with x402 support (Feb 2026). Process payments, create subscriptions, generate invoices. Agent commerce suite available.",
+    "author": "Stripe",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "coingecko-prices",
+    "name": "Cryptocurrency Price Feed",
+    "description": "Real-time and historical cryptocurrency prices for 10,000+ coins. Market data, trading volume, market cap, price charts. Free tier available.",
+    "category": "data-processing",
+    "tags": ["crypto", "prices", "market data", "bitcoin", "ethereum", "trading"],
+    "type": "api",
+    "connection": {
+      "protocol": "rest",
+      "endpoint": "https://api.coingecko.com/api/v3",
+      "auth": "none",
+      "docs": "https://docs.coingecko.com"
+    },
+    "pricing": { "model": "free", "cost_usd": "0", "note": "30 calls/min free. Pro plans available." },
+    "quality": { "reliability": 90, "verified": true },
+    "content_preview": "GET /simple/price?ids=bitcoin&vs_currencies=usd. Also /coins/markets for ranked lists. /coins/{id}/market_chart for historical data.",
+    "author": "CoinGecko",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "mem0-memory",
+    "name": "Agent Memory Layer",
+    "description": "Intelligent memory for AI agents. Store, retrieve, and manage context across sessions. Automatic extraction and consolidation of relevant memories.",
+    "category": "storage-state",
+    "tags": ["memory", "context", "persistence", "agent memory", "rag", "recall"],
+    "type": "mcp_server",
+    "connection": {
+      "protocol": "mcp",
+      "endpoint": "npx mem0-mcp",
+      "auth": "api_key",
+      "docs": "https://docs.mem0.ai"
+    },
+    "pricing": { "model": "free", "cost_usd": "0", "note": "Free tier: 1000 memories. Paid plans for more." },
+    "quality": { "reliability": 88, "verified": true },
+    "content_preview": "Mem0 MCP server. Tools: add_memory, search_memories, get_memories. Intelligent memory extraction from conversations. Cross-session persistence.",
+    "author": "Mem0",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "pinecone-vectors",
+    "name": "Vector Database",
+    "description": "Managed vector database for similarity search. Store embeddings, query by semantic similarity. Essential for RAG, recommendation, and search applications.",
+    "category": "storage-state",
+    "tags": ["vector database", "embeddings", "similarity search", "rag", "semantic search"],
+    "type": "api",
+    "connection": {
+      "protocol": "rest",
+      "endpoint": "https://{index}.svc.pinecone.io",
+      "auth": "api_key",
+      "docs": "https://docs.pinecone.io"
+    },
+    "pricing": { "model": "free", "cost_usd": "0", "note": "Free tier: 100K vectors. Paid scales up." },
+    "quality": { "reliability": 96, "verified": true },
+    "content_preview": "Pinecone vector DB. POST /vectors/upsert to store. POST /query with vector for similarity search. Serverless indexes auto-scale.",
+    "author": "Pinecone",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "slack-mcp",
+    "name": "Slack Messaging",
+    "description": "Send messages, read channels, search conversations, manage threads in Slack workspaces. Full Slack API access via MCP.",
+    "category": "communication",
+    "tags": ["slack", "messaging", "chat", "team communication", "notifications"],
+    "type": "mcp_server",
+    "connection": {
+      "protocol": "mcp",
+      "endpoint": "npx @anthropic/mcp-server-slack",
+      "auth": "api_key",
+      "docs": "https://api.slack.com/docs"
+    },
+    "pricing": { "model": "free", "cost_usd": "0", "note": "Uses your Slack bot token" },
+    "quality": { "reliability": 93, "verified": true },
+    "content_preview": "Slack MCP server. Tools: send_message, read_channel, search_messages, read_thread. Requires Slack bot token with appropriate scopes.",
+    "author": "Anthropic",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "twilio-sms",
+    "name": "SMS and Voice API",
+    "description": "Send SMS messages, make phone calls, receive webhooks for incoming messages. Global reach to 180+ countries. Programmable messaging and voice.",
+    "category": "communication",
+    "tags": ["sms", "voice", "phone", "messaging", "notifications", "twilio"],
+    "type": "api",
+    "connection": {
+      "protocol": "rest",
+      "endpoint": "https://api.twilio.com/2010-04-01",
+      "auth": "api_key",
+      "docs": "https://www.twilio.com/docs"
+    },
+    "pricing": { "model": "per_call", "cost_usd": "0.0079", "note": "$0.0079/SMS sent in US" },
+    "quality": { "reliability": 97, "verified": true },
+    "content_preview": "Twilio API. POST /Accounts/{sid}/Messages.json with {To, From, Body}. Supports MMS, WhatsApp, voice calls.",
+    "author": "Twilio",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "r2-object-storage",
+    "name": "Object Storage (S3-compatible)",
+    "description": "S3-compatible object storage with zero egress fees. Store files, images, backups, datasets. Accessible via S3 API or Workers binding.",
+    "category": "storage-state",
+    "tags": ["object storage", "s3", "files", "blobs", "cdn", "cloudflare"],
+    "type": "api",
+    "connection": {
+      "protocol": "rest",
+      "endpoint": "https://{account_id}.r2.cloudflarestorage.com",
+      "auth": "api_key",
+      "docs": "https://developers.cloudflare.com/r2"
+    },
+    "pricing": { "model": "per_call", "cost_usd": "0", "note": "10GB free. $0.015/GB/month. Zero egress." },
+    "quality": { "reliability": 99, "verified": true },
+    "content_preview": "Cloudflare R2. S3-compatible API. PUT/GET/DELETE objects. Zero egress fees. 10GB free tier. Auto-replication across data centers.",
+    "author": "Cloudflare",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "betterstack-monitoring",
+    "name": "Uptime Monitoring and Alerting",
+    "description": "Monitor URLs, APIs, and servers for uptime. Get alerts via email, Slack, SMS, or webhook when services go down. Status pages included.",
+    "category": "monitoring",
+    "tags": ["uptime", "monitoring", "alerts", "status page", "health check"],
+    "type": "api",
+    "connection": {
+      "protocol": "rest",
+      "endpoint": "https://uptime.betterstack.com/api/v2",
+      "auth": "api_key",
+      "docs": "https://betterstack.com/docs/uptime"
+    },
+    "pricing": { "model": "free", "cost_usd": "0", "note": "5 monitors free. Paid plans for more." },
+    "quality": { "reliability": 97, "verified": true },
+    "content_preview": "Better Stack uptime monitoring. POST /monitors to create. Checks every 30s. Alerts via email/Slack/SMS/webhook. Public status pages.",
+    "author": "Better Stack",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "openai-embeddings",
+    "name": "Text Embeddings API",
+    "description": "Generate vector embeddings for text. Essential for semantic search, RAG, clustering, and similarity matching. 1536 or 3072 dimensions.",
+    "category": "content-generation",
+    "tags": ["embeddings", "vectors", "semantic search", "rag", "openai", "nlp"],
+    "type": "api",
+    "connection": {
+      "protocol": "rest",
+      "endpoint": "https://api.openai.com/v1/embeddings",
+      "auth": "api_key",
+      "docs": "https://platform.openai.com/docs/api-reference/embeddings"
+    },
+    "pricing": { "model": "per_call", "cost_usd": "0.00002", "note": "$0.00002/1K tokens for text-embedding-3-small" },
+    "quality": { "reliability": 99, "verified": true },
+    "content_preview": "POST /v1/embeddings with {model: 'text-embedding-3-small', input: 'text'}. Returns vector array. Use for RAG, search, clustering.",
+    "author": "OpenAI",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "deepgram-transcription",
+    "name": "Audio Transcription",
+    "description": "Convert audio and video to text. Real-time and batch transcription. Speaker diarization, punctuation, language detection. Supports 30+ languages.",
+    "category": "data-processing",
+    "tags": ["transcription", "audio", "speech-to-text", "voice", "diarization"],
+    "type": "api",
+    "connection": {
+      "protocol": "rest",
+      "endpoint": "https://api.deepgram.com/v1/listen",
+      "auth": "api_key",
+      "docs": "https://developers.deepgram.com"
+    },
+    "pricing": { "model": "per_call", "cost_usd": "0.0043", "note": "$0.0043/min for Nova-2 model" },
+    "quality": { "reliability": 94, "verified": true },
+    "content_preview": "POST audio to /v1/listen with model=nova-2. Returns transcript with timestamps, confidence, speakers. Supports streaming and batch.",
+    "author": "Deepgram",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "unstructured-doc-parsing",
+    "name": "Document Parsing (PDF, DOCX, PPTX)",
+    "description": "Extract structured content from PDFs, Word docs, PowerPoints, images, and HTML. OCR, table extraction, layout analysis. Returns clean structured output.",
+    "category": "data-processing",
+    "tags": ["pdf", "document parsing", "ocr", "table extraction", "unstructured"],
+    "type": "api",
+    "connection": {
+      "protocol": "rest",
+      "endpoint": "https://api.unstructuredapp.io/general/v0/general",
+      "auth": "api_key",
+      "docs": "https://docs.unstructured.io"
+    },
+    "pricing": { "model": "per_call", "cost_usd": "0.01", "note": "Per document page" },
+    "quality": { "reliability": 89, "verified": true },
+    "content_preview": "POST multipart/form-data with file. Returns structured elements array with type (Title, NarrativeText, Table, etc.), text, and metadata.",
+    "author": "Unstructured",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "serper-search",
+    "name": "Google Search API",
+    "description": "Programmatic Google search results. Get organic results, snippets, people also ask, knowledge graph. Fast and structured JSON response.",
+    "category": "data-processing",
+    "tags": ["search", "google", "web search", "serp", "information retrieval"],
+    "type": "api",
+    "connection": {
+      "protocol": "rest",
+      "endpoint": "https://google.serper.dev/search",
+      "auth": "api_key",
+      "docs": "https://serper.dev/docs"
+    },
+    "pricing": { "model": "per_call", "cost_usd": "0.001", "note": "2500 free queries, then $0.001/query" },
+    "quality": { "reliability": 95, "verified": true },
+    "content_preview": "POST /search with {q: 'query'}. Returns organic results, snippets, people_also_ask. Also /images, /news, /places endpoints.",
+    "author": "Serper",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "inngest-workflows",
+    "name": "Durable Workflow Engine",
+    "description": "Event-driven durable workflows. Define multi-step processes that survive failures, retries, and long waits. Perfect for agent task pipelines that need reliability.",
+    "category": "monitoring",
+    "tags": ["workflows", "durable execution", "event-driven", "orchestration", "queues"],
+    "type": "api",
+    "connection": {
+      "protocol": "rest",
+      "endpoint": "https://api.inngest.com",
+      "auth": "api_key",
+      "docs": "https://www.inngest.com/docs"
+    },
+    "pricing": { "model": "free", "cost_usd": "0", "note": "25K function runs/month free" },
+    "quality": { "reliability": 93, "verified": true },
+    "content_preview": "Inngest durable workflows. Define functions with steps that survive crashes. Built-in retries, rate limiting, debounce. SDK for JS/TS/Python.",
+    "author": "Inngest",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "puppeteer-mcp",
+    "name": "Local Browser Control",
+    "description": "Control a local Chrome/Chromium browser via MCP. Navigate, screenshot, fill forms, extract data, generate PDFs. No cloud dependency.",
+    "category": "web-interaction",
+    "tags": ["browser", "puppeteer", "chrome", "automation", "local", "screenshots"],
+    "type": "mcp_server",
+    "connection": {
+      "protocol": "mcp",
+      "endpoint": "npx @anthropic/mcp-server-puppeteer",
+      "auth": "none",
+      "docs": "https://github.com/anthropics/mcp-servers"
+    },
+    "pricing": { "model": "free", "cost_usd": "0", "note": "Runs locally. Requires Chrome installed." },
+    "quality": { "reliability": 85, "verified": true },
+    "content_preview": "Official Anthropic Puppeteer MCP server. Tools: navigate, screenshot, click, fill, evaluate. Runs local Chrome. No API keys needed.",
+    "author": "Anthropic",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "postgres-mcp",
+    "name": "PostgreSQL Direct Access",
+    "description": "Connect to any PostgreSQL database via MCP. Run queries, inspect schema, list tables. Read-only by default with option for write access.",
+    "category": "storage-state",
+    "tags": ["postgres", "database", "sql", "queries", "schema"],
+    "type": "mcp_server",
+    "connection": {
+      "protocol": "mcp",
+      "endpoint": "npx @anthropic/mcp-server-postgres",
+      "auth": "none",
+      "docs": "https://github.com/anthropics/mcp-servers"
+    },
+    "pricing": { "model": "free", "cost_usd": "0", "note": "Connects to your own Postgres instance" },
+    "quality": { "reliability": 90, "verified": true },
+    "content_preview": "Official Anthropic Postgres MCP server. Pass connection string as arg. Tools: query, list_tables, describe_table. Read-only by default.",
+    "author": "Anthropic",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "sequential-thinking",
+    "name": "Sequential Thinking Tool",
+    "description": "Structured reasoning and problem-solving tool for agents. Break complex problems into sequential thoughts with branching, revision, and hypothesis tracking.",
+    "category": "content-generation",
+    "tags": ["reasoning", "thinking", "problem solving", "chain of thought", "planning"],
+    "type": "mcp_server",
+    "connection": {
+      "protocol": "mcp",
+      "endpoint": "npx @anthropic/mcp-server-sequential-thinking",
+      "auth": "none",
+      "docs": "https://github.com/anthropics/mcp-servers"
+    },
+    "pricing": { "model": "free", "cost_usd": "0", "note": "Runs locally" },
+    "quality": { "reliability": 90, "verified": true },
+    "content_preview": "Sequential thinking MCP server. Tool: sequentialthinking with thought, thoughtNumber, totalThoughts, nextThoughtNeeded. Supports branching and revision.",
+    "author": "Anthropic",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "x402-facilitator",
+    "name": "x402 Payment Facilitator",
+    "description": "Verify and settle x402 payments on Base/Ethereum. Free facilitator service for the x402 ecosystem. Handles payment verification and on-chain settlement.",
+    "category": "payment-financial",
+    "tags": ["x402", "payments", "verification", "settlement", "usdc", "base"],
+    "type": "api",
+    "connection": {
+      "protocol": "rest",
+      "endpoint": "https://facilitator.openx402.ai",
+      "auth": "none",
+      "docs": "https://www.x402.org"
+    },
+    "pricing": { "model": "free", "cost_usd": "0", "note": "Free facilitation for x402 ecosystem" },
+    "quality": { "reliability": 90, "verified": true },
+    "content_preview": "POST /verify with {payment, payTo, maxAmountRequired, network, resource}. Returns {valid: true/false}. POST /settle to complete on-chain transfer.",
+    "author": "Coinbase / x402 Foundation",
+    "version": "2.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "filesystem-mcp",
+    "name": "Local Filesystem Access",
+    "description": "Read, write, and manage files on the local filesystem via MCP. Directory listing, file search, move, copy operations. Sandboxed to allowed directories.",
+    "category": "storage-state",
+    "tags": ["filesystem", "files", "local storage", "read", "write", "directory"],
+    "type": "mcp_server",
+    "connection": {
+      "protocol": "mcp",
+      "endpoint": "npx @anthropic/mcp-server-filesystem",
+      "auth": "none",
+      "docs": "https://github.com/anthropics/mcp-servers"
+    },
+    "pricing": { "model": "free", "cost_usd": "0", "note": "Runs locally. Requires allowed directory paths." },
+    "quality": { "reliability": 95, "verified": true },
+    "content_preview": "Official Anthropic filesystem MCP server. Tools: read_file, write_file, list_directory, search_files, move_file. Pass allowed directories as args.",
+    "author": "Anthropic",
+    "version": "1.0.0",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "renderly",
+    "name": "Web Content Extraction API",
+    "description": "Convert any public URL to clean markdown, structured data, or readable text. Purpose-built for AI agents that need to consume web content. Pay-per-request via x402 micropayments on Base.",
+    "category": "web-interaction",
+    "tags": ["web scraping", "markdown", "content extraction", "html to text", "x402", "agent tools"],
+    "type": "api",
+    "connection": {
+      "protocol": "x402",
+      "endpoint": "https://3000-725fa3fea775ba39db5a2e3703fa4557.life.conway.tech",
+      "auth": "x402",
+      "docs": "https://3000-725fa3fea775ba39db5a2e3703fa4557.life.conway.tech/llms.txt"
+    },
+    "pricing": { "model": "per_call", "cost_usd": "0.0005-0.001", "note": "$0.001 markdown, $0.001 extract, $0.0005 readable. USDC on Base." },
+    "quality": { "reliability": 90, "verified": true },
+    "content_preview": "Renderly. POST /markdown for clean markdown. POST /extract for structured data (title, meta, headings, links, images). POST /readable for stripped text. All x402 gated. Free endpoints: /, /health, /pricing, /test, /llms.txt.",
+    "author": "Conway Automaton",
+    "version": "0.3.1",
+    "created_at": "2026-02-22T00:00:00Z"
+  }
+]
