@@ -1,14 +1,34 @@
 {
   "name": "auxilo-mcp",
   "version": "0.2.0",
-  "description": "MCP server for Auxilo — Agent Capability Discovery",
+  "description": "MCP server for Auxilo — Agent Capability Discovery & Knowledge Marketplace",
   "main": "mcp-server.js",
   "bin": {
-    "auxilo-mcp": "./mcp-server.js"
+    "auxilo-mcp": "mcp-server.js"
   },
+  "files": [
+    "mcp-server.js",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "start": "node mcp-server.js"
   },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai-agents",
+    "agent-discovery",
+    "knowledge-marketplace",
+    "x402",
+    "auxilo"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/silent-architects/auxilo.git"
+  },
+  "homepage": "https://auxilo.io",
+  "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0"
   }
