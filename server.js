@@ -11,6 +11,7 @@ const {
   verifyWithdrawalSignature,
   EIP712_DOMAIN,
 } = require('./lib/eip712.js');
+const { scanLearning, getRedactionHint } = require('./lib/sensitivity-filter.js');
 
 const app = new Hono();
 
@@ -1103,6 +1104,25 @@ app.post('/learn', async (c) => {
     }, 409);
   }
   // --- End duplicate detection ---
+
+  // --- Sensitivity filter ---
+  const scanResult = scanLearning({ title, body: content, task_context, tags });
+  if (!scanResult.clean) {
+    const redactionHints = scanResult.matches.map(m => ({
+      field: m.field,
+      pattern: m.pattern,
+      matched: m.match,
+      suggestion: getRedactionHint(m.pattern),
+      description: m.description,
+    }));
+    return c.json({
+      error: 'Sensitive data detected in learning',
+      message: 'Your learning contains patterns that may expose private credentials or infrastructure details. Redact the flagged values and resubmit.',
+      matches: redactionHints,
+      hint: 'Replace sensitive values with descriptive placeholders (e.g., 0x{PRIVATE_KEY}, {API_TOKEN}) before resubmitting.',
+    }, 422);
+  }
+  // --- End sensitivity filter ---
 
   const learning = {
     id: generateId(),
