@@ -662,6 +662,7 @@ async function verifyPaymentOrReject(c, price_usd, description) {
 }
 
 const MIN_UNLOCK_PRICE = 0.005;
+const MAX_UNLOCK_PRICE = 1.00;   // H-3: ceiling to prevent runaway prices
 const DEFAULT_UNLOCK_PRICE = 0.005;
 
 // ─── Search/Match Engine ─────────────────────────────────────────────
@@ -1075,19 +1076,25 @@ app.post('/learn', async (c) => {
     if (isNaN(price) || price < MIN_UNLOCK_PRICE) {
       return c.json({ error: `unlock_price must be >= $${MIN_UNLOCK_PRICE} USD` }, 400);
     }
+    // H-3: Enforce maximum price ceiling
+    if (price > MAX_UNLOCK_PRICE) {
+      return c.json({ error: `unlock_price must be <= $${MAX_UNLOCK_PRICE} USD` }, 400);
+    }
   }
 
   const resolvedPrice = unlock_price !== undefined ? Number(unlock_price) : DEFAULT_UNLOCK_PRICE;
 
   // --- Duplicate detection ---
   const normalizedBody = content.toLowerCase().replace(/\s+/g, ' ').trim();
+  // M-5: Pre-compute the incoming body hash once; use stored hash for existing learnings to avoid
+  // re-hashing on every lookup. Legacy learnings without body_hash fall back to on-the-fly hash.
   const bodyHash = crypto.createHash('sha256').update(normalizedBody).digest('hex');
   const normalizedTitle = title.toLowerCase().replace(/\s+/g, ' ').trim();
 
   const duplicate = learnings.find(existing => {
-    // Exact body match (normalized)
-    const existingBodyNorm = existing.body.toLowerCase().replace(/\s+/g, ' ').trim();
-    const existingHash = crypto.createHash('sha256').update(existingBodyNorm).digest('hex');
+    // Exact body match (normalized): use stored hash if available, else compute on-the-fly
+    const existingHash = existing.body_hash ||
+      crypto.createHash('sha256').update(existing.body.toLowerCase().replace(/\s+/g, ' ').trim()).digest('hex');
     if (existingHash === bodyHash) return true;
     // Exact title match (normalized) within same category
     const existingTitleNorm = existing.title.toLowerCase().replace(/\s+/g, ' ').trim();
@@ -1096,17 +1103,26 @@ app.post('/learn', async (c) => {
   });
 
   if (duplicate) {
+    // M-6: Strip info disclosure — do not expose existing_id or existing_title
     return c.json({
       error: 'Duplicate learning detected',
-      existing_id: duplicate.id,
-      existing_title: duplicate.title,
-      message: 'A learning with the same content or title+category already exists. If this is an update, consider submitting with a different title or additional context.'
+      message: 'A learning with the same content or title+category already exists. If this is an update, consider submitting with a different title or additional context.',
     }, 409);
   }
   // --- End duplicate detection ---
 
   // --- Sensitivity filter ---
-  const scanResult = scanLearning({ title, body: content, task_context, tags });
+  // M-1: Wrap in try/catch — fail CLOSED so a broken filter blocks, not passes
+  let scanResult;
+  try {
+    scanResult = scanLearning({ title, body: content, task_context, tags });
+  } catch (filterError) {
+    console.error('[SENSITIVITY-FILTER] Filter threw — blocking submission:', filterError.message);
+    return c.json({
+      error: 'Sensitivity filter error — learning blocked for safety',
+      message: 'The sensitivity filter encountered an error. Please simplify and retry.',
+    }, 500);
+  }
   if (!scanResult.clean) {
     const redactionHints = scanResult.matches.map(m => ({
       field: m.field,
@@ -1129,6 +1145,7 @@ app.post('/learn', async (c) => {
     title,
     snippet: content.substring(0, 120) + (content.length > 120 ? '...' : ''),
     body: content,
+    body_hash: bodyHash, // M-5: Store pre-computed hash for fast dedup on future submissions
     category,
     tags,
     task_context,
