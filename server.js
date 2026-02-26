@@ -2,6 +2,7 @@ const { Hono } = require('hono');
 const { serve } = require('@hono/node-server');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { isAddress } = require('viem');
 const {
   createNonce,
@@ -1076,6 +1077,32 @@ app.post('/learn', async (c) => {
   }
 
   const resolvedPrice = unlock_price !== undefined ? Number(unlock_price) : DEFAULT_UNLOCK_PRICE;
+
+  // --- Duplicate detection ---
+  const normalizedBody = content.toLowerCase().replace(/\s+/g, ' ').trim();
+  const bodyHash = crypto.createHash('sha256').update(normalizedBody).digest('hex');
+  const normalizedTitle = title.toLowerCase().replace(/\s+/g, ' ').trim();
+
+  const duplicate = learnings.find(existing => {
+    // Exact body match (normalized)
+    const existingBodyNorm = existing.body.toLowerCase().replace(/\s+/g, ' ').trim();
+    const existingHash = crypto.createHash('sha256').update(existingBodyNorm).digest('hex');
+    if (existingHash === bodyHash) return true;
+    // Exact title match (normalized) within same category
+    const existingTitleNorm = existing.title.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (existingTitleNorm === normalizedTitle && existing.category === category) return true;
+    return false;
+  });
+
+  if (duplicate) {
+    return c.json({
+      error: 'Duplicate learning detected',
+      existing_id: duplicate.id,
+      existing_title: duplicate.title,
+      message: 'A learning with the same content or title+category already exists. If this is an update, consider submitting with a different title or additional context.'
+    }, 409);
+  }
+  // --- End duplicate detection ---
 
   const learning = {
     id: generateId(),
