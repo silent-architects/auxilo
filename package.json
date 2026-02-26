@@ -1,6 +1,6 @@
 {
   "name": "auxilo-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "MCP server for Auxilo — Agent Capability Discovery & Knowledge Marketplace",
   "main": "mcp-server.js",
   "bin": {
@@ -30,6 +30,10 @@
   "homepage": "https://auxilo.io",
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "viem": "^2.46.3"
+  },
+  "devDependencies": {
+    "proxyquire": "^2.1.3"
   }
 }
