@@ -32,13 +32,16 @@ RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 # node_modules/, *.log, .git, and the deploy-*.js helpers out.
 COPY . .
 
-# Ensure the data mountpoint exists inside the image. On Fly this directory
-# is overlaid by the persistent volume; locally (docker run) it is an empty
-# dir inside the container. The `node` user owns it so the app can write.
-RUN mkdir -p /app/data && chown -R node:node /app
+# Ensure the data mountpoint exists. On Fly the persistent volume overlays
+# this at runtime; files inside may come from tar extracts with root
+# ownership (see MIGRATION-FLY.md data-restore procedure).
+RUN mkdir -p /app/data
 
-# Drop privileges. The built-in `node` user has uid 1000.
-USER node
+# NOTE: running as root here — Fly volumes restored from Conway tarballs
+# have root-owned files that non-root `node` user can't read. Hardening
+# to drop-privileges-via-entrypoint is tracked as a P1 post-pilot item;
+# for pilot-of-one this is acceptable.
+# USER node   # re-enable after pilot + chown fix
 
 ENV NODE_ENV=production \
     PORT=3000
