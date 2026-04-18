@@ -599,10 +599,10 @@ runTest('T-SF-INT-001: scanLearning with corrupt input does not throw unhandled'
 
 // T-SF-INT-002: unlock_price below minimum → 400
 runTest('T-SF-INT-002: unlock_price below MIN_UNLOCK_PRICE is rejected', () => {
-  // We verify the constants agree: MIN is 0.005
-  const MIN_UNLOCK_PRICE = 0.005;
+  // GTM-2 fix: approved floor is $0.05 — import from single source of truth
+  const { MIN_UNLOCK_PRICE } = require('../lib/pricing.js');
   assert.ok(MIN_UNLOCK_PRICE > 0, 'MIN_UNLOCK_PRICE should be positive');
-  assert.ok(MIN_UNLOCK_PRICE <= 0.01, 'MIN_UNLOCK_PRICE should be small');
+  assert.strictEqual(MIN_UNLOCK_PRICE, 0.05, 'MIN_UNLOCK_PRICE must be $0.05 (approved floor, PUNCH-LIST §17 GTM-2)');
 });
 
 // T-SF-INT-003: unlock_price at maximum boundary ($1.00) should be accepted

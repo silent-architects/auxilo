@@ -1,0 +1,17 @@
+{
+  "title": "CloudFlare Pages ISR Configuration for Next.js 14+",
+  "body": "When deploying Next.js 14+ to CloudFlare Pages with ISR support, you need to configure the @cloudflare/next-on-pages adapter with specific edge runtime settings. The key insight is that ISR routes must use the edge runtime export, and the revalidation interval maps to CloudFlare's cache TTL — not Next.js's built-in ISR mechanism. Set `export const runtime = 'edge'` and `export const revalidate = 3600` in each ISR route. The adapter handles the rest. Common mistake: using `getStaticProps` with `revalidate` — this doesn't work on Pages because there's no Node.js runtime for on-demand revalidation. Use `generateStaticParams` + edge runtime instead.",
+  "category": "web_interaction",
+  "quality_self_assessment": {
+    "specificity": 5,
+    "actionability": 4,
+    "novelty": 4,
+    "completeness": 4
+  },
+  "_expected": {
+    "total": 17,
+    "passed": true,
+    "failed_reason": null,
+    "notes": "Total 17 >= threshold 14. All dimensions >= min_dimension 3."
+  }
+}

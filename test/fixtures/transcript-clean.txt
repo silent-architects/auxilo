@@ -1,0 +1,1 @@
+Human: How do I configure CloudFlare Pages to deploy a Next.js application with ISR support?

@@ -1,0 +1,17 @@
+{
+  "title": "Use npm",
+  "body": "You should use npm to install packages.",
+  "category": "code_execution",
+  "quality_self_assessment": {
+    "specificity": 1,
+    "actionability": 2,
+    "novelty": 1,
+    "completeness": 1
+  },
+  "_expected": {
+    "total": 5,
+    "passed": false,
+    "failed_reason": "below_total",
+    "notes": "Total 5 < threshold 14. All dimensions also below min_dimension 3."
+  }
+}

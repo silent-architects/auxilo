@@ -1,0 +1,5 @@
+{
+  "clean": true,
+  "expected_patterns": [],
+  "notes": "No PII, secrets, or sensitive content. Should pass cleanly."
+}
