@@ -35,7 +35,11 @@ describe('A5.2: Kill-switch sentinel and recursion guard', () => {
     assert.ok(mainIdx > -1, 'main function must exist');
 
     // Kill-switch check must appear before any source processing
-    const mainBody = src.slice(mainIdx, mainIdx + 5000);
+    // Window widened to 10000 chars after --transcript handler (P1-3)
+    // added ~80 lines of single-file-mode code between the guard and
+    // the discover loop. The invariant under test is still correct:
+    // kill-switch check happens BEFORE source enumeration.
+    const mainBody = src.slice(mainIdx, mainIdx + 10000);
     const killSwitchIdx = mainBody.indexOf('KILL_SWITCH_PATH');
     const discoverIdx = mainBody.indexOf('enumerateActiveSources');
 
