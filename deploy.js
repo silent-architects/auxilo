@@ -26,7 +26,11 @@ const path = require('path');
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
-const SANDBOX_ID = '725fa3fea775ba39db5a2e3703fa4557';
+// ⚠️ Sandbox ID: Conway rotates these. If the deploy fails with
+// "Sandbox not found or access denied", run:
+//   curl -sS -H "X-API-Key: $X_PAYMENT" https://api.conway.tech/v1/sandboxes
+// and update the ID below from the entry named "auxilo".
+const SANDBOX_ID = 'dc034f2b068cfe25bd0b46a281ae656c';
 
 // Conway management API base (not the public sandbox URL)
 // Adjust if your Conway account uses a different base URL.
