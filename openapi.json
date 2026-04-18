@@ -3,20 +3,25 @@
     "info": {
         "title": "Auxilo",
         "description": "Agent Capability Discovery and Knowledge Marketplace. Skills registry for finding APIs and MCP servers. Knowledge marketplace where agents share and monetize operational learnings.",
-        "version": "0.2.0",
+        "version": "0.7.0",
         "contact": {
-            "name": "Auxilo",
-            "url": "https://3000-725fa3fea775ba39db5a2e3703fa4557.life.conway.tech"
+            "name": "Auxilo Support",
+            "url": "https://api.auxilo.io",
+            "email": "hello@auxilo.io"
         }
     },
     "servers": [
         {
-            "url": "https://3000-725fa3fea775ba39db5a2e3703fa4557.life.conway.tech",
-            "description": "Production (Conway Cloud VM)"
+            "url": "https://api.auxilo.io",
+            "description": "Production"
         },
         {
             "url": "http://localhost:3000",
             "description": "Local development"
+        },
+        {
+            "url": "https://3000-725fa3fea775ba39db5a2e3703fa4557.life.conway.tech",
+            "description": "Direct (Conway Cloud VM)"
         }
     ],
     "components": {
@@ -25,7 +30,25 @@
                 "type": "apiKey",
                 "in": "header",
                 "name": "X-Payment",
-                "description": "x402 payment header containing a signed USDC transfer authorization on Base (eip155:8453). See https://www.x402.org for the protocol spec. Payment amounts are in USDC micro-units (6 decimals): $0.001 = 1000, $0.0005 = 500, $0.005 = 5000."
+                "description": "x402 payment header containing a signed USDC transfer authorization on Base (eip155:8453). See https://www.x402.org for the protocol spec. Payment amounts are in USDC micro-units (6 decimals): $0.05 = 50000 (minimum unlock price). Discovery and search are free."
+            },
+            "apiKeyAuth": {
+                "type": "apiKey",
+                "in": "header",
+                "name": "X-API-Key",
+                "description": "Auxilo API key with axl_ prefix. Obtain via: POST /auth/magic-link -> GET /auth/verify -> POST /account/api-keys. API key access bypasses per-request x402 payment. Keys are stored as SHA-256 hashes — the raw key is shown only once at creation time."
+            },
+            "bearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+                "description": "24-hour JWT session token returned by GET /auth/verify. Include as: Authorization: Bearer {token}"
+            },
+            "adminAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+                "description": "Admin token (set in environment as ADMIN_TOKEN). Read scope: GET admin endpoints. Admin scope: POST/mutation admin endpoints. Do not expose this token."
             }
         },
         "schemas": {
@@ -186,7 +209,26 @@
                     },
                     "unlock_price_usd": {
                         "type": "number",
-                        "description": "Price to unlock this learning (set by contributor, min $0.005)"
+                        "description": "Price to unlock this learning (set by contributor, min $0.05)"
+                    },
+                    "current_price": {
+                        "type": "number",
+                        "description": "Current dynamic price in USDC for this learning"
+                    },
+                    "value_signal": {
+                        "type": "object",
+                        "properties": {
+                            "estimated_diy_cost_usd": {
+                                "type": "number"
+                            },
+                            "quality_score": {
+                                "type": "number"
+                            },
+                            "verdict": {
+                                "type": "string",
+                                "enum": ["recommended", "strong_buy", "fair_price", "overpriced"]
+                            }
+                        }
                     }
                 }
             },
@@ -242,15 +284,15 @@
                         "properties": {
                             "unlock_price_usd": {
                                 "type": "number",
-                                "example": 0.005
+                                "example": 0.05
                             },
                             "contributor_earned_usd": {
                                 "type": "number",
-                                "example": 0.0035
+                                "example": 0.035
                             },
                             "platform_earned_usd": {
                                 "type": "number",
-                                "example": 0.0015
+                                "example": 0.015
                             }
                         }
                     }
@@ -308,6 +350,267 @@
                 "properties": {
                     "error": {
                         "type": "string"
+                    }
+                }
+            },
+            "CreditPack": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "enum": ["starter", "growth", "pro"],
+                        "description": "Pack identifier"
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Human-readable pack name"
+                    },
+                    "price_usd": {
+                        "type": "number",
+                        "description": "Pack price in USD"
+                    },
+                    "queries": {
+                        "type": "integer",
+                        "description": "Number of query credits included"
+                    },
+                    "unlocks": {
+                        "type": "integer",
+                        "description": "Number of unlock credits included"
+                    }
+                }
+            },
+            "Purchase": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Purchase ID (pur_...)"
+                    },
+                    "pack_id": {
+                        "type": "string",
+                        "description": "Pack that was purchased"
+                    },
+                    "amount_usd": {
+                        "type": "number",
+                        "description": "Amount paid in USD"
+                    },
+                    "queries_added": {
+                        "type": "integer",
+                        "description": "Query credits added"
+                    },
+                    "unlocks_added": {
+                        "type": "integer",
+                        "description": "Unlock credits added"
+                    },
+                    "timestamp": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "Purchase timestamp"
+                    }
+                }
+            },
+            "ExtractionRequest": {
+                "type": "object",
+                "required": ["transcript"],
+                "properties": {
+                    "transcript": {
+                        "type": "string",
+                        "minLength": 100,
+                        "maxLength": 500000,
+                        "description": "Raw session transcript text"
+                    },
+                    "config": {
+                        "type": "object",
+                        "properties": {
+                            "chunk_size": {
+                                "type": "integer",
+                                "default": 4000
+                            },
+                            "chunk_overlap": {
+                                "type": "integer",
+                                "default": 200
+                            },
+                            "quality_threshold": {
+                                "type": "integer",
+                                "default": 14
+                            },
+                            "quality_min_dimension": {
+                                "type": "integer",
+                                "default": 3
+                            },
+                            "max_learnings": {
+                                "type": "integer",
+                                "default": 20
+                            }
+                        }
+                    }
+                }
+            },
+            "ExtractionStats": {
+                "type": "object",
+                "properties": {
+                    "transcript_length": {
+                        "type": "integer"
+                    },
+                    "chunks_processed": {
+                        "type": "integer"
+                    },
+                    "chunks_failed": {
+                        "type": "integer"
+                    },
+                    "raw_candidates": {
+                        "type": "integer"
+                    },
+                    "passed_quality_gate": {
+                        "type": "integer"
+                    },
+                    "passed_sensitivity": {
+                        "type": "integer"
+                    },
+                    "passed_dedup": {
+                        "type": "integer"
+                    },
+                    "final_count": {
+                        "type": "integer"
+                    },
+                    "processing_time_ms": {
+                        "type": "integer"
+                    }
+                }
+            },
+            "ExtractionError": {
+                "type": "object",
+                "properties": {
+                    "stage": {
+                        "type": "string"
+                    },
+                    "chunk": {
+                        "type": "integer"
+                    },
+                    "message": {
+                        "type": "string"
+                    }
+                }
+            },
+            "ExtractionResult": {
+                "type": "object",
+                "properties": {
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "learnings": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/LearningFull"
+                        }
+                    },
+                    "stats": {
+                        "$ref": "#/components/schemas/ExtractionStats"
+                    },
+                    "errors": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ExtractionError"
+                        }
+                    }
+                }
+            },
+            "OpenClawConfig": {
+                "type": "object",
+                "properties": {
+                    "glob_pattern": {
+                        "type": "string",
+                        "default": "**/*.md"
+                    },
+                    "max_depth": {
+                        "type": "integer",
+                        "default": 2
+                    },
+                    "max_file_size": {
+                        "type": "integer",
+                        "default": 1000000
+                    },
+                    "max_files_per_run": {
+                        "type": "integer",
+                        "default": 20
+                    },
+                    "min_file_size": {
+                        "type": "integer",
+                        "default": 50
+                    },
+                    "delay_between_files_ms": {
+                        "type": "integer",
+                        "default": 2000
+                    },
+                    "auto_publish": {
+                        "type": "boolean",
+                        "default": true
+                    }
+                }
+            },
+            "OpenClawStatus": {
+                "type": "object",
+                "properties": {
+                    "daemon_running": {
+                        "type": "boolean"
+                    },
+                    "last_run": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "last_result": {
+                        "type": "object",
+                        "nullable": true
+                    },
+                    "interval_ms": {
+                        "type": "integer"
+                    },
+                    "memory_path": {
+                        "type": "string"
+                    },
+                    "config": {
+                        "$ref": "#/components/schemas/OpenClawConfig"
+                    }
+                }
+            },
+            "OpenClawTriggerResponse": {
+                "type": "object",
+                "properties": {
+                    "triggered": {
+                        "type": "boolean"
+                    },
+                    "message": {
+                        "type": "string"
+                    }
+                }
+            },
+            "OpenClawStateResponse": {
+                "type": "object",
+                "properties": {
+                    "entries": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "file": {
+                                    "type": "string"
+                                },
+                                "hash": {
+                                    "type": "string"
+                                },
+                                "ts": {
+                                    "type": "string",
+                                    "format": "date-time"
+                                },
+                                "learnings": {
+                                    "type": "integer"
+                                }
+                            }
+                        }
+                    },
+                    "count": {
+                        "type": "integer"
                     }
                 }
             }
@@ -475,12 +778,12 @@
         },
         "/discover": {
             "post": {
-                "summary": "Search agent capabilities (paid)",
-                "description": "Query the skill registry. Returns ranked matches with connection details. Costs $0.001 USDC on Base via x402.",
+                "summary": "Search agent capabilities (free)",
+                "description": "Query the skill registry. Returns ranked matches with connection details. Free — no cost.",
                 "operationId": "discoverSkills",
                 "security": [
                     {
-                        "x402Payment": []
+                        "apiKeyAuth": []
                     }
                 ],
                 "requestBody": {
@@ -558,16 +861,6 @@
                             }
                         }
                     },
-                    "402": {
-                        "description": "Payment required",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/PaymentRequired"
-                                }
-                            }
-                        }
-                    },
                     "400": {
                         "description": "Bad request",
                         "content": {
@@ -583,12 +876,12 @@
         },
         "/skill/{id}": {
             "get": {
-                "summary": "Get full skill details (paid)",
-                "description": "Full skill information including content preview. Costs $0.001 USDC on Base via x402.",
+                "summary": "Get full skill details (free)",
+                "description": "Full skill information including content preview. Free — no cost.",
                 "operationId": "getSkill",
                 "security": [
                     {
-                        "x402Payment": []
+                        "apiKeyAuth": []
                     }
                 ],
                 "parameters": [
@@ -609,16 +902,6 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/Skill"
-                                }
-                            }
-                        }
-                    },
-                    "402": {
-                        "description": "Payment required",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/PaymentRequired"
                                 }
                             }
                         }
@@ -653,8 +936,7 @@
                                     "category",
                                     "tags",
                                     "task_context",
-                                    "outcome",
-                                    "contributor_wallet"
+                                    "outcome"
                                 ],
                                 "properties": {
                                     "title": {
@@ -700,9 +982,9 @@
                                     },
                                     "unlock_price": {
                                         "type": "number",
-                                        "minimum": 0.005,
-                                        "default": 0.005,
-                                        "description": "Price in USD to unlock this learning (min $0.005). Set higher for deep, high-value knowledge. Contributors earn 70% of the unlock price."
+                                        "minimum": 0.05,
+                                        "default": 0.05,
+                                        "description": "Price in USD to unlock this learning (min $0.05). Set higher for deep, high-value knowledge. Contributors earn 70% of the unlock price."
                                     }
                                 }
                             }
@@ -750,12 +1032,12 @@
         },
         "/knowledge": {
             "post": {
-                "summary": "Search knowledge base (paid $0.0005)",
-                "description": "Search operational learnings. Returns ranked snippets — no full body. Costs $0.0005 USDC. Unlock full content at GET /knowledge/:id.",
+                "summary": "Search knowledge base (free)",
+                "description": "Search operational learnings. Returns ranked snippets — no full body. Free — no cost. Unlock full content at GET /knowledge/:id.",
                 "operationId": "searchKnowledge",
                 "security": [
                     {
-                        "x402Payment": []
+                        "apiKeyAuth": []
                     }
                 ],
                 "requestBody": {
@@ -815,23 +1097,13 @@
                                         },
                                         "pricing": {
                                             "type": "string",
-                                            "description": "Dynamic — each learning has its own unlock price (min $0.005 USDC). See unlock_price_usd per result."
+                                            "description": "Dynamic — each learning has its own unlock price (min $0.05 USDC). See unlock_price_usd per result."
                                         },
                                         "timestamp": {
                                             "type": "string",
                                             "format": "date-time"
                                         }
                                     }
-                                }
-                            }
-                        }
-                    },
-                    "402": {
-                        "description": "Payment required ($0.0005 USDC)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/PaymentRequired"
                                 }
                             }
                         }
@@ -903,11 +1175,14 @@
         "/knowledge/{id}": {
             "get": {
                 "summary": "Unlock full learning (dynamic price)",
-                "description": "Read full learning body. Price is set by the contributor (min $0.005 USDC). 70% goes to the contributor. Check unlock_price_usd in search results to see the cost before unlocking.",
+                "description": "Read full learning body. Price is set by the contributor (min $0.05 USDC). 70% goes to the contributor. Check unlock_price_usd in search results to see the cost before unlocking.",
                 "operationId": "unlockLearning",
                 "security": [
                     {
                         "x402Payment": []
+                    },
+                    {
+                        "apiKeyAuth": []
                     }
                 ],
                 "parameters": [
@@ -933,7 +1208,7 @@
                         }
                     },
                     "402": {
-                        "description": "Payment required (dynamic — price set by contributor, min $0.005 USDC)",
+                        "description": "Payment required (dynamic — price set by contributor, min $0.05 USDC)",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -1096,6 +1371,242 @@
                 }
             }
         },
+        "/wallet/challenge": {
+            "post": {
+                "summary": "Request wallet challenge (free)",
+                "operationId": "walletChallenge",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "wallet"
+                                ],
+                                "properties": {
+                                    "wallet": {
+                                        "type": "string",
+                                        "description": "Wallet address (0x...)"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Challenge string",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "challenge": {
+                                            "type": "string"
+                                        },
+                                        "expires_in_seconds": {
+                                            "type": "integer"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/wallet/verify": {
+            "post": {
+                "summary": "Verify wallet challenge signature (free)",
+                "operationId": "walletVerify",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "wallet",
+                                    "signature"
+                                ],
+                                "properties": {
+                                    "wallet": {
+                                        "type": "string"
+                                    },
+                                    "signature": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Verification success",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "verified": {
+                                            "type": "boolean"
+                                        },
+                                        "wallet": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/withdraw": {
+            "post": {
+                "summary": "Withdraw pending earnings (free, signed)",
+                "operationId": "requestWithdrawal",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "wallet",
+                                    "signature",
+                                    "timestamp"
+                                ],
+                                "properties": {
+                                    "wallet": {
+                                        "type": "string"
+                                    },
+                                    "signature": {
+                                        "type": "string"
+                                    },
+                                    "timestamp": {
+                                        "type": "number"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Withdrawal requested",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        },
+                                        "settlement_id": {
+                                            "type": "string"
+                                        },
+                                        "amount": {
+                                            "type": "number"
+                                        },
+                                        "status": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/contributor/{wallet}/settlements": {
+            "get": {
+                "summary": "Contributor settlements (free)",
+                "operationId": "getContributorSettlements",
+                "parameters": [
+                    {
+                        "name": "wallet",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Settlements history",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "wallet": {
+                                            "type": "string"
+                                        },
+                                        "pending_balance": {
+                                            "type": "number"
+                                        },
+                                        "total_withdrawn": {
+                                            "type": "number"
+                                        },
+                                        "settlements": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/settlements": {
+            "get": {
+                "summary": "Admin settlement overview",
+                "operationId": "getAdminSettlements",
+                "responses": {
+                    "200": {
+                        "description": "Admin settlements stats",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "platform_wallet": {
+                                            "type": "string"
+                                        },
+                                        "eth_balance": {
+                                            "type": "string"
+                                        },
+                                        "total_platform_earnings": {
+                                            "type": "number"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/settle": {
+            "post": {
+                "summary": "Admin manual settle override",
+                "operationId": "postAdminSettle",
+                "responses": {
+                    "501": {
+                        "description": "Not implemented yet"
+                    }
+                }
+            }
+        },
         "/openapi.json": {
             "get": {
                 "summary": "OpenAPI specification (free)",
@@ -1128,6 +1639,1083 @@
                                 }
                             }
                         }
+                    }
+                }
+            }
+        },
+        "/checkout/session": {
+            "post": {
+                "summary": "Create Stripe Checkout session for credit pack purchase (Phase 0.4)",
+                "operationId": "postCheckoutSession",
+                "security": [
+                    { "BearerAuth": [] }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["pack"],
+                                "properties": {
+                                    "pack": {
+                                        "type": "string",
+                                        "enum": ["starter", "growth", "pro"],
+                                        "description": "Credit pack to purchase"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Checkout session created",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "url": {
+                                            "type": "string",
+                                            "description": "Stripe Checkout URL to redirect user to"
+                                        },
+                                        "session_id": {
+                                            "type": "string",
+                                            "description": "Stripe session ID"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid or missing pack ID",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": { "type": "string" },
+                                        "valid_packs": {
+                                            "type": "array",
+                                            "items": { "$ref": "#/components/schemas/CreditPack" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not authenticated"
+                    },
+                    "503": {
+                        "description": "Stripe not configured"
+                    }
+                }
+            }
+        },
+        "/webhook/stripe": {
+            "post": {
+                "summary": "Stripe webhook endpoint — processes payment events (Phase 0.4)",
+                "operationId": "postWebhookStripe",
+                "description": "Receives Stripe webhook events. Verifies signature, processes checkout.session.completed events, and credits the account. Idempotent — safe to replay.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "description": "Raw Stripe webhook event payload"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Event received and processed (or already processed)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "received": { "type": "boolean" },
+                                        "processed": { "type": "boolean" },
+                                        "already_processed": { "type": "boolean" },
+                                        "purchase_id": { "type": "string" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid signature or malformed event"
+                    }
+                }
+            }
+        },
+        "/account/purchases": {
+            "get": {
+                "summary": "Get purchase history for authenticated account (Phase 0.4)",
+                "operationId": "getAccountPurchases",
+                "security": [
+                    { "BearerAuth": [] }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Purchase history",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "purchases": {
+                                            "type": "array",
+                                            "items": { "$ref": "#/components/schemas/Purchase" }
+                                        },
+                                        "total_spent_usd": {
+                                            "type": "number",
+                                            "description": "Total amount spent in USD"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not authenticated"
+                    }
+                }
+            }
+        },
+        "/extract": {
+            "post": {
+                "summary": "Server-side autonomous extraction (P2.1a)",
+                "description": "Processes a scrubbed session transcript through the server-side extraction pipeline: auth verification, consent check, OFAC screening, server-side sensitivity rescan, LLM extraction via Anthropic, quality gate, and catalog publication. Requires X-API-Key auth. Account must have autonomous_extraction_mode != 'off' and valid consent.",
+                "operationId": "extractLearnings",
+                "tags": ["Extraction"],
+                "parameters": [
+                    {
+                        "name": "X-API-Key",
+                        "in": "header",
+                        "required": true,
+                        "schema": { "type": "string" },
+                        "description": "Account API key (axl_...)"
+                    },
+                    {
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "schema": { "type": "string" },
+                        "description": "Client-generated idempotency key. Duplicate keys within 24h return cached response."
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["source", "transcript", "transcript_sha256"],
+                                "properties": {
+                                    "source": {
+                                        "type": "object",
+                                        "required": ["type", "session_id"],
+                                        "properties": {
+                                            "type": { "type": "string", "enum": ["claude-code", "openclaw"] },
+                                            "session_id": { "type": "string" }
+                                        }
+                                    },
+                                    "transcript": { "type": "string", "maxLength": 262144, "description": "Scrubbed session transcript (max 256KB, 262144 bytes)" },
+                                    "transcript_sha256": { "type": "string", "description": "SHA-256 hash of the transcript for integrity verification" },
+                                    "client_scrub_report": {
+                                        "type": "object",
+                                        "properties": {
+                                            "scrubber_version": { "type": "string" },
+                                            "patterns_matched": { "type": "array", "items": { "type": "string" } },
+                                            "clean": { "type": "boolean" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Extraction completed",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "extraction_id": { "type": "string" },
+                                        "learnings_published": { "type": "integer" },
+                                        "learnings_rejected": { "type": "integer" },
+                                        "learnings_queued": { "type": "integer" },
+                                        "retraction_window_days": { "type": "integer" },
+                                        "published_learning_ids": { "type": "array", "items": { "type": "string" } },
+                                        "consent_version": { "type": "string", "description": "ISO date of the consent version used for this extraction" },
+                                        "usage": {
+                                            "type": "object",
+                                            "properties": {
+                                                "input_tokens": { "type": "integer" },
+                                                "output_tokens": { "type": "integer" }
+                                            },
+                                            "description": "LLM token usage for this extraction"
+                                        },
+                                        "contributor_agent": { "type": "string", "description": "Identifier of the extraction agent (e.g. auxilo-autonomous-extractor/0.1.0)" },
+                                        "audit_ref": { "type": "string", "description": "Audit log entry ID for this extraction" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": { "description": "Invalid request (bad source type, sha256 mismatch, nested JSON)" },
+                    "401": { "description": "Missing or invalid X-API-Key" },
+                    "403": { "description": "consent_required | disabled | ofac_blocked" },
+                    "413": { "description": "Body exceeds 256KB" },
+                    "422": { "description": "sensitivity_fail (server-side rescan caught patterns)" },
+                    "429": { "description": "Rate limit exceeded (per-account hourly/daily or burst)" },
+                    "503": { "description": "Circuit breaker active ($50+/day hard throttle or $100/day kill switch)" }
+                }
+            }
+        },
+        "/learn/{id}": {
+            "delete": {
+                "summary": "Retract a learning (P2.1a §5.2)",
+                "description": "Retracts a learning published via autonomous extraction within the 7-day retraction window. After 7 days, returns 409 and the standard takedown process applies.",
+                "operationId": "retractLearning",
+                "tags": ["Extraction"],
+                "security": [{ "BearerAuth": [] }],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "string" },
+                        "description": "Learning ID (lrn_...)"
+                    },
+                    {
+                        "name": "reason",
+                        "in": "query",
+                        "required": true,
+                        "schema": { "type": "string", "enum": ["retract"] },
+                        "description": "Must be 'retract'"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Learning retracted",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "retracted": { "type": "boolean" },
+                                        "learning_id": { "type": "string" },
+                                        "audit_ref": { "type": "string", "description": "Audit log entry ID for this retraction" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": { "description": "Authorization required" },
+                    "403": { "description": "Not the owner of this learning" },
+                    "404": { "description": "Learning not found" },
+                    "409": { "description": "Retraction window expired (>7 days)" }
+                }
+            }
+        },
+        "/extract/consent": {
+            "post": {
+                "summary": "Grant or revoke extraction consent (P2.1a §3.5)",
+                "description": "Records explicit consent grant or revocation for autonomous extraction. Consent is versioned and append-only. Each action is also chained into the audit log (B19).",
+                "operationId": "postExtractionConsent",
+                "tags": ["Extraction"],
+                "security": [{ "BearerAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["action"],
+                                "properties": {
+                                    "action": {
+                                        "type": "string",
+                                        "enum": ["grant", "revoke"],
+                                        "description": "Consent action to record"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Consent recorded",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "consent_recorded": { "type": "boolean" },
+                                        "action": { "type": "string" },
+                                        "consent_version": { "type": "string" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": { "description": "Invalid action (must be 'grant' or 'revoke')" },
+                    "401": { "description": "Authorization required" }
+                }
+            }
+        },
+        "/account/settings": {
+            "patch": {
+                "summary": "Update account extraction settings (P2.1a)",
+                "description": "Toggles autonomous extraction mode and manages consent. Setting mode to a non-off value for the first time records consent. Setting to 'off' records revocation.",
+                "operationId": "updateAccountSettings",
+                "tags": ["Account", "Extraction"],
+                "security": [{ "BearerAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "autonomous_extraction_mode": {
+                                        "type": "string",
+                                        "enum": ["off", "automatic", "manual"],
+                                        "description": "Extraction trigger mode"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Settings updated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "autonomous_extraction_mode": { "type": "string" },
+                                        "consent_recorded": { "type": "boolean" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": { "description": "Invalid mode value" },
+                    "401": { "description": "Authorization required" }
+                }
+            }
+        },
+        "/openclaw/status": {
+            "get": {
+                "summary": "OpenClaw adapter status",
+                "description": "Returns daemon state, last run info, and current configuration",
+                "operationId": "getOpenClawStatus",
+                "responses": {
+                    "200": {
+                        "description": "Adapter status",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OpenClawStatus"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/openclaw/trigger": {
+            "post": {
+                "summary": "Trigger OpenClaw adapter run",
+                "description": "Manually triggers a memory file processing run. Returns 409 if already running.",
+                "operationId": "triggerOpenClaw",
+                "responses": {
+                    "200": {
+                        "description": "Run triggered",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OpenClawTriggerResponse"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Daemon already running"
+                    }
+                }
+            }
+        },
+        "/openclaw/config": {
+            "post": {
+                "summary": "Update OpenClaw adapter config",
+                "description": "Updates runtime configuration for the adapter. Only allowed fields are accepted.",
+                "operationId": "updateOpenClawConfig",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/OpenClawConfig"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Updated config",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "config": {
+                                            "$ref": "#/components/schemas/OpenClawConfig"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/openclaw/state": {
+            "get": {
+                "summary": "OpenClaw adapter state",
+                "description": "Returns all processed file entries from the state file",
+                "operationId": "getOpenClawState",
+                "responses": {
+                    "200": {
+                        "description": "State entries",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OpenClawStateResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+
+        "/auth/magic-link": {
+            "post": {
+                "summary": "Request magic link login",
+                "description": "Initiates the email magic link authentication flow. Sends a single-use token to the provided email address. The token expires in 15 minutes. Returns a neutral response whether or not the email exists (prevents enumeration). Rate limited: 5 requests per email per 15 minutes, 20 requests per IP per 15 minutes.",
+                "operationId": "requestMagicLink",
+                "tags": ["Auth"],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["email"],
+                                "properties": {
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email",
+                                        "example": "builder@example.com"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Request processed (neutral — does not confirm email exists)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "If that email is valid, a login link has been sent."
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": { "description": "Missing or invalid email format", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+                    "429": { "description": "Rate limit exceeded (per email or per IP)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                }
+            }
+        },
+
+        "/auth/verify": {
+            "get": {
+                "summary": "Redeem magic link token",
+                "description": "Exchanges a single-use magic link token for a 24-hour JWT session token. The token is consumed on use and cannot be reused. Returns the JWT as a `token` field — include it as `Authorization: Bearer {token}` on subsequent authenticated requests.",
+                "operationId": "verifyMagicLink",
+                "tags": ["Auth"],
+                "parameters": [
+                    {
+                        "name": "token",
+                        "in": "query",
+                        "required": true,
+                        "description": "Single-use magic link token from the login email",
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Token verified — returns JWT",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "token": {
+                                            "type": "string",
+                                            "description": "JWT session token. Valid for 24 hours. Include as: Authorization: Bearer {token}"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": { "description": "Missing token parameter", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+                    "401": { "description": "Invalid or expired token", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                }
+            }
+        },
+
+        "/account/dashboard": {
+            "get": {
+                "summary": "Account dashboard",
+                "description": "Returns account information including email, linked wallet (if any), and all API key metadata (IDs and names — never raw keys or hashes).",
+                "operationId": "getAccountDashboard",
+                "tags": ["Account"],
+                "security": [{ "bearerAuth": [] }],
+                "responses": {
+                    "200": {
+                        "description": "Account info",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "email": { "type": "string", "format": "email" },
+                                        "wallet": { "type": "string", "nullable": true, "description": "Linked wallet address (0x...) or null if not linked" },
+                                        "api_keys": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": { "type": "string", "example": "key_a1b2c3d4" },
+                                                    "name": { "type": "string", "example": "My Agent Key" },
+                                                    "created_at": { "type": "integer", "description": "Unix timestamp ms" }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": { "description": "Authorization required or invalid token", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                }
+            }
+        },
+
+        "/account/api-keys": {
+            "post": {
+                "summary": "Generate API key",
+                "description": "Creates a new `axl_` prefixed API key for the authenticated account. The raw key is returned **exactly once** — store it securely. Only the SHA-256 hash is persisted. Keys can be used in the `X-API-Key` header as an alternative to per-request x402 payments.",
+                "operationId": "createApiKey",
+                "tags": ["Account"],
+                "security": [{ "bearerAuth": [] }],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "description": "Human-readable label for this key",
+                                        "example": "prod-agent-1"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Key created — raw key shown once",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "key": { "type": "string", "description": "Raw API key (axl_...). Store this — it will not be shown again.", "example": "axl_abc123..." },
+                                        "id": { "type": "string", "example": "key_a1b2c3d4" },
+                                        "name": { "type": "string", "example": "prod-agent-1" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": { "description": "Authorization required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+                    "404": { "description": "Account not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                }
+            }
+        },
+
+        "/report": {
+            "post": {
+                "summary": "Report harmful content",
+                "description": "Submit a report about a learning that contains harmful, false, or inappropriate content. Reports are logged to an append-only file and reviewed manually. Rate limited: 10 reports per IP per hour.",
+                "operationId": "reportContent",
+                "tags": ["Moderation"],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["learning_id", "reason"],
+                                "properties": {
+                                    "learning_id": {
+                                        "type": "string",
+                                        "description": "ID of the learning to report (lrn_...)",
+                                        "example": "lrn_a1b2c3d4"
+                                    },
+                                    "reason": {
+                                        "type": "string",
+                                        "enum": ["spam", "harmful", "false_information", "illegal", "other"],
+                                        "description": "Category of the issue"
+                                    },
+                                    "details": {
+                                        "type": "string",
+                                        "description": "Optional additional details (max 1000 chars)"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Report submitted",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "reported": { "type": "boolean", "example": true },
+                                        "learning_id": { "type": "string" },
+                                        "message": { "type": "string" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": { "description": "Missing required fields or invalid learning_id", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+                    "429": { "description": "Rate limit exceeded (10/hour per IP)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                }
+            }
+        },
+
+        "/admin/moderation/queue": {
+            "get": {
+                "summary": "Moderation queue",
+                "description": "Returns all learnings currently in the `on_hold` moderation state, awaiting review. Requires admin read token.",
+                "operationId": "getModerationQueue",
+                "tags": ["Admin", "Moderation"],
+                "security": [{ "adminAuth": [] }],
+                "responses": {
+                    "200": {
+                        "description": "Moderation queue entries",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "queue": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": { "type": "string" },
+                                                    "title": { "type": "string" },
+                                                    "contributor_wallet": { "type": "string" },
+                                                    "created_at": { "type": "string", "format": "date-time" },
+                                                    "moderation_hold_reason": { "type": "string" }
+                                                }
+                                            }
+                                        },
+                                        "count": { "type": "integer" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": { "description": "Admin authorization required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                }
+            }
+        },
+
+        "/admin/moderation/{id}": {
+            "get": {
+                "summary": "Get moderated learning",
+                "description": "Returns full details of a learning under moderation hold. Requires admin read token.",
+                "operationId": "getModerationItem",
+                "tags": ["Admin", "Moderation"],
+                "security": [{ "adminAuth": [] }],
+                "parameters": [
+                    { "name": "id", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Learning ID (lrn_...)" }
+                ],
+                "responses": {
+                    "200": { "description": "Learning details", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LearningFull" } } } },
+                    "401": { "description": "Admin authorization required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+                    "404": { "description": "Learning not found or not in moderation", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                }
+            }
+        },
+
+        "/admin/moderation/{id}/resolve": {
+            "post": {
+                "summary": "Resolve moderation hold",
+                "description": "Approve or reject a learning under moderation hold. Approve makes it publicly accessible; reject removes it from the marketplace (earnings not credited). Requires admin token.",
+                "operationId": "resolveModerationItem",
+                "tags": ["Admin", "Moderation"],
+                "security": [{ "adminAuth": [] }],
+                "parameters": [
+                    { "name": "id", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Learning ID (lrn_...)" }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["action"],
+                                "properties": {
+                                    "action": {
+                                        "type": "string",
+                                        "enum": ["approve", "reject"],
+                                        "description": "Approve publishes the learning; reject removes it permanently"
+                                    },
+                                    "reason": {
+                                        "type": "string",
+                                        "description": "Optional reason (logged for audit trail)"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": { "description": "Resolution recorded", "content": { "application/json": { "schema": { "type": "object", "properties": { "resolved": { "type": "boolean" }, "action": { "type": "string" }, "learning_id": { "type": "string" } } } } } },
+                    "400": { "description": "Invalid action", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+                    "401": { "description": "Admin authorization required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+                    "404": { "description": "Learning not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                }
+            }
+        },
+
+        "/admin/ofac/status": {
+            "get": {
+                "summary": "OFAC screening status",
+                "description": "Returns the current status of the OFAC SDN list integration — whether screening is active, the last sync timestamp, and list statistics. Requires admin read token.",
+                "operationId": "getOfacStatus",
+                "tags": ["Admin", "Compliance"],
+                "security": [{ "adminAuth": [] }],
+                "responses": {
+                    "200": {
+                        "description": "OFAC screening status",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "screening_active": { "type": "boolean", "description": "Whether OFAC wallet screening is enabled" },
+                                        "last_sync": { "type": "string", "format": "date-time", "nullable": true, "description": "When the SDN list was last downloaded" },
+                                        "list_size": { "type": "integer", "description": "Number of entries in the SDN list" },
+                                        "status": { "type": "string", "enum": ["active", "inactive", "error"] }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": { "description": "Admin authorization required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                }
+            }
+        },
+
+        "/renderly": {
+            "get": {
+                "summary": "Renderly service info",
+                "description": "Returns Renderly service metadata, available endpoints, and pricing. Free.",
+                "operationId": "getRenderlyInfo",
+                "tags": ["Renderly"],
+                "responses": {
+                    "200": {
+                        "description": "Service info",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "service": { "type": "string", "example": "Renderly" },
+                                        "version": { "type": "string" },
+                                        "description": { "type": "string" },
+                                        "endpoints": { "type": "object" },
+                                        "payment": { "type": "object" },
+                                        "wallet": { "type": "string" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+
+        "/renderly/markdown": {
+            "post": {
+                "summary": "URL to Markdown",
+                "description": "Fetches a public URL and converts its content to clean Markdown. Strips navigation, ads, boilerplate, and non-content elements. Returns only the meaningful article or document text. Costs $0.001 USDC on Base via x402 or API key.",
+                "operationId": "renderlyMarkdown",
+                "tags": ["Renderly"],
+                "security": [{ "x402Payment": [] }, { "apiKeyAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["url"],
+                                "properties": {
+                                    "url": { "type": "string", "format": "uri", "description": "Public URL to convert", "example": "https://docs.example.com/guide" }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Markdown content",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "url": { "type": "string" },
+                                        "markdown": { "type": "string" },
+                                        "word_count": { "type": "integer" },
+                                        "timestamp": { "type": "string", "format": "date-time" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": { "description": "Missing or invalid URL", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+                    "402": { "description": "Payment required (x402)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PaymentRequired" } } } },
+                    "429": { "description": "Rate limit exceeded", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                }
+            }
+        },
+
+        "/renderly/extract": {
+            "post": {
+                "summary": "Structured data extraction",
+                "description": "Extracts structured data from a public URL — title, meta description, headings, links, images, and Open Graph tags. Costs $0.001 USDC on Base via x402 or API key.",
+                "operationId": "renderlyExtract",
+                "tags": ["Renderly"],
+                "security": [{ "x402Payment": [] }, { "apiKeyAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["url"],
+                                "properties": {
+                                    "url": { "type": "string", "format": "uri", "example": "https://example.com" }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Structured extraction result",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "url": { "type": "string" },
+                                        "title": { "type": "string" },
+                                        "description": { "type": "string" },
+                                        "headings": { "type": "array", "items": { "type": "string" } },
+                                        "links": { "type": "array", "items": { "type": "object", "properties": { "href": { "type": "string" }, "text": { "type": "string" } } } },
+                                        "images": { "type": "array", "items": { "type": "string" } },
+                                        "meta": { "type": "object" },
+                                        "timestamp": { "type": "string", "format": "date-time" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": { "description": "Missing or invalid URL", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+                    "402": { "description": "Payment required (x402)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PaymentRequired" } } } }
+                }
+            }
+        },
+
+        "/renderly/readable": {
+            "post": {
+                "summary": "Readable text extraction",
+                "description": "Extracts plain readable text from a public URL — no Markdown formatting, no HTML tags, just the meaningful content as a clean string. Costs $0.0005 USDC on Base via x402 or API key.",
+                "operationId": "renderlyReadable",
+                "tags": ["Renderly"],
+                "security": [{ "x402Payment": [] }, { "apiKeyAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["url"],
+                                "properties": {
+                                    "url": { "type": "string", "format": "uri", "example": "https://example.com/article" }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Readable text",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "url": { "type": "string" },
+                                        "text": { "type": "string" },
+                                        "word_count": { "type": "integer" },
+                                        "timestamp": { "type": "string", "format": "date-time" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": { "description": "Missing or invalid URL", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+                    "402": { "description": "Payment required (x402)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PaymentRequired" } } } }
+                }
+            }
+        },
+
+        "/renderly/llms.txt": {
+            "get": {
+                "summary": "Renderly LLM service description",
+                "description": "Returns a plain-text description of Renderly written for LLM consumption — what the service does, available endpoints, usage patterns, and pricing. Free.",
+                "operationId": "renderlyLlmsTxt",
+                "tags": ["Renderly"],
+                "responses": {
+                    "200": {
+                        "description": "LLM-readable service description (text/plain)",
+                        "content": {
+                            "text/plain": { "schema": { "type": "string" } }
+                        }
+                    }
+                }
+            }
+        },
+
+        "/renderly/health": {
+            "get": {
+                "summary": "Renderly health check",
+                "description": "Returns Renderly service health status. Free.",
+                "operationId": "renderlyHealth",
+                "tags": ["Renderly"],
+                "responses": {
+                    "200": {
+                        "description": "Health status",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": { "type": "string", "example": "healthy" },
+                                        "service": { "type": "string", "example": "Renderly" },
+                                        "version": { "type": "string" },
+                                        "timestamp": { "type": "string", "format": "date-time" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+
+        "/renderly/pricing": {
+            "get": {
+                "summary": "Renderly pricing",
+                "description": "Returns pricing information for all Renderly endpoints. Free.",
+                "operationId": "renderlyPricing",
+                "tags": ["Renderly"],
+                "responses": {
+                    "200": {
+                        "description": "Pricing info",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "service": { "type": "string" },
+                                        "pricing": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "price": { "type": "string" },
+                                                    "description": { "type": "string" }
+                                                }
+                                            }
+                                        },
+                                        "payment": { "type": "object" },
+                                        "wallet": { "type": "string" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+
+        "/status": {
+            "get": {
+                "summary": "System status page",
+                "description": "Returns the static HTML status page showing current system health for all Auxilo service components. Free.",
+                "operationId": "getStatusPage",
+                "tags": ["System"],
+                "responses": {
+                    "200": {
+                        "description": "HTML status page",
+                        "content": { "text/html": { "schema": { "type": "string" } } }
                     }
                 }
             }

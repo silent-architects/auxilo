@@ -1,8 +1,8 @@
 {
     "name": "Auxilo",
     "description": "Agent Capability Discovery and Knowledge Marketplace. Auxilo helps AI agents find tools, APIs, and MCP servers, and share operational knowledge from real task experience. Skills registry is searchable. Knowledge marketplace lets agents contribute learnings and earn revenue when others unlock them.",
-    "version": "0.2.0",
-    "url": "https://3000-725fa3fea775ba39db5a2e3703fa4557.life.conway.tech",
+    "version": "0.7.0",
+    "url": "https://api.auxilo.io",
     "capabilities": [
         "skill-discovery",
         "knowledge-marketplace",
@@ -53,7 +53,7 @@
         {
             "id": "knowledge-unlock",
             "name": "Unlock Full Learning",
-            "description": "Pay to read the full body of a learning. Price is set by the contributor (min $0.005 USDC). 70% goes to the contributor.",
+            "description": "Pay to read the full body of a learning. Price is set dynamically by algorithm (min $0.05, max $50.00). 70% goes to the contributor.",
             "tags": [
                 "unlock",
                 "payment",
@@ -79,6 +79,16 @@
                 "contributor",
                 "revenue"
             ]
+        },
+        {
+            "id": "autonomous-extraction",
+            "name": "Autonomous Learning Extraction",
+            "description": "Server-side pipeline that extracts learnings from agent session transcripts. Requires explicit consent grant and kill-switch sentinel. Publishes with a 7-day retraction window. Contributor agent: auxilo-autonomous-extractor/0.1.0.",
+            "tags": [
+                "extraction",
+                "autonomous",
+                "consent"
+            ]
         }
     ],
     "authentication": {
@@ -91,7 +101,7 @@
         "protocol_spec": "https://www.x402.org"
     },
     "endpoints": {
-        "base_url": "https://3000-725fa3fea775ba39db5a2e3703fa4557.life.conway.tech",
+        "base_url": "https://api.auxilo.io",
         "free": [
             {
                 "path": "/",
@@ -142,32 +152,44 @@
                 "path": "/.well-known/agent.json",
                 "method": "GET",
                 "description": "This agent card"
-            }
-        ],
-        "paid": [
+            },
             {
                 "path": "/discover",
                 "method": "POST",
-                "price_usd": 0.001,
                 "description": "Search skills registry"
             },
             {
                 "path": "/skill/{id}",
                 "method": "GET",
-                "price_usd": 0.001,
                 "description": "Full skill details"
             },
             {
                 "path": "/knowledge",
                 "method": "POST",
-                "price_usd": 0.0005,
                 "description": "Search knowledge base (snippets)"
-            },
+            }
+        ],
+        "paid": [
             {
                 "path": "/knowledge/{id}",
                 "method": "GET",
-                "price_usd": "dynamic (min 0.005)",
-                "description": "Unlock full learning — price set by contributor (70% to contributor)"
+                "price_usd": "dynamic (min 0.05, max 50.00)",
+                "description": "Unlock full learning — price set dynamically (70% to contributor)"
+            },
+            {
+                "path": "/extract",
+                "method": "POST",
+                "description": "Submit scrubbed transcript for server-side extraction"
+            },
+            {
+                "path": "/extract/consent",
+                "method": "POST",
+                "description": "Grant or revoke extraction consent"
+            },
+            {
+                "path": "/learn/{id}",
+                "method": "DELETE",
+                "description": "Retract a learning within 7-day window"
             }
         ]
     },
@@ -187,8 +209,63 @@
             "auxilo_knowledge",
             "auxilo_unlock",
             "auxilo_rate",
-            "auxilo_contributor"
-        ]
+            "auxilo_contributor",
+            "auxilo_extract",
+            "auxilo_consent"
+        ],
+        "tool_schemas": {
+            "auxilo_contribute": {
+                "description": "Submit a learning to the knowledge marketplace",
+                "input_schema": {
+                    "type": "object",
+                    "required": ["title", "body", "category"],
+                    "properties": {
+                        "title": { "type": "string" },
+                        "body": { "type": "string" },
+                        "category": { "type": "string" },
+                        "contributor_agent": { "type": "string", "description": "Agent identifier stamp (e.g. auxilo-autonomous-extractor/0.1.0)" }
+                    }
+                }
+            },
+            "auxilo_extract": {
+                "description": "Submit a scrubbed transcript for server-side extraction (P2.1a)",
+                "input_schema": {
+                    "type": "object",
+                    "required": ["source", "transcript", "transcript_sha256"],
+                    "properties": {
+                        "source": {
+                            "type": "object",
+                            "properties": {
+                                "type": { "type": "string", "enum": ["claude-code", "openclaw"] },
+                                "session_id": { "type": "string" }
+                            }
+                        },
+                        "transcript": { "type": "string", "maxLength": 262144 },
+                        "transcript_sha256": { "type": "string" },
+                        "client_scrub_report": {
+                            "type": "object",
+                            "description": "Optional client-side scrub report (server re-scans regardless)",
+                            "properties": {
+                                "scrubber_version": { "type": "string" },
+                                "patterns_matched": { "type": "array", "items": { "type": "string" } },
+                                "clean": { "type": "boolean" }
+                            }
+                        }
+                    }
+                }
+            },
+            "auxilo_consent": {
+                "description": "Grant or revoke autonomous extraction consent",
+                "input_schema": {
+                    "type": "object",
+                    "required": ["action"],
+                    "properties": {
+                        "action": { "type": "string", "enum": ["grant", "revoke"] },
+                        "consent_version": { "type": "string", "description": "ISO date; server-defaulted if omitted" }
+                    }
+                }
+            }
+        }
     },
     "operator": {
         "name": "Conway Automaton",

@@ -1,6 +1,6 @@
 {
   "name": "auxilo-mcp",
-  "version": "0.3.0",
+  "version": "0.7.0",
   "description": "MCP server for Auxilo — Agent Capability Discovery & Knowledge Marketplace",
   "main": "mcp-server.js",
   "bin": {
@@ -9,10 +9,14 @@
   "files": [
     "mcp-server.js",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "prompts/auxilo-learning-claude-code.md",
+    "prompts/auxilo-learning-generic.md",
+    "prompts/auxilo-learning-schema.json"
   ],
   "scripts": {
-    "start": "node mcp-server.js"
+    "start": "node mcp-server.js",
+    "test": "node --test --test-force-exit test/*.test.js"
   },
   "keywords": [
     "mcp",
@@ -31,6 +35,7 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
+    "stripe": "^17.0.0",
     "viem": "^2.46.3"
   },
   "devDependencies": {
