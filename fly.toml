@@ -1,0 +1,94 @@
+# fly.toml — Auxilo HTTP server on Fly.io
+#
+# App name is globally unique across Fly. Primary choice: "auxilo".
+# If taken at `flyctl apps create`, fall back to "auxilo-prod" (update
+# the `app` line below before running `flyctl deploy`).
+#
+# Single-machine topology on pilot: the server keeps state on a local
+# volume (audit chain, consent log, learnings catalog, circuit breaker),
+# which is single-writer. Do NOT scale to >1 machine without first
+# migrating that state to a shared store. auto_stop_machines = false
+# enforces this — we never want the machine to idle-stop while writes
+# are pending.
+
+app = "auxilo"
+primary_region = "iad"   # US East — matches Conway's us-east proximity
+kill_signal   = "SIGTERM"
+kill_timeout  = "30s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT      = "3000"
+  NODE_ENV  = "production"
+  # BASE_URL is set dynamically from the Host header in server.js.
+  # Override here only if you need a fixed canonical URL for links
+  # emitted in audit records or emails.
+  # BASE_URL = "https://auxilo.io"
+
+# ── Public HTTP service ────────────────────────────────────────────────
+[http_service]
+  internal_port         = 3000
+  force_https           = true
+  auto_stop_machines    = false   # stateful — never idle-stop
+  auto_start_machines   = true
+  min_machines_running  = 1
+  processes             = ["app"]
+
+  [http_service.concurrency]
+    type        = "requests"
+    soft_limit  = 200
+    hard_limit  = 250
+
+  # Application-level health check. Fly polls /health; if it fails
+  # repeatedly, the edge stops routing traffic to the machine.
+  [[http_service.checks]]
+    grace_period  = "20s"
+    interval      = "15s"
+    method        = "GET"
+    path          = "/health"
+    protocol      = "http"
+    timeout       = "5s"
+    type          = "http"
+
+# ── Persistent state ───────────────────────────────────────────────────
+# The audit chain, consent log, and learnings catalog are append-only
+# JSONL files. They must survive machine restarts and deploys.
+#
+# Fly volumes are single-AZ. Snapshots are enabled by default (daily,
+# 5-day retention). See MIGRATION-FLY.md for snapshot + restore notes.
+[[mounts]]
+  source       = "auxilo_data"
+  destination  = "/app/data"
+  initial_size = "3gb"
+
+# ── Deploy strategy ────────────────────────────────────────────────────
+# immediate = stop old machine, start new. On a single-machine stateful
+# app this is correct — rolling/bluegreen would require two machines
+# sharing the same volume, which Fly does not allow.
+[deploy]
+  strategy = "immediate"
+
+# ── VM sizing ──────────────────────────────────────────────────────────
+# shared-cpu-1x / 512MB is the Fly default. Node + Hono + the audit
+# writer fit comfortably; scale to 1024MB if resident memory climbs
+# past ~350MB under load.
+[[vm]]
+  size   = "shared-cpu-1x"
+  memory = "512mb"
+  cpus   = 1
+
+# ── Custom domains (post-deploy) ───────────────────────────────────────
+# Custom hostnames are NOT configured in fly.toml. After first deploy:
+#   flyctl certs add auxilo.io
+#   flyctl certs add www.auxilo.io
+# Then point DNS per the records `flyctl certs show auxilo.io` prints
+# (typically an A record to the Fly shared-v4 IP and an AAAA to the
+# shared-v6 IP, or a CNAME on a subdomain). See MIGRATION-FLY.md §9.
+
+# ── Processes ──────────────────────────────────────────────────────────
+# Single process for now. Background daemons (processing_unresolved,
+# OpenClaw memory daemon) run in-process inside server.js.
+[processes]
+  app = "node server.js"

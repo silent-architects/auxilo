@@ -1,0 +1,42 @@
+# Keep the build context small and keep local state out of the image.
+# Runtime data lives on the Fly volume, not in the image.
+
+node_modules
+data
+*.log
+deploy-output.txt
+
+# VCS / editor
+.git
+.gitignore
+.DS_Store
+.idea
+.vscode
+
+# Local env — NEVER bake secrets into the image. Use `flyctl secrets set`.
+.env
+.env.*
+.npmrc
+
+# Tests & dev-only tooling (not needed at runtime)
+tests
+test
+coverage
+.nyc_output
+
+# One-off deploy helpers for the old Conway VM flow — unused on Fly
+deploy.js
+deploy-*.js
+deploy-to-vm.sh
+deploy-to-vm.py
+recover-*.js
+ecosystem.config.js
+
+# Docs / specs don't need to ship in the runtime image
+docs
+specs
+reviews
+sprints
+agents
+prompts
+*.md
