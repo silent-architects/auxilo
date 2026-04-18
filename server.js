@@ -485,6 +485,47 @@ function writeAndSync(filepath, content) {
 
 let lastBackupCleanup = 0;
 let cleanupRunning = false; // M-G: prevent concurrent backup cleanup
+/**
+ * Redact a client IP for consent/audit logs.
+ *
+ * IPv4: mask the final octet — 1.2.3.4 → 1.2.3.*
+ * IPv6: truncate to /64 network prefix (first 4 hextets), drop the
+ *       interface identifier that can uniquely identify the device.
+ *       2a09:8280:0001:0000:0105:bffb:0000:0000 → 2a09:8280:1:0::
+ *
+ * Returns the string 'unknown' for null/undefined inputs.
+ *
+ * P1-4 fix: the earlier inline regex `ip.replace(/\.\d+$/, '.*')` only
+ * matched IPv4 (requires trailing dot+digits); IPv6 addresses have `:`
+ * separators and were stored unredacted.
+ */
+function redactIp(ip) {
+  if (!ip || typeof ip !== 'string') return 'unknown';
+  // IPv4 — mask last octet
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+    return ip.replace(/\.\d+$/, '.*');
+  }
+  // IPv6 — keep first 4 hextets (/64 prefix), drop the rest
+  if (ip.includes(':')) {
+    // Expand :: if present, then take the first 4 groups
+    let parts;
+    if (ip.includes('::')) {
+      const [head, tail] = ip.split('::');
+      const headParts = head ? head.split(':') : [];
+      const tailParts = tail ? tail.split(':') : [];
+      const needed = 8 - headParts.length - tailParts.length;
+      parts = [...headParts, ...Array(needed).fill('0'), ...tailParts];
+    } else {
+      parts = ip.split(':');
+    }
+    // Take first 4 hextets, collapse the rest with ::
+    const prefix = parts.slice(0, 4).join(':');
+    return `${prefix}::/64`;
+  }
+  // Unknown format — log as-is but truncated to avoid PII leak
+  return ip.length > 32 ? ip.slice(0, 32) + '…' : ip;
+}
+
 function safeWrite(filepath, data) {
   const tmp = filepath + '.tmp';
   const strData = JSON.stringify(data, null, 2);
@@ -4671,7 +4712,7 @@ app.patch('/account/settings', requireAuth, async (c) => {
         accountId,
         action: 'grant',
         consentVersion: extractionConfig.consent_version || '2026-04-14',
-        ipRedacted: ip.replace(/\.\d+$/, '.*'),
+        ipRedacted: redactIp(ip),
         userAgent: ua,
       });
     } else if (newMode === 'off' && oldMode !== 'off') {
@@ -4679,7 +4720,7 @@ app.patch('/account/settings', requireAuth, async (c) => {
         accountId,
         action: 'revoke',
         consentVersion: extractionConfig.consent_version || '2026-04-14',
-        ipRedacted: ip.replace(/\.\d+$/, '.*'),
+        ipRedacted: redactIp(ip),
         userAgent: ua,
       });
     }
@@ -4692,6 +4733,79 @@ app.patch('/account/settings', requireAuth, async (c) => {
     changes,
     current: {
       autonomous_extraction_mode: account.autonomous_extraction_mode || 'off',
+    },
+  }, 200);
+});
+
+
+// ── POST /extract/consent — Grant/revoke autonomous extraction consent ────
+// P1-6 fast-follow: this route was documented in openapi.json and
+// agent.json but never implemented. Real consent flow was via
+// `PATCH /account/settings` with the mode toggle. This endpoint is a
+// thin wrapper that maps action→mode (grant→automatic, revoke→off)
+// and delegates to the same appendConsent path, so agents that follow
+// openapi cold-read don't hit a 404.
+app.post('/extract/consent', requireAuth, async (c) => {
+  const accountId = c.get('accountId');
+  if (!accountId) return c.json({ error: 'Authentication required' }, 401);
+
+  let body;
+  try { body = await c.req.json(); } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+
+  const action = body.action;
+  if (action !== 'grant' && action !== 'revoke') {
+    return c.json({ error: 'action must be "grant" or "revoke"' }, 400);
+  }
+
+  const accounts = loadAccounts();
+  const account = accounts[accountId];
+  if (!account) return c.json({ error: 'Account not found' }, 404);
+
+  const oldMode = account.autonomous_extraction_mode || 'off';
+  // P2.1a §3.5 — grant implies automatic (default); revoke flips to off.
+  // Callers who want 'manual' mode use PATCH /account/settings directly.
+  const newMode = action === 'grant' ? 'automatic' : 'off';
+
+  if (oldMode === newMode && oldMode !== 'off') {
+    // Idempotent re-grant when already on automatic — record the consent
+    // row again so we have fresh timestamp + IP redaction, but don't
+    // mutate the mode itself.
+  }
+
+  account.autonomous_extraction_mode = newMode;
+
+  const ip = getClientIp(c);
+  const ua = c.req.header('user-agent') || 'unknown';
+  const consentVersion = body.consent_version || extractionConfig.consent_version || '2026-04-14';
+
+  if (action === 'grant' && oldMode === 'off') {
+    appendConsent({
+      accountId,
+      action: 'grant',
+      consentVersion,
+      ipRedacted: redactIp(ip),
+      userAgent: ua,
+    });
+  } else if (action === 'revoke' && oldMode !== 'off') {
+    appendConsent({
+      accountId,
+      action: 'revoke',
+      consentVersion,
+      ipRedacted: redactIp(ip),
+      userAgent: ua,
+    });
+  }
+
+  saveAccounts(accounts);
+
+  return c.json({
+    consent_recorded: true,
+    action,
+    consent_version: consentVersion,
+    current: {
+      autonomous_extraction_mode: newMode,
     },
   }, 200);
 });
