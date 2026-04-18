@@ -40,12 +40,37 @@ const { OpenClawSource } = require('./sources/openclaw.js');
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const API_KEY = process.env.AUXILO_API_KEY;
-const BASE_URL = process.env.AUXILO_BASE_URL || 'http://localhost:49152';
+const AUXILO_DIR = path.join(os.homedir(), '.auxilo');
+const CREDS_PATH = path.join(AUXILO_DIR, 'credentials.json');
+
+/**
+ * Credentials resolution order (P1-8 fast-follow):
+ *   1. AUXILO_API_KEY env var (highest priority — for CI, launchd, hooks)
+ *   2. ~/.auxilo/credentials.json { api_key, base_url }
+ *   3. fallback to local dev URL
+ *
+ * Base URL resolution:
+ *   1. AUXILO_BASE_URL env var
+ *   2. credentials.json .base_url
+ *   3. http://localhost:49152 (dev default)
+ */
+function loadCredentials() {
+  let fileCreds = {};
+  try {
+    if (fs.existsSync(CREDS_PATH)) {
+      fileCreds = JSON.parse(fs.readFileSync(CREDS_PATH, 'utf-8'));
+    }
+  } catch { /* malformed file — treat as absent */ }
+  return {
+    apiKey: process.env.AUXILO_API_KEY || fileCreds.api_key || null,
+    baseUrl: process.env.AUXILO_BASE_URL || fileCreds.base_url || 'http://localhost:49152',
+  };
+}
+
+const { apiKey: API_KEY, baseUrl: BASE_URL } = loadCredentials();
 const MIN_CHARS = 1500;
 const MAX_CHARS = 30000;
 
-const AUXILO_DIR = path.join(os.homedir(), '.auxilo');
 const KILL_SWITCH_PATH = path.join(AUXILO_DIR, 'autonomous-enabled');
 const PENDING_DIR = path.join(AUXILO_DIR, 'pending-learnings');
 const LEDGER_PATH = path.join(AUXILO_DIR, 'ledger.json');
@@ -390,6 +415,86 @@ async function main() {
   if (!API_KEY && !args.dryRun) {
     console.error('[runner] AUXILO_API_KEY not set. Use --dry-run for local testing.');
     process.exit(1);
+  }
+
+  // ── Single-file mode (--transcript <path>) ───────────────────────────
+  // P1-3 fast-follow: this flag was parsed but never handled. Processes
+  // one transcript file through the same scrub + POST pipeline used by
+  // the discover loop, bypassing ledger/discovery. Used by SessionEnd
+  // hooks and for targeted testing.
+  if (args.transcript) {
+    const transcriptPath = path.resolve(args.transcript);
+    if (!fs.existsSync(transcriptPath)) {
+      log(`[runner] Transcript file not found: ${transcriptPath}`);
+      process.exit(1);
+    }
+
+    // Pick the right source adapter based on file location — default to
+    // claude-code since it can parse either JSONL or plain text, and
+    // works for most hook-fired single-file invocations.
+    const sourceType = args.source || 'claude-code';
+    const SourceClass = SOURCES.find(S => S.id === sourceType);
+    if (!SourceClass) {
+      log(`[runner] Unknown source type: ${sourceType}`);
+      process.exit(1);
+    }
+    const source = new SourceClass();
+    const sessionId = path.basename(transcriptPath, path.extname(transcriptPath));
+    const stat = fs.statSync(transcriptPath);
+    const sessionRef = {
+      path: transcriptPath,
+      sessionId,
+      mtime: stat.mtime.toISOString(),
+      bytes: stat.size,
+    };
+
+    log(`[runner] Single-file mode: ${transcriptPath} (${stat.size} bytes)`);
+
+    let transcriptData;
+    try {
+      transcriptData = await source.readSession(sessionRef);
+    } catch (err) {
+      // Fallback: treat the file as a plain pre-formatted transcript
+      try {
+        transcriptData = { transcript: fs.readFileSync(transcriptPath, 'utf-8') };
+      } catch (e2) {
+        log(`[runner] Read failed: ${err.message}`);
+        process.exit(1);
+      }
+    }
+
+    let transcript = transcriptData.transcript;
+    if (transcript.length < MIN_CHARS) {
+      log(`[runner] Too short (${transcript.length} chars, min ${MIN_CHARS}). Exiting.`);
+      process.exit(0);
+    }
+    if (transcript.length > MAX_CHARS) {
+      log(`[runner] Truncating from ${transcript.length} to ${MAX_CHARS} chars`);
+      transcript = transcript.slice(0, MAX_CHARS);
+    }
+
+    const { cleaned, report, refused } = scrubAndVerify(transcript);
+    if (refused || !cleaned) {
+      log(`[runner] Scrub fail-closed — refusing to upload`);
+      process.exit(1);
+    }
+    if (!report.clean) {
+      log(`[runner] Scrubbed ${report.patterns_matched.length} sensitive pattern(s): ${[...new Set(report.patterns_matched)].join(', ')}`);
+    }
+
+    if (args.dryRun) {
+      log(`[runner] [DRY RUN] Would upload ${cleaned.length} chars to ${BASE_URL}/extract`);
+      process.exit(0);
+    }
+
+    try {
+      const result = await postExtract(cleaned, sessionId, sourceType, report);
+      log(`[runner] ✓ ${result.learnings_published || 0} learning(s) published, ${result.learnings_rejected || 0} rejected (extraction: ${result.extraction_id})`);
+      process.exit(0);
+    } catch (err) {
+      log(`[runner] ✗ Upload failed: ${err.message}`);
+      process.exit(1);
+    }
   }
 
   // ── Flush pending (--flush-pending) ───────────────────────────────────
