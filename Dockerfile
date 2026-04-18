@@ -11,9 +11,11 @@
 
 FROM node:20-alpine AS base
 
-# curl is required for HEALTHCHECK. tini gives us proper signal handling so
-# SIGTERM from flyctl machine stop / rolling deploy reaches node cleanly.
-RUN apk add --no-cache curl tini
+# curl   — required for HEALTHCHECK
+# tini   — PID 1, signal handling + zombie reaping
+# su-exec — drop-privileges helper used by the entrypoint to chown-then-
+#          exec-as-node (cheaper than gosu, statically linked)
+RUN apk add --no-cache curl tini su-exec
 
 WORKDIR /app
 
@@ -37,11 +39,14 @@ COPY . .
 # ownership (see MIGRATION-FLY.md data-restore procedure).
 RUN mkdir -p /app/data
 
-# NOTE: running as root here — Fly volumes restored from Conway tarballs
-# have root-owned files that non-root `node` user can't read. Hardening
-# to drop-privileges-via-entrypoint is tracked as a P1 post-pilot item;
-# for pilot-of-one this is acceptable.
-# USER node   # re-enable after pilot + chown fix
+# Entrypoint script: runs as root, chowns /app/data to node, then
+# exec's node under the node user via su-exec. This is the correct
+# security posture — root is held only for the ~100ms chown window.
+COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Container runs as root at entry, entrypoint drops to node via su-exec.
+# Do NOT add `USER node` — it would prevent the entrypoint from chowning.
 
 ENV NODE_ENV=production \
     PORT=3000
@@ -54,6 +59,7 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl -fsS http://127.0.0.1:3000/health || exit 1
 
-# tini = PID 1 → forwards signals and reaps zombies.
-ENTRYPOINT ["/sbin/tini", "--"]
+# tini (PID 1) → docker-entrypoint (as root) → su-exec → node (as node).
+# Full signal chain preserved for clean SIGTERM handling.
+ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "server.js"]
