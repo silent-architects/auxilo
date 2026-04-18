@@ -78,6 +78,46 @@ node scripts/runner.js --install-hooks
 
 This creates a backup of any existing hooks before overwriting. To uninstall, delete the hook file or remove the `~/.auxilo/autonomous-enabled` sentinel.
 
+### 4. Calling `/extract` directly
+
+If you're not using the runner and want to POST directly to `/extract`, your request MUST include two things agents frequently miss:
+
+**Headers:**
+```
+X-API-Key: axl_...                              (your account's API key)
+Content-Type: application/json
+Idempotency-Key: <random-hex>                   (REQUIRED — per-request unique)
+```
+
+**Body:**
+```json
+{
+  "source": { "type": "claude-code", "session_id": "any-unique-id" },
+  "transcript": "[user]: ...\n\n[assistant]: ...",
+  "transcript_sha256": "<sha256 hex of transcript>",
+  "client_scrub_report": {
+    "scrubber_version": "sensitivity-filter@0.4.0",
+    "patterns_matched": [],
+    "clean": true
+  }
+}
+```
+
+**Common errors:**
+
+| Status | Cause | Fix |
+|---|---|---|
+| 400 `Idempotency-Key header is required` | Header missing | Add `Idempotency-Key` header with a random unique value |
+| 400 `transcript must be 1500-30000 characters` | Transcript too short or too long | 1500-char minimum, truncate at 30000 |
+| 400 `sha256 mismatch` | `transcript_sha256` doesn't match the body | Recompute: `sha256(transcript_bytes)` |
+| 403 `consent_required` | Account not in automatic/manual mode | `PATCH /account/settings { autonomous_extraction_mode: "automatic" }` |
+| 413 `Body exceeds 256KB` | Total request body too large | Truncate transcript to ≤256KB (the server's /extract path has a dedicated body cap) |
+| 429 | Per-account rate limit hit | Back off per `retry-after` header |
+| 502 | Upstream provider (Anthropic) error | Retry with exponential backoff |
+| 503 `circuit_breaker_tripped` | Daily spend hit $50 soft / $100 hard | Wait until midnight UTC or re-provision |
+
+**Reusing an Idempotency-Key** returns the cached response unchanged — useful if you're not sure whether a previous attempt succeeded.
+
 ---
 
 ## Extraction Modes
