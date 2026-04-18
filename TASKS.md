@@ -72,10 +72,10 @@ These were decided in the 2026-02-25 strategy session. Don't revisit unless Tyle
 
 ### 0.3 — Credit System
 - **Owner:** BUILD-1 → BUILD-2
-- [ ] Free tier: 50 discovery queries + 10 unlocks per month per account
+- [x] ~~Free tier: 50 discovery queries + 10 unlocks per month per account~~ **KILLED — no free tier. Every account is funded. Discovery/search are free for all.**
 - [ ] Credit balance tracking per account
 - [ ] Credit debit on successful paid request
-- [ ] Monthly free tier reset (cron or on-request check)
+- [x] ~~Monthly free tier reset (cron or on-request check)~~ **KILLED — no free tier.**
 - **Files:** server.js, new credits data file
 - **Dependencies:** 0.1, 0.2
 
@@ -136,3 +136,49 @@ These were decided in the 2026-02-25 strategy session. Don't revisit unless Tyle
 - [ ] Feeds them to the learning extractor (1.2)
 - [ ] Runs on OpenClaw's heartbeat daemon (scheduled extraction)
 - [ ] Configurable: extraction frequency, confidence threshold, auto-publish vs. review queue
+
+---
+
+## Phase 2.1a: Autonomous Learning Extraction (Server-Side)
+
+> **Spec:** `specs/BUILD-SPEC-P2.1a-AUTONOMOUS-EXTRACTION.md`
+> **Status:** DONE (2026-04-15). All code implemented. 114/114 tests pass. T-109 E2E pilot pending Tyler.
+> **Supersedes:** Phase 1 client-side extraction. `scripts/extract-learnings.js` deprecated.
+
+### Summary
+Rewired extraction from client-side Anthropic calls to a secure server-side pipeline via `POST /extract`. Three trigger modes (automatic/scheduled/manual), $100/day circuit breaker, hash-chained audit logging, 7-day retraction window, tiered rate limiting, and full legal amendments (ToS §5.9.3/§5.9.4, PP §1.2/§3.8/§7.5/§8.3).
+
+### New Files
+| File | Role |
+|---|---|
+| `scripts/runner.js` | Client-side runner (replaces `extract-learnings.js`) |
+| `scripts/sources/source.interface.js` | TranscriptSource base class |
+| `scripts/sources/claude-code.js` | Claude Code adapter |
+| `scripts/sources/openclaw.js` | OpenClaw adapter (poll-only v1) |
+| `scripts/hooks/auxilo-extract.sh` | Post-session hook template |
+| `scripts/admin.js` | Admin CLI (`extract:reset-kill-switch`) |
+| `lib/providers/provider.interface.js` | ExtractionProvider base + error classes |
+| `lib/providers/anthropic.js` | Anthropic implementation |
+| `lib/extraction-consent-reader.js` | Consent log reader |
+| `lib/extraction-audit-writer.js` | Hash-chained audit writer |
+| `jobs/daily-digest.js` | Daily extraction digest |
+| `ops/extract-spend-report.js` | 7-day spend report |
+| `docs/SUBPROCESSORS.md` | Public subprocessor list |
+| `docs/SUPPORTED-CLIENTS.md` | Supported client integrations |
+
+### Modified Files
+| File | Change |
+|---|---|
+| `server.js` | `/extract` rewire, `DELETE /learn/:id`, `PATCH /account/settings` |
+| `lib/sensitivity-filter.js` | `scanText()` + 10 new patterns |
+| `lib/extractor.js` | `sanitizeLearningBody()` + `scoreLearning()` |
+| `config/model_config.json` | `extraction` section |
+| `docs/TERMS-OF-SERVICE.md` | §5.9.3 + §5.9.4 |
+| `docs/PRIVACY-POLICY.md` | §1.2, §3.8, §4, §7.5, §8.3 |
+| `docs/RISK-REGISTER.md` | R-21 |
+| `docs/INDEX.md` | Added SUBPROCESSORS.md, SUPPORTED-CLIENTS.md |
+| `docs/RUNBOOK.md` | §10 extraction ops |
+| `AGENT-LEARNING-GUIDE.md` | §3 three-mode architecture |
+
+### Legacy Backlog
+- [ ] Tyler manually flushes 4-learning backlog under `contributor_agent: auxilo-extract-slash/1` before or after deploy — independent timeline per GOV-1 decision.

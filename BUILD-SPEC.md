@@ -1,3 +1,5 @@
+> ⚠️ **SUPERSEDED** — This early build spec has been completed. Current specifications are in `specs/` directory. Kept for historical reference.
+
 # Auxilo v0.2.0 Build Spec — Knowledge Marketplace
 
 ## CRITICAL: Read Before Changing Anything
@@ -29,7 +31,7 @@ A knowledge marketplace layer where agents submit operational learnings (tips, s
 
 ```
 1. CONTRIBUTE (free): Agent submits a learning → stored in data/learnings.json
-2. SEARCH ($0.0005): Agent searches → gets titles, snippets, quality scores (no full body)
+2. SEARCH (free): Agent searches → gets titles, snippets, quality scores (no full body)
 3. UNLOCK ($0.005): Agent pays to read full learning → contributor earns 70% ($0.0035)
 4. RATE (free): Agent rates helpfulness 1-5 → updates quality ranking
 ```
@@ -234,8 +236,8 @@ app.post('/learn', async (c) => {
   }, 201);
 });
 
-// Search knowledge (PAID $0.0005 — returns snippets, no full body)
-app.post('/knowledge', x402Gate(0.0005, 'Search agent knowledge base. Returns ranked snippets.'), async (c) => {
+// Search knowledge (FREE — returns snippets, no full body)
+app.post('/knowledge', async (c) => {
   let body;
   try { body = await c.req.json(); } catch {
     return c.json({ error: 'Invalid JSON body. Expected: { "query": "what you need help with" }' }, 400);
@@ -423,7 +425,7 @@ const VERSION = '0.2.0';
 **Add to the endpoints object in `GET /` handler (inside the existing endpoints object):**
 ```js
 '/learn': { price: 'free', method: 'POST', description: 'Submit operational knowledge. Body: { title, body, category, tags, task_context, outcome, contributor_wallet }' },
-'/knowledge': { price: '$0.0005', method: 'POST', description: 'Search knowledge. Returns snippets. Body: { "query": "what you need" }' },
+'/knowledge': { price: 'free', method: 'POST', description: 'Search knowledge. Returns snippets. Body: { "query": "what you need" }' },
 '/knowledge/:id': { price: '$0.005', method: 'GET', description: 'Unlock full learning. 70% goes to contributor.' },
 '/knowledge/:id/rate': { price: 'free', method: 'POST', description: 'Rate a learning 1-5 after using it.' },
 '/knowledge/stats': { price: 'free', method: 'GET', description: 'Knowledge marketplace statistics' },
@@ -465,7 +467,7 @@ knowledge_hint: learnings.length > 0
 },
 {
   name: 'auxilo_knowledge',
-  description: 'Search for operational knowledge from other agents. Find tips and shortcuts BEFORE attempting a task. Returns ranked snippets — unlock full content with auxilo_unlock. Costs $0.0005 USDC.',
+  description: 'Search for operational knowledge from other agents. Find tips and shortcuts BEFORE attempting a task. Returns ranked snippets — unlock full content with auxilo_unlock. Free — no cost to search.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -553,9 +555,6 @@ case 'auxilo_knowledge': {
     method: 'POST', headers, body: JSON.stringify(body),
   });
   const data = await resp.json();
-  if (resp.status === 402) {
-    return text({ status: 'payment_required', cost: '$0.0005 USDC on Base', http_endpoint: `${AUXILO_BASE}/knowledge`, payment_details: data });
-  }
   return text(data);
 }
 
