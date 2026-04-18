@@ -4400,6 +4400,24 @@ app.post('/extract', async (c) => {
     return c.json({ error: 'Extraction failed', extraction_id: extractionId }, 502);
   }
 
+  // ── P1-9: Surface extractor chunk failures ────────────────────────────
+  // extractLearnings swallows per-chunk LLM errors into providerResult.errors
+  // so a transient failure doesn't halt the whole pipeline. That's correct,
+  // but if ALL chunks fail (e.g., ANTHROPIC_API_KEY invalid), we previously
+  // returned 200 with learnings_found=0 and usage.input_tokens=0 — silent
+  // failure that was hard to debug. Log explicitly so operators can see the
+  // class of error without diving into audit rows.
+  if (providerResult.stats) {
+    const { chunks_processed, chunks_failed } = providerResult.stats;
+    if (chunks_failed > 0) {
+      const firstErr = (providerResult.errors || [])[0];
+      const msg = firstErr ? firstErr.message : 'unknown';
+      console.error(
+        `[POST /extract] ${chunks_failed}/${chunks_processed} chunks failed LLM extraction: ${msg}`
+      );
+    }
+  }
+
   // ── Steps 10-14: Post-extraction processing ───────────────────────────
   const candidates = providerResult.learnings || [];
   const published = [];
