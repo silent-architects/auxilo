@@ -61,26 +61,41 @@ class ClaudeCodeSource extends TranscriptSource {
       return results;
     }
 
+    // Real Claude Code layout: ~/.claude/projects/<project>/<session-id>.jsonl
+    // The jsonl files sit directly under the project directory. Historical
+    // versions put them under a `conversations/` subdir — we still check
+    // that as a fallback for safety, but the modern layout is the default.
     for (const project of projects) {
-      const convDir = path.join(this.dataDir, project, 'conversations');
-      if (!fs.existsSync(convDir)) continue;
+      const projectDir = path.join(this.dataDir, project);
+      const candidateDirs = [
+        projectDir,
+        path.join(projectDir, 'conversations'), // legacy fallback
+      ];
 
-      let files;
-      try { files = fs.readdirSync(convDir).filter(f => f.endsWith('.jsonl')); }
-      catch { continue; }
+      for (const dir of candidateDirs) {
+        if (!fs.existsSync(dir)) continue;
 
-      for (const file of files) {
-        const filePath = path.join(convDir, file);
-        try {
-          const stat = fs.statSync(filePath);
-          if (stat.mtimeMs <= sinceMs) continue;
-          results.push({
-            sessionId: path.basename(file, '.jsonl'),
-            path: filePath,
-            mtime: stat.mtime.toISOString(),
-            bytes: stat.size,
-          });
-        } catch { /* skip unreadable files */ }
+        let files;
+        try { files = fs.readdirSync(dir).filter(f => f.endsWith('.jsonl')); }
+        catch { continue; }
+
+        for (const file of files) {
+          const filePath = path.join(dir, file);
+          try {
+            const stat = fs.statSync(filePath);
+            // Skip directories masquerading via .jsonl suffix (shouldn't happen,
+            // but be defensive); the readdirSync already excludes non-files in
+            // practice, but stat check is cheap.
+            if (!stat.isFile()) continue;
+            if (stat.mtimeMs <= sinceMs) continue;
+            results.push({
+              sessionId: path.basename(file, '.jsonl'),
+              path: filePath,
+              mtime: stat.mtime.toISOString(),
+              bytes: stat.size,
+            });
+          } catch { /* skip unreadable files */ }
+        }
       }
     }
 
@@ -99,15 +114,41 @@ class ClaudeCodeSource extends TranscriptSource {
     const content = fs.readFileSync(filePath, 'utf-8');
     const lines = content.split('\n').filter(l => l.trim());
 
+    // Real Claude Code JSONL shape:
+    //   { type: 'user'|'assistant'|'system'|'queue-operation'|'attachment'|...,
+    //     message: { role, content } }
+    // For user:      message.content is a string OR [{type:'text', text:'...'}]
+    // For assistant: message.content is [{type:'text'|'thinking'|'tool_use'|'tool_result', ...}]
+    // We want user + assistant text content only, concatenated in order.
     const turns = [];
     for (const line of lines) {
       try {
-        const msg = JSON.parse(line);
-        const role = msg.role || msg.type || 'unknown';
-        const text = typeof msg.content === 'string'
-          ? msg.content
-          : (msg.content && msg.content[0]?.text) || JSON.stringify(msg.content || '');
-        turns.push(`[${role}]: ${text}`);
+        const entry = JSON.parse(line);
+        // Skip meta types — they don't contribute to the conversation
+        if (entry.type && !['user', 'assistant', 'system'].includes(entry.type)) continue;
+
+        const role = entry.message?.role || entry.role || entry.type || 'unknown';
+        const raw = entry.message?.content ?? entry.content;
+        if (raw == null) continue;
+
+        let text = '';
+        if (typeof raw === 'string') {
+          text = raw;
+        } else if (Array.isArray(raw)) {
+          // Concatenate text-like blocks. Skip tool_use/tool_result payloads
+          // and thinking blocks (internal reasoning, not conversation).
+          text = raw
+            .filter(b => b && (b.type === 'text' || b.type === 'input_text' || typeof b.text === 'string'))
+            .map(b => b.text || '')
+            .filter(Boolean)
+            .join('\n');
+        } else if (typeof raw === 'object' && typeof raw.text === 'string') {
+          text = raw.text;
+        }
+
+        if (text.trim().length > 0) {
+          turns.push(`[${role}]: ${text}`);
+        }
       } catch {
         // Skip malformed lines
       }
