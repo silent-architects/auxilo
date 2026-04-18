@@ -495,22 +495,24 @@ Source: 5-agent audit against live API after Wave 1 deploy. Top 5 findings addre
 > - FOUNDATION.md prerequisite: P2.1a launch depends on the governance framework in FOUNDATION.md (not yet created). Cross-reference the P0 governance track.
 
 > **P2.1a — Bugs discovered during T-107/T-108 runs (2026-04-18), queued as P1 fast-follows**:
-> - P1-1: `claude-code source.discoverSessions` looked in wrong path (`conversations/` subdir) — FIXED in `2732ac6`. Root cause: reviewer B1 validated interface compliance but not path correctness. Action for BUILD-4: add source-adapter unit tests that exercise real Claude Code fixtures.
-> - P1-2: `claude-code source.readSession` extracted `msg.content` (wrong level) — FIXED in `2732ac6`. Real shape is `msg.message.content` array of typed blocks.
-> - P1-3: `runner.js --transcript <path>` flag parsed at line 89 but never acted on. Handler code missing. T-107 spec references this flag — implementation needed.
-> - P1-4: `ip_redacted` IPv4-only regex `\.\d+$/` doesn't match IPv6 — stores full IPv6 in consent log. Fix: detect `:` and truncate at `/64` prefix.
-> - P1-5: `/extract` requires `Idempotency-Key` header but `AGENT-LEARNING-GUIDE.md` doesn't mention it. Cold-reading agents will hit 400. Doc fix.
-> - P1-6: `/extract/consent` POST documented in openapi + agent.json but no route registered in server.js. Real consent flow is `PATCH /account/settings`. Add thin wrapper route OR strip from docs — implementation chosen (cleaner for agent cold-read).
-> - P1-7: `/account/settings` requires Bearer JWT (`requireAuth` middleware), rejects X-API-Key. Runner can't flip modes programmatically. Consider adding X-API-Key auth path OR long-lived refresh tokens.
-> - P1-8: `runner.js` reads `AUXILO_API_KEY` env var, ignores `~/.auxilo/credentials.json` file that agents wrote during T-105. Inconsistent with MCP server behavior. Fix: fallback chain env → file.
-> - P1-9: `usage.input_tokens` in audit row was 0 for multiple extract calls because `ANTHROPIC_API_KEY` was a placeholder (Anthropic returned 401). Extractor catches the error inside chunk-processing try/catch and silently drops the chunk, but the accumulator was never populated. Add explicit logging when LLM call fails so operator sees this class of failure.
-> - P1-10: Dockerfile runs as root for pilot (see commit `1ecf811`). Add entrypoint script that chowns /app/data then su-exec's to `node` user. Tracked as post-pilot hardening.
-> - P1-11: Anthropic dashboard displays API keys in truncated form (`sk-ant-api03-8tX...tgAA`) easy to copy mistakenly. Add to AGENT-LEARNING-GUIDE onboarding copy "the modal's long string is the real key — don't copy from the list row."
-> - P1-12: npm audit reports 4 high-severity advisories — run `npm audit fix` and redeploy post-soak.
-> - P1-13: LaunchAgent `auxilo-sweeper` blocked by macOS TCC on `~/Documents/`. Move wrapper to `~/.auxilo/bin/auxilo-sweeper-wrapper.sh` and update plist path. Local-machine fix, no deploy impact.
-> - P1-14: `deploy.js` "pkill + nohup in single exec" bug documented in DEPLOY-GUIDE.md but current deploy still uses git-pull path (not pkill+nohup) because we migrated to Fly. Can be deleted once Conway is decommissioned.
-> - P1-15: Conway sandbox `dc034f2b...` kept as 48h standby after 2026-04-18 Fly migration. Decommission deadline: 2026-04-21.
-> - P1-16: Cloudflare proxy was turned OFF (DNS-only) for initial Fly cert validation. To re-enable "orange cloud" DDoS/caching, must set Cloudflare SSL mode to "Full (strict)" first, then flip proxy back on. Not blocking.
+> - P1-1: `claude-code source.discoverSessions` looked in wrong path (`conversations/` subdir) — ✅ FIXED `2732ac6`.
+> - P1-2: `claude-code source.readSession` extracted `msg.content` (wrong level) — ✅ FIXED `2732ac6`. Real shape is `msg.message.content` array of typed blocks.
+> - P1-3: `runner.js --transcript <path>` handler missing — ✅ FIXED `ece8072`. Single-file mode now works via source adapter + scrub + POST pipeline; plain-text fallback when readSession fails.
+> - P1-4: `ip_redacted` IPv4-only regex — ✅ FIXED `799c972`. New `redactIp()` helper handles IPv4 (mask last octet) + IPv6 (truncate at /64 prefix). Unit-tested in-place.
+> - P1-5: `/extract` Idempotency-Key undocumented — ✅ FIXED `560adec`. AGENT-LEARNING-GUIDE §4 now has full request example + 8-row error-code cheat sheet.
+> - P1-6: `/extract/consent` POST route missing — ✅ FIXED `799c972`. Thin wrapper over appendConsent with action→mode mapping (grant→automatic, revoke→off).
+> - P1-7: `/account/settings` Bearer-JWT-only, rejects X-API-Key — ⏸ DEFERRED. Runner can't flip modes programmatically. Needs auth-surface review before changing; post-soak task.
+> - P1-8: `runner.js` ignored `~/.auxilo/credentials.json` — ✅ FIXED `ece8072`. `loadCredentials()` now reads env → file → localhost default. Matches mcp-server.js.
+> - P1-9: Extractor chunk failures silent — ✅ FIXED `dcd3d91`. Server now logs `X/Y chunks failed LLM extraction: <error>` to stderr when `providerResult.stats.chunks_failed > 0`.
+> - P1-10: Dockerfile runs as root — ✅ FIXED `5a1cf91`. New `scripts/docker-entrypoint.sh` chowns /app/data then `exec su-exec node`. Applied on next Fly deploy.
+> - P1-11: Anthropic dashboard truncated-key display confusion — pending doc note in AGENT-LEARNING-GUIDE (P2 polish).
+> - P1-12: npm audit high advisories — ✅ FIXED `6cc3f73`. 4 advisories patched via in-major upgrades (hono, path-to-regexp, express-rate-limit, @hono/node-server). 0 vulnerabilities remaining.
+> - P1-13: LaunchAgent `auxilo-sweeper` TCC-blocked on `~/Documents/` — ⏸ DEFERRED. Tyler's machine-local fix (move wrapper to `~/.auxilo/bin/` + update plist path + launchctl reload). Doesn't block Fly.
+> - P1-14: `deploy.js` pkill+nohup legacy code — SUPERSEDED (current deploy uses git-pull path via `a7eb2cf`). Delete post-Conway-decom.
+> - P1-15: Conway sandbox `dc034f2b...` 48h standby — decommission deadline 2026-04-21. Requires Tyler's go (destructive prod action).
+> - P1-16: Cloudflare proxy re-enable with Full (strict) SSL — post-soak enhancement, Tyler's call.
+>
+> **P1 fix burn-down (2026-04-18 session)**: 9 fixes shipped, 3 deferred (P1-7, P1-13 need Tyler review; P1-16 is an enhancement), 1 pending non-urgent doc polish (P1-11). Commits: `2732ac6`, `560adec`, `799c972`, `ece8072`, `5a1cf91`, `6cc3f73`, `82a7a21`, `dcd3d91`. All in `origin/main`, will land on next `flyctl deploy` (post-soak).
 
 > **P2.1a — T-109 execution log (2026-04-18)**:
 > - T-105 ✅ (skipped — doc checks against pre-migration infra; post-migration docs pending separate T-105 re-run)
