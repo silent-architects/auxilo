@@ -118,64 +118,45 @@ async function uploadFile(localPath, remotePath) {
     }
 }
 
-// ─── Deploy ───────────────────────────────────────────────────────────────────
-
-// ─── File manifest ────────────────────────────────────────────────────────────
-// Source of truth for what gets deployed. Keep this list in sync with
-// server.js `require('./lib/...')` statements + any public assets the
-// server reads at startup (openapi.json, agent.json, etc.).
+// ─── Deploy via git pull ──────────────────────────────────────────────────────
+// Strategy: have the sandbox git-clone/pull from the public GitHub repo
+// rather than uploading files one-by-one. This is resilient to Conway API
+// drift (no /files endpoint dependency, no argv-limit chunking of base64)
+// and gives us an atomic "deploy = one exec call = git state on VM matches
+// git state on origin" guarantee.
 //
-// Client-only files (scripts/, jobs/, test/) are intentionally absent —
-// those run on the builder's machine via launchd, not on the Conway VM.
+// The sandbox's /app dir is preserved (data/ is gitignored → stays put;
+// node_modules/ persists across pulls; logs/ persist).
 
-const MANIFEST = [
-    // Top-level
-    ['server.js',                         '/app/server.js'],
-    ['mcp-server.js',                     '/app/mcp-server.js'],
-    ['package.json',                      '/app/package.json'],
-    ['model_config.json',                 '/app/model_config.json'],
-    ['openapi.json',                      '/app/openapi.json'],
-    ['skills.json',                       '/app/skills.json'],
-    ['.well-known/agent.json',            '/app/.well-known/agent.json'],
-
-    // Core libs (auth, marketplace, payouts)
-    ['lib/accounts.js',                   '/app/lib/accounts.js'],
-    ['lib/admin-auth.js',                 '/app/lib/admin-auth.js'],
-    ['lib/credits.js',                    '/app/lib/credits.js'],
-    ['lib/earnings.js',                   '/app/lib/earnings.js'],
-    ['lib/eip712.js',                     '/app/lib/eip712.js'],
-    ['lib/extractor.js',                  '/app/lib/extractor.js'],
-    ['lib/openclaw-adapter.js',           '/app/lib/openclaw-adapter.js'],
-    ['lib/pricing.js',                    '/app/lib/pricing.js'],
-    ['lib/renderly.js',                   '/app/lib/renderly.js'],
-    ['lib/sensitivity-filter.js',         '/app/lib/sensitivity-filter.js'],
-    ['lib/stripe.js',                     '/app/lib/stripe.js'],
-    ['lib/tx-manager.js',                 '/app/lib/tx-manager.js'],
-    ['lib/wal.js',                        '/app/lib/wal.js'],
-    ['lib/wallet-lock.js',                '/app/lib/wallet-lock.js'],
-    ['lib/x402-local.js',                 '/app/lib/x402-local.js'],
-
-    // P2.1a autonomous extraction pipeline
-    ['lib/extraction-audit-writer.js',    '/app/lib/extraction-audit-writer.js'],
-    ['lib/extraction-consent-reader.js',  '/app/lib/extraction-consent-reader.js'],
-    ['lib/providers/provider.interface.js', '/app/lib/providers/provider.interface.js'],
-    ['lib/providers/anthropic.js',        '/app/lib/providers/anthropic.js'],
-];
+const REPO_URL = 'https://github.com/silent-architects/auxilo.git';
+const BRANCH = 'main';
 
 async function deploy() {
-    console.log(`\n🚀 Deploying Auxilo to Conway sandbox ${SANDBOX_ID}\n`);
-    console.log(`── Step 1: Upload ${MANIFEST.length} source files ───────────`);
+    console.log(`\n🚀 Deploying Auxilo to Conway sandbox ${SANDBOX_ID}`);
+    console.log(`   Source: ${REPO_URL} @ ${BRANCH}\n`);
 
-    for (const [local, remote] of MANIFEST) {
-        await uploadFile(path.join(__dirname, local), remote);
-    }
+    console.log('── Step 1: Sync code via git ────────────────────────');
+    // If /app isn't a git repo, init one pointing at origin. If it is,
+    // fetch + hard-reset to origin/main. `data/`, `node_modules/`, `logs/`
+    // are gitignored so they persist unchanged.
+    const syncCmd = [
+        'cd /app',
+        'if [ ! -d .git ]; then',
+        '  git init -q',
+        `  git remote add origin ${REPO_URL}`,
+        'fi',
+        `git fetch --depth=1 origin ${BRANCH}`,
+        `git reset --hard origin/${BRANCH}`,
+        'git log -1 --oneline',
+    ].join(' && ');
+    await exec(syncCmd, 'git clone/pull main');
 
     console.log('\n── Step 2: Install dependencies ─────────────────────');
-    await exec('cd /app && npm install --production', 'npm install --production');
+    await exec('cd /app && npm install --production --silent', 'npm install --production');
 
     console.log('\n── Step 3: Restart server ───────────────────────────');
-    // Kill old process gracefully, then start fresh with nohup
-    // SESSION_SECRET is exported inline — survives nohup
+    // Kill old process gracefully, then start fresh with nohup.
+    // SESSION_SECRET is exported inline — survives nohup disconnection.
     const startCmd = [
         'pkill -f "node server.js" || true',
         'sleep 1',
@@ -183,7 +164,6 @@ async function deploy() {
         'sleep 2',
         'pgrep -fa "node server.js" && echo "server running" || echo "WARNING: server not found in process list"',
     ].join(' && ');
-
     await exec(startCmd, 'kill old + start fresh server with nohup');
 
     console.log('\n── Step 4: Verify process is alive ──────────────────');
@@ -191,7 +171,8 @@ async function deploy() {
 
     console.log('\n🎉 Deployment complete!');
     console.log(`\nSandbox URL: https://3000-${SANDBOX_ID}.life.conway.tech`);
-    console.log('Run live validation: npx --yes mocha tests/test-a-01-account.js (with server running)\n');
+    console.log('Public URL:  https://auxilo.io');
+    console.log('Verify:      curl -sS https://auxilo.io/health\n');
 }
 
 deploy().catch((err) => {
