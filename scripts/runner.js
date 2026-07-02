@@ -233,30 +233,52 @@ function listPendingFiles() {
 
 // ─── Upload ─────────────────────────────────────────────────────────────────
 
-async function postExtract(transcript, sessionId, sourceType, scrubReport) {
-  const transcriptSha256 = crypto.createHash('sha256').update(transcript).digest('hex');
-  const idempotencyKey = crypto.randomUUID();
-
-  const res = await fetch(`${BASE_URL}/extract`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-API-Key': API_KEY,
-      'Idempotency-Key': idempotencyKey,
-    },
-    body: JSON.stringify({
-      source: { type: sourceType, session_id: sessionId },
-      transcript,
-      transcript_sha256: transcriptSha256,
-      client_scrub_report: scrubReport,
-    }),
-  });
-
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(`Upload failed (${res.status}): ${data.error || JSON.stringify(data)}`);
+async function postExtract(transcript, sessionId, sourceType, _scrubReport) {
+  // CLIENT-SIDE extraction (2026-07-02). Server /extract is deprecated (410) — Auxilo
+  // does not pay to extract. The local model (via `claude -p`) extracts + self-screens
+  // the already-client-scrubbed transcript, and we submit finished learnings to /learn.
+  const { extractLocally } = require('./extract-local.js');
+  let learnings;
+  let skipped;
+  try {
+    ({ learnings, skipped } = await extractLocally(transcript, sourceType));
+  } catch (err) {
+    throw new Error(`Local extraction failed: ${err.message}`);
   }
-  return { ...data, transcript_sha256: transcriptSha256 };
+  if (skipped) {
+    log(`[runner] ${skipped}`);
+    return { learnings_published: 0, learnings_rejected: 0, extraction_id: 'client-skip' };
+  }
+
+  let published = 0;
+  let rejected = 0;
+  for (const l of learnings) {
+    try {
+      const res = await fetch(`${BASE_URL}/learn`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': API_KEY,
+          'Idempotency-Key': crypto.randomUUID(),
+        },
+        body: JSON.stringify({
+          title: l.title,
+          body: l.body,
+          category: l.category,
+          tags: l.tags,
+          task_context: l.task_context,
+          outcome: l.outcome,
+          contributor_agent: `auxilo-hook/${sourceType}`,
+        }),
+      });
+      if (res.ok) published += 1;
+      else rejected += 1;
+    } catch (_) {
+      rejected += 1;
+    }
+  }
+  log(`[runner] client-side extraction: ${learnings.length} candidate(s), published=${published} rejected=${rejected}`);
+  return { learnings_published: published, learnings_rejected: rejected, extraction_id: `client-${sessionId}` };
 }
 
 // ─── Install Hooks (B15) ────────────────────────────────────────────────────
