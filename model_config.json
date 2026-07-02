@@ -1,129 +1,43 @@
 {
-  "_meta": {
-    "description": "Single source of truth for all Auxilo binding parameters",
-    "generated": "2026-03-19",
-    "source": "MASTER_ALIGNMENT_PROMPT.md — Section 2: Binding Decisions"
-  },
-
-  "business": {
-    "free_tier_unlocks": 5,
-    "free_tier_queries": 50,
-    "credit_card_required": false,
-    "credit_packs": {
-      "starter": { "price_usd": 10, "queries": 400, "unlocks": 80 },
-      "growth": { "price_usd": 25, "queries": 1200, "unlocks": 250 },
-      "pro": { "price_usd": 100, "queries": 5000, "unlocks": 1000 }
-    },
-    "credit_expiry": "none",
-    "float_revenue": "killed",
-    "platform_take_standard": 0.30,
-    "platform_take_discovery": 0.40,
-    "builder_take_standard": 0.70,
-    "builder_take_discovery": 0.60,
-    "min_unlock_price": 0.05,
-    "max_unlock_price": 50.00,
-    "default_unlock_price": 0.08,
-    "payout_fees": "builder_pays",
-    "first_payout_fee_free": true,
-    "stripe_inbound": "platform_pays_2.9pct_plus_30c",
-    "revenue_streams": ["learning_unlocks", "query_search_fees"]
-  },
-
-  "referral": {
-    "structure": "credits_only",
-    "referrer_reward_usd": 5,
-    "referee_reward_usd": 5,
-    "total_cost_per_referral_usd": 10,
-    "real_cost_estimate_usd": 7,
-    "multi_level": false,
-    "affiliate_link_format": "auxilo.io/ref/BUILDER_ID",
-    "direct_learning_link": "auxilo.io/learning/LEARNING_ID",
-    "combined_link": "auxilo.io/learning/LEARNING_ID?ref=BUILDER_ID",
-    "fraud_prevention": {
-      "payment_uniqueness": true,
-      "vesting_on_first_paid_tx": true,
-      "max_referral_payouts_per_month": 50,
-      "self_referral_blocked": true
-    }
-  },
-
-  "growth": {
-    "primary_audience": "builders",
-    "secondary_audience": "press_investors",
-    "tertiary_audience": "agents",
-    "spend_curve": {
-      "M1_M3": { "min": 0, "max": 2000, "label": "catalog seeding" },
-      "M4_M6": { "amount": 5000, "label": "supplement organic" },
-      "M7_M12": { "min": 10000, "max": 15000, "label": "scale" }
-    },
-    "catalog_target_before_ads": 500,
-    "current_catalog": { "learnings": 59, "skills": 30, "total": 89 },
-    "seeding_strategy": "chat_history_upload + 20 early builders at 90/10 split"
-  },
-
-  "financial_model": {
-    "organic_multipliers": {
-      "M1_M6": 1.0,
-      "M7_M12": 1.5,
-      "M13_M24": 2.5,
-      "M25_M36": 4.0
-    },
-    "infrastructure_costs": {
-      "tier1": 100, "tier2": 300, "tier3": 1500, "tier4": 5000,
-      "note": "Monthly infrastructure cost per growth tier"
-    },
-    "ai_costs": {
-      "tier1": 300, "tier2": 500, "tier3": 1000, "tier4": 2000,
-      "note": "Monthly AI/LLM cost per growth tier"
-    },
-    "legal": 500,
-    "misc": 50,
-    "founder_salary_scenarios": [0, 5000, 8000],
-    "employees": 0,
-    "conversion_scenarios": [0.15, 0.18, 0.22],
-    "churn_monthly": 0.05,
-    "raise_aggressive": 304000
-  },
-
-  "subscription_tiers": {
-    "free": { "price": 0, "launch": "Day 1" },
-    "pro": { "price": 29, "launch": "At 100 active agents" },
-    "team": { "price_per_seat": 99, "launch": "At 500 active agents" }
-  },
-
-  "monetization_roadmap": {
-    "day_1": ["discovery_premium_40pct", "credit_packs", "affiliate_referral"],
-    "M6_M12": ["promoted_learnings", "pro_tier"],
-    "M12_M24": ["team_tier", "api_provider_reports"],
-    "M24_plus": ["data_licensing", "white_label", "enterprise"]
-  },
-
-  "key_metrics": {
-    "break_even_accounts": 238,
-    "thrive_accounts": 895,
-    "monthly_fixed_costs_launch": 950,
-    "traditional_equivalent_cost": 50000,
-    "escape_velocity_month": "M4-M7"
-  },
-
   "extraction": {
-    "_note": "P2.1a §6.3 — Autonomous extraction provider config. Model is a config value, never hardcoded.",
-    "primary": { "provider": "anthropic", "model": "claude-haiku-4-5" },
+    "_note": "P2.1a \u00a76.3 \u2014 Autonomous extraction provider config. Model is a config value, never hardcoded.",
+    "primary": {
+      "provider": "anthropic",
+      "model": "claude-haiku-4-5"
+    },
     "fallbacks": [
-      { "provider": "anthropic", "model": "claude-sonnet-4-5" }
+      {
+        "provider": "anthropic",
+        "model": "claude-sonnet-4-5"
+      }
     ],
     "timeout_ms": 45000,
     "max_attempts_per_provider": 3,
     "cache_control": {
       "enabled": false,
-      "blocks": ["system_prompt", "extraction_schema"],
+      "blocks": [
+        "system_prompt",
+        "extraction_schema"
+      ],
       "_note": "Disabled at launch; flagged for P2.1b optimization (10-15% cost reduction)"
     },
     "rate_limits": {
       "tiers": {
-        "unverified": { "daily": 50, "hourly": 30, "burst_per_min": 5 },
-        "verified":   { "daily": 200, "hourly": 60, "burst_per_min": 5 },
-        "trusted":    { "daily": 1000, "hourly": 120, "burst_per_min": 5 }
+        "unverified": {
+          "daily": 50,
+          "hourly": 30,
+          "burst_per_min": 5
+        },
+        "verified": {
+          "daily": 200,
+          "hourly": 60,
+          "burst_per_min": 5
+        },
+        "trusted": {
+          "daily": 1000,
+          "hourly": 120,
+          "burst_per_min": 5
+        }
       },
       "global_circuit_breaker": {
         "soft_alert_usd": 25,
@@ -138,7 +52,10 @@
       "max_json_depth": 10,
       "max_keys_per_object": 200
     },
-    "source_allowlist": ["claude-code", "openclaw"],
+    "source_allowlist": [
+      "claude-code",
+      "openclaw"
+    ],
     "retraction_window_days": 7,
     "idempotency_ttl_hours": 24,
     "consent_version": "2026-04-14"
