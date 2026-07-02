@@ -53,6 +53,7 @@ outputs
 !docs/PRIVACY-POLICY.md
 !docs/SUBPROCESSORS.md
 !docs/SUPPORTED-CLIENTS.md
+!docs/DMCA-POLICY.md
 
 # Never bake data tarballs into the image
 *.tgz

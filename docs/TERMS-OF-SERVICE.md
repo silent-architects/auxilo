@@ -198,7 +198,7 @@ A Builder may change trigger modes or disable Autonomous Extraction at any time 
 
 **(a) Seven-day retraction window.** A Builder may retract any Learning published via Autonomous Extraction for a period of seven (7) calendar days following its publication date. Retraction is effected by request through the Platform's catalog management interface or by email to hello@auxilo.io identifying the Learning. Upon a valid retraction request, Auxilo will remove the Learning from public discovery, search results, and the catalog API within a commercially reasonable time.
 
-**(b) After the retraction window.** Following the seven-day window, autonomously-published Learnings are subject to the same removal mechanisms as any other published Learning, including the DMCA/notice-and-takedown processes referenced in Section 5 and Section 9.
+**(b) After the retraction window.** Following the seven-day window, autonomously-published Learnings are subject to the same removal mechanisms as any other published Learning, including the content-moderation rights in Section 10.1 and the DMCA notice-and-takedown procedure in Section 9.4 and at https://auxilo.io/dmca.
 
 **(c) No clawback; no refund.** Retraction removes a Learning from the catalog on a forward-going basis only. It does **not** reverse, refund, or unwind any unlock transaction completed prior to retraction. Consumers who unlocked the Learning before retraction retain the perpetual license described in Section 5.3 and Section 6.4. Builder earnings already accrued from pre-retraction unlocks remain payable on the normal settlement schedule and are not subject to clawback.
 
@@ -333,7 +333,23 @@ The Platform employs an automated sensitivity filter designed to detect and bloc
 
 ### 9.3 Reporting Violations
 
-If you encounter content on the Platform that you believe violates these content standards, please report it to hello@auxilo.io with the Learning identifier and a description of the concern.
+If you encounter content on the Platform that you believe violates these content standards, please report it to hello@auxilo.io with the Learning identifier and a description of the concern. Copyright infringement claims must instead follow the DMCA procedure in Section 9.4 and are sent to our Designated Agent at dmca@auxilo.io, not to hello@auxilo.io.
+
+### 9.4 Copyright Infringement; DMCA Notice-and-Takedown
+
+Auxilo complies with the Digital Millennium Copyright Act, 17 U.S.C. § 512, and maintains a notice-and-takedown procedure for claims of copyright infringement. Our full procedure, including the required elements of a takedown notice and the counter-notification process, is published at https://auxilo.io/dmca and is incorporated into these Terms by reference.
+
+**(a) Takedown notices.** If you believe that a Learning or other material on the Platform infringes your copyright, you may submit a notice to Auxilo's Designated Agent. To be effective, your notice must include the elements required by 17 U.S.C. § 512(c)(3)(A), as described at https://auxilo.io/dmca. Upon receipt of a valid notice, Auxilo will remove or disable access to the identified material within a reasonable time and will take reasonable steps to notify the affected Builder.
+
+**(b) Counter-notifications.** A Builder whose material has been removed or disabled may submit a counter-notification under 17 U.S.C. § 512(g), including the elements described at https://auxilo.io/dmca. Auxilo will restore the material within 10 to 14 business days after receiving a valid counter-notification unless the party who filed the original notice first notifies our Designated Agent that it has filed a lawsuit seeking a court order to restrain the allegedly infringing activity.
+
+**(c) Repeat-infringer policy.** In appropriate circumstances and at Auxilo's discretion, Auxilo will terminate the accounts of Builders who are repeat infringers, consistent with 17 U.S.C. § 512(i). A Builder is treated as a repeat infringer when the Builder has been the subject of two or more valid takedown notices that were not reversed by a counter-notification or a court. Auxilo's usual practice is a warning after the first valid notice and account termination on or after the second, and Auxilo may act sooner in cases of clear, willful, or large-scale infringement.
+
+**(d) Misrepresentation.** Under 17 U.S.C. § 512(f), any person who knowingly materially misrepresents that material is infringing, or that material was removed or disabled by mistake or misidentification, may be liable for damages.
+
+**(e) Designated Agent.** Notices and counter-notifications must be sent to Auxilo's Designated Agent:
+
+> SLAM Agency LLC (d/b/a Auxilo), DMCA Agent, Attn: T Kelley, 222 S. Meramec Ave, Ste 202-1092, Clayton, MO 63105. Email: dmca@auxilo.io.
 
 ---
 
