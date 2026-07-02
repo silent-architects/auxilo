@@ -7357,6 +7357,7 @@ app.get('/terms', (c) => serveLegalPage(c, 'TERMS-OF-SERVICE.md', 'Terms of Serv
 app.get('/privacy', (c) => serveLegalPage(c, 'PRIVACY-POLICY.md', 'Privacy Policy'));
 app.get('/legal/subprocessors', (c) => serveLegalPage(c, 'SUBPROCESSORS.md', 'Sub-Processors'));
 app.get('/legal/supported-clients', (c) => serveLegalPage(c, 'SUPPORTED-CLIENTS.md', 'Supported Clients'));
+app.get('/dmca', (c) => serveLegalPage(c, 'DMCA-POLICY.md', 'DMCA Copyright Policy'));
 
 // ─── Renderly — Web Content Extraction API ───────────────────────────
 
