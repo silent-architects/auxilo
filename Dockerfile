@@ -34,6 +34,13 @@ RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 # node_modules/, *.log, .git, and the deploy-*.js helpers out.
 COPY . .
 
+# LW-17: COPY preserves local file modes. model_config.json once shipped as
+# 0600 root:root while the server runs de-privileged as `node` — the config
+# loader EACCES'd silently and autonomous extraction died (every /extract
+# returned published=0). Normalize read permissions on app config so a local
+# chmod can never break prod again.
+RUN chmod a+r /app/*.json
+
 # Ensure the data mountpoint exists. On Fly the persistent volume overlays
 # this at runtime; files inside may come from tar extracts with root
 # ownership (see MIGRATION-FLY.md data-restore procedure).
@@ -49,7 +56,8 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 # Do NOT add `USER node` — it would prevent the entrypoint from chowning.
 
 ENV NODE_ENV=production \
-    PORT=3000
+    PORT=3000 \
+    CONTENT_MODERATION_ENABLED=true
 
 EXPOSE 3000
 

@@ -1,0 +1,1472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard | Auxilo</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" />
+  <link rel="stylesheet" href="/styles.css?v=4" />
+  <style>
+    /* ── Dashboard layout ───────────────────────────────────────────── */
+    .dash-wrap {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 100px 24px 80px;
+    }
+
+    .dash-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 40px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .dash-title {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--ivory);
+      letter-spacing: -0.02em;
+    }
+
+    .dash-email {
+      font-size: 13px;
+      color: var(--slate);
+    }
+
+    /* ── Cards ──────────────────────────────────────────────────────── */
+    .dash-card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(229,229,227,0.1);
+      border-radius: 12px;
+      padding: 28px;
+      margin-bottom: 20px;
+    }
+
+    .dash-card-title {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--slate);
+      margin-bottom: 20px;
+    }
+
+    /* ── Earnings grid ──────────────────────────────────────────────── */
+    .earnings-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+
+    @media (max-width: 540px) {
+      .earnings-grid { grid-template-columns: 1fr; }
+    }
+
+    .earnings-item {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(229,229,227,0.07);
+      border-radius: 8px;
+      padding: 16px 18px;
+    }
+
+    .earnings-label {
+      font-size: 12px;
+      color: var(--slate);
+      margin-bottom: 6px;
+      font-weight: 400;
+    }
+
+    .earnings-value {
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--ivory);
+      font-family: var(--mono);
+      letter-spacing: -0.02em;
+    }
+
+    .earnings-value.aurum { color: var(--aurum); }
+
+    /* ── Buttons ────────────────────────────────────────────────────── */
+    .btn {
+      display: inline-block;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      font-family: var(--sans);
+      transition: opacity 0.15s, background 0.15s;
+      text-decoration: none;
+    }
+
+    .btn:disabled { opacity: 0.45; cursor: default; }
+
+    .btn-primary {
+      background: var(--aurum);
+      color: #0A0A0A;
+    }
+
+    .btn-primary:hover:not(:disabled) { opacity: 0.88; }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--ivory);
+      border: 1px solid rgba(229,229,227,0.2);
+    }
+
+    .btn-ghost:hover:not(:disabled) {
+      background: rgba(255,255,255,0.05);
+    }
+
+    .btn-danger {
+      background: transparent;
+      color: #f87171;
+      border: 1px solid rgba(248,113,113,0.3);
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: rgba(248,113,113,0.08);
+    }
+
+    .btn-sm {
+      padding: 6px 14px;
+      font-size: 13px;
+    }
+
+    /* ── Login form ─────────────────────────────────────────────────── */
+    #login-view {
+      max-width: 400px;
+      margin: 0 auto;
+      padding-top: 140px;
+      padding-bottom: 60px;
+      padding-left: 24px;
+      padding-right: 24px;
+    }
+
+    .login-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 40px;
+    }
+
+    .login-heading {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--ivory);
+      margin-bottom: 8px;
+      letter-spacing: -0.02em;
+    }
+
+    .login-sub {
+      font-size: 14px;
+      color: var(--slate);
+      margin-bottom: 28px;
+      line-height: 1.6;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ash);
+      margin-bottom: 6px;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 11px 14px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(229,229,227,0.15);
+      border-radius: 6px;
+      color: var(--ivory);
+      font-size: 14px;
+      font-family: var(--sans);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .form-input:focus {
+      border-color: var(--aurum-border);
+    }
+
+    .form-input::placeholder {
+      color: var(--slate);
+    }
+
+    /* ── Alert box ──────────────────────────────────────────────────── */
+    .alert {
+      padding: 12px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      margin-bottom: 14px;
+      line-height: 1.5;
+    }
+
+    .alert-info {
+      background: rgba(201,168,76,0.1);
+      border: 1px solid rgba(201,168,76,0.25);
+      color: #E5C97A;
+    }
+
+    .alert-success {
+      background: rgba(52,211,153,0.08);
+      border: 1px solid rgba(52,211,153,0.2);
+      color: #6EE7B7;
+    }
+
+    .alert-error {
+      background: rgba(248,113,113,0.08);
+      border: 1px solid rgba(248,113,113,0.2);
+      color: #FCA5A5;
+    }
+
+    .alert-warn {
+      background: rgba(251,191,36,0.08);
+      border: 1px solid rgba(251,191,36,0.2);
+      color: #FCD34D;
+    }
+
+    /* ── Pending queue ──────────────────────────────────────────────── */
+    .pending-item {
+      border: 1px solid rgba(229,229,227,0.1);
+      border-radius: 8px;
+      padding: 18px;
+      margin-bottom: 14px;
+      background: rgba(255,255,255,0.015);
+    }
+
+    .pending-item-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .pending-item-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--ivory);
+      flex: 1;
+    }
+
+    .pending-item-meta {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .tag-category {
+      background: rgba(201,168,76,0.12);
+      color: var(--aurum);
+      border: 1px solid rgba(201,168,76,0.2);
+    }
+
+    .tag-warn {
+      background: rgba(251,191,36,0.1);
+      color: #FCD34D;
+      border: 1px solid rgba(251,191,36,0.2);
+    }
+
+    .tag-danger {
+      background: rgba(248,113,113,0.1);
+      color: #FCA5A5;
+      border: 1px solid rgba(248,113,113,0.2);
+    }
+
+    .pending-body-wrap {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(229,229,227,0.08);
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 14px;
+    }
+
+    .pending-body {
+      font-size: 12px;
+      font-family: var(--mono);
+      color: var(--ash);
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 180px;
+      overflow-y: auto;
+      margin: 0;
+    }
+
+    .pending-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    /* ── API key input area ─────────────────────────────────────────── */
+    .apikey-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .apikey-row .form-group {
+      flex: 1;
+      margin-bottom: 0;
+    }
+
+    /* ── Payout row ─────────────────────────────────────────────────── */
+    .payout-row {
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .payout-row .form-group {
+      flex: 1;
+      margin-bottom: 0;
+      min-width: 120px;
+    }
+
+    /* ── Wallet status ──────────────────────────────────────────────── */
+    .wallet-note {
+      font-size: 13px;
+      color: var(--slate);
+      line-height: 1.6;
+      padding: 14px;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(229,229,227,0.08);
+      border-radius: 6px;
+    }
+
+    .wallet-address {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--aurum);
+      word-break: break-all;
+    }
+
+    /* ── Sign out ───────────────────────────────────────────────────── */
+    .signout-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    /* ── Loading state ──────────────────────────────────────────────── */
+    .loading-text {
+      font-size: 14px;
+      color: var(--slate);
+      padding: 20px 0;
+    }
+
+    /* ── Empty state ────────────────────────────────────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 28px;
+      color: var(--slate);
+      font-size: 14px;
+    }
+
+    /* ── Spinner ────────────────────────────────────────────────────── */
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(229,229,227,0.2);
+      border-top-color: var(--aurum);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Divider ────────────────────────────────────────────────────── */
+    .section-sep {
+      height: 1px;
+      background: rgba(229,229,227,0.08);
+      margin: 20px 0;
+    }
+
+    /* ── Purchases table ────────────────────────────────────────────── */
+    .purchases-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .purchases-table th {
+      text-align: left;
+      color: var(--slate);
+      font-weight: 500;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0 8px 10px;
+      border-bottom: 1px solid rgba(229,229,227,0.08);
+    }
+
+    .purchases-table td {
+      padding: 10px 8px;
+      border-bottom: 1px solid rgba(229,229,227,0.05);
+      color: var(--ash);
+      font-family: var(--mono);
+      vertical-align: top;
+    }
+
+    /* ── Mobile nav override ────────────────────────────────────────── */
+    @media (max-width: 640px) {
+      .dash-card { padding: 20px 16px; }
+      .earnings-value { font-size: 22px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav id="main-nav" aria-label="Main navigation">
+  <a href="/" class="nav-logo" id="nav-logo">
+    <svg class="logo-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <polygon points="16,2 30,28 2,28" fill="none" stroke="#C9A84C" stroke-width="2.2" stroke-linejoin="round"/>
+      <line x1="16" y1="17" x2="30" y2="17" stroke="#C9A84C" stroke-width="1.8"/>
+    </svg>
+    <span class="wordmark">auxilo</span>
+  </a>
+  <ul class="nav-links" role="list">
+    <li><a href="/for-builders" id="nav-builders">For Builders</a></li>
+    <li><a href="/for-agents" id="nav-agents">For Agents</a></li>
+    <li><a href="/pricing" id="nav-pricing">Pricing</a></li>
+    <li><a href="/api" id="nav-api">API</a></li>
+    <li><a href="/dashboard" id="nav-dashboard" class="nav-cta active">Dashboard</a></li>
+  </ul>
+  <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
+
+<!-- ── Login view (shown when no session) ──────────────────────────── -->
+<div id="login-view" style="display:none">
+  <div class="login-logo">
+    <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <polygon points="16,2 30,28 2,28" fill="none" stroke="#C9A84C" stroke-width="2.2" stroke-linejoin="round"/>
+      <line x1="16" y1="17" x2="30" y2="17" stroke="#C9A84C" stroke-width="1.8"/>
+    </svg>
+    <span style="font-size:18px;font-weight:500;color:var(--ivory)">auxilo</span>
+  </div>
+
+  <h1 class="login-heading">Sign in to your account</h1>
+  <p class="login-sub">Enter your email and we will send you a magic link. No password needed.</p>
+
+  <div id="login-alert" class="alert" style="display:none"></div>
+
+  <div id="login-form">
+    <div class="form-group">
+      <label class="form-label" for="login-email">Email address</label>
+      <input
+        class="form-input"
+        type="email"
+        id="login-email"
+        placeholder="you@example.com"
+        autocomplete="email"
+        spellcheck="false"
+      />
+    </div>
+    <button class="btn btn-primary" id="login-btn" onclick="submitMagicLink()" style="width:100%">Send magic link</button>
+  </div>
+
+  <div id="login-sent" style="display:none">
+    <div class="alert alert-success" id="login-sent-msg"></div>
+    <p style="font-size:13px;color:var(--slate);line-height:1.6">
+      Click the link in your email to sign in. The link expires after 15 minutes and can only be used once.
+      If you did not receive it, check your spam folder or
+      <button onclick="showLoginForm()" style="background:none;border:none;color:var(--aurum);cursor:pointer;font-size:13px;padding:0;font-family:var(--sans)">try again</button>.
+    </p>
+  </div>
+</div>
+
+<!-- ── Dashboard view (shown when session exists) ──────────────────── -->
+<div id="dash-view" style="display:none">
+  <div class="dash-wrap">
+
+    <div class="dash-header">
+      <div>
+        <div class="dash-title">Account Dashboard</div>
+        <div class="dash-email" id="dash-email-label"></div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="signOut()">Sign out</button>
+    </div>
+
+    <!-- Global alert -->
+    <div id="dash-alert" class="alert" style="display:none;margin-bottom:20px"></div>
+
+    <!-- Earnings panel -->
+    <div class="dash-card">
+      <div class="dash-card-title">Earnings</div>
+      <div id="earnings-loading" class="loading-text"><span class="spinner"></span>Loading earnings...</div>
+      <div id="earnings-content" style="display:none">
+        <div class="earnings-grid" id="earnings-grid"></div>
+      </div>
+    </div>
+
+    <!-- Payout panel -->
+    <div class="dash-card">
+      <div class="dash-card-title">Payouts</div>
+      <div id="payout-loading" class="loading-text"><span class="spinner"></span>Loading...</div>
+      <div id="payout-content" style="display:none"></div>
+    </div>
+
+    <!-- Pending review queue -->
+    <div class="dash-card">
+      <div class="dash-card-title">Pending Review Queue</div>
+      <p style="font-size:13px;color:var(--slate);margin-bottom:16px;line-height:1.6">
+        Learnings extracted by your agents land here before going public. Review each one, then approve or reject.
+      </p>
+      <button class="btn btn-ghost btn-sm" onclick="loadPendingQueue()" style="margin-bottom:16px">Load queue</button>
+      <div id="pending-alert" class="alert" style="display:none;margin-bottom:12px"></div>
+      <div id="pending-content"></div>
+    </div>
+
+    <!-- API Keys panel -->
+    <div class="dash-card">
+      <div class="dash-card-title">API Keys</div>
+      <div id="apikeys-loading" class="loading-text"><span class="spinner"></span>Loading...</div>
+      <div id="apikeys-content" style="display:none"></div>
+    </div>
+
+    <!-- Purchase history -->
+    <div class="dash-card">
+      <div class="dash-card-title">Credit Purchase History</div>
+      <div id="purchases-loading" class="loading-text"><span class="spinner"></span>Loading...</div>
+      <div id="purchases-content" style="display:none"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── Storage ────────────────────────────────────────────────────────
+  var SESSION_KEY = 'auxilo_session';
+
+  function getToken() {
+    try { return localStorage.getItem(SESSION_KEY) || null; }
+    catch (_) { return null; }
+  }
+
+  function setToken(t) {
+    try { localStorage.setItem(SESSION_KEY, t); } catch (_) {}
+  }
+
+  function clearToken() {
+    try { localStorage.removeItem(SESSION_KEY); } catch (_) {}
+  }
+
+  // ── XSS-safe DOM helpers ────────────────────────────────────────────
+  // ALL dynamic data is set via textContent or createElement, NEVER innerHTML
+  // with interpolated content.
+
+  function setText(id, value) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = value;
+  }
+
+  function showAlert(id, msg, type) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = msg;
+    el.className = 'alert alert-' + (type || 'info');
+    el.style.display = '';
+  }
+
+  function hideAlert(id) {
+    var el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  }
+
+  function show(id) {
+    var el = document.getElementById(id);
+    if (el) el.style.display = '';
+  }
+
+  function hide(id) {
+    var el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  }
+
+  // ── API fetch wrapper (Bearer JWT in header, never in URL) ──────────
+  function apiFetch(path, opts) {
+    var token = getToken();
+    var headers = Object.assign({ 'Content-Type': 'application/json' }, (opts || {}).headers || {});
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    return fetch(path, Object.assign({}, opts || {}, { headers: headers }));
+  }
+
+  // ── Magic link login ────────────────────────────────────────────────
+
+  window.submitMagicLink = function () {
+    var emailEl = document.getElementById('login-email');
+    var email = emailEl ? emailEl.value.trim() : '';
+    if (!email) {
+      showAlert('login-alert', 'Please enter your email address.', 'error');
+      return;
+    }
+    var btn = document.getElementById('login-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+    hideAlert('login-alert');
+
+    fetch('/auth/magic-link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email }),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Send magic link'; }
+        if (res.ok || res.data.message) {
+          var sentMsg = document.getElementById('login-sent-msg');
+          if (sentMsg) sentMsg.textContent = res.data.message || 'Check your email for the magic link.';
+          hide('login-form');
+          show('login-sent');
+        } else {
+          showAlert('login-alert', res.data.error || 'Something went wrong. Please try again.', 'error');
+        }
+      })
+      .catch(function (err) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Send magic link'; }
+        showAlert('login-alert', 'Request failed. Check your connection and try again.', 'error');
+      });
+  };
+
+  window.showLoginForm = function () {
+    show('login-form');
+    hide('login-sent');
+    hideAlert('login-alert');
+  };
+
+  // ── Sign out ────────────────────────────────────────────────────────
+  window.signOut = function () {
+    clearToken();
+    showLoginScreen();
+  };
+
+  // ── View switching ──────────────────────────────────────────────────
+  function showLoginScreen() {
+    hide('dash-view');
+    show('login-view');
+    show('login-form');
+    hide('login-sent');
+    hideAlert('login-alert');
+  }
+
+  function showDashboard(email) {
+    hide('login-view');
+    show('dash-view');
+    if (email) {
+      setText('dash-email-label', email);
+    }
+    loadEarnings();
+    loadApiKeys();
+    loadPurchases();
+    // Payout loads after earnings to know the balance
+  }
+
+  // ── Earnings ────────────────────────────────────────────────────────
+  var _earnings = null;
+
+  function loadEarnings() {
+    show('earnings-loading');
+    hide('earnings-content');
+    show('payout-loading');
+    hide('payout-content');
+
+    apiFetch('/account/earnings')
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        hide('earnings-loading');
+        if (!res.ok) {
+          var grid = document.getElementById('earnings-grid');
+          if (grid) {
+            grid.textContent = '';
+            var msg = document.createElement('div');
+            msg.className = 'empty-state';
+            msg.textContent = res.data.error || 'Could not load earnings.';
+            grid.appendChild(msg);
+          }
+          show('earnings-content');
+          renderPayoutPanel(null);
+          return;
+        }
+        _earnings = res.data;
+        renderEarnings(res.data);
+        renderPayoutPanel(res.data);
+      })
+      .catch(function () {
+        hide('earnings-loading');
+        var grid = document.getElementById('earnings-grid');
+        if (grid) {
+          grid.textContent = '';
+          var msg = document.createElement('div');
+          msg.className = 'empty-state';
+          msg.textContent = 'Failed to load earnings.';
+          grid.appendChild(msg);
+        }
+        show('earnings-content');
+        renderPayoutPanel(null);
+      });
+  }
+
+  function fmt(n) {
+    var num = typeof n === 'number' ? n : 0;
+    return '$' + num.toFixed(2);
+  }
+
+  function renderEarnings(data) {
+    var grid = document.getElementById('earnings-grid');
+    if (!grid) return;
+    grid.textContent = '';
+
+    var items = [
+      { label: 'Your share (withdrawable)', value: fmt(data.pending_balance), highlight: true },
+      { label: 'Lifetime gross', value: fmt(data.total_gross_usd || data.total_gross || 0) },
+      { label: 'Your total (70%)', value: fmt(data.total_contributor) },
+      { label: 'Total withdrawn', value: fmt(data.total_withdrawn) },
+    ];
+
+    items.forEach(function (item) {
+      var wrap = document.createElement('div');
+      wrap.className = 'earnings-item';
+
+      var lbl = document.createElement('div');
+      lbl.className = 'earnings-label';
+      lbl.textContent = item.label;
+
+      var val = document.createElement('div');
+      val.className = 'earnings-value' + (item.highlight ? ' aurum' : '');
+      val.textContent = item.value;
+
+      wrap.appendChild(lbl);
+      wrap.appendChild(val);
+      grid.appendChild(wrap);
+    });
+
+    show('earnings-content');
+  }
+
+  // ── Payout panel ────────────────────────────────────────────────────
+  function renderPayoutPanel(data) {
+    hide('payout-loading');
+    var el = document.getElementById('payout-content');
+    if (!el) return;
+    el.textContent = '';
+
+    // USDC / crypto section (always shown)
+    var cryptoWrap = document.createElement('div');
+    cryptoWrap.className = 'wallet-note';
+
+    var cryptoHead = document.createElement('strong');
+    cryptoHead.style.color = 'var(--ivory)';
+    cryptoHead.style.display = 'block';
+    cryptoHead.style.marginBottom = '6px';
+    cryptoHead.textContent = 'Wallet (USDC on Base)';
+    cryptoWrap.appendChild(cryptoHead);
+
+    if (data && data.wallet) {
+      var linkedLine = document.createElement('div');
+      linkedLine.style.marginBottom = '4px';
+      linkedLine.textContent = 'Linked wallet:';
+
+      var addrSpan = document.createElement('div');
+      addrSpan.className = 'wallet-address';
+      addrSpan.textContent = data.wallet;
+
+      var note = document.createElement('div');
+      note.style.marginTop = '8px';
+      note.style.fontSize = '12px';
+      note.textContent = 'To withdraw USDC, use the CLI or your wallet app. Browser signing is coming in v2.';
+
+      cryptoWrap.appendChild(linkedLine);
+      cryptoWrap.appendChild(addrSpan);
+      cryptoWrap.appendChild(note);
+    } else {
+      var noWallet = document.createElement('div');
+      noWallet.textContent = 'No wallet linked. Use the CLI command "auxilo link-wallet" to connect a wallet for USDC withdrawals on Base.';
+      cryptoWrap.appendChild(noWallet);
+    }
+
+    el.appendChild(cryptoWrap);
+
+    // Stripe section
+    var sep = document.createElement('div');
+    sep.className = 'section-sep';
+    el.appendChild(sep);
+
+    var stripeHead = document.createElement('strong');
+    stripeHead.style.color = 'var(--ivory)';
+    stripeHead.style.display = 'block';
+    stripeHead.style.marginBottom = '8px';
+    stripeHead.textContent = 'Bank transfer (Stripe Connect)';
+    el.appendChild(stripeHead);
+
+    var stripeNote = document.createElement('p');
+    stripeNote.style.fontSize = '13px';
+    stripeNote.style.color = 'var(--slate)';
+    stripeNote.style.marginBottom = '14px';
+    stripeNote.textContent = 'Minimum withdrawal: $0.50. Platform fee: $0.25 per transfer.';
+    el.appendChild(stripeNote);
+
+    var stripeAlertEl = document.createElement('div');
+    stripeAlertEl.id = 'stripe-alert';
+    stripeAlertEl.className = 'alert';
+    stripeAlertEl.style.display = 'none';
+    stripeAlertEl.style.marginBottom = '12px';
+    el.appendChild(stripeAlertEl);
+
+    // Connect Stripe button (if not yet connected)
+    var connectBtn = document.createElement('button');
+    connectBtn.className = 'btn btn-ghost btn-sm';
+    connectBtn.id = 'connect-stripe-btn';
+    connectBtn.textContent = 'Connect Stripe account';
+    connectBtn.onclick = function () { doConnectStripe(); };
+    el.appendChild(connectBtn);
+
+    // Withdraw form (shown when balance > 0)
+    var pendingBal = data ? (data.pending_balance || 0) : 0;
+    var canWithdraw = data && data.can_withdraw && pendingBal >= 0.50;
+
+    var sep2 = document.createElement('div');
+    sep2.className = 'section-sep';
+    sep2.id = 'withdraw-sep';
+    sep2.style.display = canWithdraw ? '' : 'none';
+    el.appendChild(sep2);
+
+    var withdrawWrap = document.createElement('div');
+    withdrawWrap.id = 'withdraw-wrap';
+    withdrawWrap.style.display = canWithdraw ? '' : 'none';
+    el.appendChild(withdrawWrap);
+
+    if (canWithdraw) {
+      var wHead = document.createElement('strong');
+      wHead.style.color = 'var(--ivory)';
+      wHead.style.display = 'block';
+      wHead.style.marginBottom = '8px';
+      wHead.textContent = 'Withdraw to bank';
+      withdrawWrap.appendChild(wHead);
+
+      var withdrawNote = document.createElement('p');
+      withdrawNote.style.fontSize = '13px';
+      withdrawNote.style.color = 'var(--slate)';
+      withdrawNote.style.marginBottom = '14px';
+      withdrawNote.textContent = 'Available: ' + fmt(pendingBal) + '. Enter the amount you want to withdraw (min $0.50, fee $0.25).';
+      withdrawWrap.appendChild(withdrawNote);
+
+      var payoutRow = document.createElement('div');
+      payoutRow.className = 'payout-row';
+      withdrawWrap.appendChild(payoutRow);
+
+      var amtGroup = document.createElement('div');
+      amtGroup.className = 'form-group';
+      payoutRow.appendChild(amtGroup);
+
+      var amtLabel = document.createElement('label');
+      amtLabel.className = 'form-label';
+      amtLabel.setAttribute('for', 'withdraw-amount');
+      amtLabel.textContent = 'Amount (USD)';
+      amtGroup.appendChild(amtLabel);
+
+      var amtInput = document.createElement('input');
+      amtInput.className = 'form-input';
+      amtInput.id = 'withdraw-amount';
+      amtInput.type = 'number';
+      amtInput.min = '0.50';
+      amtInput.step = '0.01';
+      amtInput.value = Math.max(0.50, pendingBal).toFixed(2);
+      amtGroup.appendChild(amtInput);
+
+      var wBtn = document.createElement('button');
+      wBtn.className = 'btn btn-primary btn-sm';
+      wBtn.id = 'withdraw-btn';
+      wBtn.textContent = 'Withdraw';
+      wBtn.style.marginBottom = '1px';
+      wBtn.onclick = function () { doWithdraw(); };
+      payoutRow.appendChild(wBtn);
+
+      var withdrawAlert = document.createElement('div');
+      withdrawAlert.id = 'withdraw-alert';
+      withdrawAlert.className = 'alert';
+      withdrawAlert.style.display = 'none';
+      withdrawAlert.style.marginTop = '12px';
+      withdrawWrap.appendChild(withdrawAlert);
+    }
+
+    show('payout-content');
+  }
+
+  function doConnectStripe() {
+    var btn = document.getElementById('connect-stripe-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Connecting...'; }
+
+    apiFetch('/account/connect-stripe', { method: 'POST' })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); })
+      .then(function (res) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Connect Stripe account'; }
+        if (res.ok && res.data.url) {
+          // Redirect to Stripe onboarding
+          window.location.href = res.data.url;
+        } else if (res.ok && res.data.message === 'Already connected') {
+          var alertEl = document.getElementById('stripe-alert');
+          if (alertEl) {
+            alertEl.textContent = 'Your Stripe account is connected. Complete onboarding at Stripe if you have not done so yet.';
+            alertEl.className = 'alert alert-info';
+            alertEl.style.display = '';
+          }
+        } else if (res.status === 401 || res.status === 403) {
+          showAlert('dash-alert', 'Session expired. Please sign in again.', 'error');
+          clearToken();
+          setTimeout(showLoginScreen, 1800);
+        } else {
+          var alertEl = document.getElementById('stripe-alert');
+          if (alertEl) {
+            alertEl.textContent = res.data.error || 'Could not connect Stripe. Please try again.';
+            alertEl.className = 'alert alert-error';
+            alertEl.style.display = '';
+          }
+        }
+      })
+      .catch(function () {
+        if (btn) { btn.disabled = false; btn.textContent = 'Connect Stripe account'; }
+        var alertEl = document.getElementById('stripe-alert');
+        if (alertEl) {
+          alertEl.textContent = 'Request failed. Check your connection and try again.';
+          alertEl.className = 'alert alert-error';
+          alertEl.style.display = '';
+        }
+      });
+  }
+
+  function doWithdraw() {
+    var amtEl = document.getElementById('withdraw-amount');
+    var amtVal = amtEl ? parseFloat(amtEl.value) : 0;
+    if (!amtVal || amtVal < 0.50) {
+      var a = document.getElementById('withdraw-alert');
+      if (a) { a.textContent = 'Minimum withdrawal is $0.50.'; a.className = 'alert alert-error'; a.style.display = ''; }
+      return;
+    }
+    var btn = document.getElementById('withdraw-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Processing...'; }
+
+    apiFetch('/withdraw/stripe', {
+      method: 'POST',
+      body: JSON.stringify({ amount_usd: amtVal }),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); })
+      .then(function (res) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Withdraw'; }
+        var a = document.getElementById('withdraw-alert');
+        if (res.ok) {
+          if (a) { a.textContent = 'Withdrawal initiated. Funds will arrive in 1 to 2 business days.'; a.className = 'alert alert-success'; a.style.display = ''; }
+          // Refresh earnings after a short delay
+          setTimeout(loadEarnings, 1500);
+        } else if (res.status === 401 || res.status === 403) {
+          showAlert('dash-alert', 'Session expired. Please sign in again.', 'error');
+          clearToken();
+          setTimeout(showLoginScreen, 1800);
+        } else {
+          if (a) { a.textContent = res.data.error || 'Withdrawal failed. Please try again.'; a.className = 'alert alert-error'; a.style.display = ''; }
+        }
+      })
+      .catch(function () {
+        if (btn) { btn.disabled = false; btn.textContent = 'Withdraw'; }
+        var a = document.getElementById('withdraw-alert');
+        if (a) { a.textContent = 'Request failed. Check your connection.'; a.className = 'alert alert-error'; a.style.display = ''; }
+      });
+  }
+
+  // ── Pending queue ────────────────────────────────────────────────────
+  window.loadPendingQueue = function () {
+    // Uses the login session (Bearer JWT via apiFetch). The self-review
+    // endpoints accept the session token, so no API key is needed in the browser.
+    hideAlert('pending-alert');
+    var contentEl = document.getElementById('pending-content');
+    if (contentEl) {
+      contentEl.textContent = '';
+      var loading = document.createElement('div');
+      loading.className = 'loading-text';
+      var spin = document.createElement('span');
+      spin.className = 'spinner';
+      loading.appendChild(spin);
+      loading.appendChild(document.createTextNode('Loading pending queue...'));
+      contentEl.appendChild(loading);
+    }
+
+    apiFetch('/account/pending')
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); })
+      .then(function (res) {
+        if (!res.ok) {
+          var msg = res.data.error || 'Could not load pending queue.';
+          showAlert('pending-alert', msg, 'error');
+          if (contentEl) contentEl.textContent = '';
+          return;
+        }
+        renderPendingQueue(res.data.learnings || []);
+      })
+      .catch(function () {
+        showAlert('pending-alert', 'Request failed. Check your connection.', 'error');
+        if (contentEl) contentEl.textContent = '';
+      });
+  };
+
+  function renderPendingQueue(learnings) {
+    var el = document.getElementById('pending-content');
+    if (!el) return;
+    el.textContent = '';
+
+    if (!learnings.length) {
+      var empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.textContent = 'No pending learnings. Your queue is clear.';
+      el.appendChild(empty);
+      return;
+    }
+
+    var countLine = document.createElement('p');
+    countLine.style.fontSize = '13px';
+    countLine.style.color = 'var(--slate)';
+    countLine.style.marginBottom = '16px';
+    countLine.textContent = learnings.length + ' item' + (learnings.length !== 1 ? 's' : '') + ' waiting for your review.';
+    el.appendChild(countLine);
+
+    learnings.forEach(function (item) {
+      el.appendChild(buildPendingCard(item));
+    });
+  }
+
+  function buildPendingCard(item) {
+    var card = document.createElement('div');
+    card.className = 'pending-item';
+    card.id = 'pending-card-' + item.id;
+
+    // Header: title
+    var header = document.createElement('div');
+    header.className = 'pending-item-header';
+    var titleEl = document.createElement('div');
+    titleEl.className = 'pending-item-title';
+    titleEl.textContent = item.title || '(no title)'; // textContent -- safe
+    header.appendChild(titleEl);
+    card.appendChild(header);
+
+    // Meta: category, tags
+    var meta = document.createElement('div');
+    meta.className = 'pending-item-meta';
+
+    if (item.category) {
+      var catTag = document.createElement('span');
+      catTag.className = 'tag tag-category';
+      catTag.textContent = item.category; // textContent -- safe
+      meta.appendChild(catTag);
+    }
+
+    // Safety flags (injection_flags, sensitivity_signals)
+    if (item.injection_flags && item.injection_flags.length) {
+      item.injection_flags.forEach(function (flag) {
+        var t = document.createElement('span');
+        t.className = 'tag tag-danger';
+        t.textContent = 'injection: ' + flag; // textContent -- safe
+        meta.appendChild(t);
+      });
+    }
+
+    if (item.sensitivity_signals && item.sensitivity_signals.length) {
+      item.sensitivity_signals.forEach(function (sig) {
+        var t = document.createElement('span');
+        t.className = 'tag tag-warn';
+        t.textContent = 'sensitive: ' + sig; // textContent -- safe
+        meta.appendChild(t);
+      });
+    }
+
+    if (item.possible_duplicate_of) {
+      var dupTag = document.createElement('span');
+      dupTag.className = 'tag tag-warn';
+      var sim = item.possible_duplicate_similarity !== undefined
+        ? Math.round(item.possible_duplicate_similarity * 100) + '% match'
+        : 'possible duplicate';
+      dupTag.textContent = 'duplicate: ' + sim; // textContent -- safe
+      meta.appendChild(dupTag);
+    }
+
+    card.appendChild(meta);
+
+    // Body: untrusted content -- rendered as PLAIN TEXT in pre element
+    var bodyWrap = document.createElement('div');
+    bodyWrap.className = 'pending-body-wrap';
+
+    var bodyPre = document.createElement('pre');
+    bodyPre.className = 'pending-body';
+    bodyPre.textContent = item.body || '(no body)'; // textContent -- XSS safe
+    bodyWrap.appendChild(bodyPre);
+    card.appendChild(bodyWrap);
+
+    // Date
+    if (item.created_at) {
+      var dateLine = document.createElement('div');
+      dateLine.style.fontSize = '11px';
+      dateLine.style.color = 'var(--slate)';
+      dateLine.style.marginBottom = '12px';
+      var d = new Date(item.created_at);
+      dateLine.textContent = 'Submitted: ' + (isNaN(d.getTime()) ? item.created_at : d.toLocaleString()); // textContent -- safe
+      card.appendChild(dateLine);
+    }
+
+    // Action buttons
+    var actions = document.createElement('div');
+    actions.className = 'pending-actions';
+
+    var approveBtn = document.createElement('button');
+    approveBtn.className = 'btn btn-primary btn-sm';
+    approveBtn.textContent = 'Approve';
+    approveBtn.onclick = function () { doPendingAction(item.id, 'approve', card); };
+    actions.appendChild(approveBtn);
+
+    var rejectBtn = document.createElement('button');
+    rejectBtn.className = 'btn btn-danger btn-sm';
+    rejectBtn.textContent = 'Reject';
+    rejectBtn.onclick = function () { doPendingAction(item.id, 'reject', card); };
+    actions.appendChild(rejectBtn);
+
+    card.appendChild(actions);
+
+    // Result area
+    var resultEl = document.createElement('div');
+    resultEl.className = 'alert';
+    resultEl.style.display = 'none';
+    resultEl.style.marginTop = '10px';
+    resultEl.id = 'pending-result-' + item.id;
+    card.appendChild(resultEl);
+
+    return card;
+  }
+
+  function doPendingAction(id, action, cardEl) {
+    var resultEl = document.getElementById('pending-result-' + id);
+    var btns = cardEl ? cardEl.querySelectorAll('button') : [];
+    btns.forEach(function (b) { b.disabled = true; });
+
+    var url = '/account/pending/' + encodeURIComponent(id) + '/' + action;
+    var fetchOpts = { method: 'POST' };
+    if (action === 'reject') {
+      fetchOpts.body = JSON.stringify({});
+    }
+
+    apiFetch(url, fetchOpts)
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); })
+      .then(function (res) {
+        if (res.ok) {
+          if (resultEl) {
+            resultEl.textContent = action === 'approve' ? 'Approved. This learning is now live.' : 'Rejected. This learning will not be published.';
+            resultEl.className = 'alert ' + (action === 'approve' ? 'alert-success' : 'alert-warn');
+            resultEl.style.display = '';
+          }
+          btns.forEach(function (b) { b.style.display = 'none'; });
+        } else {
+          btns.forEach(function (b) { b.disabled = false; });
+          if (resultEl) {
+            resultEl.textContent = res.data.error || 'Action failed. Please try again.'; // textContent -- safe
+            resultEl.className = 'alert alert-error';
+            resultEl.style.display = '';
+          }
+        }
+      })
+      .catch(function () {
+        btns.forEach(function (b) { b.disabled = false; });
+        if (resultEl) {
+          resultEl.textContent = 'Request failed. Check your connection.';
+          resultEl.className = 'alert alert-error';
+          resultEl.style.display = '';
+        }
+      });
+  }
+
+  // ── API Keys ─────────────────────────────────────────────────────────
+  function loadApiKeys() {
+    show('apikeys-loading');
+    hide('apikeys-content');
+
+    apiFetch('/account/api-keys')
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); })
+      .then(function (res) {
+        hide('apikeys-loading');
+        var el = document.getElementById('apikeys-content');
+        if (!el) return;
+        el.textContent = '';
+        if (!res.ok) {
+          var msg = document.createElement('div');
+          msg.className = 'empty-state';
+          msg.textContent = res.data.error || 'Could not load API keys.';
+          el.appendChild(msg);
+        } else {
+          renderApiKeys(res.data.keys || [], el);
+        }
+        show('apikeys-content');
+      })
+      .catch(function () {
+        hide('apikeys-loading');
+        var el = document.getElementById('apikeys-content');
+        if (el) {
+          el.textContent = '';
+          var msg = document.createElement('div');
+          msg.className = 'empty-state';
+          msg.textContent = 'Failed to load API keys.';
+          el.appendChild(msg);
+          show('apikeys-content');
+        }
+      });
+  }
+
+  function renderApiKeys(keys, el) {
+    if (!keys.length) {
+      var empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.textContent = 'No API keys yet. Generate one via the CLI or POST /account/api-keys.';
+      el.appendChild(empty);
+      return;
+    }
+
+    keys.forEach(function (k) {
+      var row = document.createElement('div');
+      row.style.display = 'flex';
+      row.style.justifyContent = 'space-between';
+      row.style.alignItems = 'center';
+      row.style.padding = '10px 0';
+      row.style.borderBottom = '1px solid rgba(229,229,227,0.07)';
+      row.style.flexWrap = 'wrap';
+      row.style.gap = '8px';
+
+      var left = document.createElement('div');
+
+      var labelEl = document.createElement('div');
+      labelEl.style.fontSize = '14px';
+      labelEl.style.color = 'var(--ivory)';
+      labelEl.style.marginBottom = '3px';
+      labelEl.textContent = k.label || 'default'; // textContent -- safe
+
+      var prefixEl = document.createElement('div');
+      prefixEl.style.fontSize = '12px';
+      prefixEl.style.color = 'var(--slate)';
+      prefixEl.style.fontFamily = 'var(--mono)';
+      prefixEl.textContent = (k.hash_prefix || '') + ' | scope: ' + (k.scope || 'admin'); // textContent -- safe
+
+      left.appendChild(labelEl);
+      left.appendChild(prefixEl);
+
+      var right = document.createElement('div');
+      right.style.fontSize = '11px';
+      right.style.color = 'var(--slate)';
+      right.style.textAlign = 'right';
+      right.textContent = k.active === false ? 'revoked' : 'active'; // textContent -- safe
+
+      row.appendChild(left);
+      row.appendChild(right);
+      el.appendChild(row);
+    });
+  }
+
+  // ── Purchases ────────────────────────────────────────────────────────
+  function loadPurchases() {
+    show('purchases-loading');
+    hide('purchases-content');
+
+    apiFetch('/account/purchases')
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); })
+      .then(function (res) {
+        hide('purchases-loading');
+        var el = document.getElementById('purchases-content');
+        if (!el) return;
+        el.textContent = '';
+        if (!res.ok) {
+          var msg = document.createElement('div');
+          msg.className = 'empty-state';
+          msg.textContent = res.data.error || 'Could not load purchases.';
+          el.appendChild(msg);
+        } else {
+          renderPurchases(res.data, el);
+        }
+        show('purchases-content');
+      })
+      .catch(function () {
+        hide('purchases-loading');
+        var el = document.getElementById('purchases-content');
+        if (el) {
+          el.textContent = '';
+          var msg = document.createElement('div');
+          msg.className = 'empty-state';
+          msg.textContent = 'Failed to load purchases.';
+          el.appendChild(msg);
+          show('purchases-content');
+        }
+      });
+  }
+
+  function renderPurchases(data, el) {
+    var purchases = data.purchases || [];
+    if (!purchases.length) {
+      var empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.textContent = 'No credit purchases yet.';
+      el.appendChild(empty);
+      return;
+    }
+
+    var totalEl = document.createElement('p');
+    totalEl.style.fontSize = '13px';
+    totalEl.style.color = 'var(--slate)';
+    totalEl.style.marginBottom = '16px';
+    totalEl.textContent = 'Total spent: ' + fmt(data.total_spent_usd || 0); // textContent -- safe
+    el.appendChild(totalEl);
+
+    var table = document.createElement('table');
+    table.className = 'purchases-table';
+
+    var thead = document.createElement('thead');
+    var headRow = document.createElement('tr');
+    ['Date', 'Pack', 'Amount', 'Queries', 'Unlocks'].forEach(function (h) {
+      var th = document.createElement('th');
+      th.textContent = h;
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    var tbody = document.createElement('tbody');
+    purchases.slice().reverse().forEach(function (p) {
+      var tr = document.createElement('tr');
+
+      var dateTd = document.createElement('td');
+      var d = new Date(p.timestamp);
+      dateTd.textContent = isNaN(d.getTime()) ? (p.timestamp || '') : d.toLocaleDateString(); // textContent -- safe
+      tr.appendChild(dateTd);
+
+      var packTd = document.createElement('td');
+      packTd.textContent = p.pack_id || ''; // textContent -- safe
+      tr.appendChild(packTd);
+
+      var amtTd = document.createElement('td');
+      amtTd.textContent = fmt(p.amount_usd); // textContent -- safe
+      tr.appendChild(amtTd);
+
+      var qTd = document.createElement('td');
+      qTd.textContent = p.queries_added != null ? String(p.queries_added) : ''; // textContent -- safe
+      tr.appendChild(qTd);
+
+      var uTd = document.createElement('td');
+      uTd.textContent = p.unlocks_added != null ? String(p.unlocks_added) : ''; // textContent -- safe
+      tr.appendChild(uTd);
+
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    el.appendChild(table);
+  }
+
+  // ── Navigation toggle (mobile) ───────────────────────────────────────
+  window.toggleNav = function () {
+    var nav = document.querySelector('.nav-links');
+    var btn = document.getElementById('hamburger');
+    if (!nav) return;
+    var isOpen = nav.classList.toggle('open');
+    if (btn) btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+  };
+
+  // ── Boot ─────────────────────────────────────────────────────────────
+  function boot() {
+    // 1. Check for ?token= in URL (magic link landing)
+    var params = new URLSearchParams(window.location.search);
+    var magicToken = params.get('token');
+
+    if (magicToken) {
+      // Strip token from URL before anything else (never expose in history)
+      var cleanUrl = window.location.pathname;
+      if (history.replaceState) {
+        history.replaceState({}, '', cleanUrl);
+      }
+
+      // Verify the token with the server
+      // The token goes in the query string as-is (that is the API contract for
+      // GET /auth/verify). The JWT we receive back goes in localStorage only.
+      fetch('/auth/verify?token=' + encodeURIComponent(magicToken))
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); })
+        .then(function (res) {
+          if (res.ok && res.data.token) {
+            setToken(res.data.token);
+            // Decode email from JWT payload for display (decode only, no verify needed client-side)
+            var email = decodeJwtEmail(res.data.token);
+            showDashboard(email);
+          } else {
+            showLoginScreen();
+            showAlert('login-alert', res.data.error || 'Invalid or expired link. Please request a new one.', 'error');
+          }
+        })
+        .catch(function () {
+          showLoginScreen();
+          showAlert('login-alert', 'Could not verify the link. Check your connection and try again.', 'error');
+        });
+      return;
+    }
+
+    // 2. Check for existing session
+    var token = getToken();
+    if (token) {
+      var email = decodeJwtEmail(token);
+      showDashboard(email);
+    } else {
+      showLoginScreen();
+    }
+  }
+
+  // Decode JWT payload to extract email for display only.
+  // This is client-side display only -- the server verifies the signature.
+  function decodeJwtEmail(token) {
+    try {
+      var parts = token.split('.');
+      if (parts.length !== 3) return '';
+      var payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+      return (payload && typeof payload.email === 'string') ? payload.email : '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  boot();
+})();
+</script>
+
+</body>
+</html>

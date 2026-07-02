@@ -3,9 +3,10 @@
 /**
  * jobs/daily-digest.js — Per-Builder Daily Extraction Digest (P2.1a §9.2 / B3)
  *
- * Reads the extract.log (JSONL) from the prior 24h window, aggregates
- * per-Builder, and sends a digest via MailerSend (or falls back to stdout
- * when MAILERSEND_API_KEY is absent).
+ * Reads the extract.log (plain-text, timestamp-prefixed lines written by
+ * scripts/runner.js log()) from the prior 24h window, aggregates per-Builder,
+ * and sends a digest via MailerSend (or falls back to stdout when
+ * MAILERSEND_API_KEY is absent).
  *
  * Usage:
  *   node jobs/daily-digest.js                  # production — sends email
@@ -67,6 +68,7 @@ function readLogRows(logPath, windowHours) {
   const content = fs.readFileSync(logPath, 'utf-8');
   const cutoff = Date.now() - (windowHours * 60 * 60 * 1000);
   const rows = [];
+  const seenLines = new Set();
 
   for (const line of content.split('\n')) {
     const trimmed = line.trim();
@@ -78,6 +80,12 @@ function readLogRows(logPath, windowHours) {
 
     const ts = new Date(tsMatch[1]);
     if (ts.getTime() < cutoff) continue;
+
+    // An exact-duplicate line (same ms timestamp, same text) is a double-write
+    // — e.g. stdout redirected into the log on top of log()'s own append —
+    // not a repeated event. Count it once or publish totals double.
+    if (seenLines.has(trimmed)) continue;
+    seenLines.add(trimmed);
 
     // Parse structured data if present
     const row = {
@@ -95,13 +103,23 @@ function readLogRows(logPath, windowHours) {
                          trimmed.match(/builder[_=](\S+)/i);
     if (builderMatch) row.builder = builderMatch[1];
 
-    // Extract action
+    // Extract action — structured tokens first, then the legacy human-readable
+    // runner vocabulary (lines written before runner.js emitted tokens)
+    const legacyPublish = trimmed.match(/(\d+) learning\(s\) published, (\d+) rejected/);
+    const legacyFlush = trimmed.match(/Flushed \S+: (\d+) published/);
     if (trimmed.includes('published=')) {
       const pubMatch = trimmed.match(/published=(\d+)/);
       const rejMatch = trimmed.match(/rejected=(\d+)/);
       row.action = 'extract';
       row.published = pubMatch ? parseInt(pubMatch[1], 10) : 0;
       row.rejected = rejMatch ? parseInt(rejMatch[1], 10) : 0;
+    } else if (legacyPublish) {
+      row.action = 'extract';
+      row.published = parseInt(legacyPublish[1], 10);
+      row.rejected = parseInt(legacyPublish[2], 10);
+    } else if (legacyFlush) {
+      row.action = 'extract';
+      row.published = parseInt(legacyFlush[1], 10);
     } else if (trimmed.includes('retract')) {
       row.action = 'retract';
     } else if (trimmed.includes('Scrub')) {
@@ -113,6 +131,11 @@ function readLogRows(logPath, windowHours) {
     // Extract category if present
     const catMatch = trimmed.match(/category[=:](\S+)/i);
     if (catMatch) row.category = catMatch[1];
+
+    // Lines with no recognized action (sweep summaries, installer output)
+    // carry no digest signal — keeping them fabricates an all-zero "unknown"
+    // builder section in the rendered digest.
+    if (!row.action) continue;
 
     rows.push(row);
   }

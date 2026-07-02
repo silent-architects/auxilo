@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
+  <!--
+    Geometric Pattern — B-2 Brand Asset
+    Tile-ready seamless repeat based on Angular A mark geometry.
+    Designed for CSS background-image: url() repeating on Obsidian (#0A0A0A) backgrounds.
+    Elements at ~12% opacity Aurum (#C9A84C), scaled down 40%, 2x spacing.
+  -->
+
+  <!-- Small angular A triangle — scaled to ~60% of natural size (~14px tall) -->
+  <!-- Centered in tile at (60, 30) -->
+  <polygon
+    points="60,18 68,38 52,38"
+    fill="none"
+    stroke="#C9A84C"
+    stroke-width="0.8"
+    stroke-linejoin="miter"
+    opacity="0.12"
+  />
+  <!-- Crossbar extending right -->
+  <line
+    x1="60" y1="30"
+    x2="68" y2="30"
+    stroke="#C9A84C"
+    stroke-width="0.6"
+    opacity="0.12"
+  />
+
+  <!-- Offset partial — rotated 180° triangle at bottom-right quadrant (90, 90) -->
+  <polygon
+    points="90,78 98,98 82,98"
+    fill="none"
+    stroke="#C9A84C"
+    stroke-width="0.8"
+    stroke-linejoin="miter"
+    opacity="0.10"
+  />
+  <line
+    x1="90" y1="90"
+    x2="98" y2="90"
+    stroke="#C9A84C"
+    stroke-width="0.6"
+    opacity="0.10"
+  />
+
+  <!-- Single crossbar angle fragment — top-right corner accent -->
+  <line
+    x1="100" y1="8"
+    x2="114" y2="14"
+    stroke="#C9A84C"
+    stroke-width="0.5"
+    opacity="0.08"
+  />
+
+  <!-- Single crossbar angle fragment — bottom-left corner accent -->
+  <line
+    x1="6" y1="106"
+    x2="20" y2="112"
+    stroke="#C9A84C"
+    stroke-width="0.5"
+    opacity="0.08"
+  />
+
+  <!-- Tiny diamond (two triangles) — mid-left area at (20, 60) -->
+  <polygon
+    points="20,54 24,60 20,66 16,60"
+    fill="none"
+    stroke="#C9A84C"
+    stroke-width="0.5"
+    opacity="0.10"
+  />
+</svg>

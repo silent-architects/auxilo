@@ -1,0 +1,238 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <!--
+    Growth Flywheel — B-3 Brand Asset
+    Circular flywheel diagram: 4-stage growth loop.
+    Brand colors: Aurum #C9A84C, Ivory #FAFAF8, Slate #6B7280.
+    Uses system fonts (Inter / sans-serif fallback).
+  -->
+  <defs>
+    <!-- Arrowhead marker in Aurum -->
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+      markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#C9A84C"/>
+    </marker>
+  </defs>
+
+  <!-- Center label -->
+  <text
+    x="400" y="292"
+    font-family="Inter, Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+    font-weight="500"
+    font-size="16"
+    fill="#C9A84C"
+    text-anchor="middle"
+    letter-spacing="0.08em"
+    text-transform="uppercase"
+  >GROWTH</text>
+  <text
+    x="400" y="314"
+    font-family="Inter, Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+    font-weight="500"
+    font-size="16"
+    fill="#C9A84C"
+    text-anchor="middle"
+    letter-spacing="0.08em"
+  >FLYWHEEL</text>
+
+  <!--
+    Four curved arrow arcs connecting the stages.
+    The circle radius is 180px, centered at (400, 300).
+    Each arc spans ~70° between stage positions, leaving gaps for labels.
+    Stage positions (on the circle):
+      Top (12 o'clock):    (400, 120) — Stage 1
+      Right (3 o'clock):   (580, 300) — Stage 2
+      Bottom (6 o'clock):  (400, 480) — Stage 3
+      Left (9 o'clock):    (220, 300) — Stage 4
+  -->
+
+  <!-- Arc: Stage 1 (top) → Stage 2 (right) -->
+  <path
+    d="M 440,130 A 180,180 0 0,1 570,260"
+    fill="none"
+    stroke="#C9A84C"
+    stroke-width="2"
+    marker-end="url(#arrow)"
+    opacity="0.9"
+  />
+
+  <!-- Arc: Stage 2 (right) → Stage 3 (bottom) -->
+  <path
+    d="M 570,340 A 180,180 0 0,1 440,470"
+    fill="none"
+    stroke="#C9A84C"
+    stroke-width="2"
+    marker-end="url(#arrow)"
+    opacity="0.9"
+  />
+
+  <!-- Arc: Stage 3 (bottom) → Stage 4 (left) -->
+  <path
+    d="M 360,470 A 180,180 0 0,1 230,340"
+    fill="none"
+    stroke="#C9A84C"
+    stroke-width="2"
+    marker-end="url(#arrow)"
+    opacity="0.9"
+  />
+
+  <!-- Arc: Stage 4 (left) → Stage 1 (top) -->
+  <path
+    d="M 230,260 A 180,180 0 0,1 360,130"
+    fill="none"
+    stroke="#C9A84C"
+    stroke-width="2"
+    marker-end="url(#arrow)"
+    opacity="0.9"
+  />
+
+  <!--
+    ═══════════════════════════════════════
+    Stage 1 — Top: "Builders publish learnings"
+    ═══════════════════════════════════════
+  -->
+  <g>
+    <!-- Stage number badge -->
+    <circle cx="400" cy="72" r="14" fill="none" stroke="#C9A84C" stroke-width="1.5"/>
+    <text
+      x="400" y="77"
+      font-family="Inter, Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+      font-weight="500"
+      font-size="13"
+      fill="#C9A84C"
+      text-anchor="middle"
+    >1</text>
+    <!-- Primary label -->
+    <text
+      x="400" y="106"
+      font-family="Inter, Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+      font-weight="600"
+      font-size="15"
+      fill="#FAFAF8"
+      text-anchor="middle"
+    >Builders publish learnings</text>
+    <!-- Secondary label -->
+    <text
+      x="400" y="122"
+      font-family="Inter, Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+      font-weight="400"
+      font-size="12"
+      fill="#6B7280"
+      text-anchor="middle"
+    >Supply</text>
+  </g>
+
+  <!--
+    ═══════════════════════════════════════
+    Stage 2 — Right: "Agents discover & purchase"
+    ═══════════════════════════════════════
+  -->
+  <g>
+    <circle cx="620" cy="292" r="14" fill="none" stroke="#C9A84C" stroke-width="1.5"/>
+    <text
+      x="620" y="297"
+      font-family="Inter, Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+      font-weight="500"
+      font-size="13"
+      fill="#C9A84C"
+      text-anchor="middle"
+    >2</text>
+    <text
+      x="678" y="318"
+      font-family="Inter, Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+      font-weight="600"
+      font-size="15"
+      fill="#FAFAF8"
+      text-anchor="middle"
+    >Agents discover</text>
+    <text
+      x="678" y="336"
+      font-family="Inter, Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+      font-weight="600"
+      font-size="15"
+      fill="#FAFAF8"
+      text-anchor="middle"
+    >&amp; purchase</text>
+    <text
+      x="678" y="354"
+      font-family="Inter, Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+      font-weight="400"
+      font-size="12"
+      fill="#6B7280"
+      text-anchor="middle"
+    >Demand</text>
+  </g>
+
+  <!--
+    ═══════════════════════════════════════
+    Stage 3 — Bottom: "Earnings attract more builders"
+    ═══════════════════════════════════════
+  -->
+  <g>
+    <circle cx="400" cy="516" r="14" fill="none" stroke="#C9A84C" stroke-width="1.5"/>
+    <text
+      x="400" y="521"
+      font-family="Inter, Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+      font-weight="500"
+      font-size="13"
+      fill="#C9A84C"
+      text-anchor="middle"
+    >3</text>
+    <text
+      x="400" y="498"
+      font-family="Inter, Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+      font-weight="600"
+      font-size="15"
+      fill="#FAFAF8"
+      text-anchor="middle"
+    >Earnings attract more builders</text>
+    <text
+      x="400" y="546"
+      font-family="Inter, Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+      font-weight="400"
+      font-size="12"
+      fill="#6B7280"
+      text-anchor="middle"
+    >Growth</text>
+  </g>
+
+  <!--
+    ═══════════════════════════════════════
+    Stage 4 — Left: "More learnings attract more agents"
+    ═══════════════════════════════════════
+  -->
+  <g>
+    <circle cx="180" cy="292" r="14" fill="none" stroke="#C9A84C" stroke-width="1.5"/>
+    <text
+      x="180" y="297"
+      font-family="Inter, Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+      font-weight="500"
+      font-size="13"
+      fill="#C9A84C"
+      text-anchor="middle"
+    >4</text>
+    <text
+      x="122" y="318"
+      font-family="Inter, Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+      font-weight="600"
+      font-size="15"
+      fill="#FAFAF8"
+      text-anchor="middle"
+    >More learnings</text>
+    <text
+      x="122" y="336"
+      font-family="Inter, Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+      font-weight="600"
+      font-size="15"
+      fill="#FAFAF8"
+      text-anchor="middle"
+    >attract more agents</text>
+    <text
+      x="122" y="354"
+      font-family="Inter, Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+      font-weight="400"
+      font-size="12"
+      fill="#6B7280"
+      text-anchor="middle"
+    >Network Effect</text>
+  </g>
+</svg>
