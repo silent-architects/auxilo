@@ -32,11 +32,27 @@ deploy-to-vm.py
 recover-*.js
 ecosystem.config.js
 
-# Docs / specs don't need to ship in the runtime image
-docs
+# Docs / specs don't need to ship in the runtime image.
+# NOTE: exclude docs/ via a glob (docs/**), NOT the bare `docs` dir name —
+# Docker won't descend into a directory excluded by name, so leaf-file
+# re-includes (!docs/FOO.md) below would be ignored. With docs/** the
+# directory is still walked, so the 4 served legal files can be un-ignored.
+docs/**
 specs
 reviews
 sprints
 agents
 prompts
+outputs
 *.md
+
+# Re-include ONLY the legal markdown that serveLegalPage reads from /app/docs.
+# Everything else under docs/ stays excluded. These stay untracked in git;
+# .dockerignore only affects the build context, not the repo.
+!docs/TERMS-OF-SERVICE.md
+!docs/PRIVACY-POLICY.md
+!docs/SUBPROCESSORS.md
+!docs/SUPPORTED-CLIENTS.md
+
+# Never bake data tarballs into the image
+*.tgz

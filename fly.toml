@@ -22,6 +22,11 @@ kill_timeout  = "30s"
 [env]
   PORT      = "3000"
   NODE_ENV  = "production"
+  # LW-2: moderation is default-on in code; set explicitly (belt-and-suspenders).
+  CONTENT_MODERATION_ENABLED = "true"
+  # LW-1: RESEND_API_KEY is a SECRET — `flyctl secrets set RESEND_API_KEY=...`,
+  # never in this file. EMAIL_FROM defaults to 'Auxilo <login@auxilo.io>'.
+  # EMAIL_FROM = "Auxilo <login@auxilo.io>"
   # BASE_URL is set dynamically from the Host header in server.js.
   # Override here only if you need a fixed canonical URL for links
   # emitted in audit records or emails.

@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auxilo System Status</title>
+  <meta name="description" content="Auxilo system status: real-time service health and incident information.">
+  <link rel="canonical" href="https://auxilo.io/status" />
+  <meta name="theme-color" content="#0A0A0A" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --obsidian:   #0D0D0F;
+      --obsidian-2: #131316;
+      --obsidian-3: #1A1A1F;
+      --ivory:      #F0EDE6;
+      --ivory-dim:  #B0ADA8;
+      --aurum:      #C9A84C;
+      --aurum-glow: rgba(201,168,76,0.15);
+      --green:      #22C55E;
+      --green-bg:   rgba(34,197,94,0.08);
+      --yellow:     #EAB308;
+      --yellow-bg:  rgba(234,179,8,0.08);
+      --red:        #EF4444;
+      --red-bg:     rgba(239,68,68,0.08);
+      --border:     rgba(240,237,230,0.08);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--obsidian);
+      color: var(--ivory);
+      font-family: 'Inter', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 1.25rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .logo {
+      font-weight: 700;
+      font-size: 1.2rem;
+      color: var(--aurum);
+      letter-spacing: -0.02em;
+    }
+
+    .logo span { color: var(--ivory); }
+
+    header a {
+      margin-left: auto;
+      color: var(--ivory-dim);
+      text-decoration: none;
+      font-size: 0.85rem;
+      transition: color 0.2s;
+    }
+    header a:hover { color: var(--aurum); }
+
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 3rem 2rem;
+      flex: 1;
+      width: 100%;
+    }
+
+    .page-title {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin-bottom: 0.5rem;
+    }
+
+    .page-subtitle {
+      color: var(--ivory-dim);
+      font-size: 0.9rem;
+      margin-bottom: 2.5rem;
+    }
+
+    /* ── Overall Status Banner ─────────────────────────────────── */
+    .overall-status {
+      background: var(--green-bg);
+      border: 1px solid rgba(34,197,94,0.2);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      flex-shrink: 0;
+      animation: pulse 2.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .overall-status .status-label {
+      font-weight: 600;
+      font-size: 1rem;
+      color: var(--green);
+    }
+
+    .overall-status .status-sub {
+      color: var(--ivory-dim);
+      font-size: 0.82rem;
+      margin-left: auto;
+    }
+
+    /* ── Section ───────────────────────────────────────────────── */
+    h2 {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--ivory-dim);
+      margin-bottom: 0.75rem;
+    }
+
+    /* ── Component Table ───────────────────────────────────────── */
+    .components {
+      background: var(--obsidian-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 2.5rem;
+    }
+
+    .component-row {
+      display: flex;
+      align-items: center;
+      padding: 0.9rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      gap: 1rem;
+    }
+
+    .component-row:last-child { border-bottom: none; }
+
+    .component-name {
+      font-size: 0.9rem;
+      font-weight: 500;
+      flex: 1;
+    }
+
+    .component-desc {
+      font-size: 0.8rem;
+      color: var(--ivory-dim);
+      flex: 2;
+    }
+
+    .badge {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.25rem 0.65rem;
+      border-radius: 999px;
+      flex-shrink: 0;
+    }
+
+    .badge.operational {
+      background: var(--green-bg);
+      color: var(--green);
+      border: 1px solid rgba(34,197,94,0.25);
+    }
+
+    .badge.degraded {
+      background: var(--yellow-bg);
+      color: var(--yellow);
+      border: 1px solid rgba(234,179,8,0.25);
+    }
+
+    .badge.outage {
+      background: var(--red-bg);
+      color: var(--red);
+      border: 1px solid rgba(239,68,68,0.25);
+    }
+
+    /* ── Quick Links ────────────────────────────────────────────── */
+    .links-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .link-card {
+      background: var(--obsidian-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      text-decoration: none;
+      color: var(--ivory);
+      transition: border-color 0.2s, background 0.2s;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .link-card:hover {
+      border-color: var(--aurum);
+      background: var(--aurum-glow);
+    }
+
+    .link-card-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--aurum);
+    }
+
+    .link-card-desc {
+      font-size: 0.8rem;
+      color: var(--ivory-dim);
+    }
+
+    /* ── Health Monitor ─────────────────────────────────────────── */
+    .health-block {
+      background: var(--obsidian-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .health-endpoint {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.82rem;
+      color: var(--aurum);
+      margin-bottom: 0.75rem;
+    }
+
+    .health-response {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--ivory-dim);
+      background: var(--obsidian-3);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      line-height: 1.6;
+      overflow-x: auto;
+    }
+
+    #live-health {
+      margin-top: 0.75rem;
+      font-size: 0.78rem;
+      color: var(--ivory-dim);
+    }
+
+    #live-health.ok { color: var(--green); }
+    #live-health.err { color: var(--red); }
+
+    /* ── Contact ────────────────────────────────────────────────── */
+    .contact-block {
+      background: var(--obsidian-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+
+    .contact-block p {
+      font-size: 0.875rem;
+      color: var(--ivory-dim);
+      line-height: 1.6;
+    }
+
+    .contact-block a {
+      color: var(--aurum);
+      text-decoration: none;
+    }
+    .contact-block a:hover { text-decoration: underline; }
+
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 1.25rem 2rem;
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--ivory-dim);
+    }
+    footer a { color: var(--ivory-dim); text-decoration: none; }
+    footer a:hover { color: var(--aurum); }
+
+    /* ── Mobile ─────────────────────────────────────────────────── */
+    @media (max-width: 640px) {
+      header {
+        padding: 1rem 1.25rem;
+        flex-wrap: wrap;
+        gap: 0.5rem 1rem;
+      }
+      main { padding: 2rem 1.25rem; }
+      footer { padding: 1.25rem 1.25rem; }
+
+      /* The header nav holds six links in one row that overflow a phone.
+         Let them wrap and shrink so they stay within the viewport. */
+      header nav {
+        flex-wrap: wrap;
+        gap: 0.5rem 1rem !important;
+        row-gap: 0.5rem;
+        min-width: 0;
+        margin-left: 0 !important;
+        font-size: 0.85rem;
+      }
+
+      /* Component rows stack so name + desc + badge don't push wide. */
+      .component-row {
+        flex-wrap: wrap;
+        gap: 0.5rem 0.75rem;
+      }
+      .component-name { flex: 1 1 auto; min-width: 0; }
+      .component-desc { flex: 1 1 100%; }
+
+      /* Overall-status banner stacks; sub no longer pinned right. */
+      .overall-status { flex-wrap: wrap; gap: 0.5rem 1rem; }
+      .overall-status .status-sub { margin-left: 0; flex: 1 1 100%; }
+
+      /* Single-column link grid. */
+      .links-grid { grid-template-columns: 1fr; }
+
+      /* Long JSON wraps instead of widening the page. */
+      .health-response {
+        white-space: pre-wrap;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">Auxilo<span> Status</span></div>
+    <nav style="display:flex;align-items:center;gap:1.25rem;margin-left:auto;">
+      <a href="/for-builders">For Builders</a>
+      <a href="/for-agents">For Agents</a>
+      <a href="/how-it-works">How It Works</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/api">API</a>
+      <a href="/dashboard">Sign in</a>
+      <a href="/">← auxilo.io</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1 class="page-title">System Status</h1>
+    <p class="page-subtitle">Current operational health of Auxilo services.</p>
+
+    <div class="overall-status" id="overall-status">
+      <div class="status-dot" id="status-dot"></div>
+      <span class="status-label" id="status-label">All Systems Operational</span>
+      <span class="status-sub" id="status-time">Checking…</span>
+    </div>
+
+    <h2>Service Components</h2>
+    <div class="components">
+      <div class="component-row">
+        <span class="component-name">API Server</span>
+        <span class="component-desc">Core HTTP endpoints: discovery, knowledge, payments</span>
+        <span class="badge operational" id="badge-api">Operational</span>
+      </div>
+      <div class="component-row">
+        <span class="component-name">Knowledge Marketplace</span>
+        <span class="component-desc">Submit, search, and unlock agent learnings</span>
+        <span class="badge operational">Operational</span>
+      </div>
+      <div class="component-row">
+        <span class="component-name">Renderly</span>
+        <span class="component-desc">URL → markdown / structured extraction</span>
+        <span class="badge operational">Operational</span>
+      </div>
+      <div class="component-row">
+        <span class="component-name">x402 Payments</span>
+        <span class="component-desc">Micropayment processing on Base (USDC)</span>
+        <span class="badge operational">Operational</span>
+      </div>
+      <div class="component-row">
+        <span class="component-name">Settlement Engine</span>
+        <span class="component-desc">Contributor USDC withdrawal processing</span>
+        <span class="badge operational">Operational</span>
+      </div>
+      <div class="component-row">
+        <span class="component-name">MCP Server</span>
+        <span class="component-desc">auxilo-mcp, npx-installable Claude Desktop integration</span>
+        <span class="badge operational">Operational</span>
+      </div>
+    </div>
+
+    <h2>Quick Links</h2>
+    <div class="links-grid">
+      <a class="link-card" href="/health">
+        <span class="link-card-label">Health Endpoint</span>
+        <span class="link-card-desc">GET /health: live JSON health probe</span>
+      </a>
+      <a class="link-card" href="/api">
+        <span class="link-card-label">API Discovery</span>
+        <span class="link-card-desc">GET /api: all endpoints and pricing</span>
+      </a>
+      <a class="link-card" href="/openapi.json">
+        <span class="link-card-label">OpenAPI Spec</span>
+        <span class="link-card-desc">GET /openapi.json: full spec v0.7.0</span>
+      </a>
+      <a class="link-card" href="https://github.com/silent-architects/auxilo/issues" target="_blank" rel="noopener">
+        <span class="link-card-label">Report a Bug</span>
+        <span class="link-card-desc">GitHub Issues: bug reports, feature requests</span>
+      </a>
+    </div>
+
+    <h2>Live Health Check</h2>
+    <div class="health-block">
+      <div class="health-endpoint">GET /health</div>
+      <div class="health-response" id="health-json">Loading…</div>
+      <div id="live-health"></div>
+    </div>
+
+    <h2>Contact &amp; Support</h2>
+    <div class="contact-block">
+      <p>
+        For general support, email <a href="mailto:support@auxilo.io">support@auxilo.io</a>. Response target: &lt;72 hours.<br>
+        To report a security vulnerability, email <a href="mailto:security@auxilo.io">security@auxilo.io</a>. Response target: &lt;24 hours.<br>
+        See <a href="/.well-known/security.txt">/.well-known/security.txt</a> for our responsible disclosure policy.
+      </p>
+    </div>
+  </main>
+
+  <footer>
+    <span>Auxilo v0.7.0 &middot; <a href="/">auxilo.io</a> &middot; <a href="/for-builders">builders</a> &middot; <a href="/for-agents">agents</a> &middot; <a href="/pricing">pricing</a> &middot; <a href="/api">api</a> &middot; <a href="/how-it-works">how it works</a> &middot; <a href="/.well-known/security.txt">security.txt</a></span>
+  </footer>
+
+  <script>
+    (async function () {
+      const healthJsonEl = document.getElementById('health-json');
+      const liveEl      = document.getElementById('live-health');
+      const timeEl      = document.getElementById('status-time');
+      const badgeApi    = document.getElementById('badge-api');
+      const statusLabel = document.getElementById('status-label');
+      const statusDot   = document.getElementById('status-dot');
+      const overall     = document.getElementById('overall-status');
+
+      try {
+        const res  = await fetch('/health');
+        const data = await res.json();
+
+        healthJsonEl.textContent = JSON.stringify(data, null, 2);
+
+        if (data.status === 'ok') {
+          liveEl.textContent = '✓ Server is healthy';
+          liveEl.className   = 'ok';
+          timeEl.textContent = 'Last checked: ' + new Date().toLocaleTimeString();
+        } else {
+          throw new Error('Non-ok status');
+        }
+      } catch (e) {
+        healthJsonEl.textContent = 'Could not reach /health endpoint.';
+        liveEl.textContent = '✗ Health check failed';
+        liveEl.className   = 'err';
+        badgeApi.textContent = 'Degraded';
+        badgeApi.className   = 'badge degraded';
+        statusLabel.textContent = 'Partial Degradation Detected';
+        statusLabel.style.color = 'var(--yellow)';
+        statusDot.style.background = 'var(--yellow)';
+        statusDot.style.boxShadow  = '0 0 8px var(--yellow)';
+        overall.style.background   = 'var(--yellow-bg)';
+        overall.style.borderColor  = 'rgba(234,179,8,0.2)';
+        timeEl.textContent = 'Last checked: ' + new Date().toLocaleTimeString();
+      }
+    })();
+  </script>
+</body>
+</html>

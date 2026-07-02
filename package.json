@@ -1,13 +1,22 @@
 {
   "name": "auxilo-mcp",
-  "version": "0.7.0",
-  "description": "MCP server for Auxilo — Agent Capability Discovery & Knowledge Marketplace",
+  "version": "0.9.1",
+  "description": "MCP server for Auxilo \u2014 Agent Capability Discovery & Knowledge Marketplace",
   "main": "mcp-server.js",
   "bin": {
-    "auxilo-mcp": "mcp-server.js"
+    "auxilo-mcp": "mcp-server.js",
+    "auxilo": "bin/auxilo-cli.js"
   },
   "files": [
     "mcp-server.js",
+    "bin/",
+    "lib/installer.js",
+    "lib/review.js",
+    "lib/sensitivity-filter.js",
+    "scripts/runner.js",
+    "scripts/capture-core.js",
+    "scripts/sources/",
+    "scripts/hooks/auxilo-extract.sh",
     "README.md",
     "LICENSE",
     "prompts/auxilo-learning-claude-code.md",

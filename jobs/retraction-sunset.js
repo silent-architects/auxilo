@@ -17,7 +17,11 @@
  *   node jobs/retraction-sunset.js              # production sweep
  *   node jobs/retraction-sunset.js --dry-run    # report only, no writes
  *
- * Scheduled via: ~/Library/LaunchAgents/tech.conway.auxilo-retraction-sweeper.plist
+ * Scheduling: the tech.conway.auxilo-retraction-sweeper LaunchAgent was RETIRED
+ * 2026-06-11 (plist archived in ~/.auxilo/disabled-launchagents/). This job walks
+ * data/learnings.json, which lives on the Fly box in production — a local
+ * LaunchAgent never operated on real data. Run it on the box (or as a server-side
+ * cron) if window expiry sweeping is needed; manual invocation still works.
  *
  * @module jobs/retraction-sunset
  */

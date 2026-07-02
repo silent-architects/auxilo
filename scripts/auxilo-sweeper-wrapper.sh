@@ -2,6 +2,12 @@
 # Wrapper for launchd — runs the extraction runner.
 # P2.1a: credentials come from ~/.auxilo/credentials.json — no shell env sourcing.
 # launchd does NOT inherit interactive shell env.
+#
+# P1-13: This script is INSTALLED to ~/.auxilo/bin/ by `node scripts/runner.js
+# --install-sweeper` (copied, not symlinked). launchd must never execute anything
+# under ~/Documents — macOS TCC blocks it ("Operation not permitted"). The RUNNER
+# path below resolves relative to this script's own location, so the installed
+# copy runs the installed runner.
 
 set -u
 
@@ -15,7 +21,8 @@ fi
 # Ensure Node is in PATH (Homebrew default).
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-RUNNER="/Users/iamtylerkelley/Documents/Custom/auxilo/scripts/runner.js"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+RUNNER="$SCRIPT_DIR/scripts/runner.js"
 LOG="$HOME/.auxilo/extract.log"
 
 mkdir -p "$HOME/.auxilo"
@@ -26,7 +33,13 @@ if [ ! -f "$HOME/.auxilo/autonomous-enabled" ]; then
   exit 0
 fi
 
-# Mark this as an extraction run so any nested hooks bail out.
-export AUXILO_EXTRACTING=1
+# NOTE (P1-13 fix): do NOT export AUXILO_EXTRACTING here. The runner sets it
+# itself after passing its own recursion-guard check (runner.js main()).
+# Exporting it from the wrapper made the runner's guard trip on every launchd
+# run, silently no-opping the sweeper.
 
-exec /usr/bin/env node "$RUNNER" >> "$LOG" 2>&1
+# Do NOT redirect stdout into extract.log: the runner's log() already appends
+# every line there itself, so the redirect wrote each line twice and the daily
+# digest double-counted publish events. launchd captures stdout/stderr via the
+# plist's StandardOutPath/StandardErrorPath instead.
+exec /usr/bin/env node "$RUNNER"
