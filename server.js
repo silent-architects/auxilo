@@ -212,6 +212,21 @@ const VERSION = require('./package.json').version;
 // Default: ON (opt-out). Set CONTENT_MODERATION_ENABLED=false to disable.
 const CONTENT_MODERATION_ENABLED = process.env.CONTENT_MODERATION_ENABLED !== 'false';
 
+// COST/ARCH (2026-07-02): server-side LLM extraction is DEPRECATED and OFF by
+// default. Auxilo does not pay Anthropic to extract learnings from users'
+// sessions on spec. Extraction now happens CLIENT-SIDE — the agent's own model
+// packages a finished learning and submits it via the auxilo_contribute MCP tool
+// (POST /learn). This flag gates every server-side extraction entry point
+// (/extract, /pipeline/upload, the OpenClaw daemon). Sensitivity screening is
+// likewise client-side (the agent self-screens) with a server regex backstop;
+// set LLM_SENSITIVITY_ENABLED=false so the server never spends on the LLM layer.
+const SERVER_SIDE_EXTRACTION_ENABLED = process.env.SERVER_SIDE_EXTRACTION_ENABLED === 'true';
+const EXTRACTION_DEPRECATED = {
+  error: 'Server-side extraction is disabled',
+  code: 'extraction_client_side',
+  message: 'Auxilo no longer extracts learnings server-side. Your client extracts: the agent packages a finished learning and submits it via the auxilo_contribute MCP tool, or POST /learn directly. See https://auxilo.io/for-builders.',
+};
+
 // LW-13 / LW-16: `MODERATION_AUTO_APPROVE` is RETIRED as the seamless gate.
 // LW-16 inverts the default: when moderation is on, publishing is seamless
 // (status='approved') for any submission that is fully clean — review is the
@@ -1868,6 +1883,8 @@ let openclawLastResult = null;
 let openclawRuntimeConfig = { ...DEFAULT_ADAPTER_CONFIG };
 
 async function runOpenClawDaemon() {
+  // Server-side extraction is deprecated (client-side now). Do not poll/extract.
+  if (!SERVER_SIDE_EXTRACTION_ENABLED) return;
   if (openclawDaemonRunning) {
     console.log('[openclaw-daemon] Already running, skipping');
     return;
@@ -4992,6 +5009,8 @@ function parkForReview(extractionId, accountId, candidates) {
 // This is the server-side extraction endpoint. The client runner uploads a
 // PII-scrubbed transcript; Auxilo calls the LLM subprocessor (Anthropic).
 app.post('/extract', async (c) => {
+  // Deprecated: extraction is client-side now (see SERVER_SIDE_EXTRACTION_ENABLED).
+  if (!SERVER_SIDE_EXTRACTION_ENABLED) return c.json(EXTRACTION_DEPRECATED, 410);
   // ── Step 0: Check circuit breaker ─────────────────────────────────────
   checkKillSwitchReset();
   const cbState = circuitBreaker.getState();
@@ -7535,6 +7554,8 @@ const CHAT_QUALITY_THRESHOLD = 14; // Minimum score out of 20
 // (moved earlier so WAL recovery's replayPipelineApprove can access them).
 
 app.post('/pipeline/upload', requireSession, async (c) => {
+  // Deprecated: server-side extraction is client-side now (SERVER_SIDE_EXTRACTION_ENABLED).
+  if (!SERVER_SIDE_EXTRACTION_ENABLED) return c.json(EXTRACTION_DEPRECATED, 410);
   // D-3 FIX: /pipeline/upload fires a billable Anthropic call on the platform
   // key per request. Apply /extract's cost defenses BEFORE the LLM call:
   // (1) the global $-denominated circuit breaker / daily-spend kill-switch, and
