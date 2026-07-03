@@ -172,8 +172,15 @@ describe('B3: Module shape', () => {
 });
 
 // ─── Plist validation ───────────────────────────────────────────────────────
+// These assert INSTALLED machine state (~/Library/LaunchAgents), which only
+// exists on macOS. CI runs ubuntu-latest, so skip off-darwin with a logged
+// reason rather than failing on an impossible precondition.
 
-describe('B3: LaunchAgent plist', () => {
+const PLIST_SKIP = process.platform === 'darwin'
+  ? false
+  : `LaunchAgent plists are macOS machine state; not applicable on ${process.platform}`;
+
+describe('B3: LaunchAgent plist', { skip: PLIST_SKIP }, () => {
   it('tech.conway.auxilo-digest.plist exists', () => {
     const plistPath = path.join(os.homedir(), 'Library', 'LaunchAgents',
       'tech.conway.auxilo-digest.plist');
