@@ -21,6 +21,19 @@ const path = require('path');
 
 const SERVER_SRC = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf-8');
 
+/**
+ * Extract the FULL /extract handler source: from app.post('/extract' to the
+ * next top-level route registration. Fixed-width windows (previously 18000
+ * chars) broke when PR #5's client-side-extraction restructure grew the
+ * handler past the window — this is length-independent.
+ */
+function extractHandlerSrc() {
+  const start = SERVER_SRC.indexOf("app.post('/extract'");
+  assert.ok(start > -1, '/extract handler must exist');
+  const next = SERVER_SRC.indexOf('\napp.', start + 1);
+  return next === -1 ? SERVER_SRC.slice(start) : SERVER_SRC.slice(start, next);
+}
+
 // ── A4: 256KB body cap reachable for /extract ───────────────────────────────
 
 describe('A4: /extract gets 256KB body cap', () => {
@@ -39,10 +52,12 @@ describe('A4: /extract gets 256KB body cap', () => {
   });
 
   it('error response includes max_bytes for path-aware cap', () => {
-    // Find the global middleware error response
-    const capIdx = SERVER_SRC.indexOf("const cap = c.req.path === '/extract'");
+    // Find the global middleware error response. The cap variable became
+    // `let cap` when the /pipeline/upload override was added — match the
+    // assignment itself, not the declaration keyword.
+    const capIdx = SERVER_SRC.indexOf("cap = c.req.path === '/extract'");
     assert.ok(capIdx > -1, 'cap variable must exist');
-    const after = SERVER_SRC.slice(capIdx, capIdx + 200);
+    const after = SERVER_SRC.slice(capIdx, capIdx + 800);
     assert.ok(after.includes('max_bytes: cap'),
       'error response must include max_bytes referencing the cap variable');
   });
@@ -222,10 +237,7 @@ describe('A6: validModes does not include scheduled', () => {
 
 describe('ITEM 1: publish path audit-before-mutate', () => {
   it('appendAuditRow occurs BEFORE safeWrite(LEARNINGS_FILE) in /extract handler', () => {
-    // Find the /extract handler
-    const handlerIdx = SERVER_SRC.indexOf("app.post('/extract'");
-    assert.ok(handlerIdx > -1, '/extract handler must exist');
-    const handler = SERVER_SRC.slice(handlerIdx, handlerIdx + 18000);
+    const handler = extractHandlerSrc();
 
     const auditIdx = handler.indexOf('appendAuditRow');
     const safeWriteIdx = handler.indexOf('safeWrite(LEARNINGS_FILE');
@@ -236,8 +248,7 @@ describe('ITEM 1: publish path audit-before-mutate', () => {
   });
 
   it('audit failure returns 500 with code audit_integrity_error', () => {
-    const handlerIdx = SERVER_SRC.indexOf("app.post('/extract'");
-    const handler = SERVER_SRC.slice(handlerIdx, handlerIdx + 18000);
+    const handler = extractHandlerSrc();
 
     assert.ok(handler.includes("code: 'audit_integrity_error'"),
       'audit failure must return code: audit_integrity_error');
@@ -248,8 +259,7 @@ describe('ITEM 1: publish path audit-before-mutate', () => {
   });
 
   it('catalog is NOT mutated when audit write fails (published.length = 0)', () => {
-    const handlerIdx = SERVER_SRC.indexOf("app.post('/extract'");
-    const handler = SERVER_SRC.slice(handlerIdx, handlerIdx + 18000);
+    const handler = extractHandlerSrc();
 
     // After the catch block for audit failure, published must be emptied
     const catchIdx = handler.indexOf('audit_integrity_error');
@@ -263,9 +273,7 @@ describe('ITEM 1: publish path audit-before-mutate', () => {
     // The for-loop that processes candidates must NOT directly push to learnings[].
     // Instead, it collects candidates in pendingCatalogEntries, which are committed
     // to learnings[] only after the audit write succeeds.
-    const handlerIdx = SERVER_SRC.indexOf("app.post('/extract'");
-    assert.ok(handlerIdx > -1);
-    const handler = SERVER_SRC.slice(handlerIdx, handlerIdx + 18000);
+    const handler = extractHandlerSrc();
 
     // Verify pendingCatalogEntries array is declared
     assert.ok(handler.includes('const pendingCatalogEntries = []'),
@@ -286,8 +294,7 @@ describe('ITEM 1: publish path audit-before-mutate', () => {
   });
 
   it('learnings.push happens AFTER audit write succeeds (from pendingCatalogEntries)', () => {
-    const handlerIdx = SERVER_SRC.indexOf("app.post('/extract'");
-    const handler = SERVER_SRC.slice(handlerIdx, handlerIdx + 18000);
+    const handler = extractHandlerSrc();
 
     // Find the catalog mutation section (after audit)
     const catalogMutationIdx = handler.indexOf('Catalog mutation: ONLY after successful audit');

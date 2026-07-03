@@ -176,34 +176,30 @@ describe('B2: Module exports', () => {
   });
 });
 
-// ─── Plist validation ───────────────────────────────────────────────────────
+// ─── LaunchAgent retirement ──────────────────────────────────────────────────
+// The tech.conway.auxilo-retraction-sweeper LaunchAgent was RETIRED 2026-06-11
+// (plist archived to ~/.auxilo/disabled-launchagents/ on the dev machine) —
+// see the header of jobs/retraction-sunset.js. The old tests here asserted the
+// plist existed under ~/Library/LaunchAgents, which is machine state that no
+// longer exists on ANY machine (retired on the dev Mac, impossible on ubuntu
+// CI). What we can still verify from the repo: the retirement is documented
+// at the scheduling source of truth, so nobody re-introduces a local
+// LaunchAgent that silently operates on non-production data.
 
-describe('B2: LaunchAgent plist', () => {
-  it('tech.conway.auxilo-retraction-sweeper.plist exists', () => {
-    const plistPath = path.join(os.homedir(), 'Library', 'LaunchAgents',
-      'tech.conway.auxilo-retraction-sweeper.plist');
-    assert.ok(fs.existsSync(plistPath), `plist must exist at ${plistPath}`);
+describe('B2: LaunchAgent retirement (2026-06-11)', () => {
+  it('jobs/retraction-sunset.js documents the LaunchAgent retirement', () => {
+    const src = fs.readFileSync(
+      path.join(__dirname, '..', 'jobs', 'retraction-sunset.js'), 'utf-8');
+    assert.ok(src.includes('RETIRED'),
+      'retraction-sunset.js must document the LaunchAgent retirement');
+    assert.ok(src.includes('tech.conway.auxilo-retraction-sweeper'),
+      'retirement note must name the retired LaunchAgent label');
   });
 
-  it('plist contains correct label', () => {
-    const plistPath = path.join(os.homedir(), 'Library', 'LaunchAgents',
-      'tech.conway.auxilo-retraction-sweeper.plist');
-    const content = fs.readFileSync(plistPath, 'utf-8');
-    assert.ok(content.includes('tech.conway.auxilo-retraction-sweeper'));
-  });
-
-  it('plist runs hourly (StartInterval 3600)', () => {
-    const plistPath = path.join(os.homedir(), 'Library', 'LaunchAgents',
-      'tech.conway.auxilo-retraction-sweeper.plist');
-    const content = fs.readFileSync(plistPath, 'utf-8');
-    assert.ok(content.includes('<key>StartInterval</key>'));
-    assert.ok(content.includes('<integer>3600</integer>'));
-  });
-
-  it('plist logs to ~/.auxilo/logs/', () => {
-    const plistPath = path.join(os.homedir(), 'Library', 'LaunchAgents',
-      'tech.conway.auxilo-retraction-sweeper.plist');
-    const content = fs.readFileSync(plistPath, 'utf-8');
-    assert.ok(content.includes('.auxilo/logs/'));
+  it('sweeper remains manually invocable (no LaunchAgent dependency)', () => {
+    const src = fs.readFileSync(
+      path.join(__dirname, '..', 'jobs', 'retraction-sunset.js'), 'utf-8');
+    assert.ok(src.includes('require.main === module') || src.includes('parseArgs'),
+      'sweeper must support direct CLI invocation for manual/server-side runs');
   });
 });
