@@ -179,6 +179,7 @@ Not before launch, but before public visibility. Source: VISUAL_IDENTITY.md
 | T-6 | Full regression: v0.3.0 settlement (challenge/verify, withdrawal, settlement lifecycle, earnings migration, stuck resolution, admin) | BUILD-4 | DONE — covered by 108 A-series tests |
 | T-7 | Edge case sweep: concurrent withdrawals, malformed JSON on every POST, empty states, 10K+ char strings, unicode, duplicate submissions | BUILD-4 | DONE — Sprint 07, 58/58 tests pass |
 | T-8 | Live validation on Conway VM after each deployment | BUILD-4 | DONE — T-DEPLOY 5/5 + x402v2 7/7 + Sprint 02 18/18 + Sprint 03 8/8 + Sprint 04 13/13 + Sprint 05 15/15 + Sprint 06 18/18 + Sprint 07 157/157 live regression + Sprint 10 19/19 |
+| T-9 | CI green on main: viem→2.54.2 lockfile bump (pulls ws 8.21.0, clears GHSA-96hv-2xvq-fx4p audit fail); darwin-skip digest plist tests; replace stale retraction-sweeper plist tests (LaunchAgent retired 2026-06-11); length-independent source-introspection windows broken by PR #5 restructure | BUILD-4 | IN REVIEW — PR `fix/ci-green`; Gate B (SPEC-1) on viem bump |
 
 ---
 
