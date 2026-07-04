@@ -99,6 +99,7 @@ describe('recordTosAcceptance', () => {
     fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify({
       acc_tos_test: { email: 'tos@example.com', created_at: Date.now(), api_keys: [] },
       acc_tos_test2: { email: 'tos2@example.com', created_at: Date.now(), api_keys: [] },
+      acc_tos_test3: { email: 'tos3@example.com', created_at: Date.now(), api_keys: [] },
     }, null, 2));
   });
 
@@ -180,6 +181,19 @@ describe('recordTosAcceptance', () => {
     assert.equal(acctAfter.tos_acceptance_log.length, logLenBefore); // no duplicate row
     assert.equal(acctAfter.accepted_ip, '203.0.113.9');             // original IP preserved, not overwritten
   });
+
+  it('stamps accepted_affirmed + a history affirmed flag when an explicit affirmation is passed (L-2)', () => {
+    const r = recordTosAcceptance('acc_tos_test3', {
+      version: CURRENT_TOS_VERSION,
+      ip: '198.51.100.7',
+      ua: 'affirm-test',
+      affirmed: true,
+    });
+    assert.equal(r.success, true);
+    const acct = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf8')).acc_tos_test3;
+    assert.equal(acct.accepted_affirmed, true);                       // the transmitted affirmation is recorded
+    assert.equal(acct.tos_acceptance_log[0].affirmed, true);          // and carried into the append-only history
+  });
 });
 
 // ─── 5. Server route gates + endpoints (source-level handler verification) ──────
@@ -201,6 +215,19 @@ describe('server.js: blocking clickwrap gates', () => {
   it('accept-terms + terms-status endpoints exist and accept session OR API key', () => {
     assert.ok(SERVER_SRC.includes("app.post('/account/accept-terms', requireSessionOrApiKey('contribute')"));
     assert.ok(SERVER_SRC.includes("app.get('/account/terms-status', requireSessionOrApiKey('read')"));
+  });
+
+  it('accept-terms REQUIRES an explicit agree:true affirmation (L-2) and records it', () => {
+    const h = sliceHandler("app.post('/account/accept-terms'");
+    // The server must reject a bare {version} POST that carries no affirmation.
+    assert.ok(/const \{ version, agree \} = body/.test(h), 'must destructure the agree flag from the body');
+    assert.ok(/if \(agree !== true\)/.test(h), 'must reject unless agree === true');
+    assert.ok(h.includes("code: 'AFFIRMATION_REQUIRED'"), 'must return the machine-readable AFFIRMATION_REQUIRED code');
+    // The affirmation must be threaded into BOTH evidentiary records.
+    assert.ok(h.includes('recordTosAcceptance(accountId, { version, ip, ua, affirmed: true })'),
+      'must stamp affirmed:true onto the account artifact');
+    assert.ok(/appendTosAcceptance\(\{[\s\S]*affirmed: true,[\s\S]*\}\)/.test(h),
+      'must stamp affirmed:true onto the tamper-evident durable row');
   });
 
   it('the 403 helper is machine-readable (stable code + current version + how-to)', () => {
@@ -260,5 +287,30 @@ describe('mcp-server.js: acceptance handshake', () => {
   });
   it('link-wallet tool description warns acceptance is required', () => {
     assert.ok(MCP_SRC.includes('auxilo_accept_terms') && MCP_SRC.includes('TERMS_NOT_ACCEPTED'));
+  });
+  it('forwards agree:true to the server accept-terms endpoint (L-2)', () => {
+    const i = MCP_SRC.indexOf("case 'auxilo_accept_terms'");
+    const h = MCP_SRC.slice(i, i + 1400);
+    assert.ok(/body: JSON\.stringify\(\{ version, agree: true \}\)/.test(h),
+      'the MCP client must transmit the affirmation, not a bare version-echo');
+  });
+});
+
+// ─── 7. Web clickwrap forwards the affirmation (L-2, source-level) ──────────────
+
+const DASHBOARD_SRC = fs.readFileSync(path.join(__dirname, '..', 'public', 'dashboard.html'), 'utf-8');
+
+describe('public/dashboard.html: web clickwrap', () => {
+  it('the accept checkbox is unchecked by default and the button disabled until checked', () => {
+    assert.ok(/id="terms-agree-check"[^>]*onchange="onTermsCheckChange\(\)"/.test(DASHBOARD_SRC));
+    assert.ok(/id="terms-accept-btn"[^>]*onclick="acceptTerms\(\)"[^>]*disabled/.test(DASHBOARD_SRC),
+      'the Accept button must be disabled until the box is checked');
+  });
+  it('acceptTerms POSTs agree:true alongside the version (L-2)', () => {
+    const i = DASHBOARD_SRC.indexOf('window.acceptTerms');
+    const h = DASHBOARD_SRC.slice(i, i + 900);
+    assert.ok(/if \(!chk \|\| !chk\.checked\) return/.test(h), 'must require the affirmative checkbox before POSTing');
+    assert.ok(/version: _tosStatus\.current_tos_version, agree: true/.test(h),
+      'the web client must forward the checkbox affirmation to the server');
   });
 });

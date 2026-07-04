@@ -505,7 +505,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const resp = await fetch(`${AUXILO_BASE}/account/accept-terms`, {
           method: 'POST',
           headers,
-          body: JSON.stringify({ version }),
+          // Forward the affirmation to the server (L-2): the local agree===true guard above
+          // is not enough — the server requires and records agree:true so the acceptance is
+          // evidenced by a transmitted affirmation, not a bare version-echo.
+          body: JSON.stringify({ version, agree: true }),
         });
         return text(await resp.json());
       }

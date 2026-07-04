@@ -5843,10 +5843,26 @@ app.post('/account/accept-terms', requireSessionOrApiKey('contribute'), async (c
   try { body = await c.req.json(); } catch {
     return c.json({ error: 'Invalid JSON body' }, 400);
   }
-  const { version } = body || {};
+  const { version, agree } = body || {};
   if (!version || typeof version !== 'string') {
     return c.json({
       error: 'version is required — POST the current_tos_version you are accepting',
+      current_tos_version: CURRENT_TOS_VERSION,
+    }, 400);
+  }
+  // L-2 (Gate-B): require an explicit, server-transmitted affirmation of assent — not
+  // merely an authenticated POST bearing the version. This closes the gap the red-team
+  // named: the MCP client enforced `agree===true` LOCALLY (mcp-server.js) but the server
+  // would happily record an acceptance from a bare {version} POST, so the evidentiary row
+  // could not distinguish "the caller affirmed" from "any authenticated version-echo." The
+  // affirmation is now forced onto the wire and stamped into the record (account artifact +
+  // tamper-evident durable row) below. It hardens against a "fabricated-with-no-assent-
+  // signal" challenge; it does NOT resolve whether an agent-executed acceptance binds the
+  // human principal (V-3b, reserved for licensed counsel).
+  if (agree !== true) {
+    return c.json({
+      error: 'You must affirmatively agree to accept — resend with { "version": "...", "agree": true }',
+      code: 'AFFIRMATION_REQUIRED',
       current_tos_version: CURRENT_TOS_VERSION,
     }, 400);
   }
@@ -5858,7 +5874,7 @@ app.post('/account/accept-terms', requireSessionOrApiKey('contribute'), async (c
   // mutations on the same account (all do loadAccounts->mutate->saveAccounts).
   const releaseAccountLock = await acquireAccountLock(accountId);
   try {
-    const result = recordTosAcceptance(accountId, { version, ip, ua });
+    const result = recordTosAcceptance(accountId, { version, ip, ua, affirmed: true });
     if (!result.success) {
       return c.json(
         { error: result.error, current_tos_version: CURRENT_TOS_VERSION },
@@ -5883,6 +5899,7 @@ app.post('/account/accept-terms', requireSessionOrApiKey('contribute'), async (c
           ipRedacted: redactIp(ip),
           userAgent: ua,
           acceptPath: c.req.header('X-API-Key') ? 'mcp-api' : 'web',
+          affirmed: true,
         });
       } catch (logErr) {
         console.error('[tos] durable acceptance-log append failed:', logErr.message);

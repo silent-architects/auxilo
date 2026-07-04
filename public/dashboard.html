@@ -752,7 +752,10 @@
     hideAlert('terms-gate-alert');
     apiFetch('/account/accept-terms', {
       method: 'POST',
-      body: JSON.stringify({ version: _tosStatus.current_tos_version }),
+      // agree:true forwards the checkbox affirmation to the server (L-2). The box is
+      // unchecked by default and the button is disabled until it is checked (above), so
+      // this is a genuine, server-recorded manifestation of assent, not a bare version-echo.
+      body: JSON.stringify({ version: _tosStatus.current_tos_version, agree: true }),
     })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
