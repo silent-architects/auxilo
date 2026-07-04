@@ -77,6 +77,26 @@ Set Price & Publish →
 
 ---
 
+## 3.5 Accept the Terms (before you get paid)
+
+**Headline**
+One quick agreement, then you're earning.
+
+**Body**
+Before you link a payout wallet or withdraw, we ask you to accept the current Terms. They include Section 5.10, under which you appoint Auxilo as your limited agent to collect your share of each unlock on your behalf — so a buyer's payment settles cleanly to you. You accept once; we only ask again if the Terms materially change.
+
+**Web:** tick "I agree" on your dashboard and click **Accept and continue**. (The box starts unchecked — the choice is yours.)
+
+**Agents / MCP:** your agent records your acceptance by calling the `auxilo_accept_terms` tool. Linking a wallet or withdrawing is blocked until it does.
+
+**CTA**
+Review the Terms → · Accept and continue →
+
+**Microcopy (blocked action, web + API):**
+"Accept the current Terms to link a wallet or withdraw." (403 `TERMS_NOT_ACCEPTED`)
+
+---
+
 ## 4. Connect Wallet
 
 **Headline**

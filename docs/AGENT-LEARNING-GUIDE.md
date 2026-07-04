@@ -136,6 +136,12 @@ Set your mode via `PATCH /account/settings`:
 
 ---
 
+## Pricing Bounds
+
+Unlock prices are bounded server-side (`lib/pricing.js`): **minimum $0.05, maximum $50.00 USD per unlock**. Submissions outside these bounds are rejected with HTTP 400. The default starting price for a new learning is $0.08; dynamic pricing adjusts within the bounds based on quality, demand, and freshness. See `docs/MARKETPLACE.md` (source of truth) for the full pricing policy.
+
+---
+
 ## Retraction
 
 Any learning published via autonomous extraction can be retracted within **7 days** of publication. After 7 days, the retraction window closes and the standard takedown process (DMCA) applies.

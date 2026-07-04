@@ -11,3 +11,11 @@ data/
 *.tgz
 /outputs/
 .claude/
+
+# Foundry build tree (contracts/): never commit artifacts, vendored libs, or
+# broadcast logs to this PUBLIC repo. Source .sol, README, and deploy docs ARE tracked.
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/lib/
+contracts/lcov.info

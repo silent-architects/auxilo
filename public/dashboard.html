@@ -526,6 +526,23 @@
     <!-- Global alert -->
     <div id="dash-alert" class="alert" style="display:none;margin-bottom:20px"></div>
 
+    <!-- Terms of Service clickwrap gate (R-01 §5.10 payee-agency) -->
+    <div id="terms-gate" class="dash-card" style="display:none;border:1px solid var(--aurum)">
+      <div class="dash-card-title">Action required: accept the updated Terms</div>
+      <p style="font-size:14px;color:var(--slate);margin-bottom:14px;line-height:1.6">
+        We've updated our <a href="/terms" target="_blank" rel="noopener" style="color:var(--aurum)">Terms of Service</a>.
+        They now include <strong style="color:var(--ivory)">Section 5.10</strong>, under which you appoint Auxilo as your
+        limited agent to receive your Builder Share on your behalf when consumers unlock your learnings. You must accept
+        the current Terms before you can link a payout wallet or withdraw earnings.
+      </p>
+      <div id="terms-gate-alert" class="alert" style="display:none;margin-bottom:12px"></div>
+      <label style="display:flex;align-items:flex-start;gap:10px;font-size:14px;color:var(--ivory);cursor:pointer;margin-bottom:16px">
+        <input type="checkbox" id="terms-agree-check" style="margin-top:3px" onchange="onTermsCheckChange()">
+        <span>I have read and agree to the <a href="/terms" target="_blank" rel="noopener" style="color:var(--aurum)">Terms of Service</a>, including the Section 5.10 payment-collection agency.</span>
+      </label>
+      <button class="btn btn-primary" id="terms-accept-btn" onclick="acceptTerms()" disabled>Accept and continue</button>
+    </div>
+
     <!-- Earnings panel -->
     <div class="dash-card">
       <div class="dash-card-title">Earnings</div>
@@ -693,11 +710,66 @@
     if (email) {
       setText('dash-email-label', email);
     }
+    loadTerms();
     loadEarnings();
     loadApiKeys();
     loadPurchases();
     // Payout loads after earnings to know the balance
   }
+
+  // ── Terms of Service clickwrap (R-01 §5.10 payee-agency) ────────────
+  // Assent must be an affirmative act (unchecked box + explicit button), captured
+  // server-side with version + timestamp + IP/UA. The server enforces the gate at
+  // wallet-link/withdrawal; this surfaces it and records the acceptance.
+  var _tosStatus = null;
+
+  function loadTerms() {
+    apiFetch('/account/terms-status')
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (!res.ok) return;
+        _tosStatus = res.data;
+        if (res.data.needs_acceptance) { show('terms-gate'); } else { hide('terms-gate'); }
+        // Re-render the payout panel so the withdraw form reflects the gate state,
+        // in case earnings resolved before this async status check returned.
+        if (_earnings !== null) renderPayoutPanel(_earnings);
+      })
+      .catch(function () {});
+  }
+
+  window.onTermsCheckChange = function () {
+    var chk = document.getElementById('terms-agree-check');
+    var btn = document.getElementById('terms-accept-btn');
+    if (btn) btn.disabled = !(chk && chk.checked);
+  };
+
+  window.acceptTerms = function () {
+    if (!_tosStatus || !_tosStatus.current_tos_version) return;
+    var chk = document.getElementById('terms-agree-check');
+    if (!chk || !chk.checked) return; // affirmative action required
+    var btn = document.getElementById('terms-accept-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Recording…'; }
+    hideAlert('terms-gate-alert');
+    apiFetch('/account/accept-terms', {
+      method: 'POST',
+      body: JSON.stringify({ version: _tosStatus.current_tos_version }),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (res.ok) {
+          _tosStatus = { needs_acceptance: false, accepted: true, current_tos_version: _tosStatus.current_tos_version };
+          hide('terms-gate');
+          loadEarnings(); // re-render payout with withdrawal unlocked
+        } else {
+          showAlert('terms-gate-alert', (res.data && res.data.error) || 'Could not record acceptance. Please try again.', 'error');
+          if (btn) { btn.disabled = false; btn.textContent = 'Accept and continue'; }
+        }
+      })
+      .catch(function () {
+        showAlert('terms-gate-alert', 'Network error. Please try again.', 'error');
+        if (btn) { btn.disabled = false; btn.textContent = 'Accept and continue'; }
+      });
+  };
 
   // ── Earnings ────────────────────────────────────────────────────────
   var _earnings = null;
@@ -860,7 +932,19 @@
 
     // Withdraw form (shown when balance > 0)
     var pendingBal = data ? (data.pending_balance || 0) : 0;
-    var canWithdraw = data && data.can_withdraw && pendingBal >= 0.50;
+    // R-01 §5.10: withdrawal is gated on current-Terms acceptance. The server 403s
+    // regardless; here we hide the form and point the builder at the gate above so
+    // the UI matches the server rather than letting them submit into a 403.
+    var termsBlock = !!(_tosStatus && _tosStatus.needs_acceptance);
+    if (termsBlock) {
+      var wBlockNote = document.createElement('p');
+      wBlockNote.style.fontSize = '13px';
+      wBlockNote.style.color = 'var(--aurum)';
+      wBlockNote.style.marginTop = '14px';
+      wBlockNote.textContent = 'Accept the updated Terms of Service above to enable withdrawals.';
+      el.appendChild(wBlockNote);
+    }
+    var canWithdraw = data && data.can_withdraw && pendingBal >= 0.50 && !termsBlock;
 
     var sep2 = document.createElement('div');
     sep2.className = 'section-sep';

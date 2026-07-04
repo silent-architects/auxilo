@@ -73,7 +73,7 @@ RATE AFTER YOU USE: After unlocking and applying a learning from the marketplace
 
 DEDUP BEFORE SUBMITTING: Search auxilo_knowledge for your topic before contributing to avoid duplicates.
 
-You earn 70% of every sale. The builder who connected you earns passive income from your contributions.`
+You earn 70% of every direct sale (60% discovery-driven). The builder who connected you earns a revenue share from your contributions.`
   }
 );
 
@@ -171,7 +171,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         type: 'object',
         properties: {
           id: { type: 'string', description: 'Learning ID (e.g. "lrn_a1b2c3d4")' },
-          x_payment: { type: 'string', description: 'x402 payment header' },
+          x_payment: { type: 'string', description: 'x402 payment header. If the 402 challenge carries extra.router (non-custodial split settlement), you may either pay payTo with a standard TransferWithAuthorization as usual, or — preferred — sign a ReceiveWithAuthorization with to=extra.router.address and nonce=extra.router.nonce and echo {"extra":{"salt":extra.router.salt}} inside the payment payload; the precomputed nonce binds the advertised contributor split into your signature.' },
         },
         required: ['id'],
       },
@@ -238,7 +238,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_link_wallet',
-      description: 'Link a verified wallet address to your Auxilo account. Requires session JWT (from magic link login) and the wallet must have been previously verified via auxilo_verify_wallet. One wallet per account. Required to withdraw earnings.',
+      description: 'Link a verified wallet address to your Auxilo account. Requires session JWT (from magic link login) and the wallet must have been previously verified via auxilo_verify_wallet. One wallet per account. Required to withdraw earnings. NOTE: you must first accept the current Terms via auxilo_accept_terms — linking a payout wallet triggers the §5.10 payment-collection agency and returns 403 TERMS_NOT_ACCEPTED until acceptance is on file.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -257,6 +257,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           session_token: { type: 'string', description: 'JWT session token from /auth/verify (Bearer token)' },
         },
         required: ['session_token'],
+      },
+    },
+    {
+      name: 'auxilo_accept_terms',
+      description: 'Record the builder\'s affirmative acceptance of the current Auxilo Terms of Service — including the Section 5.10 payment-collection agency, under which the builder appoints Auxilo as their limited agent to receive the Builder Share on their behalf. REQUIRED before linking a payout wallet or withdrawing: those actions return 403 TERMS_NOT_ACCEPTED until this is called. Present the Terms (https://auxilo.io/terms) to the builder and call with agree=true ONLY on the builder\'s assent — this is their affirmative clickwrap acceptance, not a formality. Authenticates with your configured API key automatically, or pass a session_token. The current terms version is fetched and bound automatically.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          agree: { type: 'boolean', description: 'Must be true — the builder\'s affirmative acceptance of the current Terms (Section 5.10 payee-agency). Do not default this; set it only after presenting the Terms and obtaining the builder\'s assent.' },
+          session_token: { type: 'string', description: 'Optional JWT session token from /auth/verify. If omitted, your configured API key authenticates the account.' },
+          version: { type: 'string', description: 'Optional. The exact terms version to accept; defaults to the server\'s current version of record (recommended — leave unset).' },
+        },
+        required: ['agree'],
       },
     },
     {
@@ -470,6 +483,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           headers: baseHeaders({
             'Authorization': `Bearer ${args.session_token}`,
           }),
+        });
+        return text(await resp.json());
+      }
+
+      case 'auxilo_accept_terms': {
+        if (args.agree !== true) {
+          return text({
+            error: 'Not accepted. Present the current Terms (https://auxilo.io/terms) to the builder and call auxilo_accept_terms with agree=true only on their affirmative assent.',
+          });
+        }
+        const headers = baseHeaders(
+          args.session_token ? { 'Authorization': `Bearer ${args.session_token}` } : {}
+        );
+        // Bind to the server's current version of record so the builder can never
+        // accept a stale version. Fetch it, then POST the acceptance.
+        const statusResp = await fetch(`${AUXILO_BASE}/account/terms-status`, { headers });
+        const status = await statusResp.json();
+        if (!statusResp.ok) return text(status);
+        const version = args.version || status.current_tos_version;
+        const resp = await fetch(`${AUXILO_BASE}/account/accept-terms`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ version }),
         });
         return text(await resp.json());
       }

@@ -32,6 +32,10 @@ const { extractWithRetry } = require('./lib/providers/anthropic.js');
 const { ProviderAuthError } = require('./lib/providers/provider.interface.js');
 const { extractLearnings, sanitizeLearningBody, scoreLearning, VALID_CATEGORIES: EXTRACTOR_CATEGORIES } = require('./lib/extractor.js');
 const { getConsentState, appendConsent, hasActiveConsent } = require('./lib/extraction-consent-reader.js');
+// R-01 / red-team P0-3 + P0-B: durable, versioned, hash-chained ToS-acceptance
+// log — the tamper-evident evidentiary half of the §5.10 clickwrap capture.
+// The account record (lib/accounts.js) gates; this proves assent for a dispute.
+const { appendTosAcceptance } = require('./lib/tos-acceptance-log.js');
 
 // LW-3(a): Untrusted-content envelope. Learning bodies are third-party content
 // from unknown contributors. The unlock response carries this advisory as a
@@ -914,6 +918,11 @@ const {
   ERC20_ABI,
 } = require('./lib/tx-manager.js');
 
+// R-01 non-custodial settlement (contracts/README.md rewire steps 1–3).
+// Inert unless the X402_ROUTER_ADDRESS env flag is set — with it unset, every
+// x402 code path below behaves byte-for-byte like the facilitator rail.
+const x402Router = require('./lib/x402-router.js');
+
 // ─── A4: Local x402 Fallback (C5 + AUDIT-12) ────────────────────────────────
 const { verifyPaymentLocally, getCacheStats } = require('./lib/x402-local.js');
 const { computePaymentDedupKey } = require('./lib/x402-dedup.js'); // M-4
@@ -932,6 +941,13 @@ const {
   linkWallet,
   getClientIp,
   setStripeConnectId,
+  // R-01 / red-team P0-3: ToS clickwrap assent capture. The gates below and the
+  // accept/status endpoints use these; the payee-agency appointment (§5.10) does
+  // not bind a Builder until they affirmatively accept the CURRENT_TOS_VERSION.
+  CURRENT_TOS_VERSION,
+  hasAcceptedCurrentTos,
+  getTosStatus,
+  recordTosAcceptance,
   newAccountCreationStore,  // FIX 5: periodic sweep of IP-throttle store
   NEW_ACCOUNT_WINDOW_MS,    // FIX 5: 24-hour window constant
   addToKeyIndex,
@@ -986,7 +1002,7 @@ const { computeCurrentPrice, getLockedPrice, lockPrice } = pricingEngine;
  * IMPL-A2-02: payload stores contributor_earned + platform_earned separately.
  */
 function replayUnlock(entry) {
-  const { learning_id, builder_wallet, contributor_account_id, unlock_price, contributor_earned, platform_earned } = entry.payload;
+  const { learning_id, builder_wallet, contributor_account_id, unlock_price, contributor_earned, platform_earned, settled_onchain, settlement_tx, settlement_bps } = entry.payload;
   const steps = entry.steps_completed || [];
 
   // If learnings write didn't complete, we can't determine the learning state.
@@ -1017,7 +1033,29 @@ function replayUnlock(entry) {
     earningsEntry.total_gross += unlock_price;
     earningsEntry.total_contributor += contributor_earned;
     earningsEntry.total_platform += platform_earned;
-    earningsEntry.pending_balance += contributor_earned;
+    if (settled_onchain) {
+      // R-01: this unlock settled through the router — the share is already
+      // in the contributor's wallet. Replay the settlement record, never a
+      // pending_balance credit (that would double-pay AND re-create custody).
+      if (!Array.isArray(earningsEntry.onchain_settlements)) earningsEntry.onchain_settlements = [];
+      const replayGrossMicro = Math.round(unlock_price * 1_000_000);
+      const replayContribMicro = settlement_bps ? Math.floor(replayGrossMicro * settlement_bps / 10000) : null;
+      earningsEntry.onchain_settlements.push({
+        tx_hash: settlement_tx || null,
+        learning_id,
+        gross_usd: unlock_price,
+        contributor_usd: contributor_earned,
+        platform_usd: platform_earned,
+        gross_micro: replayGrossMicro,
+        contributor_micro: replayContribMicro,
+        platform_micro: replayContribMicro === null ? null : replayGrossMicro - replayContribMicro,
+        contributor_bps: settlement_bps || null,
+        ts: new Date().toISOString(),
+        replayed_from_wal: entry.id,
+      });
+    } else {
+      earningsEntry.pending_balance += contributor_earned;
+    }
     earningsEntry.last_updated = new Date().toISOString();
 
     if (!earningsEntry.by_learning[learning_id]) {
@@ -1956,9 +1994,13 @@ function generateId() {
  * @param {string} amount - Pre-computed micro-USDC amount string
  * @returns {Promise<{ verified: boolean, rateLimited: boolean }>}
  */
-async function _verifyPayment(paymentHeader, price_usd, pathname, amount) {
+async function _verifyPayment(paymentHeader, price_usd, pathname, amount, routerCtx = null) {
   let verified = false;
   let settlementTx = null;
+  // R-01: router mode applies only when the flag is set AND the caller passed
+  // a contributor context (today: the unlock route). Everything routerMode
+  // touches below is unreachable when the flag is unset.
+  const routerMode = !!(routerCtx && x402Router.routerEnabled());
 
   // ── x402 payment requirements (must match what x402Gate advertised in the
   //    402, since the client signs its authorization against these). The
@@ -1983,6 +2025,27 @@ async function _verifyPayment(paymentHeader, price_usd, pathname, amount) {
     paymentPayload = JSON.parse(Buffer.from(paymentHeader, 'base64').toString('utf8'));
   } catch { /* malformed — facilitator path can't run; local fallback below */ }
 
+  // ── P0-4 (red-team 2026-07-03): buyer-side OFAC screen, fail-closed. ──
+  // Sanctions liability is strict: the EIP-3009 signer (the buyer) must be
+  // screened BEFORE any settlement broadcast moves their USDC. Screening
+  // not-ready reuses the rateLimited signal so callers return 503 — the same
+  // fail-closed posture as the other money-movement endpoints. NOTE: a proof
+  // that skips the payload (local self-submitted fallback with an unparseable
+  // header) has no extractable buyer address; that path moves no funds by our
+  // action, but extending the screen to it is tracked in contracts/README.md
+  // rewire step 3 (lib/x402-router.js screens both paths).
+  if (paymentPayload) {
+    if (!ofacScreeningReady()) {
+      console.warn('[x402] OFAC list not loaded — failing closed before settlement');
+      return { verified: false, rateLimited: true };
+    }
+    const buyerWallet = paymentPayload?.payload?.authorization?.from;
+    if (buyerWallet && checkOFAC(buyerWallet)) {
+      logOFACBlock(buyerWallet, `${pathname} (x402 buyer)`);
+      return { verified: false, rateLimited: false };
+    }
+  }
+
   // 1. Facilitator path: VERIFY then SETTLE.
   //
   // CRITICAL FIX (money blocker, 2026-06-12): the prior code called only
@@ -2003,6 +2066,56 @@ async function _verifyPayment(paymentHeader, price_usd, pathname, amount) {
     if (consumedTxHashes.has(dedupKey.toLowerCase().trim())) {
       console.warn(`[x402] Replay blocked pre-settle: ${dedupKey} already consumed`);
       return { verified: false, rateLimited: false, replayBlocked: true };
+    }
+
+    // ── R-01 router mode: Auxilo self-settles through AuxiloSplitRouter. ──
+    // The buyer's USDC splits contributor/platform atomically on-chain — no
+    // facilitator /settle, no platform custody of the contributor share.
+    // settleWithRouter re-screens BOTH buyer and contributor against OFAC
+    // fail-closed before broadcasting (the buyer screen above already ran;
+    // the double-screen is deliberate defense in depth). This branch RETURNS
+    // in every case: in router mode there is no facilitator fallback (the
+    // payment is addressed to the router, not to us) and no local fallback
+    // (verifyPaymentLocally proves funds moved to the PLATFORM wallet — the
+    // wrong destination here). A payment that cannot settle through the
+    // router is a failed payment.
+    if (routerMode) {
+      const r = await x402Router.settleWithRouter({
+        paymentPayload,
+        expectedAmountMicro: amount,
+        resource: pathname,
+        contributor: routerCtx.contributor,
+        contributorBps: routerCtx.contributorBps,
+        deps: { checkOFAC, ofacScreeningReady, logOFACBlock },
+      });
+      if (r.ofacUnavailable) {
+        console.warn('[x402-router] OFAC screening unavailable — failing closed');
+        return { verified: false, rateLimited: true };
+      }
+      if (r.settled) {
+        recordTxHash(r.txHash);
+        recordTxHash(dedupKey);
+        console.log(`[x402-router] Settled on-chain via ${r.path} path: ${r.txHash}`);
+        return {
+          verified: true,
+          rateLimited: false,
+          settlementTx: r.txHash,
+          routerSettlement: {
+            txHash: r.txHash,
+            path: r.path,
+            contributor: routerCtx.contributor,
+            contributorBps: routerCtx.contributorBps,
+          },
+        };
+      }
+      if (r.settleFailed) {
+        console.warn(`[x402-router] Settle failed (${r.reason}) — failing closed`);
+        return { verified: false, rateLimited: false, settleFailed: true };
+      }
+      // Pre-broadcast rejection (malformed payload, wrong payTo, amount
+      // mismatch, expired auth, unknown salt, sanctioned party, ...).
+      console.warn(`[x402-router] Payment rejected pre-broadcast (${r.reason})`);
+      return { verified: false, rateLimited: false };
     }
 
     try {
@@ -2034,6 +2147,16 @@ async function _verifyPayment(paymentHeader, price_usd, pathname, amount) {
   //    on-chain and supplies a real txHash. verifyPaymentLocally reads the
   //    receipt and confirms the USDC actually moved to our wallet — this path
   //    is settlement-complete by construction, so it is safe to honor.
+  // R-01 router mode can only reach here with an unparseable X-Payment header
+  // (the router branch above returns on every parsed payload). There is
+  // nothing to settle, and the local fallback below proves payment to the
+  // PLATFORM wallet — the wrong destination in router mode. Fail closed.
+  // This also closes the known buyer-OFAC gap on the self-submitted fallback
+  // (no extractable buyer address): in router mode that path no longer exists.
+  if (routerMode) {
+    return { verified: false, rateLimited: false };
+  }
+
   if (!verified) {
     const localResult = await verifyPaymentLocally(
       paymentHeader, price_usd, WALLET_ADDRESS, TX_USDC_BASE
@@ -2140,13 +2263,49 @@ function x402Gate(price_usd, description) {
 }
 
 // ─── Dynamic Payment Verification (for routes where price isn't known at registration) ──
-async function verifyPaymentOrReject(c, price_usd, description) {
+
+// R-01: the `accepts` entry for a router-mode 402 challenge. payTo is the
+// router contract; `extra.router` carries the (contributor, contributorBps,
+// salt) hint an Auxilo-aware client needs to sign the nonce-bound
+// ReceiveWithAuthorization. Generic x402 clients ignore `extra.router` and
+// sign the standard TransferWithAuthorization to payTo — the router's
+// Transfer path settles those. Only reachable when X402_ROUTER_ADDRESS is set
+// AND the route supplied a contributor context.
+function _routerAccepts(amount, pathname, description, routerCtx) {
+  const hint = x402Router.createRouterHint({
+    contributor: routerCtx.contributor,
+    contributorBps: routerCtx.contributorBps,
+    resource: pathname,
+    amountMicro: amount,
+  });
+  return {
+    scheme: 'exact',
+    network: x402Router.getNetworkString(),
+    maxAmountRequired: amount,
+    resource: pathname,
+    description,
+    mimeType: 'application/json',
+    payTo: x402Router.getRouterAddress(),
+    maxTimeoutSeconds: 30,
+    asset: x402Router.getUsdcAddress(),
+    extra: x402Router.buildRouterExtra(hint),
+  };
+}
+
+async function verifyPaymentOrReject(c, price_usd, description, routerCtx = null) {
   const amount = String(Math.round(price_usd * 1_000_000));
   const paymentHeader = c.req.header('X-Payment');
+  const routerMode = !!(routerCtx && x402Router.routerEnabled());
 
   if (!paymentHeader) {
     c.status(402);
     c.header('X-Payment-Required', 'true');
+    if (routerMode) {
+      return c.json({
+        x402Version: 2,
+        accepts: [_routerAccepts(amount, new URL(c.req.url).pathname, description, routerCtx)]
+      });
+    }
     return c.json({
       x402Version: 2,
       accepts: [{
@@ -2168,8 +2327,8 @@ async function verifyPaymentOrReject(c, price_usd, description) {
     });
   }
 
-  const { verified, rateLimited, replayBlocked, settleFailed } = await _verifyPayment(
-    paymentHeader, price_usd, new URL(c.req.url).pathname, amount
+  const { verified, rateLimited, replayBlocked, settleFailed, routerSettlement } = await _verifyPayment(
+    paymentHeader, price_usd, new URL(c.req.url).pathname, amount, routerCtx
   );
 
   if (rateLimited) {
@@ -2193,6 +2352,12 @@ async function verifyPaymentOrReject(c, price_usd, description) {
 
   if (!verified) {
     c.status(402);
+    if (routerMode) {
+      return c.json({
+        error: 'Payment verification failed',
+        accepts: [_routerAccepts(amount, new URL(c.req.url).pathname, description, routerCtx)]
+      });
+    }
     return c.json({
       error: 'Payment verification failed',
       accepts: [{
@@ -2212,6 +2377,12 @@ async function verifyPaymentOrReject(c, price_usd, description) {
         }
       }]
     });
+  }
+
+  // R-01: surface the on-chain split to the route handler so it records the
+  // settlement instead of crediting pending_balance (custody would re-appear).
+  if (routerSettlement) {
+    c.set('x402RouterSettlement', routerSettlement);
   }
 
   return null; // null = payment OK, proceed
@@ -2340,7 +2511,7 @@ function optionalAuth() {
     };
 }
 
-async function dualAuthDynamic(c, price_usd, description, creditType, requiredScope) {
+async function dualAuthDynamic(c, price_usd, description, creditType, requiredScope, routerCtx = null) {
     // Fix: X-API-Key takes precedence; Authorization: Bearer is the fallback
     let apiKey = c.req.header('X-API-Key');
     if (!apiKey) {
@@ -2403,7 +2574,7 @@ async function dualAuthDynamic(c, price_usd, description, creditType, requiredSc
 
     // Path 2: x402 payment
     if (payment) {
-        return verifyPaymentOrReject(c, price_usd, description);
+        return verifyPaymentOrReject(c, price_usd, description, routerCtx);
     }
 
     // Path 3: Neither
@@ -3479,6 +3650,9 @@ app.post('/withdraw/stripe', requireAuth, async (c) => {
   const account = accts[accountId];
   if (!account) return c.json({ error: 'Account not found' }, 404);
 
+  // R-01 P0-3: withdrawal requires current-Terms acceptance (§5.10 payee-agency).
+  if (!hasAcceptedCurrentTos(account)) return termsNotAcceptedResponse(c);
+
   const { getStripe } = require('./lib/stripe.js');
   if (!getStripe()) return c.json({ error: 'Stripe not configured' }, 503);
 
@@ -3656,6 +3830,16 @@ app.post('/account/link-wallet', requireAuth, async (c) => {
   if (wallet && checkOFAC(wallet)) {
     logOFACBlock(wallet, '/account/link-wallet');
     return c.json({ error: 'Transaction blocked by sanctions compliance' }, 403);
+  }
+
+  // R-01 / red-team P0-3: linking a payout wallet is the agency-triggering step
+  // (§5.10). Block it until the Builder has affirmatively accepted the current
+  // Terms — assent-via-use does not bind the payee-agency appointment. Covers the
+  // MCP path too: auxilo_link_wallet carries the same session JWT through this route.
+  const walletLinkAccount = loadAccounts()[accountId];
+  if (!walletLinkAccount) return c.json({ error: 'Account not found' }, 404);
+  if (!hasAcceptedCurrentTos(walletLinkAccount)) {
+    return termsNotAcceptedResponse(c);
   }
 
   // Serialize the linkWallet read-modify-write so a concurrent settings/connect-stripe
@@ -5609,6 +5793,112 @@ app.delete('/learn/:id', async (c) => {
 // ── GET /account/settings — read current extraction mode (LW-17) ────────────
 // The installer CLI's `auxilo status` has queried this route (X-API-Key) since
 // 0.8.1, but it never existed — status always showed mode "unknown".
+// ── ToS Clickwrap Assent (R-01 / red-team P0-3) ─────────────────────────────
+//
+// The payee-agency appointment (Terms §5.10) only binds a Builder who has
+// affirmatively accepted the current Terms. These two endpoints are the capture
+// mechanism for BOTH paths:
+//   • Web: the dashboard reads terms-status (also embedded in /account/dashboard),
+//     presents the clickwrap, and POSTs the acceptance here.
+//   • MCP/API (V-3): agent-mediated Builders who never load a web page accept via
+//     the `auxilo_accept_terms` tool, which POSTs here with their API key. Both
+//     endpoints authenticate with session JWT OR API key so the MCP path is bound
+//     server-side, not by a buried notice.
+// Enforcement is the 403 gate at wallet-link + withdrawal (below): a Builder
+// cannot trigger the agency (link a payout wallet) or move money without a
+// current-version acceptance on file.
+
+// The structured 403 a money/agency route returns when the caller has not accepted
+// the current Terms. Machine-readable (stable `code`, current version, how-to) so
+// MCP/API clients react by calling auxilo_accept_terms rather than treating it as an
+// opaque failure — this is what makes the MCP path genuinely enforceable, not a
+// buried notice. Declared as a hoisted function so the gate sites below can use it.
+function termsNotAcceptedResponse(c) {
+  return c.json({
+    error: 'You must accept the current Terms of Service before this action.',
+    code: 'TERMS_NOT_ACCEPTED',
+    current_tos_version: CURRENT_TOS_VERSION,
+    how_to_accept: 'Web: open your dashboard and accept the Terms. MCP/API: call auxilo_accept_terms (or POST /account/accept-terms) with { "version": "' + CURRENT_TOS_VERSION + '" }.',
+    terms_url: (process.env.BASE_URL || '') + '/terms',
+  }, 403);
+}
+
+// GET /account/terms-status — is (re-)acceptance required for this account?
+app.get('/account/terms-status', requireSessionOrApiKey('read'), (c) => {
+  const account = loadAccounts()[c.get('accountId')];
+  if (!account) return c.json({ error: 'Account not found' }, 404);
+  return c.json(getTosStatus(account), 200);
+});
+
+// POST /account/accept-terms — record an affirmative acceptance of the current
+// Terms. Body: { version }. The server refuses any version other than the current
+// one (409) so a client can never bind itself to a stale/unknown version, and the
+// server — never the client — stamps the timestamp, IP, and user-agent that form
+// the evidentiary clickwrap record.
+app.post('/account/accept-terms', requireSessionOrApiKey('contribute'), async (c) => {
+  const accountId = c.get('accountId');
+  if (!accountId) return c.json({ error: 'Authentication required' }, 401);
+
+  let body;
+  try { body = await c.req.json(); } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+  const { version } = body || {};
+  if (!version || typeof version !== 'string') {
+    return c.json({
+      error: 'version is required — POST the current_tos_version you are accepting',
+      current_tos_version: CURRENT_TOS_VERSION,
+    }, 400);
+  }
+
+  const ip = getClientIp(c);
+  const ua = c.req.header('user-agent') || 'unknown';
+
+  // Serialize the read-modify-write against concurrent link-wallet / settings
+  // mutations on the same account (all do loadAccounts->mutate->saveAccounts).
+  const releaseAccountLock = await acquireAccountLock(accountId);
+  try {
+    const result = recordTosAcceptance(accountId, { version, ip, ua });
+    if (!result.success) {
+      return c.json(
+        { error: result.error, current_tos_version: CURRENT_TOS_VERSION },
+        result.status_code || 400
+      );
+    }
+    invalidateCachedAccount(accountId);
+
+    // P0-B: augment the fast account-record stamp with a durable, tamper-evident
+    // record on the hash-chained consent chain. Same wiring shape as the
+    // extraction-consent call sites (redactIp lives with the handler). Covers
+    // BOTH paths through this one endpoint — web (session JWT) and MCP/API
+    // (X-API-Key, e.g. auxilo_accept_terms). Best-effort: a log failure must not
+    // fail an acceptance the account record already recorded and gates on.
+    // Skip on an idempotent re-accept (already current version) so repeated calls
+    // don't append duplicate durable rows for the same version transition.
+    if (!result.alreadyAccepted) {
+      try {
+        appendTosAcceptance({
+          accountId,
+          tosVersion: result.version,
+          ipRedacted: redactIp(ip),
+          userAgent: ua,
+          acceptPath: c.req.header('X-API-Key') ? 'mcp-api' : 'web',
+        });
+      } catch (logErr) {
+        console.error('[tos] durable acceptance-log append failed:', logErr.message);
+      }
+    }
+
+    return c.json({
+      message: 'Terms accepted',
+      version: result.version,
+      accepted_at: result.accepted_at,
+    }, 200);
+  } finally {
+    releaseAccountLock();
+  }
+});
+
 app.get('/account/settings', requireSessionOrApiKey('read'), (c) => {
   const account = loadAccounts()[c.get('accountId')];
   if (!account) return c.json({ error: 'Account not found' }, 404);
@@ -5905,10 +6195,34 @@ app.get('/knowledge/:id', async (c) => {
   const CONTRIBUTOR_SHARE = (source === 'search') ? CONTRIBUTOR_SHARE_DISCOVERY : CONTRIBUTOR_SHARE_STANDARD;
   const shareLabel = (source === 'search') ? '60%' : '70%';
 
+  // R-01 router mode (rewire step 3): resolve + validate the contributor
+  // wallet BEFORE settlement. A learning only rides the non-custodial rail if
+  // its contributor has a VERIFIED wallet (wallet-link-to-earn); otherwise it
+  // falls back to the legacy rail (platform payTo + pending_balance credit,
+  // paid out fiat-side) exactly as with the flag unset — never hold the share
+  // as a crypto balance. OFAC on buyer AND contributor runs fail-closed inside
+  // settleWithRouter before any broadcast.
+  let routerCtx = null;
+  if (x402Router.routerEnabled()) {
+    const rw = learning.contributor_wallet;
+    const rwLower = rw ? String(rw).toLowerCase() : null;
+    if (rwLower && /^0x[0-9a-f]{40}$/.test(rwLower) && verifiedWallets[rwLower]) {
+      routerCtx = {
+        contributor: rw,
+        contributorBps: Math.round(CONTRIBUTOR_SHARE * 10000),
+      };
+    }
+  }
+
   // Dynamic x402 verification — price comes from the learning itself
   const rejection = await dualAuthDynamic(c, UNLOCK_PRICE,
-    `Unlock "${learning.title}" — ${UNLOCK_PRICE} USDC. ${shareLabel} goes to contributor.`, 'unlock', 'read');
+    `Unlock "${learning.title}" — ${UNLOCK_PRICE} USDC. ${shareLabel} goes to contributor.`, 'unlock', 'read', routerCtx);
   if (rejection) return rejection;
+
+  // Set when (and only when) this unlock actually settled through the router.
+  // API-key/credit unlocks and legacy x402 settles leave this null and follow
+  // the existing pending_balance accounting.
+  const routerSettlement = c.get('x402RouterSettlement') || null;
 
   // Track unlock
   learning.quality.unlocks = (learning.quality.unlocks || 0) + 1;
@@ -5944,6 +6258,38 @@ app.get('/knowledge/:id', async (c) => {
     // own content back at the price of the unlock, with zero earnings.
     safeWrite(LEARNINGS_FILE, learnings);
 
+    // R-01 (Gate A MED-1): a self-unlock that PAID through the router still
+    // moved real USDC on-chain (their own share back to them + our fee to
+    // us). No ledger credit — but the broadcast must be booked or it is
+    // invisible at reconciliation/tax time.
+    if (routerSettlement) {
+      const { entry: selfEntry, key: selfKey, source: selfSource } = resolveEarningsEntry(earnings, {
+        account_id: contribAccountId,
+        wallet: contribWallet,
+      });
+      const selfResolvedKey = (selfSource === 'new') ? (contribAccountId || contribWallet) : selfKey;
+      if (selfSource === 'new') earnings[selfResolvedKey] = selfEntry;
+      const bookedEntry = earnings[selfResolvedKey];
+      const grossMicro = Math.round(UNLOCK_PRICE * 1_000_000);
+      const contributorMicro = Math.floor(grossMicro * routerSettlement.contributorBps / 10000);
+      if (!Array.isArray(bookedEntry.onchain_settlements)) bookedEntry.onchain_settlements = [];
+      bookedEntry.onchain_settlements.push({
+        tx_hash: routerSettlement.txHash,
+        path: routerSettlement.path,
+        learning_id: id,
+        gross_usd: UNLOCK_PRICE,
+        contributor_usd: contributorEarned,
+        platform_usd: platformEarned,
+        gross_micro: grossMicro,
+        contributor_micro: contributorMicro,
+        platform_micro: grossMicro - contributorMicro,
+        contributor_bps: routerSettlement.contributorBps,
+        self_unlock: true,
+        ts: new Date().toISOString(),
+      });
+      safeWrite(EARNINGS_FILE, earnings);
+    }
+
     const {
       injection_flags: _if, possible_duplicate_of: _pd,
       possible_duplicate_similarity: _ps, moderation: _mod,
@@ -5958,6 +6304,15 @@ app.get('/knowledge/:id', async (c) => {
         contributor_earned_usd: 0,
         platform_earned_usd: 0,
         self_unlock: true,
+        // R-01: surface the on-chain receipt so the self-unlocker can see
+        // where their payment actually went.
+        ...(routerSettlement ? {
+          settlement: {
+            tx_hash: routerSettlement.txHash,
+            path: routerSettlement.path,
+            router: x402Router.getRouterAddress(),
+          }
+        } : {})
       },
       timestamp: new Date().toISOString()
     });
@@ -5997,7 +6352,33 @@ app.get('/knowledge/:id', async (c) => {
   activeEntry.by_learning[id].contributor += contributorEarned;
   activeEntry.by_learning[id].platform += platformEarned;
   activeEntry.by_learning[id].unlocks += 1;
-  activeEntry.pending_balance += contributorEarned;
+  if (routerSettlement) {
+    // R-01: the contributor's share already landed in their wallet on-chain,
+    // atomically with the platform fee. Record the settlement for
+    // reconciliation/tax; crediting pending_balance here would re-create the
+    // custodial ledger the router exists to eliminate. Micro fields are the
+    // EXACT on-chain integers (contract floors the contributor share; dust
+    // goes to the fee side) — the float USD fields are display-grade only
+    // (Gate A sec L-2).
+    const grossMicro = Math.round(UNLOCK_PRICE * 1_000_000);
+    const contributorMicro = Math.floor(grossMicro * routerSettlement.contributorBps / 10000);
+    if (!Array.isArray(activeEntry.onchain_settlements)) activeEntry.onchain_settlements = [];
+    activeEntry.onchain_settlements.push({
+      tx_hash: routerSettlement.txHash,
+      path: routerSettlement.path,
+      learning_id: id,
+      gross_usd: UNLOCK_PRICE,
+      contributor_usd: contributorEarned,
+      platform_usd: platformEarned,
+      gross_micro: grossMicro,
+      contributor_micro: contributorMicro,
+      platform_micro: grossMicro - contributorMicro,
+      contributor_bps: routerSettlement.contributorBps,
+      ts: new Date().toISOString(),
+    });
+  } else {
+    activeEntry.pending_balance += contributorEarned;
+  }
   activeEntry.last_updated = new Date().toISOString();
 
   // SPEC-A2 C3: WAL-protected dual write — crash-safe atomicity
@@ -6011,6 +6392,11 @@ app.get('/knowledge/:id', async (c) => {
     contributor_earned: contributorEarned,
     platform_earned: platformEarned,
     purchaser_key_label: c.get('keyLabel') || null,  // D2: which key environment unlocked
+    // R-01: replayUnlock must know an on-chain-settled unlock never credits
+    // pending_balance, even when replayed after a crash.
+    settled_onchain: !!routerSettlement,
+    settlement_tx: routerSettlement ? routerSettlement.txHash : null,
+    settlement_bps: routerSettlement ? routerSettlement.contributorBps : null,
   });
 
   safeWrite(LEARNINGS_FILE, learnings);
@@ -6038,7 +6424,15 @@ app.get('/knowledge/:id', async (c) => {
     _revenue: {
       unlock_price_usd: UNLOCK_PRICE,
       contributor_earned_usd: contributorEarned,
-      platform_earned_usd: platformEarned
+      platform_earned_usd: platformEarned,
+      // R-01: present only when the unlock settled non-custodially on-chain.
+      ...(routerSettlement ? {
+        settlement: {
+          tx_hash: routerSettlement.txHash,
+          path: routerSettlement.path,
+          router: x402Router.getRouterAddress(),
+        }
+      } : {})
     },
     timestamp: new Date().toISOString()
   });
@@ -6506,6 +6900,19 @@ const GAS_ESTIMATE_USD = (!isNaN(_rawGasEst) && _rawGasEst >= 0 && _rawGasEst <=
 
 // Request a withdrawal (FREE, Auth via EIP-712 Signature — SPEC-A3)
 app.post('/withdraw', async (c) => {
+  // R-01 KILL-SWITCH (2026-07-03): the custodial USDC payout rail is the single
+  // element that would convert Auxilo's never-executed transmission leg into a
+  // completed one (platform wallet nonce 0 to date). Disabled by default until
+  // the non-custodial router replaces it. To re-enable, set Fly secret
+  // CUSTODIAL_WITHDRAW_ENABLED=true. Red-team P0-1: leaving this open lets any
+  // builder falsify the past-conduct posture with one request, mid-consult.
+  if (process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true') {
+    return c.json({
+      error: 'Custodial USDC withdrawals are temporarily paused while we migrate to direct on-chain settlement. Your balance is safe and will be payable on the new rail.',
+      code: 'withdraw_paused_noncustodial_migration',
+    }, 503);
+  }
+
   let body;
   try { body = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
   const { wallet, signature } = body;
@@ -6531,6 +6938,18 @@ app.post('/withdraw', async (c) => {
   if (checkOFAC(wallet)) {
     logOFACBlock(wallet, '/withdraw');
     return c.json({ error: 'Transaction blocked by sanctions compliance' }, 403);
+  }
+
+  // R-01 / red-team P0-3: no withdrawal path may settle for a Builder who has not
+  // accepted the current Terms (§5.10 payee-agency). This custodial rail is paused
+  // above (503) — the gate is defense-in-depth for if/when it re-enables. The caller
+  // is wallet-signed (no session), so resolve the account by its linked wallet.
+  // FAIL CLOSED (GOV-3): a wallet with a legacy wallet-keyed earnings entry but NO
+  // linked account has given no assent — hasAcceptedCurrentTos(undefined) is false,
+  // so it blocks. Never settle the agency-covered payout without an account + assent.
+  const withdrawAccount = Object.values(loadAccounts()).find(a => a && a.wallet === walletLower);
+  if (!hasAcceptedCurrentTos(withdrawAccount)) {
+    return termsNotAcceptedResponse(c);
   }
 
   // SPEC-P0.5: resolve via __wallet_index (account-keyed) or direct wallet key
@@ -7376,7 +7795,6 @@ app.get('/terms', (c) => serveLegalPage(c, 'TERMS-OF-SERVICE.md', 'Terms of Serv
 app.get('/privacy', (c) => serveLegalPage(c, 'PRIVACY-POLICY.md', 'Privacy Policy'));
 app.get('/legal/subprocessors', (c) => serveLegalPage(c, 'SUBPROCESSORS.md', 'Sub-Processors'));
 app.get('/legal/supported-clients', (c) => serveLegalPage(c, 'SUPPORTED-CLIENTS.md', 'Supported Clients'));
-app.get('/dmca', (c) => serveLegalPage(c, 'DMCA-POLICY.md', 'DMCA Copyright Policy'));
 
 // ─── Renderly — Web Content Extraction API ───────────────────────────
 
