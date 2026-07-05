@@ -11,6 +11,11 @@
         "model": "claude-sonnet-4-5"
       }
     ],
+    "sonnet_model": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-5",
+      "_note": "Interim Sonnet default for the openclaw memory daemon (server.js runOpenClawDaemon) and /pipeline/upload extraction. De-dated from the retired claude-sonnet-4-20250514 pin (404s post-retirement) to the current supported Sonnet; config-driven, never hardcoded (AGENTS.md). NOTE: BUILD-SPEC-P2.1a designates claude-haiku-4-5 (extraction.primary) as the extraction tier, with Sonnet as fallback insurance only — the Sonnet pin on these two paths is inherited drift, not a designed choice. A tracked follow-up will realign both onto primary (Haiku) via extractWithRetry (which also adds the primary+fallback chain they currently lack)."
+    },
     "timeout_ms": 45000,
     "max_attempts_per_provider": 3,
     "cache_control": {
