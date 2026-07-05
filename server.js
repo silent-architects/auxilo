@@ -3878,6 +3878,14 @@ app.post('/account/link-wallet', requireAuth, async (c) => {
     // Lazy migrate any pre-existing wallet-keyed earnings entry to account-keyed
     const migrated = lazyMigrateOnWalletLink(earnings, result.wallet, accountId);
     if (migrated) {
+      // CP-6 P1-B: the accept-then-link ordering would otherwise STRAND held balance. A
+      // wallet-only contributor accrues to `unassented_pending` under the wallet key; when they
+      // later create an account and accept, accept-terms runs its conversion BEFORE the wallet is
+      // linked (wallet is null then) so it resolves nothing, and the migration above carries the
+      // held balance in as `unassented_pending`. This route is terms-gated (:3857), so the agency
+      // is in force here — convert the just-migrated held balance to withdrawable now, so a
+      // Builder who did everything right isn't left with permanently non-withdrawable funds.
+      convertUnassentedToPending(earnings, { account_id: accountId, wallet: result.wallet });
       safeWrite(EARNINGS_FILE, earnings);
       console.log(`[p0.5] Lazy migrated wallet-keyed earnings to account ${accountId} on wallet link`);
     }
