@@ -47,7 +47,9 @@ The reviewer that reads your delivery report will spot-check rows at random by o
 
 ## Default model for extraction
 
-The spec (§6.3) defaults to `claude-haiku-4-5` with `claude-sonnet-4-5` as fallback. These are configuration values in `config/model_config.json` — not code constants. Do not hardcode model names.
+The spec (§6.3) defaults to `claude-haiku-4-5` with `claude-sonnet-4-5` as fallback. These are configuration values in `model_config.json` (repo root, under `extraction.*`) — not code constants. Do not hardcode model names.
+
+The openclaw memory daemon (`server.js` `runOpenClawDaemon`) and the `/pipeline/upload` learning-extraction route read their model config-driven via `extraction.sonnet_model` (`extractionConfig.sonnet_model?.model || 'claude-sonnet-5'`), replacing a dated `claude-sonnet-4-20250514` pin that silently 404s once the dated model retires. **Tier caveat:** `specs/BUILD-SPEC-P2.1a-AUTONOMOUS-EXTRACTION.md` designates `claude-haiku-4-5` (the `primary` key) as the extraction tier, with Sonnet as failure-fallback insurance only. The Sonnet pin on these two paths is inherited drift, not a designed choice — `sonnet_model` faithfully de-dates it as an interim measure. A tracked follow-up will realign both paths onto `primary` (Haiku) via `extractWithRetry`, which also gives them the primary+fallback chain they currently lack (unlike `/extract`). Always source the model from `model_config.json`; never write a dated literal.
 
 ## Project governance
 

@@ -1902,7 +1902,8 @@ async function runOpenClawDaemon() {
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          // Config-driven per AGENTS.md — model_config.json -> extraction.sonnet_model (was the retired claude-sonnet-4-20250514 pin)
+          model: extractionConfig.sonnet_model?.model || 'claude-sonnet-5',
           max_tokens: 4096,
           messages: [{ role: 'user', content: prompt }],
         }),
@@ -7642,7 +7643,8 @@ ${conversation.substring(0, 100000)}`;
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        // Config-driven per AGENTS.md — model_config.json -> extraction.sonnet_model (was the retired claude-sonnet-4-20250514 pin)
+        model: extractionConfig.sonnet_model?.model || 'claude-sonnet-5',
         max_tokens: 4096,
         messages: [{ role: 'user', content: extractionPrompt }],
       }),
