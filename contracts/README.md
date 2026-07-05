@@ -1,14 +1,25 @@
 # AuxiloSplitRouter — non-custodial x402 settlement (Option 1 / R-01)
 
-**Status 2026-07-03: contract LIVE on Base Sepolia (`0x8979…6142`) + server
-rewire (steps 1–3) BUILT and deployed to prod INERT behind
-`X402_ROUTER_ADDRESS` (unset). NOT on mainnet. Two hard gates before any
-mainnet deploy:**
-1. **External security audit** of `AuxiloSplitRouter.sol` (it moves real USDC).
+**Status 2026-07-04: the MVP rail is the RECEIVE-ONLY contract
+`AuxiloSplitRouterReceiveOnly.sol` — LIVE on Base Sepolia at
+`0x149C21BD3aC4364528fECceF29acf4Ec8ecf8145`. The server rewire is deployed to
+prod INERT behind `X402_ROUTER_ADDRESS` (unset). The FREE/in-control mainnet
+gates (A1 monitor+breaker, A3 deploy-attestation, A4 confirmation-depth,
+receive-only wiring) are BUILT + testnet-verified — see VERIFICATION.md §10 and
+the "Flip-the-flag runbook" at the bottom of this file. NOT on mainnet.**
+
+**Two hard gates remain before any mainnet deploy:**
+1. **External security audit** (now a ~100-LOC Receive-only subset — cheap).
 2. **R-01 written sign-off** from fintech counsel on the non-custodial design
    (see `~/.auxilo/handoffs/AUXILO-COUNSEL-BRIEF-money-transmission-R01.md`).
 
-Base Sepolia testnet deployment is fine now (no real funds; validates the flow).
+**Mainnet enable is additionally gated on TYLER'S EXPLICIT WORD.** Base Sepolia
+testnet deployment + flag-on staging are fine now (no real funds).
+
+> The both-paths `AuxiloSplitRouter.sol` below is the preserved FUTURE variant
+> (generic-x402 interop; retains a settler-discretionary Transfer/Stranded
+> surface). The MVP ships Receive-only. Everything about the Transfer/Stranded
+> paths in this doc applies ONLY to that future variant, not the MVP rail.
 
 ---
 
@@ -152,3 +163,77 @@ as a crypto balance — that re-creates custody.
   `splitStranded` completes the intended split; `skim` cannot touch USDC).
 - Reentrancy + zero/edge params revert correctly.
 - Event fields correct for reconciliation (nonce ↔ x402 payload dedup).
+
+---
+
+## Receive-only MVP guards (A1 / A3 / A4) — built 2026-07-04
+
+All behind `X402_ROUTER_ADDRESS`, inert by default. See VERIFICATION.md §10.
+
+- **A4 confirmation-depth** (`lib/x402-router.js`): settles are booked as final
+  only after a reorg-safe finality wait, never at depth 1. Books only when the
+  tx is min-depth deep, its block is **still canonical at that height** (a
+  deterministic reorg check — the canonical block-hash-at-height must equal the
+  tx's block hash; Gate-A H1), and the OP-stack `safe`/`finalized` head has
+  reached it. `X402_ROUTER_CONFIRM_TAG` = `safe` (default) | `finalized` |
+  `latest`; `X402_ROUTER_MIN_CONFIRMATIONS` (default 2, floored to ≥1 on mainnet);
+  `X402_ROUTER_CONFIRM_TIMEOUT_MS` (default 180000). `reverted` /
+  `reorged_before_final` / `confirm_timeout` all fail closed. Requires an RPC
+  that supports the OP-stack `safe`/`finalized` tags. Latency tradeoff: with
+  `tag=safe` the unlock request blocks for the safe-head wait (seconds–minutes on
+  Base).
+- **A1 USDC-impl monitor + circuit-breaker** (`lib/usdc-impl-monitor.js`,
+  `scripts/usdc-impl-monitor.js`): the settle path fails closed if Circle
+  upgrades the USDC proxy impl out from under the verified assumptions; the
+  standalone monitor alerts (cron one-shot or `--watch`, optional
+  `X402_MONITOR_WEBHOOK_URL`). Pinned impls: Base `0x2ce6…d779`, Sepolia
+  `0xd74c…c5b5`; override `X402_USDC_EXPECTED_IMPL`. The inline guard re-checks
+  every settle by default (`X402_USDC_IMPL_CHECK_TTL_MS=0`); keep any positive
+  cache TTL ≤ the monitor's poll interval. The breaker is per-process sticky —
+  once tripped it clears only on restart (with a corrected pin); run the
+  standalone monitor fleet-wide so no instance is blind.
+- **A3 deploy-attestation** (`scripts/deploy-attest.js`,
+  `DEPLOY-ATTESTATION.md`): `preflight` before deploy, `readback` after
+  (on-chain immutable read-back + immutable-aware bytecode match). Both exit
+  non-zero on any hard failure.
+- **Receive-only** (`X402_ROUTER_RECEIVE_ONLY`, default ON): 402 challenge mints
+  the Receive path only; saltless Transfer payments are refused fail-closed
+  (closes F8). Settler key is the dedicated fail-closed `X402_SETTLER_PRIVATE_KEY`
+  (F5).
+
+---
+
+## Flip-the-flag runbook (mainnet — GATED ON TYLER'S EXPLICIT WORD)
+
+**Do NOT run this without (a) the paid external audit, (b) written R-01
+counsel sign-off, and (c) Tyler's explicit go. Testnet flag-on is fine now.**
+
+**Prereqs (one-time):**
+1. Provision a **fresh single-purpose** `feeWallet` and a **dedicated** settler
+   key in HSM/KMS (F5) — see `DEPLOY-ATTESTATION.md` §1–§2.
+2. `cd contracts && forge build` (fresh artifact for the readback bytecode match).
+
+**Deploy + attest (A3):**
+3. `node scripts/deploy-attest.js preflight --chain 8453 --usdc 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 --fee <FRESH_FEE> --settler <SETTLER>` → must be all ✓. Save + sign off the attestation record.
+4. Deploy `AuxiloSplitRouterReceiveOnly(usdc, feeWallet, settler)` with exactly the attested args.
+5. `forge verify-contract` on Basescan (DEPLOY-ATTESTATION.md §5).
+6. `node scripts/deploy-attest.js readback --chain 8453 --router <ROUTER> --usdc 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 --fee <FRESH_FEE> --settler <SETTLER>` → must be all ✓ incl. the bytecode match.
+
+**Arm the guards (A1) + policy (A4):**
+7. `node scripts/usdc-impl-monitor.js` (chain 8453) → exit 0. Wire it to cron/alerting (`--watch` + `X402_MONITOR_WEBHOOK_URL`).
+8. Set the settle env on the server:
+   - `X402_ROUTER_CHAIN_ID=8453`
+   - `X402_ROUTER_RECEIVE_ONLY=1` (default, be explicit)
+   - `X402_ROUTER_CONFIRM_TAG=safe` (or `finalized` for max safety), `X402_ROUTER_MIN_CONFIRMATIONS=2`
+   - `X402_SETTLER_PRIVATE_KEY=<dedicated settler key>` (fails closed if unset)
+   - `CUSTODIAL_WITHDRAW_ENABLED` stays unset (custodial withdraw remains paused).
+
+**Flip:**
+9. **Only when 3–8 are all green:** set `X402_ROUTER_ADDRESS=<ROUTER>`. The router
+   rail is now live; a first real unlock self-settles + splits atomically.
+
+**Rollback:** unset `X402_ROUTER_ADDRESS` → instant revert to the facilitator
+rail (byte-for-byte). The A1 breaker also auto-fails-closed on a USDC upgrade.
+
+**Settler rotation:** `settler` is immutable → rotation is redeploy-only (repeat
+3–9 with a new settler; move `X402_ROUTER_ADDRESS` to the new contract).

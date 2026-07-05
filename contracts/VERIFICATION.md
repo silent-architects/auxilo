@@ -238,3 +238,141 @@ But the **deployed-system** number (§5b, ~78%) is the one that governs whether 
 - **A1 (USDC is a Circle-upgradeable proxy)** — every PROVEN/FORK verdict is against FiatTokenV2_2 as deployed today; a Circle upgrade (hook, fee-on-transfer, changed nonce semantics) silently invalidates the proofs. Needs an off-chain impl-hash monitor + circuit-breaker. Applies identically here.
 - **A3 (deploy-time constructor is the trust root, uncovered by every layer)** — a wrong-but-nonzero `feeWallet_`/`settler_` is permanent; only `usdc_` is code-pinnable. The A3 attestation checklist (canonical-USDC assert, fresh non-blacklistable feeWallet, bytecode verify, post-deploy read-back) is still required before any mainnet flag-enable.
 - **A2 (no post-pull balance assertion)** and **P13 (EIP-1271 proven by mock, no real-USDC 1271 fork test)** carry over unchanged; both are liveness, not theft.
+
+---
+
+## 10. MVP mainnet-prep gates — IMPLEMENTED + testnet-verified (2026-07-04)
+
+The FREE, in-control, non-legal mainnet gates named in §7/§8 for the Receive-only
+MVP are now **built, unit-tested, and live-exercised on Base Sepolia**. This
+section supersedes the "required / not built / depth 1 today" status of the
+A1 / A3 / A4 rows in the §7 accepted-limitations table for the Receive-only
+deployment. It changes **nothing** about the two hard gates that remain (paid
+external audit + written fintech-counsel R-01 sign-off) — those are unaffected.
+
+All of this is behind `X402_ROUTER_ADDRESS` and **INERT in prod by default**
+(flag unset → byte-for-byte the facilitator rail).
+
+### A4 — reorg-safe confirmation-depth → IMPLEMENTED (`lib/x402-router.js`)
+The settle path no longer books at depth 1. `_waitForFinality()` waits until the
+settlement's block is **at/under a chosen OP-stack safety head AND ≥ a numeric
+min-depth**, then re-reads the receipt to catch a block that was un-mined after
+first sight. Config:
+- `X402_ROUTER_CONFIRM_TAG` — `safe` (default; block batched to L1 → immune to
+  sequencer-only reorg) | `finalized` (derived from a finalized L1 block;
+  strongest, ~mins) | `latest` (numeric-depth only, testnet/opt-out).
+- `X402_ROUTER_MIN_CONFIRMATIONS` (default 2), `X402_ROUTER_CONFIRM_TIMEOUT_MS`
+  (default 180000).
+Terminal states map to fail-closed outcomes: `reverted` / `reorged_before_final`
+/ `confirm_timeout` all return `settleFailed` (no content served, nothing
+booked). Only a re-verified reorg-safe receipt books.
+**Latency tradeoff (documented, not hidden):** with `tag=safe` the unlock request
+blocks until the safe head passes the tx (Base mainnet: seconds–minutes). The
+async provisional-serve + background-reconcile design remains a future
+enhancement; the MVP takes the honest synchronous wait. Unit-tested
+(confirmed/reverted/reorged/timeout) and **live on Sepolia — a settle booked
+only after a 60.4s `safe`-head wait, not depth 1**.
+
+### A1 — USDC impl-hash monitor + circuit-breaker → IMPLEMENTED (`lib/usdc-impl-monitor.js` + `scripts/usdc-impl-monitor.js`)
+Two layers:
+- **Inline circuit-breaker (the fund protection):** before every broadcast,
+  `settleWithRouter` reads the USDC proxy implementation (ZeppelinOS slot
+  `0x7050…3f8c3`) and compares it to a pinned known-good impl
+  (Base `0x2ce6…d779`, Sepolia `0xd74c…c5b5`; override `X402_USDC_EXPECTED_IMPL`,
+  optional codehash pin). On mismatch it **fails closed and stays closed**
+  (sticky) — the server surfaces it as a retryable 503. A transient read failure
+  fails closed for that settle only. Result carries `circuitOpen:true`.
+- **Standalone monitor (the alert):** `scripts/usdc-impl-monitor.js` (one-shot for
+  cron — exit 0 ok / 2 changed / 3 read-error — or `--watch`), optional
+  `X402_MONITOR_WEBHOOK_URL` alert.
+Unit-tested (ok / impl_changed / no-pin / read-error / codehash) and **live: OK
+on Base mainnet + Sepolia; breaker trips fail-closed on a wrong pin with no funds
+moved.**
+
+### A3 — deploy-time constructor attestation → IMPLEMENTED (`scripts/deploy-attest.js` + `contracts/DEPLOY-ATTESTATION.md`)
+Runnable two-phase attestation over the immutable trust root:
+- **`preflight`** (before deploy): canonical-USDC assertion, feeWallet ≠
+  settler/USDC/platform-custodial-wallet, USDC impl == pin (ties to A1), feeWallet
+  not USDC-blacklisted (`isBlacklisted`), feeWallet nonce == 0 (fresh
+  single-purpose), + a printed attestation record to sign off.
+- **`readback`** (after deploy, before the flag): on-chain read-back of
+  `usdc`/`feeWallet`/`settler` asserted equal to intent + canonical, and an
+  **immutable-aware deployed-bytecode match** vs the audited Foundry artifact
+  (blanks the immutable byte-ranges, then compares logic).
+Both phases exit non-zero on any hard failure. **Live rehearsal against the
+Sepolia deploy `0x149C…8145`: preflight all-pass, readback all-pass incl.
+bytecode match; negative cases (wrong feeWallet, feeWallet==settler) fail
+closed.** The written `DEPLOY-ATTESTATION.md` adds the manual steps (fresh-wallet
+provisioning, Basescan `forge verify-contract`, sign-off gate).
+
+### Receive-only server wiring → IMPLEMENTED
+- `X402_ROUTER_RECEIVE_ONLY` (default ON): the 402 challenge advertises the
+  Receive path ONLY (`extra.router.mode='receive-only'`), and `settleWithRouter`
+  refuses any saltless (generic Transfer) payment fail-closed
+  (`receive_only_requires_salt`) — it never invokes `settleAndSplitTransfer`
+  (absent from the deployed bytecode anyway). This **closes audit F8** (buyer
+  forcing the unbound Transfer path by omitting the salt) by construction.
+- **F6 / AR-2 addressed in client copy:** the challenge instructions now tell the
+  buyer to **derive the nonce and verify it equals the advertised one**, not
+  blind-sign the given value.
+- **F5 confirmed:** the settler key remains the dedicated, fail-closed
+  `X402_SETTLER_PRIVATE_KEY` (no `WALLET_PRIVATE_KEY` fallback);
+  `test/x402-router.test.js` covers the guard. On the Receive-only contract F5 is
+  liveness-only (settler cannot divert).
+
+### Testnet stage — LIVE PASS (Base Sepolia Receive-only `0x149C…8145`)
+`scripts/x402-router-sepolia-receiveonly-e2e.js`, flag-on, one real settle:
+- Receive settle tx **`0x6dcd5b31e60df20a74df8834ca60784d0715971eb8e0290685dcdd6414771867`**
+  (block 43703561, status success, 112 183 gas) — contributor +700000 /
+  feeWallet +300000 micro-USDC, **router residue 0**.
+- A4 finality gate waited **60.4s for the Base `safe` head** before booking (not depth 1).
+- A1 breaker verified OK live, then **tripped fail-closed** on a deliberate wrong
+  pin (no funds moved).
+- Receive-only **refused a saltless Transfer** pre-broadcast.
+
+### Net effect on the mainnet-gate posture
+- **CLOSED (free, in-control):** A4 confirmation-depth, A1 monitor+breaker, A3
+  attestation, receive-only wiring, F5/F6/F8. Full test suite 617/624 (the 7
+  fails are the pre-existing extract-handler family, unrelated).
+- **STILL OPEN (unchanged):** paid external audit + written fintech-counsel R-01
+  sign-off. A2 (post-pull balance assertion) and P13 (real-USDC 1271 fork test)
+  remain liveness-class carry-overs. Settler-key custody (HSM/KMS) remains a
+  worthwhile availability control though on Receive-only it is liveness, not theft.
+- **Mainnet enable stays gated on TYLER'S EXPLICIT WORD.** The exact runbook is in
+  `contracts/README.md` ("Flip-the-flag runbook").
+
+### Gate-A adversarial review (2026-07-04) — findings + fixes
+An independent adversarial engineering/security review traced challenge-mint →
+settle → finality → server booking. It confirmed **inert-by-default holds**, the
+**receive-only gating is airtight** (saltless/empty/null salt all fail closed,
+no path reaches `settleAndSplitTransfer`), the **circuit-breaker sticky-trip and
+transient-read semantics are correct**, and the **server `circuitOpen`→503
+ordering is correct** (before `settled`/`settleFailed`, so a tripped breaker is a
+retryable 503 not a hard 402). It found and I FIXED:
+- **H1 (HIGH) — reorg re-check was a height-only/stale-read.** The finality gate
+  compared `safeHead.number >= txBlock` (height) and re-read the receipt, which
+  a lagging/load-balanced RPC could satisfy on a block that had been reorged out
+  → a book-without-settle. **Fixed:** `_waitForFinality` now fetches the
+  **canonical block at the tx's height and asserts its hash == the tx's block
+  hash** — a deterministic reorg detector independent of RPC receipt freshness —
+  in addition to the safety-tag and min-depth checks. Live-re-verified on Sepolia.
+- **M1 — safe/finalized tag not validated.** A provider that aliases/omits the
+  tag could yield a non-bigint head. **Fixed:** require `typeof head.number ===
+  'bigint'` or the tag is unsatisfied (keep waiting, never book).
+- **M2 — impl-guard OK-cache window.** The 30s pass-cache was a window in which a
+  just-upgraded impl could still settle. **Fixed:** default TTL now **0**
+  (re-check every settle; the read is one cheap `getStorageAt`), env-tunable via
+  `X402_USDC_IMPL_CHECK_TTL_MS`. Sticky-trip on a real change is unaffected.
+- **M5 — amount compare.** String equality → **BigInt equality** (fail closed on
+  malformed encodings).
+- **L2 — mainnet depth-0 foot-gun.** `tag=latest`+`min=0` could book at depth 0.
+  **Fixed:** `getConfirmConfig` floors min-confirmations to ≥1 on chain 8453.
+- **L4 — attestation readback bytecode check was a warning.** A missing artifact
+  silently skipped the strongest check. **Fixed:** in `readback` it is now a HARD
+  FAIL (verified: bogus artifact path → attestation FAILED).
+- **L1 (framework-mitigated) — challenge-mint throw:** `_routerAccepts`
+  (buildRouterExtra/deriveReceiveNonce) runs inside the Hono request lifecycle;
+  an exception is caught by Hono's error boundary → 500 (fail closed, no content).
+All post-fix: router+monitor unit suite 44/44; full suite 619/626 (7 pre-existing
+extract-handler fails); live Sepolia E2E re-passed (settle booked after a 74.3s
+safe-head wait, canonical-hash reorg check active).

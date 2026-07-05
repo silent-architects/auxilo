@@ -54,6 +54,7 @@ const {
   setWalletIndex,
   getWithdrawableBalance,
   debitWithdrawableBalance,
+  convertUnassentedToPending,
 } = require('./lib/earnings.js');
 const { acquireEarningsLock } = require('./lib/earnings-lock.js');
 const { sendOpsAlert } = require('./lib/ops-alert.js');
@@ -946,6 +947,7 @@ const {
   // not bind a Builder until they affirmatively accept the CURRENT_TOS_VERSION.
   CURRENT_TOS_VERSION,
   hasAcceptedCurrentTos,
+  isPayeeAgencyInForce,
   getTosStatus,
   recordTosAcceptance,
   newAccountCreationStore,  // FIX 5: periodic sweep of IP-throttle store
@@ -1002,7 +1004,7 @@ const { computeCurrentPrice, getLockedPrice, lockPrice } = pricingEngine;
  * IMPL-A2-02: payload stores contributor_earned + platform_earned separately.
  */
 function replayUnlock(entry) {
-  const { learning_id, builder_wallet, contributor_account_id, unlock_price, contributor_earned, platform_earned, settled_onchain, settlement_tx, settlement_bps } = entry.payload;
+  const { learning_id, builder_wallet, contributor_account_id, unlock_price, contributor_earned, platform_earned, settled_onchain, settlement_tx, settlement_bps, agency_in_force } = entry.payload;
   const steps = entry.steps_completed || [];
 
   // If learnings write didn't complete, we can't determine the learning state.
@@ -1053,8 +1055,13 @@ function replayUnlock(entry) {
         ts: new Date().toISOString(),
         replayed_from_wal: entry.id,
       });
-    } else {
+    } else if (agency_in_force !== false) {
+      // CP-6: re-apply the accrual gate decided at unlock time. `agency_in_force !== false`
+      // credits pending_balance when the decision was true OR when the field is absent
+      // (pre-CP-6 WAL entries, which predate the gate) — backward-compatible.
       earningsEntry.pending_balance += contributor_earned;
+    } else {
+      earningsEntry.unassented_pending = (earningsEntry.unassented_pending || 0) + contributor_earned;
     }
     earningsEntry.last_updated = new Date().toISOString();
 
@@ -2090,6 +2097,15 @@ async function _verifyPayment(paymentHeader, price_usd, pathname, amount, router
       });
       if (r.ofacUnavailable) {
         console.warn('[x402-router] OFAC screening unavailable — failing closed');
+        return { verified: false, rateLimited: true };
+      }
+      if (r.circuitOpen) {
+        // A1 circuit-breaker tripped: USDC's proxy implementation changed
+        // underneath our verified assumptions (or the impl check could not be
+        // read). Fail closed as a retryable 503 — this is a degraded-service
+        // signal for ops, NOT a bad-payment signal. See lib/usdc-impl-monitor.js
+        // and scripts/usdc-impl-monitor.js.
+        console.error(`[x402-router] CIRCUIT OPEN (${r.reason}) — USDC impl guard; failing closed`);
         return { verified: false, rateLimited: true };
       }
       if (r.settled) {
@@ -5904,6 +5920,25 @@ app.post('/account/accept-terms', requireSessionOrApiKey('contribute'), async (c
       } catch (logErr) {
         console.error('[tos] durable acceptance-log append failed:', logErr.message);
       }
+
+      // CP-6: the payee-agency is now in force for this Builder. Move any Builder Share
+      // received on their behalf and HELD (unassented_pending) before this acceptance into
+      // the withdrawable pending_balance — the moment it becomes agency-covered. Lock-free
+      // and correct: this only ever moves money on the FIRST acceptance (afterwards
+      // isPayeeAgencyInForce is true, so nothing new lands in the held bucket), and a
+      // withdrawal cannot be in flight before the first acceptance (withdrawals are
+      // acceptance-gated). The mutate+safeWrite is synchronous → atomic w.r.t. the unlock
+      // handler's write on the shared `earnings` singleton.
+      try {
+        const acctForConv = loadAccounts()[accountId];
+        const moved = convertUnassentedToPending(earnings, {
+          account_id: accountId,
+          wallet: (acctForConv && acctForConv.wallet) || null,
+        });
+        if (moved > 0) safeWrite(EARNINGS_FILE, earnings);
+      } catch (convErr) {
+        console.error('[tos] CP-6 unassented→pending conversion failed:', convErr.message);
+      }
     }
 
     return c.json({
@@ -6369,6 +6404,11 @@ app.get('/knowledge/:id', async (c) => {
   activeEntry.by_learning[id].contributor += contributorEarned;
   activeEntry.by_learning[id].platform += platformEarned;
   activeEntry.by_learning[id].unlocks += 1;
+  // CP-6: gate custodial accrual on the payee-agency being in force for this contributor.
+  // Decided here (authoritative account read; cache misses null) and STORED in the WAL
+  // payload so replayUnlock re-applies the same decision deterministically (mirrors
+  // settled_onchain). Default true; only the custodial else-branch below consults it.
+  let agencyInForce = true;
   if (routerSettlement) {
     // R-01: the contributor's share already landed in their wallet on-chain,
     // atomically with the platform fee. Record the settlement for
@@ -6394,7 +6434,17 @@ app.get('/knowledge/:id', async (c) => {
       ts: new Date().toISOString(),
     });
   } else {
-    activeEntry.pending_balance += contributorEarned;
+    // CP-6: the defense turns on receipt. If the payee-agency is not yet in force for this
+    // Builder (never accepted, or a wallet-only contributor with no account), HOLD the share
+    // in unassented_pending — non-withdrawable — until they accept, when accept-terms converts
+    // it. Authoritative read: getCachedAccount misses null, which would wrongly quarantine.
+    const contribAccount = contribAccountId ? (loadAccounts()[contribAccountId] || null) : null;
+    agencyInForce = isPayeeAgencyInForce(contribAccount);
+    if (agencyInForce) {
+      activeEntry.pending_balance += contributorEarned;
+    } else {
+      activeEntry.unassented_pending = (activeEntry.unassented_pending || 0) + contributorEarned;
+    }
   }
   activeEntry.last_updated = new Date().toISOString();
 
@@ -6414,6 +6464,7 @@ app.get('/knowledge/:id', async (c) => {
     settled_onchain: !!routerSettlement,
     settlement_tx: routerSettlement ? routerSettlement.txHash : null,
     settlement_bps: routerSettlement ? routerSettlement.contributorBps : null,
+    agency_in_force: agencyInForce, // CP-6: replayUnlock re-applies the accrual gate decision
   });
 
   safeWrite(LEARNINGS_FILE, learnings);

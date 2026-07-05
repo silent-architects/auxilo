@@ -28,6 +28,10 @@ beforeEach(() => {
   delete process.env.X402_ROUTER_ADDRESS;
   delete process.env.X402_ROUTER_CHAIN_ID;
   delete process.env.X402_ROUTER_USDC;
+  delete process.env.X402_ROUTER_RECEIVE_ONLY;
+  delete process.env.X402_ROUTER_CONFIRM_TAG;
+  delete process.env.X402_ROUTER_MIN_CONFIRMATIONS;
+  delete process.env.X402_ROUTER_CONFIRM_TIMEOUT_MS;
   router._resetForTests();
 });
 
@@ -54,8 +58,11 @@ function makePayload({ auth = makeAuth(), signature = '0x' + 'cd'.repeat(65), ex
   return p;
 }
 
-// Benign OFAC deps + a recording broadcast mock.
-function makeDeps({ sanctioned = [], ready = true, broadcast } = {}) {
+// Benign OFAC deps + a recording broadcast mock. `implOk` injects the A1
+// USDC-impl guard result (default OK) so unit tests stay hermetic — the real
+// _defaultAssertUsdcImplOk (a network read) runs only when NOT injected, i.e.
+// in the live Sepolia E2E.
+function makeDeps({ sanctioned = [], ready = true, broadcast, implOk = true } = {}) {
   const set = new Set(sanctioned.map((a) => a.toLowerCase()));
   const calls = [];
   const blocks = [];
@@ -63,6 +70,7 @@ function makeDeps({ sanctioned = [], ready = true, broadcast } = {}) {
     ofacScreeningReady: () => ready,
     checkOFAC: (addr) => set.has(String(addr).toLowerCase()),
     logOFACBlock: (addr, endpoint) => blocks.push({ addr, endpoint }),
+    assertUsdcImplOk: async () => (implOk ? { ok: true, reason: 'test' } : { ok: false, reason: 'circuit_open:impl_changed' }),
     sendRouterTx: async (call) => {
       calls.push(call);
       if (broadcast) return broadcast(call);
@@ -319,10 +327,11 @@ test('consumeRouterHint still removes a hint explicitly', () => {
   assert.notEqual(next.salt, hint.salt);
 });
 
-// ── Transfer path (generic x402 interop) ────────────────────────────────────
+// ── Transfer path (generic x402 interop — ONLY in both-paths mode) ──────────
 
-test('transfer path: no salt settles via settleAndSplitTransfer with the client nonce', async () => {
+test('transfer path: with RECEIVE_ONLY off, no salt settles via settleAndSplitTransfer', async () => {
   enableRouter();
+  process.env.X402_ROUTER_RECEIVE_ONLY = '0'; // both-paths AuxiloSplitRouter deployment
   const auth = makeAuth();
   const payload = makePayload({ auth });
   const { deps, calls } = makeDeps();
@@ -374,10 +383,18 @@ test('amount mismatch, expired auth, and malformed payloads are rejected pre-bro
   assert.equal(calls.length, 0);
 });
 
+// Build a valid Receive-path payload (salt + derived nonce) that reaches the
+// broadcast stage under receive-only default.
+function receivePayload(bps = 7000) {
+  const hint = router.createRouterHint({ contributor: CONTRIBUTOR, contributorBps: bps, resource: RESOURCE, amountMicro: AMOUNT });
+  const nonce = router.deriveReceiveNonce(CONTRIBUTOR, bps, hint.salt);
+  return makePayload({ auth: makeAuth({ nonce }), extra: { salt: hint.salt } });
+}
+
 test('broadcast exception maps to settleFailed (fail closed, no content)', async () => {
   enableRouter();
   const { deps } = makeDeps({ broadcast: async () => { throw new Error('rpc down'); } });
-  const r = await settle({ payload: makePayload(), deps });
+  const r = await settle({ payload: receivePayload(), deps });
   assert.equal(r.settleFailed, true);
   assert.match(r.reason, /broadcast_error/);
 });
@@ -385,8 +402,161 @@ test('broadcast exception maps to settleFailed (fail closed, no content)', async
 test('confirmation timeout maps to settleFailed confirm_timeout', async () => {
   enableRouter();
   const { deps } = makeDeps({ broadcast: async () => ({ txHash: '0x' + '33'.repeat(32), confirmed: false, reverted: false }) });
-  const r = await settle({ payload: makePayload(), deps });
+  const r = await settle({ payload: receivePayload(), deps });
   assert.equal(r.settleFailed, true);
   assert.equal(r.reason, 'confirm_timeout');
   assert.match(r.txHash, /^0x/);
+});
+
+// ── Receive-only MVP mode (default ON) ──────────────────────────────────────
+
+test('receive-only is the default', () => {
+  assert.equal(router.receiveOnly(), true);
+  process.env.X402_ROUTER_RECEIVE_ONLY = '0';
+  assert.equal(router.receiveOnly(), false);
+  process.env.X402_ROUTER_RECEIVE_ONLY = 'false';
+  assert.equal(router.receiveOnly(), false);
+  process.env.X402_ROUTER_RECEIVE_ONLY = '1';
+  assert.equal(router.receiveOnly(), true);
+});
+
+test('receive-only: a saltless (Transfer) payment is refused fail-closed, no broadcast (F8)', async () => {
+  enableRouter(); // receive-only default ON
+  const { deps, calls } = makeDeps();
+  const r = await settle({ payload: makePayload(), deps }); // no extra.salt
+  assert.equal(r.settled, false);
+  assert.equal(r.settleFailed, false);
+  assert.equal(r.reason, 'receive_only_requires_salt');
+  assert.equal(calls.length, 0);
+});
+
+test('receive-only: the Receive path still settles normally', async () => {
+  enableRouter();
+  const hint = router.createRouterHint({ contributor: CONTRIBUTOR, contributorBps: 7000, resource: RESOURCE, amountMicro: AMOUNT });
+  const nonce = router.deriveReceiveNonce(CONTRIBUTOR, 7000, hint.salt);
+  const payload = makePayload({ auth: makeAuth({ nonce }), extra: { salt: hint.salt } });
+  const { deps, calls } = makeDeps();
+  const r = await settle({ payload, deps });
+  assert.equal(r.settled, true);
+  assert.equal(r.path, 'receive');
+  assert.equal(calls[0].functionName, 'settleAndSplitReceive');
+});
+
+test('buildRouterExtra advertises receive-only mode and rejects blind-signing', () => {
+  enableRouter();
+  const hint = router.createRouterHint({ contributor: CONTRIBUTOR, contributorBps: 7000, resource: RESOURCE, amountMicro: AMOUNT });
+  const extra = router.buildRouterExtra(hint);
+  assert.equal(extra.router.mode, 'receive-only');
+  assert.match(extra.router.instructions, /RECEIVE-ONLY/);
+  assert.match(extra.router.instructions, /Derive the nonce yourself/);
+  assert.match(extra.router.instructions, /not accepted|rejected/i);
+
+  process.env.X402_ROUTER_RECEIVE_ONLY = '0';
+  const dual = router.buildRouterExtra(hint);
+  assert.equal(dual.router.mode, 'dual');
+  assert.match(dual.router.instructions, /Generic x402 clients/);
+});
+
+// ── A1 circuit-breaker (USDC impl guard) ────────────────────────────────────
+
+test('circuit-breaker: a tripped USDC-impl guard fails closed before broadcast', async () => {
+  enableRouter();
+  const hint = router.createRouterHint({ contributor: CONTRIBUTOR, contributorBps: 7000, resource: RESOURCE, amountMicro: AMOUNT });
+  const nonce = router.deriveReceiveNonce(CONTRIBUTOR, 7000, hint.salt);
+  const payload = makePayload({ auth: makeAuth({ nonce }), extra: { salt: hint.salt } });
+  const { deps, calls } = makeDeps({ implOk: false });
+  const r = await settle({ payload, deps });
+  assert.equal(r.settled, false);
+  assert.equal(r.settleFailed, true);
+  assert.equal(r.circuitOpen, true);
+  assert.match(r.reason, /circuit_open/);
+  assert.equal(calls.length, 0); // never broadcast with a changed impl
+});
+
+// ── A4 reorg-safe finality ──────────────────────────────────────────────────
+
+test('reorg before finality maps to settleFailed reorged_before_final (no booking)', async () => {
+  enableRouter();
+  const hint = router.createRouterHint({ contributor: CONTRIBUTOR, contributorBps: 7000, resource: RESOURCE, amountMicro: AMOUNT });
+  const nonce = router.deriveReceiveNonce(CONTRIBUTOR, 7000, hint.salt);
+  const payload = makePayload({ auth: makeAuth({ nonce }), extra: { salt: hint.salt } });
+  const { deps } = makeDeps({ broadcast: async () => ({ txHash: '0x' + '44'.repeat(32), confirmed: false, reverted: false, reorged: true }) });
+  const r = await settle({ payload, deps });
+  assert.equal(r.settled, false);
+  assert.equal(r.settleFailed, true);
+  assert.equal(r.reason, 'reorged_before_final');
+});
+
+// _waitForFinality against a mock publicClient — the four terminal states.
+// getBlock({blockTag}) → { number: safeNumber }; getBlock({blockNumber}) →
+// { hash: canonicalHash } (the canonical block at the tx's height — Gate-A H1).
+function mockPublicClient({ receipts, blockNumber, safeNumber, canonicalHash = '0xabc' }) {
+  let i = 0;
+  return {
+    async getTransactionReceipt() {
+      const r = receipts[Math.min(i++, receipts.length - 1)];
+      if (r === 'throw') throw new Error('not found');
+      return r;
+    },
+    async getBlockNumber() { return BigInt(blockNumber); },
+    async getBlock(arg) {
+      if (arg && arg.blockNumber !== undefined) return { hash: canonicalHash }; // canonical-at-height
+      return { number: BigInt(safeNumber) }; // safe/finalized head
+    },
+  };
+}
+
+test('_waitForFinality: confirmed when depth met, block still canonical, safe head passed', async () => {
+  process.env.X402_ROUTER_CONFIRM_TAG = 'safe';
+  process.env.X402_ROUTER_MIN_CONFIRMATIONS = '2';
+  const receipt = { status: 'success', blockNumber: 100n, blockHash: '0xabc' };
+  const client = mockPublicClient({ receipts: [receipt], blockNumber: 102, safeNumber: 100, canonicalHash: '0xabc' });
+  const out = await router._waitForFinality(client, '0xhash');
+  assert.equal(out.status, 'confirmed');
+  assert.equal(out.confirmations, 2);
+});
+
+test('_waitForFinality: reverted receipt short-circuits', async () => {
+  const receipt = { status: 'reverted', blockNumber: 100n, blockHash: '0xabc' };
+  const client = mockPublicClient({ receipts: [receipt], blockNumber: 100, safeNumber: 100 });
+  const out = await router._waitForFinality(client, '0xhash');
+  assert.equal(out.status, 'reverted');
+});
+
+test('_waitForFinality: a reorg (canonical block hash changed at height) fails closed', async () => {
+  process.env.X402_ROUTER_CONFIRM_TAG = 'safe';
+  process.env.X402_ROUTER_MIN_CONFIRMATIONS = '1';
+  const receipt = { status: 'success', blockNumber: 100n, blockHash: '0xabc' };
+  // canonical block at height 100 now has a DIFFERENT hash → the tx block was reorged out
+  const client = mockPublicClient({ receipts: [receipt], blockNumber: 102, safeNumber: 102, canonicalHash: '0xDEAD' });
+  const out = await router._waitForFinality(client, '0xhash');
+  assert.equal(out.status, 'reorged');
+});
+
+test('_waitForFinality: safe tag not a real bigint head → keeps waiting, times out (fail closed)', async () => {
+  process.env.X402_ROUTER_CONFIRM_TAG = 'safe';
+  process.env.X402_ROUTER_MIN_CONFIRMATIONS = '1';
+  process.env.X402_ROUTER_CONFIRM_TIMEOUT_MS = '150';
+  const receipt = { status: 'success', blockNumber: 100n, blockHash: '0xabc' };
+  const client = mockPublicClient({ receipts: [receipt], blockNumber: 102, canonicalHash: '0xabc' });
+  // provider returns a non-bigint head number for the tag (e.g. aliases/omits it)
+  client.getBlock = async (arg) => (arg && arg.blockNumber !== undefined) ? { hash: '0xabc' } : { number: null };
+  const out = await router._waitForFinality(client, '0xhash');
+  assert.equal(out.status, 'timeout'); // never books on an unverifiable tag
+});
+
+test('_waitForFinality: never-mined times out (fail closed)', async () => {
+  process.env.X402_ROUTER_CONFIRM_TIMEOUT_MS = '150'; // tiny, so the test is fast
+  const client = mockPublicClient({ receipts: ['throw'], blockNumber: 100, safeNumber: 100 });
+  const out = await router._waitForFinality(client, '0xhash');
+  assert.equal(out.status, 'timeout');
+});
+
+test('getConfirmConfig: mainnet floors min-confirmations to >=1 (no depth-0 booking)', () => {
+  process.env.X402_ROUTER_CHAIN_ID = '8453';
+  process.env.X402_ROUTER_CONFIRM_TAG = 'latest';
+  process.env.X402_ROUTER_MIN_CONFIRMATIONS = '0';
+  assert.equal(router.getConfirmConfig().minConfirmations, 1);
+  process.env.X402_ROUTER_CHAIN_ID = '84532'; // testnet may opt into 0
+  assert.equal(router.getConfirmConfig().minConfirmations, 0);
 });
