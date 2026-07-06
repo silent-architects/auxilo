@@ -894,6 +894,45 @@
     if (!el) return;
     el.textContent = '';
 
+    // Launch is ACCRUE-ONLY: BOTH withdrawal rails (USDC router + Stripe custodial
+    // kill-switch) are paused. The server reports this via `payouts_paused` on
+    // GET /account/earnings. When true, we must NOT render an enabled cash-out
+    // affordance (no Stripe connect button, no withdraw form) — otherwise the UI
+    // invites a submit that the server will 503. Read defensively: only a strict
+    // `true` shows the paused state; anything else keeps the normal render below.
+    if (data && data.payouts_paused === true) {
+      var pausedWrap = document.createElement('div');
+      pausedWrap.className = 'wallet-note';
+
+      var pausedHead = document.createElement('strong');
+      pausedHead.style.color = 'var(--ivory)';
+      pausedHead.style.display = 'block';
+      pausedHead.style.marginBottom = '6px';
+      pausedHead.textContent = 'Withdrawals are opening soon';
+      pausedWrap.appendChild(pausedHead);
+
+      var pausedBody = document.createElement('p');
+      pausedBody.style.fontSize = '13px';
+      pausedBody.style.color = 'var(--slate)';
+      pausedBody.style.margin = '0';
+      pausedBody.textContent = 'Both withdrawal rails — Stripe-to-bank and USDC on Base — are paused while we complete our non-custodial migration. Your balance is safe and will be withdrawable as soon as the non-custodial rail goes live. Earnings keep accruing in the meantime.';
+      pausedWrap.appendChild(pausedBody);
+
+      if (data.wallet) {
+        var pausedWallet = document.createElement('p');
+        pausedWallet.style.fontSize = '12px';
+        pausedWallet.style.color = 'var(--slate)';
+        pausedWallet.style.marginTop = '8px';
+        pausedWallet.style.marginBottom = '0';
+        pausedWallet.textContent = 'Your linked wallet stays ready: ' + data.wallet;
+        pausedWrap.appendChild(pausedWallet);
+      }
+
+      el.appendChild(pausedWrap);
+      show('payout-content');
+      return;
+    }
+
     // USDC / crypto section (always shown)
     var cryptoWrap = document.createElement('div');
     cryptoWrap.className = 'wallet-note';
@@ -917,14 +956,14 @@
       var note = document.createElement('div');
       note.style.marginTop = '8px';
       note.style.fontSize = '12px';
-      note.textContent = 'USDC withdrawals on Base are paused while our non-custodial rail rolls out. For now, cash out via Stripe to your bank below. Your wallet stays linked and ready.';
+      note.textContent = 'USDC withdrawals on Base are paused while our non-custodial rail rolls out. Bank withdrawals via Stripe are available in the section below when your balance is ready. Your wallet stays linked and ready.';
 
       cryptoWrap.appendChild(linkedLine);
       cryptoWrap.appendChild(addrSpan);
       cryptoWrap.appendChild(note);
     } else {
       var noWallet = document.createElement('div');
-      noWallet.textContent = 'No wallet linked. USDC withdrawals on Base are rolling out on our non-custodial rail (coming soon). You can link a wallet now with the CLI command "auxilo link-wallet" to be ready. Today, cash out via Stripe to your bank below.';
+      noWallet.textContent = 'No wallet linked. USDC withdrawals on Base are rolling out on our non-custodial rail (coming soon). You can link a wallet now with the CLI command "auxilo link-wallet" to be ready. Bank withdrawals via Stripe are available in the section below when your balance is ready.';
       cryptoWrap.appendChild(noWallet);
     }
 

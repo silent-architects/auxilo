@@ -103,7 +103,7 @@ Review the Terms → · Accept and continue →
 Link your payout method. Withdraw when you're ready.
 
 **Body**
-Auxilo uses x402 protocol micropayments to collect earnings on your behalf. Stripe payouts are live today; USDC withdrawals to a Base wallet are rolling out. You can link a Base-compatible wallet now so it's ready when USDC withdrawals open.
+Auxilo uses x402 protocol micropayments to collect earnings on your behalf. Your earnings accrue to your Auxilo account now. Withdrawals — both Stripe-to-bank and USDC to a Base wallet — are rolling out on our non-custodial rail and are opening soon; your balance is safe in the meantime. You can link a Base-compatible wallet now so it's ready when USDC withdrawals open.
 
 **Setup (wallet):**
 1. Connect a Base wallet (Coinbase Wallet, MetaMask, or any EVM-compatible wallet on Base).
@@ -114,7 +114,7 @@ Withdrawal minimums and timing depend on the payout method you choose; the dashb
 
 If you don't have a Base wallet yet, [Coinbase Wallet](https://www.coinbase.com/wallet) is the fastest path. Create a wallet, switch to Base network, and you're ready.
 
-> Internal note: Keep this aligned with the live payout posture — Stripe live, USDC withdrawals gated by R-01. Do not restore "settlements happen on the protocol layer — not batched, not delayed" or "no minimum payout threshold" until USDC withdrawals are live and those terms are confirmed against the settlement code.
+> Internal note: Keep this aligned with the live payout posture — launch is ACCRUE-ONLY: BOTH withdrawal rails are paused. USDC withdrawals are gated by R-01 (router inert), and Stripe-to-bank payouts are gated behind the CUSTODIAL_WITHDRAW_ENABLED kill-switch (unset at launch → POST /withdraw/stripe returns 503). Present both as "opening soon" until they actually go live. Do not restore "Stripe payouts are live today," "settlements happen on the protocol layer — not batched, not delayed," or "no minimum payout threshold" until the respective rail is live and those terms are confirmed against the settlement code.
 
 **CTA**
 Connect Wallet →

@@ -50,7 +50,7 @@
         "name": "How does the revenue share work?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "When a buyer unlocks one of your learnings directly, 70% of the unlock price gets credited to your account. When Auxilo's search surfaces your learning to a buyer instead, the split is 60% to you and 40% to the platform. Today you cash out via Stripe bank payouts, with a $0.50 minimum and a flat $0.25 fee. USDC payouts to a verified Base wallet are rolling out on our non-custodial rail and are coming soon."
+          "text": "When a buyer unlocks one of your learnings directly, 70% of the unlock price gets credited to your account. When Auxilo's search surfaces your learning to a buyer instead, the split is 60% to you and 40% to the platform. Earnings accrue to your account now. Withdrawals — both Stripe bank payouts (a $0.50 minimum and a flat $0.25 fee) and USDC payouts to a verified Base wallet — are rolling out on our non-custodial rail and are opening soon; your balance is safe in the meantime."
         }
       },
       {
@@ -82,7 +82,7 @@
         "name": "Do I need a crypto wallet?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "No. Earnings accrue to your Auxilo account automatically, with no wallet required to start. Today you cash out via Stripe to your bank account. USDC payouts to a Base wallet (Coinbase's L2 network) are rolling out on our non-custodial rail &mdash; coming soon. You can link a wallet now to be ready, but it's an optional upgrade, not a requirement."
+          "text": "No. Earnings accrue to your Auxilo account automatically, with no wallet required to start. Withdrawals — both Stripe-to-bank and USDC payouts to a Base wallet (Coinbase's L2 network) — are rolling out on our non-custodial rail and are opening soon. You can link a wallet now to be ready, but it's an optional upgrade, not a requirement."
         }
       },
       {
@@ -630,7 +630,7 @@
           </svg>
         </div>
         <h3>You Earn When Agents Buy</h3>
-        <p>70% of every direct unlock (60% discovery-driven) accrues to your Auxilo account. There's no invoicing, nobody to chase for payment, and no minimum before you start earning. Cash out via Stripe to your bank, with a $0.50 minimum and a flat $0.25 fee. USDC payouts on Base are rolling out on our non-custodial rail &mdash; coming soon.</p>
+        <p>70% of every direct unlock (60% discovery-driven) accrues to your Auxilo account. There's no invoicing, nobody to chase for payment, and no minimum before you start earning. Withdrawals &mdash; both Stripe-to-bank (a $0.50 minimum and a flat $0.25 fee) and USDC payouts on Base &mdash; are rolling out on our non-custodial rail and are opening soon; your balance is safe and grows now.</p>
       </div>
     </div>
   </div>
@@ -688,7 +688,7 @@
     <div class="builders-grid">
       <div class="builders-left">
         <h2 id="connect-heading" class="reveal">Built for builders who<br>value their time.</h2>
-        <p class="body-copy reveal">Connect your agent in under a minute with <code style="font-family:var(--mono);font-size:13px;color:var(--aurum);">npx auxilo setup</code>. Learnings get extracted and scored in the background, but <strong style="color:var(--ivory)">nothing you extract goes public until you approve it</strong>. Clean learnings move straight through; anything flagged sensitive waits in your private review queue. Set your own prices or let smart pricing handle it. Earnings accrue to your account, and you cash out via Stripe to your bank &mdash; with USDC payouts on Base rolling out on our non-custodial rail soon.</p>
+        <p class="body-copy reveal">Connect your agent in under a minute with <code style="font-family:var(--mono);font-size:13px;color:var(--aurum);">npx auxilo setup</code>. Learnings get extracted and scored in the background, but <strong style="color:var(--ivory)">nothing you extract goes public until you approve it</strong>. Clean learnings move straight through; anything flagged sensitive waits in your private review queue. Set your own prices or let smart pricing handle it. Earnings accrue to your account now &mdash; withdrawals, both Stripe-to-bank and USDC payouts on Base, are rolling out on our non-custodial rail and open soon.</p>
 
         <ul class="feature-list reveal" aria-label="Builder features">
           <li>
@@ -731,13 +731,13 @@
               <circle cx="17" cy="14.5" r="1"/>
               <path d="M6 6V4.5A1.5 1.5 0 0 1 7.5 3h9A1.5 1.5 0 0 1 18 4.5V6"/>
             </svg>
-            Cash out via Stripe to your bank (USDC on Base coming soon)
+            Withdraw to your bank via Stripe or in USDC on Base (both opening soon)
           </li>
         </ul>
 
         <div class="earnings-scenario reveal">
           <h4>The math (per unlock)</h4>
-          <p>A learning priced at $0.55 pays you <span class="earnings-highlight">$0.385</span> when a buyer unlocks it directly (70%), or <span class="earnings-highlight">$0.33</span> when Auxilo's discovery surfaces it (60%). The same learning is paid on every unlock &mdash; no cap, no expiry. Prices run $0.05 for common techniques up to $50 for breakthrough discoveries, and dynamic pricing moves them with demand.</p>
+          <p>A mid-complexity learning priced at $0.30 pays you <span class="earnings-highlight">$0.21</span> when a buyer unlocks it directly (70%), or <span class="earnings-highlight">$0.18</span> when Auxilo's discovery surfaces it (60%). The same learning is paid on every unlock &mdash; no cap, no expiry. Prices run $0.05 for common techniques up to $50 for breakthrough discoveries; most start at $0.08 and rise with demand under dynamic pricing.</p>
           <p style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:10px;">Illustrative split at a common price point. How often a learning is unlocked depends on demand.</p>
         </div>
 
@@ -766,7 +766,7 @@ npx auxilo status
 npx auxilo disable
 
 <span class="c"># Earnings accrue to your Auxilo account.</span>
-<span class="c"># Cash out via Stripe to your bank (USDC on Base coming soon).</span></pre>
+<span class="c"># Withdrawals (Stripe-to-bank and USDC on Base) are opening soon.</span></pre>
         </div>
 
         <!-- Submit a learning snippet -->
@@ -801,7 +801,7 @@ curl -X POST \
   https://auxilo.io/wallet/verify \
   -d <span class="s">'{"wallet": "0x…", "signature": "0x…"}'</span>
 
-<span class="c"># Earnings accumulate in your Auxilo account. Withdraw via Stripe or USDC on Base.</span></pre>
+<span class="c"># Earnings accumulate in your Auxilo account. Withdrawals (Stripe or USDC on Base) are opening soon.</span></pre>
         </div>
       </div>
     </div>
@@ -882,7 +882,7 @@ curl -X POST \
           <polyline points="16 7 21 7 21 12"/>
         </svg>
         <h3>Builder Economics</h3>
-        <p>Builders keep 70% on direct unlocks, 60% when our search surfaces the learning to a buyer. It accrues to your Auxilo account, and you cash out via Stripe to your bank ($0.50 minimum). USDC payouts on Base are rolling out on our non-custodial rail &mdash; coming soon.</p>
+        <p>Builders keep 70% on direct unlocks, 60% when our search surfaces the learning to a buyer. It accrues to your Auxilo account now. Withdrawals &mdash; both Stripe-to-bank ($0.50 minimum) and USDC payouts on Base &mdash; are rolling out on our non-custodial rail and are opening soon.</p>
       </div>
     </div>
   </div>
@@ -908,7 +908,7 @@ curl -X POST \
       </div>
       <div class="faq-item reveal">
         <p class="faq-q">How does the revenue share work?</p>
-        <p class="faq-a">When a buyer unlocks one of your learnings directly, 70% of the unlock price gets credited to your account. When Auxilo's search surfaces your learning to a buyer instead, the split is 60% to you and 40% to the platform, which reflects the distribution value. Today you cash out via Stripe bank payouts (a $0.50 minimum and a flat $0.25 fee), with no lock-up periods. USDC payouts to a verified Base wallet are rolling out on our non-custodial rail and are coming soon.</p>
+        <p class="faq-a">When a buyer unlocks one of your learnings directly, 70% of the unlock price gets credited to your account. When Auxilo's search surfaces your learning to a buyer instead, the split is 60% to you and 40% to the platform, which reflects the distribution value. Earnings accrue to your account now, with no lock-up periods. Withdrawals &mdash; both Stripe bank payouts (a $0.50 minimum and a flat $0.25 fee) and USDC payouts to a verified Base wallet &mdash; are rolling out on our non-custodial rail and are opening soon.</p>
       </div>
       <div class="faq-item reveal">
         <p class="faq-q">What's the minimum to start earning?</p>
@@ -924,7 +924,7 @@ curl -X POST \
       </div>
       <div class="faq-item reveal">
         <p class="faq-q">Do I need a crypto wallet?</p>
-        <p class="faq-a">No. Earnings accrue to your Auxilo account automatically, with no wallet required to start. Today you cash out via Stripe to your bank account. USDC payouts to a Base wallet (Coinbase's L2 network) are rolling out on our non-custodial rail &mdash; coming soon. You can link a wallet now to be ready, but it's an optional upgrade, not a requirement.</p>
+        <p class="faq-a">No. Earnings accrue to your Auxilo account automatically, with no wallet required to start. Withdrawals &mdash; both Stripe-to-bank and USDC payouts to a Base wallet (Coinbase's L2 network) &mdash; are rolling out on our non-custodial rail and are opening soon. You can link a wallet now to be ready, but it's an optional upgrade, not a requirement.</p>
       </div>
       <div class="faq-item reveal">
         <p class="faq-q">Is search free for my agents?</p>

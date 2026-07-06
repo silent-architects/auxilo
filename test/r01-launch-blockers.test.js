@@ -74,8 +74,10 @@ describe('2. isPlatformContributor predicate (lib/accounts.js)', () => {
   it('platform-owned: seed learning whose contributor IS the platform wallet', () => {
     assert.equal(isPlatformContributor({ contributor_wallet: PLATFORM_WALLET }, PLATFORM_WALLET), true);
   });
-  it('platform-owned: learning with NO external contributor_account_id', () => {
-    assert.equal(isPlatformContributor({ contributor_wallet: '0xdead000000000000000000000000000000000001' }, PLATFORM_WALLET), true);
+  it('EXTERNAL (FB-3): wallet-only builder — non-platform wallet, no account — is NOT platform-owned', () => {
+    // A bare external wallet with no account cannot have accepted §5.10, so its content
+    // must be refused, not received into custody. (Previously wrongly returned true.)
+    assert.equal(isPlatformContributor({ contributor_wallet: '0xdead000000000000000000000000000000000001' }, PLATFORM_WALLET), false);
   });
   it('platform-owned: case-insensitive match against a checksummed platform wallet', () => {
     assert.equal(isPlatformContributor({ contributor_wallet: PLATFORM_WALLET.toLowerCase() }, PLATFORM_WALLET), true);
@@ -83,10 +85,16 @@ describe('2. isPlatformContributor predicate (lib/accounts.js)', () => {
   it('platform-owned: null learning is treated as platform (never gates the catalog closed)', () => {
     assert.equal(isPlatformContributor(null, PLATFORM_WALLET), true);
   });
+  it('platform-owned: no external payee at all (no wallet, no account) is platform-owned', () => {
+    assert.equal(isPlatformContributor({ title: 'ownerless' }, PLATFORM_WALLET), true);
+  });
   it('EXTERNAL: real account_id with a non-platform wallet is NOT platform-owned', () => {
     assert.equal(isPlatformContributor(
       { contributor_account_id: 'acc_ext', contributor_wallet: '0xdead000000000000000000000000000000000001' },
       PLATFORM_WALLET), false);
+  });
+  it('EXTERNAL: an external account with no wallet is NOT platform-owned (gates on assent)', () => {
+    assert.equal(isPlatformContributor({ contributor_account_id: 'acc_ext' }, PLATFORM_WALLET), false);
   });
 });
 
@@ -276,5 +284,45 @@ describe('7. GET /version route', () => {
     assert.ok(h.includes('version: VERSION'), 'must return the package version');
     assert.ok(h.includes("process.env.GIT_SHA || 'unknown'"), "gitSha must default to 'unknown'");
     assert.ok(h.includes('process.env.BUILT_AT || null'), 'builtAt must default to null');
+  });
+});
+
+// ─── 8. Round-2 survivors (FB-1 /dmca route, FB-2 payouts_paused, FB-4 price) ─────
+
+describe('8. FB-1: /dmca route is wired (Terms §5.9.4(b) links /dmca)', () => {
+  it('server.js serves /dmca via serveLegalPage(DMCA-POLICY.md)', () => {
+    assert.ok(
+      /app\.get\('\/dmca',\s*\(c\)\s*=>\s*serveLegalPage\(c,\s*'DMCA-POLICY\.md'/.test(SERVER_SRC),
+      'the /dmca route must exist so the clickwrapped Terms link does not 404');
+  });
+});
+
+describe('8. FB-2: earnings API is server-authoritative about the payout pause', () => {
+  const h = sliceHandler("app.get('/account/earnings'", 4500);
+  it('GET /account/earnings returns payouts_paused derived from the kill-switch', () => {
+    assert.ok(h.includes('payouts_paused'), 'must surface a payouts_paused flag');
+    assert.ok(h.includes("process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true'"),
+      'payouts_paused must derive from the CUSTODIAL_WITHDRAW_ENABLED kill-switch');
+  });
+  it('can_withdraw is gated on the kill-switch (never true while paused)', () => {
+    assert.ok(h.includes("canWithdraw && process.env.CUSTODIAL_WITHDRAW_ENABLED === 'true'"),
+      'can_withdraw must be false whenever the custodial payout kill-switch is engaged');
+  });
+});
+
+describe('8. FB-4: search quotes ONE price = the unlock charge', () => {
+  const h = sliceHandler('const resolvedPrice = r.pricing?.current_price', 2200);
+  it('unlock_price_usd and current_price both use the single resolvedPrice', () => {
+    assert.ok(h.includes('const resolvedPrice'), 'must resolve one canonical price');
+    assert.ok(h.includes('unlock_price_usd: resolvedPrice'), 'unlock_price_usd must be the resolved charge');
+    assert.ok(h.includes('current_price: resolvedPrice'), 'current_price must equal unlock_price_usd');
+  });
+  it('resolvedPrice mirrors the unlock route chain (no 10x understatement)', () => {
+    assert.ok(h.includes('pricingEngine.getCurrentPrice?.(r, learnings)'),
+      'must resolve via the same engine call the unlock route charges with');
+  });
+  it('the verdict is computed against the resolved (charged) price', () => {
+    assert.ok(h.includes('calculateVerdict(pricedForVerdict)'),
+      'verdict must key off the resolved charge, not the stale $0.005 unlock_price');
   });
 });

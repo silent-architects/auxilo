@@ -91,6 +91,29 @@ if [ -n "${SERVER_VERSION}" ] && [ -n "${TOS_VERSION}" ]; then
 fi
 
 echo ""
+echo "── predeploy-check: internal doc links resolve to a live route ──"
+# FB-1 root cause: the ToS incorporates the DMCA policy "into these Terms" and links
+# /dmca, but the serving route was missing — a clickwrapped contract linking to a 404.
+# Every internal absolute-path markdown link ](/path) in a served legal doc MUST have a
+# matching app.get('/path' ...) route in server.js.
+SERVER_FILE="server.js"
+LINK_FAILED=0
+for doc in "${LEGAL_DOCS[@]}"; do
+  [ -f "${doc}" ] || continue
+  # Extract internal absolute-path link targets (skip #anchors, mailto:, http(s)://).
+  links="$(grep -Eo '\]\(/[a-zA-Z0-9/_-]+' "${doc}" 2>/dev/null | sed -E 's/^\]\(//' | sort -u || true)"
+  while IFS= read -r link; do
+    [ -z "${link}" ] && continue
+    if ! grep -Fq "app.get('${link}'" "${SERVER_FILE}" 2>/dev/null; then
+      echo "  ❌ ${doc} links ${link} but no app.get('${link}' ...) route exists in ${SERVER_FILE}"
+      FAILED=1
+      LINK_FAILED=1
+    fi
+  done <<< "${links}"
+done
+[ "${LINK_FAILED}" -eq 0 ] && echo "  ✅ all internal legal-doc links resolve to a route"
+
+echo ""
 if [ "${FAILED}" -ne 0 ]; then
   echo "🛑 predeploy-check FAILED — do NOT deploy. Resolve the items above first."
   exit 1

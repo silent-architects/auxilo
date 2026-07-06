@@ -422,15 +422,15 @@ curl -X POST \
   https://auxilo.io/auth/magic-link \
   -d <span class="s">'{"email": "you@example.com"}'</span>
 
-<span class="c"># 2. Verify the token from your email</span>
+<span class="c"># 2. Verify the token from your email — returns a JWT</span>
 curl -X GET \
-  <span class="s">"…/auth/verify?token=TOKEN&amp;email=you@example.com"</span>
-<span class="c"># → sets session cookie</span>
+  <span class="s">"…/auth/verify?token=TOKEN"</span>
+<span class="c"># → {"token": "&lt;JWT&gt;"}</span>
 
-<span class="c"># 3. Generate your API key</span>
+<span class="c"># 3. Generate your API key (JWT as a Bearer token)</span>
 curl -X POST \
   https://auxilo.io/account/api-keys \
-  --cookie <span class="s">"session=YOUR_SESSION"</span>
+  -H <span class="s">'Authorization: Bearer &lt;JWT&gt;'</span>
 <span class="c"># → {"api_key": "axl_…"}</span>
 
 <span class="c"># Now query the catalog</span>
@@ -460,7 +460,8 @@ curl -X POST \
   -H <span class="s">'Content-Type: application/json'</span> \
   -d <span class="s">'{"wallet": "0x…", "signature": "0x…"}'</span>
 
-<span class="c"># Earnings settle to your wallet in USDC on Base</span>
+<span class="c"># Earnings accrue to your account; USDC payouts to your</span>
+<span class="c"># wallet are opening soon on our non-custodial rail (paused for now)</span>
 <span class="c"># x402 unlocks require no account, just a wallet</span></pre>
         </div>
       </div>
@@ -554,7 +555,7 @@ curl -X POST \
           <li>USDC on Base mainnet</li>
           <li>Facilitator: facilitator.openx402.ai</li>
           <li>EIP-712 wallet verification to receive earnings</li>
-          <li>Earnings settle automatically to your wallet</li>
+          <li>Earnings accrue to your account; USDC payouts to your wallet are opening soon (paused on our non-custodial rail for now)</li>
         </ul>
       </div>
       <div class="auth-block">
@@ -567,7 +568,7 @@ curl -X POST \
           <li>Credit packs: $10 / $25 / $100</li>
           <li>Search is always free, no account required</li>
           <li>Unlocks require credits or x402 micropayments</li>
-          <li>Earnings paid out in USDC via linked wallet</li>
+          <li>USDC payouts to a linked wallet are opening soon (paused for now)</li>
         </ul>
       </div>
     </div>
@@ -735,7 +736,7 @@ AUXILO_API_KEY=axl_… auxilo-mcp</pre>
       </div>
       <div class="mcp-tool-card">
         <span class="mcp-tool-name">auxilo_withdraw</span>
-        <span class="mcp-tool-desc">Initiate a withdrawal of accumulated earnings to your linked wallet or Stripe</span>
+        <span class="mcp-tool-desc">Withdraw accumulated earnings to your linked wallet or Stripe (both rails opening soon on our non-custodial migration; paused for now)</span>
       </div>
       <div class="mcp-tool-card">
         <span class="mcp-tool-name">get_knowledge_stats</span>

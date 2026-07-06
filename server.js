@@ -3952,6 +3952,10 @@ app.get('/account/earnings', requireSessionOrApiKey('read'), async (c) => {
       total_withdrawn: 0,
       withdrawal_count: 0,
       can_withdraw: false,
+      // FB-2: both custodial payout rails are paused when the kill-switch is unset (launch
+      // default). Surfaced so the dashboard form + MCP earnings tool are server-authoritative
+      // about the pause instead of advertising a cash-out that 503s.
+      payouts_paused: process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true',
       message: 'No earnings recorded yet',
     });
   }
@@ -3980,7 +3984,10 @@ app.get('/account/earnings', requireSessionOrApiKey('read'), async (c) => {
     pending_balance: entry.pending_balance || 0,  // withdrawable subset of owned
     total_withdrawn: entry.total_withdrawn || 0,
     withdrawal_count: entry.withdrawal_count || 0,
-    can_withdraw: canWithdraw,
+    // FB-2: never advertise can_withdraw while the custodial payout kill-switch is engaged
+    // (launch default) — both rails 503 until CUSTODIAL_WITHDRAW_ENABLED is set.
+    can_withdraw: canWithdraw && process.env.CUSTODIAL_WITHDRAW_ENABLED === 'true',
+    payouts_paused: process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true',
   });
 });
 
@@ -6204,7 +6211,21 @@ app.post('/knowledge', optionalAuth(), apiKeyRateLimitMiddleware('/knowledge'), 
   return c.json({
     query,
     results_count: results.length,
-    results: results.map(r => ({
+    results: results.map(r => {
+      // FB-4: quote the ONE price the unlock route will actually CHARGE. Resolve it with
+      // the exact same chain as the unlock handler (pricing.current_price -> engine
+      // getCurrentPrice -> unlock_price) so unlock_price_usd, current_price, and the verdict
+      // never disagree. The old code quoted r.unlock_price ($0.005 on seeds) for
+      // unlock_price_usd but computeCurrentPrice ($0.05 clamped) for current_price — a 10x
+      // understatement of the charge and two contradictory prices in one result.
+      const resolvedPrice = r.pricing?.current_price
+        || pricingEngine.getCurrentPrice?.(r, learnings)
+        || r.unlock_price
+        || DEFAULT_UNLOCK_PRICE;
+      // Feed the resolved price into the verdict (calculateVerdict keys off
+      // pricing.current_price || unlock_price) so the ROI signal matches the real charge.
+      const pricedForVerdict = { ...r, pricing: { ...(r.pricing || {}), current_price: resolvedPrice } };
+      return {
       id: r.id,
       title: r.title,
       snippet: r.snippet,
@@ -6212,8 +6233,8 @@ app.post('/knowledge', optionalAuth(), apiKeyRateLimitMiddleware('/knowledge'), 
       task_context: r.task_context,
       outcome: r.outcome,
       tags: r.tags,
-      unlock_price_usd: r.pricing?.current_price || r.unlock_price || DEFAULT_UNLOCK_PRICE,
-      current_price: r.pricing?.current_price || computeCurrentPrice(r, getCatalogStats()),
+      unlock_price_usd: resolvedPrice,
+      current_price: resolvedPrice,
       quality: { score: computeScore(r), unlocks: r.quality.unlocks, ratings: r.quality.ratings, avg_helpfulness: r.quality.avg_helpfulness },
       relevance: r.relevance,
       // UX-N1/CAT-1: recompute the autonomous buy-signal from fields the pricing
@@ -6224,9 +6245,10 @@ app.post('/knowledge', optionalAuth(), apiKeyRateLimitMiddleware('/knowledge'), 
       value_signal: {
         estimated_diy_cost_usd: pricingEngine.estimateDiyCost(r),
         quality_score: pricingEngine.qualityScore01(r),
-        verdict: pricingEngine.calculateVerdict(r) || null
+        verdict: pricingEngine.calculateVerdict(pricedForVerdict) || null
       }
-    })),
+    };
+    }),
     pricing: `Dynamic — each learning has its own unlock price (min $${MIN_UNLOCK_PRICE} USDC). See unlock_price_usd per result.`,
     timestamp: new Date().toISOString()
   });
@@ -7948,6 +7970,8 @@ app.get('/terms', (c) => serveLegalPage(c, 'TERMS-OF-SERVICE.md', 'Terms of Serv
 app.get('/privacy', (c) => serveLegalPage(c, 'PRIVACY-POLICY.md', 'Privacy Policy'));
 app.get('/legal/subprocessors', (c) => serveLegalPage(c, 'SUBPROCESSORS.md', 'Sub-Processors'));
 app.get('/legal/supported-clients', (c) => serveLegalPage(c, 'SUPPORTED-CLIENTS.md', 'Supported Clients'));
+// FB-1: /dmca is incorporated into the Terms (§5.9.4(b)) and must resolve, not 404.
+app.get('/dmca', (c) => serveLegalPage(c, 'DMCA-POLICY.md', 'DMCA Copyright Policy'));
 
 // ─── Renderly — Web Content Extraction API ───────────────────────────
 
