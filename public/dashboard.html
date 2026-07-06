@@ -829,12 +829,32 @@
     if (!grid) return;
     grid.textContent = '';
 
+    // R-01 §5.10: held (unassented) funds are earnings that require accepting the
+    // updated Terms before they can be released/withdrawn. Read defensively — only
+    // surface the held line when the server actually sends a non-zero field.
+    var held = 0;
+    if (data && typeof data.unassented_pending === 'number') {
+      held = data.unassented_pending;
+    } else if (data && typeof data.held === 'number') {
+      held = data.held;
+    }
+
     var items = [
       { label: 'Your share (withdrawable)', value: fmt(data.pending_balance), highlight: true },
       { label: 'Lifetime gross', value: fmt(data.total_gross_usd || data.total_gross || 0) },
-      { label: 'Your total (70%)', value: fmt(data.total_contributor) },
+      { label: 'Your revenue share (70%, earned to date)', value: fmt(data.total_contributor) },
       { label: 'Total withdrawn', value: fmt(data.total_withdrawn) },
     ];
+
+    if (held > 0) {
+      // Insert directly under the withdrawable share so the two are read together,
+      // and make clear this amount is NOT included in the withdrawable figure.
+      items.splice(1, 0, {
+        label: 'Held — accept Terms to release',
+        value: fmt(held),
+        held: true,
+      });
+    }
 
     items.forEach(function (item) {
       var wrap = document.createElement('div');
@@ -845,11 +865,22 @@
       lbl.textContent = item.label;
 
       var val = document.createElement('div');
-      val.className = 'earnings-value' + (item.highlight ? ' aurum' : '');
+      val.className = 'earnings-value' + (item.highlight || item.held ? ' aurum' : '');
       val.textContent = item.value;
 
       wrap.appendChild(lbl);
       wrap.appendChild(val);
+
+      // Held balance gets a short explainer pointing at the Terms gate above.
+      if (item.held) {
+        var heldNote = document.createElement('div');
+        heldNote.style.fontSize = '11px';
+        heldNote.style.color = 'var(--slate)';
+        heldNote.style.marginTop = '4px';
+        heldNote.textContent = 'Not included in your withdrawable share. Accept the updated Terms above to release it.';
+        wrap.appendChild(heldNote);
+      }
+
       grid.appendChild(wrap);
     });
 
@@ -871,7 +902,7 @@
     cryptoHead.style.color = 'var(--ivory)';
     cryptoHead.style.display = 'block';
     cryptoHead.style.marginBottom = '6px';
-    cryptoHead.textContent = 'Wallet (USDC on Base)';
+    cryptoHead.textContent = 'Wallet (USDC on Base) — coming soon';
     cryptoWrap.appendChild(cryptoHead);
 
     if (data && data.wallet) {
@@ -886,14 +917,14 @@
       var note = document.createElement('div');
       note.style.marginTop = '8px';
       note.style.fontSize = '12px';
-      note.textContent = 'To withdraw USDC, use the CLI or your wallet app. Browser signing is coming in v2.';
+      note.textContent = 'USDC withdrawals on Base are paused while our non-custodial rail rolls out. For now, cash out via Stripe to your bank below. Your wallet stays linked and ready.';
 
       cryptoWrap.appendChild(linkedLine);
       cryptoWrap.appendChild(addrSpan);
       cryptoWrap.appendChild(note);
     } else {
       var noWallet = document.createElement('div');
-      noWallet.textContent = 'No wallet linked. Use the CLI command "auxilo link-wallet" to connect a wallet for USDC withdrawals on Base.';
+      noWallet.textContent = 'No wallet linked. USDC withdrawals on Base are rolling out on our non-custodial rail (coming soon). You can link a wallet now with the CLI command "auxilo link-wallet" to be ready. Today, cash out via Stripe to your bank below.';
       cryptoWrap.appendChild(noWallet);
     }
 

@@ -6,7 +6,7 @@ Auxilo respects the intellectual property rights of others and expects the build
 
 This policy is Auxilo's notice-and-takedown procedure under the Digital Millennium Copyright Act, 17 U.S.C. § 512. It is part of, and incorporated into, our [Terms of Service](/terms).
 
-Auxilo is SLAM Agency LLC, doing business as Auxilo.
+Auxilo is [[LEGAL-ENTITY — V-1: confirm operating entity, type, and state from charter/formation docs before deploy; candidates per counsel brief: "Slam Agency, Inc." (interim) or "Auxilo LLC, a Missouri LLC" (post-formation)]], doing business as Auxilo.
 
 ## 1. How to report copyright infringement
 
@@ -25,7 +25,7 @@ Send the notice to our Designated Agent:
 
 ```
 DMCA Designated Agent
-SLAM Agency LLC (d/b/a Auxilo)
+[[LEGAL-ENTITY — V-1: confirm operating entity, type, and state from charter/formation docs before deploy; candidates per counsel brief: "Slam Agency, Inc." (interim) or "Auxilo LLC, a Missouri LLC" (post-formation)]] (d/b/a Auxilo)
 DMCA Agent
 Attn: T Kelley
 222 S. Meramec Ave, Ste 202-1092

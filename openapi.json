@@ -3,7 +3,7 @@
     "info": {
         "title": "Auxilo",
         "description": "Agent Capability Discovery and Knowledge Marketplace. Skills registry for finding APIs and MCP servers. Knowledge marketplace where agents share and monetize operational learnings.",
-        "version": "0.7.0",
+        "version": "0.9.1",
         "contact": {
             "name": "Auxilo Support",
             "url": "https://auxilo.io",
@@ -1504,6 +1504,7 @@
         "/withdraw": {
             "post": {
                 "summary": "Withdraw pending earnings (free, signed)",
+                "description": "Withdraw the withdrawable USDC balance to a verified, wallet-signed address. NOTE: custodial withdrawals are PAUSED during the non-custodial migration and return 503 { code: 'withdraw_paused_noncustodial_migration' } unless the operator sets CUSTODIAL_WITHDRAW_ENABLED=true. When enabled, requires prior acceptance of the current Terms (§5.10 payee-agency); suspended accounts are refused.",
                 "operationId": "requestWithdrawal",
                 "requestBody": {
                     "required": true,
@@ -1555,7 +1556,217 @@
                                 }
                             }
                         }
+                    },
+                    "503": {
+                        "description": "Custodial withdrawals paused during non-custodial migration (code: withdraw_paused_noncustodial_migration)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": { "type": "string" },
+                                        "code": { "type": "string", "example": "withdraw_paused_noncustodial_migration" }
+                                    }
+                                }
+                            }
+                        }
                     }
+                }
+            }
+        },
+        "/withdraw/stripe": {
+            "post": {
+                "summary": "Withdraw pending earnings to Stripe Connect",
+                "description": "Pay out the withdrawable balance to the account's linked Stripe Connect account. Debits the same authoritative pending_balance as POST /withdraw. NOTE: paused during the non-custodial migration — returns 503 { code: 'withdraw_paused_noncustodial_migration' } unless CUSTODIAL_WITHDRAW_ENABLED=true. Requires session/API-key auth, prior acceptance of the current Terms (§5.10 payee-agency), a completed Stripe Connect onboarding, and a minimum of $0.50.",
+                "operationId": "requestStripeWithdrawal",
+                "tags": ["Account", "Payments"],
+                "security": [{ "bearerAuth": [] }, { "apiKeyAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["amount_usd"],
+                                "properties": {
+                                    "amount_usd": {
+                                        "type": "number",
+                                        "description": "Amount to withdraw in USD. Must be a positive number and >= 0.50."
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Stripe payout initiated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": { "type": "string" },
+                                        "payout_id": { "type": "string" },
+                                        "amount": { "type": "number" },
+                                        "status": { "type": "string" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": { "description": "No Stripe account linked, onboarding incomplete, invalid amount, below minimum, or insufficient balance" },
+                    "401": { "description": "Authentication required" },
+                    "403": { "description": "Terms not accepted (§5.10) or account suspended" },
+                    "404": { "description": "Account not found" },
+                    "503": {
+                        "description": "Withdrawals paused during non-custodial migration, Stripe not configured, or sanctions screening unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": { "type": "string" },
+                                        "code": { "type": "string", "example": "withdraw_paused_noncustodial_migration" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/account/accept-terms": {
+            "post": {
+                "summary": "Accept the current Terms of Service (clickwrap assent)",
+                "description": "Records an affirmative, server-stamped acceptance of the current Terms — the §5.10 payee-agency clickwrap. The body MUST carry both the current version string and an explicit agree:true affirmation. The server refuses any non-current version (409) and refuses a missing affirmation (400, code: AFFIRMATION_REQUIRED); it stamps the timestamp, IP, and user-agent itself. On first acceptance, any Builder Share held in unassented_pending is converted to the withdrawable balance. Accepts a web session (Bearer) OR an account API key (contribute scope).",
+                "operationId": "acceptTerms",
+                "tags": ["Account", "Terms"],
+                "security": [{ "bearerAuth": [] }, { "apiKeyAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["version", "agree"],
+                                "properties": {
+                                    "version": {
+                                        "type": "string",
+                                        "description": "The current_tos_version being accepted (from GET /account/terms-status). A stale/unknown version is refused with 409."
+                                    },
+                                    "agree": {
+                                        "type": "boolean",
+                                        "description": "Must be true — an explicit, transmitted affirmation of assent. A bare version echo without agree:true is refused (400, AFFIRMATION_REQUIRED)."
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Terms accepted",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": { "type": "string" },
+                                        "version": { "type": "string" },
+                                        "accepted_at": { "type": "number" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": { "description": "Missing version, or missing affirmation (code: AFFIRMATION_REQUIRED)" },
+                    "401": { "description": "Authentication required" },
+                    "409": { "description": "Version is not the current Terms version — cannot bind to a stale/unknown version" }
+                }
+            }
+        },
+        "/account/link-wallet": {
+            "post": {
+                "summary": "Link a verified wallet to the account",
+                "description": "Links a previously verified wallet address to the authenticated account so earnings can be attributed and withdrawn. Gates on current-Terms acceptance BEFORE linking. Sanctions-screens the wallet (fails closed if screening is unavailable). Enforces one wallet per account and global wallet uniqueness. On link, any wallet-keyed held balance is migrated in and converted to the withdrawable balance if the agency is in force.",
+                "operationId": "linkWallet",
+                "tags": ["Account", "Wallet"],
+                "security": [{ "bearerAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["wallet"],
+                                "properties": {
+                                    "wallet": {
+                                        "type": "string",
+                                        "description": "The verified wallet address to link (must already be verified via /wallet/challenge + /wallet/verify)."
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Wallet linked",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": { "type": "string" },
+                                        "wallet": { "type": "string" },
+                                        "account_id": { "type": "string" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": { "description": "Invalid body, wallet not verified, wallet already linked/in use, or account already has a wallet" },
+                    "403": { "description": "Terms not accepted (§5.10), account suspended, or sanctions block" },
+                    "404": { "description": "Account not found" },
+                    "503": { "description": "Sanctions screening unavailable" }
+                }
+            }
+        },
+        "/account/earnings": {
+            "get": {
+                "summary": "View contributor earnings for the authenticated account",
+                "description": "Returns the account's earnings breakdown. total_contributor is the OWNED lifetime share (excludes unassented_pending); unassented_pending is the Builder Share received but HELD until §5.10 acceptance (not yet owned, not withdrawable); pending_balance is the withdrawable subset of owned earnings; total_contributor_gross is the raw lifetime figure (owned + held). Requires session auth.",
+                "operationId": "getAccountEarnings",
+                "tags": ["Account", "Earnings"],
+                "security": [{ "bearerAuth": [] }],
+                "responses": {
+                    "200": {
+                        "description": "Earnings breakdown",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "account_id": { "type": "string" },
+                                        "wallet": { "type": "string", "nullable": true },
+                                        "total_gross_usd": { "type": "number" },
+                                        "total_gross": { "type": "number" },
+                                        "total_contributor": { "type": "number", "description": "Owned lifetime contributor share (excludes held/unassented_pending)." },
+                                        "total_contributor_gross": { "type": "number", "description": "Raw lifetime contributor share including held funds (owned + held)." },
+                                        "unassented_pending": { "type": "number", "description": "Builder Share received but held until §5.10 acceptance — not owned, not withdrawable." },
+                                        "pending_balance": { "type": "number", "description": "Withdrawable balance (subset of owned earnings)." },
+                                        "total_withdrawn": { "type": "number" },
+                                        "withdrawal_count": { "type": "number" },
+                                        "can_withdraw": { "type": "boolean" },
+                                        "message": { "type": "string" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": { "description": "Authentication required" },
+                    "404": { "description": "Account not found" }
                 }
             }
         },

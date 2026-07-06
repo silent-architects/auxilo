@@ -2,7 +2,7 @@
 
 **Effective Date: March 17, 2026**
 **Last Updated: [[DEPLOY-DATE]]**
-**Current Amendment: `2026-07-04-payee-agency-a1` — Payment-Collection Agency (Section 5.10), effective [[DEPLOY-DATE]].**
+**Current Amendment: `2026-07-04-payee-agency-a1` — Payment-Collection Agency (Section 5.10), effective [[DEPLOY-DATE]].** The payment-collection agency in Section 5.10 was added by this amendment and applies only on and after its effective date shown above ([[DEPLOY-DATE]]); it does not apply retroactively to the original March 17, 2026 Effective Date or to any Builder Share received before the amendment's effective date.
 
 ---
 
@@ -58,6 +58,16 @@ Each individual or organization may maintain one account on the Platform. Creati
 ### 3.5 Account Security
 
 You are solely responsible for all activity that occurs under your account, API key, or verified wallet address, whether or not you authorized that activity. You agree to notify us immediately at hello@auxilo.io if you believe your account or credentials have been compromised. Auxilo is not liable for any loss or damage arising from unauthorized use of your credentials.
+
+### 3.6 Sanctions and Jurisdiction Representations
+
+By registering for or using the Platform, you represent and warrant that:
+
+1. You are not located in, ordinarily resident in, or organized under the laws of any country or region that is the subject of comprehensive U.S. economic sanctions or embargo (including, at present, Cuba, Iran, North Korea, Syria, and the Crimea, Donetsk, and Luhansk regions of Ukraine), and you will not access or use the Platform from any such country or region.
+2. You are not identified on, and are not owned 50% or more (individually or in the aggregate) or controlled by any person identified on, any list of sanctioned, restricted, or prohibited persons maintained by the U.S. Government — including the U.S. Department of the Treasury's Office of Foreign Assets Control ("OFAC") Specially Designated Nationals and Blocked Persons ("SDN") List — or any equivalent list maintained by any other applicable jurisdiction.
+3. You will not use the Platform to transact with, or on behalf of, any such country, region, or person, or for any purpose prohibited by applicable sanctions, export-control, or anti-money-laundering laws.
+
+You agree to notify us promptly if any of these representations ceases to be accurate. Auxilo may suspend, restrict, or terminate your access to the Platform, withhold or freeze any earnings, and take any other action it deems necessary to comply with applicable law, immediately and without prior notice, if you breach this Section 3.6 or if Auxilo reasonably believes such action is required to comply with applicable sanctions or anti-money-laundering laws.
 
 ---
 
@@ -145,6 +155,8 @@ Settlement occurs on a periodic basis as determined by Auxilo. We will make reas
 
 **Tax Obligations.** Builders are solely responsible for reporting and paying any taxes applicable to their earnings. Auxilo may request tax documentation (such as W-9 or W-8BEN forms) as required for compliance with applicable tax reporting obligations. Failure to provide requested documentation may result in withholding or suspension of payouts.
 
+**Nature of the Revenue Share.** The Builder Share is compensation for content you contribute to the Platform and make available for unlock by Consumers. It is not an investment contract, security, or interest in Auxilo, and it is not a promise or guarantee of any return, profit, or income. Your earnings depend entirely on the independent purchasing behavior of third-party Consumers who choose to unlock your Learnings, and are not guaranteed. No Builder should expect profits derived solely or predominantly from the managerial or entrepreneurial efforts of Auxilo. Nothing in these Terms should be construed as an offer or sale of a security.
+
 ### 5.7 Builder Representations and Warranties
 
 By submitting a Learning, you represent and warrant that:
@@ -208,7 +220,7 @@ A Builder may change trigger modes or disable Autonomous Extraction at any time 
 
 **(a) Seven-day retraction window.** A Builder may retract any Learning published via Autonomous Extraction for a period of seven (7) calendar days following its publication date. Retraction is effected by request through the Platform's catalog management interface or by email to hello@auxilo.io identifying the Learning. Upon a valid retraction request, Auxilo will remove the Learning from public discovery, search results, and the catalog API within a commercially reasonable time.
 
-**(b) After the retraction window.** Following the seven-day window, autonomously-published Learnings are subject to the same removal mechanisms as any other published Learning, including the DMCA/notice-and-takedown processes referenced in Section 5 and Section 9.
+**(b) After the retraction window.** Following the seven-day window, autonomously-published Learnings are subject to the same removal mechanisms as any other published Learning, including Auxilo's content moderation and enforcement rights under Section 10 and the notice-and-takedown procedure in our [DMCA Copyright Policy](/dmca), which is incorporated into these Terms.
 
 **(c) No clawback; no refund.** Retraction removes a Learning from the catalog on a forward-going basis only. It does **not** reverse, refund, or unwind any unlock transaction completed prior to retraction. Consumers who unlocked the Learning before retraction retain the perpetual license described in Section 5.3 and Section 6.4. Builder earnings already accrued from pre-retraction unlocks remain payable on the normal settlement schedule and are not subject to clawback.
 
@@ -218,7 +230,9 @@ A Builder may change trigger modes or disable Autonomous Extraction at any time 
 
 #### 5.10.1 Appointment and Scope
 
-By accepting these Terms and by submitting any Learning for which you may earn a revenue share, you ("Builder") appoint Auxilo — SLAM Agency LLC, a [[STATE — V-1: fill from formation docs before deploy]] limited liability company doing business as Auxilo ("Auxilo") — as your limited agent for the sole and exclusive purpose of receiving, on your behalf, payment of the Builder Share (as defined in Section 5.4) owed to you by Consumers who unlock your Learnings.
+By accepting these Terms and by submitting any Learning for which you may earn a revenue share, you ("Builder") appoint Auxilo — [[LEGAL-ENTITY — V-1: confirm operating entity, type, and state of organization from charter/formation docs before deploy; per counsel brief candidates are "Slam Agency, Inc., a [state] corporation d/b/a Auxilo" (interim) or "Auxilo LLC, a Missouri limited liability company" (post-formation)]] ("Auxilo") — as your limited agent for the sole and exclusive purpose of receiving, on your behalf, payment of the Builder Share (as defined in Section 5.4) owed to you by Consumers who unlock your Learnings.
+
+This appointment takes effect on the effective date of the amendment that introduced this Section 5.10 (`2026-07-04-payee-agency-a1`, effective [[DEPLOY-DATE]]) or, if later, on the date you accept these Terms as so amended. It applies only to Builder Share amounts received on or after that date and does not apply retroactively to any amount received before it.
 
 This appointment is limited to the collection and receipt of the Builder Share. It does **not** authorize Auxilo to act as your agent for any other purpose, and specifically does not authorize Auxilo to:
 

@@ -948,6 +948,7 @@ const {
   CURRENT_TOS_VERSION,
   hasAcceptedCurrentTos,
   isPayeeAgencyInForce,
+  isPlatformContributor,
   getTosStatus,
   recordTosAcceptance,
   newAccountCreationStore,  // FIX 5: periodic sweep of IP-throttle store
@@ -3657,6 +3658,19 @@ app.post('/account/connect-stripe', requireAuth, async (c) => {
 
 // POST /withdraw/stripe — withdraw earnings to Stripe Connect
 app.post('/withdraw/stripe', requireAuth, async (c) => {
+  // R-01 KILL-SWITCH (R01-MT-02): the Stripe payout rail debits the SAME
+  // authoritative pending_balance the USDC rail debits (see debitWithdrawableBalance
+  // below) — so the moment Stripe is configured this is a live fiat custodial payout
+  // loop, the completed-transmission leg the migration exists to avoid. Gated by the
+  // SAME sentinel as the custodial USDC rail (POST /withdraw). Disabled by default
+  // until the non-custodial rail replaces it; to re-enable set CUSTODIAL_WITHDRAW_ENABLED=true.
+  if (process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true') {
+    return c.json({
+      error: 'Withdrawals temporarily paused during non-custodial migration',
+      code: 'withdraw_paused_noncustodial_migration',
+    }, 503);
+  }
+
   // GOV-3: fail closed if sanctions screening has never loaded a list.
   if (!ofacScreeningReady()) {
     return c.json({ error: 'Sanctions screening unavailable' }, 503);
@@ -3828,7 +3842,7 @@ app.post('/withdraw/stripe', requireAuth, async (c) => {
 // ─── Phase 0.5: Account Wallet + Earnings Endpoints (SPEC-P0.5) ──────────────
 
 // POST /account/link-wallet — link a verified wallet to the authenticated account
-app.post('/account/link-wallet', requireAuth, async (c) => {
+app.post('/account/link-wallet', requireSessionOrApiKey(), async (c) => {
   let body;
   try { body = await c.req.json(); } catch {
     return c.json({ error: 'Invalid JSON body' }, 400);
@@ -3897,7 +3911,7 @@ app.post('/account/link-wallet', requireAuth, async (c) => {
 });
 
 // GET /account/earnings — view earnings for the authenticated account
-app.get('/account/earnings', requireAuth, async (c) => {
+app.get('/account/earnings', requireSessionOrApiKey('read'), async (c) => {
   const accountId = c.get('accountId');
 
   // AU-7: Check account cache before hitting disk
@@ -3924,13 +3938,16 @@ app.get('/account/earnings', requireAuth, async (c) => {
   const canWithdraw = hasWallet && source !== 'new' && (entry.pending_balance || 0) > 0;
 
   if (source === 'new') {
-    // No earnings yet — return zero state
+    // No earnings yet — return zero state. unassented_pending is surfaced in BOTH
+    // branches (MISS-03/BUX-3) so a consumer always has the held-vs-owned split.
     return c.json({
       account_id: accountId,
       wallet: account.wallet || null,
       total_gross_usd: 0,
       total_gross: 0,
       total_contributor: 0,
+      total_contributor_gross: 0,
+      unassented_pending: 0,
       pending_balance: 0,
       total_withdrawn: 0,
       withdrawal_count: 0,
@@ -3939,13 +3956,28 @@ app.get('/account/earnings', requireAuth, async (c) => {
     });
   }
 
+  // MISS-03/BUX-3: `total_contributor` is credited unconditionally at unlock time
+  // (server.js accrual: `activeEntry.total_contributor += contributorEarned`) BEFORE
+  // the CP-6 branch decides whether the share is OWNED (pending_balance) or merely HELD
+  // (unassented_pending, not yet owned until the Builder accepts §5.10). So the stored
+  // total_contributor is lifetime-GROSS and folding it into the dashboard "Your total"
+  // headline over-reports not-yet-owned funds. Report the OWNED contributor total here
+  // (gross − held) as `total_contributor`, expose the held bucket as its own field, and
+  // keep the raw lifetime figure as `total_contributor_gross`. No double-count:
+  // owned + held == gross.
+  const heldPending = Number((entry.unassented_pending || 0).toFixed(6));
+  const contributorGross = Number((entry.total_contributor || 0).toFixed(6));
+  const contributorOwned = Number(Math.max(0, contributorGross - heldPending).toFixed(6));
+
   return c.json({
     account_id: accountId,
     wallet: entry.wallet || account.wallet || null,
     total_gross_usd: entry.total_gross || 0,
     total_gross: entry.total_gross || 0,
-    total_contributor: entry.total_contributor || 0,
-    pending_balance: entry.pending_balance || 0,
+    total_contributor: contributorOwned,          // owned lifetime share (excludes held)
+    total_contributor_gross: contributorGross,    // lifetime gross including held
+    unassented_pending: heldPending,              // held until §5.10 acceptance (not owned)
+    pending_balance: entry.pending_balance || 0,  // withdrawable subset of owned
     total_withdrawn: entry.total_withdrawn || 0,
     withdrawal_count: entry.withdrawal_count || 0,
     can_withdraw: canWithdraw,
@@ -4084,8 +4116,8 @@ app.get('/api/info', (c) => {
       '/wallet/challenge': { price: 'free', method: 'POST', description: 'Request an EIP-712 signing challenge. Body: { wallet, action? }', auth: 'public' },
       '/wallet/verify': { price: 'free', method: 'POST', description: 'Verify a signed challenge and mark wallet as verified. Body: { wallet, signature }', auth: 'public' },
       '/withdraw': { price: 'free', method: 'POST', description: 'Withdraw pending USDC earnings to verified wallet. Body: { wallet, signature }. Requires prior challenge + EIP-712 signature.', auth: 'wallet-signed' },
-      '/account/link-wallet': { price: 'free', method: 'POST', description: 'Link a verified wallet to the authenticated account. Body: { wallet }', auth: 'session' },
-      '/account/earnings': { price: 'free', method: 'GET', description: 'View contributor earnings for the authenticated account', auth: 'session' },
+      '/account/link-wallet': { price: 'free', method: 'POST', description: 'Link a verified wallet to the authenticated account. Body: { wallet }', auth: 'session or api-key' },
+      '/account/earnings': { price: 'free', method: 'GET', description: 'View contributor earnings for the authenticated account', auth: 'session or api-key' },
       '/account/credits': { price: 'free', method: 'GET', description: 'View query and unlock credit balance for the authenticated account', auth: 'session' },
       '/account/purchases': { price: 'free', method: 'GET', description: 'View credit purchase history for the authenticated account', auth: 'session' },
       '/checkout/session': { price: 'free', method: 'POST', description: 'Create a Stripe checkout session to purchase credits. Body: { pack_id }', auth: 'session' },
@@ -4099,8 +4131,8 @@ app.get('/api/info', (c) => {
       '/auth/verify': { price: 'free', method: 'GET', description: 'Redeem magic link token, receive JWT. Query: ?token=...', auth: 'public' },
       '/account/dashboard': { price: 'free', method: 'GET', description: 'View account info, API keys, wallet linkage', auth: 'session' },
       '/account/api-keys': { price: 'free', method: 'POST', description: 'Generate a new axl_ API key. Body: { name? }', auth: 'session' },
-      '/account/link-wallet': { price: 'free', method: 'POST', description: 'Link a verified wallet to the authenticated account. Body: { wallet }', auth: 'session' },
-      '/account/earnings': { price: 'free', method: 'GET', description: 'View contributor earnings for the authenticated account', auth: 'session' },
+      '/account/link-wallet': { price: 'free', method: 'POST', description: 'Link a verified wallet to the authenticated account. Body: { wallet }', auth: 'session or api-key' },
+      '/account/earnings': { price: 'free', method: 'GET', description: 'View contributor earnings for the authenticated account', auth: 'session or api-key' },
       '/account/credits': { price: 'free', method: 'GET', description: 'View query and unlock credit balance for the authenticated account', auth: 'session' },
       '/account/purchases': { price: 'free', method: 'GET', description: 'View credit purchase history for the authenticated account', auth: 'session' },
       '/checkout/session': { price: 'free', method: 'POST', description: 'Create a Stripe checkout session to purchase credits. Body: { pack_id }', auth: 'session' },
@@ -4152,6 +4184,17 @@ app.get('/ready', (c) => {
 
   const ready = Object.values(checks).every(Boolean);
   return c.json({ ready, checks, timestamp: new Date().toISOString() }, ready ? 200 : 503);
+});
+
+// GET /version (OPS-4): report the running build so deploys are verifiable in prod.
+// version comes from package.json (VERSION const); gitSha/builtAt are injected via env
+// at build/deploy time (Dockerfile ARG wiring is out of scope) — 'unknown'/null until then.
+app.get('/version', (c) => {
+  return c.json({
+    version: VERSION,
+    gitSha: process.env.GIT_SHA || 'unknown',
+    builtAt: process.env.BUILT_AT || null,
+  });
 });
 
 app.get('/categories', (c) => {
@@ -6173,9 +6216,14 @@ app.post('/knowledge', optionalAuth(), apiKeyRateLimitMiddleware('/knowledge'), 
       current_price: r.pricing?.current_price || computeCurrentPrice(r, getCatalogStats()),
       quality: { score: computeScore(r), unlocks: r.quality.unlocks, ratings: r.quality.ratings, avg_helpfulness: r.quality.avg_helpfulness },
       relevance: r.relevance,
+      // UX-N1/CAT-1: recompute the autonomous buy-signal from fields the pricing
+      // engine actually produces. The old keys (token_cost_estimate/time_value_estimate/
+      // quality_multiplier) were never written on /learn, so every live result returned
+      // estimated_diy_cost_usd=0, quality_score=null, and a misleading verdict. These
+      // derive from the real complexity/category cost model and the real quality object.
       value_signal: {
-        estimated_diy_cost_usd: (r.pricing?.token_cost_estimate || 0) + (r.pricing?.time_value_estimate || 0),
-        quality_score: r.pricing?.quality_multiplier || null,
+        estimated_diy_cost_usd: pricingEngine.estimateDiyCost(r),
+        quality_score: pricingEngine.qualityScore01(r),
         verdict: pricingEngine.calculateVerdict(r) || null
       }
     })),
@@ -6271,6 +6319,28 @@ app.get('/knowledge/:id', async (c) => {
         contributor: rw,
         contributorBps: Math.round(CONTRIBUTOR_SHARE * 10000),
       };
+    }
+  }
+
+  // R-01 LAUNCH INVARIANT (REFUSE arm): money-transmission requires that no
+  // unassented external Builder Share is ever RECEIVED on the custodial rail.
+  // BEFORE any x402 402-challenge is issued / any payment is requested or settled,
+  // identify the contributor: if this learning has a REAL external Builder
+  // (contributor_account_id present AND its wallet is not the platform wallet) whose
+  // §5.10 payee-agency is NOT yet in force, REFUSE the unlock (409) so we never take
+  // third-party funds without the agency defense. Platform-owned learnings (no
+  // external account, or the platform wallet itself) are ALWAYS unlockable — gating
+  // them would kill the seed catalog. Router-mode settles the share straight to the
+  // Builder's own verified wallet on-chain (no custodial receipt), so it is exempt.
+  if (!routerCtx && !isPlatformContributor(learning, WALLET)) {
+    const contribAccount = learning.contributor_account_id
+      ? (loadAccounts()[learning.contributor_account_id] || null)
+      : null;
+    if (!isPayeeAgencyInForce(contribAccount)) {
+      return c.json({
+        error: "This learning's contributor has not completed onboarding and it is temporarily unavailable for unlock",
+        code: 'CONTRIBUTOR_NOT_ONBOARDED',
+      }, 409);
     }
   }
 
@@ -7024,6 +7094,13 @@ app.post('/withdraw', async (c) => {
   // linked account has given no assent — hasAcceptedCurrentTos(undefined) is false,
   // so it blocks. Never settle the agency-covered payout without an account + assent.
   const withdrawAccount = Object.values(loadAccounts()).find(a => a && a.wallet === walletLower);
+  // SEC-2: this wallet-signed rail bypasses requireAuth, so it never passes the
+  // session/API-key chokepoint that blocks suspended accounts (lib/accounts.js). A
+  // suspended (disabled_at) Builder must not be able to move funds off the platform
+  // via their still-verified wallet — mirror the same 403 the other routes return.
+  if (withdrawAccount && withdrawAccount.disabled_at) {
+    return c.json({ error: 'Account suspended' }, 403);
+  }
   if (!hasAcceptedCurrentTos(withdrawAccount)) {
     return termsNotAcceptedResponse(c);
   }

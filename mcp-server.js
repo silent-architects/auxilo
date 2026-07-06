@@ -203,7 +203,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_withdraw',
-      description: 'Request withdrawal of earned USDC. Requires a valid cryptographic signature of: "auxilo-withdraw-{wallet}-{amount}-{timestamp}".',
+      description: 'Request withdrawal of earned USDC. Requires a valid cryptographic signature of: "auxilo-withdraw-{wallet}-{amount}-{timestamp}". NOTE: withdrawals are TEMPORARILY PAUSED during the non-custodial settlement migration — this call currently returns HTTP 503 with code "withdraw_paused_noncustodial_migration". Earned balances are safe and become payable on the new on-chain rail; there is nothing to retry until the pause lifts.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -238,25 +238,25 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_link_wallet',
-      description: 'Link a verified wallet address to your Auxilo account. Requires session JWT (from magic link login) and the wallet must have been previously verified via auxilo_verify_wallet. One wallet per account. Required to withdraw earnings. NOTE: you must first accept the current Terms via auxilo_accept_terms — linking a payout wallet triggers the §5.10 payment-collection agency and returns 403 TERMS_NOT_ACCEPTED until acceptance is on file.',
+      description: 'Link a verified wallet address to your Auxilo account. Authenticates with your configured API key automatically, or pass a session_token (JWT from magic link login). The wallet must have been previously verified via auxilo_verify_wallet. One wallet per account. Required to withdraw earnings. NOTE: you must first accept the current Terms via auxilo_accept_terms — linking a payout wallet triggers the §5.10 payment-collection agency and returns 403 TERMS_NOT_ACCEPTED until acceptance is on file.',
       inputSchema: {
         type: 'object',
         properties: {
           wallet: { type: 'string', description: 'Verified wallet address (0x...) to link to your account' },
-          session_token: { type: 'string', description: 'JWT session token from /auth/verify (Bearer token)' },
+          session_token: { type: 'string', description: 'Optional JWT session token from /auth/verify. If omitted, your configured API key authenticates the account.' },
         },
-        required: ['wallet', 'session_token'],
+        required: ['wallet'],
       },
     },
     {
       name: 'auxilo_account_earnings',
-      description: 'View earnings for your authenticated Auxilo account. Requires session JWT. Returns total gross, contributor share, pending balance, total withdrawn, and whether withdrawal is available (can_withdraw). Free.',
+      description: 'View earnings for your authenticated Auxilo account. Authenticates with your configured API key automatically, or pass a session_token (JWT). Returns total gross, contributor share, pending balance, total withdrawn, and whether withdrawal is available (can_withdraw). Free.',
       inputSchema: {
         type: 'object',
         properties: {
-          session_token: { type: 'string', description: 'JWT session token from /auth/verify (Bearer token)' },
+          session_token: { type: 'string', description: 'Optional JWT session token from /auth/verify. If omitted, your configured API key authenticates the account.' },
         },
-        required: ['session_token'],
+        required: [],
       },
     },
     {
@@ -454,7 +454,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           headers: baseHeaders(),
           body: JSON.stringify(args)
         });
-        return text(await resp.json());
+        const data = await resp.json();
+        // R-01: the custodial USDC rail is paused during the non-custodial
+        // migration and returns 503 withdraw_paused_noncustodial_migration.
+        // Surface that as a plain, human-legible note instead of a raw error
+        // blob so the agent doesn't treat it as a transient failure to retry.
+        if (resp.status === 503 && data && data.code === 'withdraw_paused_noncustodial_migration') {
+          return text({
+            status: 'paused',
+            message: 'Withdrawals are temporarily paused while Auxilo migrates to direct on-chain (non-custodial) settlement. Your earned balance is safe and will be payable on the new rail once the migration completes. This is expected — do not retry; nothing is wrong with your account or signature.',
+            server_response: data,
+          });
+        }
+        return text(data);
       }
 
       case 'auxilo_settlements': {
@@ -468,21 +480,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'auxilo_link_wallet': {
+        // UX-N2: authenticate with a session JWT when provided, otherwise fall
+        // back to the configured API key that baseHeaders() attaches — same
+        // idiom as auxilo_accept_terms. Only set the Authorization header when a
+        // token is actually present (avoids sending "Bearer undefined").
         const resp = await fetch(`${AUXILO_BASE}/account/link-wallet`, {
           method: 'POST',
-          headers: baseHeaders({
-            'Authorization': `Bearer ${args.session_token}`,
-          }),
+          headers: baseHeaders(
+            args.session_token ? { 'Authorization': `Bearer ${args.session_token}` } : {}
+          ),
           body: JSON.stringify({ wallet: args.wallet }),
         });
         return text(await resp.json());
       }
 
       case 'auxilo_account_earnings': {
+        // UX-N2: session JWT when provided, else the configured API key via
+        // baseHeaders() — mirrors auxilo_accept_terms.
         const resp = await fetch(`${AUXILO_BASE}/account/earnings`, {
-          headers: baseHeaders({
-            'Authorization': `Bearer ${args.session_token}`,
-          }),
+          headers: baseHeaders(
+            args.session_token ? { 'Authorization': `Bearer ${args.session_token}` } : {}
+          ),
         });
         return text(await resp.json());
       }
@@ -616,7 +634,7 @@ function text(obj) {
 // LW-3(a): export the pure helpers so they can be unit-tested without starting
 // the stdio transport. When this file is required (not run directly), stop here
 // before the CLI dispatch and MCP startup below.
-module.exports = { fenceUnlockResult, UNTRUSTED_CONTENT_ADVISORY };
+module.exports = { fenceUnlockResult, UNTRUSTED_CONTENT_ADVISORY, baseHeaders };
 if (require.main !== module) {
   return;
 }

@@ -1,4 +1,11 @@
 #!/bin/bash
+# ============================================================================
+# DEPRECATED — Conway/PM2 relic, DO NOT USE. Deploy is via Fly; see README.
+# ----------------------------------------------------------------------------
+# This starts the server under PM2 on a Conway VM (cd /app, ~/.conway/wallet.json,
+# ecosystem.config.js). Production runs on Fly.io from the Dockerfile
+# (tini → docker-entrypoint.sh → su-exec → node server.js). Kept for history only.
+# ============================================================================
 # ─── Auxilo Production Start Script ──────────────────────────────────
 # Starts Auxilo server + health monitor via PM2.
 # All env vars are exported here so PM2 inherits them.

@@ -1,5 +1,13 @@
 #!/usr/bin/env node
 /**
+ * ============================================================================
+ * DEPRECATED — Conway relic, DO NOT USE. Deploy is via Fly; see README.
+ * ----------------------------------------------------------------------------
+ * This script targets a dead Conway sandbox, deploys the WRONG branch (main),
+ * and inlines SESSION_SECRET into a raw shell string (secret-in-argv leak).
+ * Production runs on Fly.io: `fly deploy` (Dockerfile). Kept for history only.
+ * ============================================================================
+ *
  * deploy.js — Push Phase 0.1 (accounts system) to Conway VM
  *
  * Usage:

@@ -1,6 +1,6 @@
 # Auxilo — Subprocessors
 
-*Last updated: 2026-06-10*
+*Last updated: 2026-07-06*
 
 This page lists the third-party service providers that Auxilo engages as subprocessors for the processing of Builder and Consumer data. It is maintained as a living document and updated whenever a subprocessor is added, removed, or materially changed.
 
@@ -29,7 +29,8 @@ This page lists the third-party service providers that Auxilo engages as subproc
 | Date | Change | Reviewer |
 |---|---|---|
 | 2026-04-14 | Initial publication with P2.1a launch | GOV-2 |
-| 2026-06-10 | Added Resend, Inc. — magic-link email delivery (LW-1) | GOV-2 (pending sign-off) |
+| 2026-06-10 | Added Resend, Inc. — magic-link email delivery (LW-1) | GOV-2 |
+| 2026-07-06 | Confirmed Resend, Inc. as the operative transactional email subprocessor (verified wired in `lib/email.js` + `lib/ops-alert.js`); aligned with Privacy Policy §3.8 | GOV-2 |
 
 ---
 

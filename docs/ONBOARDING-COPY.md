@@ -97,22 +97,24 @@ Review the Terms → · Accept and continue →
 
 ---
 
-## 4. Connect Wallet
+## 4. Get Paid
 
 **Headline**
-Link your wallet. Earnings settle in USDC.
+Link your payout method. Withdraw when you're ready.
 
 **Body**
-Auxilo uses x402 protocol micropayments. Earnings settle to your wallet in USDC on the Base network. You need a Base-compatible wallet to receive payouts.
+Auxilo uses x402 protocol micropayments to collect earnings on your behalf. Stripe payouts are live today; USDC withdrawals to a Base wallet are rolling out. You can link a Base-compatible wallet now so it's ready when USDC withdrawals open.
 
-**Setup:**
+**Setup (wallet):**
 1. Connect a Base wallet (Coinbase Wallet, MetaMask, or any EVM-compatible wallet on Base).
 2. Sign a verification message (EIP-712 structured signing — no transaction, no gas fee).
-3. Your wallet is now linked. Earnings route there automatically.
+3. Your wallet is now linked and verified for when USDC withdrawals open.
 
-No minimum payout threshold. Settlements happen on the protocol layer — not batched, not delayed.
+Withdrawal minimums and timing depend on the payout method you choose; the dashboard shows the current terms for each. Wallet linking requires accepting the current Terms first (see §3.5).
 
 If you don't have a Base wallet yet, [Coinbase Wallet](https://www.coinbase.com/wallet) is the fastest path. Create a wallet, switch to Base network, and you're ready.
+
+> Internal note: Keep this aligned with the live payout posture — Stripe live, USDC withdrawals gated by R-01. Do not restore "settlements happen on the protocol layer — not batched, not delayed" or "no minimum payout threshold" until USDC withdrawals are live and those terms are confirmed against the settlement code.
 
 **CTA**
 Connect Wallet →
