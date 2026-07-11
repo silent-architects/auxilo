@@ -1,8 +1,8 @@
 # Terms of Service
 
 **Effective Date: March 17, 2026**
-**Last Updated: [[DEPLOY-DATE]]**
-**Current Amendment: `2026-07-04-payee-agency-a1` — Payment-Collection Agency (Section 5.10), effective [[DEPLOY-DATE]].** The payment-collection agency in Section 5.10 was added by this amendment and applies only on and after its effective date shown above ([[DEPLOY-DATE]]); it does not apply retroactively to the original March 17, 2026 Effective Date or to any Builder Share received before the amendment's effective date.
+**Last Updated: July 11, 2026**
+**Current Amendment: `2026-07-04-payee-agency-a1` — Payment-Collection Agency (Section 5.10), effective July 11, 2026.** The payment-collection agency in Section 5.10 was added by this amendment and applies only on and after its effective date shown above (July 11, 2026); it does not apply retroactively to the original March 17, 2026 Effective Date or to any Builder Share received before the amendment's effective date.
 
 ---
 
@@ -230,9 +230,9 @@ A Builder may change trigger modes or disable Autonomous Extraction at any time 
 
 #### 5.10.1 Appointment and Scope
 
-By accepting these Terms and by submitting any Learning for which you may earn a revenue share, you ("Builder") appoint Auxilo — [[LEGAL-ENTITY — V-1: confirm operating entity, type, and state of organization from charter/formation docs before deploy; per counsel brief candidates are "Slam Agency, Inc., a [state] corporation d/b/a Auxilo" (interim) or "Auxilo LLC, a Missouri limited liability company" (post-formation)]] ("Auxilo") — as your limited agent for the sole and exclusive purpose of receiving, on your behalf, payment of the Builder Share (as defined in Section 5.4) owed to you by Consumers who unlock your Learnings.
+By accepting these Terms and by submitting any Learning for which you may earn a revenue share, you ("Builder") appoint Auxilo — Auxilo, LLC, a Missouri limited liability company ("Auxilo") — as your limited agent for the sole and exclusive purpose of receiving, on your behalf, payment of the Builder Share (as defined in Section 5.4) owed to you by Consumers who unlock your Learnings.
 
-This appointment takes effect on the effective date of the amendment that introduced this Section 5.10 (`2026-07-04-payee-agency-a1`, effective [[DEPLOY-DATE]]) or, if later, on the date you accept these Terms as so amended. It applies only to Builder Share amounts received on or after that date and does not apply retroactively to any amount received before it.
+This appointment takes effect on the effective date of the amendment that introduced this Section 5.10 (`2026-07-04-payee-agency-a1`, effective July 11, 2026) or, if later, on the date you accept these Terms as so amended. It applies only to Builder Share amounts received on or after that date and does not apply retroactively to any amount received before it.
 
 This appointment is limited to the collection and receipt of the Builder Share. It does **not** authorize Auxilo to act as your agent for any other purpose, and specifically does not authorize Auxilo to:
 
@@ -685,4 +685,4 @@ Section headings are for convenience and reference only and shall not affect the
 
 ---
 
-*These Terms of Service were last updated on [[DEPLOY-DATE]]. Current amendment: 2026-07-04-payee-agency-a1.*
+*These Terms of Service were last updated on July 11, 2026. Current amendment: 2026-07-04-payee-agency-a1.*

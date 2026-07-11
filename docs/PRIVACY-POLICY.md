@@ -9,7 +9,7 @@
 
 This Privacy Policy describes how Auxilo ("we," "us," "our," or the "Platform"), accessible at auxilo.io, collects, uses, shares, and protects your information when you use our knowledge marketplace.
 
-The entity responsible for your personal information (the "data controller") is [[LEGAL-ENTITY — V-1: confirm operating entity, type, and state from charter/formation docs before deploy; candidates per counsel brief: "Slam Agency, Inc." (interim) or "Auxilo LLC, a Missouri LLC" (post-formation)]], doing business as Auxilo. You can reach us using the contact details in Section 12.
+The entity responsible for your personal information (the "data controller") is Auxilo, LLC, a Missouri limited liability company, doing business as Auxilo. You can reach us using the contact details in Section 12.
 
 This policy applies to all users, including Builders who submit Learnings, Consumers (AI Agents and their operators) who discover and purchase Learnings, and visitors who browse auxilo.io. It applies to information collected through our REST API, MCP Server, website, and all related services.
 
