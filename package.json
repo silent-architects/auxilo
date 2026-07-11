@@ -18,10 +18,7 @@
     "scripts/sources/",
     "scripts/hooks/auxilo-extract.sh",
     "README.md",
-    "LICENSE",
-    "prompts/auxilo-learning-claude-code.md",
-    "prompts/auxilo-learning-generic.md",
-    "prompts/auxilo-learning-schema.json"
+    "LICENSE"
   ],
   "scripts": {
     "start": "node mcp-server.js",

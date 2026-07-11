@@ -326,3 +326,36 @@ describe('8. FB-4: search quotes ONE price = the unlock charge', () => {
       'verdict must key off the resolved charge, not the stale $0.005 unlock_price');
   });
 });
+
+// ─── 9. CP-1: recurring linked-wallet re-screen on SDN refresh (AML G-1) ─────────
+
+describe('9. CP-1 linked-wallet re-screen', () => {
+  it('rescreenLinkedWallets suspends on a hit and persists via saveAccounts', () => {
+    const h = sliceHandler('function rescreenLinkedWallets', 1300);
+    assert.ok(h.includes('checkOFAC(account.wallet)'), 'must re-check every linked wallet');
+    assert.ok(h.includes("account.disabled_reason = 'ofac_rescreen_hit'"),
+      'a hit must suspend with a machine-readable reason');
+    assert.ok(h.includes('saveAccounts(accounts)'), 'suspension must be persisted');
+    assert.ok(h.includes("logOFACBlock(account.wallet, 'rescreen-sweep')"),
+      'every NEW hit must be written to the OFAC block log');
+    assert.ok(h.includes('if (account.disabled_at) { results.alreadySuspended++; continue; }'),
+      'already-suspended accounts keep their first-hit disabled_at and do not re-alert/re-log each cycle');
+  });
+
+  it('the sweep runs inside the refresh success path, error-contained', () => {
+    const h = sliceHandler('async function refreshOFACList', 3200);
+    const sweepAt = h.indexOf('rescreenLinkedWallets()');
+    const successLogAt = h.indexOf('SDN list refreshed');
+    assert.ok(sweepAt !== -1, 'refresh must trigger the re-screen sweep');
+    assert.ok(successLogAt !== -1 && sweepAt > successLogAt,
+      'sweep runs only after a successful list refresh (never against a stale/failed load)');
+    assert.ok(h.includes('Re-screen sweep failed (refresh unaffected)'),
+      'a sweep failure must be contained and never break the refresh cycle');
+  });
+
+  it('a hit alerts ops with the manual-review requirement', () => {
+    const h = sliceHandler('async function refreshOFACList', 3200);
+    assert.ok(h.includes('Linked-wallet re-screen HIT'), 'ops alert on any hit');
+    assert.ok(h.includes('manual compliance review'), 'release path is manual review, never automatic');
+  });
+});

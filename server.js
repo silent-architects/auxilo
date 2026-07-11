@@ -1857,6 +1857,29 @@ async function refreshOFACList() {
     }
 
     console.log(`[OFAC] SDN list refreshed: ${addresses.size} total addresses (sdn.csv: ${sdnAddresses.size}, alt.csv: ${altAddresses.size})`);
+
+    // CP-1 (AML-PROGRAM G-1): re-screen every account-linked wallet against the
+    // fresh list. Contained: a sweep failure must never break the refresh cycle
+    // that feeds point-of-transaction screening.
+    try {
+      const sweep = rescreenLinkedWallets();
+      if (sweep.hits > 0) {
+        console.error(`[OFAC] [CP-1] Re-screen HIT: ${sweep.hits} linked wallet(s) newly sanctioned; suspended account(s): ${sweep.suspended.join(', ')}`);
+        sendOpsAlert(
+          '[Auxilo][OFAC] Linked-wallet re-screen HIT — account(s) suspended',
+          `The 24h SDN refresh matched ${sweep.hits} account-linked wallet(s) not previously suspended. ` +
+          `Newly suspended: ${sweep.suspended.join(', ')}. Withdrawals and all authed routes are blocked ` +
+          `for these accounts (disabled_at). Release requires manual compliance review per docs/AML-PROGRAM.md.`
+        ).catch(() => {});
+      } else {
+        const stillNote = sweep.alreadySuspended > 0
+          ? ` (${sweep.alreadySuspended} previously-suspended sanctioned wallet(s) remain frozen)`
+          : '';
+        console.log(`[OFAC] [CP-1] Re-screen clean: ${sweep.screened} linked wallet(s) checked against the fresh list${stillNote}.`);
+      }
+    } catch (sweepErr) {
+      console.error(`[OFAC] [CP-1] Re-screen sweep failed (refresh unaffected): ${sweepErr.message}`);
+    }
   } catch (err) {
     ofacState.consecutiveFailures++;
     ofacState.lastRefreshSuccess = false;
@@ -1902,6 +1925,38 @@ function logOFACBlock(walletAddress, endpoint) {
   }
   // Also log to stdout for PM2 capture
   console.warn(`[OFAC] Blocked sanctioned wallet on ${endpoint}`);
+}
+
+// ─── CP-1: Recurring linked-wallet re-screen (AML-PROGRAM §G-1) ──────────────
+// A wallet screened clean at link time can appear on a LATER SDN publication.
+// After every successful list refresh, re-screen every account-linked wallet and
+// fail closed on a hit: suspend the account. disabled_at blocks every authed
+// route — requireAuth (lib/accounts.js:529), requireSessionOrApiKey (:594), and
+// the wallet-signed /withdraw suspension check — so both payout rails and all
+// account mutation stop immediately. Suspension is one-way here: a later SDN
+// delisting does NOT auto-clear the account; release requires manual compliance
+// review per docs/AML-PROGRAM.md (screening history must be preserved).
+function rescreenLinkedWallets() {
+  const results = { screened: 0, hits: 0, suspended: [], alreadySuspended: 0 };
+  const accounts = loadAccounts();
+  let dirty = false;
+  for (const [accountId, account] of Object.entries(accounts)) {
+    if (!account || !account.wallet) continue;
+    results.screened++;
+    if (!checkOFAC(account.wallet)) continue;
+    // Already-suspended accounts stay suspended (first-hit time preserved) but do
+    // NOT re-alert or re-log every cycle — a persistent sanctions hit would page
+    // ops daily and re-write the block log for an account that is already frozen.
+    if (account.disabled_at) { results.alreadySuspended++; continue; }
+    results.hits++;
+    results.suspended.push(accountId);
+    logOFACBlock(account.wallet, 'rescreen-sweep');
+    account.disabled_at = new Date().toISOString();
+    account.disabled_reason = 'ofac_rescreen_hit';
+    dirty = true;
+  }
+  if (dirty) saveAccounts(accounts);
+  return results;
 }
 
 // Load SDN list at startup (non-blocking, does not prevent server start).
