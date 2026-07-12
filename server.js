@@ -58,6 +58,8 @@ const {
 } = require('./lib/earnings.js');
 const { acquireEarningsLock } = require('./lib/earnings-lock.js');
 const { sendOpsAlert } = require('./lib/ops-alert.js');
+// CP-4 (AML-PROGRAM §4.3 G-2): IP-geolocation embargo screen (pure decision engine).
+const geoEmbargo = require('./lib/geo-embargo.js');
 
 // ─── S21-4: SESSION_SECRET Startup Validation ──────────────────────────────
 // If SESSION_SECRET is unset in production, sessions use an ephemeral key and
@@ -1718,6 +1720,10 @@ const OFAC_MAX_REDIRECTS = 5;
 // every hop, blocking a MITM/upstream 30x to an internal address.
 const OFAC_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const OFAC_BLOCKS_LOG = path.join(DATA_DIR, 'ofac-blocks.log');
+// CP-4 (AML-PROGRAM §4.3 G-2): geo-embargo point-of-transaction block ledger.
+// Parallel to the OFAC block log; 5-year retention per AML-PROGRAM §8. In prod
+// DATA_DIR is a persistent volume; data/ is gitignored so logs never commit.
+const GEO_BLOCKS_LOG = path.join(DATA_DIR, 'geo-blocks.log');
 
 const ofacState = {
   sanctionedAddresses: new Set(),
@@ -1991,6 +1997,85 @@ function rescreenLinkedWallets() {
   }
   if (dirty) saveAccounts(accounts);
   return results;
+}
+
+// ─── CP-4: IP-geolocation embargo screen (AML-PROGRAM §4.3 G-2, E-1/E-2) ─────
+// Secondary, defense-in-depth control that screens the request's Cloudflare-
+// resolved country (cf-ipcountry header — no network lookup) against the
+// comprehensively OFAC-embargoed jurisdictions in lib/geo-embargo.js EMBARGO.
+// Enforced at the two money-movement points G-2 names: builder wallet-link (E-1)
+// and x402 buyer settle (E-2). The PRIMARY strict-liability control is the
+// fail-closed OFAC SDN wallet screen (checkOFAC) — this does NOT replace it.
+//
+// Fail-mode (specified verbatim by AML-PROGRAM §4.3 G-2):
+//   • POSITIVE embargo match → FAIL CLOSED: block + log + ops-alert (CP-1 shape).
+//   • MISSING geo signal      → FAIL OPEN: advisory-log only, do NOT block. Geo
+//     is advisory, not the primary SDN control; hard-blocking every request that
+//     lacks cf-ipcountry (local/CI/direct-origin) would take the whole service
+//     down for a SECONDARY screen. The OFAC wallet screen still runs fail-closed.
+// INERT: non-embargoed traffic reads one header + one Set lookup, then proceeds
+// unchanged. No behavior change off the embargoed path.
+
+// Append a geo screen event to data/geo-blocks.log. Mirrors logOFACBlock: never
+// throws (a logging failure must not break a request), also emits to stdout.
+function logGeoBlock(detail) {
+  const entry = `${new Date().toISOString()} | ${detail.result} | country=${detail.country || '-'} | region=${detail.region || '-'} | level=${detail.level || '-'} | endpoint=${detail.endpoint}\n`;
+  try {
+    fs.appendFileSync(GEO_BLOCKS_LOG, entry);
+  } catch (err) {
+    console.error(`[GEO] Failed to write geo block log: ${err.message}`);
+  }
+}
+
+// Point-of-transaction geo gate. Returns a 403 Response to RETURN from the
+// caller on a positive embargo match; returns null (proceed) when allowed OR
+// when the geo signal is missing (advisory fail-open). Never throws.
+function geoEmbargoGate(c, endpoint) {
+  let decision;
+  try {
+    const country = geoEmbargo.getRequestCountry(c);
+    const region = geoEmbargo.getRequestRegion(c);
+    decision = geoEmbargo.screenGeo(country, region);
+  } catch (err) {
+    // A screen failure must never break a legitimate request for a secondary
+    // advisory control. Treat as fail-open and record the anomaly.
+    console.error(`[GEO] [CP-4] screen error on ${endpoint} (failing open): ${err.message}`);
+    return null;
+  }
+
+  if (!decision.embargoed) {
+    // Only the missing-signal case leaves an advisory trail; an allowed
+    // present-signal is the hot path and stays silent.
+    if (decision.signal === 'missing') {
+      logGeoBlock({ result: 'ADVISORY-NO-GEO', endpoint });
+    }
+    return null;
+  }
+
+  // POSITIVE embargo match at a money-movement point — fail closed.
+  logGeoBlock({
+    result: 'BLOCKED',
+    country: decision.country,
+    region: decision.region,
+    level: decision.level,
+    endpoint,
+  });
+  console.error(`[GEO] [CP-4] Embargoed-jurisdiction block on ${endpoint}: country=${decision.country}${decision.level === 'region' ? ` region=${decision.region}` : ''}`);
+  // Match the CP-1 alert shape: fire-and-forget, never await, never let a
+  // delivery failure surface into the request path.
+  sendOpsAlert(
+    '[Auxilo][GEO] Embargoed-jurisdiction request blocked at money-movement point',
+    `A request resolving to an OFAC-embargoed jurisdiction was blocked at ${endpoint}. ` +
+    `country=${decision.country}${decision.region ? ` region=${decision.region}` : ''} (level=${decision.level}). ` +
+    `No funds moved and no wallet was linked. Logged to data/geo-blocks.log. ` +
+    `Comprehensive-country OFAC control per docs/AML-PROGRAM.md §4.3 G-2 (CP-4). ` +
+    `Region-level UA matches are best-effort — see the region-limitation note in lib/geo-embargo.js.`
+  ).catch(() => {});
+
+  return c.json(
+    { error: 'Transaction blocked by geographic sanctions compliance', code: 'GEO_EMBARGOED' },
+    403
+  );
 }
 
 // Load SDN list at startup (non-blocking, does not prevent server start).
@@ -2317,6 +2402,12 @@ function x402Gate(price_usd, description) {
       });
     }
 
+    // CP-4 (AML-PROGRAM §4.3 G-2 / E-2): screen the buyer's geo before settling.
+    // A payment header is present here (settlement is imminent), so this fires
+    // only at the money-movement moment. Fail-open on missing geo (advisory).
+    const geoBuyerBlock = geoEmbargoGate(c, `${new URL(c.req.url).pathname} (x402 buyer)`);
+    if (geoBuyerBlock) return geoBuyerBlock;
+
     const { verified, rateLimited, replayBlocked, settleFailed } = await _verifyPayment(
       paymentHeader, price_usd, new URL(c.req.url).pathname, amount
     );
@@ -2432,6 +2523,11 @@ async function verifyPaymentOrReject(c, price_usd, description, routerCtx = null
       }]
     });
   }
+
+  // CP-4 (AML-PROGRAM §4.3 G-2 / E-2): screen the buyer's geo before settling
+  // (covers the router-mode / unlock path). Fail-open on missing geo (advisory).
+  const geoBuyerBlock = geoEmbargoGate(c, `${new URL(c.req.url).pathname} (x402 buyer)`);
+  if (geoBuyerBlock) return geoBuyerBlock;
 
   const { verified, rateLimited, replayBlocked, settleFailed, routerSettlement } = await _verifyPayment(
     paymentHeader, price_usd, new URL(c.req.url).pathname, amount, routerCtx
@@ -3950,6 +4046,11 @@ app.post('/account/link-wallet', requireSessionOrApiKey(), async (c) => {
     logOFACBlock(wallet, '/account/link-wallet');
     return c.json({ error: 'Transaction blocked by sanctions compliance' }, 403);
   }
+
+  // CP-4 (AML-PROGRAM §4.3 G-2 / E-1): block embargoed-jurisdiction builders at
+  // the wallet-link hook before any link. Fail-open on missing geo (advisory).
+  const geoLinkBlock = geoEmbargoGate(c, '/account/link-wallet');
+  if (geoLinkBlock) return geoLinkBlock;
 
   // R-01 / red-team P0-3: linking a payout wallet is the agency-triggering step
   // (§5.10). Block it until the Builder has affirmatively accepted the current
