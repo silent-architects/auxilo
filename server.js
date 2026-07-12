@@ -559,7 +559,17 @@ let learnings = loadDataFile(LEARNINGS_FILE, [], true);     // CRITICAL
 let earnings  = loadDataFile(EARNINGS_FILE, {}, true);      // CRITICAL
 let accounts  = loadDataFile(ACCOUNTS_FILE, {}, true);      // CRITICAL
 let verifiedWallets = loadDataFile(VERIFIED_WALLETS_FILE, {}, false); // NON-CRITICAL
-for (const pw of PLATFORM_WALLETS) verifiedWallets[pw.toLowerCase()] = true; // Auto-verify platform wallets (current + legacy)
+// Auto-verify the LIVE platform wallet ONLY (red-team rotation P1). verifiedWallets is a
+// KEY-CONTROL trust set (router-eligibility, link-wallet, withdraw) — the retired legacy
+// wallet must NOT sit in it: (a) router-eligible legacy seeds would settle on-chain to the
+// retired address, violating Resolution 5's no-Builder-settlement-to-legacy covenant;
+// (b) linkWallet trusts global membership, so a verified legacy would let any ToS-accepted
+// account link it and drain migrated seed balances. Legacy stays recognized ONLY as
+// platform IDENTITY via PLATFORM_WALLETS (the refuse gate), never as key-control-verified.
+verifiedWallets[WALLET.toLowerCase()] = true;
+// Belt-and-suspenders: a prior deploy's loop may have PERSISTED legacy into the store —
+// strip retired wallets so the file-backed set converges to live-only.
+for (const lw of LEGACY_PLATFORM_WALLETS) delete verifiedWallets[lw.toLowerCase()];
 
 // walletChallenges removed — nonces are now in-memory via lib/eip712.js (SPEC-A3)
 
@@ -929,6 +939,19 @@ const {
   WALLET_ADDRESS,
   ERC20_ABI,
 } = require('./lib/tx-manager.js');
+
+// Rotation invariant (red-team P2): the platform wallet has TWO sources of truth —
+// the advertised WALLET const (every 402 payTo, agent.json, manifests) and the
+// address DERIVED from the WALLET_PRIVATE_KEY secret (payment verification + payout
+// FROM address). A staged-secret/code-image mismatch (e.g. `fly secrets deploy`
+// alone, or redeploying an old image with a new key staged) would silently
+// advertise an address whose key we don't run — payments verify against the wrong
+// address and fail closed, but SILENTLY. Refuse to boot split-brained instead.
+if (WALLET.toLowerCase() !== String(WALLET_ADDRESS).toLowerCase()) {
+  console.error(`FATAL: advertised WALLET ${WALLET} != key-derived address ${WALLET_ADDRESS} — ` +
+    'the WALLET const and the WALLET_PRIVATE_KEY secret must rotate together (see papering v0.3 sequencing note).');
+  process.exit(1);
+}
 
 // R-01 non-custodial settlement (contracts/README.md rewire steps 1–3).
 // Inert unless the X402_ROUTER_ADDRESS env flag is set — with it unset, every
