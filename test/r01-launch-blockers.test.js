@@ -38,8 +38,13 @@ function sliceHandler(marker, span = 4500) {
   return SERVER_SRC.slice(i, i + span);
 }
 
-// The platform wallet (server.js:207). Seed learnings carry this as contributor_wallet.
-const PLATFORM_WALLET = '0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6';
+// The platform wallets (server.js WALLET/PLATFORM_WALLETS). The 2026-07-12 LLC
+// rotation made the Auxilo, LLC wallet the receiving address; seed learnings still
+// carry the retired pre-LLC wallet as contributor_wallet, so identity checks must
+// recognize BOTH (or the refuse gate 409s the platform-seed catalog).
+const PLATFORM_WALLET = '0xA19Cf92cc1daCf742f0E50b4128cAD3A86A81EC4';        // current — Auxilo, LLC
+const LEGACY_PLATFORM_WALLET = '0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6'; // retired pre-LLC; seeds carry it
+const PLATFORM_WALLETS = [PLATFORM_WALLET, LEGACY_PLATFORM_WALLET];
 
 // ─── 1. Stripe payout kill-switch (R01-MT-02) ───────────────────────────────────
 
@@ -96,6 +101,25 @@ describe('2. isPlatformContributor predicate (lib/accounts.js)', () => {
   it('EXTERNAL: an external account with no wallet is NOT platform-owned (gates on assent)', () => {
     assert.equal(isPlatformContributor({ contributor_account_id: 'acc_ext' }, PLATFORM_WALLET), false);
   });
+
+  // ── 2026-07-12 LLC wallet rotation: the predicate accepts a SET and must keep
+  //    recognizing legacy-wallet seed learnings as platform, else the refuse gate
+  //    409s the existing catalog the moment the receiving address rotates.
+  it('ROTATION: legacy-wallet seed learning is still platform-owned under the PLATFORM_WALLETS set', () => {
+    assert.equal(isPlatformContributor({ contributor_wallet: LEGACY_PLATFORM_WALLET }, PLATFORM_WALLETS), true);
+  });
+  it('ROTATION: new-wallet learning is platform-owned under the set', () => {
+    assert.equal(isPlatformContributor({ contributor_wallet: PLATFORM_WALLET }, PLATFORM_WALLETS), true);
+  });
+  it('ROTATION: an external wallet is still refused under the set', () => {
+    assert.equal(isPlatformContributor({ contributor_wallet: '0xdead000000000000000000000000000000000001' }, PLATFORM_WALLETS), false);
+  });
+  it('ROTATION: server.js passes the PLATFORM_WALLETS set (not the single WALLET) to the refuse gate', () => {
+    assert.ok(SERVER_SRC.includes('isPlatformContributor(learning, PLATFORM_WALLETS)'),
+      'the refuse gate must consult the set so legacy seeds stay unlockable');
+    assert.ok(/const PLATFORM_WALLETS = \[WALLET, \.\.\.LEGACY_PLATFORM_WALLETS\]/.test(SERVER_SRC),
+      'PLATFORM_WALLETS must be the current WALLET plus the legacy list');
+  });
 });
 
 describe('2. refuse-at-unlock gate is wired BEFORE payment (server.js)', () => {
@@ -108,8 +132,8 @@ describe('2. refuse-at-unlock gate is wired BEFORE payment (server.js)', () => {
   });
 
   it('the refusal consults isPlatformContributor + isPayeeAgencyInForce', () => {
-    assert.ok(h.includes('isPlatformContributor(learning, WALLET)'),
-      'platform-owned learnings must be exempt (never gated)');
+    assert.ok(h.includes('isPlatformContributor(learning, PLATFORM_WALLETS)'),
+      'platform-owned learnings must be exempt (never gated) — post-rotation the gate consults the wallet SET');
     assert.ok(h.includes('isPayeeAgencyInForce(contribAccount)'),
       'external contributors gate on the §5.10 payee-agency being in force');
   });
@@ -125,7 +149,7 @@ describe('2. refuse-at-unlock gate is wired BEFORE payment (server.js)', () => {
   it('router-mode settlements (non-custodial, no receipt) are exempt from the gate', () => {
     // The gate is `if (!routerCtx && !isPlatformContributor(...))` — router mode
     // pays the builder on-chain directly, so no custodial receipt occurs.
-    assert.ok(/if \(!routerCtx && !isPlatformContributor\(learning, WALLET\)\)/.test(h),
+    assert.ok(/if \(!routerCtx && !isPlatformContributor\(learning, PLATFORM_WALLETS\)\)/.test(h),
       'the gate must be skipped when a router settlement will occur');
   });
 });

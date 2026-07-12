@@ -347,7 +347,7 @@ test('transfer path: with RECEIVE_ONLY off, no salt settles via settleAndSplitTr
 
 test('payment addressed to the platform wallet (not the router) is rejected', async () => {
   enableRouter();
-  const payload = makePayload({ auth: makeAuth({ to: '0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6' }) });
+  const payload = makePayload({ auth: makeAuth({ to: '0xA19Cf92cc1daCf742f0E50b4128cAD3A86A81EC4' }) });
   const { deps, calls } = makeDeps();
   const r = await settle({ payload, deps });
   assert.equal(r.reason, 'wrong_payto');

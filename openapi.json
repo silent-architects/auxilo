@@ -1367,7 +1367,7 @@
                         "schema": {
                             "type": "string"
                         },
-                        "example": "0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6"
+                        "example": "0xA19Cf92cc1daCf742f0E50b4128cAD3A86A81EC4"
                     }
                 ],
                 "responses": {

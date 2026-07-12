@@ -35,7 +35,9 @@ deploy, `readback` after). The script exits non-zero on any hard failure.
 
 - [ ] Generate a **brand-new** key used for nothing else (`cast wallet new`).
       It receives only Auxilo's platform fee. It must NOT be:
-  - the shared custodial payout wallet `0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6`,
+  - the shared custodial payout wallet `0xA19Cf92cc1daCf742f0E50b4128cAD3A86A81EC4`
+    (current — Auxilo, LLC, rotated 2026-07-12) or the retired pre-LLC wallet
+    `0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6`,
   - the settler key, or
   - any wallet with prior history/approvals.
 - [ ] Confirm you control it and have backed up the key (offline).

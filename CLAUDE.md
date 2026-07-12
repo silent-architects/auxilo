@@ -65,7 +65,7 @@ Call the `auxilo_contribute` MCP tool with:
 - `tags`: Array of lowercase-hyphenated keywords (3-8 tags)
 - `task_context`: One sentence describing what task produced this learning
 - `outcome`: success | partial | failure | workaround
-- `contributor_wallet`: `0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6`
+- `contributor_wallet`: `0xA19Cf92cc1daCf742f0E50b4128cAD3A86A81EC4`
 
 ### Timing
 

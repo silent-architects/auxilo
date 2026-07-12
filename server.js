@@ -204,7 +204,18 @@ app.use('*', async (c, next) => {
   }
 });
 
-const WALLET = '0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6';
+// The Company's receiving wallet (Auxilo, LLC — generated post-formation, zero
+// pre-LLC history; papering: DRAFT-LLC-wallet-resolution v0.3, private tree).
+// All x402 payTo/challenge sites and public manifests advertise THIS address.
+// Its key is Fly secret WALLET_PRIVATE_KEY (staged at rotation; applies at deploy).
+const WALLET = '0xA19Cf92cc1daCf742f0E50b4128cAD3A86A81EC4';
+// Pre-LLC platform wallet(s): retired as a payment destination, but existing
+// seed learnings carry it as contributor_wallet, so PLATFORM IDENTITY checks
+// (isPlatformContributor / the 409 CONTRIBUTOR_NOT_ONBOARDED refuse gate) must
+// keep recognizing it or the platform-seed catalog 409s. NEVER used as payTo.
+// Balance sweep + retirement ride the Slam-side Assignment (papering v0.3).
+const LEGACY_PLATFORM_WALLETS = ['0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6'];
+const PLATFORM_WALLETS = [WALLET, ...LEGACY_PLATFORM_WALLETS];
 const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 const FACILITATOR = 'https://facilitator.openx402.ai';
 // Single source of truth: read the published version from package.json once at
@@ -548,7 +559,7 @@ let learnings = loadDataFile(LEARNINGS_FILE, [], true);     // CRITICAL
 let earnings  = loadDataFile(EARNINGS_FILE, {}, true);      // CRITICAL
 let accounts  = loadDataFile(ACCOUNTS_FILE, {}, true);      // CRITICAL
 let verifiedWallets = loadDataFile(VERIFIED_WALLETS_FILE, {}, false); // NON-CRITICAL
-verifiedWallets[WALLET.toLowerCase()] = true; // Auto-verify platform wallet
+for (const pw of PLATFORM_WALLETS) verifiedWallets[pw.toLowerCase()] = true; // Auto-verify platform wallets (current + legacy)
 
 // walletChallenges removed — nonces are now in-memory via lib/eip712.js (SPEC-A3)
 
@@ -6409,7 +6420,7 @@ app.get('/knowledge/:id', async (c) => {
   // external account, or the platform wallet itself) are ALWAYS unlockable — gating
   // them would kill the seed catalog. Router-mode settles the share straight to the
   // Builder's own verified wallet on-chain (no custodial receipt), so it is exempt.
-  if (!routerCtx && !isPlatformContributor(learning, WALLET)) {
+  if (!routerCtx && !isPlatformContributor(learning, PLATFORM_WALLETS)) {
     const contribAccount = learning.contributor_account_id
       ? (loadAccounts()[learning.contributor_account_id] || null)
       : null;

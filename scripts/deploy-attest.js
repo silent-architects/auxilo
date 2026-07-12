@@ -43,8 +43,13 @@ const EXPECTED_USDC_IMPL = {
   8453: '0x2ce6311ddae708829bc0784c967b7d77d19fd779', // FiatTokenV2_2
   84532: '0xd74cc5d436923b8ba2c179b4bca2841d8a52c5b5',
 };
-// Never let feeWallet/settler collide with the shared custodial payout wallet.
-const PLATFORM_CUSTODIAL_WALLET = '0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6';
+// Never let feeWallet/settler collide with a platform custodial payout wallet —
+// current (Auxilo, LLC, rotated 2026-07-12) OR the retired pre-LLC wallet (which
+// carries prior history/approvals, exactly what a fresh feeWallet must not have).
+const PLATFORM_CUSTODIAL_WALLETS = [
+  '0xA19Cf92cc1daCf742f0E50b4128cAD3A86A81EC4', // current — Auxilo, LLC
+  '0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6', // retired pre-LLC wallet
+];
 const IMPL_SLOT = '0x7050c9e0f4ca769c69bd3a8ef740bc37934f8e2c036e5a723fd8ee048ed3f8c3';
 
 const ROUTER_READ_ABI = [
@@ -127,10 +132,12 @@ async function preflight(a) {
   if (eqAddr(fee, settler)) fail('feeWallet == settler (must be distinct)');
   else pass('feeWallet != settler');
   if (eqAddr(fee, usdc)) fail('feeWallet == USDC address'); else pass('feeWallet != USDC');
-  if (eqAddr(fee, PLATFORM_CUSTODIAL_WALLET)) fail(`feeWallet == platform custodial wallet ${PLATFORM_CUSTODIAL_WALLET} — use a FRESH single-purpose wallet`);
-  else pass('feeWallet != platform custodial payout wallet');
-  if (eqAddr(settler, PLATFORM_CUSTODIAL_WALLET)) fail(`settler == platform custodial wallet ${PLATFORM_CUSTODIAL_WALLET} — settler must be a dedicated isolated key (F5)`);
-  else pass('settler != platform custodial payout wallet');
+  const feeCollision = PLATFORM_CUSTODIAL_WALLETS.find((w) => eqAddr(fee, w));
+  if (feeCollision) fail(`feeWallet == platform custodial wallet ${feeCollision} (current or retired) — use a FRESH single-purpose wallet`);
+  else pass('feeWallet != platform custodial payout wallets (current + retired)');
+  const settlerCollision = PLATFORM_CUSTODIAL_WALLETS.find((w) => eqAddr(settler, w));
+  if (settlerCollision) fail(`settler == platform custodial wallet ${settlerCollision} (current or retired) — settler must be a dedicated isolated key (F5)`);
+  else pass('settler != platform custodial payout wallets (current + retired)');
 
   const client = clientFor(chainId);
 
