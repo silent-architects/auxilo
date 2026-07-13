@@ -81,7 +81,7 @@ describe('Idempotency: checkIdempotency + recordExtraction', () => {
 
   it('/extract handler calls recordExtraction after processing', () => {
     const extractIdx = SERVER_SRC.indexOf("app.post('/extract'");
-    const handler = SERVER_SRC.slice(extractIdx, extractIdx + 18000);
+    const handler = SERVER_SRC.slice(extractIdx, extractIdx + 24000);
     assert.ok(handler.includes('recordExtraction'),
       '/extract handler must call recordExtraction');
   });

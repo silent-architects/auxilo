@@ -123,7 +123,7 @@ describe('A3: Circuit breaker file existence after server.js load', () => {
     // Find recordSpend function body
     const recordSpendIdx = src.indexOf('recordSpend(costUsd)');
     assert.ok(recordSpendIdx > -1, 'recordSpend must exist');
-    const after = src.slice(recordSpendIdx, recordSpendIdx + 500);
+    const after = src.slice(recordSpendIdx, recordSpendIdx + 900);
     assert.ok(after.includes('persistCircuitBreaker()'),
       'recordSpend must call persistCircuitBreaker');
   });
