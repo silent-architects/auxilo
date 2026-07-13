@@ -830,7 +830,7 @@
     grid.textContent = '';
 
     // R-01 §5.10: held (unassented) funds are earnings that require accepting the
-    // updated Terms before they can be released/withdrawn. Read defensively — only
+    // updated Terms before they can be released/withdrawn. Read defensively: only
     // surface the held line when the server actually sends a non-zero field.
     var held = 0;
     if (data && typeof data.unassented_pending === 'number') {
@@ -850,7 +850,7 @@
       // Insert directly under the withdrawable share so the two are read together,
       // and make clear this amount is NOT included in the withdrawable figure.
       items.splice(1, 0, {
-        label: 'Held — accept Terms to release',
+        label: 'Held: accept Terms to release',
         value: fmt(held),
         held: true,
       });
@@ -897,7 +897,7 @@
     // Launch is ACCRUE-ONLY: BOTH withdrawal rails (USDC router + Stripe custodial
     // kill-switch) are paused. The server reports this via `payouts_paused` on
     // GET /account/earnings. When true, we must NOT render an enabled cash-out
-    // affordance (no Stripe connect button, no withdraw form) — otherwise the UI
+    // affordance (no Stripe connect button, no withdraw form), otherwise the UI
     // invites a submit that the server will 503. Read defensively: only a strict
     // `true` shows the paused state; anything else keeps the normal render below.
     if (data && data.payouts_paused === true) {
@@ -915,7 +915,7 @@
       pausedBody.style.fontSize = '13px';
       pausedBody.style.color = 'var(--slate)';
       pausedBody.style.margin = '0';
-      pausedBody.textContent = 'Both withdrawal rails — Stripe-to-bank and USDC on Base — are paused while we complete our non-custodial migration. Your balance is safe and will be withdrawable as soon as the non-custodial rail goes live. Earnings keep accruing in the meantime.';
+      pausedBody.textContent = 'Both withdrawal rails (Stripe-to-bank and USDC on Base) are paused while we complete our non-custodial migration. Your earnings accrue now and remain payable to you under the Terms; they become withdrawable as soon as the non-custodial rail goes live.';
       pausedWrap.appendChild(pausedBody);
 
       if (data.wallet) {
@@ -941,7 +941,7 @@
     cryptoHead.style.color = 'var(--ivory)';
     cryptoHead.style.display = 'block';
     cryptoHead.style.marginBottom = '6px';
-    cryptoHead.textContent = 'Wallet (USDC on Base) — coming soon';
+    cryptoHead.textContent = 'Wallet (USDC on Base): coming soon';
     cryptoWrap.appendChild(cryptoHead);
 
     if (data && data.wallet) {

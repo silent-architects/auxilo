@@ -422,7 +422,7 @@ curl -X POST \
   https://auxilo.io/auth/magic-link \
   -d <span class="s">'{"email": "you@example.com"}'</span>
 
-<span class="c"># 2. Verify the token from your email — returns a JWT</span>
+<span class="c"># 2. Verify the token from your email, returns a JWT</span>
 curl -X GET \
   <span class="s">"…/auth/verify?token=TOKEN"</span>
 <span class="c"># → {"token": "&lt;JWT&gt;"}</span>
