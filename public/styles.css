@@ -37,6 +37,11 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Base link — bare <a> in prose. Low specificity so styled nav/button/footer
+   links (which carry their own classes) win and render unchanged. Browser-default
+   blue fails WCAG on the dark bg (~2.1:1); aurum on obsidian is 8.66:1. */
+a { color: var(--aurum); text-decoration: underline; }
+
 /* ── Layout Primitives ─────────────────────────────────────────────────────── */
 .container {
   max-width: var(--max-w);
@@ -1034,7 +1039,7 @@ section { padding: var(--section-pad); }
   tab-size: 2;
 }
 
-.code-block pre .c { color: #5C6A78; } /* comment */
+.code-block pre .c { color: #7C8A9A; } /* comment — #7C8A9A on #111 = 5.36:1 (WCAG AA); was #5C6A78 = 3.41:1 (fail) */
 .code-block pre .k { color: #C9A84C; } /* keyword / key */
 .code-block pre .s { color: #98C379; } /* string */
 .code-block pre .n { color: #61AFEF; } /* number */
@@ -2053,7 +2058,7 @@ abbr[title] {
   border-radius: 6px;
 }
 
-.earnings-scenario h4 {
+.earnings-scenario h3 {
   font-size: 14px;
   font-weight: 600;
   color: var(--ivory);

@@ -7961,6 +7961,31 @@ app.get('/pricing', (c) => {
 });
 
 app.get('/earnings', (c) => {
+  // Server-render the three live-ledger numbers into the raw HTML so non-JS
+  // crawlers see real values (not em-dashes) on the page that says "the numbers
+  // below are live". Uses the SAME visibility predicate as GET /knowledge/stats.
+  // The client-side fetch('/knowledge/stats') stays as a freshness upgrade.
+  try {
+    const filePath = path.join(PUBLIC_DIR, 'earnings.html');
+    if (fs.existsSync(filePath)) {
+      let html = fs.readFileSync(filePath, 'utf8');
+      const visibleLearnings = CONTENT_MODERATION_ENABLED
+        ? learnings.filter(l => !l.status || l.status === 'approved')
+        : learnings;
+      const llLearnings  = visibleLearnings.length.toLocaleString('en-US');
+      const llUnlocks    = visibleLearnings.reduce((s, l) => s + (l.quality.unlocks || 0), 0).toLocaleString('en-US');
+      const llCategories = new Set(visibleLearnings.map(l => l.category)).size.toLocaleString('en-US');
+      html = html
+        .replace('id="ll-learnings">&mdash;<',  `id="ll-learnings">${llLearnings}<`)
+        .replace('id="ll-unlocks">&mdash;<',    `id="ll-unlocks">${llUnlocks}<`)
+        .replace('id="ll-categories">&mdash;<', `id="ll-categories">${llCategories}<`);
+      c.header('Content-Type', 'text/html; charset=utf-8');
+      c.header('Cache-Control', 'public, max-age=3600');
+      return c.body(html);
+    }
+  } catch (e) {
+    console.error('[earnings] server-render failed, falling back to static:', e.message);
+  }
   const res = serveStatic(c, 'earnings.html');
   if (res) return res;
   return c.text('Earnings page not found', 404);
@@ -8008,18 +8033,38 @@ app.get('/llms.txt', (c) => {
 function serveLegalPage(c, filename, title) {
   try {
     const md = fs.readFileSync(path.join(__dirname, 'docs', filename), 'utf8');
-    // Minimal markdown-to-HTML: headings, paragraphs, bold, italic, lists
-    const body = md
+    // Minimal markdown-to-HTML: headings, paragraphs, bold, italic, lists,
+    // inline links, and fenced code blocks.
+    // Fenced code blocks (```...```) are pulled out FIRST and replaced with
+    // placeholders so the line-based list/paragraph transforms below don't wrap
+    // each of their lines in <p>. They are restored as <pre> at the very end.
+    const codeBlocks = [];
+    const protectedMd = md.replace(/```[^\n]*\n([\s\S]*?)```/g, (_m, code) => {
+      const esc = code
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n+$/, '');
+      codeBlocks.push(`<pre class="legal-pre">${esc}</pre>`);
+      return ` CODE${codeBlocks.length - 1} `;
+    });
+    let body = protectedMd
       .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
       .replace(/^### (.+)$/gm, '<h3>$1</h3>')
       .replace(/^## (.+)$/gm, '<h2>$1</h2>')
       .replace(/^# (.+)$/gm, '<h1>$1</h1>')
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      // Inline links [text](url) → <a>. Before list/paragraph wrapping so links
+      // inside prose, headings, and list items all become clickable.
+      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>')
       .replace(/^- (.+)$/gm, '<li>$1</li>')
       .replace(/(<li>.*<\/li>\n?)+/g, (m) => `<ul>${m}</ul>`)
       .replace(/^(?!<[hul])(.*\S.*)$/gm, '<p>$1</p>')
       .replace(/\n{2,}/g, '\n');
+    // Restore protected code blocks, unwrapping any <p> the paragraph rule added.
+    body = body.replace(/<p> CODE(\d+) <\/p>| CODE(\d+) /g,
+      (_m, a, b) => codeBlocks[a !== undefined ? a : b]);
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8036,6 +8081,8 @@ function serveLegalPage(c, filename, title) {
     .legal-wrap ul{margin:0 0 16px 20px}
     .legal-wrap li{margin-bottom:6px;line-height:1.6}
     .legal-wrap strong{color:#FAFAF8}
+    .legal-wrap a{color:#C9A84C}
+    .legal-wrap pre.legal-pre{background:#111;border:1px solid rgba(229,229,227,0.12);border-radius:6px;padding:16px;margin-bottom:16px;overflow-x:auto;white-space:pre-wrap;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;line-height:1.6;color:#E5E5E3}
     .legal-back{display:inline-block;margin-bottom:32px;color:#C9A84C;text-decoration:none;font-size:14px}
     .legal-back:hover{text-decoration:underline}
   </style>

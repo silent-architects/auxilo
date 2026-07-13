@@ -113,6 +113,67 @@
       50% { opacity: 0.5; }
     }
 
+    /* Respect a reduced-motion preference: stop the infinite status-dot pulse
+       and the hamburger transitions for users who ask for less motion. */
+    @media (prefers-reduced-motion: reduce) {
+      .status-dot { animation: none; }
+      .hamburger span { transition: none; }
+    }
+
+    /* ── Mobile hamburger nav (parity with the other pages) ────────── */
+    .status-nav {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      margin-left: auto;
+    }
+    .hamburger {
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      gap: 4px;
+      width: 34px;
+      height: 34px;
+      margin-left: auto;
+      padding: 5px;
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+    .hamburger span {
+      display: block;
+      width: 22px;
+      height: 2px;
+      background: var(--ivory);
+      border-radius: 2px;
+      transition: transform 0.25s ease, opacity 0.25s ease;
+    }
+    .hamburger[aria-expanded="true"] span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+    .hamburger[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
+    .hamburger[aria-expanded="true"] span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+
+    @media (max-width: 720px) {
+      header { position: relative; flex-wrap: wrap; }
+      .hamburger { display: flex; }
+      .status-nav {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0;
+        margin-left: 0;
+        padding: 0.5rem 2rem 1rem;
+        background: var(--obsidian-2);
+        border-bottom: 1px solid var(--border);
+        z-index: 50;
+      }
+      .status-nav.nav-open { display: flex; }
+      .status-nav a { margin-left: 0; padding: 0.65rem 0; width: 100%; font-size: 0.95rem; }
+    }
+
     .overall-status .status-label {
       font-weight: 600;
       font-size: 1rem;
@@ -343,7 +404,10 @@
 <body>
   <header>
     <div class="logo">Auxilo<span> Status</span></div>
-    <nav style="display:flex;align-items:center;gap:1.25rem;margin-left:auto;">
+    <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
+      <span></span><span></span><span></span>
+    </button>
+    <nav class="status-nav" id="status-nav" aria-label="Main navigation">
       <a href="/for-builders">For Builders</a>
       <a href="/for-agents">For Agents</a>
       <a href="/how-it-works">How It Works</a>
@@ -410,7 +474,7 @@
       </a>
       <a class="link-card" href="/openapi.json">
         <span class="link-card-label">OpenAPI Spec</span>
-        <span class="link-card-desc">GET /openapi.json: full spec v0.7.0</span>
+        <span class="link-card-desc">GET /openapi.json: full spec v0.9.1</span>
       </a>
       <a class="link-card" href="https://github.com/silent-architects/auxilo/issues" target="_blank" rel="noopener">
         <span class="link-card-label">Report a Bug</span>
@@ -436,7 +500,7 @@
   </main>
 
   <footer>
-    <span>Auxilo v0.7.0 &middot; <a href="/">auxilo.io</a> &middot; <a href="/for-builders">builders</a> &middot; <a href="/for-agents">agents</a> &middot; <a href="/pricing">pricing</a> &middot; <a href="/api">api</a> &middot; <a href="/how-it-works">how it works</a> &middot; <a href="/.well-known/security.txt">security.txt</a></span>
+    <span>Auxilo v0.9.1 &middot; <a href="/">auxilo.io</a> &middot; <a href="/for-builders">builders</a> &middot; <a href="/for-agents">agents</a> &middot; <a href="/pricing">pricing</a> &middot; <a href="/api">api</a> &middot; <a href="/how-it-works">how it works</a> &middot; <a href="/.well-known/security.txt">security.txt</a></span>
   </footer>
 
   <script>
@@ -477,6 +541,30 @@
         timeEl.textContent = 'Last checked: ' + new Date().toLocaleTimeString();
       }
     })();
+  </script>
+
+  <script>
+    function toggleNav() {
+      const nav = document.getElementById('status-nav');
+      const btn = document.getElementById('hamburger');
+      if (!nav || !btn) return;
+      const open = nav.classList.toggle('nav-open');
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    function closeNav() {
+      const nav = document.getElementById('status-nav');
+      const btn = document.getElementById('hamburger');
+      if (nav && nav.classList.contains('nav-open')) {
+        nav.classList.remove('nav-open');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+      }
+    }
+    document.querySelectorAll('#status-nav a').forEach(function (a) {
+      a.addEventListener('click', closeNav);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeNav();
+    });
   </script>
 </body>
 </html>

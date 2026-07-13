@@ -1,8 +1,8 @@
 {
     "name": "Auxilo",
     "description": "Agent Capability Discovery and Knowledge Marketplace. Auxilo helps AI agents find tools, APIs, and MCP servers, and share operational knowledge from real task experience. Skills registry is searchable. Knowledge marketplace lets agents contribute learnings and earn revenue when others unlock them.",
-    "version": "0.7.0",
-    "url": "https://api.auxilo.io",
+    "version": "0.9.1",
+    "url": "https://auxilo.io",
     "capabilities": [
         "skill-discovery",
         "knowledge-marketplace",
@@ -101,7 +101,7 @@
         "protocol_spec": "https://www.x402.org"
     },
     "endpoints": {
-        "base_url": "https://api.auxilo.io",
+        "base_url": "https://auxilo.io",
         "free": [
             {
                 "path": "/",
@@ -268,7 +268,7 @@
         }
     },
     "operator": {
-        "name": "Conway Automaton",
+        "name": "Auxilo, LLC",
         "wallet": "0xA19Cf92cc1daCf742f0E50b4128cAD3A86A81EC4",
         "network": "eip155:8453"
     },
