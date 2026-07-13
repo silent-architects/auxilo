@@ -7976,9 +7976,9 @@ app.get('/earnings', (c) => {
       const llUnlocks    = visibleLearnings.reduce((s, l) => s + (l.quality.unlocks || 0), 0).toLocaleString('en-US');
       const llCategories = new Set(visibleLearnings.map(l => l.category)).size.toLocaleString('en-US');
       html = html
-        .replace('id="ll-learnings">&mdash;<',  `id="ll-learnings">${llLearnings}<`)
-        .replace('id="ll-unlocks">&mdash;<',    `id="ll-unlocks">${llUnlocks}<`)
-        .replace('id="ll-categories">&mdash;<', `id="ll-categories">${llCategories}<`);
+        .replace(/(id="ll-learnings"[^>]*>)[^<]*</,  `$1${llLearnings}<`)
+        .replace(/(id="ll-unlocks"[^>]*>)[^<]*</,    `$1${llUnlocks}<`)
+        .replace(/(id="ll-categories"[^>]*>)[^<]*</, `$1${llCategories}<`);
       c.header('Content-Type', 'text/html; charset=utf-8');
       c.header('Cache-Control', 'public, max-age=3600');
       return c.body(html);
@@ -8057,7 +8057,8 @@ function serveLegalPage(c, filename, title) {
       .replace(/\*(.+?)\*/g, '<em>$1</em>')
       // Inline links [text](url) → <a>. Before list/paragraph wrapping so links
       // inside prose, headings, and list items all become clickable.
-      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>')
+      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, text, url) =>
+        /^(https?:|mailto:|\/|#)/i.test(url) ? `<a href="${url.replace(/"/g, '&quot;')}">${text}</a>` : text)
       .replace(/^- (.+)$/gm, '<li>$1</li>')
       .replace(/(<li>.*<\/li>\n?)+/g, (m) => `<ul>${m}</ul>`)
       .replace(/^(?!<[hul])(.*\S.*)$/gm, '<p>$1</p>')
