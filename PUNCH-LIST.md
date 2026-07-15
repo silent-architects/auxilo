@@ -471,7 +471,7 @@ Source: 5-agent audit against live API after Wave 1 deploy. Top 5 findings addre
 
 ### TD-CONWAY-1 — Purge stale `tech.conway.*` naming
 
-`tech.conway.*` is the pre-Fly host prefix (the retired Conway VM); production moved to fly.io, but the **local macOS LaunchAgents on the dev machine** still carry the dead-host name. **Three** labels exist across 9 files — the original handoff flagged only two; `auxilo-sweeper` was missed:
+`tech.conway.*` is the pre-Fly host prefix (the retired Conway VM); production moved to fly.io, but the **local macOS LaunchAgents on the dev machine** still carry the dead-host name. **Three** labels exist across 8 files — the original handoff flagged only two; `auxilo-sweeper` was missed:
 
 | Label | Status | Source-of-truth | Other references |
 |---|---|---|---|
