@@ -1090,7 +1090,7 @@ node tests/p2-1a/e2e/pilot.js --operator tyler --confirm
 1. Grant consent: `POST /account/consent/grant`.
 2. `PATCH /account/settings {"autonomous_extraction_mode":"automatic"}`.
 3. Touch sentinel: `touch ~/.auxilo/autonomous-enabled`.
-4. Load agent: `launchctl load ~/Library/LaunchAgents/tech.conway.auxilo-sweeper.plist`.
+4. Load agent: `launchctl load ~/Library/LaunchAgents/tech.conway.auxilo-sweeper.plist`. *(2026-07-15: label renamed `io.auxilo.sweeper`; the launchd sweeper is currently retired-archived — extraction runs via the SessionEnd hook. See PUNCH-LIST TD-CONWAY-1.)*
 **Expected:** Consent row appended; account record flipped; sentinel exists; launchd reports agent loaded.
 **Fail signal:** Any step errors or leaves inconsistent state.
 **Automation:** manual

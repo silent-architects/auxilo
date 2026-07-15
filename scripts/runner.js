@@ -359,7 +359,8 @@ function installHooks() {
 // ~/Documents would still be TCC-blocked) — and point the LaunchAgent plist
 // at the installed copy. Re-run after changing any of these files.
 
-const SWEEPER_LABEL = 'tech.conway.auxilo-sweeper';
+// Renamed from tech.conway.auxilo-sweeper (dead pre-Fly host prefix) — TD-CONWAY-1, 2026-07-15.
+const SWEEPER_LABEL = 'io.auxilo.sweeper';
 
 function installSweeper() {
   const repoRoot = path.resolve(__dirname, '..');
@@ -449,7 +450,8 @@ function installSweeper() {
 // daily-digest.js is self-contained (fs/path/os only), so it is the only file
 // to copy. Re-run after changing it.
 
-const DIGEST_LABEL = 'tech.conway.auxilo-digest';
+// Renamed from tech.conway.auxilo-digest (dead pre-Fly host prefix) — TD-CONWAY-1, 2026-07-15.
+const DIGEST_LABEL = 'io.auxilo.digest';
 
 function installDigest() {
   const repoRoot = path.resolve(__dirname, '..');

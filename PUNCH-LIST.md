@@ -3,7 +3,7 @@
 > Everything that must happen before launch. One list. No duplicates.
 > Source files: TASKS.md, SECURITY-AUDIT.md, ANTIGRAVITY-REVIEW.md, VISUAL_IDENTITY.md, AGENT-TEAM.md
 > Last updated: 2026-03-30 (Wave 1 verified + deployed. PD-1–PD-5 fixed. PD-6 deferred. 5-agent audit: BUILD-2a–2d DONE, H-3 OPEN. 4 open items remain.)
-> 2026-07-15: +§20 Tech Debt & Governance Hygiene — TD-CONWAY-1 (`tech.conway.*` dead-host naming purge, open) + DG-1 (`docs/INDEX.md` public-repo gap — resolved same day via public-safe stub). P3 open 0→1.
+> 2026-07-15: +§20 Tech Debt & Governance Hygiene — TD-CONWAY-1 (`tech.conway.*` dead-host naming → renamed `io.auxilo.*`, DONE) + DG-1 (`docs/INDEX.md` public-repo gap → public-safe stub, DONE). §20 fully closed same day; P3 open back to 0.
 
 ---
 
@@ -466,7 +466,7 @@ Source: 5-agent audit against live API after Wave 1 deploy. Top 5 findings addre
 
 | # | Item | Priority | Owner | Status |
 |---|------|----------|-------|--------|
-| TD-CONWAY-1 | Purge the dead-host `tech.conway.*` prefix from local automations, tests, and specs (detail below) | P3 | BUILD-2 + BUILD-4 | OPEN |
+| TD-CONWAY-1 | Purge the dead-host `tech.conway.*` prefix from local automations, tests, and specs (detail below) | P3 | BUILD-2 + BUILD-4 | DONE — renamed to `io.auxilo.*` 2026-07-15 (Tyler delegated the call: rename, not delete) |
 | DG-1 | `docs/INDEX.md` (doc-governance entrypoint) was scrubbed from the public repo — CLAUDE.md + §15 Rule 2 still mandate it (detail below) | P3 | GOV-1 | DONE — public-safe stub committed 2026-07-15 (option a) |
 
 ### TD-CONWAY-1 — Purge stale `tech.conway.*` naming
@@ -479,7 +479,7 @@ Source: 5-agent audit against live API after Wave 1 deploy. Top 5 findings addre
 | `tech.conway.auxilo-digest` | **LIVE** (daily digest, re-enabled per LW-17) | `scripts/runner.js:452` (`DIGEST_LABEL`, `installDigest()`) | `jobs/daily-digest.js:25`; `test/p2-1a-digest.test.js` (6×, darwin-only skip guard); `specs/REWORK-P2.1a.md:179` |
 | `tech.conway.auxilo-retraction-sweeper` | RETIRED 2026-06-11 (P1-13a) | — plist deleted | `jobs/retraction-sunset.js:20`; `test/p2-1a-retraction.test.js:180,195` |
 
-**Delete vs. rename is Tyler's call** — two of the three are live jobs, not dead automations, so "delete the `tech.conway.*` local automations" may mean rename-off-the-dead-prefix for those. When the parent task runs:
+**Resolved 2026-07-15 — renamed to the `io.auxilo.*` family** (matching the existing `io.auxilo.backup` convention), executed per the plan below with two machine-truth corrections discovered at install time: (a) the **sweeper LaunchAgent was already retired-archived** (`~/.auxilo/disabled-launchagents/`; extraction runs via the SessionEnd hook, not launchd) — so its label was renamed in code (`SWEEPER_LABEL` → `io.auxilo.sweeper`) for any future install, but no agent was loaded and none was installed; (b) the digest agent was the only loaded `tech.conway.*` automation — relabeled `io.auxilo.digest`, reinstalled via `--install-digest`, old label booted out, old plist archived, new agent bootstrapped + kickstart-verified. **Historical records keep the old label by design** (never-delete-always-mark): the retraction-sunset retirement note + its guard test (step 3 below — kept as-is, the guard still protects against re-introducing a LaunchAgent on dead data), the superseded BUILD-SPEC-P2.1a, and dated rename notes were appended to the living specs (REWORK-P2.1a.md, TEST-P2.1a.md) rather than rewriting shipped history. `scripts/migrate-data.sh` (dead Conway API, completed one-time migration tool) considered and left as archaeology. The original plan, for the record:
 
 1. **Automations** — change (or remove) the installed label at the source-of-truth constants `SWEEPER_LABEL` (`scripts/runner.js:362`) and `DIGEST_LABEL` (`scripts/runner.js:452`), re-run `node scripts/runner.js --install-sweeper` / `--install-digest` to rewrite the plists, and `launchctl bootout` the old labels.
 2. **Digest test** (`test/p2-1a-digest.test.js:183-210`) — re-point the darwin-only plist assertions (path, label, `content.includes(...)`) to the new label once step 1 lands.
@@ -504,8 +504,8 @@ Source: 5-agent audit against live API after Wave 1 deploy. Top 5 findings addre
 | P0 (blocks launch) | **0** | 0 | 0 | **28** | 28 |
 | P1 (blocks real money / production) | **1** | 5 | 1 | 68 | 75 |
 | P2 (blocks scale) | **3** | 1 | 0 | 23 | 27 |
-| P3 (polish) | **1** | 0 | 0 | 4 | 5 |
-| **Total** | **5** | **6** | **1** | **123** | **135** |
+| P3 (polish) | **0** | 0 | 0 | 5 | 5 |
+| **Total** | **4** | **6** | **1** | **124** | **135** |
 
 > **P2.1a Autonomous Extraction**: DONE (2026-04-15). Server-side extraction pipeline, admin CLI, transcript sources, runner, cron jobs, legal docs updated.
 > PD-6: DEFERRED — Stripe withdrawals work, on-chain needs 0.01 ETH when ready.
