@@ -3,6 +3,7 @@
 > Everything that must happen before launch. One list. No duplicates.
 > Source files: TASKS.md, SECURITY-AUDIT.md, ANTIGRAVITY-REVIEW.md, VISUAL_IDENTITY.md, AGENT-TEAM.md
 > Last updated: 2026-03-30 (Wave 1 verified + deployed. PD-1–PD-5 fixed. PD-6 deferred. 5-agent audit: BUILD-2a–2d DONE, H-3 OPEN. 4 open items remain.)
+> 2026-07-15: +§20 Tech Debt & Governance Hygiene — TD-CONWAY-1 (`tech.conway.*` dead-host naming purge, open) + DG-1 (`docs/INDEX.md` public-repo gap — resolved same day via public-safe stub). P3 open 0→1.
 
 ---
 
@@ -343,6 +344,8 @@ Every new feature, endpoint, pricing change, policy change, or UX flow MUST be r
 ### Rule 2: INDEX.md Is the Map
 `docs/INDEX.md` maps every document to its domain and declares source-of-truth status. New documents MUST be registered in INDEX.md. If a document is superseded, it gets a banner AND an INDEX.md update.
 
+> ⚠️ 2026-07-15: the public repo's `docs/INDEX.md` is a **public-safe stub** — the sensitivity scrub `f70a6ef` deleted the full index (it mapped ~62 internal docs). The stub (committed via §20 DG-1) maps only the published docs and points to the private canon, which holds the complete index. Register new **public** docs in the stub; the full internal map is maintained in the private-canon `docs/INDEX.md`.
+
 ### Rule 3: One Source of Truth Per Domain
 Each domain (product, marketplace, pricing, GTM, etc.) has exactly ONE source-of-truth document as designated in INDEX.md. Business decisions live in domain docs, NOT in MEMORY.md. MEMORY.md stores operational context only (credentials, VM IDs, session state).
 
@@ -457,6 +460,43 @@ Source: 5-agent audit against live API after Wave 1 deploy. Top 5 findings addre
 
 ---
 
+## 20. Tech Debt & Governance Hygiene (P3)
+
+> Added 2026-07-15 — GOV-1 surfaced these during r01-noncustodial-launch test triage. Both are P3 (polish); neither blocks launch, money, or scale. Full inventory captured here so the work isn't lost to conversation history (Rule 6).
+
+| # | Item | Priority | Owner | Status |
+|---|------|----------|-------|--------|
+| TD-CONWAY-1 | Purge the dead-host `tech.conway.*` prefix from local automations, tests, and specs (detail below) | P3 | BUILD-2 + BUILD-4 | OPEN |
+| DG-1 | `docs/INDEX.md` (doc-governance entrypoint) was scrubbed from the public repo — CLAUDE.md + §15 Rule 2 still mandate it (detail below) | P3 | GOV-1 | DONE — public-safe stub committed 2026-07-15 (option a) |
+
+### TD-CONWAY-1 — Purge stale `tech.conway.*` naming
+
+`tech.conway.*` is the pre-Fly host prefix (the retired Conway VM); production moved to fly.io, but the **local macOS LaunchAgents on the dev machine** still carry the dead-host name. **Three** labels exist across 8 files — the original handoff flagged only two; `auxilo-sweeper` was missed:
+
+| Label | Status | Source-of-truth | Other references |
+|---|---|---|---|
+| `tech.conway.auxilo-sweeper` | **LIVE** (extraction sweeper) | `scripts/runner.js:362` (`SWEEPER_LABEL`, `installSweeper()`) | `specs/BUILD-SPEC-P2.1a-AUTONOMOUS-EXTRACTION.md:741,809`; `specs/TEST-P2.1a.md:1093` |
+| `tech.conway.auxilo-digest` | **LIVE** (daily digest, re-enabled per LW-17) | `scripts/runner.js:452` (`DIGEST_LABEL`, `installDigest()`) | `jobs/daily-digest.js:25`; `test/p2-1a-digest.test.js` (6×, darwin-only skip guard); `specs/REWORK-P2.1a.md:179` |
+| `tech.conway.auxilo-retraction-sweeper` | RETIRED 2026-06-11 (P1-13a) | — plist deleted | `jobs/retraction-sunset.js:20`; `test/p2-1a-retraction.test.js:180,195` |
+
+**Delete vs. rename is Tyler's call** — two of the three are live jobs, not dead automations, so "delete the `tech.conway.*` local automations" may mean rename-off-the-dead-prefix for those. When the parent task runs:
+
+1. **Automations** — change (or remove) the installed label at the source-of-truth constants `SWEEPER_LABEL` (`scripts/runner.js:362`) and `DIGEST_LABEL` (`scripts/runner.js:452`), re-run `node scripts/runner.js --install-sweeper` / `--install-digest` to rewrite the plists, and `launchctl bootout` the old labels.
+2. **Digest test** (`test/p2-1a-digest.test.js:183-210`) — re-point the darwin-only plist assertions (path, label, `content.includes(...)`) to the new label once step 1 lands.
+3. **Retraction test** (`test/p2-1a-retraction.test.js:189-205`) — ⚠️ the handoff called this "permanently inert / always skips"; that's **stale**. PR #11 rewrote it from a machine-state check to a source-doc assertion that pins `jobs/retraction-sunset.js` still contains the string `tech.conway.auxilo-retraction-sweeper` — it runs (and passes) on **every** host, CI included. To purge: update the retirement note (`jobs/retraction-sunset.js:20`) and the matching assertion string together, or drop the `B2` block — but that block also guards against re-introducing a local LaunchAgent that operates on dead data, so don't drop the guard silently.
+4. **Specs & comments** — `specs/REWORK-P2.1a.md:179`, `specs/BUILD-SPEC-P2.1a-AUTONOMOUS-EXTRACTION.md:741,809`, `specs/TEST-P2.1a.md:1093`, plus the comments in `jobs/daily-digest.js:25` and `scripts/runner.js:444`.
+
+### DG-1 — `docs/INDEX.md` absent from the public repo
+
+`docs/INDEX.md` — the doc-governance entrypoint that **CLAUDE.md and §15 Rule 2 both mandate reading first** — was **deliberately deleted from this public repo** by the sensitivity scrub `f70a6ef` ("scrub business-sensitive content from public repo"); the commit body records that it "indexed ~62 internal docs (FINANCIAL-PLAN, RISK-REGISTER, …)". So its absence is by design (this repo is public) — but CLAUDE.md + Rule 2 still send every change to a file that no longer exists in any public checkout (this branch, r01, fresh clones). The full INDEX.md survives untracked in the private canon (`~/dev/auxilo/docs/INDEX.md`).
+
+**Resolved 2026-07-15 — option (a) committed.** A *public-safe* `docs/INDEX.md` now maps only the published docs (with served routes: `/terms`, `/privacy`, `/legal/subprocessors`, `/legal/supported-clients`, `/dmca`) plus a directory-level pointer to other public artifacts, and a banner walling off the private canon — restoring the CLAUDE.md / Rule 2 entrypoint in public checkouts without republishing the ~62-doc internal index. Options weighed:
+- **(a) [recommended]** Commit a *public-safe* `docs/INDEX.md` mapping only the 8 tracked public docs (AGENT-LEARNING-GUIDE, CONSENT-LOG-INTEGRITY, DMCA-POLICY, ONBOARDING-COPY, PRIVACY-POLICY, SUBPROCESSORS, SUPPORTED-CLIENTS, TERMS-OF-SERVICE), with a line noting the full internal index lives in the private canon. Restores the entrypoint without re-leaking.
+- **(b)** Amend CLAUDE.md + §15 Rule 2 to point doc-governance at the private-canon INDEX.md and stop mandating a public-repo file.
+- **(c)** Leave as-is; this line tracks the gap.
+
+---
+
 ## Counts
 
 | Priority | Open | On Hold | Deferred | Done/Verified | Total |
@@ -464,8 +504,8 @@ Source: 5-agent audit against live API after Wave 1 deploy. Top 5 findings addre
 | P0 (blocks launch) | **0** | 0 | 0 | **28** | 28 |
 | P1 (blocks real money / production) | **1** | 5 | 1 | 68 | 75 |
 | P2 (blocks scale) | **3** | 1 | 0 | 23 | 27 |
-| P3 (polish) | 0 | 0 | 0 | 3 | 3 |
-| **Total** | **4** | **6** | **1** | **122** | **133** |
+| P3 (polish) | **1** | 0 | 0 | 4 | 5 |
+| **Total** | **5** | **6** | **1** | **123** | **135** |
 
 > **P2.1a Autonomous Extraction**: DONE (2026-04-15). Server-side extraction pipeline, admin CLI, transcript sources, runner, cron jobs, legal docs updated.
 > PD-6: DEFERRED — Stripe withdrawals work, on-chain needs 0.01 ETH when ready.

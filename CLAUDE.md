@@ -1,6 +1,6 @@
 # Auxilo Project Instructions
 
-This file contains governance rules that apply **only when working in the Auxilo repo**. General cross-project rules (source discipline, performance rules) live in `/Users/iamtylerkelley/Documents/Custom/CLAUDE.md`.
+This file contains governance rules that apply **only when working in the Auxilo repo**. General cross-project rules (source discipline, performance rules) live in the operator's private global `~/Documents/Custom/CLAUDE.md`.
 
 ---
 
