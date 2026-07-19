@@ -7364,6 +7364,10 @@ app.get('/contributor/:wallet/pricing-insights', (c) => {
 });
 
 // Contributor earnings dashboard (FREE)
+// CH-2 ruling (SPEC-3): learnings_submitted counts publicly VISIBLE learnings —
+// the route is unauthenticated for any wallet, so a raw count would be an
+// oracle for hidden (pending/rejected/retracted) submissions and disagree with
+// the sibling /pricing-insights predicate.
 app.get('/contributor/:wallet', (c) => {
   const wallet = c.req.param('wallet').toLowerCase();
 
@@ -7375,7 +7379,7 @@ app.get('/contributor/:wallet', (c) => {
       wallet,
       message: 'No earnings found for this wallet',
       total_contributor_usd: 0,
-      learnings_submitted: learnings.filter(l => l.contributor_wallet === wallet).length
+      learnings_submitted: visibleLearningsList().filter(l => l.contributor_wallet === wallet).length
     });
   }
 
@@ -7388,7 +7392,7 @@ app.get('/contributor/:wallet', (c) => {
     total_withdrawn: data.total_withdrawn || 0,
     withdrawal_count: data.withdrawal_count || 0,
     by_learning: data.by_learning,
-    learnings_submitted: learnings.filter(l => l.contributor_wallet === wallet).length,
+    learnings_submitted: visibleLearningsList().filter(l => l.contributor_wallet === wallet).length,
     last_updated: data.last_updated
   });
 });

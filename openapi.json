@@ -1494,7 +1494,8 @@
                                             "type": "object"
                                         },
                                         "learnings_submitted": {
-                                            "type": "integer"
+                                            "type": "integer",
+                                            "description": "Count of the wallet's publicly visible learnings (same visibility predicate as /knowledge/stats). Submissions that are pending review, rejected, or retracted are not counted."
                                         },
                                         "last_updated": {
                                             "type": "string",

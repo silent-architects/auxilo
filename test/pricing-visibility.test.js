@@ -14,6 +14,9 @@
  * predicate /knowledge/stats applies (LW-QA fix, server.js ~6783):
  * CONTENT_MODERATION_ENABLED ? (!l.status || l.status === 'approved') : all.
  *
+ * CH-2 (SPEC-3 ruling, same pass): GET /contributor/:wallet learnings_submitted
+ * joined the same predicate — see the structural guard below for the rationale.
+ *
  * Two guards, matching repo convention (test/cold-start-seed.test.js):
  *   1. Structural — source assertions that both route handlers use
  *      visibleLearningsList() and never touch the raw array, and that the
@@ -82,6 +85,23 @@ describe('structural: pricing analytics use the shared visibility predicate', ()
       'pricing-insights must draw from visibleLearningsList()');
     assert.ok(!/\blearnings\.(filter|map|forEach)\(/.test(slice),
       'pricing-insights must not read the raw learnings array — top_earning_learnings would leak non-approved titles');
+  });
+
+  // CH-2 ruling (SPEC-3, 2026-07-19): learnings_submitted on the unauthenticated
+  // GET /contributor/:wallet dashboard counts VISIBLE learnings — a raw count is
+  // a per-wallet oracle for hidden (pending/rejected/retracted) submissions and
+  // disagrees with the sibling /pricing-insights predicate. Anchored on the
+  // field name so BOTH response branches (no-earnings and earnings) are pinned.
+  it('learnings_submitted counts visibleLearningsList() in both branches of GET /contributor/:wallet', () => {
+    const lines = SERVER_SRC.split('\n').filter((l) => l.includes('learnings_submitted:'));
+    assert.equal(lines.length, 2,
+      'expected learnings_submitted in exactly the two branches of GET /contributor/:wallet');
+    for (const line of lines) {
+      assert.ok(line.includes('visibleLearningsList().filter'),
+        `learnings_submitted must count visibleLearningsList(), got: ${line.trim()}`);
+      assert.ok(!/\blearnings\.filter\(/.test(line),
+        `learnings_submitted must not count the raw learnings array — that reveals hidden submissions per wallet: ${line.trim()}`);
+    }
   });
 });
 
@@ -241,6 +261,16 @@ describe('behavioral: the three public endpoints agree on visibility', () => {
       // A wallet whose only learnings are non-approved reads as not found —
       // same posture as GET /knowledge/:id for a non-approved id.
       await get(`/contributor/${WALLET_PENDING_ONLY}/pricing-insights`, 404);
+
+      // CH-2: the earnings dashboard's learnings_submitted obeys the same
+      // predicate (fixture has no earnings file, so this exercises the
+      // no-earnings branch; the earnings branch is pinned structurally).
+      const dash = await get(`/contributor/${WALLET_MIXED}`);
+      assert.equal(dash.learnings_submitted, 3,
+        'learnings_submitted must count only the wallet\'s visible learnings');
+      const dashHidden = await get(`/contributor/${WALLET_PENDING_ONLY}`);
+      assert.equal(dashHidden.learnings_submitted, 0,
+        'a wallet with only non-approved submissions must read 0 — no hidden-submission oracle');
     } finally {
       if (child) child.kill('SIGKILL');
       fs.rmSync(tmpDir, { recursive: true, force: true });
