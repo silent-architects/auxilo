@@ -49,6 +49,8 @@
   "homepage": "https://auxilo.io",
   "license": "MIT",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1090.0",
+    "@aws-sdk/lib-storage": "^3.1090.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "stripe": "^17.0.0",
     "viem": "^2.46.3"

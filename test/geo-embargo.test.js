@@ -243,14 +243,21 @@ describe('server.js wiring — CP-4 enforcement points (structural)', () => {
     assert.ok(gateIdx < linkIdx, 'geo screen must precede linkWallet()');
   });
 
-  it('E-2: screens the buyer geo on the x402 settle path (both settle sites)', () => {
-    const matches = src.match(/geoEmbargoGate\(c, `\$\{new URL\(c\.req\.url\)\.pathname\} \(x402 buyer\)`\)/g) || [];
-    assert.ok(matches.length >= 2, `expected >=2 x402 buyer gates, found ${matches.length}`);
+  it('E-2: screens the buyer geo on every LIVE x402 settle site', () => {
+    // Wave-1 AUD19-13: the dead x402Gate middleware (zero callers) carried the
+    // second buyer gate; deleting it leaves verifyPaymentOrReject as the ONE
+    // live settle path. The invariant is coverage, not a count: every
+    // _verifyPayment CALL site must carry the buyer geo gate in its function.
+    const gates = src.match(/geoEmbargoGate\(c, `\$\{new URL\(c\.req\.url\)\.pathname\} \(x402 buyer\)`\)/g) || [];
+    const settleCalls = (src.match(/await _verifyPayment\(/g) || []).length;
+    assert.equal(settleCalls, 1, 'exactly one live x402 settle call site (verifyPaymentOrReject)');
+    assert.equal(gates.length, settleCalls,
+      `every live settle site must be geo-gated (gates=${gates.length}, settle sites=${settleCalls})`);
   });
 
   it('E-2: each x402 buyer geo screen runs BEFORE _verifyPayment (before settling)', () => {
     // Every occurrence of the buyer gate must be followed by a _verifyPayment call
-    // that comes sooner than the next buyer gate — i.e. gate then settle, in order.
+    // — i.e. gate then settle, in order — at every live settle site.
     const gateRe = /geoEmbargoGate\(c, `\$\{new URL\(c\.req\.url\)\.pathname\} \(x402 buyer\)`\)/g;
     let m;
     let checked = 0;
@@ -259,7 +266,8 @@ describe('server.js wiring — CP-4 enforcement points (structural)', () => {
       assert.ok(settleIdx > m.index, 'a _verifyPayment must follow each buyer geo gate');
       checked++;
     }
-    assert.ok(checked >= 2, 'should have verified ordering at >=2 settle sites');
+    assert.equal(checked, (src.match(/await _verifyPayment\(/g) || []).length,
+      'ordering verified at every live settle site');
   });
 
   it('returns a clear GEO_EMBARGOED error with HTTP 403 on a positive match', () => {
