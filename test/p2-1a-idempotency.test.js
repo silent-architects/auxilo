@@ -71,27 +71,18 @@ describe('Idempotency: checkIdempotency + recordExtraction', () => {
   });
 
   it('/extract handler calls checkIdempotency before processing', () => {
-    const handler = extractHandlerSrc();
+    // Find the extract handler — uses app.post('/extract', ...
+    const extractIdx = SERVER_SRC.indexOf("app.post('/extract'");
+    assert.ok(extractIdx > -1, '/extract handler must exist');
+    const handler = SERVER_SRC.slice(extractIdx, extractIdx + 6000);
     assert.ok(handler.includes('checkIdempotency'),
       '/extract handler must call checkIdempotency');
   });
 
   it('/extract handler calls recordExtraction after processing', () => {
-    const handler = extractHandlerSrc();
+    const extractIdx = SERVER_SRC.indexOf("app.post('/extract'");
+    const handler = SERVER_SRC.slice(extractIdx, extractIdx + 24000);
     assert.ok(handler.includes('recordExtraction'),
       '/extract handler must call recordExtraction');
   });
 });
-
-/**
- * Extract the FULL /extract handler source: from app.post('/extract' to the
- * next top-level route registration. Fixed-width windows (previously
- * 6000/18000 chars) broke when PR #5's client-side-extraction restructure
- * grew the handler past the window — this is length-independent.
- */
-function extractHandlerSrc() {
-  const start = SERVER_SRC.indexOf("app.post('/extract'");
-  assert.ok(start > -1, '/extract handler must exist');
-  const next = SERVER_SRC.indexOf('\napp.', start + 1);
-  return next === -1 ? SERVER_SRC.slice(start) : SERVER_SRC.slice(start, next);
-}

@@ -526,6 +526,23 @@
     <!-- Global alert -->
     <div id="dash-alert" class="alert" style="display:none;margin-bottom:20px"></div>
 
+    <!-- Terms of Service clickwrap gate (R-01 §5.10 payee-agency) -->
+    <div id="terms-gate" class="dash-card" style="display:none;border:1px solid var(--aurum)">
+      <div class="dash-card-title">Action required: accept the updated Terms</div>
+      <p style="font-size:14px;color:var(--slate);margin-bottom:14px;line-height:1.6">
+        We've updated our <a href="/terms" target="_blank" rel="noopener" style="color:var(--aurum)">Terms of Service</a>.
+        They now include <strong style="color:var(--ivory)">Section 5.10</strong>, under which you appoint Auxilo as your
+        limited agent to receive your Builder Share on your behalf when consumers unlock your learnings. You must accept
+        the current Terms before you can link a payout wallet or withdraw earnings.
+      </p>
+      <div id="terms-gate-alert" class="alert" style="display:none;margin-bottom:12px"></div>
+      <label style="display:flex;align-items:flex-start;gap:10px;font-size:14px;color:var(--ivory);cursor:pointer;margin-bottom:16px">
+        <input type="checkbox" id="terms-agree-check" style="margin-top:3px" onchange="onTermsCheckChange()">
+        <span>I have read and agree to the <a href="/terms" target="_blank" rel="noopener" style="color:var(--aurum)">Terms of Service</a>, including the Section 5.10 payment-collection agency.</span>
+      </label>
+      <button class="btn btn-primary" id="terms-accept-btn" onclick="acceptTerms()" disabled>Accept and continue</button>
+    </div>
+
     <!-- Earnings panel -->
     <div class="dash-card">
       <div class="dash-card-title">Earnings</div>
@@ -693,11 +710,69 @@
     if (email) {
       setText('dash-email-label', email);
     }
+    loadTerms();
     loadEarnings();
     loadApiKeys();
     loadPurchases();
     // Payout loads after earnings to know the balance
   }
+
+  // ── Terms of Service clickwrap (R-01 §5.10 payee-agency) ────────────
+  // Assent must be an affirmative act (unchecked box + explicit button), captured
+  // server-side with version + timestamp + IP/UA. The server enforces the gate at
+  // wallet-link/withdrawal; this surfaces it and records the acceptance.
+  var _tosStatus = null;
+
+  function loadTerms() {
+    apiFetch('/account/terms-status')
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (!res.ok) return;
+        _tosStatus = res.data;
+        if (res.data.needs_acceptance) { show('terms-gate'); } else { hide('terms-gate'); }
+        // Re-render the payout panel so the withdraw form reflects the gate state,
+        // in case earnings resolved before this async status check returned.
+        if (_earnings !== null) renderPayoutPanel(_earnings);
+      })
+      .catch(function () {});
+  }
+
+  window.onTermsCheckChange = function () {
+    var chk = document.getElementById('terms-agree-check');
+    var btn = document.getElementById('terms-accept-btn');
+    if (btn) btn.disabled = !(chk && chk.checked);
+  };
+
+  window.acceptTerms = function () {
+    if (!_tosStatus || !_tosStatus.current_tos_version) return;
+    var chk = document.getElementById('terms-agree-check');
+    if (!chk || !chk.checked) return; // affirmative action required
+    var btn = document.getElementById('terms-accept-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Recording…'; }
+    hideAlert('terms-gate-alert');
+    apiFetch('/account/accept-terms', {
+      method: 'POST',
+      // agree:true forwards the checkbox affirmation to the server (L-2). The box is
+      // unchecked by default and the button is disabled until it is checked (above), so
+      // this is a genuine, server-recorded manifestation of assent, not a bare version-echo.
+      body: JSON.stringify({ version: _tosStatus.current_tos_version, agree: true }),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (res.ok) {
+          _tosStatus = { needs_acceptance: false, accepted: true, current_tos_version: _tosStatus.current_tos_version };
+          hide('terms-gate');
+          loadEarnings(); // re-render payout with withdrawal unlocked
+        } else {
+          showAlert('terms-gate-alert', (res.data && res.data.error) || 'Could not record acceptance. Please try again.', 'error');
+          if (btn) { btn.disabled = false; btn.textContent = 'Accept and continue'; }
+        }
+      })
+      .catch(function () {
+        showAlert('terms-gate-alert', 'Network error. Please try again.', 'error');
+        if (btn) { btn.disabled = false; btn.textContent = 'Accept and continue'; }
+      });
+  };
 
   // ── Earnings ────────────────────────────────────────────────────────
   var _earnings = null;
@@ -754,12 +829,32 @@
     if (!grid) return;
     grid.textContent = '';
 
+    // R-01 §5.10: held (unassented) funds are earnings that require accepting the
+    // updated Terms before they can be released/withdrawn. Read defensively: only
+    // surface the held line when the server actually sends a non-zero field.
+    var held = 0;
+    if (data && typeof data.unassented_pending === 'number') {
+      held = data.unassented_pending;
+    } else if (data && typeof data.held === 'number') {
+      held = data.held;
+    }
+
     var items = [
       { label: 'Your share (withdrawable)', value: fmt(data.pending_balance), highlight: true },
       { label: 'Lifetime gross', value: fmt(data.total_gross_usd || data.total_gross || 0) },
-      { label: 'Your total (70%)', value: fmt(data.total_contributor) },
+      { label: 'Your revenue share (70%, earned to date)', value: fmt(data.total_contributor) },
       { label: 'Total withdrawn', value: fmt(data.total_withdrawn) },
     ];
+
+    if (held > 0) {
+      // Insert directly under the withdrawable share so the two are read together,
+      // and make clear this amount is NOT included in the withdrawable figure.
+      items.splice(1, 0, {
+        label: 'Held: accept Terms to release',
+        value: fmt(held),
+        held: true,
+      });
+    }
 
     items.forEach(function (item) {
       var wrap = document.createElement('div');
@@ -770,11 +865,22 @@
       lbl.textContent = item.label;
 
       var val = document.createElement('div');
-      val.className = 'earnings-value' + (item.highlight ? ' aurum' : '');
+      val.className = 'earnings-value' + (item.highlight || item.held ? ' aurum' : '');
       val.textContent = item.value;
 
       wrap.appendChild(lbl);
       wrap.appendChild(val);
+
+      // Held balance gets a short explainer pointing at the Terms gate above.
+      if (item.held) {
+        var heldNote = document.createElement('div');
+        heldNote.style.fontSize = '11px';
+        heldNote.style.color = 'var(--slate)';
+        heldNote.style.marginTop = '4px';
+        heldNote.textContent = 'Not included in your withdrawable share. Accept the updated Terms above to release it.';
+        wrap.appendChild(heldNote);
+      }
+
       grid.appendChild(wrap);
     });
 
@@ -788,6 +894,45 @@
     if (!el) return;
     el.textContent = '';
 
+    // Launch is ACCRUE-ONLY: BOTH withdrawal rails (USDC router + Stripe custodial
+    // kill-switch) are paused. The server reports this via `payouts_paused` on
+    // GET /account/earnings. When true, we must NOT render an enabled cash-out
+    // affordance (no Stripe connect button, no withdraw form), otherwise the UI
+    // invites a submit that the server will 503. Read defensively: only a strict
+    // `true` shows the paused state; anything else keeps the normal render below.
+    if (data && data.payouts_paused === true) {
+      var pausedWrap = document.createElement('div');
+      pausedWrap.className = 'wallet-note';
+
+      var pausedHead = document.createElement('strong');
+      pausedHead.style.color = 'var(--ivory)';
+      pausedHead.style.display = 'block';
+      pausedHead.style.marginBottom = '6px';
+      pausedHead.textContent = 'Withdrawals are opening soon';
+      pausedWrap.appendChild(pausedHead);
+
+      var pausedBody = document.createElement('p');
+      pausedBody.style.fontSize = '13px';
+      pausedBody.style.color = 'var(--slate)';
+      pausedBody.style.margin = '0';
+      pausedBody.textContent = 'Both withdrawal rails (Stripe-to-bank and USDC on Base) are paused while we complete our non-custodial migration. Your earnings accrue now and remain payable to you under the Terms; they become withdrawable as soon as the non-custodial rail goes live. No lock-ups, no expiry.';
+      pausedWrap.appendChild(pausedBody);
+
+      if (data.wallet) {
+        var pausedWallet = document.createElement('p');
+        pausedWallet.style.fontSize = '12px';
+        pausedWallet.style.color = 'var(--slate)';
+        pausedWallet.style.marginTop = '8px';
+        pausedWallet.style.marginBottom = '0';
+        pausedWallet.textContent = 'Your linked wallet stays ready: ' + data.wallet;
+        pausedWrap.appendChild(pausedWallet);
+      }
+
+      el.appendChild(pausedWrap);
+      show('payout-content');
+      return;
+    }
+
     // USDC / crypto section (always shown)
     var cryptoWrap = document.createElement('div');
     cryptoWrap.className = 'wallet-note';
@@ -796,7 +941,7 @@
     cryptoHead.style.color = 'var(--ivory)';
     cryptoHead.style.display = 'block';
     cryptoHead.style.marginBottom = '6px';
-    cryptoHead.textContent = 'Wallet (USDC on Base)';
+    cryptoHead.textContent = 'Wallet (USDC on Base): coming soon';
     cryptoWrap.appendChild(cryptoHead);
 
     if (data && data.wallet) {
@@ -811,14 +956,14 @@
       var note = document.createElement('div');
       note.style.marginTop = '8px';
       note.style.fontSize = '12px';
-      note.textContent = 'To withdraw USDC, use the CLI or your wallet app. Browser signing is coming in v2.';
+      note.textContent = 'USDC withdrawals on Base are paused while our non-custodial rail rolls out. Bank withdrawals via Stripe are available in the section below when your balance is ready. Your wallet stays linked and ready.';
 
       cryptoWrap.appendChild(linkedLine);
       cryptoWrap.appendChild(addrSpan);
       cryptoWrap.appendChild(note);
     } else {
       var noWallet = document.createElement('div');
-      noWallet.textContent = 'No wallet linked. Use the CLI command "auxilo link-wallet" to connect a wallet for USDC withdrawals on Base.';
+      noWallet.textContent = 'No wallet linked. USDC withdrawals on Base are rolling out on our non-custodial rail (coming soon). You can link a wallet now with the CLI command "auxilo link-wallet" to be ready. Bank withdrawals via Stripe are available in the section below when your balance is ready.';
       cryptoWrap.appendChild(noWallet);
     }
 
@@ -860,7 +1005,19 @@
 
     // Withdraw form (shown when balance > 0)
     var pendingBal = data ? (data.pending_balance || 0) : 0;
-    var canWithdraw = data && data.can_withdraw && pendingBal >= 0.50;
+    // R-01 §5.10: withdrawal is gated on current-Terms acceptance. The server 403s
+    // regardless; here we hide the form and point the builder at the gate above so
+    // the UI matches the server rather than letting them submit into a 403.
+    var termsBlock = !!(_tosStatus && _tosStatus.needs_acceptance);
+    if (termsBlock) {
+      var wBlockNote = document.createElement('p');
+      wBlockNote.style.fontSize = '13px';
+      wBlockNote.style.color = 'var(--aurum)';
+      wBlockNote.style.marginTop = '14px';
+      wBlockNote.textContent = 'Accept the updated Terms of Service above to enable withdrawals.';
+      el.appendChild(wBlockNote);
+    }
+    var canWithdraw = data && data.can_withdraw && pendingBal >= 0.50 && !termsBlock;
 
     var sep2 = document.createElement('div');
     sep2.className = 'section-sep';

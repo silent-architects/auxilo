@@ -3,7 +3,7 @@ const { serve } = require('@hono/node-server');
 
 const app = new Hono();
 
-const WALLET = '0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6';
+const WALLET = '0xA19Cf92cc1daCf742f0E50b4128cAD3A86A81EC4';
 const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 const FACILITATOR = 'https://facilitator.openx402.ai';
 const VERSION = '0.3.1';
@@ -207,7 +207,7 @@ Renderly is a stateless web content extraction service designed for autonomous a
 Protocol: x402 v2
 Network: Base (eip155:8453)
 Asset: USDC (0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913)
-Wallet: 0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6
+Wallet: 0xA19Cf92cc1daCf742f0E50b4128cAD3A86A81EC4
 Facilitator: https://facilitator.openx402.ai
 Method: Include X-Payment header with x402 payment proof. Without it, endpoints return HTTP 402 with payment requirements.
 `;

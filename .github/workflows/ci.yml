@@ -5,6 +5,19 @@ on:
   pull_request:
 
 jobs:
+  predeploy-guard:
+    name: Predeploy Guard (OPS-1)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # BLOCKING: fails the build if any served legal doc still contains a
+      # `[[...]]` fill-blank (e.g. [[DEPLOY-DATE]], [[LEGAL-ENTITY ...]]), or
+      # if the ToS "Current Amendment" id has drifted from the server's
+      # CURRENT_TOS_VERSION (Gate-B Condition B). See scripts/predeploy-check.sh.
+      - name: Run predeploy check
+        run: bash scripts/predeploy-check.sh
+
   test:
     name: Test
     runs-on: ubuntu-latest

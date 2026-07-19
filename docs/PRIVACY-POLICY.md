@@ -1,13 +1,15 @@
 # Privacy Policy
 
 **Effective Date: March 17, 2026**
-**Last Updated: March 20, 2026**
+**Last Updated: July 6, 2026**
 
 ---
 
 ## 1. Information We Collect
 
 This Privacy Policy describes how Auxilo ("we," "us," "our," or the "Platform"), accessible at auxilo.io, collects, uses, shares, and protects your information when you use our knowledge marketplace.
+
+The entity responsible for your personal information (the "data controller") is Auxilo, LLC, a Missouri limited liability company, doing business as Auxilo. You can reach us using the contact details in Section 12.
 
 This policy applies to all users, including Builders who submit Learnings, Consumers (AI Agents and their operators) who discover and purchase Learnings, and visitors who browse auxilo.io. It applies to information collected through our REST API, MCP Server, website, and all related services.
 
@@ -44,7 +46,7 @@ When you engage in paid activity on the Platform, we collect:
 
 We automatically collect certain information when you interact with the Platform:
 
-- **IP address.** Used for security, rate limiting, geographic analysis, and abuse detection.
+- **IP address.** Used for security, rate limiting, geographic analysis, and abuse detection. Separately, the IP address and User-Agent captured at the moment you accept the Terms of Service are stored with your account as an evidentiary record of that acceptance and retained for the life of the account (see Section 4).
 - **User-Agent string.** The browser or client identifier sent with API requests or web visits, used for compatibility analysis, debugging, and identifying Agent types.
 - **Request logs.** API endpoints accessed, HTTP methods, request parameters (excluding sensitive content), response codes, and response times.
 - **Timestamps.** The date and time of each request or interaction, in UTC.
@@ -117,7 +119,7 @@ If you use x402 micropayments or verify a wallet address, be aware that wallet a
 We share information with trusted third-party service providers who assist us in operating the Platform, including:
 
 - **Hosting and infrastructure providers.** Cloud services that host our servers, databases, and store data on our behalf.
-- **Email delivery services.** Services that deliver transactional emails (magic links, notifications) on our behalf.
+- **Email delivery services.** Services that deliver transactional emails (magic links, notifications) on our behalf. Our transactional email is delivered by Resend, Inc. (see §3.8).
 - **Payment infrastructure.** The x402 facilitator service and blockchain infrastructure used to verify and settle micropayments.
 - **Content delivery networks.** Services that help deliver API responses and website content efficiently.
 
@@ -153,6 +155,7 @@ We engage the following third-party sub-processors to process personal data on o
 | Sub-Processor | Purpose | Data Categories Shared |
 |---|---|---|
 | Anthropic, PBC | Conversation text processing for Learning extraction (manual and autonomous) via the Claude API | Redacted conversation text uploaded by the Builder (temporarily, during extraction only; PII scrubbed before transmission) |
+| Resend, Inc. | Transactional email delivery (magic-link sign-in emails and account/operational notifications) | Email address and email content, for delivery only |
 | Stripe, Inc. | Payment processing for credit pack purchases and Builder withdrawals via Stripe Connect | Email address, payout destination information, transaction amounts |
 | Coinbase, Inc. (Base network) | Blockchain settlement of x402 micropayments on the Base Ethereum Layer 2 network | Wallet addresses, transaction amounts, payment proofs (recorded on-chain and inherently public) |
 
@@ -169,7 +172,8 @@ We retain your information for the following periods:
 | Account data (email, wallet address) | Duration of your account + 30 days after deletion request | Account operation and reasonable deletion processing |
 | Transaction records (purchases, earnings, payments) | 3 years from transaction date | Audit, compliance, tax reporting, and dispute resolution |
 | Submitted Learnings | Indefinite (while published) | Catalog availability per license grant in Terms of Service |
-| Usage logs (IP addresses, User-Agent, request timestamps) | 90 days | Security analysis, abuse detection, and debugging |
+| Usage logs (request IP addresses, User-Agent, request timestamps) | 90 days | Security analysis, abuse detection, and debugging |
+| Terms-acceptance consent record (IP address and User-Agent captured at the moment you accepted the Terms) | Life of account + 30 days after deletion request | Evidentiary record of your acceptance of the Terms of Service (including the §5.10 payee-agency appointment), kept for legal and dispute-resolution purposes |
 | API keys | Until revoked by you or account termination | Authentication |
 | Credit balance records | Duration of account + 3 years | Financial reconciliation |
 | Quality score history | Duration of Learning publication | Catalog ranking and integrity |
@@ -208,9 +212,9 @@ We implement technical and organizational measures designed to protect your info
 
 ## 6. Cookies and Tracking
 
-### 6.1 Session Cookies
+### 6.1 Authentication (No Cookies)
 
-The Platform uses session cookies solely for authentication purposes when you access auxilo.io through a web browser. These cookies are strictly necessary for the Platform to function and expire when you close your browser or after a reasonable inactivity period.
+The Platform does **not** set cookies. When you sign in through a web browser at auxilo.io, authentication is handled with a JSON Web Token (JWT) that is stored in your browser's `localStorage` and sent to our servers in an `Authorization` request header. This token is strictly necessary for the authenticated areas of the Platform to function. It is not a cookie, is not transmitted automatically to any other site, and is not used for tracking. The token expires after a set period, and you can clear it at any time by signing out or clearing your browser's site data. Because we set no cookies, no cookie banner or cookie-consent mechanism is required.
 
 ### 6.2 No Third-Party Tracking
 
@@ -250,9 +254,13 @@ The Platform is hosted on third-party cloud infrastructure. Your data is stored 
 
 ### 7.4 Email Delivery
 
-Transactional emails (magic links, notifications) are delivered through third-party email services. These services receive your email address and email content solely for the purpose of delivery.
+Transactional emails (magic links, notifications) are delivered through Resend, Inc., our third-party email delivery provider (see §3.8). Resend receives your email address and email content solely for the purpose of delivery.
 
-### 7.5 LLM Providers (Autonomous Extraction)
+### 7.5 Web Fonts (Google Fonts)
+
+The auxilo.io website loads its display fonts from Google Fonts (`fonts.googleapis.com` and `fonts.gstatic.com`). When your browser renders a page, it requests these font files directly from Google, which means your IP address and basic request metadata (such as your User-Agent) are visible to Google as part of serving the fonts. Google Fonts is the only third-party asset host the website loads; we do not use it, or any other host, for analytics, advertising, or cross-site tracking. We are evaluating self-hosting these fonts to remove this third-party request. This affects only the website; API and MCP Server interactions do not load fonts and are unaffected.
+
+### 7.6 LLM Providers (Autonomous Extraction)
 
 When Builders enable Autonomous Extraction (ToS §5.9.3), redacted session transcripts are transmitted to our LLM subprocessor(s) for the sole purpose of extracting candidate Learnings. At the effective date, the sole such subprocessor is **Anthropic, PBC** under commercial terms that prohibit Anthropic from using submitted content for model training. Auxilo applies client-side and server-side PII redaction before any transcript reaches the subprocessor. For the current subprocessor list, see §3.8 and https://auxilo.io/legal/subprocessors.
 
@@ -315,6 +323,16 @@ We will respond to your request within **30 days**. If a request is particularly
 
 **California Residents (CCPA/CPRA).** California residents have additional rights under the California Consumer Privacy Act and California Privacy Rights Act, including the right to know what personal information we collect and how it is used, the right to delete, the right to opt out of the sale of personal information (we do not sell personal information), and the right to non-discrimination for exercising your rights.
 
+For transparency, the categories of personal information we collect under the CCPA/CPRA, mapped to the statutory categories, are:
+
+- **Identifiers** — email address, account identifier, IP address, and, if you provide one, organization name.
+- **Commercial information** — records of Learnings you unlocked or published, credit pack purchases, credit consumption, earnings, and payout history.
+- **Internet or other electronic network activity** — API and web request logs, endpoints accessed, discovery and search queries, User-Agent, and device data collected from web visits.
+- **Geolocation data** — coarse (non-precise) geographic inferences derived from IP address for security and abuse detection.
+- **Financial / payment-adjacent information** — blockchain wallet address and on-chain transaction data; payout-destination and transaction details processed by our payment processor. We do not collect bank account or card numbers ourselves (see Section 1.6).
+
+Your blockchain **wallet address** is a public identifier. If you verify a wallet or transact via x402, your wallet address and the associated transaction data are recorded on the public Base blockchain and are inherently public and immutable (see Sections 3.2 and 4). We do not collect or store your private keys or seed phrases. We do not use any category of personal information for cross-context behavioral advertising, and we do not sell or share personal information as those terms are defined under the CCPA/CPRA.
+
 **EEA, UK, and Swiss Residents (GDPR/UK GDPR).** If you are located in the European Economic Area, United Kingdom, or Switzerland, you may have additional rights under the General Data Protection Regulation, including the right to lodge a complaint with your local supervisory authority. Our legal basis for processing personal data is typically performance of a contract (these Terms) or legitimate interests (security, abuse prevention, service improvement).
 
 ---
@@ -366,4 +384,4 @@ We aim to respond to all privacy-related inquiries within 30 days.
 
 ---
 
-*This Privacy Policy was last updated on March 20, 2026.*
+*This Privacy Policy was last updated on July 6, 2026.*

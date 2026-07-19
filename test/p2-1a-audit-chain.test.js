@@ -18,7 +18,14 @@ const path = require('path');
 const crypto = require('crypto');
 
 // ── Test isolation ──────────────────────────────────────────────────────────
-const DATA_DIR = path.join(__dirname, '..', 'data');
+// Route this file's audit + consent writes into a private temp data dir so the
+// hash-chain assertions cannot be polluted by sibling test files that run
+// concurrently against the shared repo data/ dir. The audit-writer and
+// consent-reader both honor AUXILO_DATA_DIR, read at their require() time — so
+// this must be set before the require() calls in the before() hook below.
+const os = require('os');
+const DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'auxilo-audit-chain-'));
+process.env.AUXILO_DATA_DIR = DATA_DIR;
 const CONSENT_FILE = path.join(DATA_DIR, 'extraction-consent.jsonl');
 const CONSENT_BACKUP = CONSENT_FILE + '.test-backup';
 

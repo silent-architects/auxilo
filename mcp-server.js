@@ -73,7 +73,7 @@ RATE AFTER YOU USE: After unlocking and applying a learning from the marketplace
 
 DEDUP BEFORE SUBMITTING: Search auxilo_knowledge for your topic before contributing to avoid duplicates.
 
-You earn 70% of every sale. The builder who connected you earns passive income from your contributions.`
+You earn 70% of every direct sale (60% discovery-driven). The builder who connected you earns a revenue share from your contributions.`
   }
 );
 
@@ -171,7 +171,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         type: 'object',
         properties: {
           id: { type: 'string', description: 'Learning ID (e.g. "lrn_a1b2c3d4")' },
-          x_payment: { type: 'string', description: 'x402 payment header' },
+          x_payment: { type: 'string', description: 'x402 payment header. If the 402 challenge carries extra.router (non-custodial split settlement), you may either pay payTo with a standard TransferWithAuthorization as usual, or — preferred — sign a ReceiveWithAuthorization with to=extra.router.address and nonce=extra.router.nonce and echo {"extra":{"salt":extra.router.salt}} inside the payment payload; the precomputed nonce binds the advertised contributor split into your signature.' },
         },
         required: ['id'],
       },
@@ -203,7 +203,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_withdraw',
-      description: 'Request withdrawal of earned USDC. Requires a valid cryptographic signature of: "auxilo-withdraw-{wallet}-{amount}-{timestamp}".',
+      description: 'Request withdrawal of earned USDC. Requires a valid cryptographic signature of: "auxilo-withdraw-{wallet}-{amount}-{timestamp}". NOTE: withdrawals are TEMPORARILY PAUSED during the non-custodial settlement migration — this call currently returns HTTP 503 with code "withdraw_paused_noncustodial_migration". Earned balances are safe and become payable on the new on-chain rail; there is nothing to retry until the pause lifts.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -238,25 +238,38 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_link_wallet',
-      description: 'Link a verified wallet address to your Auxilo account. Requires session JWT (from magic link login) and the wallet must have been previously verified via auxilo_verify_wallet. One wallet per account. Required to withdraw earnings.',
+      description: 'Link a verified wallet address to your Auxilo account. Authenticates with your configured API key automatically, or pass a session_token (JWT from magic link login). The wallet must have been previously verified via auxilo_verify_wallet. One wallet per account. Required to withdraw earnings. NOTE: you must first accept the current Terms via auxilo_accept_terms — linking a payout wallet triggers the §5.10 payment-collection agency and returns 403 TERMS_NOT_ACCEPTED until acceptance is on file.',
       inputSchema: {
         type: 'object',
         properties: {
           wallet: { type: 'string', description: 'Verified wallet address (0x...) to link to your account' },
-          session_token: { type: 'string', description: 'JWT session token from /auth/verify (Bearer token)' },
+          session_token: { type: 'string', description: 'Optional JWT session token from /auth/verify. If omitted, your configured API key authenticates the account.' },
         },
-        required: ['wallet', 'session_token'],
+        required: ['wallet'],
       },
     },
     {
       name: 'auxilo_account_earnings',
-      description: 'View earnings for your authenticated Auxilo account. Requires session JWT. Returns total gross, contributor share, pending balance, total withdrawn, and whether withdrawal is available (can_withdraw). Free.',
+      description: 'View earnings for your authenticated Auxilo account. Authenticates with your configured API key automatically, or pass a session_token (JWT). Returns total gross, contributor share, pending balance, total withdrawn, and whether withdrawal is available (can_withdraw). Free.',
       inputSchema: {
         type: 'object',
         properties: {
-          session_token: { type: 'string', description: 'JWT session token from /auth/verify (Bearer token)' },
+          session_token: { type: 'string', description: 'Optional JWT session token from /auth/verify. If omitted, your configured API key authenticates the account.' },
         },
-        required: ['session_token'],
+        required: [],
+      },
+    },
+    {
+      name: 'auxilo_accept_terms',
+      description: 'Record the builder\'s affirmative acceptance of the current Auxilo Terms of Service — including the Section 5.10 payment-collection agency, under which the builder appoints Auxilo as their limited agent to receive the Builder Share on their behalf. REQUIRED before linking a payout wallet or withdrawing: those actions return 403 TERMS_NOT_ACCEPTED until this is called. Present the Terms (https://auxilo.io/terms) to the builder and call with agree=true ONLY on the builder\'s assent — this is their affirmative clickwrap acceptance, not a formality. Authenticates with your configured API key automatically, or pass a session_token. The current terms version is fetched and bound automatically.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          agree: { type: 'boolean', description: 'Must be true — the builder\'s affirmative acceptance of the current Terms (Section 5.10 payee-agency). Do not default this; set it only after presenting the Terms and obtaining the builder\'s assent.' },
+          session_token: { type: 'string', description: 'Optional JWT session token from /auth/verify. If omitted, your configured API key authenticates the account.' },
+          version: { type: 'string', description: 'Optional. The exact terms version to accept; defaults to the server\'s current version of record (recommended — leave unset).' },
+        },
+        required: ['agree'],
       },
     },
     {
@@ -441,7 +454,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           headers: baseHeaders(),
           body: JSON.stringify(args)
         });
-        return text(await resp.json());
+        const data = await resp.json();
+        // R-01: the custodial USDC rail is paused during the non-custodial
+        // migration and returns 503 withdraw_paused_noncustodial_migration.
+        // Surface that as a plain, human-legible note instead of a raw error
+        // blob so the agent doesn't treat it as a transient failure to retry.
+        if (resp.status === 503 && data && data.code === 'withdraw_paused_noncustodial_migration') {
+          return text({
+            status: 'paused',
+            message: 'Withdrawals are temporarily paused while Auxilo migrates to direct on-chain (non-custodial) settlement. Your earned balance is safe and will be payable on the new rail once the migration completes. This is expected — do not retry; nothing is wrong with your account or signature.',
+            server_response: data,
+          });
+        }
+        return text(data);
       }
 
       case 'auxilo_settlements': {
@@ -455,21 +480,53 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'auxilo_link_wallet': {
+        // UX-N2: authenticate with a session JWT when provided, otherwise fall
+        // back to the configured API key that baseHeaders() attaches — same
+        // idiom as auxilo_accept_terms. Only set the Authorization header when a
+        // token is actually present (avoids sending "Bearer undefined").
         const resp = await fetch(`${AUXILO_BASE}/account/link-wallet`, {
           method: 'POST',
-          headers: baseHeaders({
-            'Authorization': `Bearer ${args.session_token}`,
-          }),
+          headers: baseHeaders(
+            args.session_token ? { 'Authorization': `Bearer ${args.session_token}` } : {}
+          ),
           body: JSON.stringify({ wallet: args.wallet }),
         });
         return text(await resp.json());
       }
 
       case 'auxilo_account_earnings': {
+        // UX-N2: session JWT when provided, else the configured API key via
+        // baseHeaders() — mirrors auxilo_accept_terms.
         const resp = await fetch(`${AUXILO_BASE}/account/earnings`, {
-          headers: baseHeaders({
-            'Authorization': `Bearer ${args.session_token}`,
-          }),
+          headers: baseHeaders(
+            args.session_token ? { 'Authorization': `Bearer ${args.session_token}` } : {}
+          ),
+        });
+        return text(await resp.json());
+      }
+
+      case 'auxilo_accept_terms': {
+        if (args.agree !== true) {
+          return text({
+            error: 'Not accepted. Present the current Terms (https://auxilo.io/terms) to the builder and call auxilo_accept_terms with agree=true only on their affirmative assent.',
+          });
+        }
+        const headers = baseHeaders(
+          args.session_token ? { 'Authorization': `Bearer ${args.session_token}` } : {}
+        );
+        // Bind to the server's current version of record so the builder can never
+        // accept a stale version. Fetch it, then POST the acceptance.
+        const statusResp = await fetch(`${AUXILO_BASE}/account/terms-status`, { headers });
+        const status = await statusResp.json();
+        if (!statusResp.ok) return text(status);
+        const version = args.version || status.current_tos_version;
+        const resp = await fetch(`${AUXILO_BASE}/account/accept-terms`, {
+          method: 'POST',
+          headers,
+          // Forward the affirmation to the server (L-2): the local agree===true guard above
+          // is not enough — the server requires and records agree:true so the acceptance is
+          // evidenced by a transmitted affirmation, not a bare version-echo.
+          body: JSON.stringify({ version, agree: true }),
         });
         return text(await resp.json());
       }
@@ -577,7 +634,7 @@ function text(obj) {
 // LW-3(a): export the pure helpers so they can be unit-tested without starting
 // the stdio transport. When this file is required (not run directly), stop here
 // before the CLI dispatch and MCP startup below.
-module.exports = { fenceUnlockResult, UNTRUSTED_CONTENT_ADVISORY };
+module.exports = { fenceUnlockResult, UNTRUSTED_CONTENT_ADVISORY, baseHeaders };
 if (require.main !== module) {
   return;
 }

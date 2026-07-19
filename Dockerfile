@@ -55,6 +55,17 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 # Container runs as root at entry, entrypoint drops to node via su-exec.
 # Do NOT add `USER node` — it would prevent the entrypoint from chowning.
 
+# ── Version stamp (OPS-4 support) ─────────────────────────────────────────
+# GIT_SHA / BUILT_AT are injected at build time so `GET /version` can report
+# the exact deployed commit. Pass at build with:
+#   fly deploy --build-arg GIT_SHA=$(git rev-parse HEAD)
+#   docker build --build-arg GIT_SHA=$(git rev-parse HEAD) .
+# BUILT_AT defaults to the build timestamp if not supplied.
+ARG GIT_SHA=unknown
+ARG BUILT_AT
+ENV GIT_SHA=$GIT_SHA \
+    BUILT_AT=$BUILT_AT
+
 ENV NODE_ENV=production \
     PORT=3000 \
     CONTENT_MODERATION_ENABLED=true

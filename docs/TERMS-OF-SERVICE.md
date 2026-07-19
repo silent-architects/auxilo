@@ -1,7 +1,8 @@
 # Terms of Service
 
 **Effective Date: March 17, 2026**
-**Last Updated: July 3, 2026**
+**Last Updated: July 11, 2026**
+**Current Amendment: `2026-07-04-payee-agency-a1` — Payment-Collection Agency (Section 5.10), effective July 11, 2026.** The payment-collection agency in Section 5.10 was added by this amendment and applies only on and after its effective date shown above (July 11, 2026); it does not apply retroactively to the original March 17, 2026 Effective Date or to any Builder Share received before the amendment's effective date.
 
 ---
 
@@ -58,6 +59,16 @@ Each individual or organization may maintain one account on the Platform. Creati
 
 You are solely responsible for all activity that occurs under your account, API key, or verified wallet address, whether or not you authorized that activity. You agree to notify us immediately at hello@auxilo.io if you believe your account or credentials have been compromised. Auxilo is not liable for any loss or damage arising from unauthorized use of your credentials.
 
+### 3.6 Sanctions and Jurisdiction Representations
+
+By registering for or using the Platform, you represent and warrant that:
+
+1. You are not located in, ordinarily resident in, or organized under the laws of any country or region that is the subject of comprehensive U.S. economic sanctions or embargo (including, at present, Cuba, Iran, North Korea, Syria, and the Crimea, Donetsk, and Luhansk regions of Ukraine), and you will not access or use the Platform from any such country or region.
+2. You are not identified on, and are not owned 50% or more (individually or in the aggregate) or controlled by any person identified on, any list of sanctioned, restricted, or prohibited persons maintained by the U.S. Government — including the U.S. Department of the Treasury's Office of Foreign Assets Control ("OFAC") Specially Designated Nationals and Blocked Persons ("SDN") List — or any equivalent list maintained by any other applicable jurisdiction.
+3. You will not use the Platform to transact with, or on behalf of, any such country, region, or person, or for any purpose prohibited by applicable sanctions, export-control, or anti-money-laundering laws.
+
+You agree to notify us promptly if any of these representations ceases to be accurate. Auxilo may suspend, restrict, or terminate your access to the Platform, withhold or freeze any earnings, and take any other action it deems necessary to comply with applicable law, immediately and without prior notice, if you breach this Section 3.6 or if Auxilo reasonably believes such action is required to comply with applicable sanctions or anti-money-laundering laws.
+
 ---
 
 ## 4. Description of Service
@@ -82,7 +93,7 @@ Discovery queries and knowledge searches require a registered account with avail
 
 ### 4.4 Marketplace Facilitator
 
-Auxilo is a marketplace facilitator. We do not create, verify, endorse, or guarantee the accuracy of any Learning published on the Platform. Builders are independent publishers, not employees, contractors, or agents of Auxilo.
+Auxilo is a marketplace facilitator. We do not create, verify, endorse, or guarantee the accuracy of any Learning published on the Platform. Builders are independent publishers, not employees, contractors, or general agents of Auxilo, except that a Builder appoints Auxilo as its limited payment-collection agent solely as provided in Section 5.10.
 
 ---
 
@@ -140,7 +151,11 @@ Settlement occurs on a periodic basis as determined by Auxilo. We will make reas
 
 **Minimum Payout Threshold.** Auxilo may establish a minimum earnings threshold that must be met before a payout is processed. The current threshold, if any, is published in the API documentation.
 
+**Network (Gas) Costs on Withdrawal.** As provided in Section 7.4, you are responsible for the network transaction ("gas") fees associated with your transactions. This Section 5.6 states how that general responsibility applies to withdrawals of your earnings. On the custodial USDC withdrawal rail currently in operation, the gas cost of settling your earnings on-chain is borne by you and is deducted from your pending balance at the time of withdrawal. Auxilo applies a fixed gas estimate to each withdrawal (currently **USD $0.005** per withdrawal, subject to change on notice under Section 17), and remits to you the net amount after that single deduction; if your balance is insufficient to cover the estimated gas, the withdrawal will not be processed. Where earnings are settled through the Auxilo Split Router's direct-settlement flow (Section 5.10.4(b)), Auxilo bears the on-chain gas cost of that settlement and no gas deduction is applied to your Builder Share on that path. This paragraph is the specific application of Section 7.4 to earnings withdrawals and does not impose any gas charge in addition to the one described here.
+
 **Tax Obligations.** Builders are solely responsible for reporting and paying any taxes applicable to their earnings. Auxilo may request tax documentation (such as W-9 or W-8BEN forms) as required for compliance with applicable tax reporting obligations. Failure to provide requested documentation may result in withholding or suspension of payouts.
+
+**Nature of the Revenue Share.** The Builder Share is compensation for content you contribute to the Platform and make available for unlock by Consumers. It is not an investment contract, security, or interest in Auxilo, and it is not a promise or guarantee of any return, profit, or income. Your earnings depend entirely on the independent purchasing behavior of third-party Consumers who choose to unlock your Learnings, and are not guaranteed. No Builder should expect profits derived solely or predominantly from the managerial or entrepreneurial efforts of Auxilo. Nothing in these Terms should be construed as an offer or sale of a security.
 
 ### 5.7 Builder Representations and Warranties
 
@@ -205,11 +220,76 @@ A Builder may change trigger modes or disable Autonomous Extraction at any time 
 
 **(a) Seven-day retraction window.** A Builder may retract any Learning published via Autonomous Extraction for a period of seven (7) calendar days following its publication date. Retraction is effected by request through the Platform's catalog management interface or by email to hello@auxilo.io identifying the Learning. Upon a valid retraction request, Auxilo will remove the Learning from public discovery, search results, and the catalog API within a commercially reasonable time.
 
-**(b) After the retraction window.** Following the seven-day window, autonomously-published Learnings are subject to the same removal mechanisms as any other published Learning, including the DMCA/notice-and-takedown processes referenced in Section 5 and Section 9.
+**(b) After the retraction window.** Following the seven-day window, autonomously-published Learnings are subject to the same removal mechanisms as any other published Learning, including Auxilo's content moderation and enforcement rights under Section 10 and the notice-and-takedown procedure in our [DMCA Copyright Policy](/dmca), which is incorporated into these Terms.
 
 **(c) No clawback; no refund.** Retraction removes a Learning from the catalog on a forward-going basis only. It does **not** reverse, refund, or unwind any unlock transaction completed prior to retraction. Consumers who unlocked the Learning before retraction retain the perpetual license described in Section 5.3 and Section 6.4. Builder earnings already accrued from pre-retraction unlocks remain payable on the normal settlement schedule and are not subject to clawback.
 
 **(d) Relationship to transaction finality.** This subsection is consistent with, and does not alter, the transaction-finality rule in Section 7.3.
+
+### 5.10 Appointment of Auxilo as Limited Payment-Collection Agent
+
+#### 5.10.1 Appointment and Scope
+
+By accepting these Terms and by submitting any Learning for which you may earn a revenue share, you ("Builder") appoint Auxilo — Auxilo, LLC, a Missouri limited liability company ("Auxilo") — as your limited agent for the sole and exclusive purpose of receiving, on your behalf, payment of the Builder Share (as defined in Section 5.4) owed to you by Consumers who unlock your Learnings.
+
+This appointment takes effect on the effective date of the amendment that introduced this Section 5.10 (`2026-07-04-payee-agency-a1`, effective July 11, 2026) or, if later, on the date you accept these Terms as so amended. It applies only to Builder Share amounts received on or after that date and does not apply retroactively to any amount received before it.
+
+This appointment is limited to the collection and receipt of the Builder Share. It does **not** authorize Auxilo to act as your agent for any other purpose, and specifically does not authorize Auxilo to:
+
+- incur obligations in your name;
+- make representations or warranties on your behalf;
+- set, negotiate, or waive the price a Consumer pays (which is governed by Section 5.5);
+- bind you to any agreement with any Consumer or third party; or
+- act as your agent with respect to any matter other than receipt of the Builder Share.
+
+#### 5.10.2 Receipt by Agent Is Payment to Builder (Payment-Extinguishment)
+
+**Payment of the Builder Share to Auxilo, in its capacity as your limited collection agent, constitutes payment to you.** A Consumer's obligation to pay for an unlock of your Learning is fully satisfied and extinguished at the moment Auxilo (or, where applicable, the settlement mechanism described in Section 5.10.4) receives the unlock payment — whether or not, and regardless of when, Auxilo remits the Builder Share to you.
+
+Accordingly:
+
+- The Consumer bears **no** risk that you will not receive your Builder Share; once Auxilo receives payment, that risk is between you and Auxilo.
+- Any failure, delay, or shortfall by Auxilo in remitting the Builder Share to you is a matter solely between you and Auxilo and does **not** revive, reinstate, or create any payment obligation of the Consumer to you.
+
+#### 5.10.3 No Trust, No Fiduciary Deposit, No Custodial Duty
+
+The appointment in this Section 5.10 creates an agency for collection only. It does **not** create a trust, escrow, fiduciary deposit, or bailment, and it does **not** impose on Auxilo any duty to segregate, hold in trust, safeguard as a custodian, or account for the Builder Share as trust property. With respect to any Builder Share received by Auxilo and not yet remitted, the relationship between you and Auxilo is that of **creditor (you) and debtor (Auxilo)**, not beneficiary and trustee.
+
+Nothing in this Section 5.10 modifies the independent-contractor relationship in Section 20.5, and no partnership, joint venture, employment, or general agency is created by this Section.
+
+#### 5.10.4 Payment Rails and Settlement Flows
+
+This Section 5.10 applies to all Builder Share payments across the rails Auxilo supports, under whichever settlement flow is in effect at the time of the unlock.
+
+**(a) x402 / USDC rail — custodial flow (the currently-operated default).** Where a Consumer pays in USDC via the x402 protocol and settlement is directed to Auxilo's platform wallet, Auxilo receives the full unlock amount as your collection agent as to the Builder Share portion, and in its own right as to the platform fee. Auxilo's receipt of the Builder Share into the platform wallet is payment to you under Section 5.10.2, and Auxilo thereafter holds the Builder Share as your debtor under Section 5.10.3 until settlement to your verified wallet under Section 5.6. This custodial flow is the rail currently in operation.
+
+**(b) x402 / USDC rail — direct-settlement flow via the Auxilo Split Router (buyer-attested receive path only).** Where, and only where, an unlock is settled through the Auxilo Split Router's buyer-attested receive path — a settlement in which the Builder Share destination and split are cryptographically bound to the authorization the Consumer signed (an on-chain contract that, in a single transaction, transfers the Builder Share directly to your verified wallet and the platform fee to Auxilo's fee wallet) — the Builder Share is settled directly to your verified wallet and does not enter an Auxilo-controlled address on that path. On that buyer-attested receive path, receipt by your wallet is receipt by you, and the Consumer's obligation is extinguished at that on-chain receipt.
+
+The direct-settlement representation in this Section 5.10.4(b) is limited to the buyer-attested receive path described above. Auxilo also operates, or may operate, other Split Router settlement paths (including a transfer path for interoperability with generic payment clients and a recovery path for stranded funds) on which Auxilo, acting as settler, retains operational discretion over settlement parameters. Auxilo does not represent, and you should not understand, that the Builder Share is incapable of diversion on those other paths. On any path other than the buyer-attested receive path, Auxilo receives the Builder Share as your collection agent under Section 5.10.1, and the custodial characterization in Section 5.10.4(a) and the creditor/debtor characterization in Section 5.10.3 apply.
+
+**(c) Fiat / credits rail.** Where a Consumer's unlock is funded by prepaid credits and the Builder Share is settled to you via the Platform's fiat payout mechanism (currently Stripe Connect), Auxilo receives the credit-funded Builder Share as your collection agent, holds it as your debtor under Section 5.10.3, and remits it via the licensed payout partner. Nothing in this Section makes Auxilo the transmitter of the fiat payout; that function is performed by the licensed payment partner.
+
+#### 5.10.5 Fee-Netting and Authorized Deductions
+
+You authorize Auxilo, as your collection agent, to deduct and retain Auxilo's platform fee (the portion of the unlock price that is not the Builder Share, as set out in Section 5.4) from amounts received, and to remit to you only the net Builder Share. This netting is an accounting convenience and a term of the marketplace commission arrangement; it does not convert the platform fee into funds held on your behalf, and it does not enlarge the agency beyond collection of the Builder Share.
+
+You further authorize Auxilo to deduct, before remittance, any amounts you owe Auxilo or that Auxilo is required to withhold, including: (i) the network (gas) cost of your USDC withdrawal, to the extent that cost is borne by you as disclosed in Section 5.6; (ii) minimum-threshold and rounding adjustments; and (iii) any tax withholding required under Section 5.6 or applicable law.
+
+#### 5.10.6 Irrevocability During Pendency
+
+This appointment is **irrevocable with respect to any unlock transaction that has been initiated or completed while the appointment is in effect**, and with respect to any Builder Share already received by Auxilo, until that Builder Share has been remitted to you. This limited irrevocability protects the finality of the Consumer's discharge under Section 5.10.2: because a Consumer's payment obligation is extinguished upon Auxilo's receipt as your agent, that discharge cannot be unwound by revocation of the agency after the fact. You may terminate the appointment on a going-forward basis as provided in Section 5.10.7, but such termination does not affect (i) the extinguishment of any Consumer's obligation that already occurred under Section 5.10.2, or (ii) Auxilo's authority and obligation to complete collection and remittance of Builder Share already accrued.
+
+#### 5.10.7 Termination and Effect on Accrued Amounts
+
+You may revoke this appointment prospectively by closing your account (Section 14.1) or by written notice to hello@auxilo.io. Upon revocation or account termination:
+
+- The appointment ceases to apply to unlocks initiated **after** the effective time of revocation.
+- Builder Share already accrued (whether already received by Auxilo or arising from unlocks initiated before revocation) remains payable to you and will be settled in accordance with Section 5.6 and Section 14.3, and the payment-extinguishment rule of Section 5.10.2 continues to apply to those transactions.
+- Revocation does not entitle you to any Consumer payment directly; extinguished Consumer obligations are not revived.
+
+#### 5.10.8 Survival
+
+Sections 5.10.2 (payment-extinguishment), 5.10.3 (no trust), 5.10.5 (fee-netting and authorized deductions as to accrued amounts), 5.10.6 (irrevocability during pendency), and this Section 5.10.8 survive any termination or expiration of these Terms or of your account, with respect to all Builder Share and unlock transactions arising while the appointment was in effect.
 
 ---
 
@@ -500,7 +580,7 @@ Upon termination of your account:
 
 ### 14.4 Survival
 
-The following sections survive any termination or expiration of these Terms: Section 2 (Definitions), Section 5 (Builder Terms — license grants and representations), Section 7.3 (Transaction Finality), Section 8 (Intellectual Property), Section 12 (Disclaimers and Limitation of Liability), Section 13 (Indemnification), Section 15 (Dispute Resolution), Section 16 (Governing Law), and Section 20 (Entire Agreement).
+The following sections survive any termination or expiration of these Terms: Section 2 (Definitions), Section 5 (Builder Terms — license grants, representations, and the limited payment-collection agency and its survival, netting, irrevocability, and payment-extinguishment provisions in Section 5.10), Section 7.3 (Transaction Finality), Section 8 (Intellectual Property), Section 12 (Disclaimers and Limitation of Liability), Section 13 (Indemnification), Section 15 (Dispute Resolution), Section 16 (Governing Law), and Section 20 (Entire Agreement).
 
 ---
 
@@ -593,7 +673,7 @@ Auxilo shall not be liable for any delay or failure to perform any obligation un
 
 ### 20.5 Independent Contractors
 
-The relationship between you and Auxilo is that of independent contractors. Nothing in these Terms creates a partnership, joint venture, employment, agency, or fiduciary relationship between you and Auxilo.
+The relationship between you and Auxilo is that of independent contractors. Nothing in these Terms creates a partnership, joint venture, employment, or fiduciary relationship between you and Auxilo. Except for the limited payment-collection agency expressly created in Section 5.10, nothing in these Terms creates any agency relationship between you and Auxilo, and that limited agency does not make either party the general agent of the other for any purpose beyond the collection of the Builder Share as provided in Section 5.10.
 
 ### 20.6 Electronic Agreement
 
@@ -605,4 +685,4 @@ Section headings are for convenience and reference only and shall not affect the
 
 ---
 
-*These Terms of Service were last updated on March 31, 2026.*
+*These Terms of Service were last updated on July 11, 2026. Current amendment: 2026-07-04-payee-agency-a1.*

@@ -32,6 +32,10 @@ const { extractWithRetry } = require('./lib/providers/anthropic.js');
 const { ProviderAuthError } = require('./lib/providers/provider.interface.js');
 const { extractLearnings, sanitizeLearningBody, scoreLearning, VALID_CATEGORIES: EXTRACTOR_CATEGORIES } = require('./lib/extractor.js');
 const { getConsentState, appendConsent, hasActiveConsent } = require('./lib/extraction-consent-reader.js');
+// R-01 / red-team P0-3 + P0-B: durable, versioned, hash-chained ToS-acceptance
+// log — the tamper-evident evidentiary half of the §5.10 clickwrap capture.
+// The account record (lib/accounts.js) gates; this proves assent for a dispute.
+const { appendTosAcceptance } = require('./lib/tos-acceptance-log.js');
 
 // LW-3(a): Untrusted-content envelope. Learning bodies are third-party content
 // from unknown contributors. The unlock response carries this advisory as a
@@ -50,9 +54,12 @@ const {
   setWalletIndex,
   getWithdrawableBalance,
   debitWithdrawableBalance,
+  convertUnassentedToPending,
 } = require('./lib/earnings.js');
 const { acquireEarningsLock } = require('./lib/earnings-lock.js');
 const { sendOpsAlert } = require('./lib/ops-alert.js');
+// CP-4 (AML-PROGRAM §4.3 G-2): IP-geolocation embargo screen (pure decision engine).
+const geoEmbargo = require('./lib/geo-embargo.js');
 
 // ─── S21-4: SESSION_SECRET Startup Validation ──────────────────────────────
 // If SESSION_SECRET is unset in production, sessions use an ephemeral key and
@@ -199,7 +206,18 @@ app.use('*', async (c, next) => {
   }
 });
 
-const WALLET = '0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6';
+// The Company's receiving wallet (Auxilo, LLC — generated post-formation, zero
+// pre-LLC history; papering: DRAFT-LLC-wallet-resolution v0.3, private tree).
+// All x402 payTo/challenge sites and public manifests advertise THIS address.
+// Its key is Fly secret WALLET_PRIVATE_KEY (staged at rotation; applies at deploy).
+const WALLET = '0xA19Cf92cc1daCf742f0E50b4128cAD3A86A81EC4';
+// Pre-LLC platform wallet(s): retired as a payment destination, but existing
+// seed learnings carry it as contributor_wallet, so PLATFORM IDENTITY checks
+// (isPlatformContributor / the 409 CONTRIBUTOR_NOT_ONBOARDED refuse gate) must
+// keep recognizing it or the platform-seed catalog 409s. NEVER used as payTo.
+// Balance sweep + retirement ride the Slam-side Assignment (papering v0.3).
+const LEGACY_PLATFORM_WALLETS = ['0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6'];
+const PLATFORM_WALLETS = [WALLET, ...LEGACY_PLATFORM_WALLETS];
 const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 const FACILITATOR = 'https://facilitator.openx402.ai';
 // Single source of truth: read the published version from package.json once at
@@ -543,7 +561,17 @@ let learnings = loadDataFile(LEARNINGS_FILE, [], true);     // CRITICAL
 let earnings  = loadDataFile(EARNINGS_FILE, {}, true);      // CRITICAL
 let accounts  = loadDataFile(ACCOUNTS_FILE, {}, true);      // CRITICAL
 let verifiedWallets = loadDataFile(VERIFIED_WALLETS_FILE, {}, false); // NON-CRITICAL
-verifiedWallets[WALLET.toLowerCase()] = true; // Auto-verify platform wallet
+// Auto-verify the LIVE platform wallet ONLY (red-team rotation P1). verifiedWallets is a
+// KEY-CONTROL trust set (router-eligibility, link-wallet, withdraw) — the retired legacy
+// wallet must NOT sit in it: (a) router-eligible legacy seeds would settle on-chain to the
+// retired address, violating Resolution 5's no-Builder-settlement-to-legacy covenant;
+// (b) linkWallet trusts global membership, so a verified legacy would let any ToS-accepted
+// account link it and drain migrated seed balances. Legacy stays recognized ONLY as
+// platform IDENTITY via PLATFORM_WALLETS (the refuse gate), never as key-control-verified.
+verifiedWallets[WALLET.toLowerCase()] = true;
+// Belt-and-suspenders: a prior deploy's loop may have PERSISTED legacy into the store —
+// strip retired wallets so the file-backed set converges to live-only.
+for (const lw of LEGACY_PLATFORM_WALLETS) delete verifiedWallets[lw.toLowerCase()];
 
 // walletChallenges removed — nonces are now in-memory via lib/eip712.js (SPEC-A3)
 
@@ -914,6 +942,24 @@ const {
   ERC20_ABI,
 } = require('./lib/tx-manager.js');
 
+// Rotation invariant (red-team P2): the platform wallet has TWO sources of truth —
+// the advertised WALLET const (every 402 payTo, agent.json, manifests) and the
+// address DERIVED from the WALLET_PRIVATE_KEY secret (payment verification + payout
+// FROM address). A staged-secret/code-image mismatch (e.g. `fly secrets deploy`
+// alone, or redeploying an old image with a new key staged) would silently
+// advertise an address whose key we don't run — payments verify against the wrong
+// address and fail closed, but SILENTLY. Refuse to boot split-brained instead.
+if (WALLET.toLowerCase() !== String(WALLET_ADDRESS).toLowerCase()) {
+  console.error(`FATAL: advertised WALLET ${WALLET} != key-derived address ${WALLET_ADDRESS} — ` +
+    'the WALLET const and the WALLET_PRIVATE_KEY secret must rotate together (see papering v0.3 sequencing note).');
+  process.exit(1);
+}
+
+// R-01 non-custodial settlement (contracts/README.md rewire steps 1–3).
+// Inert unless the X402_ROUTER_ADDRESS env flag is set — with it unset, every
+// x402 code path below behaves byte-for-byte like the facilitator rail.
+const x402Router = require('./lib/x402-router.js');
+
 // ─── A4: Local x402 Fallback (C5 + AUDIT-12) ────────────────────────────────
 const { verifyPaymentLocally, getCacheStats } = require('./lib/x402-local.js');
 const { computePaymentDedupKey } = require('./lib/x402-dedup.js'); // M-4
@@ -932,6 +978,15 @@ const {
   linkWallet,
   getClientIp,
   setStripeConnectId,
+  // R-01 / red-team P0-3: ToS clickwrap assent capture. The gates below and the
+  // accept/status endpoints use these; the payee-agency appointment (§5.10) does
+  // not bind a Builder until they affirmatively accept the CURRENT_TOS_VERSION.
+  CURRENT_TOS_VERSION,
+  hasAcceptedCurrentTos,
+  isPayeeAgencyInForce,
+  isPlatformContributor,
+  getTosStatus,
+  recordTosAcceptance,
   newAccountCreationStore,  // FIX 5: periodic sweep of IP-throttle store
   NEW_ACCOUNT_WINDOW_MS,    // FIX 5: 24-hour window constant
   addToKeyIndex,
@@ -986,7 +1041,7 @@ const { computeCurrentPrice, getLockedPrice, lockPrice } = pricingEngine;
  * IMPL-A2-02: payload stores contributor_earned + platform_earned separately.
  */
 function replayUnlock(entry) {
-  const { learning_id, builder_wallet, contributor_account_id, unlock_price, contributor_earned, platform_earned } = entry.payload;
+  const { learning_id, builder_wallet, contributor_account_id, unlock_price, contributor_earned, platform_earned, settled_onchain, settlement_tx, settlement_bps, agency_in_force } = entry.payload;
   const steps = entry.steps_completed || [];
 
   // If learnings write didn't complete, we can't determine the learning state.
@@ -1017,7 +1072,34 @@ function replayUnlock(entry) {
     earningsEntry.total_gross += unlock_price;
     earningsEntry.total_contributor += contributor_earned;
     earningsEntry.total_platform += platform_earned;
-    earningsEntry.pending_balance += contributor_earned;
+    if (settled_onchain) {
+      // R-01: this unlock settled through the router — the share is already
+      // in the contributor's wallet. Replay the settlement record, never a
+      // pending_balance credit (that would double-pay AND re-create custody).
+      if (!Array.isArray(earningsEntry.onchain_settlements)) earningsEntry.onchain_settlements = [];
+      const replayGrossMicro = Math.round(unlock_price * 1_000_000);
+      const replayContribMicro = settlement_bps ? Math.floor(replayGrossMicro * settlement_bps / 10000) : null;
+      earningsEntry.onchain_settlements.push({
+        tx_hash: settlement_tx || null,
+        learning_id,
+        gross_usd: unlock_price,
+        contributor_usd: contributor_earned,
+        platform_usd: platform_earned,
+        gross_micro: replayGrossMicro,
+        contributor_micro: replayContribMicro,
+        platform_micro: replayContribMicro === null ? null : replayGrossMicro - replayContribMicro,
+        contributor_bps: settlement_bps || null,
+        ts: new Date().toISOString(),
+        replayed_from_wal: entry.id,
+      });
+    } else if (agency_in_force !== false) {
+      // CP-6: re-apply the accrual gate decided at unlock time. `agency_in_force !== false`
+      // credits pending_balance when the decision was true OR when the field is absent
+      // (pre-CP-6 WAL entries, which predate the gate) — backward-compatible.
+      earningsEntry.pending_balance += contributor_earned;
+    } else {
+      earningsEntry.unassented_pending = (earningsEntry.unassented_pending || 0) + contributor_earned;
+    }
     earningsEntry.last_updated = new Date().toISOString();
 
     if (!earningsEntry.by_learning[learning_id]) {
@@ -1638,6 +1720,10 @@ const OFAC_MAX_REDIRECTS = 5;
 // every hop, blocking a MITM/upstream 30x to an internal address.
 const OFAC_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const OFAC_BLOCKS_LOG = path.join(DATA_DIR, 'ofac-blocks.log');
+// CP-4 (AML-PROGRAM §4.3 G-2): geo-embargo point-of-transaction block ledger.
+// Parallel to the OFAC block log; 5-year retention per AML-PROGRAM §8. In prod
+// DATA_DIR is a persistent volume; data/ is gitignored so logs never commit.
+const GEO_BLOCKS_LOG = path.join(DATA_DIR, 'geo-blocks.log');
 
 const ofacState = {
   sanctionedAddresses: new Set(),
@@ -1811,6 +1897,29 @@ async function refreshOFACList() {
     }
 
     console.log(`[OFAC] SDN list refreshed: ${addresses.size} total addresses (sdn.csv: ${sdnAddresses.size}, alt.csv: ${altAddresses.size})`);
+
+    // CP-1 (AML-PROGRAM G-1): re-screen every account-linked wallet against the
+    // fresh list. Contained: a sweep failure must never break the refresh cycle
+    // that feeds point-of-transaction screening.
+    try {
+      const sweep = rescreenLinkedWallets();
+      if (sweep.hits > 0) {
+        console.error(`[OFAC] [CP-1] Re-screen HIT: ${sweep.hits} linked wallet(s) newly sanctioned; suspended account(s): ${sweep.suspended.join(', ')}`);
+        sendOpsAlert(
+          '[Auxilo][OFAC] Linked-wallet re-screen HIT — account(s) suspended',
+          `The 24h SDN refresh matched ${sweep.hits} account-linked wallet(s) not previously suspended. ` +
+          `Newly suspended: ${sweep.suspended.join(', ')}. Withdrawals and all authed routes are blocked ` +
+          `for these accounts (disabled_at). Release requires manual compliance review per docs/AML-PROGRAM.md.`
+        ).catch(() => {});
+      } else {
+        const stillNote = sweep.alreadySuspended > 0
+          ? ` (${sweep.alreadySuspended} previously-suspended sanctioned wallet(s) remain frozen)`
+          : '';
+        console.log(`[OFAC] [CP-1] Re-screen clean: ${sweep.screened} linked wallet(s) checked against the fresh list${stillNote}.`);
+      }
+    } catch (sweepErr) {
+      console.error(`[OFAC] [CP-1] Re-screen sweep failed (refresh unaffected): ${sweepErr.message}`);
+    }
   } catch (err) {
     ofacState.consecutiveFailures++;
     ofacState.lastRefreshSuccess = false;
@@ -1856,6 +1965,117 @@ function logOFACBlock(walletAddress, endpoint) {
   }
   // Also log to stdout for PM2 capture
   console.warn(`[OFAC] Blocked sanctioned wallet on ${endpoint}`);
+}
+
+// ─── CP-1: Recurring linked-wallet re-screen (AML-PROGRAM §G-1) ──────────────
+// A wallet screened clean at link time can appear on a LATER SDN publication.
+// After every successful list refresh, re-screen every account-linked wallet and
+// fail closed on a hit: suspend the account. disabled_at blocks every authed
+// route — requireAuth (lib/accounts.js:529), requireSessionOrApiKey (:594), and
+// the wallet-signed /withdraw suspension check — so both payout rails and all
+// account mutation stop immediately. Suspension is one-way here: a later SDN
+// delisting does NOT auto-clear the account; release requires manual compliance
+// review per docs/AML-PROGRAM.md (screening history must be preserved).
+function rescreenLinkedWallets() {
+  const results = { screened: 0, hits: 0, suspended: [], alreadySuspended: 0 };
+  const accounts = loadAccounts();
+  let dirty = false;
+  for (const [accountId, account] of Object.entries(accounts)) {
+    if (!account || !account.wallet) continue;
+    results.screened++;
+    if (!checkOFAC(account.wallet)) continue;
+    // Already-suspended accounts stay suspended (first-hit time preserved) but do
+    // NOT re-alert or re-log every cycle — a persistent sanctions hit would page
+    // ops daily and re-write the block log for an account that is already frozen.
+    if (account.disabled_at) { results.alreadySuspended++; continue; }
+    results.hits++;
+    results.suspended.push(accountId);
+    logOFACBlock(account.wallet, 'rescreen-sweep');
+    account.disabled_at = new Date().toISOString();
+    account.disabled_reason = 'ofac_rescreen_hit';
+    dirty = true;
+  }
+  if (dirty) saveAccounts(accounts);
+  return results;
+}
+
+// ─── CP-4: IP-geolocation embargo screen (AML-PROGRAM §4.3 G-2, E-1/E-2) ─────
+// Secondary, defense-in-depth control that screens the request's Cloudflare-
+// resolved country (cf-ipcountry header — no network lookup) against the
+// comprehensively OFAC-embargoed jurisdictions in lib/geo-embargo.js EMBARGO.
+// Enforced at the two money-movement points G-2 names: builder wallet-link (E-1)
+// and x402 buyer settle (E-2). The PRIMARY strict-liability control is the
+// fail-closed OFAC SDN wallet screen (checkOFAC) — this does NOT replace it.
+//
+// Fail-mode (specified verbatim by AML-PROGRAM §4.3 G-2):
+//   • POSITIVE embargo match → FAIL CLOSED: block + log + ops-alert (CP-1 shape).
+//   • MISSING geo signal      → FAIL OPEN: advisory-log only, do NOT block. Geo
+//     is advisory, not the primary SDN control; hard-blocking every request that
+//     lacks cf-ipcountry (local/CI/direct-origin) would take the whole service
+//     down for a SECONDARY screen. The OFAC wallet screen still runs fail-closed.
+// INERT: non-embargoed traffic reads one header + one Set lookup, then proceeds
+// unchanged. No behavior change off the embargoed path.
+
+// Append a geo screen event to data/geo-blocks.log. Mirrors logOFACBlock: never
+// throws (a logging failure must not break a request), also emits to stdout.
+function logGeoBlock(detail) {
+  const entry = `${new Date().toISOString()} | ${detail.result} | country=${detail.country || '-'} | region=${detail.region || '-'} | level=${detail.level || '-'} | endpoint=${detail.endpoint}\n`;
+  try {
+    fs.appendFileSync(GEO_BLOCKS_LOG, entry);
+  } catch (err) {
+    console.error(`[GEO] Failed to write geo block log: ${err.message}`);
+  }
+}
+
+// Point-of-transaction geo gate. Returns a 403 Response to RETURN from the
+// caller on a positive embargo match; returns null (proceed) when allowed OR
+// when the geo signal is missing (advisory fail-open). Never throws.
+function geoEmbargoGate(c, endpoint) {
+  let decision;
+  try {
+    const country = geoEmbargo.getRequestCountry(c);
+    const region = geoEmbargo.getRequestRegion(c);
+    decision = geoEmbargo.screenGeo(country, region);
+  } catch (err) {
+    // A screen failure must never break a legitimate request for a secondary
+    // advisory control. Treat as fail-open and record the anomaly.
+    console.error(`[GEO] [CP-4] screen error on ${endpoint} (failing open): ${err.message}`);
+    return null;
+  }
+
+  if (!decision.embargoed) {
+    // Only the missing-signal case leaves an advisory trail; an allowed
+    // present-signal is the hot path and stays silent.
+    if (decision.signal === 'missing') {
+      logGeoBlock({ result: 'ADVISORY-NO-GEO', endpoint });
+    }
+    return null;
+  }
+
+  // POSITIVE embargo match at a money-movement point — fail closed.
+  logGeoBlock({
+    result: 'BLOCKED',
+    country: decision.country,
+    region: decision.region,
+    level: decision.level,
+    endpoint,
+  });
+  console.error(`[GEO] [CP-4] Embargoed-jurisdiction block on ${endpoint}: country=${decision.country}${decision.level === 'region' ? ` region=${decision.region}` : ''}`);
+  // Match the CP-1 alert shape: fire-and-forget, never await, never let a
+  // delivery failure surface into the request path.
+  sendOpsAlert(
+    '[Auxilo][GEO] Embargoed-jurisdiction request blocked at money-movement point',
+    `A request resolving to an OFAC-embargoed jurisdiction was blocked at ${endpoint}. ` +
+    `country=${decision.country}${decision.region ? ` region=${decision.region}` : ''} (level=${decision.level}). ` +
+    `No funds moved and no wallet was linked. Logged to data/geo-blocks.log. ` +
+    `Comprehensive-country OFAC control per docs/AML-PROGRAM.md §4.3 G-2 (CP-4). ` +
+    `Region-level UA matches are best-effort — see the region-limitation note in lib/geo-embargo.js.`
+  ).catch(() => {});
+
+  return c.json(
+    { error: 'Transaction blocked by geographic sanctions compliance', code: 'GEO_EMBARGOED' },
+    403
+  );
 }
 
 // Load SDN list at startup (non-blocking, does not prevent server start).
@@ -1956,9 +2176,13 @@ function generateId() {
  * @param {string} amount - Pre-computed micro-USDC amount string
  * @returns {Promise<{ verified: boolean, rateLimited: boolean }>}
  */
-async function _verifyPayment(paymentHeader, price_usd, pathname, amount) {
+async function _verifyPayment(paymentHeader, price_usd, pathname, amount, routerCtx = null) {
   let verified = false;
   let settlementTx = null;
+  // R-01: router mode applies only when the flag is set AND the caller passed
+  // a contributor context (today: the unlock route). Everything routerMode
+  // touches below is unreachable when the flag is unset.
+  const routerMode = !!(routerCtx && x402Router.routerEnabled());
 
   // ── x402 payment requirements (must match what x402Gate advertised in the
   //    402, since the client signs its authorization against these). The
@@ -1983,6 +2207,27 @@ async function _verifyPayment(paymentHeader, price_usd, pathname, amount) {
     paymentPayload = JSON.parse(Buffer.from(paymentHeader, 'base64').toString('utf8'));
   } catch { /* malformed — facilitator path can't run; local fallback below */ }
 
+  // ── P0-4 (red-team 2026-07-03): buyer-side OFAC screen, fail-closed. ──
+  // Sanctions liability is strict: the EIP-3009 signer (the buyer) must be
+  // screened BEFORE any settlement broadcast moves their USDC. Screening
+  // not-ready reuses the rateLimited signal so callers return 503 — the same
+  // fail-closed posture as the other money-movement endpoints. NOTE: a proof
+  // that skips the payload (local self-submitted fallback with an unparseable
+  // header) has no extractable buyer address; that path moves no funds by our
+  // action, but extending the screen to it is tracked in contracts/README.md
+  // rewire step 3 (lib/x402-router.js screens both paths).
+  if (paymentPayload) {
+    if (!ofacScreeningReady()) {
+      console.warn('[x402] OFAC list not loaded — failing closed before settlement');
+      return { verified: false, rateLimited: true };
+    }
+    const buyerWallet = paymentPayload?.payload?.authorization?.from;
+    if (buyerWallet && checkOFAC(buyerWallet)) {
+      logOFACBlock(buyerWallet, `${pathname} (x402 buyer)`);
+      return { verified: false, rateLimited: false };
+    }
+  }
+
   // 1. Facilitator path: VERIFY then SETTLE.
   //
   // CRITICAL FIX (money blocker, 2026-06-12): the prior code called only
@@ -2003,6 +2248,65 @@ async function _verifyPayment(paymentHeader, price_usd, pathname, amount) {
     if (consumedTxHashes.has(dedupKey.toLowerCase().trim())) {
       console.warn(`[x402] Replay blocked pre-settle: ${dedupKey} already consumed`);
       return { verified: false, rateLimited: false, replayBlocked: true };
+    }
+
+    // ── R-01 router mode: Auxilo self-settles through AuxiloSplitRouter. ──
+    // The buyer's USDC splits contributor/platform atomically on-chain — no
+    // facilitator /settle, no platform custody of the contributor share.
+    // settleWithRouter re-screens BOTH buyer and contributor against OFAC
+    // fail-closed before broadcasting (the buyer screen above already ran;
+    // the double-screen is deliberate defense in depth). This branch RETURNS
+    // in every case: in router mode there is no facilitator fallback (the
+    // payment is addressed to the router, not to us) and no local fallback
+    // (verifyPaymentLocally proves funds moved to the PLATFORM wallet — the
+    // wrong destination here). A payment that cannot settle through the
+    // router is a failed payment.
+    if (routerMode) {
+      const r = await x402Router.settleWithRouter({
+        paymentPayload,
+        expectedAmountMicro: amount,
+        resource: pathname,
+        contributor: routerCtx.contributor,
+        contributorBps: routerCtx.contributorBps,
+        deps: { checkOFAC, ofacScreeningReady, logOFACBlock },
+      });
+      if (r.ofacUnavailable) {
+        console.warn('[x402-router] OFAC screening unavailable — failing closed');
+        return { verified: false, rateLimited: true };
+      }
+      if (r.circuitOpen) {
+        // A1 circuit-breaker tripped: USDC's proxy implementation changed
+        // underneath our verified assumptions (or the impl check could not be
+        // read). Fail closed as a retryable 503 — this is a degraded-service
+        // signal for ops, NOT a bad-payment signal. See lib/usdc-impl-monitor.js
+        // and scripts/usdc-impl-monitor.js.
+        console.error(`[x402-router] CIRCUIT OPEN (${r.reason}) — USDC impl guard; failing closed`);
+        return { verified: false, rateLimited: true };
+      }
+      if (r.settled) {
+        recordTxHash(r.txHash);
+        recordTxHash(dedupKey);
+        console.log(`[x402-router] Settled on-chain via ${r.path} path: ${r.txHash}`);
+        return {
+          verified: true,
+          rateLimited: false,
+          settlementTx: r.txHash,
+          routerSettlement: {
+            txHash: r.txHash,
+            path: r.path,
+            contributor: routerCtx.contributor,
+            contributorBps: routerCtx.contributorBps,
+          },
+        };
+      }
+      if (r.settleFailed) {
+        console.warn(`[x402-router] Settle failed (${r.reason}) — failing closed`);
+        return { verified: false, rateLimited: false, settleFailed: true };
+      }
+      // Pre-broadcast rejection (malformed payload, wrong payTo, amount
+      // mismatch, expired auth, unknown salt, sanctioned party, ...).
+      console.warn(`[x402-router] Payment rejected pre-broadcast (${r.reason})`);
+      return { verified: false, rateLimited: false };
     }
 
     try {
@@ -2034,6 +2338,16 @@ async function _verifyPayment(paymentHeader, price_usd, pathname, amount) {
   //    on-chain and supplies a real txHash. verifyPaymentLocally reads the
   //    receipt and confirms the USDC actually moved to our wallet — this path
   //    is settlement-complete by construction, so it is safe to honor.
+  // R-01 router mode can only reach here with an unparseable X-Payment header
+  // (the router branch above returns on every parsed payload). There is
+  // nothing to settle, and the local fallback below proves payment to the
+  // PLATFORM wallet — the wrong destination in router mode. Fail closed.
+  // This also closes the known buyer-OFAC gap on the self-submitted fallback
+  // (no extractable buyer address): in router mode that path no longer exists.
+  if (routerMode) {
+    return { verified: false, rateLimited: false };
+  }
+
   if (!verified) {
     const localResult = await verifyPaymentLocally(
       paymentHeader, price_usd, WALLET_ADDRESS, TX_USDC_BASE
@@ -2088,6 +2402,12 @@ function x402Gate(price_usd, description) {
       });
     }
 
+    // CP-4 (AML-PROGRAM §4.3 G-2 / E-2): screen the buyer's geo before settling.
+    // A payment header is present here (settlement is imminent), so this fires
+    // only at the money-movement moment. Fail-open on missing geo (advisory).
+    const geoBuyerBlock = geoEmbargoGate(c, `${new URL(c.req.url).pathname} (x402 buyer)`);
+    if (geoBuyerBlock) return geoBuyerBlock;
+
     const { verified, rateLimited, replayBlocked, settleFailed } = await _verifyPayment(
       paymentHeader, price_usd, new URL(c.req.url).pathname, amount
     );
@@ -2140,13 +2460,49 @@ function x402Gate(price_usd, description) {
 }
 
 // ─── Dynamic Payment Verification (for routes where price isn't known at registration) ──
-async function verifyPaymentOrReject(c, price_usd, description) {
+
+// R-01: the `accepts` entry for a router-mode 402 challenge. payTo is the
+// router contract; `extra.router` carries the (contributor, contributorBps,
+// salt) hint an Auxilo-aware client needs to sign the nonce-bound
+// ReceiveWithAuthorization. Generic x402 clients ignore `extra.router` and
+// sign the standard TransferWithAuthorization to payTo — the router's
+// Transfer path settles those. Only reachable when X402_ROUTER_ADDRESS is set
+// AND the route supplied a contributor context.
+function _routerAccepts(amount, pathname, description, routerCtx) {
+  const hint = x402Router.createRouterHint({
+    contributor: routerCtx.contributor,
+    contributorBps: routerCtx.contributorBps,
+    resource: pathname,
+    amountMicro: amount,
+  });
+  return {
+    scheme: 'exact',
+    network: x402Router.getNetworkString(),
+    maxAmountRequired: amount,
+    resource: pathname,
+    description,
+    mimeType: 'application/json',
+    payTo: x402Router.getRouterAddress(),
+    maxTimeoutSeconds: 30,
+    asset: x402Router.getUsdcAddress(),
+    extra: x402Router.buildRouterExtra(hint),
+  };
+}
+
+async function verifyPaymentOrReject(c, price_usd, description, routerCtx = null) {
   const amount = String(Math.round(price_usd * 1_000_000));
   const paymentHeader = c.req.header('X-Payment');
+  const routerMode = !!(routerCtx && x402Router.routerEnabled());
 
   if (!paymentHeader) {
     c.status(402);
     c.header('X-Payment-Required', 'true');
+    if (routerMode) {
+      return c.json({
+        x402Version: 2,
+        accepts: [_routerAccepts(amount, new URL(c.req.url).pathname, description, routerCtx)]
+      });
+    }
     return c.json({
       x402Version: 2,
       accepts: [{
@@ -2168,8 +2524,13 @@ async function verifyPaymentOrReject(c, price_usd, description) {
     });
   }
 
-  const { verified, rateLimited, replayBlocked, settleFailed } = await _verifyPayment(
-    paymentHeader, price_usd, new URL(c.req.url).pathname, amount
+  // CP-4 (AML-PROGRAM §4.3 G-2 / E-2): screen the buyer's geo before settling
+  // (covers the router-mode / unlock path). Fail-open on missing geo (advisory).
+  const geoBuyerBlock = geoEmbargoGate(c, `${new URL(c.req.url).pathname} (x402 buyer)`);
+  if (geoBuyerBlock) return geoBuyerBlock;
+
+  const { verified, rateLimited, replayBlocked, settleFailed, routerSettlement } = await _verifyPayment(
+    paymentHeader, price_usd, new URL(c.req.url).pathname, amount, routerCtx
   );
 
   if (rateLimited) {
@@ -2193,6 +2554,12 @@ async function verifyPaymentOrReject(c, price_usd, description) {
 
   if (!verified) {
     c.status(402);
+    if (routerMode) {
+      return c.json({
+        error: 'Payment verification failed',
+        accepts: [_routerAccepts(amount, new URL(c.req.url).pathname, description, routerCtx)]
+      });
+    }
     return c.json({
       error: 'Payment verification failed',
       accepts: [{
@@ -2212,6 +2579,12 @@ async function verifyPaymentOrReject(c, price_usd, description) {
         }
       }]
     });
+  }
+
+  // R-01: surface the on-chain split to the route handler so it records the
+  // settlement instead of crediting pending_balance (custody would re-appear).
+  if (routerSettlement) {
+    c.set('x402RouterSettlement', routerSettlement);
   }
 
   return null; // null = payment OK, proceed
@@ -2340,7 +2713,7 @@ function optionalAuth() {
     };
 }
 
-async function dualAuthDynamic(c, price_usd, description, creditType, requiredScope) {
+async function dualAuthDynamic(c, price_usd, description, creditType, requiredScope, routerCtx = null) {
     // Fix: X-API-Key takes precedence; Authorization: Bearer is the fallback
     let apiKey = c.req.header('X-API-Key');
     if (!apiKey) {
@@ -2403,7 +2776,7 @@ async function dualAuthDynamic(c, price_usd, description, creditType, requiredSc
 
     // Path 2: x402 payment
     if (payment) {
-        return verifyPaymentOrReject(c, price_usd, description);
+        return verifyPaymentOrReject(c, price_usd, description, routerCtx);
     }
 
     // Path 3: Neither
@@ -3470,6 +3843,19 @@ app.post('/account/connect-stripe', requireAuth, async (c) => {
 
 // POST /withdraw/stripe — withdraw earnings to Stripe Connect
 app.post('/withdraw/stripe', requireAuth, async (c) => {
+  // R-01 KILL-SWITCH (R01-MT-02): the Stripe payout rail debits the SAME
+  // authoritative pending_balance the USDC rail debits (see debitWithdrawableBalance
+  // below) — so the moment Stripe is configured this is a live fiat custodial payout
+  // loop, the completed-transmission leg the migration exists to avoid. Gated by the
+  // SAME sentinel as the custodial USDC rail (POST /withdraw). Disabled by default
+  // until the non-custodial rail replaces it; to re-enable set CUSTODIAL_WITHDRAW_ENABLED=true.
+  if (process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true') {
+    return c.json({
+      error: 'Withdrawals temporarily paused during non-custodial migration',
+      code: 'withdraw_paused_noncustodial_migration',
+    }, 503);
+  }
+
   // GOV-3: fail closed if sanctions screening has never loaded a list.
   if (!ofacScreeningReady()) {
     return c.json({ error: 'Sanctions screening unavailable' }, 503);
@@ -3478,6 +3864,9 @@ app.post('/withdraw/stripe', requireAuth, async (c) => {
   const accts = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf8'));
   const account = accts[accountId];
   if (!account) return c.json({ error: 'Account not found' }, 404);
+
+  // R-01 P0-3: withdrawal requires current-Terms acceptance (§5.10 payee-agency).
+  if (!hasAcceptedCurrentTos(account)) return termsNotAcceptedResponse(c);
 
   const { getStripe } = require('./lib/stripe.js');
   if (!getStripe()) return c.json({ error: 'Stripe not configured' }, 503);
@@ -3638,7 +4027,7 @@ app.post('/withdraw/stripe', requireAuth, async (c) => {
 // ─── Phase 0.5: Account Wallet + Earnings Endpoints (SPEC-P0.5) ──────────────
 
 // POST /account/link-wallet — link a verified wallet to the authenticated account
-app.post('/account/link-wallet', requireAuth, async (c) => {
+app.post('/account/link-wallet', requireSessionOrApiKey(), async (c) => {
   let body;
   try { body = await c.req.json(); } catch {
     return c.json({ error: 'Invalid JSON body' }, 400);
@@ -3656,6 +4045,21 @@ app.post('/account/link-wallet', requireAuth, async (c) => {
   if (wallet && checkOFAC(wallet)) {
     logOFACBlock(wallet, '/account/link-wallet');
     return c.json({ error: 'Transaction blocked by sanctions compliance' }, 403);
+  }
+
+  // CP-4 (AML-PROGRAM §4.3 G-2 / E-1): block embargoed-jurisdiction builders at
+  // the wallet-link hook before any link. Fail-open on missing geo (advisory).
+  const geoLinkBlock = geoEmbargoGate(c, '/account/link-wallet');
+  if (geoLinkBlock) return geoLinkBlock;
+
+  // R-01 / red-team P0-3: linking a payout wallet is the agency-triggering step
+  // (§5.10). Block it until the Builder has affirmatively accepted the current
+  // Terms — assent-via-use does not bind the payee-agency appointment. Covers the
+  // MCP path too: auxilo_link_wallet carries the same session JWT through this route.
+  const walletLinkAccount = loadAccounts()[accountId];
+  if (!walletLinkAccount) return c.json({ error: 'Account not found' }, 404);
+  if (!hasAcceptedCurrentTos(walletLinkAccount)) {
+    return termsNotAcceptedResponse(c);
   }
 
   // Serialize the linkWallet read-modify-write so a concurrent settings/connect-stripe
@@ -3678,6 +4082,14 @@ app.post('/account/link-wallet', requireAuth, async (c) => {
     // Lazy migrate any pre-existing wallet-keyed earnings entry to account-keyed
     const migrated = lazyMigrateOnWalletLink(earnings, result.wallet, accountId);
     if (migrated) {
+      // CP-6 P1-B: the accept-then-link ordering would otherwise STRAND held balance. A
+      // wallet-only contributor accrues to `unassented_pending` under the wallet key; when they
+      // later create an account and accept, accept-terms runs its conversion BEFORE the wallet is
+      // linked (wallet is null then) so it resolves nothing, and the migration above carries the
+      // held balance in as `unassented_pending`. This route is terms-gated (:3857), so the agency
+      // is in force here — convert the just-migrated held balance to withdrawable now, so a
+      // Builder who did everything right isn't left with permanently non-withdrawable funds.
+      convertUnassentedToPending(earnings, { account_id: accountId, wallet: result.wallet });
       safeWrite(EARNINGS_FILE, earnings);
       console.log(`[p0.5] Lazy migrated wallet-keyed earnings to account ${accountId} on wallet link`);
     }
@@ -3689,7 +4101,7 @@ app.post('/account/link-wallet', requireAuth, async (c) => {
 });
 
 // GET /account/earnings — view earnings for the authenticated account
-app.get('/account/earnings', requireAuth, async (c) => {
+app.get('/account/earnings', requireSessionOrApiKey('read'), async (c) => {
   const accountId = c.get('accountId');
 
   // AU-7: Check account cache before hitting disk
@@ -3716,31 +4128,56 @@ app.get('/account/earnings', requireAuth, async (c) => {
   const canWithdraw = hasWallet && source !== 'new' && (entry.pending_balance || 0) > 0;
 
   if (source === 'new') {
-    // No earnings yet — return zero state
+    // No earnings yet — return zero state. unassented_pending is surfaced in BOTH
+    // branches (MISS-03/BUX-3) so a consumer always has the held-vs-owned split.
     return c.json({
       account_id: accountId,
       wallet: account.wallet || null,
       total_gross_usd: 0,
       total_gross: 0,
       total_contributor: 0,
+      total_contributor_gross: 0,
+      unassented_pending: 0,
       pending_balance: 0,
       total_withdrawn: 0,
       withdrawal_count: 0,
       can_withdraw: false,
+      // FB-2: both custodial payout rails are paused when the kill-switch is unset (launch
+      // default). Surfaced so the dashboard form + MCP earnings tool are server-authoritative
+      // about the pause instead of advertising a cash-out that 503s.
+      payouts_paused: process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true',
       message: 'No earnings recorded yet',
     });
   }
+
+  // MISS-03/BUX-3: `total_contributor` is credited unconditionally at unlock time
+  // (server.js accrual: `activeEntry.total_contributor += contributorEarned`) BEFORE
+  // the CP-6 branch decides whether the share is OWNED (pending_balance) or merely HELD
+  // (unassented_pending, not yet owned until the Builder accepts §5.10). So the stored
+  // total_contributor is lifetime-GROSS and folding it into the dashboard "Your total"
+  // headline over-reports not-yet-owned funds. Report the OWNED contributor total here
+  // (gross − held) as `total_contributor`, expose the held bucket as its own field, and
+  // keep the raw lifetime figure as `total_contributor_gross`. No double-count:
+  // owned + held == gross.
+  const heldPending = Number((entry.unassented_pending || 0).toFixed(6));
+  const contributorGross = Number((entry.total_contributor || 0).toFixed(6));
+  const contributorOwned = Number(Math.max(0, contributorGross - heldPending).toFixed(6));
 
   return c.json({
     account_id: accountId,
     wallet: entry.wallet || account.wallet || null,
     total_gross_usd: entry.total_gross || 0,
     total_gross: entry.total_gross || 0,
-    total_contributor: entry.total_contributor || 0,
-    pending_balance: entry.pending_balance || 0,
+    total_contributor: contributorOwned,          // owned lifetime share (excludes held)
+    total_contributor_gross: contributorGross,    // lifetime gross including held
+    unassented_pending: heldPending,              // held until §5.10 acceptance (not owned)
+    pending_balance: entry.pending_balance || 0,  // withdrawable subset of owned
     total_withdrawn: entry.total_withdrawn || 0,
     withdrawal_count: entry.withdrawal_count || 0,
-    can_withdraw: canWithdraw,
+    // FB-2: never advertise can_withdraw while the custodial payout kill-switch is engaged
+    // (launch default) — both rails 503 until CUSTODIAL_WITHDRAW_ENABLED is set.
+    can_withdraw: canWithdraw && process.env.CUSTODIAL_WITHDRAW_ENABLED === 'true',
+    payouts_paused: process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true',
   });
 });
 
@@ -3876,8 +4313,8 @@ app.get('/api/info', (c) => {
       '/wallet/challenge': { price: 'free', method: 'POST', description: 'Request an EIP-712 signing challenge. Body: { wallet, action? }', auth: 'public' },
       '/wallet/verify': { price: 'free', method: 'POST', description: 'Verify a signed challenge and mark wallet as verified. Body: { wallet, signature }', auth: 'public' },
       '/withdraw': { price: 'free', method: 'POST', description: 'Withdraw pending USDC earnings to verified wallet. Body: { wallet, signature }. Requires prior challenge + EIP-712 signature.', auth: 'wallet-signed' },
-      '/account/link-wallet': { price: 'free', method: 'POST', description: 'Link a verified wallet to the authenticated account. Body: { wallet }', auth: 'session' },
-      '/account/earnings': { price: 'free', method: 'GET', description: 'View contributor earnings for the authenticated account', auth: 'session' },
+      '/account/link-wallet': { price: 'free', method: 'POST', description: 'Link a verified wallet to the authenticated account. Body: { wallet }', auth: 'session or api-key' },
+      '/account/earnings': { price: 'free', method: 'GET', description: 'View contributor earnings for the authenticated account', auth: 'session or api-key' },
       '/account/credits': { price: 'free', method: 'GET', description: 'View query and unlock credit balance for the authenticated account', auth: 'session' },
       '/account/purchases': { price: 'free', method: 'GET', description: 'View credit purchase history for the authenticated account', auth: 'session' },
       '/checkout/session': { price: 'free', method: 'POST', description: 'Create a Stripe checkout session to purchase credits. Body: { pack_id }', auth: 'session' },
@@ -3891,8 +4328,8 @@ app.get('/api/info', (c) => {
       '/auth/verify': { price: 'free', method: 'GET', description: 'Redeem magic link token, receive JWT. Query: ?token=...', auth: 'public' },
       '/account/dashboard': { price: 'free', method: 'GET', description: 'View account info, API keys, wallet linkage', auth: 'session' },
       '/account/api-keys': { price: 'free', method: 'POST', description: 'Generate a new axl_ API key. Body: { name? }', auth: 'session' },
-      '/account/link-wallet': { price: 'free', method: 'POST', description: 'Link a verified wallet to the authenticated account. Body: { wallet }', auth: 'session' },
-      '/account/earnings': { price: 'free', method: 'GET', description: 'View contributor earnings for the authenticated account', auth: 'session' },
+      '/account/link-wallet': { price: 'free', method: 'POST', description: 'Link a verified wallet to the authenticated account. Body: { wallet }', auth: 'session or api-key' },
+      '/account/earnings': { price: 'free', method: 'GET', description: 'View contributor earnings for the authenticated account', auth: 'session or api-key' },
       '/account/credits': { price: 'free', method: 'GET', description: 'View query and unlock credit balance for the authenticated account', auth: 'session' },
       '/account/purchases': { price: 'free', method: 'GET', description: 'View credit purchase history for the authenticated account', auth: 'session' },
       '/checkout/session': { price: 'free', method: 'POST', description: 'Create a Stripe checkout session to purchase credits. Body: { pack_id }', auth: 'session' },
@@ -3944,6 +4381,17 @@ app.get('/ready', (c) => {
 
   const ready = Object.values(checks).every(Boolean);
   return c.json({ ready, checks, timestamp: new Date().toISOString() }, ready ? 200 : 503);
+});
+
+// GET /version (OPS-4): report the running build so deploys are verifiable in prod.
+// version comes from package.json (VERSION const); gitSha/builtAt are injected via env
+// at build/deploy time (Dockerfile ARG wiring is out of scope) — 'unknown'/null until then.
+app.get('/version', (c) => {
+  return c.json({
+    version: VERSION,
+    gitSha: process.env.GIT_SHA || 'unknown',
+    builtAt: process.env.BUILT_AT || null,
+  });
 });
 
 app.get('/categories', (c) => {
@@ -5609,6 +6057,148 @@ app.delete('/learn/:id', async (c) => {
 // ── GET /account/settings — read current extraction mode (LW-17) ────────────
 // The installer CLI's `auxilo status` has queried this route (X-API-Key) since
 // 0.8.1, but it never existed — status always showed mode "unknown".
+// ── ToS Clickwrap Assent (R-01 / red-team P0-3) ─────────────────────────────
+//
+// The payee-agency appointment (Terms §5.10) only binds a Builder who has
+// affirmatively accepted the current Terms. These two endpoints are the capture
+// mechanism for BOTH paths:
+//   • Web: the dashboard reads terms-status (also embedded in /account/dashboard),
+//     presents the clickwrap, and POSTs the acceptance here.
+//   • MCP/API (V-3): agent-mediated Builders who never load a web page accept via
+//     the `auxilo_accept_terms` tool, which POSTs here with their API key. Both
+//     endpoints authenticate with session JWT OR API key so the MCP path is bound
+//     server-side, not by a buried notice.
+// Enforcement is the 403 gate at wallet-link + withdrawal (below): a Builder
+// cannot trigger the agency (link a payout wallet) or move money without a
+// current-version acceptance on file.
+
+// The structured 403 a money/agency route returns when the caller has not accepted
+// the current Terms. Machine-readable (stable `code`, current version, how-to) so
+// MCP/API clients react by calling auxilo_accept_terms rather than treating it as an
+// opaque failure — this is what makes the MCP path genuinely enforceable, not a
+// buried notice. Declared as a hoisted function so the gate sites below can use it.
+function termsNotAcceptedResponse(c) {
+  return c.json({
+    error: 'You must accept the current Terms of Service before this action.',
+    code: 'TERMS_NOT_ACCEPTED',
+    current_tos_version: CURRENT_TOS_VERSION,
+    how_to_accept: 'Web: open your dashboard and accept the Terms. MCP/API: call auxilo_accept_terms (or POST /account/accept-terms) with { "version": "' + CURRENT_TOS_VERSION + '" }.',
+    terms_url: (process.env.BASE_URL || '') + '/terms',
+  }, 403);
+}
+
+// GET /account/terms-status — is (re-)acceptance required for this account?
+app.get('/account/terms-status', requireSessionOrApiKey('read'), (c) => {
+  const account = loadAccounts()[c.get('accountId')];
+  if (!account) return c.json({ error: 'Account not found' }, 404);
+  return c.json(getTosStatus(account), 200);
+});
+
+// POST /account/accept-terms — record an affirmative acceptance of the current
+// Terms. Body: { version }. The server refuses any version other than the current
+// one (409) so a client can never bind itself to a stale/unknown version, and the
+// server — never the client — stamps the timestamp, IP, and user-agent that form
+// the evidentiary clickwrap record.
+app.post('/account/accept-terms', requireSessionOrApiKey('contribute'), async (c) => {
+  const accountId = c.get('accountId');
+  if (!accountId) return c.json({ error: 'Authentication required' }, 401);
+
+  let body;
+  try { body = await c.req.json(); } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+  const { version, agree } = body || {};
+  if (!version || typeof version !== 'string') {
+    return c.json({
+      error: 'version is required — POST the current_tos_version you are accepting',
+      current_tos_version: CURRENT_TOS_VERSION,
+    }, 400);
+  }
+  // L-2 (Gate-B): require an explicit, server-transmitted affirmation of assent — not
+  // merely an authenticated POST bearing the version. This closes the gap the red-team
+  // named: the MCP client enforced `agree===true` LOCALLY (mcp-server.js) but the server
+  // would happily record an acceptance from a bare {version} POST, so the evidentiary row
+  // could not distinguish "the caller affirmed" from "any authenticated version-echo." The
+  // affirmation is now forced onto the wire and stamped into the record (account artifact +
+  // tamper-evident durable row) below. It hardens against a "fabricated-with-no-assent-
+  // signal" challenge; it does NOT resolve whether an agent-executed acceptance binds the
+  // human principal (V-3b, reserved for licensed counsel).
+  if (agree !== true) {
+    return c.json({
+      error: 'You must affirmatively agree to accept — resend with { "version": "...", "agree": true }',
+      code: 'AFFIRMATION_REQUIRED',
+      current_tos_version: CURRENT_TOS_VERSION,
+    }, 400);
+  }
+
+  const ip = getClientIp(c);
+  const ua = c.req.header('user-agent') || 'unknown';
+
+  // Serialize the read-modify-write against concurrent link-wallet / settings
+  // mutations on the same account (all do loadAccounts->mutate->saveAccounts).
+  const releaseAccountLock = await acquireAccountLock(accountId);
+  try {
+    const result = recordTosAcceptance(accountId, { version, ip, ua, affirmed: true });
+    if (!result.success) {
+      return c.json(
+        { error: result.error, current_tos_version: CURRENT_TOS_VERSION },
+        result.status_code || 400
+      );
+    }
+    invalidateCachedAccount(accountId);
+
+    // P0-B: augment the fast account-record stamp with a durable, tamper-evident
+    // record on the hash-chained consent chain. Same wiring shape as the
+    // extraction-consent call sites (redactIp lives with the handler). Covers
+    // BOTH paths through this one endpoint — web (session JWT) and MCP/API
+    // (X-API-Key, e.g. auxilo_accept_terms). Best-effort: a log failure must not
+    // fail an acceptance the account record already recorded and gates on.
+    // Skip on an idempotent re-accept (already current version) so repeated calls
+    // don't append duplicate durable rows for the same version transition.
+    if (!result.alreadyAccepted) {
+      try {
+        appendTosAcceptance({
+          accountId,
+          tosVersion: result.version,
+          ipRedacted: redactIp(ip),
+          userAgent: ua,
+          acceptPath: c.req.header('X-API-Key') ? 'mcp-api' : 'web',
+          affirmed: true,
+        });
+      } catch (logErr) {
+        console.error('[tos] durable acceptance-log append failed:', logErr.message);
+      }
+
+      // CP-6: the payee-agency is now in force for this Builder. Move any Builder Share
+      // received on their behalf and HELD (unassented_pending) before this acceptance into
+      // the withdrawable pending_balance — the moment it becomes agency-covered. Lock-free
+      // and correct: this only ever moves money on the FIRST acceptance (afterwards
+      // isPayeeAgencyInForce is true, so nothing new lands in the held bucket), and a
+      // withdrawal cannot be in flight before the first acceptance (withdrawals are
+      // acceptance-gated). The mutate+safeWrite is synchronous → atomic w.r.t. the unlock
+      // handler's write on the shared `earnings` singleton.
+      try {
+        const acctForConv = loadAccounts()[accountId];
+        const moved = convertUnassentedToPending(earnings, {
+          account_id: accountId,
+          wallet: (acctForConv && acctForConv.wallet) || null,
+        });
+        if (moved > 0) safeWrite(EARNINGS_FILE, earnings);
+      } catch (convErr) {
+        console.error('[tos] CP-6 unassented→pending conversion failed:', convErr.message);
+      }
+    }
+
+    return c.json({
+      message: 'Terms accepted',
+      version: result.version,
+      accepted_at: result.accepted_at,
+    }, 200);
+  } finally {
+    releaseAccountLock();
+  }
+});
+
 app.get('/account/settings', requireSessionOrApiKey('read'), (c) => {
   const account = loadAccounts()[c.get('accountId')];
   if (!account) return c.json({ error: 'Account not found' }, 404);
@@ -5811,7 +6401,21 @@ app.post('/knowledge', optionalAuth(), apiKeyRateLimitMiddleware('/knowledge'), 
   return c.json({
     query,
     results_count: results.length,
-    results: results.map(r => ({
+    results: results.map(r => {
+      // FB-4: quote the ONE price the unlock route will actually CHARGE. Resolve it with
+      // the exact same chain as the unlock handler (pricing.current_price -> engine
+      // getCurrentPrice -> unlock_price) so unlock_price_usd, current_price, and the verdict
+      // never disagree. The old code quoted r.unlock_price ($0.005 on seeds) for
+      // unlock_price_usd but computeCurrentPrice ($0.05 clamped) for current_price — a 10x
+      // understatement of the charge and two contradictory prices in one result.
+      const resolvedPrice = r.pricing?.current_price
+        || pricingEngine.getCurrentPrice?.(r, learnings)
+        || r.unlock_price
+        || DEFAULT_UNLOCK_PRICE;
+      // Feed the resolved price into the verdict (calculateVerdict keys off
+      // pricing.current_price || unlock_price) so the ROI signal matches the real charge.
+      const pricedForVerdict = { ...r, pricing: { ...(r.pricing || {}), current_price: resolvedPrice } };
+      return {
       id: r.id,
       title: r.title,
       snippet: r.snippet,
@@ -5819,16 +6423,22 @@ app.post('/knowledge', optionalAuth(), apiKeyRateLimitMiddleware('/knowledge'), 
       task_context: r.task_context,
       outcome: r.outcome,
       tags: r.tags,
-      unlock_price_usd: r.pricing?.current_price || r.unlock_price || DEFAULT_UNLOCK_PRICE,
-      current_price: r.pricing?.current_price || computeCurrentPrice(r, getCatalogStats()),
+      unlock_price_usd: resolvedPrice,
+      current_price: resolvedPrice,
       quality: { score: computeScore(r), unlocks: r.quality.unlocks, ratings: r.quality.ratings, avg_helpfulness: r.quality.avg_helpfulness },
       relevance: r.relevance,
+      // UX-N1/CAT-1: recompute the autonomous buy-signal from fields the pricing
+      // engine actually produces. The old keys (token_cost_estimate/time_value_estimate/
+      // quality_multiplier) were never written on /learn, so every live result returned
+      // estimated_diy_cost_usd=0, quality_score=null, and a misleading verdict. These
+      // derive from the real complexity/category cost model and the real quality object.
       value_signal: {
-        estimated_diy_cost_usd: (r.pricing?.token_cost_estimate || 0) + (r.pricing?.time_value_estimate || 0),
-        quality_score: r.pricing?.quality_multiplier || null,
-        verdict: pricingEngine.calculateVerdict(r) || null
+        estimated_diy_cost_usd: pricingEngine.estimateDiyCost(r),
+        quality_score: pricingEngine.qualityScore01(r),
+        verdict: pricingEngine.calculateVerdict(pricedForVerdict) || null
       }
-    })),
+    };
+    }),
     pricing: `Dynamic — each learning has its own unlock price (min $${MIN_UNLOCK_PRICE} USDC). See unlock_price_usd per result.`,
     timestamp: new Date().toISOString()
   });
@@ -5905,10 +6515,56 @@ app.get('/knowledge/:id', async (c) => {
   const CONTRIBUTOR_SHARE = (source === 'search') ? CONTRIBUTOR_SHARE_DISCOVERY : CONTRIBUTOR_SHARE_STANDARD;
   const shareLabel = (source === 'search') ? '60%' : '70%';
 
+  // R-01 router mode (rewire step 3): resolve + validate the contributor
+  // wallet BEFORE settlement. A learning only rides the non-custodial rail if
+  // its contributor has a VERIFIED wallet (wallet-link-to-earn); otherwise it
+  // falls back to the legacy rail (platform payTo + pending_balance credit,
+  // paid out fiat-side) exactly as with the flag unset — never hold the share
+  // as a crypto balance. OFAC on buyer AND contributor runs fail-closed inside
+  // settleWithRouter before any broadcast.
+  let routerCtx = null;
+  if (x402Router.routerEnabled()) {
+    const rw = learning.contributor_wallet;
+    const rwLower = rw ? String(rw).toLowerCase() : null;
+    if (rwLower && /^0x[0-9a-f]{40}$/.test(rwLower) && verifiedWallets[rwLower]) {
+      routerCtx = {
+        contributor: rw,
+        contributorBps: Math.round(CONTRIBUTOR_SHARE * 10000),
+      };
+    }
+  }
+
+  // R-01 LAUNCH INVARIANT (REFUSE arm): money-transmission requires that no
+  // unassented external Builder Share is ever RECEIVED on the custodial rail.
+  // BEFORE any x402 402-challenge is issued / any payment is requested or settled,
+  // identify the contributor: if this learning has a REAL external Builder
+  // (contributor_account_id present AND its wallet is not the platform wallet) whose
+  // §5.10 payee-agency is NOT yet in force, REFUSE the unlock (409) so we never take
+  // third-party funds without the agency defense. Platform-owned learnings (no
+  // external account, or the platform wallet itself) are ALWAYS unlockable — gating
+  // them would kill the seed catalog. Router-mode settles the share straight to the
+  // Builder's own verified wallet on-chain (no custodial receipt), so it is exempt.
+  if (!routerCtx && !isPlatformContributor(learning, PLATFORM_WALLETS)) {
+    const contribAccount = learning.contributor_account_id
+      ? (loadAccounts()[learning.contributor_account_id] || null)
+      : null;
+    if (!isPayeeAgencyInForce(contribAccount)) {
+      return c.json({
+        error: "This learning's contributor has not completed onboarding and it is temporarily unavailable for unlock",
+        code: 'CONTRIBUTOR_NOT_ONBOARDED',
+      }, 409);
+    }
+  }
+
   // Dynamic x402 verification — price comes from the learning itself
   const rejection = await dualAuthDynamic(c, UNLOCK_PRICE,
-    `Unlock "${learning.title}" — ${UNLOCK_PRICE} USDC. ${shareLabel} goes to contributor.`, 'unlock', 'read');
+    `Unlock "${learning.title}" — ${UNLOCK_PRICE} USDC. ${shareLabel} goes to contributor.`, 'unlock', 'read', routerCtx);
   if (rejection) return rejection;
+
+  // Set when (and only when) this unlock actually settled through the router.
+  // API-key/credit unlocks and legacy x402 settles leave this null and follow
+  // the existing pending_balance accounting.
+  const routerSettlement = c.get('x402RouterSettlement') || null;
 
   // Track unlock
   learning.quality.unlocks = (learning.quality.unlocks || 0) + 1;
@@ -5944,6 +6600,38 @@ app.get('/knowledge/:id', async (c) => {
     // own content back at the price of the unlock, with zero earnings.
     safeWrite(LEARNINGS_FILE, learnings);
 
+    // R-01 (Gate A MED-1): a self-unlock that PAID through the router still
+    // moved real USDC on-chain (their own share back to them + our fee to
+    // us). No ledger credit — but the broadcast must be booked or it is
+    // invisible at reconciliation/tax time.
+    if (routerSettlement) {
+      const { entry: selfEntry, key: selfKey, source: selfSource } = resolveEarningsEntry(earnings, {
+        account_id: contribAccountId,
+        wallet: contribWallet,
+      });
+      const selfResolvedKey = (selfSource === 'new') ? (contribAccountId || contribWallet) : selfKey;
+      if (selfSource === 'new') earnings[selfResolvedKey] = selfEntry;
+      const bookedEntry = earnings[selfResolvedKey];
+      const grossMicro = Math.round(UNLOCK_PRICE * 1_000_000);
+      const contributorMicro = Math.floor(grossMicro * routerSettlement.contributorBps / 10000);
+      if (!Array.isArray(bookedEntry.onchain_settlements)) bookedEntry.onchain_settlements = [];
+      bookedEntry.onchain_settlements.push({
+        tx_hash: routerSettlement.txHash,
+        path: routerSettlement.path,
+        learning_id: id,
+        gross_usd: UNLOCK_PRICE,
+        contributor_usd: contributorEarned,
+        platform_usd: platformEarned,
+        gross_micro: grossMicro,
+        contributor_micro: contributorMicro,
+        platform_micro: grossMicro - contributorMicro,
+        contributor_bps: routerSettlement.contributorBps,
+        self_unlock: true,
+        ts: new Date().toISOString(),
+      });
+      safeWrite(EARNINGS_FILE, earnings);
+    }
+
     const {
       injection_flags: _if, possible_duplicate_of: _pd,
       possible_duplicate_similarity: _ps, moderation: _mod,
@@ -5958,6 +6646,15 @@ app.get('/knowledge/:id', async (c) => {
         contributor_earned_usd: 0,
         platform_earned_usd: 0,
         self_unlock: true,
+        // R-01: surface the on-chain receipt so the self-unlocker can see
+        // where their payment actually went.
+        ...(routerSettlement ? {
+          settlement: {
+            tx_hash: routerSettlement.txHash,
+            path: routerSettlement.path,
+            router: x402Router.getRouterAddress(),
+          }
+        } : {})
       },
       timestamp: new Date().toISOString()
     });
@@ -5997,7 +6694,48 @@ app.get('/knowledge/:id', async (c) => {
   activeEntry.by_learning[id].contributor += contributorEarned;
   activeEntry.by_learning[id].platform += platformEarned;
   activeEntry.by_learning[id].unlocks += 1;
-  activeEntry.pending_balance += contributorEarned;
+  // CP-6: gate custodial accrual on the payee-agency being in force for this contributor.
+  // Decided here (authoritative account read; cache misses null) and STORED in the WAL
+  // payload so replayUnlock re-applies the same decision deterministically (mirrors
+  // settled_onchain). Default true; only the custodial else-branch below consults it.
+  let agencyInForce = true;
+  if (routerSettlement) {
+    // R-01: the contributor's share already landed in their wallet on-chain,
+    // atomically with the platform fee. Record the settlement for
+    // reconciliation/tax; crediting pending_balance here would re-create the
+    // custodial ledger the router exists to eliminate. Micro fields are the
+    // EXACT on-chain integers (contract floors the contributor share; dust
+    // goes to the fee side) — the float USD fields are display-grade only
+    // (Gate A sec L-2).
+    const grossMicro = Math.round(UNLOCK_PRICE * 1_000_000);
+    const contributorMicro = Math.floor(grossMicro * routerSettlement.contributorBps / 10000);
+    if (!Array.isArray(activeEntry.onchain_settlements)) activeEntry.onchain_settlements = [];
+    activeEntry.onchain_settlements.push({
+      tx_hash: routerSettlement.txHash,
+      path: routerSettlement.path,
+      learning_id: id,
+      gross_usd: UNLOCK_PRICE,
+      contributor_usd: contributorEarned,
+      platform_usd: platformEarned,
+      gross_micro: grossMicro,
+      contributor_micro: contributorMicro,
+      platform_micro: grossMicro - contributorMicro,
+      contributor_bps: routerSettlement.contributorBps,
+      ts: new Date().toISOString(),
+    });
+  } else {
+    // CP-6: the defense turns on receipt. If the payee-agency is not yet in force for this
+    // Builder (never accepted, or a wallet-only contributor with no account), HOLD the share
+    // in unassented_pending — non-withdrawable — until they accept, when accept-terms converts
+    // it. Authoritative read: getCachedAccount misses null, which would wrongly quarantine.
+    const contribAccount = contribAccountId ? (loadAccounts()[contribAccountId] || null) : null;
+    agencyInForce = isPayeeAgencyInForce(contribAccount);
+    if (agencyInForce) {
+      activeEntry.pending_balance += contributorEarned;
+    } else {
+      activeEntry.unassented_pending = (activeEntry.unassented_pending || 0) + contributorEarned;
+    }
+  }
   activeEntry.last_updated = new Date().toISOString();
 
   // SPEC-A2 C3: WAL-protected dual write — crash-safe atomicity
@@ -6011,6 +6749,12 @@ app.get('/knowledge/:id', async (c) => {
     contributor_earned: contributorEarned,
     platform_earned: platformEarned,
     purchaser_key_label: c.get('keyLabel') || null,  // D2: which key environment unlocked
+    // R-01: replayUnlock must know an on-chain-settled unlock never credits
+    // pending_balance, even when replayed after a crash.
+    settled_onchain: !!routerSettlement,
+    settlement_tx: routerSettlement ? routerSettlement.txHash : null,
+    settlement_bps: routerSettlement ? routerSettlement.contributorBps : null,
+    agency_in_force: agencyInForce, // CP-6: replayUnlock re-applies the accrual gate decision
   });
 
   safeWrite(LEARNINGS_FILE, learnings);
@@ -6038,7 +6782,15 @@ app.get('/knowledge/:id', async (c) => {
     _revenue: {
       unlock_price_usd: UNLOCK_PRICE,
       contributor_earned_usd: contributorEarned,
-      platform_earned_usd: platformEarned
+      platform_earned_usd: platformEarned,
+      // R-01: present only when the unlock settled non-custodially on-chain.
+      ...(routerSettlement ? {
+        settlement: {
+          tx_hash: routerSettlement.txHash,
+          path: routerSettlement.path,
+          router: x402Router.getRouterAddress(),
+        }
+      } : {})
     },
     timestamp: new Date().toISOString()
   });
@@ -6506,6 +7258,19 @@ const GAS_ESTIMATE_USD = (!isNaN(_rawGasEst) && _rawGasEst >= 0 && _rawGasEst <=
 
 // Request a withdrawal (FREE, Auth via EIP-712 Signature — SPEC-A3)
 app.post('/withdraw', async (c) => {
+  // R-01 KILL-SWITCH (2026-07-03): the custodial USDC payout rail is the single
+  // element that would convert Auxilo's never-executed transmission leg into a
+  // completed one (platform wallet nonce 0 to date). Disabled by default until
+  // the non-custodial router replaces it. To re-enable, set Fly secret
+  // CUSTODIAL_WITHDRAW_ENABLED=true. Red-team P0-1: leaving this open lets any
+  // builder falsify the past-conduct posture with one request, mid-consult.
+  if (process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true') {
+    return c.json({
+      error: 'Custodial USDC withdrawals are temporarily paused while we migrate to direct on-chain settlement. Your balance is safe and will be payable on the new rail.',
+      code: 'withdraw_paused_noncustodial_migration',
+    }, 503);
+  }
+
   let body;
   try { body = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
   const { wallet, signature } = body;
@@ -6531,6 +7296,25 @@ app.post('/withdraw', async (c) => {
   if (checkOFAC(wallet)) {
     logOFACBlock(wallet, '/withdraw');
     return c.json({ error: 'Transaction blocked by sanctions compliance' }, 403);
+  }
+
+  // R-01 / red-team P0-3: no withdrawal path may settle for a Builder who has not
+  // accepted the current Terms (§5.10 payee-agency). This custodial rail is paused
+  // above (503) — the gate is defense-in-depth for if/when it re-enables. The caller
+  // is wallet-signed (no session), so resolve the account by its linked wallet.
+  // FAIL CLOSED (GOV-3): a wallet with a legacy wallet-keyed earnings entry but NO
+  // linked account has given no assent — hasAcceptedCurrentTos(undefined) is false,
+  // so it blocks. Never settle the agency-covered payout without an account + assent.
+  const withdrawAccount = Object.values(loadAccounts()).find(a => a && a.wallet === walletLower);
+  // SEC-2: this wallet-signed rail bypasses requireAuth, so it never passes the
+  // session/API-key chokepoint that blocks suspended accounts (lib/accounts.js). A
+  // suspended (disabled_at) Builder must not be able to move funds off the platform
+  // via their still-verified wallet — mirror the same 403 the other routes return.
+  if (withdrawAccount && withdrawAccount.disabled_at) {
+    return c.json({ error: 'Account suspended' }, 403);
+  }
+  if (!hasAcceptedCurrentTos(withdrawAccount)) {
+    return termsNotAcceptedResponse(c);
   }
 
   // SPEC-P0.5: resolve via __wallet_index (account-keyed) or direct wallet key
@@ -7278,6 +8062,31 @@ app.get('/pricing', (c) => {
 });
 
 app.get('/earnings', (c) => {
+  // Server-render the three live-ledger numbers into the raw HTML so non-JS
+  // crawlers see real values (not em-dashes) on the page that says "the numbers
+  // below are live". Uses the SAME visibility predicate as GET /knowledge/stats.
+  // The client-side fetch('/knowledge/stats') stays as a freshness upgrade.
+  try {
+    const filePath = path.join(PUBLIC_DIR, 'earnings.html');
+    if (fs.existsSync(filePath)) {
+      let html = fs.readFileSync(filePath, 'utf8');
+      const visibleLearnings = CONTENT_MODERATION_ENABLED
+        ? learnings.filter(l => !l.status || l.status === 'approved')
+        : learnings;
+      const llLearnings  = visibleLearnings.length.toLocaleString('en-US');
+      const llUnlocks    = visibleLearnings.reduce((s, l) => s + (l.quality.unlocks || 0), 0).toLocaleString('en-US');
+      const llCategories = new Set(visibleLearnings.map(l => l.category)).size.toLocaleString('en-US');
+      html = html
+        .replace(/(id="ll-learnings"[^>]*>)[^<]*</,  `$1${llLearnings}<`)
+        .replace(/(id="ll-unlocks"[^>]*>)[^<]*</,    `$1${llUnlocks}<`)
+        .replace(/(id="ll-categories"[^>]*>)[^<]*</, `$1${llCategories}<`);
+      c.header('Content-Type', 'text/html; charset=utf-8');
+      c.header('Cache-Control', 'public, max-age=3600');
+      return c.body(html);
+    }
+  } catch (e) {
+    console.error('[earnings] server-render failed, falling back to static:', e.message);
+  }
   const res = serveStatic(c, 'earnings.html');
   if (res) return res;
   return c.text('Earnings page not found', 404);
@@ -7325,18 +8134,39 @@ app.get('/llms.txt', (c) => {
 function serveLegalPage(c, filename, title) {
   try {
     const md = fs.readFileSync(path.join(__dirname, 'docs', filename), 'utf8');
-    // Minimal markdown-to-HTML: headings, paragraphs, bold, italic, lists
-    const body = md
+    // Minimal markdown-to-HTML: headings, paragraphs, bold, italic, lists,
+    // inline links, and fenced code blocks.
+    // Fenced code blocks (```...```) are pulled out FIRST and replaced with
+    // placeholders so the line-based list/paragraph transforms below don't wrap
+    // each of their lines in <p>. They are restored as <pre> at the very end.
+    const codeBlocks = [];
+    const protectedMd = md.replace(/```[^\n]*\n([\s\S]*?)```/g, (_m, code) => {
+      const esc = code
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n+$/, '');
+      codeBlocks.push(`<pre class="legal-pre">${esc}</pre>`);
+      return ` CODE${codeBlocks.length - 1} `;
+    });
+    let body = protectedMd
       .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
       .replace(/^### (.+)$/gm, '<h3>$1</h3>')
       .replace(/^## (.+)$/gm, '<h2>$1</h2>')
       .replace(/^# (.+)$/gm, '<h1>$1</h1>')
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      // Inline links [text](url) → <a>. Before list/paragraph wrapping so links
+      // inside prose, headings, and list items all become clickable.
+      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, text, url) =>
+        /^(https?:|mailto:|\/|#)/i.test(url) ? `<a href="${url.replace(/"/g, '&quot;')}">${text}</a>` : text)
       .replace(/^- (.+)$/gm, '<li>$1</li>')
       .replace(/(<li>.*<\/li>\n?)+/g, (m) => `<ul>${m}</ul>`)
       .replace(/^(?!<[hul])(.*\S.*)$/gm, '<p>$1</p>')
       .replace(/\n{2,}/g, '\n');
+    // Restore protected code blocks, unwrapping any <p> the paragraph rule added.
+    body = body.replace(/<p> CODE(\d+) <\/p>| CODE(\d+) /g,
+      (_m, a, b) => codeBlocks[a !== undefined ? a : b]);
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7353,6 +8183,8 @@ function serveLegalPage(c, filename, title) {
     .legal-wrap ul{margin:0 0 16px 20px}
     .legal-wrap li{margin-bottom:6px;line-height:1.6}
     .legal-wrap strong{color:#FAFAF8}
+    .legal-wrap a{color:#C9A84C}
+    .legal-wrap pre.legal-pre{background:#111;border:1px solid rgba(229,229,227,0.12);border-radius:6px;padding:16px;margin-bottom:16px;overflow-x:auto;white-space:pre-wrap;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;line-height:1.6;color:#E5E5E3}
     .legal-back{display:inline-block;margin-bottom:32px;color:#C9A84C;text-decoration:none;font-size:14px}
     .legal-back:hover{text-decoration:underline}
   </style>
@@ -7376,6 +8208,7 @@ app.get('/terms', (c) => serveLegalPage(c, 'TERMS-OF-SERVICE.md', 'Terms of Serv
 app.get('/privacy', (c) => serveLegalPage(c, 'PRIVACY-POLICY.md', 'Privacy Policy'));
 app.get('/legal/subprocessors', (c) => serveLegalPage(c, 'SUBPROCESSORS.md', 'Sub-Processors'));
 app.get('/legal/supported-clients', (c) => serveLegalPage(c, 'SUPPORTED-CLIENTS.md', 'Supported Clients'));
+// FB-1: /dmca is incorporated into the Terms (§5.9.4(b)) and must resolve, not 404.
 app.get('/dmca', (c) => serveLegalPage(c, 'DMCA-POLICY.md', 'DMCA Copyright Policy'));
 
 // ─── Renderly — Web Content Extraction API ───────────────────────────

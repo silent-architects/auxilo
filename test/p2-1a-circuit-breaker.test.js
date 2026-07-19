@@ -120,12 +120,11 @@ describe('A3: Circuit breaker file existence after server.js load', () => {
 
   it('server.js calls persistCircuitBreaker in recordSpend', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf-8');
-    // Extract the FULL recordSpend method body (up to its closing brace at
-    // 2-space indent) instead of a fixed-width window — the old 500-char
-    // window broke when the method body grew past it.
-    const match = src.match(/recordSpend\(costUsd\)\s*\{[\s\S]*?\n  \}/);
-    assert.ok(match, 'recordSpend must exist');
-    assert.ok(match[0].includes('persistCircuitBreaker()'),
+    // Find recordSpend function body
+    const recordSpendIdx = src.indexOf('recordSpend(costUsd)');
+    assert.ok(recordSpendIdx > -1, 'recordSpend must exist');
+    const after = src.slice(recordSpendIdx, recordSpendIdx + 900);
+    assert.ok(after.includes('persistCircuitBreaker()'),
       'recordSpend must call persistCircuitBreaker');
   });
 
