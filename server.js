@@ -58,6 +58,15 @@ const {
   convertUnassentedToPending,
 } = require('./lib/earnings.js');
 const { acquireEarningsLock } = require('./lib/earnings-lock.js');
+// Wave 2b: store-level catalog write mutex (RUNBOOK §9). LOCK-ORDER RULE:
+// account-lock → earnings-lock → learnings-lock (innermost/leaf) — see the
+// module header for the full argument.
+const { acquireLearningsLock } = require('./lib/learnings-lock.js');
+// Wave 2b: PAYMENTS_ENABLED global money-movement kill switch (RUNBOOK §5).
+const { paymentsEnabled, paymentsDisabledBody } = require('./lib/payments-switch.js');
+// Wave 2b: CP-2 identity/W-9 capture at wallet-link — CODE-DARK behind
+// CP2_IDENTITY_CAPTURE_ENABLED (default OFF); encrypted-at-rest store.
+const identityVault = require('./lib/identity-vault.js');
 const { sendOpsAlert } = require('./lib/ops-alert.js');
 // CP-4 (AML-PROGRAM §4.3 G-2): IP-geolocation embargo screen (pure decision engine).
 const geoEmbargo = require('./lib/geo-embargo.js');
@@ -1968,6 +1977,24 @@ async function refreshOFACList() {
     } else {
       console.warn(`[OFAC] [WARNING] SDN list refresh failed: ${err.message}. Using stale list.`);
     }
+
+    // H-3 (Wave 2b): fetch failures previously died in the logs — a stale
+    // sanctions list must PAGE. Refresh cadence is 24h, so ONE failure already
+    // means the list is >24h stale; two means >48h (the AML-PROGRAM line).
+    // Cadence bounds this to ≤1 alert/day; the per-category limiter also
+    // applies. Never-throws: fire-and-forget with a swallowed rejection.
+    const staleSeverity = ofacState.consecutiveFailures >= 2 ? 'CRITICAL — stale >48h' : 'WARNING — stale >24h';
+    sendOpsAlert(
+      `[OFAC] SDN list refresh FAILED (${staleSeverity})`,
+      `The scheduled OFAC SDN refresh failed (${ofacState.consecutiveFailures} consecutive failure(s)).\n` +
+      `Error: ${err.message}\n` +
+      `Last successful refresh: ${ofacState.lastRefresh || 'NEVER (boot-time failure)'}\n` +
+      `Current list size: ${ofacState.listSize} addresses\n` +
+      (ofacScreeningReady()
+        ? 'Screening continues on the STALE list. If this persists past 48h, sanctions screening is out of compliance (AML-PROGRAM).'
+        : 'Screening is NOT ready — wallet-link and money-movement endpoints are failing CLOSED (503) until a list loads.'),
+      { category: 'ofac' }
+    ).catch(() => {});
   }
 }
 
@@ -2596,6 +2623,16 @@ function optionalAuth() {
 }
 
 async function dualAuthDynamic(c, price_usd, description, creditType, requiredScope, routerCtx = null) {
+    // PAYMENTS_ENABLED (Wave 2b): global money-movement kill switch. This
+    // function is the single entry to credit deduction (Path 1), x402
+    // settlement (Path 2 → verifyPaymentOrReject, whose only caller is this
+    // function), and cold 402-challenge minting (Path 3 — minting a challenge
+    // invites a payment we would then refuse, so refuse first). Free
+    // reads/search never route through here; gating the top gates exactly the
+    // paid surface.
+    if (!paymentsEnabled()) {
+        return c.json(paymentsDisabledBody(), 503);
+    }
     // Fix: X-API-Key takes precedence; Authorization: Bearer is the fallback
     let apiKey = c.req.header('X-API-Key');
     if (!apiKey) {
@@ -2819,17 +2856,26 @@ function computeScore(learning) {
 const KNOWLEDGE_QUERY_MAX_CHARS = 512;
 const KNOWLEDGE_QUERY_MAX_TOKENS = 64;
 
+// S21-2 / LW-QA / CAT-1 task-#13(a): THE public-visibility predicate — every
+// public analytics/search surface must count only servable learnings. When
+// content moderation is enabled, exclude anything not approved
+// (retracted/pending/rejected); legacy learnings without a status field are
+// treated as 'approved' for backward compatibility. One helper so the
+// 2026-06-12 inflated-stats class ("922 vs dozens") cannot re-enter through a
+// new endpoint forgetting the filter.
+function visibleCatalog() {
+  return CONTENT_MODERATION_ENABLED
+    ? learnings.filter(l => !l.status || l.status === 'approved')
+    : learnings;
+}
+
 function matchLearnings(query, filters = {}) {
   // D-10 FIX: defense-in-depth — clamp length and token count even if a caller
   // bypassed the route-level validation, so scoring stays O(N × bounded).
   const q = String(query || '').slice(0, KNOWLEDGE_QUERY_MAX_CHARS).toLowerCase().trim();
   const tokens = q.split(/\s+/).filter(t => t.length > 1).slice(0, KNOWLEDGE_QUERY_MAX_TOKENS);
 
-  // S21-2: When content moderation is enabled, exclude non-approved learnings from results.
-  // Legacy learnings without a status field are treated as 'approved' for backward compatibility.
-  const visibleLearnings = CONTENT_MODERATION_ENABLED
-    ? learnings.filter(l => !l.status || l.status === 'approved')
-    : learnings;
+  const visibleLearnings = visibleCatalog();
 
   let results = visibleLearnings.map(learning => {
     let textScore = 0;
@@ -3440,6 +3486,10 @@ app.get('/account/credits', requireAuth, (c) => {
 
 // ── POST /checkout/session (Phase 0.4 — Stripe) ────────────────────────────
 app.post('/checkout/session', requireAuth, async (c) => {
+    // PAYMENTS_ENABLED (Wave 2b): no Stripe sessions minted while payments
+    // are globally disabled — a session minted now would complete into a
+    // webhook we are refusing.
+    if (!paymentsEnabled()) return c.json(paymentsDisabledBody(), 503);
     let body;
     try { body = await c.req.json(); } catch {
         return c.json({ error: 'Invalid JSON body' }, 400);
@@ -3477,6 +3527,11 @@ app.post('/checkout/session', requireAuth, async (c) => {
 // IMPORTANT: This route must receive the raw body for signature verification.
 // Hono's default JSON parsing must be bypassed.
 app.post('/webhook/stripe', async (c) => {
+    // PAYMENTS_ENABLED (Wave 2b): refuse BEFORE any side effect. Deliberate
+    // 503 (not 200-and-drop): Stripe retries non-2xx deliveries with backoff
+    // for days, so packs paid during the pause credit themselves when the
+    // switch re-enables — no event lost, no manual replay.
+    if (!paymentsEnabled()) return c.json(paymentsDisabledBody(), 503);
     const signature = c.req.header('stripe-signature');
     if (!signature) {
         return c.json({ error: 'Missing stripe-signature header' }, 400);
@@ -3814,6 +3869,10 @@ app.post('/account/connect-stripe', requireAuth, async (c) => {
 
 // POST /withdraw/stripe — withdraw earnings to Stripe Connect
 app.post('/withdraw/stripe', requireAuth, async (c) => {
+  // PAYMENTS_ENABLED (Wave 2b): global kill switch, layered ABOVE the
+  // rail-specific sentinel below — it must hold even when the custodial rail
+  // is individually enabled.
+  if (!paymentsEnabled()) return c.json(paymentsDisabledBody(), 503);
   // R-01 KILL-SWITCH (R01-MT-02): the Stripe payout rail debits the SAME
   // authoritative pending_balance the USDC rail debits (see debitWithdrawableBalance
   // below) — so the moment Stripe is configured this is a live fiat custodial payout
@@ -4090,7 +4149,56 @@ app.post('/account/link-wallet', requireSessionOrApiKey(), async (c) => {
         // to this account.
         message: { wallet, nonce, timestamp, action },
       },
+      // CP-2 (Wave 2b, CODE-DARK — flag off in prod): when identity capture is
+      // enabled, advertise the field contract at challenge time so clients
+      // collect the self-attested fields BEFORE spending the single-use
+      // signature. Schema only — no data.
+      ...(identityVault.captureEnabled() ? {
+        identity_required: true,
+        identity_fields: identityVault.identityFieldContract(),
+      } : {}),
     }, 401);
+  }
+
+  // CP-2 (Wave 2b, CODE-DARK behind CP2_IDENTITY_CAPTURE_ENABLED — default
+  // OFF, absent = off = zero behavior change): identity/W-9 capture at the
+  // wallet-link step (red-team P1-7: atomic settlement removes the payout
+  // chokepoint, so identity gates HERE). Validation + encryption run BEFORE
+  // nonce consumption so a refused attempt never burns the single-use
+  // challenge, and BEFORE any mutation. Storage design per GOV-3 argument in
+  // lib/identity-vault.js (separate encrypted store, AES-256-GCM, AAD-bound,
+  // key only in env — 2026-07-01 leak lesson). Fail CLOSED: flag on with a
+  // missing/invalid key REFUSES capture (503), never skips, never stores
+  // plaintext. Policy activation stays counsel-gated (PUNCH-LIST CP-2).
+  let cp2Encrypted = null;
+  if (identityVault.captureEnabled()) {
+    const cp2Key = identityVault.keyStatus();
+    if (!cp2Key.ok) {
+      console.error('[CP-2] capture enabled but data key unusable — refusing wallet link (fail closed)');
+      return c.json({
+        error: 'Identity capture is required for wallet linking but is temporarily unavailable. Retry later.',
+        code: 'IDENTITY_CAPTURE_UNAVAILABLE',
+      }, 503);
+    }
+    const cp2Valid = identityVault.validateIdentityFields(body.identity);
+    if (!cp2Valid.ok) {
+      return c.json({
+        error: 'Wallet linking requires self-attested identity details. Resend with an "identity" object alongside wallet + signature.',
+        code: 'IDENTITY_REQUIRED',
+        errors: cp2Valid.errors,
+        required: identityVault.identityFieldContract(),
+      }, 400);
+    }
+    try {
+      cp2Encrypted = identityVault.encryptIdentity(accountId, cp2Valid.fields, wallet);
+    } catch (cp2EncErr) {
+      // Never log field values; the error is key/crypto-side.
+      console.error('[CP-2] identity encryption failed — refusing wallet link (fail closed)');
+      return c.json({
+        error: 'Identity capture is required for wallet linking but is temporarily unavailable. Retry later.',
+        code: 'IDENTITY_CAPTURE_UNAVAILABLE',
+      }, 503);
+    }
   }
 
   // Step 2: signature presented — consume the nonce (single-use, C7 idiom) and
@@ -4124,12 +4232,31 @@ app.post('/account/link-wallet', requireSessionOrApiKey(), async (c) => {
   // loadAccounts->mutate->saveAccounts internally).
   const releaseAccountLock = await acquireAccountLock(accountId);
   try {
+    // CP-2: persist the encrypted identity record BEFORE the link, snapshot
+    // first — a failed link restores the prior state (deletes a new row,
+    // re-installs a pre-existing one), so an identity row can never exist for
+    // a failed link and a re-link 409 can never destroy a prior good record.
+    // A store write failure throws here → 500 with NOTHING mutated.
+    let cp2Prior = null;
+    let cp2Written = false;
+    if (cp2Encrypted) {
+      cp2Prior = identityVault.snapshotIdentity(accountId);
+      identityVault.storeIdentity(accountId, cp2Encrypted);
+      cp2Written = true;
+      console.log(`[CP-2] identity captured for ${accountId} (encrypted at rest)`);
+    }
+
     // linkWallet validates format, verified status, uniqueness, no-existing-wallet,
     // and (AUD19 MED-2) refuses platform wallets — the live platform wallet is
     // auto-verified at boot, so without the refusal any ToS-accepted account
     // could claim it and drain platform-attributed balances via the hooks below.
     const result = linkWallet(accountId, wallet, verifiedWallets, PLATFORM_WALLETS);
     if (!result.success) {
+      if (cp2Written) {
+        try { identityVault.restoreIdentity(accountId, cp2Prior); } catch (cp2RestoreErr) {
+          console.error('[CP-2] identity compensation failed after refused link:', cp2RestoreErr.message);
+        }
+      }
       return c.json({ error: result.error }, result.status_code || 400);
     }
 
@@ -4172,10 +4299,18 @@ app.post('/account/link-wallet', requireSessionOrApiKey(), async (c) => {
     // the lazy cure on GET /account/pending re-runs it.
     let adoptedIds = [];
     try {
-      adoptedIds = adoptWalletOrphans(learnings, accountId, result.wallet);
-      if (adoptedIds.length > 0) {
-        safeWrite(LEARNINGS_FILE, learnings);
-        console.log(`[AUD19-3] adopted ${adoptedIds.length} wallet-only learning(s) into account ${accountId} on wallet link`);
+      // Wave 2b (RUNBOOK §9): catalog write lock, acquired while HOLDING the
+      // account lock — rule order (account → learnings), the one dual-
+      // acquisition site. No earnings lock is touched while it is held.
+      const releaseLearningsLock = await acquireLearningsLock();
+      try {
+        adoptedIds = adoptWalletOrphans(learnings, accountId, result.wallet);
+        if (adoptedIds.length > 0) {
+          safeWrite(LEARNINGS_FILE, learnings);
+          console.log(`[AUD19-3] adopted ${adoptedIds.length} wallet-only learning(s) into account ${accountId} on wallet link`);
+        }
+      } finally {
+        releaseLearningsLock();
       }
     } catch (adoptErr) {
       console.error('[link-wallet] wallet-orphan adoption failed:', adoptErr.message);
@@ -4185,6 +4320,9 @@ app.post('/account/link-wallet', requireSessionOrApiKey(), async (c) => {
       message: 'Wallet linked',
       wallet: result.wallet,
       account_id: accountId,
+      // CP-2: boolean receipt ONLY — the captured fields never appear in any
+      // response, log, or stat.
+      ...(cp2Written && { identity_captured: true }),
       // MED-3: surface exactly what changed hands so the operator can audit the
       // adoption (ids, not just a count).
       ...(adoptedIds.length > 0 && {
@@ -4465,6 +4603,9 @@ app.get('/health', (c) => {
     status: 'ok',
     uptime: process.uptime(),
     catalog_size: skills.length,
+    // Wave 2b: effective global payment-switch state (observability — an
+    // operator or monitor can see the pause without probing a paid endpoint).
+    payments_enabled: paymentsEnabled(),
     timestamp: new Date().toISOString()
   });
 });
@@ -5272,8 +5413,16 @@ app.post('/learn', async (c) => {
     learning.quality.score = Math.min(quality_self_assessment.extraction_confidence * 5, 5);
   }
 
-  learnings.push(learning);
-  safeWrite(LEARNINGS_FILE, learnings);
+  // Wave 2b (RUNBOOK §9): catalog write lock around the append + persist.
+  {
+    const releaseLearningsLock = await acquireLearningsLock();
+    try {
+      learnings.push(learning);
+      safeWrite(LEARNINGS_FILE, learnings);
+    } finally {
+      releaseLearningsLock();
+    }
+  }
 
   // AUD19-3(c): batched/throttled ops alert on queue entry (fire-and-forget).
   if (learning.status === 'pending_review') {
@@ -6063,10 +6212,16 @@ app.post('/extract', async (c) => {
   // pendingCatalogEntries were prepared in the loop but NOT pushed to learnings[]
   // until the audit row succeeded. This closes the in-memory mutation gap.
   if (published.length > 0) {
-    for (const entry of pendingCatalogEntries) {
-      learnings.push(entry);
+    // Wave 2b (RUNBOOK §9): catalog write lock around the commit block.
+    const releaseLearningsLock = await acquireLearningsLock();
+    try {
+      for (const entry of pendingCatalogEntries) {
+        learnings.push(entry);
+      }
+      safeWrite(LEARNINGS_FILE, learnings);
+    } finally {
+      releaseLearningsLock();
     }
-    safeWrite(LEARNINGS_FILE, learnings);
 
     // AUD19-3(c): batched/throttled ops alert on queue entry (fire-and-forget).
     const extractPendingEntries = pendingCatalogEntries.filter((e) => e && e.status === 'pending_review');
@@ -6131,6 +6286,12 @@ app.delete('/learn/:id', async (c) => {
   if (!retractAccount) return c.json({ error: 'Account not found' }, 401);
   if (retractAccount.disabled_at) return c.json({ error: 'Account suspended' }, 403);
 
+  // Wave 2b (RUNBOOK §9): catalog write lock — the ownership/window decision
+  // and the mutation stay atomic across the awaited audit append. Innermost
+  // lock; the awaited audit writer's internal mutex is a self-contained leaf.
+  const releaseLearningsLock = await acquireLearningsLock();
+  try {
+
   // Find the learning
   const learning = learnings.find(l => l.id === learningId);
   if (!learning) return c.json({ error: 'Learning not found' }, 404);
@@ -6141,18 +6302,37 @@ app.delete('/learn/:id', async (c) => {
   }
 
   if (reason === 'retract') {
-    // Check retraction window
-    const publishedAt = new Date(learning.created_at).getTime();
+    // Check retraction window.
+    // SPEC3 B4-2 (Wave 2b): the window basis is the APPROVAL time when the
+    // item was approved out of the review queue (self- or admin-approve stamp)
+    // — an item that sat pending N days previously got only 7−N real days.
+    // Seamless publishes carry no approval stamp and keep created_at
+    // (created == approved for them).
+    const approvedAtIso =
+      (learning.self_review_action && learning.self_review_action.action === 'self_approve' && learning.self_review_action.at)
+      || (learning.moderation_action && learning.moderation_action.action === 'approved' && learning.moderation_action.at)
+      || null;
+    const publishedAtIso = approvedAtIso || learning.created_at;
+    const publishedAt = new Date(publishedAtIso).getTime();
     const daysSincePublish = (Date.now() - publishedAt) / 86400000;
 
     if (daysSincePublish > EXTRACT_RETRACTION_DAYS) {
       return c.json({
         error: 'Retraction window expired',
         message: `Retraction is only available within ${EXTRACT_RETRACTION_DAYS} days of publication. Use the standard takedown process.`,
-        published_at: learning.created_at,
+        published_at: publishedAtIso,
         retraction_deadline: new Date(publishedAt + EXTRACT_RETRACTION_DAYS * 86400000).toISOString(),
       }, 409);
     }
+
+    // SPEC3 B4-1 (Wave 2b, live bug): getConsentState returns NULL for any
+    // account with no extraction-consent record — i.e. most direct /learn and
+    // MCP contributors — and the old unguarded `.consent_version` deref threw
+    // inside the audit try, misreported as audit_integrity_error 500.
+    // Retraction is a contributor right independent of extraction consent, so
+    // a never-consented retractor records the truthful 'none' (satisfies the
+    // audit writer's truthiness assertion for action 'retract').
+    const retractConsent = getConsentState(accountId);
 
     // CORRECTION 1.5: Audit FIRST, mutate SECOND.
     // The appendAuditRow guard throws on missing consent_version.
@@ -6162,7 +6342,7 @@ app.delete('/learn/:id', async (c) => {
     try {
       auditResult = await appendAuditRow({
         account_id: accountId,
-        consent_version: getConsentState(accountId).consent_version,
+        consent_version: retractConsent ? retractConsent.consent_version : 'none',
         action: 'retract',
         source: { learning_id: learningId },
         transcript_sha256: learning.body_hash || '',
@@ -6204,6 +6384,10 @@ app.delete('/learn/:id', async (c) => {
   }
 
   return c.json({ error: 'reason=retract is the only supported retraction method' }, 400);
+
+  } finally {
+    releaseLearningsLock();
+  }
 });
 
 // ── GET /account/settings — read current extraction mode (LW-17) ────────────
@@ -6603,15 +6787,11 @@ app.get('/knowledge/stats', (c) => {
   const earningsEntries = Object.entries(earnings).filter(([k]) => !k.startsWith('__'));
   const totalEarnings = earningsEntries.reduce((sum, [, w]) => sum + (w.total_gross || 0), 0);
 
-  // LW-QA fix: public stats must reflect only publicly-visible learnings.
-  // Use the SAME predicate as search (matchLearnings) and GET /knowledge/:id: when
-  // moderation is on, exclude anything not approved (retracted/pending/rejected).
-  // Legacy learnings without a status field are treated as approved (backward-compat).
-  // Without this, learnings_count reported the raw array length (e.g. 922) instead of
-  // the ~dozens actually servable — a 10x-inflated headline.
-  const visibleLearnings = CONTENT_MODERATION_ENABLED
-    ? learnings.filter(l => !l.status || l.status === 'approved')
-    : learnings;
+  // LW-QA fix: public stats must reflect only publicly-visible learnings —
+  // the shared visibleCatalog() predicate (same as search + /knowledge/:id).
+  // Without this, learnings_count reported the raw array length (e.g. 922)
+  // instead of the ~dozens actually servable — a 10x-inflated headline.
+  const visibleLearnings = visibleCatalog();
 
   // PD-1 fix: count unique contributor wallets from learnings, not earnings entries
   const contributorWallets = new Set(visibleLearnings.map(l => l.contributor_wallet).filter(Boolean));
@@ -6717,6 +6897,15 @@ app.get('/knowledge/:id', async (c) => {
     `Unlock "${learning.title}" — ${UNLOCK_PRICE} USDC. 70% goes to contributor.`, 'unlock', 'read', routerCtx);
   if (rejection) return rejection;
 
+  // Wave 2b (RUNBOOK §9): catalog write lock. Acquired AFTER settlement —
+  // never across the x402/router finality wait (up to 180s) — and released in
+  // the finally at the end of this handler, so the whole mutation + persist +
+  // compensation section is serialized against every other catalog writer.
+  // Innermost lock: nothing below acquires account/earnings locks (see
+  // lib/learnings-lock.js for the lock-order rule).
+  const releaseLearningsLock = await acquireLearningsLock();
+  try {
+
   // Set when (and only when) this unlock actually settled through the router.
   // API-key/credit unlocks and legacy x402 settles leave this null and follow
   // the existing pending_balance accounting.
@@ -6762,36 +6951,6 @@ app.get('/knowledge/:id', async (c) => {
   const accrualCapped = (fundingSource === 'credit_pack') && !!buyerAccountId
     && isAccrualCapped(buyerAccountId, id);
 
-  // AUD19-10: compensation state. The buyer's credit was already burned inside
-  // dualAuthDynamic; every mutation from here to the response is tracked so a
-  // failed delivery can cancel the WAL, roll the in-memory ledger back, and
-  // refund the credit (+ its consumed lot) in the same request.
-  let walId = null;
-  let accrualArmed = false;
-  const _rb = {
-    qualityUnlocks: learning.quality.unlocks || 0,
-    demand: learning.demand ? { ...learning.demand } : null,
-    learningEarnings: learning.earnings ? { ...learning.earnings } : null,
-    earningsKey: null, earningsWasNew: false, earningsSnapshot: null,
-  };
-  try {
-
-  // Track unlock
-  learning.quality.unlocks = (learning.quality.unlocks || 0) + 1;
-
-  // E2: Demand tracking — unlock counters for rolling windows.
-  // AUD19-2: capped repeat unlocks do NOT bump demand — repeat unlocks from a
-  // single buyer must not pump the dynamic-pricing demand multiplier.
-  if (!learning.demand) learning.demand = { search_impressions_7d: 0, search_impressions_30d: 0, unlocks_7d: 0, unlocks_30d: 0 };
-  if (!accrualCapped) {
-    learning.demand.unlocks_7d++;
-    learning.demand.unlocks_30d++;
-  }
-
-  // Track earnings with source attribution (AUD19-2: on the PAID basis)
-  const contributorEarned = accrualBasis * CONTRIBUTOR_SHARE;
-  const platformEarned = accrualBasis * (1 - CONTRIBUTOR_SHARE);
-
   // SPEC-P0.5: Resolve contributor earnings entry via account_id (preferred) or wallet fallback
   const contribWallet = learning.contributor_wallet;
   const contribAccountId = learning.contributor_account_id || null;
@@ -6802,6 +6961,8 @@ app.get('/knowledge/:id', async (c) => {
   // entering the system. Detect self-unlock by matching the caller's account id
   // OR the caller's wallet against the contributor's, and return the content
   // WITHOUT crediting anything (no revenue counters, no earnings entry, no WAL).
+  // (Wave 2b: computed BEFORE the counter bumps so the CAT-1 §5 gating below
+  // can consult it — pure hoist, decision inputs unchanged.)
   const callerWallet = (c.get('walletAddress') || c.req.header('X-Wallet-Address') || '').toLowerCase();
   const contribWalletLower = contribWallet ? contribWallet.toLowerCase() : null;
   // AUD19-2: the account arm compares the POST-auth buyerAccountId — a
@@ -6811,10 +6972,53 @@ app.get('/knowledge/:id', async (c) => {
     (buyerAccountId && contribAccountId && buyerAccountId === contribAccountId) ||
     (callerWallet && contribWalletLower && callerWallet === contribWalletLower);
 
+  // CAT-1 §5 / task-#13(b): counters are CREDITED only for a real, non-self,
+  // first-in-window unlock. quality.unlocks feeds computeScore → search
+  // ranking, buyer-facing quality.score, /knowledge/stats total_unlocks and
+  // the public top_learnings leaderboard — so capped repeats and self-unlocks
+  // must not buy ranking (20 repeat self-unlocks previously bought +40 ranking
+  // points). The demand bump gates on the SAME predicate (self-unlocks could
+  // still pump the one-day +37.8% price spike before this). Raw volume stays
+  // observable in quality.unlocks_total (ops-only: read by no scorer, no
+  // public stat, and excluded from search projections by their explicit field
+  // lists). Residual, accepted by CAT-1: anonymous x402 sybil demand bumps —
+  // unaddressable without identity on that path.
+  const countersCredited = !accrualCapped && !isSelfUnlock;
+
+  // AUD19-10: compensation state. The buyer's credit was already burned inside
+  // dualAuthDynamic; every mutation from here to the response is tracked so a
+  // failed delivery can cancel the WAL, roll the in-memory ledger back, and
+  // refund the credit (+ its consumed lot) in the same request.
+  let walId = null;
+  let accrualArmed = false;
+  const _rb = {
+    qualityUnlocks: learning.quality.unlocks || 0,
+    unlocksTotal: learning.quality.unlocks_total || 0,
+    demand: learning.demand ? { ...learning.demand } : null,
+    learningEarnings: learning.earnings ? { ...learning.earnings } : null,
+    earningsKey: null, earningsWasNew: false, earningsSnapshot: null,
+  };
+  try {
+
+  // Track unlock — ops-only raw counter always bumps; the credited counter and
+  // the demand windows bump only per the CAT-1 gating above.
+  learning.quality.unlocks_total = (learning.quality.unlocks_total || 0) + 1;
+  if (!learning.demand) learning.demand = { search_impressions_7d: 0, search_impressions_30d: 0, unlocks_7d: 0, unlocks_30d: 0 };
+  if (countersCredited) {
+    learning.quality.unlocks = (learning.quality.unlocks || 0) + 1;
+    learning.demand.unlocks_7d++;
+    learning.demand.unlocks_30d++;
+  }
+
+  // Track earnings with source attribution (AUD19-2: on the PAID basis)
+  const contributorEarned = accrualBasis * CONTRIBUTOR_SHARE;
+  const platformEarned = accrualBasis * (1 - CONTRIBUTOR_SHARE);
+
   if (isSelfUnlock) {
-    // Persist only the unlock counters already bumped above (quality/demand) so
-    // the catalog stays consistent; credit NOTHING. The contributor gets their
-    // own content back at the price of the unlock, with zero earnings.
+    // Persist only the ops-only raw counter bumped above (unlocks_total) so
+    // volume stays observable; credit NOTHING — no ranking counter, no demand
+    // bump, no earnings. The contributor gets their own content back at the
+    // price of the unlock, with zero earnings.
     safeWrite(LEARNINGS_FILE, learnings);
 
     // R-01 (Gate A MED-1): a self-unlock that PAID through the router still
@@ -6879,16 +7083,18 @@ app.get('/knowledge/:id', async (c) => {
 
   // AUD19-2: capped repeat unlock — serve the content, accrue NOTHING. Exact
   // mirror of the M-2 shape: no revenue counters, no earnings entry, no WAL.
-  // quality.unlocks (bumped above) persists for catalog consistency; the
-  // demand counters were deliberately NOT bumped.
+  // Only the ops-only unlocks_total (bumped above) persists for volume
+  // observability; the ranking counter and demand windows were deliberately
+  // NOT bumped (CAT-1 §5 gating).
   if (accrualCapped) {
     safeWrite(LEARNINGS_FILE, learnings);
     // LW-7: a capped repeat still DELIVERED content — it proves purchase for
-    // rating eligibility even though it accrues nothing. Best-effort: a ledger
-    // write failure must never fail a paid delivery.
-    try { recordPurchase(buyerAccountId, id); } catch (e) {
+    // rating eligibility even though it accrues nothing. Best-effort +
+    // fire-and-forget (F4: recordPurchase is now async under the ledger's
+    // write mutex): a ledger write failure must never fail a paid delivery.
+    recordPurchase(buyerAccountId, id).catch((e) => {
       console.error('[LW-7] purchase-ledger write failed (capped path):', e && e.message);
-    }
+    });
     const {
       injection_flags: _ifc, possible_duplicate_of: _pdc,
       possible_duplicate_similarity: _psc, moderation: _modc,
@@ -7046,11 +7252,12 @@ app.get('/knowledge/:id', async (c) => {
   // Sits AFTER the WAL commit so a refunded delivery failure can never mint
   // rating rights. Account-authenticated buyers only (anonymous x402 has no
   // account); the self-unlock path above returns before reaching this.
-  // Best-effort: a ledger write failure must never fail a paid delivery.
+  // Best-effort + fire-and-forget (F4: async under the ledger's write mutex):
+  // a ledger write failure must never fail a paid delivery.
   if (buyerAccountId) {
-    try { recordPurchase(buyerAccountId, id); } catch (e) {
+    recordPurchase(buyerAccountId, id).catch((e) => {
       console.error('[LW-7] purchase-ledger write failed (unlock path):', e && e.message);
-    }
+    });
   }
 
   // LW-13 / LW-16: strip moderation-internal fields from the buyer-facing unlock response
@@ -7129,6 +7336,7 @@ app.get('/knowledge/:id', async (c) => {
     //    real account, is value-idempotent, and carries no money.)
     try {
       learning.quality.unlocks = _rb.qualityUnlocks;
+      learning.quality.unlocks_total = _rb.unlocksTotal;
       if (_rb.demand) {
         learning.demand = _rb.demand;
       } else if (learning.demand) {
@@ -7144,18 +7352,29 @@ app.get('/knowledge/:id', async (c) => {
         if (_rb.earningsWasNew) delete earnings[_rb.earningsKey];
         else if (_rb.earningsSnapshot) earnings[_rb.earningsKey] = _rb.earningsSnapshot;
       }
+      // F1 (Wave-1 review carry-in): the discovery-premium cache entry was
+      // consumed (single-use) at the read site above — restore it so the
+      // buyer's RETRY of this refunded unlock still earns the 60% discovery
+      // attribution. Original timestamp on purpose: the retry rides the
+      // original discovery window, not a fresh one.
+      if (isFromSearch) searchSourceCache.set(discoveryCacheKey, cachedAt);
     } catch (rbErr) {
       console.error('[AUD19-10] in-memory rollback failed (continuing to refund):', rbErr && rbErr.message);
     }
 
-    // 3. Refund the credit + its consumed lot at the unit price it carried.
-    //    4. Un-arm the accrual cap iff THIS request armed it (see
+    // 3. Un-arm the accrual cap iff THIS request armed it (see
     //    unrecordAccrual's safety argument) so the buyer's retry accrues
-    //    normally instead of $0.
+    //    normally instead of $0. F2 (Wave-1 review carry-in): un-arm BEFORE
+    //    the refund await — during that await a concurrent same-buyer unlock
+    //    could read the still-armed cap and serve a $0-accrual capped unlock
+    //    for a delivery that was refunded. If the refund below then fails,
+    //    staying un-armed is still correct: the WAL is already aborted, so no
+    //    accrual landed and the retry SHOULD accrue.
+    //    4. Refund the credit + its consumed lot at the unit price it carried.
     try {
+      if (accrualArmed) unrecordAccrual(buyerAccountId, id);
       await refundCredit(buyerAccountId, 'unlock',
         (typeof creditUnit === 'number' && Number.isFinite(creditUnit)) ? creditUnit : undefined);
-      if (accrualArmed) unrecordAccrual(buyerAccountId, id);
       console.error(`[AUD19-10] credit refunded to ${buyerAccountId} for failed unlock of ${id}`);
       return c.json({
         error: 'Unlock delivery failed — your credit has been refunded. Please retry.',
@@ -7176,6 +7395,10 @@ app.get('/knowledge/:id', async (c) => {
         credit_refunded: false,
       }, 500);
     }
+  }
+  } finally {
+    // Wave 2b: release the catalog write lock acquired post-settlement above.
+    releaseLearningsLock();
   }
 });
 
@@ -7259,23 +7482,30 @@ app.post('/knowledge/:id/rate', requireSessionOrApiKey('read'), async (c) => {
 
   ratingLimitMap.set(rateKey, Date.now()); // burn BEFORE mutation
 
-  const learning = learnings[idx];
-  const q = learning.quality;
-  q.ratings = (q.ratings || 0) + 1;
-  // D-6 FIX: maintain a bounded running sum instead of pushing onto an unbounded
-  // helpfulness_scores array. Migrate any pre-fix array into the sum once, then
-  // drop it so the catalog file stops growing per-rating.
-  if (typeof q.helpfulness_sum !== 'number') {
-    q.helpfulness_sum = Array.isArray(q.helpfulness_scores)
-      ? q.helpfulness_scores.reduce((a, b) => a + b, 0)
-      : 0;
-  }
-  q.helpfulness_sum += helpfulness;
-  if (Array.isArray(q.helpfulness_scores)) delete q.helpfulness_scores;
-  q.avg_helpfulness = q.helpfulness_sum / q.ratings;
-  learning.updated_at = new Date().toISOString();
+  // Wave 2b (RUNBOOK §9): catalog write lock around the mutation + persist.
+  const releaseLearningsLock = await acquireLearningsLock();
+  let learning;
+  try {
+    learning = learnings[idx];
+    const q = learning.quality;
+    q.ratings = (q.ratings || 0) + 1;
+    // D-6 FIX: maintain a bounded running sum instead of pushing onto an unbounded
+    // helpfulness_scores array. Migrate any pre-fix array into the sum once, then
+    // drop it so the catalog file stops growing per-rating.
+    if (typeof q.helpfulness_sum !== 'number') {
+      q.helpfulness_sum = Array.isArray(q.helpfulness_scores)
+        ? q.helpfulness_scores.reduce((a, b) => a + b, 0)
+        : 0;
+    }
+    q.helpfulness_sum += helpfulness;
+    if (Array.isArray(q.helpfulness_scores)) delete q.helpfulness_scores;
+    q.avg_helpfulness = q.helpfulness_sum / q.ratings;
+    learning.updated_at = new Date().toISOString();
 
-  safeWrite(LEARNINGS_FILE, learnings);
+    safeWrite(LEARNINGS_FILE, learnings);
+  } finally {
+    releaseLearningsLock();
+  }
 
   // Append-only JSONL log (crash-safe, distinct from safeWrite)
   // LW-7: rater_account_id recorded for future anomaly review (who rated what).
@@ -7293,7 +7523,11 @@ app.post('/knowledge/:id/rate', requireSessionOrApiKey('read'), async (c) => {
 // ─── E2: GET /pricing/categories — Category demand & pricing analytics (PUBLIC) ──
 app.get('/pricing/categories', (c) => {
   const categoryData = {};
-  for (const learning of learnings) {
+  // CAT-1 task-#13(a) (live leak, found 2026-07-19): this iterated the RAW
+  // array — a public endpoint reported 940 learnings (incl. pending/rejected/
+  // retracted) vs the 58 actually servable, and mixed pending items' default
+  // prices into public avg_price — the exact 2026-06-12 inflated-stats class.
+  for (const learning of visibleCatalog()) {
     const cat = learning.category;
     if (!cat) continue;
     if (!categoryData[cat]) {
@@ -7322,7 +7556,10 @@ app.get('/pricing/categories', (c) => {
 // ─── E2: GET /contributor/:wallet/pricing-insights — Builder analytics (PUBLIC) ──
 app.get('/contributor/:wallet/pricing-insights', (c) => {
   const wallet = c.req.param('wallet');
-  const builderLearnings = learnings.filter(l => l.contributor_wallet === wallet.toLowerCase());
+  // CAT-1 task-#13(a) same-class hit: unfiltered, this leaked the TITLES of
+  // pending/rejected/retracted learnings (top_earning_learnings) on a public
+  // endpoint — worse than the count leak. Servable items only.
+  const builderLearnings = visibleCatalog().filter(l => l.contributor_wallet === wallet.toLowerCase());
 
   if (builderLearnings.length === 0) return c.json({ error: 'No learnings found for this wallet' }, 404);
 
@@ -7604,7 +7841,11 @@ const rateLimitCleanupInterval = setInterval(sweepRateLimitStores, RATE_LIMIT_CL
 rateLimitCleanupInterval.unref(); // Don't prevent process exit
 
 // ─── E2: Daily Pricing Cron ──────────────────────────────────────────────────
-function runDailyPricingCron() {
+// Wave 2b (RUNBOOK §9): async — takes the catalog write lock around the
+// reprice + decay + persist so the daily sweep can never interleave with a
+// request-path writer's critical section.
+async function runDailyPricingCron() {
+  const releaseLearningsLock = await acquireLearningsLock();
   try {
     const catalog = learnings.slice(); // snapshot to avoid mutation during iteration
     let repriced = 0;
@@ -7639,6 +7880,8 @@ function runDailyPricingCron() {
     console.log(`[pricing-cron] Repriced ${repriced} learnings`);
   } catch (err) {
     console.error('[pricing-cron] Error:', err.message);
+  } finally {
+    releaseLearningsLock();
   }
 }
 
@@ -7657,6 +7900,9 @@ const GAS_ESTIMATE_USD = (!isNaN(_rawGasEst) && _rawGasEst >= 0 && _rawGasEst <=
 
 // Request a withdrawal (FREE, Auth via EIP-712 Signature — SPEC-A3)
 app.post('/withdraw', async (c) => {
+  // PAYMENTS_ENABLED (Wave 2b): global kill switch, layered ABOVE the
+  // rail-specific sentinel below (same shape as /withdraw/stripe).
+  if (!paymentsEnabled()) return c.json(paymentsDisabledBody(), 503);
   // R-01 KILL-SWITCH (2026-07-03): the custodial USDC payout rail is the single
   // element that would convert Auxilo's never-executed transmission leg into a
   // completed one (platform wallet nonce 0 to date). Disabled by default until
@@ -8139,28 +8385,35 @@ app.get('/admin/moderation/queue', adminAuth('read'), (c) => {
 });
 
 // POST /admin/moderation/:id/approve — approve a pending learning
-app.post('/admin/moderation/:id/approve', adminAuth('admin'), (c) => {
+app.post('/admin/moderation/:id/approve', adminAuth('admin'), async (c) => {
   const id = c.req.param('id');
-  const idx = learnings.findIndex(l => l.id === id);
 
-  if (idx === -1) return c.json({ error: 'Learning not found', id }, 404);
+  // Wave 2b (RUNBOOK §9): catalog write lock around decision + mutation.
+  const releaseLearningsLock = await acquireLearningsLock();
+  try {
+    const idx = learnings.findIndex(l => l.id === id);
 
-  const learning = learnings[idx];
-  if (learning.status === 'approved') {
-    return c.json({ error: 'Learning is already approved', id }, 400);
+    if (idx === -1) return c.json({ error: 'Learning not found', id }, 404);
+
+    const learning = learnings[idx];
+    if (learning.status === 'approved') {
+      return c.json({ error: 'Learning is already approved', id }, 400);
+    }
+
+    learning.status = 'approved';
+    learning.moderation = 'manual'; // LW-13: audit trail — human-approved
+    learning.moderation_action = {
+      action: 'approved',
+      at: new Date().toISOString(),
+    };
+    learning.updated_at = new Date().toISOString();
+    safeWrite(LEARNINGS_FILE, learnings);
+
+    console.log(`[S21-2] Learning ${id} approved by admin`);
+    return c.json({ approved: true, id, title: learning.title });
+  } finally {
+    releaseLearningsLock();
   }
-
-  learning.status = 'approved';
-  learning.moderation = 'manual'; // LW-13: audit trail — human-approved
-  learning.moderation_action = {
-    action: 'approved',
-    at: new Date().toISOString(),
-  };
-  learning.updated_at = new Date().toISOString();
-  safeWrite(LEARNINGS_FILE, learnings);
-
-  console.log(`[S21-2] Learning ${id} approved by admin`);
-  return c.json({ approved: true, id, title: learning.title });
 });
 
 // POST /admin/moderation/:id/reject — reject a pending learning with a reason
@@ -8180,22 +8433,28 @@ app.post('/admin/moderation/:id/reject', adminAuth('admin'), async (c) => {
     return c.json({ error: 'Rejection reason required (min 5 characters)' }, 400);
   }
 
-  const learning = learnings[idx];
-  if (learning.status === 'rejected') {
-    return c.json({ error: 'Learning is already rejected', id }, 400);
+  // Wave 2b (RUNBOOK §9): catalog write lock around decision + mutation.
+  const releaseLearningsLock = await acquireLearningsLock();
+  try {
+    const learning = learnings[idx];
+    if (learning.status === 'rejected') {
+      return c.json({ error: 'Learning is already rejected', id }, 400);
+    }
+
+    learning.status = 'rejected';
+    learning.moderation_action = {
+      action: 'rejected',
+      reason,
+      at: new Date().toISOString(),
+    };
+    learning.updated_at = new Date().toISOString();
+    safeWrite(LEARNINGS_FILE, learnings);
+
+    console.log(`[S21-2] Learning ${id} rejected by admin: ${reason}`);
+    return c.json({ rejected: true, id, reason });
+  } finally {
+    releaseLearningsLock();
   }
-
-  learning.status = 'rejected';
-  learning.moderation_action = {
-    action: 'rejected',
-    reason,
-    at: new Date().toISOString(),
-  };
-  learning.updated_at = new Date().toISOString();
-  safeWrite(LEARNINGS_FILE, learnings);
-
-  console.log(`[S21-2] Learning ${id} rejected by admin: ${reason}`);
-  return c.json({ rejected: true, id, reason });
 });
 
 // ─── LW-15: Contributor Self-Review Queue ───────────────────────────────────
@@ -8229,18 +8488,24 @@ function resolveSelfReviewAccount(c, minScope = 'read') {
 // against the VERIFIED link — account.wallet is only ever set through
 // linkWallet (which requires prior signature verification), and we re-check the
 // verifiedWallets store for defense in depth. Never a claimed/request wallet.
-function adoptOrphansForAccount(accountId) {
+async function adoptOrphansForAccount(accountId) {
   if (!accountId) return 0;
   const acct = loadAccounts()[accountId];
   if (!acct || !acct.wallet || typeof acct.wallet !== 'string') return 0;
   const walletLower = acct.wallet.toLowerCase();
   if (!verifiedWallets[walletLower]) return 0;
-  const adoptedIds = adoptWalletOrphans(learnings, accountId, walletLower);
-  if (adoptedIds.length > 0) {
-    safeWrite(LEARNINGS_FILE, learnings);
-    console.log(`[AUD19-3] lazily adopted ${adoptedIds.length} wallet-only learning(s) into account ${accountId}`);
+  // Wave 2b (RUNBOOK §9): catalog write lock — adoption mutates learnings.
+  const releaseLearningsLock = await acquireLearningsLock();
+  try {
+    const adoptedIds = adoptWalletOrphans(learnings, accountId, walletLower);
+    if (adoptedIds.length > 0) {
+      safeWrite(LEARNINGS_FILE, learnings);
+      console.log(`[AUD19-3] lazily adopted ${adoptedIds.length} wallet-only learning(s) into account ${accountId}`);
+    }
+    return adoptedIds.length;
+  } finally {
+    releaseLearningsLock();
   }
-  return adoptedIds.length;
 }
 
 // GET /account/pending — list the CALLER's OWN pending_review learnings (full body
@@ -8251,7 +8516,7 @@ app.get('/account/pending', async (c) => {
   const accountId = auth.accountId;
 
   // AUD19-3(b): retroactive wallet-orphan adoption before listing.
-  adoptOrphansForAccount(accountId);
+  await adoptOrphansForAccount(accountId);
 
   const url = new URL(c.req.url, 'http://localhost');
   let limit = parseInt(url.searchParams.get('limit') || '50', 10);
@@ -8280,12 +8545,18 @@ app.post('/account/pending/:id/approve', async (c) => {
   const accountId = auth.accountId;
 
   const id = c.req.param('id');
-  const result = applySelfDecision(learnings, accountId, id, 'approve');
-  if (!result.ok) return c.json({ error: result.error, id }, result.status);
+  // Wave 2b (RUNBOOK §9): catalog write lock around decision + persist.
+  const releaseLearningsLock = await acquireLearningsLock();
+  try {
+    const result = applySelfDecision(learnings, accountId, id, 'approve');
+    if (!result.ok) return c.json({ error: result.error, id }, result.status);
 
-  safeWrite(LEARNINGS_FILE, learnings);
-  console.log(`[LW-15] [AUDIT] self_approve account=${accountId} learning=${id}`);
-  return c.json({ approved: true, id, title: result.learning.title, status: result.learning.status });
+    safeWrite(LEARNINGS_FILE, learnings);
+    console.log(`[LW-15] [AUDIT] self_approve account=${accountId} learning=${id}`);
+    return c.json({ approved: true, id, title: result.learning.title, status: result.learning.status });
+  } finally {
+    releaseLearningsLock();
+  }
 });
 
 // POST /account/pending/:id/reject — caller rejects their OWN pending learning.
@@ -8303,12 +8574,18 @@ app.post('/account/pending/:id/reject', async (c) => {
     if (body && typeof body.reason === 'string') reason = body.reason;
   } catch { /* reason is optional; empty/absent body is fine */ }
 
-  const result = applySelfDecision(learnings, accountId, id, 'reject', { reason });
-  if (!result.ok) return c.json({ error: result.error, id }, result.status);
+  // Wave 2b (RUNBOOK §9): catalog write lock around decision + persist.
+  const releaseLearningsLock = await acquireLearningsLock();
+  try {
+    const result = applySelfDecision(learnings, accountId, id, 'reject', { reason });
+    if (!result.ok) return c.json({ error: result.error, id }, result.status);
 
-  safeWrite(LEARNINGS_FILE, learnings);
-  console.log(`[LW-15] [AUDIT] self_reject account=${accountId} learning=${id}${reason ? ` reason="${reason}"` : ''}`);
-  return c.json({ rejected: true, id, status: result.learning.status });
+    safeWrite(LEARNINGS_FILE, learnings);
+    console.log(`[LW-15] [AUDIT] self_reject account=${accountId} learning=${id}${reason ? ` reason="${reason}"` : ''}`);
+    return c.json({ rejected: true, id, status: result.learning.status });
+  } finally {
+    releaseLearningsLock();
+  }
 });
 
 // ─── Review-seamless: triage summary + counted bulk decisions ───────────────
@@ -8329,7 +8606,7 @@ app.get('/account/pending/summary', async (c) => {
   const accountId = auth.accountId;
 
   // AUD19-3(b): retroactive wallet-orphan adoption before summarizing.
-  adoptOrphansForAccount(accountId);
+  await adoptOrphansForAccount(accountId);
 
   const summary = summarizeOwnPending(learnings, accountId);
   return c.json({ account_id: accountId, ...summary });
@@ -8352,18 +8629,25 @@ app.post('/account/pending/bulk', async (c) => {
   const decisions = body ? body.decisions : undefined;
   const confirmCount = body ? body.confirm_count : undefined;
 
-  const outcome = applyBulkDecisions(learnings, accountId, decisions, { confirmCount });
-  if (!outcome.ok) {
-    return c.json({ error: outcome.error, code: outcome.code }, outcome.status);
-  }
+  // Wave 2b (RUNBOOK §9): catalog write lock around the batch + persist.
+  let outcome;
+  const releaseLearningsLock = await acquireLearningsLock();
+  try {
+    outcome = applyBulkDecisions(learnings, accountId, decisions, { confirmCount });
+    if (!outcome.ok) {
+      return c.json({ error: outcome.error, code: outcome.code }, outcome.status);
+    }
 
-  if (outcome.counts.changed > 0) {
-    safeWrite(LEARNINGS_FILE, learnings);
-    for (const r of outcome.results) {
-      if (r.ok && r.changed) {
-        console.log(`[REVIEW-BULK] [AUDIT] self_${r.decision} account=${accountId} learning=${r.id} (bulk)`);
+    if (outcome.counts.changed > 0) {
+      safeWrite(LEARNINGS_FILE, learnings);
+      for (const r of outcome.results) {
+        if (r.ok && r.changed) {
+          console.log(`[REVIEW-BULK] [AUDIT] self_${r.decision} account=${accountId} learning=${r.id} (bulk)`);
+        }
       }
     }
+  } finally {
+    releaseLearningsLock();
   }
   console.log(`[REVIEW-BULK] [AUDIT] bulk_summary account=${accountId} submitted=${outcome.counts.processed} approved=${outcome.counts.approved} rejected=${outcome.counts.rejected} idempotent=${outcome.counts.idempotent} failed=${outcome.counts.failed}`);
 
@@ -8610,9 +8894,8 @@ function escapeHtmlText(s) {
 }
 
 function visibleLearningsList() {
-  return CONTENT_MODERATION_ENABLED
-    ? learnings.filter(l => !l.status || l.status === 'approved')
-    : learnings;
+  // Wave 2b: delegates to the single shared predicate (CAT-1 task-#13(a)).
+  return visibleCatalog();
 }
 
 function displayPrice(l) {
@@ -8717,9 +9000,7 @@ app.get('/earnings', (c) => {
     const filePath = path.join(PUBLIC_DIR, 'earnings.html');
     if (fs.existsSync(filePath)) {
       let html = fs.readFileSync(filePath, 'utf8');
-      const visibleLearnings = CONTENT_MODERATION_ENABLED
-        ? learnings.filter(l => !l.status || l.status === 'approved')
-        : learnings;
+      const visibleLearnings = visibleCatalog(); // Wave 2b: shared predicate
       const llLearnings  = visibleLearnings.length.toLocaleString('en-US');
       const llUnlocks    = visibleLearnings.reduce((s, l) => s + (l.quality?.unlocks || 0), 0).toLocaleString('en-US');
       const llCategories = new Set(visibleLearnings.map(l => l.category)).size.toLocaleString('en-US');
@@ -9224,19 +9505,28 @@ app.post('/pipeline/:id/approve', requireSession, async (c) => {
   // a re-approve that would duplicate every learning.  The WAL ensures that on
   // restart we detect the partial write and complete step-2 before serving
   // any traffic.
-  const walId = createWalEntry('pipeline_approve', { pipeline_id: pipeline.id });
+  // Wave 2b (RUNBOOK §9): catalog write lock around the dual write (the pushes
+  // above are in the same synchronous segment — nothing can interleave between
+  // them and this persist).
+  const releaseLearningsLock = await acquireLearningsLock();
+  let walId;
+  try {
+    walId = createWalEntry('pipeline_approve', { pipeline_id: pipeline.id });
 
-  // Write 1: persist learnings to disk
-  safeWrite(LEARNINGS_FILE, learnings);
-  markStepComplete(walId, 'update_learnings');
+    // Write 1: persist learnings to disk
+    safeWrite(LEARNINGS_FILE, learnings);
+    markStepComplete(walId, 'update_learnings');
 
-  // Write 2: persist pipeline status change to disk
-  pipeline.status = 'published';
-  savePipelines();
-  markStepComplete(walId, 'update_pipelines');
+    // Write 2: persist pipeline status change to disk
+    pipeline.status = 'published';
+    savePipelines();
+    markStepComplete(walId, 'update_pipelines');
 
-  // Both writes succeeded — discard the WAL entry
-  commitWal(walId);
+    // Both writes succeeded — discard the WAL entry
+    commitWal(walId);
+  } finally {
+    releaseLearningsLock();
+  }
   // ─────────────────────────────────────────────────────────────────────────
 
   // AUD19-3(c): batched/throttled ops alert on queue entry (fire-and-forget).

@@ -155,22 +155,26 @@ describe('B1: consent_version audit row structural checks', () => {
       'publish audit row must use auditConsentVersion from fresh recheck');
   });
 
-  it('retraction audit row reads consent without || null fallback', () => {
-    // Find the retraction audit row
+  it("retraction audit row null-guards consent and records 'none' — never a fabricated stamp, never || null (B4-1)", () => {
+    // Wave 2b (SPEC3 B4-1) superseded the CORRECTION-1 pin: the unguarded
+    // `getConsentState(accountId).consent_version` deref threw for every
+    // never-consented account (getConsentState returns null when no consent
+    // record exists — i.e. most direct /learn + MCP contributors), 500ing the
+    // retraction path. The new contract keeps CORRECTION-1's spirit — no
+    // silent null masking (`|| null` would just re-trip the audit writer's
+    // truthiness assertion) — while recording the truthful literal 'none' for
+    // never-consented retractors.
     const retractIdx = SERVER_SRC.indexOf("action: 'retract'");
     assert.ok(retractIdx > -1, 'retraction audit row must exist');
-    const retractBlock = SERVER_SRC.slice(retractIdx - 300, retractIdx + 200);
-    assert.ok(
-      retractBlock.includes('getConsentState(accountId).consent_version'),
-      'retraction audit row must use getConsentState(accountId).consent_version without || null'
-    );
-    // Ensure no || null on the consent_version line near retract
-    const consentLine = retractBlock.split('\n').find(l =>
-      l.includes('consent_version:') && l.includes('getConsentState')
-    );
+    const retractBlock = SERVER_SRC.slice(retractIdx - 600, retractIdx + 200);
+    const consentLine = retractBlock.split('\n').find(l => l.includes('consent_version:'));
     assert.ok(consentLine, 'must find consent_version line near retract');
+    assert.ok(consentLine.includes("retractConsent ? retractConsent.consent_version : 'none'"),
+      "guarded read with the explicit 'none' fallback (B4-1)");
     assert.ok(!consentLine.includes('|| null'),
-      'retraction consent_version must NOT have || null fallback (CORRECTION 1)');
+      'no || null masking (CORRECTION 1 spirit preserved)');
+    assert.ok(SERVER_SRC.includes('const retractConsent = getConsentState(accountId);'),
+      'the consent state is read once, guarded');
   });
 });
 
@@ -292,7 +296,8 @@ describe('ITEM 1: publish path audit-before-mutate', () => {
     // Find the catalog mutation section (after audit)
     const catalogMutationIdx = handler.indexOf('Catalog mutation: ONLY after successful audit');
     assert.ok(catalogMutationIdx > -1, 'post-audit catalog mutation section must exist');
-    const postAudit = handler.slice(catalogMutationIdx, catalogMutationIdx + 500);
+    // Window widened for the Wave-2b learnings-lock wrapper around the commit.
+    const postAudit = handler.slice(catalogMutationIdx, catalogMutationIdx + 800);
 
     assert.ok(postAudit.includes('pendingCatalogEntries'),
       'post-audit section must reference pendingCatalogEntries');

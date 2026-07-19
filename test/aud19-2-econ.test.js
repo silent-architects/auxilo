@@ -279,9 +279,13 @@ describe('server.js: per-(buyer, learning) accrual cap wiring', () => {
     assert.ok(!capBlock.includes('pending_balance'), 'no ledger credit of any kind');
   });
 
-  it('capped unlocks do not pump the demand counters', () => {
-    assert.ok(/if \(!accrualCapped\) \{\s*\n\s*learning\.demand\.unlocks_7d\+\+;\s*\n\s*learning\.demand\.unlocks_30d\+\+;\s*\n\s*\}/.test(h),
-      'demand increments are gated on !accrualCapped');
+  it('capped and self unlocks do not pump the demand counters (Wave 2b: gated on countersCredited)', () => {
+    // Wave 2b task-#13(b) strengthened the gate: demand (and the credited
+    // ranking counter) bump only when !accrualCapped && !isSelfUnlock.
+    assert.ok(h.includes('const countersCredited = !accrualCapped && !isSelfUnlock;'),
+      'the credited predicate must combine the cap AND the wash guard');
+    assert.ok(/if \(countersCredited\) \{\s*\n\s*learning\.quality\.unlocks = \(learning\.quality\.unlocks \|\| 0\) \+ 1;\s*\n\s*learning\.demand\.unlocks_7d\+\+;\s*\n\s*learning\.demand\.unlocks_30d\+\+;\s*\n\s*\}/.test(h),
+      'ranking counter + demand increments are gated on countersCredited');
   });
 
   it('the accrual is recorded against the cap BEFORE the WAL write (crash-conservative)', () => {
