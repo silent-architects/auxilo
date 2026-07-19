@@ -736,12 +736,12 @@ if (require.main !== module) {
   return;
 }
 
-// ─── CLI delegation (LW-17) ────────────────────────────────────────────────────
-// `npx auxilo-mcp setup|status|review|disable` runs the full turnkey CLI.
+// ─── CLI delegation (LW-17; init added Wave 3.4/NF-3) ─────────────────────────
+// `npx auxilo-mcp setup|init|status|review|disable` runs the full turnkey CLI.
 // npx resolves PACKAGE names, not bin aliases — the documented `npx auxilo
 // setup` 404s until the `auxilo` npm package name is claimed, so the package
 // bin must handle these commands itself.
-if (['setup', 'status', 'review', 'disable'].includes(process.argv[2])) {
+if (['setup', 'init', 'status', 'review', 'disable'].includes(process.argv[2])) {
   require('./bin/auxilo-cli.js').run();
   return; // module-level return in CommonJS stops the MCP server from starting
 }

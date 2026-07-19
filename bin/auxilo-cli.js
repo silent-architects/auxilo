@@ -331,6 +331,119 @@ async function cmdSetup(flags) {
   console.log('\nDone. Check `npx auxilo status` any time. Restart your client(s) to pick up the MCP server.\n');
 }
 
+// ─── auxilo init (NF-3, Wave 3.4) ───────────────────────────────────────────
+//
+// Non-interactive builder onboarding: mint a SCOPED key for CI or a second
+// machine WITHOUT re-running full setup (no client detection, no hooks, no
+// consent flow, and — unless --save — no touch of ~/.auxilo/credentials.json).
+// ZERO prompts by design: every input is a flag with a default, so piped/
+// scripted stdin can never hang (LW-17 lesson class; init never opens the
+// shared readline at all). The only human step is the device-code approval
+// in a browser, which can happen on any machine.
+
+const INIT_SCOPES = ['read', 'earnings-read', 'contribute'];
+
+async function cmdInit(flags) {
+  const baseUrl = resolveBaseUrl(flags);
+
+  const scope = flags.scope === undefined ? 'contribute' : String(flags.scope);
+  if (!INIT_SCOPES.includes(scope)) {
+    console.error(`Invalid --scope '${scope}'. Must be one of: ${INIT_SCOPES.join(', ')}.`);
+    console.error('(admin keys cannot be created via the API or device flow.)');
+    process.exit(1);
+  }
+  const label = (flags.label === undefined || flags.label === true
+    ? `init-${os.hostname()}`
+    : String(flags.label)).trim().slice(0, 50);
+
+  if (!flags.json) {
+    console.log('\nAuxilo init — mint a scoped API key');
+    console.log('===================================');
+    console.log(`Server: ${baseUrl}`);
+    console.log(`Scope:  ${scope}   Label: ${label}\n`);
+  }
+
+  let result;
+  try {
+    result = await installer.deviceLogin({
+      baseUrl,
+      scope,
+      label,
+      onCode: (code, url) => {
+        if (!flags.json) {
+          console.log(`  Your device code: ${code}`);
+          console.log(`  Approve at: ${url}`);
+          console.log('  Waiting for authorization (Ctrl-C to abort)...\n');
+        } else {
+          // --json keeps stdout machine-readable; the human-step info goes to stderr.
+          console.error(`device_code=${code} approve_at=${url}`);
+        }
+        if (!flags['no-browser']) openBrowser(url);
+      },
+    });
+  } catch (err) {
+    console.error(`✗ init failed: ${err.message}`);
+    process.exit(1);
+  }
+
+  // Pre-Wave-3.4 servers ignore the requested scope and mint 'contribute'
+  // (and don't echo). Detect and WARN — never silently mislabel a credential.
+  const grantedScope = result.scope || 'contribute';
+  const grantedLabel = result.label || label;
+  if (grantedScope !== scope) {
+    console.error(`  ! Server granted scope '${grantedScope}' (requested '${scope}') — older server version. The key below carries '${grantedScope}'.`);
+  }
+
+  if (flags['env-file']) {
+    const envPath = String(flags['env-file']);
+    try {
+      const w = installer.writeEnvFile(envPath, { api_key: result.api_key, base_url: baseUrl });
+      if (!flags.json) {
+        console.log(`  ✓ ${w.created ? 'Created' : 'Updated'} ${w.path} (AUXILO_API_KEY, mode 0600)`);
+      }
+    } catch (err) {
+      // The key was already minted — surface it rather than losing it.
+      console.error(`  ✗ Could not write ${envPath}: ${err.message}`);
+      console.error('    Your key (shown once — store it now):');
+      console.error(`    ${result.api_key}`);
+      process.exit(1);
+    }
+  }
+
+  if (flags.save) {
+    installer.writeCredentials(HOME, {
+      api_key: result.api_key,
+      base_url: baseUrl,
+      email: result.email,
+      account_id: result.account_id,
+    });
+    if (!flags.json) console.log('  ✓ Saved to ~/.auxilo/credentials.json (mode 0600) — this machine now uses this key.');
+  }
+
+  if (flags.json) {
+    console.log(JSON.stringify({
+      api_key: result.api_key,
+      scope: grantedScope,
+      label: grantedLabel,
+      account_id: result.account_id,
+      email: result.email,
+      base_url: baseUrl,
+      env_file: flags['env-file'] ? String(flags['env-file']) : null,
+      saved_credentials: !!flags.save,
+    }));
+    return;
+  }
+
+  console.log(`  ✓ Key minted for ${result.email || result.account_id} (scope: ${grantedScope}, label: ${grantedLabel})`);
+  if (!flags['env-file']) {
+    console.log('\n  Your API key (shown ONCE — store it now, e.g. in your CI secret store):');
+    console.log(`    ${result.api_key}\n`);
+    console.log('  Use it as the X-API-Key header, or write it to an env file next time with --env-file <path>.');
+  }
+  console.log('  Rotate later: POST /account/api-keys/rotate with this key (self-rotate).');
+  console.log('  Revoke later: from the dashboard, or DELETE /account/api-keys/:label with this key.\n');
+}
+
 // ─── auxilo status ──────────────────────────────────────────────────────────
 
 async function cmdStatus() {
@@ -642,6 +755,19 @@ Commands:
   setup     Interactive install: client detection, MCP registration,
             device-code login, extraction runner + hook, consent.
             Flags: --re-auth, --base-url <url>
+  init      Mint a SCOPED API key for CI or a second machine — no full setup,
+            no prompts (device-code approval in a browser is the only human
+            step). Does NOT touch ~/.auxilo/credentials.json unless --save.
+            Flags:
+              --scope <s>       read | earnings-read | contribute (default:
+                                contribute; admin is never issuable)
+              --label <name>    key label (default: init-<hostname>)
+              --env-file <path> write AUXILO_API_KEY to an env file (0600,
+                                updated in place) instead of printing the key
+              --save            also write ~/.auxilo/credentials.json
+              --json            machine-readable result on stdout
+              --no-browser      don't try to open the approval URL
+              --base-url <url>
   status    Show install/auth/extraction status.
   review    Review YOUR pending-review learnings (from background extraction)
             and approve/reject before anything goes public. Default: triage
@@ -674,6 +800,7 @@ async function main() {
   const flags = parseFlags(process.argv);
   switch (cmd) {
     case 'setup': return cmdSetup(flags);
+    case 'init': return cmdInit(flags);
     case 'status': return cmdStatus(flags);
     case 'review': return cmdReview(flags);
     case 'disable': return cmdDisable(flags);
