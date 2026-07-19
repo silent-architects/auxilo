@@ -30,8 +30,15 @@ const path = require('path');
 const crypto = require('crypto');
 
 const ROOT = path.join(__dirname, '..');
-const ACCOUNTS_FILE = path.join(ROOT, 'data', 'accounts.json');
-const BACKUP_FILE = ACCOUNTS_FILE + '.w34-backup';
+
+// ─── Env-file isolation (must precede any require of lib/accounts.js) ────────
+// The live data/accounts.json is ALSO fixtured (backup/restore) by
+// test/api-key-validation.test.js, and node --test runs files as concurrent
+// processes — two writers on one path race. This suite gets its own store
+// via AUXILO_ACCOUNTS_FILE (same idiom as AUXILO_IDENTITY_FILE in wave2b).
+const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'auxilo-w34-accounts-'));
+const ACCOUNTS_FILE = path.join(TMP_DIR, 'accounts.json');
+process.env.AUXILO_ACCOUNTS_FILE = ACCOUNTS_FILE;
 
 const SERVER_SRC = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf-8');
 const ACCOUNTS_SRC = fs.readFileSync(path.join(ROOT, 'lib', 'accounts.js'), 'utf-8');
@@ -98,20 +105,13 @@ function buildFixture() {
 let accountsLib;
 
 before(() => {
-  if (fs.existsSync(ACCOUNTS_FILE)) fs.copyFileSync(ACCOUNTS_FILE, BACKUP_FILE);
-  buildFixture();
+  buildFixture(); // writes to the isolated AUXILO_ACCOUNTS_FILE tmp store
   accountsLib = require('../lib/accounts.js');
   accountsLib.rebuildKeyIndex(); // deterministic even if the module was pre-loaded
 });
 
 after(() => {
-  if (fs.existsSync(BACKUP_FILE)) {
-    fs.copyFileSync(BACKUP_FILE, ACCOUNTS_FILE);
-    fs.unlinkSync(BACKUP_FILE);
-  } else if (fs.existsSync(ACCOUNTS_FILE)) {
-    fs.unlinkSync(ACCOUNTS_FILE);
-  }
-  try { require('../lib/accounts.js').rebuildKeyIndex(); } catch { /* best effort */ }
+  try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch { /* best effort */ }
 });
 
 /** Minimal Hono-ish context: only c.req.header is consumed by the resolvers. */
@@ -416,6 +416,116 @@ describe('T9 dualAuthDynamic rank check (the unlock fix)', () => {
   it('the higher-privilege-refusing exact-match is gone', () => {
     assert.ok(!dual.includes("result.scope !== 'admin' && result.scope !== requiredScope"),
       'exact-match scope check must be replaced by the rank check');
+  });
+});
+
+// ─── T9b. dualAuthDynamic BEHAVIORAL (Gate-A F1) ─────────────────────────────
+//
+// Gate-A on 2e0c39f found the headline fix had zero behavioral coverage:
+// mutation M3 (dropping the `!` off `!hasMinScope(...)` at the scope gate)
+// passed the whole suite because T9 above is regex-only. These tests EXECUTE
+// the real dualAuthDynamic source extracted from server.js — the exact bytes
+// that ship — with the REAL validateApiKey + hasMinScope (fixture-backed) and
+// stubs only for the money/payment collaborators the scope gate hands off to.
+// M3 inverts the gate's polarity, so the sufficient-key case below fails
+// under the mutation (sufficient keys would 403) and kills it.
+
+describe('T9b dualAuthDynamic behavioral (kills mutation M3)', () => {
+  // Extract the function verbatim: from its declaration to the first
+  // column-0 closing brace (the body is fully indented).
+  const start = SERVER_SRC.indexOf('async function dualAuthDynamic');
+  assert.ok(start !== -1, 'dualAuthDynamic not found in server.js');
+  const end = SERVER_SRC.indexOf('\n}', start);
+  assert.ok(end !== -1, 'dualAuthDynamic end brace not found');
+  const fnSrc = SERVER_SRC.slice(start, end + 2);
+
+  function buildHarness({ creditsExhausted = false } = {}) {
+    const lib = require('../lib/accounts.js');
+    const calls = { deductCredit: [], verify: 0 };
+    const factory = new Function(
+      'paymentsEnabled', 'paymentsDisabledBody', 'validateApiKey', 'hasMinScope',
+      'loadAccounts', 'saveAccounts', 'deductCredit', 'x402Router',
+      '_routerAccepts', '_custodialAccepts', 'verifyPaymentOrReject',
+      fnSrc + '\nreturn dualAuthDynamic;'
+    );
+    const dualAuthDynamic = factory(
+      /* paymentsEnabled */      () => true,
+      /* paymentsDisabledBody */ () => ({ error: 'PAYMENTS_DISABLED' }),
+      /* validateApiKey */       lib.validateApiKey,   // REAL, fixture-backed
+      /* hasMinScope */          lib.hasMinScope,      // REAL
+      /* loadAccounts */         () => ({}),           // last_used_at update no-ops
+      /* saveAccounts */         () => {},
+      /* deductCredit */         async (accountId, creditType) => {
+        calls.deductCredit.push({ accountId, creditType });
+        return creditsExhausted
+          ? { success: false, message: 'no credits', status: { remaining: 0, period_end: 0 } }
+          : { success: true, unit_price_usd: 0.08 };
+      },
+      /* x402Router */           { routerEnabled: () => false },
+      /* _routerAccepts */       () => ({ stub: 'router' }),
+      /* _custodialAccepts */    () => ({ stub: 'custodial' }),
+      /* verifyPaymentOrReject */ async () => { calls.verify++; return { __resp: true, status: 402, body: { via: 'verifyPaymentOrReject' } }; }
+    );
+    return { dualAuthDynamic, calls };
+  }
+
+  function mkCtx(headers = {}) {
+    const h = {};
+    for (const [k, v] of Object.entries(headers)) h[k.toLowerCase()] = v;
+    const store = {};
+    return {
+      req: { header: (n) => h[n.toLowerCase()], url: 'http://localhost/knowledge/l_test' },
+      set: (k, v) => { store[k] = v; },
+      header: () => {},
+      json: (body, status) => ({ __resp: true, status: status || 200, body }),
+      _store: store,
+    };
+  }
+
+  it('KILLS M3: contribute key at the unlock gate (requiredScope read) is NOT scope-403d — it proceeds to the credit gate and returns null (payment OK)', async () => {
+    const { dualAuthDynamic, calls } = buildHarness();
+    const c = mkCtx({ 'X-API-Key': RAW.v2Contribute });
+    const rejection = await dualAuthDynamic(c, 0.08, 'unlock test', 'unlock', 'read');
+    assert.equal(rejection, null, `sufficient key must pass the scope gate (got ${JSON.stringify(rejection)})`);
+    assert.equal(calls.deductCredit.length, 1, 'must reach the NEXT gate (credits)');
+    assert.equal(calls.deductCredit[0].accountId, 'acc_w34');
+    assert.equal(c._store.accountId, 'acc_w34');
+    assert.equal(c._store.authMethod, 'api_key');
+  });
+
+  it('contribute key with exhausted credits gets 402 (the x402 fallback), never the scope 403', async () => {
+    const { dualAuthDynamic } = buildHarness({ creditsExhausted: true });
+    const c = mkCtx({ 'X-API-Key': RAW.v2Contribute });
+    const rejection = await dualAuthDynamic(c, 0.08, 'unlock test', 'unlock', 'read');
+    assert.equal(rejection.status, 402, 'exhausted credits must 402, proving the scope gate was passed');
+    assert.notEqual(rejection.body.error, 'API key scope insufficient');
+    assert.equal(rejection.body.error, 'Credits exhausted');
+  });
+
+  it('grandfathered legacy read key still unlocks (pre-D2 parity through the real gate)', async () => {
+    const { dualAuthDynamic } = buildHarness();
+    const c = mkCtx({ 'X-API-Key': RAW.legacyRead });
+    const rejection = await dualAuthDynamic(c, 0.08, 'unlock test', 'unlock', 'read');
+    assert.equal(rejection, null);
+  });
+
+  it('INVERSE: an insufficient-rank key (v2 read at a contribute-required gate) DOES 403 scope-insufficient', async () => {
+    const { dualAuthDynamic, calls } = buildHarness();
+    const c = mkCtx({ 'X-API-Key': RAW.v2Read });
+    const rejection = await dualAuthDynamic(c, 0.08, 'contribute-gated test', 'unlock', 'contribute');
+    assert.equal(rejection.status, 403);
+    assert.equal(rejection.body.error, 'API key scope insufficient');
+    assert.equal(rejection.body.required, 'contribute');
+    assert.equal(rejection.body.actual, 'read');
+    assert.equal(calls.deductCredit.length, 0, 'insufficient key must never reach the credit gate');
+  });
+
+  it('admin key passes any requiredScope; invalid key 401s (path-1 sanity)', async () => {
+    const { dualAuthDynamic } = buildHarness();
+    const ok = await dualAuthDynamic(mkCtx({ 'X-API-Key': RAW.legacyAdmin }), 0.08, 'x', 'unlock', 'contribute');
+    assert.equal(ok, null);
+    const bad = await dualAuthDynamic(mkCtx({ 'X-API-Key': 'axl_not_a_real_key_1234567890' }), 0.08, 'x', 'unlock', 'read');
+    assert.equal(bad.status, 401);
   });
 });
 
