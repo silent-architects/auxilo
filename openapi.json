@@ -218,7 +218,12 @@
                             },
                             "verdict": {
                                 "type": "string",
-                                "enum": ["recommended", "strong_buy", "fair_price", "overpriced"]
+                                "enum": [
+                                    "recommended",
+                                    "strong_buy",
+                                    "fair_price",
+                                    "overpriced"
+                                ]
                             }
                         }
                     }
@@ -354,7 +359,11 @@
                 "properties": {
                     "id": {
                         "type": "string",
-                        "enum": ["starter", "growth", "pro"],
+                        "enum": [
+                            "starter",
+                            "growth",
+                            "pro"
+                        ],
                         "description": "Pack identifier"
                     },
                     "name": {
@@ -407,7 +416,9 @@
             },
             "ExtractionRequest": {
                 "type": "object",
-                "required": ["transcript"],
+                "required": [
+                    "transcript"
+                ],
                 "properties": {
                     "transcript": {
                         "type": "string",
@@ -607,6 +618,33 @@
                     },
                     "count": {
                         "type": "integer"
+                    }
+                }
+            },
+            "TermsNotAccepted": {
+                "type": "object",
+                "description": "Machine-readable 403 returned by money/agency routes (link-wallet, both withdraw rails) when the account has not accepted the current Terms. Clients should react by calling POST /account/accept-terms (or the auxilo_accept_terms MCP tool) with the given version, then retry.",
+                "properties": {
+                    "error": {
+                        "type": "string",
+                        "example": "You must accept the current Terms of Service before this action."
+                    },
+                    "code": {
+                        "type": "string",
+                        "enum": [
+                            "TERMS_NOT_ACCEPTED"
+                        ]
+                    },
+                    "current_tos_version": {
+                        "type": "string"
+                    },
+                    "how_to_accept": {
+                        "type": "string",
+                        "description": "Human/agent-readable instructions: web dashboard, or POST /account/accept-terms with { \"version\": current_tos_version, \"agree\": true }."
+                    },
+                    "terms_url": {
+                        "type": "string",
+                        "format": "uri"
                     }
                 }
             }
@@ -1004,7 +1042,10 @@
                                         },
                                         "status": {
                                             "type": "string",
-                                            "enum": ["approved", "pending_review"],
+                                            "enum": [
+                                                "approved",
+                                                "pending_review"
+                                            ],
                                             "description": "LW-16: 'approved' = published seamlessly; 'pending_review' = held for review."
                                         },
                                         "review_reason": {
@@ -1012,7 +1053,13 @@
                                             "description": "LW-16: present only when status is 'pending_review'. Reasons the submission was held.",
                                             "items": {
                                                 "type": "string",
-                                                "enum": ["content_sensitivity", "injection", "near_duplicate", "forced_review", "awaiting_quality"]
+                                                "enum": [
+                                                    "content_sensitivity",
+                                                    "injection",
+                                                    "near_duplicate",
+                                                    "forced_review",
+                                                    "awaiting_quality"
+                                                ]
                                             }
                                         },
                                         "contributor_wallet": {
@@ -1046,7 +1093,10 @@
                                     "properties": {
                                         "error": {
                                             "type": "string",
-                                            "enum": ["Duplicate learning detected", "Near-duplicate learning detected"]
+                                            "enum": [
+                                                "Duplicate learning detected",
+                                                "Near-duplicate learning detected"
+                                            ]
                                         },
                                         "message": {
                                             "type": "string"
@@ -1212,7 +1262,7 @@
         "/knowledge/{id}": {
             "get": {
                 "summary": "Unlock full learning (dynamic price)",
-                "description": "Read full learning body. Price is set by the contributor (min $0.05 USDC). 70% goes to the contributor. Check unlock_price_usd in search results to see the cost before unlocking.",
+                "description": "Read the full learning body. Dynamic price: floor $0.05, default $0.08, ceiling $50.00 USDC (contributor may override within the floor/ceiling). Contributor split: 70% on direct unlocks, 60% when the unlock was discovery-driven (surfaced by a recent POST /knowledge search from the same account). Auth is dual-path: an X-API-Key (deducts a purchased unlock credit) OR an x402 X-Payment header. With NEITHER header the endpoint currently returns 401 with an options envelope describing both paths (the x402 accepts[] descriptor is only issued once an X-Payment header is present); a 402-first redesign is planned. Check unlock_price_usd in search results to see the cost before unlocking.",
                 "operationId": "unlockLearning",
                 "security": [
                     {
@@ -1245,7 +1295,7 @@
                         }
                     },
                     "402": {
-                        "description": "Payment required (dynamic — price set by contributor, min $0.05 USDC)",
+                        "description": "API-key path with credits exhausted (options + reset_at), or an X-Payment header that failed verification (x402 accepts[] descriptor)",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -1260,6 +1310,86 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No X-API-Key and no X-Payment header. Body: { error, message, options: { api_key: { header, format, obtain }, x402_payment: { header, price_usd, description, protocol } } }",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string",
+                                            "example": "Authentication required"
+                                        },
+                                        "message": {
+                                            "type": "string"
+                                        },
+                                        "options": {
+                                            "type": "object",
+                                            "properties": {
+                                                "api_key": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "header": {
+                                                            "type": "string",
+                                                            "example": "X-API-Key"
+                                                        },
+                                                        "format": {
+                                                            "type": "string",
+                                                            "example": "axl_XXX"
+                                                        },
+                                                        "obtain": {
+                                                            "type": "string"
+                                                        }
+                                                    }
+                                                },
+                                                "x402_payment": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "header": {
+                                                            "type": "string",
+                                                            "example": "X-Payment"
+                                                        },
+                                                        "price_usd": {
+                                                            "type": "number"
+                                                        },
+                                                        "description": {
+                                                            "type": "string"
+                                                        },
+                                                        "protocol": {
+                                                            "type": "string",
+                                                            "example": "x402 (https://www.x402.org)"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Contributor onboarding gate: this learning's external contributor has not accepted the current Terms (payee-agency not in force), so the unlock is refused. Body: { error, code: 'CONTRIBUTOR_NOT_ONBOARDED' }",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "enum": [
+                                                "CONTRIBUTOR_NOT_ONBOARDED"
+                                            ]
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1564,9 +1694,24 @@
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "error": { "type": "string" },
-                                        "code": { "type": "string", "example": "withdraw_paused_noncustodial_migration" }
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "withdraw_paused_noncustodial_migration"
+                                        }
                                     }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Terms not accepted (code: TERMS_NOT_ACCEPTED — accept via POST /account/accept-terms and retry), account suspended, or sanctions block",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TermsNotAccepted"
                                 }
                             }
                         }
@@ -1579,15 +1724,27 @@
                 "summary": "Withdraw pending earnings to Stripe Connect",
                 "description": "Pay out the withdrawable balance to the account's linked Stripe Connect account. Debits the same authoritative pending_balance as POST /withdraw. NOTE: paused during the non-custodial migration — returns 503 { code: 'withdraw_paused_noncustodial_migration' } unless CUSTODIAL_WITHDRAW_ENABLED=true. Requires session/API-key auth, prior acceptance of the current Terms (§5.10 payee-agency), a completed Stripe Connect onboarding, and a minimum of $0.50.",
                 "operationId": "requestStripeWithdrawal",
-                "tags": ["Account", "Payments"],
-                "security": [{ "bearerAuth": [] }, { "apiKeyAuth": [] }],
+                "tags": [
+                    "Account",
+                    "Payments"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    },
+                    {
+                        "apiKeyAuth": []
+                    }
+                ],
                 "requestBody": {
                     "required": true,
                     "content": {
                         "application/json": {
                             "schema": {
                                 "type": "object",
-                                "required": ["amount_usd"],
+                                "required": [
+                                    "amount_usd"
+                                ],
                                 "properties": {
                                     "amount_usd": {
                                         "type": "number",
@@ -1606,19 +1763,42 @@
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "message": { "type": "string" },
-                                        "payout_id": { "type": "string" },
-                                        "amount": { "type": "number" },
-                                        "status": { "type": "string" }
+                                        "message": {
+                                            "type": "string"
+                                        },
+                                        "payout_id": {
+                                            "type": "string"
+                                        },
+                                        "amount": {
+                                            "type": "number"
+                                        },
+                                        "status": {
+                                            "type": "string"
+                                        }
                                     }
                                 }
                             }
                         }
                     },
-                    "400": { "description": "No Stripe account linked, onboarding incomplete, invalid amount, below minimum, or insufficient balance" },
-                    "401": { "description": "Authentication required" },
-                    "403": { "description": "Terms not accepted (§5.10) or account suspended" },
-                    "404": { "description": "Account not found" },
+                    "400": {
+                        "description": "No Stripe account linked, onboarding incomplete, invalid amount, below minimum, or insufficient balance"
+                    },
+                    "401": {
+                        "description": "Authentication required"
+                    },
+                    "403": {
+                        "description": "Terms not accepted (code: TERMS_NOT_ACCEPTED — accept via POST /account/accept-terms and retry), account suspended, or sanctions block",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TermsNotAccepted"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Account not found"
+                    },
                     "503": {
                         "description": "Withdrawals paused during non-custodial migration, Stripe not configured, or sanctions screening unavailable",
                         "content": {
@@ -1626,8 +1806,13 @@
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "error": { "type": "string" },
-                                        "code": { "type": "string", "example": "withdraw_paused_noncustodial_migration" }
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "withdraw_paused_noncustodial_migration"
+                                        }
                                     }
                                 }
                             }
@@ -1641,15 +1826,28 @@
                 "summary": "Accept the current Terms of Service (clickwrap assent)",
                 "description": "Records an affirmative, server-stamped acceptance of the current Terms — the §5.10 payee-agency clickwrap. The body MUST carry both the current version string and an explicit agree:true affirmation. The server refuses any non-current version (409) and refuses a missing affirmation (400, code: AFFIRMATION_REQUIRED); it stamps the timestamp, IP, and user-agent itself. On first acceptance, any Builder Share held in unassented_pending is converted to the withdrawable balance. Accepts a web session (Bearer) OR an account API key (contribute scope).",
                 "operationId": "acceptTerms",
-                "tags": ["Account", "Terms"],
-                "security": [{ "bearerAuth": [] }, { "apiKeyAuth": [] }],
+                "tags": [
+                    "Account",
+                    "Terms"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    },
+                    {
+                        "apiKeyAuth": []
+                    }
+                ],
                 "requestBody": {
                     "required": true,
                     "content": {
                         "application/json": {
                             "schema": {
                                 "type": "object",
-                                "required": ["version", "agree"],
+                                "required": [
+                                    "version",
+                                    "agree"
+                                ],
                                 "properties": {
                                     "version": {
                                         "type": "string",
@@ -1672,17 +1870,29 @@
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "message": { "type": "string" },
-                                        "version": { "type": "string" },
-                                        "accepted_at": { "type": "number" }
+                                        "message": {
+                                            "type": "string"
+                                        },
+                                        "version": {
+                                            "type": "string"
+                                        },
+                                        "accepted_at": {
+                                            "type": "number"
+                                        }
                                     }
                                 }
                             }
                         }
                     },
-                    "400": { "description": "Missing version, or missing affirmation (code: AFFIRMATION_REQUIRED)" },
-                    "401": { "description": "Authentication required" },
-                    "409": { "description": "Version is not the current Terms version — cannot bind to a stale/unknown version" }
+                    "400": {
+                        "description": "Missing version, or missing affirmation (code: AFFIRMATION_REQUIRED)"
+                    },
+                    "401": {
+                        "description": "Authentication required"
+                    },
+                    "409": {
+                        "description": "Version is not the current Terms version — cannot bind to a stale/unknown version"
+                    }
                 }
             }
         },
@@ -1691,15 +1901,24 @@
                 "summary": "Link a verified wallet to the account",
                 "description": "Links a previously verified wallet address to the authenticated account so earnings can be attributed and withdrawn. Gates on current-Terms acceptance BEFORE linking. Sanctions-screens the wallet (fails closed if screening is unavailable). Enforces one wallet per account and global wallet uniqueness. On link, any wallet-keyed held balance is migrated in and converted to the withdrawable balance if the agency is in force.",
                 "operationId": "linkWallet",
-                "tags": ["Account", "Wallet"],
-                "security": [{ "bearerAuth": [] }],
+                "tags": [
+                    "Account",
+                    "Wallet"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
                 "requestBody": {
                     "required": true,
                     "content": {
                         "application/json": {
                             "schema": {
                                 "type": "object",
-                                "required": ["wallet"],
+                                "required": [
+                                    "wallet"
+                                ],
                                 "properties": {
                                     "wallet": {
                                         "type": "string",
@@ -1718,18 +1937,39 @@
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "message": { "type": "string" },
-                                        "wallet": { "type": "string" },
-                                        "account_id": { "type": "string" }
+                                        "message": {
+                                            "type": "string"
+                                        },
+                                        "wallet": {
+                                            "type": "string"
+                                        },
+                                        "account_id": {
+                                            "type": "string"
+                                        }
                                     }
                                 }
                             }
                         }
                     },
-                    "400": { "description": "Invalid body, wallet not verified, wallet already linked/in use, or account already has a wallet" },
-                    "403": { "description": "Terms not accepted (§5.10), account suspended, or sanctions block" },
-                    "404": { "description": "Account not found" },
-                    "503": { "description": "Sanctions screening unavailable" }
+                    "400": {
+                        "description": "Invalid body, wallet not verified, wallet already linked/in use, or account already has a wallet"
+                    },
+                    "403": {
+                        "description": "Terms not accepted (code: TERMS_NOT_ACCEPTED — accept via POST /account/accept-terms and retry), account suspended, or sanctions block",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TermsNotAccepted"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Account not found"
+                    },
+                    "503": {
+                        "description": "Sanctions screening unavailable"
+                    }
                 }
             }
         },
@@ -1738,8 +1978,15 @@
                 "summary": "View contributor earnings for the authenticated account",
                 "description": "Returns the account's earnings breakdown. total_contributor is the OWNED lifetime share (excludes unassented_pending); unassented_pending is the Builder Share received but HELD until §5.10 acceptance (not yet owned, not withdrawable); pending_balance is the withdrawable subset of owned earnings; total_contributor_gross is the raw lifetime figure (owned + held). Requires session auth.",
                 "operationId": "getAccountEarnings",
-                "tags": ["Account", "Earnings"],
-                "security": [{ "bearerAuth": [] }],
+                "tags": [
+                    "Account",
+                    "Earnings"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "Earnings breakdown",
@@ -1748,25 +1995,58 @@
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "account_id": { "type": "string" },
-                                        "wallet": { "type": "string", "nullable": true },
-                                        "total_gross_usd": { "type": "number" },
-                                        "total_gross": { "type": "number" },
-                                        "total_contributor": { "type": "number", "description": "Owned lifetime contributor share (excludes held/unassented_pending)." },
-                                        "total_contributor_gross": { "type": "number", "description": "Raw lifetime contributor share including held funds (owned + held)." },
-                                        "unassented_pending": { "type": "number", "description": "Builder Share received but held until §5.10 acceptance — not owned, not withdrawable." },
-                                        "pending_balance": { "type": "number", "description": "Withdrawable balance (subset of owned earnings)." },
-                                        "total_withdrawn": { "type": "number" },
-                                        "withdrawal_count": { "type": "number" },
-                                        "can_withdraw": { "type": "boolean" },
-                                        "message": { "type": "string" }
+                                        "account_id": {
+                                            "type": "string"
+                                        },
+                                        "wallet": {
+                                            "type": "string",
+                                            "nullable": true
+                                        },
+                                        "total_gross_usd": {
+                                            "type": "number"
+                                        },
+                                        "total_gross": {
+                                            "type": "number"
+                                        },
+                                        "total_contributor": {
+                                            "type": "number",
+                                            "description": "Owned lifetime contributor share (excludes held/unassented_pending)."
+                                        },
+                                        "total_contributor_gross": {
+                                            "type": "number",
+                                            "description": "Raw lifetime contributor share including held funds (owned + held)."
+                                        },
+                                        "unassented_pending": {
+                                            "type": "number",
+                                            "description": "Builder Share received but held until §5.10 acceptance — not owned, not withdrawable."
+                                        },
+                                        "pending_balance": {
+                                            "type": "number",
+                                            "description": "Withdrawable balance (subset of owned earnings)."
+                                        },
+                                        "total_withdrawn": {
+                                            "type": "number"
+                                        },
+                                        "withdrawal_count": {
+                                            "type": "number"
+                                        },
+                                        "can_withdraw": {
+                                            "type": "boolean"
+                                        },
+                                        "message": {
+                                            "type": "string"
+                                        }
                                     }
                                 }
                             }
                         }
                     },
-                    "401": { "description": "Authentication required" },
-                    "404": { "description": "Account not found" }
+                    "401": {
+                        "description": "Authentication required"
+                    },
+                    "404": {
+                        "description": "Account not found"
+                    }
                 }
             }
         },
@@ -1896,7 +2176,9 @@
                 "summary": "Create Stripe Checkout session for credit pack purchase (Phase 0.4)",
                 "operationId": "postCheckoutSession",
                 "security": [
-                    { "BearerAuth": [] }
+                    {
+                        "BearerAuth": []
+                    }
                 ],
                 "requestBody": {
                     "required": true,
@@ -1904,11 +2186,17 @@
                         "application/json": {
                             "schema": {
                                 "type": "object",
-                                "required": ["pack"],
+                                "required": [
+                                    "pack"
+                                ],
                                 "properties": {
                                     "pack": {
                                         "type": "string",
-                                        "enum": ["starter", "growth", "pro"],
+                                        "enum": [
+                                            "starter",
+                                            "growth",
+                                            "pro"
+                                        ],
                                         "description": "Credit pack to purchase"
                                     }
                                 }
@@ -1944,10 +2232,14 @@
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "error": { "type": "string" },
+                                        "error": {
+                                            "type": "string"
+                                        },
                                         "valid_packs": {
                                             "type": "array",
-                                            "items": { "$ref": "#/components/schemas/CreditPack" }
+                                            "items": {
+                                                "$ref": "#/components/schemas/CreditPack"
+                                            }
                                         }
                                     }
                                 }
@@ -1987,10 +2279,18 @@
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "received": { "type": "boolean" },
-                                        "processed": { "type": "boolean" },
-                                        "already_processed": { "type": "boolean" },
-                                        "purchase_id": { "type": "string" }
+                                        "received": {
+                                            "type": "boolean"
+                                        },
+                                        "processed": {
+                                            "type": "boolean"
+                                        },
+                                        "already_processed": {
+                                            "type": "boolean"
+                                        },
+                                        "purchase_id": {
+                                            "type": "string"
+                                        }
                                     }
                                 }
                             }
@@ -2007,7 +2307,9 @@
                 "summary": "Get purchase history for authenticated account (Phase 0.4)",
                 "operationId": "getAccountPurchases",
                 "security": [
-                    { "BearerAuth": [] }
+                    {
+                        "BearerAuth": []
+                    }
                 ],
                 "responses": {
                     "200": {
@@ -2019,7 +2321,9 @@
                                     "properties": {
                                         "purchases": {
                                             "type": "array",
-                                            "items": { "$ref": "#/components/schemas/Purchase" }
+                                            "items": {
+                                                "$ref": "#/components/schemas/Purchase"
+                                            }
                                         },
                                         "total_spent_usd": {
                                             "type": "number",
@@ -2041,19 +2345,25 @@
                 "summary": "Server-side autonomous extraction (P2.1a)",
                 "description": "Processes a scrubbed session transcript through the server-side extraction pipeline: auth verification, consent check, OFAC screening, server-side sensitivity rescan, LLM extraction via Anthropic, quality gate, and catalog publication. Requires X-API-Key auth. Account must have autonomous_extraction_mode != 'off' and valid consent.",
                 "operationId": "extractLearnings",
-                "tags": ["Extraction"],
+                "tags": [
+                    "Extraction"
+                ],
                 "parameters": [
                     {
                         "name": "X-API-Key",
                         "in": "header",
                         "required": true,
-                        "schema": { "type": "string" },
+                        "schema": {
+                            "type": "string"
+                        },
                         "description": "Account API key (axl_...)"
                     },
                     {
                         "name": "Idempotency-Key",
                         "in": "header",
-                        "schema": { "type": "string" },
+                        "schema": {
+                            "type": "string"
+                        },
                         "description": "Client-generated idempotency key. Duplicate keys within 24h return cached response."
                     }
                 ],
@@ -2063,24 +2373,55 @@
                         "application/json": {
                             "schema": {
                                 "type": "object",
-                                "required": ["source", "transcript", "transcript_sha256"],
+                                "required": [
+                                    "source",
+                                    "transcript",
+                                    "transcript_sha256"
+                                ],
                                 "properties": {
                                     "source": {
                                         "type": "object",
-                                        "required": ["type", "session_id"],
+                                        "required": [
+                                            "type",
+                                            "session_id"
+                                        ],
                                         "properties": {
-                                            "type": { "type": "string", "enum": ["claude-code", "openclaw"] },
-                                            "session_id": { "type": "string" }
+                                            "type": {
+                                                "type": "string",
+                                                "enum": [
+                                                    "claude-code",
+                                                    "openclaw"
+                                                ]
+                                            },
+                                            "session_id": {
+                                                "type": "string"
+                                            }
                                         }
                                     },
-                                    "transcript": { "type": "string", "maxLength": 262144, "description": "Scrubbed session transcript (max 256KB, 262144 bytes)" },
-                                    "transcript_sha256": { "type": "string", "description": "SHA-256 hash of the transcript for integrity verification" },
+                                    "transcript": {
+                                        "type": "string",
+                                        "maxLength": 262144,
+                                        "description": "Scrubbed session transcript (max 256KB, 262144 bytes)"
+                                    },
+                                    "transcript_sha256": {
+                                        "type": "string",
+                                        "description": "SHA-256 hash of the transcript for integrity verification"
+                                    },
                                     "client_scrub_report": {
                                         "type": "object",
                                         "properties": {
-                                            "scrubber_version": { "type": "string" },
-                                            "patterns_matched": { "type": "array", "items": { "type": "string" } },
-                                            "clean": { "type": "boolean" }
+                                            "scrubber_version": {
+                                                "type": "string"
+                                            },
+                                            "patterns_matched": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "clean": {
+                                                "type": "boolean"
+                                            }
                                         }
                                     }
                                 }
@@ -2096,36 +2437,112 @@
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "extraction_id": { "type": "string" },
-                                        "learnings_published": { "type": "integer" },
-                                        "learnings_rejected": { "type": "integer" },
-                                        "learnings_queued": { "type": "integer" },
-                                        "retraction_window_days": { "type": "integer" },
-                                        "published_learning_ids": { "type": "array", "items": { "type": "string" } },
-                                        "consent_version": { "type": "string", "description": "ISO date of the consent version used for this extraction" },
+                                        "extraction_id": {
+                                            "type": "string"
+                                        },
+                                        "learnings_published": {
+                                            "type": "integer"
+                                        },
+                                        "learnings_rejected": {
+                                            "type": "integer"
+                                        },
+                                        "learnings_queued": {
+                                            "type": "integer"
+                                        },
+                                        "retraction_window_days": {
+                                            "type": "integer"
+                                        },
+                                        "published_learning_ids": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "consent_version": {
+                                            "type": "string",
+                                            "description": "ISO date of the consent version used for this extraction"
+                                        },
                                         "usage": {
                                             "type": "object",
                                             "properties": {
-                                                "input_tokens": { "type": "integer" },
-                                                "output_tokens": { "type": "integer" }
+                                                "input_tokens": {
+                                                    "type": "integer"
+                                                },
+                                                "output_tokens": {
+                                                    "type": "integer"
+                                                }
                                             },
                                             "description": "LLM token usage for this extraction"
                                         },
-                                        "contributor_agent": { "type": "string", "description": "Identifier of the extraction agent (e.g. auxilo-autonomous-extractor/0.1.0)" },
-                                        "audit_ref": { "type": "string", "description": "Audit log entry ID for this extraction" },
-                                        "published": { "type": "array", "description": "Per-item publication record. LW-16: status is 'approved' when the candidate is fully clean (seamless, parity with /learn), or 'pending_review' when a screen flags it (injection, near-duplicate, or the two-layer content-sensitivity classifier — regex first pass UNION LLM semantic layer) or FORCE_ALL_REVIEW is on. When held, review_reason lists why. The content-sensitivity verdict is a UNION of the server classifier (regex || LLM) and any extractor-provided verdict (extractor can only raise sensitivity).", "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" }, "status": { "type": "string", "enum": ["approved", "pending_review"] }, "review_reason": { "type": "array", "description": "LW-16: present only when status is 'pending_review'.", "items": { "type": "string", "enum": ["content_sensitivity", "injection", "near_duplicate", "forced_review"] } } } } }
+                                        "contributor_agent": {
+                                            "type": "string",
+                                            "description": "Identifier of the extraction agent (e.g. auxilo-autonomous-extractor/0.1.0)"
+                                        },
+                                        "audit_ref": {
+                                            "type": "string",
+                                            "description": "Audit log entry ID for this extraction"
+                                        },
+                                        "published": {
+                                            "type": "array",
+                                            "description": "Per-item publication record. LW-16: status is 'approved' when the candidate is fully clean (seamless, parity with /learn), or 'pending_review' when a screen flags it (injection, near-duplicate, or the two-layer content-sensitivity classifier — regex first pass UNION LLM semantic layer) or FORCE_ALL_REVIEW is on. When held, review_reason lists why. The content-sensitivity verdict is a UNION of the server classifier (regex || LLM) and any extractor-provided verdict (extractor can only raise sensitivity).",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "title": {
+                                                        "type": "string"
+                                                    },
+                                                    "status": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "approved",
+                                                            "pending_review"
+                                                        ]
+                                                    },
+                                                    "review_reason": {
+                                                        "type": "array",
+                                                        "description": "LW-16: present only when status is 'pending_review'.",
+                                                        "items": {
+                                                            "type": "string",
+                                                            "enum": [
+                                                                "content_sensitivity",
+                                                                "injection",
+                                                                "near_duplicate",
+                                                                "forced_review"
+                                                            ]
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
                     },
-                    "400": { "description": "Invalid request (bad source type, sha256 mismatch, nested JSON)" },
-                    "401": { "description": "Missing or invalid X-API-Key" },
-                    "403": { "description": "consent_required | disabled | ofac_blocked" },
-                    "413": { "description": "Body exceeds 256KB" },
-                    "422": { "description": "sensitivity_fail (server-side rescan caught patterns)" },
-                    "429": { "description": "Rate limit exceeded (per-account hourly/daily or burst)" },
-                    "503": { "description": "Circuit breaker active ($50+/day hard throttle or $100/day kill switch)" }
+                    "400": {
+                        "description": "Invalid request (bad source type, sha256 mismatch, nested JSON)"
+                    },
+                    "401": {
+                        "description": "Missing or invalid X-API-Key"
+                    },
+                    "403": {
+                        "description": "consent_required | disabled | ofac_blocked"
+                    },
+                    "413": {
+                        "description": "Body exceeds 256KB"
+                    },
+                    "422": {
+                        "description": "sensitivity_fail (server-side rescan caught patterns)"
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (per-account hourly/daily or burst)"
+                    },
+                    "503": {
+                        "description": "Circuit breaker active ($50+/day hard throttle or $100/day kill switch)"
+                    }
                 }
             }
         },
@@ -2134,21 +2551,34 @@
                 "summary": "Retract a learning (P2.1a §5.2)",
                 "description": "Retracts a learning published via autonomous extraction within the 7-day retraction window. After 7 days, returns 409 and the standard takedown process applies.",
                 "operationId": "retractLearning",
-                "tags": ["Extraction"],
-                "security": [{ "BearerAuth": [] }],
+                "tags": [
+                    "Extraction"
+                ],
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "parameters": [
                     {
                         "name": "id",
                         "in": "path",
                         "required": true,
-                        "schema": { "type": "string" },
+                        "schema": {
+                            "type": "string"
+                        },
                         "description": "Learning ID (lrn_...)"
                     },
                     {
                         "name": "reason",
                         "in": "query",
                         "required": true,
-                        "schema": { "type": "string", "enum": ["retract"] },
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "retract"
+                            ]
+                        },
                         "description": "Must be 'retract'"
                     }
                 ],
@@ -2160,18 +2590,33 @@
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "retracted": { "type": "boolean" },
-                                        "learning_id": { "type": "string" },
-                                        "audit_ref": { "type": "string", "description": "Audit log entry ID for this retraction" }
+                                        "retracted": {
+                                            "type": "boolean"
+                                        },
+                                        "learning_id": {
+                                            "type": "string"
+                                        },
+                                        "audit_ref": {
+                                            "type": "string",
+                                            "description": "Audit log entry ID for this retraction"
+                                        }
                                     }
                                 }
                             }
                         }
                     },
-                    "401": { "description": "Authorization required" },
-                    "403": { "description": "Not the owner of this learning" },
-                    "404": { "description": "Learning not found" },
-                    "409": { "description": "Retraction window expired (>7 days)" }
+                    "401": {
+                        "description": "Authorization required"
+                    },
+                    "403": {
+                        "description": "Not the owner of this learning"
+                    },
+                    "404": {
+                        "description": "Learning not found"
+                    },
+                    "409": {
+                        "description": "Retraction window expired (>7 days)"
+                    }
                 }
             }
         },
@@ -2180,19 +2625,30 @@
                 "summary": "Grant or revoke extraction consent (P2.1a §3.5)",
                 "description": "Records explicit consent grant or revocation for autonomous extraction. Consent is versioned and append-only. Each action is also chained into the audit log (B19).",
                 "operationId": "postExtractionConsent",
-                "tags": ["Extraction"],
-                "security": [{ "BearerAuth": [] }],
+                "tags": [
+                    "Extraction"
+                ],
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "requestBody": {
                     "required": true,
                     "content": {
                         "application/json": {
                             "schema": {
                                 "type": "object",
-                                "required": ["action"],
+                                "required": [
+                                    "action"
+                                ],
                                 "properties": {
                                     "action": {
                                         "type": "string",
-                                        "enum": ["grant", "revoke"],
+                                        "enum": [
+                                            "grant",
+                                            "revoke"
+                                        ],
                                         "description": "Consent action to record"
                                     }
                                 }
@@ -2208,16 +2664,26 @@
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "consent_recorded": { "type": "boolean" },
-                                        "action": { "type": "string" },
-                                        "consent_version": { "type": "string" }
+                                        "consent_recorded": {
+                                            "type": "boolean"
+                                        },
+                                        "action": {
+                                            "type": "string"
+                                        },
+                                        "consent_version": {
+                                            "type": "string"
+                                        }
                                     }
                                 }
                             }
                         }
                     },
-                    "400": { "description": "Invalid action (must be 'grant' or 'revoke')" },
-                    "401": { "description": "Authorization required" }
+                    "400": {
+                        "description": "Invalid action (must be 'grant' or 'revoke')"
+                    },
+                    "401": {
+                        "description": "Authorization required"
+                    }
                 }
             }
         },
@@ -2226,8 +2692,15 @@
                 "summary": "Update account extraction settings (P2.1a)",
                 "description": "Toggles autonomous extraction mode and manages consent. Setting mode to a non-off value for the first time records consent. Setting to 'off' records revocation.",
                 "operationId": "updateAccountSettings",
-                "tags": ["Account", "Extraction"],
-                "security": [{ "BearerAuth": [] }],
+                "tags": [
+                    "Account",
+                    "Extraction"
+                ],
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -2237,7 +2710,11 @@
                                 "properties": {
                                     "autonomous_extraction_mode": {
                                         "type": "string",
-                                        "enum": ["off", "automatic", "manual"],
+                                        "enum": [
+                                            "off",
+                                            "automatic",
+                                            "manual"
+                                        ],
                                         "description": "Extraction trigger mode"
                                     }
                                 }
@@ -2253,15 +2730,23 @@
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "autonomous_extraction_mode": { "type": "string" },
-                                        "consent_recorded": { "type": "boolean" }
+                                        "autonomous_extraction_mode": {
+                                            "type": "string"
+                                        },
+                                        "consent_recorded": {
+                                            "type": "boolean"
+                                        }
                                     }
                                 }
                             }
                         }
                     },
-                    "400": { "description": "Invalid mode value" },
-                    "401": { "description": "Authorization required" }
+                    "400": {
+                        "description": "Invalid mode value"
+                    },
+                    "401": {
+                        "description": "Authorization required"
+                    }
                 }
             }
         },
@@ -2358,20 +2843,23 @@
                 }
             }
         },
-
         "/auth/magic-link": {
             "post": {
                 "summary": "Request magic link login",
                 "description": "Initiates the email magic link authentication flow. Sends a single-use token to the provided email address. The token expires in 15 minutes. Returns a neutral response whether or not the email exists (prevents enumeration). Rate limited: 5 requests per email per 15 minutes, 20 requests per IP per 15 minutes.",
                 "operationId": "requestMagicLink",
-                "tags": ["Auth"],
+                "tags": [
+                    "Auth"
+                ],
                 "requestBody": {
                     "required": true,
                     "content": {
                         "application/json": {
                             "schema": {
                                 "type": "object",
-                                "required": ["email"],
+                                "required": [
+                                    "email"
+                                ],
                                 "properties": {
                                     "email": {
                                         "type": "string",
@@ -2400,25 +2888,46 @@
                             }
                         }
                     },
-                    "400": { "description": "Missing or invalid email format", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-                    "429": { "description": "Rate limit exceeded (per email or per IP)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                    "400": {
+                        "description": "Missing or invalid email format",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (per email or per IP)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },
-
         "/auth/verify": {
             "get": {
                 "summary": "Redeem magic link token",
                 "description": "Exchanges a single-use magic link token for a 24-hour JWT session token. The token is consumed on use and cannot be reused. Returns the JWT as a `token` field — include it as `Authorization: Bearer {token}` on subsequent authenticated requests.",
                 "operationId": "verifyMagicLink",
-                "tags": ["Auth"],
+                "tags": [
+                    "Auth"
+                ],
                 "parameters": [
                     {
                         "name": "token",
                         "in": "query",
                         "required": true,
                         "description": "Single-use magic link token from the login email",
-                        "schema": { "type": "string" }
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 ],
                 "responses": {
@@ -2438,19 +2947,42 @@
                             }
                         }
                     },
-                    "400": { "description": "Missing token parameter", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-                    "401": { "description": "Invalid or expired token", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                    "400": {
+                        "description": "Missing token parameter",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid or expired token",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },
-
         "/account/dashboard": {
             "get": {
                 "summary": "Account dashboard",
                 "description": "Returns account information including email, linked wallet (if any), and all API key metadata (IDs and names — never raw keys or hashes).",
                 "operationId": "getAccountDashboard",
-                "tags": ["Account"],
-                "security": [{ "bearerAuth": [] }],
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "Account info",
@@ -2459,16 +2991,32 @@
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "email": { "type": "string", "format": "email" },
-                                        "wallet": { "type": "string", "nullable": true, "description": "Linked wallet address (0x...) or null if not linked" },
+                                        "email": {
+                                            "type": "string",
+                                            "format": "email"
+                                        },
+                                        "wallet": {
+                                            "type": "string",
+                                            "nullable": true,
+                                            "description": "Linked wallet address (0x...) or null if not linked"
+                                        },
                                         "api_keys": {
                                             "type": "array",
                                             "items": {
                                                 "type": "object",
                                                 "properties": {
-                                                    "id": { "type": "string", "example": "key_a1b2c3d4" },
-                                                    "name": { "type": "string", "example": "My Agent Key" },
-                                                    "created_at": { "type": "integer", "description": "Unix timestamp ms" }
+                                                    "id": {
+                                                        "type": "string",
+                                                        "example": "key_a1b2c3d4"
+                                                    },
+                                                    "name": {
+                                                        "type": "string",
+                                                        "example": "My Agent Key"
+                                                    },
+                                                    "created_at": {
+                                                        "type": "integer",
+                                                        "description": "Unix timestamp ms"
+                                                    }
                                                 }
                                             }
                                         }
@@ -2477,21 +3025,52 @@
                             }
                         }
                     },
-                    "401": { "description": "Authorization required or invalid token", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                    "401": {
+                        "description": "Authorization required or invalid token",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },
-
         "/account/pending": {
             "get": {
                 "summary": "List your pending-review learnings (contributor self-review)",
                 "description": "Returns ONLY the authenticated contributor's own `pending_review` learnings — those held for review (e.g. from background extraction) before going public. Authenticated with the contributor's own API key (`X-API-Key`); scoped strictly to `contributor_account_id === your account`. This is NOT the platform admin moderation queue. Each item includes the FULL body plus any reviewer safety signals (`injection_flags`, `possible_duplicate_of`) so a human can judge before approving. Paginated.",
                 "operationId": "listAccountPending",
-                "tags": ["Account"],
-                "security": [{ "apiKeyAuth": [] }],
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "apiKeyAuth": []
+                    }
+                ],
                 "parameters": [
-                    { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50, "maximum": 200 }, "description": "Page size (1–200, default 50)" },
-                    { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 }, "description": "Page offset" }
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "default": 50,
+                            "maximum": 200
+                        },
+                        "description": "Page size (1–200, default 50)"
+                    },
+                    {
+                        "name": "offset",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "default": 0
+                        },
+                        "description": "Page offset"
+                    }
                 ],
                 "responses": {
                     "200": {
@@ -2501,26 +3080,70 @@
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "account_id": { "type": "string", "example": "acc_a1b2c3" },
-                                        "pending_count": { "type": "integer", "description": "Total pending items for this account (across pages)" },
-                                        "limit": { "type": "integer" },
-                                        "offset": { "type": "integer" },
+                                        "account_id": {
+                                            "type": "string",
+                                            "example": "acc_a1b2c3"
+                                        },
+                                        "pending_count": {
+                                            "type": "integer",
+                                            "description": "Total pending items for this account (across pages)"
+                                        },
+                                        "limit": {
+                                            "type": "integer"
+                                        },
+                                        "offset": {
+                                            "type": "integer"
+                                        },
                                         "learnings": {
                                             "type": "array",
                                             "items": {
                                                 "type": "object",
                                                 "properties": {
-                                                    "id": { "type": "string" },
-                                                    "title": { "type": "string" },
-                                                    "body": { "type": "string", "description": "Full learning body — the reviewer reads this to judge" },
-                                                    "category": { "type": "string" },
-                                                    "tags": { "type": "array", "items": { "type": "string" } },
-                                                    "outcome": { "type": "string", "nullable": true },
-                                                    "created_at": { "type": "string", "format": "date-time" },
-                                                    "status": { "type": "string", "example": "pending_review" },
-                                                    "injection_flags": { "type": "array", "description": "Present only if the injection screen flagged the content", "items": { "type": "object" } },
-                                                    "possible_duplicate_of": { "type": "string", "description": "Present only if near-duplicate detection flagged it" },
-                                                    "possible_duplicate_similarity": { "type": "number" }
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "title": {
+                                                        "type": "string"
+                                                    },
+                                                    "body": {
+                                                        "type": "string",
+                                                        "description": "Full learning body — the reviewer reads this to judge"
+                                                    },
+                                                    "category": {
+                                                        "type": "string"
+                                                    },
+                                                    "tags": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "outcome": {
+                                                        "type": "string",
+                                                        "nullable": true
+                                                    },
+                                                    "created_at": {
+                                                        "type": "string",
+                                                        "format": "date-time"
+                                                    },
+                                                    "status": {
+                                                        "type": "string",
+                                                        "example": "pending_review"
+                                                    },
+                                                    "injection_flags": {
+                                                        "type": "array",
+                                                        "description": "Present only if the injection screen flagged the content",
+                                                        "items": {
+                                                            "type": "object"
+                                                        }
+                                                    },
+                                                    "possible_duplicate_of": {
+                                                        "type": "string",
+                                                        "description": "Present only if near-duplicate detection flagged it"
+                                                    },
+                                                    "possible_duplicate_similarity": {
+                                                        "type": "number"
+                                                    }
                                                 }
                                             }
                                         }
@@ -2529,79 +3152,233 @@
                             }
                         }
                     },
-                    "401": { "description": "Missing or invalid X-API-Key", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                    "401": {
+                        "description": "Missing or invalid X-API-Key",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },
-
         "/account/pending/{id}/approve": {
             "post": {
                 "summary": "Approve your own pending learning (goes live)",
                 "description": "The authenticated contributor approves one of THEIR OWN `pending_review` learnings. Ownership-checked: a learning that does not belong to the caller returns 403 regardless of whether it exists (no cross-account information leak). On success the learning becomes `approved` and appears in search/discover/unlock. Audit-logged.",
                 "operationId": "approveAccountPending",
-                "tags": ["Account"],
-                "security": [{ "apiKeyAuth": [] }],
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "apiKeyAuth": []
+                    }
+                ],
                 "parameters": [
-                    { "name": "id", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Learning id" }
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Learning id"
+                    }
                 ],
                 "responses": {
                     "200": {
                         "description": "Approved",
-                        "content": { "application/json": { "schema": { "type": "object", "properties": {
-                            "approved": { "type": "boolean", "example": true },
-                            "id": { "type": "string" },
-                            "title": { "type": "string" },
-                            "status": { "type": "string", "example": "approved" }
-                        } } } }
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "approved": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "id": {
+                                            "type": "string"
+                                        },
+                                        "title": {
+                                            "type": "string"
+                                        },
+                                        "status": {
+                                            "type": "string",
+                                            "example": "approved"
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     },
-                    "401": { "description": "Missing or invalid X-API-Key", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-                    "403": { "description": "Not authorized to review this learning (not owned by caller)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-                    "404": { "description": "Learning not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-                    "409": { "description": "Learning is not pending review", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                    "401": {
+                        "description": "Missing or invalid X-API-Key",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Not authorized to review this learning (not owned by caller)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Learning not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Learning is not pending review",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },
-
         "/account/pending/{id}/reject": {
             "post": {
                 "summary": "Reject your own pending learning (stays private)",
                 "description": "The authenticated contributor rejects one of THEIR OWN `pending_review` learnings. Ownership-checked exactly like approve (403 for non-owned ids). On success the learning becomes `rejected` and is permanently excluded from search/discover/unlock. Accepts an optional `{ reason }`. Audit-logged.",
                 "operationId": "rejectAccountPending",
-                "tags": ["Account"],
-                "security": [{ "apiKeyAuth": [] }],
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "apiKeyAuth": []
+                    }
+                ],
                 "parameters": [
-                    { "name": "id", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Learning id" }
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Learning id"
+                    }
                 ],
                 "requestBody": {
                     "required": false,
-                    "content": { "application/json": { "schema": { "type": "object", "properties": {
-                        "reason": { "type": "string", "description": "Optional note recorded with the rejection" }
-                    } } } }
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "reason": {
+                                        "type": "string",
+                                        "description": "Optional note recorded with the rejection"
+                                    }
+                                }
+                            }
+                        }
+                    }
                 },
                 "responses": {
                     "200": {
                         "description": "Rejected",
-                        "content": { "application/json": { "schema": { "type": "object", "properties": {
-                            "rejected": { "type": "boolean", "example": true },
-                            "id": { "type": "string" },
-                            "status": { "type": "string", "example": "rejected" }
-                        } } } }
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "rejected": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "id": {
+                                            "type": "string"
+                                        },
+                                        "status": {
+                                            "type": "string",
+                                            "example": "rejected"
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     },
-                    "401": { "description": "Missing or invalid X-API-Key", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-                    "403": { "description": "Not authorized to review this learning (not owned by caller)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-                    "404": { "description": "Learning not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-                    "409": { "description": "Learning is not pending review", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                    "401": {
+                        "description": "Missing or invalid X-API-Key",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Not authorized to review this learning (not owned by caller)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Learning not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Learning is not pending review",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },
-
         "/account/api-keys": {
             "post": {
                 "summary": "Generate API key",
                 "description": "Creates a new `axl_` prefixed API key for the authenticated account. The raw key is returned **exactly once** — store it securely. Only the SHA-256 hash is persisted. Keys can be used in the `X-API-Key` header as an alternative to per-request x402 payments.",
                 "operationId": "createApiKey",
-                "tags": ["Account"],
-                "security": [{ "bearerAuth": [] }],
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
                 "requestBody": {
                     "content": {
                         "application/json": {
@@ -2626,33 +3403,65 @@
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "key": { "type": "string", "description": "Raw API key (axl_...). Store this — it will not be shown again.", "example": "axl_abc123..." },
-                                        "id": { "type": "string", "example": "key_a1b2c3d4" },
-                                        "name": { "type": "string", "example": "prod-agent-1" }
+                                        "key": {
+                                            "type": "string",
+                                            "description": "Raw API key (axl_...). Store this — it will not be shown again.",
+                                            "example": "axl_abc123..."
+                                        },
+                                        "id": {
+                                            "type": "string",
+                                            "example": "key_a1b2c3d4"
+                                        },
+                                        "name": {
+                                            "type": "string",
+                                            "example": "prod-agent-1"
+                                        }
                                     }
                                 }
                             }
                         }
                     },
-                    "401": { "description": "Authorization required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-                    "404": { "description": "Account not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                    "401": {
+                        "description": "Authorization required",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Account not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },
-
         "/report": {
             "post": {
                 "summary": "Report harmful content",
                 "description": "Submit a report about a learning that contains harmful, false, or inappropriate content. Reports are logged to an append-only file and reviewed manually. Rate limited: 10 reports per IP per hour.",
                 "operationId": "reportContent",
-                "tags": ["Moderation"],
+                "tags": [
+                    "Moderation"
+                ],
                 "requestBody": {
                     "required": true,
                     "content": {
                         "application/json": {
                             "schema": {
                                 "type": "object",
-                                "required": ["learning_id", "reason"],
+                                "required": [
+                                    "learning_id",
+                                    "reason"
+                                ],
                                 "properties": {
                                     "learning_id": {
                                         "type": "string",
@@ -2661,7 +3470,13 @@
                                     },
                                     "reason": {
                                         "type": "string",
-                                        "enum": ["spam", "harmful", "false_information", "illegal", "other"],
+                                        "enum": [
+                                            "spam",
+                                            "harmful",
+                                            "false_information",
+                                            "illegal",
+                                            "other"
+                                        ],
                                         "description": "Category of the issue"
                                     },
                                     "details": {
@@ -2681,27 +3496,58 @@
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "reported": { "type": "boolean", "example": true },
-                                        "learning_id": { "type": "string" },
-                                        "message": { "type": "string" }
+                                        "reported": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "learning_id": {
+                                            "type": "string"
+                                        },
+                                        "message": {
+                                            "type": "string"
+                                        }
                                     }
                                 }
                             }
                         }
                     },
-                    "400": { "description": "Missing required fields or invalid learning_id", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-                    "429": { "description": "Rate limit exceeded (10/hour per IP)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                    "400": {
+                        "description": "Missing required fields or invalid learning_id",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (10/hour per IP)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },
-
         "/admin/moderation/queue": {
             "get": {
                 "summary": "Moderation queue",
                 "description": "Returns all learnings currently in the `on_hold` moderation state, awaiting review. Requires admin read token.",
                 "operationId": "getModerationQueue",
-                "tags": ["Admin", "Moderation"],
-                "security": [{ "adminAuth": [] }],
+                "tags": [
+                    "Admin",
+                    "Moderation"
+                ],
+                "security": [
+                    {
+                        "adminAuth": []
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "Moderation queue entries",
@@ -2715,91 +3561,60 @@
                                             "items": {
                                                 "type": "object",
                                                 "properties": {
-                                                    "id": { "type": "string" },
-                                                    "title": { "type": "string" },
-                                                    "contributor_wallet": { "type": "string" },
-                                                    "created_at": { "type": "string", "format": "date-time" },
-                                                    "moderation_hold_reason": { "type": "string" }
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "title": {
+                                                        "type": "string"
+                                                    },
+                                                    "contributor_wallet": {
+                                                        "type": "string"
+                                                    },
+                                                    "created_at": {
+                                                        "type": "string",
+                                                        "format": "date-time"
+                                                    },
+                                                    "moderation_hold_reason": {
+                                                        "type": "string"
+                                                    }
                                                 }
                                             }
                                         },
-                                        "count": { "type": "integer" }
+                                        "count": {
+                                            "type": "integer"
+                                        }
                                     }
                                 }
                             }
                         }
                     },
-                    "401": { "description": "Admin authorization required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
-                }
-            }
-        },
-
-        "/admin/moderation/{id}": {
-            "get": {
-                "summary": "Get moderated learning",
-                "description": "Returns full details of a learning under moderation hold. Requires admin read token.",
-                "operationId": "getModerationItem",
-                "tags": ["Admin", "Moderation"],
-                "security": [{ "adminAuth": [] }],
-                "parameters": [
-                    { "name": "id", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Learning ID (lrn_...)" }
-                ],
-                "responses": {
-                    "200": { "description": "Learning details", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LearningFull" } } } },
-                    "401": { "description": "Admin authorization required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-                    "404": { "description": "Learning not found or not in moderation", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
-                }
-            }
-        },
-
-        "/admin/moderation/{id}/resolve": {
-            "post": {
-                "summary": "Resolve moderation hold",
-                "description": "Approve or reject a learning under moderation hold. Approve makes it publicly accessible; reject removes it from the marketplace (earnings not credited). Requires admin token.",
-                "operationId": "resolveModerationItem",
-                "tags": ["Admin", "Moderation"],
-                "security": [{ "adminAuth": [] }],
-                "parameters": [
-                    { "name": "id", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Learning ID (lrn_...)" }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "required": ["action"],
-                                "properties": {
-                                    "action": {
-                                        "type": "string",
-                                        "enum": ["approve", "reject"],
-                                        "description": "Approve publishes the learning; reject removes it permanently"
-                                    },
-                                    "reason": {
-                                        "type": "string",
-                                        "description": "Optional reason (logged for audit trail)"
-                                    }
+                    "401": {
+                        "description": "Admin authorization required",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
                                 }
                             }
                         }
                     }
-                },
-                "responses": {
-                    "200": { "description": "Resolution recorded", "content": { "application/json": { "schema": { "type": "object", "properties": { "resolved": { "type": "boolean" }, "action": { "type": "string" }, "learning_id": { "type": "string" } } } } } },
-                    "400": { "description": "Invalid action", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-                    "401": { "description": "Admin authorization required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-                    "404": { "description": "Learning not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
                 }
             }
         },
-
         "/admin/ofac/status": {
             "get": {
                 "summary": "OFAC screening status",
                 "description": "Returns the current status of the OFAC SDN list integration — whether screening is active, the last sync timestamp, and list statistics. Requires admin read token.",
                 "operationId": "getOfacStatus",
-                "tags": ["Admin", "Compliance"],
-                "security": [{ "adminAuth": [] }],
+                "tags": [
+                    "Admin",
+                    "Compliance"
+                ],
+                "security": [
+                    {
+                        "adminAuth": []
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OFAC screening status",
@@ -2808,30 +3623,583 @@
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "screening_active": { "type": "boolean", "description": "Whether OFAC wallet screening is enabled" },
-                                        "last_sync": { "type": "string", "format": "date-time", "nullable": true, "description": "When the SDN list was last downloaded" },
-                                        "list_size": { "type": "integer", "description": "Number of entries in the SDN list" },
-                                        "status": { "type": "string", "enum": ["active", "inactive", "error"] }
+                                        "screening_active": {
+                                            "type": "boolean",
+                                            "description": "Whether OFAC wallet screening is enabled"
+                                        },
+                                        "last_sync": {
+                                            "type": "string",
+                                            "format": "date-time",
+                                            "nullable": true,
+                                            "description": "When the SDN list was last downloaded"
+                                        },
+                                        "list_size": {
+                                            "type": "integer",
+                                            "description": "Number of entries in the SDN list"
+                                        },
+                                        "status": {
+                                            "type": "string",
+                                            "enum": [
+                                                "active",
+                                                "inactive",
+                                                "error"
+                                            ]
+                                        }
                                     }
                                 }
                             }
                         }
                     },
-                    "401": { "description": "Admin authorization required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                    "401": {
+                        "description": "Admin authorization required",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },
-
         "/status": {
             "get": {
                 "summary": "System status page",
                 "description": "Returns the static HTML status page showing current system health for all Auxilo service components. Free.",
                 "operationId": "getStatusPage",
-                "tags": ["System"],
+                "tags": [
+                    "System"
+                ],
                 "responses": {
                     "200": {
                         "description": "HTML status page",
-                        "content": { "text/html": { "schema": { "type": "string" } } }
+                        "content": {
+                            "text/html": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/device": {
+            "post": {
+                "summary": "Start device-code login (used by `npx auxilo setup`)",
+                "description": "Begins the device-authorization flow: returns a short human-readable user_code, a high-entropy device_code (the polling secret — required to retrieve the minted API key; the user_code alone can never harvest it), and a verification_url the human opens in a browser. The client then polls GET /auth/device/status with the device_code. Codes expire after expires_in seconds (600).",
+                "operationId": "startDeviceAuth",
+                "tags": [
+                    "Auth"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Device code issued",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "user_code": {
+                                            "type": "string",
+                                            "description": "Short code shown to the human on the verification page. Not a secret."
+                                        },
+                                        "device_code": {
+                                            "type": "string",
+                                            "description": "High-entropy polling secret. Returned only here; required by GET /auth/device/status."
+                                        },
+                                        "verification_url": {
+                                            "type": "string",
+                                            "format": "uri",
+                                            "description": "Browser page (GET /auth/device/verify?code=user_code) where the human signs in and authorizes the device."
+                                        },
+                                        "expires_in": {
+                                            "type": "integer",
+                                            "example": 600
+                                        },
+                                        "interval": {
+                                            "type": "integer",
+                                            "example": 5,
+                                            "description": "Minimum seconds between status polls (enforced with 429 slow_down)."
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/device/status": {
+            "get": {
+                "summary": "Poll device-code authorization status",
+                "description": "Polls the device flow. Requires the secret device_code (never the user_code). While the human has not finished: { status: 'pending' }. After authorization the response carries the minted contribute-scoped API key EXACTLY ONCE ({ status: 'authorized', api_key, account_id, email }) and the code is invalidated — a replayed poll cannot re-harvest the key. Expired codes return { status: 'expired' }. Polling faster than `interval` returns 429 { error: 'slow_down', retry_after: 5 }.",
+                "operationId": "deviceAuthStatus",
+                "tags": [
+                    "Auth"
+                ],
+                "parameters": [
+                    {
+                        "name": "device_code",
+                        "in": "query",
+                        "required": true,
+                        "description": "The polling secret from POST /auth/device",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Current status (pending | expired | authorized — authorized delivers api_key once, then the code is invalidated)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "enum": [
+                                                "pending",
+                                                "expired",
+                                                "authorized"
+                                            ]
+                                        },
+                                        "api_key": {
+                                            "type": "string",
+                                            "description": "Present only on the single authorized response. Contribute-scoped, axl_c_ prefix."
+                                        },
+                                        "account_id": {
+                                            "type": "string",
+                                            "description": "Present only on the authorized response."
+                                        },
+                                        "email": {
+                                            "type": "string",
+                                            "description": "Present only on the authorized response."
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Missing device_code query parameter",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Unknown device code",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Polled faster than interval (error: slow_down, retry_after: 5) or poll cap exceeded",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/device/verify": {
+            "get": {
+                "summary": "Device verification page (browser, HTML)",
+                "description": "The human-facing page from verification_url. Renders an HTML page where the user signs in (magic link) and authorizes the pending device; the page calls POST /auth/device/authorize. Not a JSON API.",
+                "operationId": "deviceAuthVerifyPage",
+                "tags": [
+                    "Auth"
+                ],
+                "parameters": [
+                    {
+                        "name": "code",
+                        "in": "query",
+                        "required": true,
+                        "description": "The user_code from POST /auth/device",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "HTML verification page",
+                        "content": {
+                            "text/html": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/device/authorize": {
+            "post": {
+                "summary": "Authorize a pending device (called by the verification page)",
+                "description": "Binds a pending device code to the signed-in account: verifies the session JWT, mints a contribute-scoped API key ('Device Login Key'), and marks the code authorized so the polling client's next GET /auth/device/status receives the key. Requires the user_code plus a valid session JWT (from the magic-link flow).",
+                "operationId": "deviceAuthAuthorize",
+                "tags": [
+                    "Auth"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "code",
+                                    "session_token"
+                                ],
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "description": "The user_code being authorized"
+                                    },
+                                    "session_token": {
+                                        "type": "string",
+                                        "description": "JWT session token from GET /auth/verify"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Device authorized ({ status: 'authorized' })",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "enum": [
+                                                "authorized"
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid JSON, or code/session_token missing",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid or expired session token",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Unknown device code or account not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Code already authorized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "410": {
+                        "description": "Device code expired",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/account/terms-status": {
+            "get": {
+                "summary": "Terms-of-Service acceptance status for this account",
+                "description": "Returns whether the authenticated account has accepted the CURRENT Terms version. needs_acceptance:true means money/agency routes (link-wallet, withdrawals) will 403 with code TERMS_NOT_ACCEPTED until POST /account/accept-terms is called with { version: current_tos_version, agree: true }. Accepts a web session (Bearer) OR an account API key (read scope).",
+                "operationId": "termsStatus",
+                "tags": [
+                    "Account",
+                    "Terms"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    },
+                    {
+                        "apiKeyAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Acceptance status",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "current_tos_version": {
+                                            "type": "string"
+                                        },
+                                        "accepted_version": {
+                                            "type": "string",
+                                            "nullable": true
+                                        },
+                                        "accepted_at": {
+                                            "type": "string",
+                                            "format": "date-time",
+                                            "nullable": true
+                                        },
+                                        "accepted": {
+                                            "type": "boolean",
+                                            "description": "True when accepted_version == current_tos_version"
+                                        },
+                                        "needs_acceptance": {
+                                            "type": "boolean"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Account not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/moderation/{id}/approve": {
+            "post": {
+                "summary": "Approve a pending learning (admin)",
+                "description": "Approves a learning in the moderation queue: sets status 'approved', moderation 'manual', and records a moderation_action audit entry. Requires admin token.",
+                "operationId": "approveModerationItem",
+                "tags": [
+                    "Admin",
+                    "Moderation"
+                ],
+                "security": [
+                    {
+                        "adminAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Learning ID (lrn_...)"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Approved",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "approved": {
+                                            "type": "boolean"
+                                        },
+                                        "id": {
+                                            "type": "string"
+                                        },
+                                        "title": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Learning is already approved",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Admin authorization required",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Learning not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/moderation/{id}/reject": {
+            "post": {
+                "summary": "Reject a pending learning with a reason (admin)",
+                "description": "Rejects a learning in the moderation queue: sets status 'rejected' and records the reason in a moderation_action audit entry. Requires admin token.",
+                "operationId": "rejectModerationItem",
+                "tags": [
+                    "Admin",
+                    "Moderation"
+                ],
+                "security": [
+                    {
+                        "adminAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Learning ID (lrn_...)"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "reason"
+                                ],
+                                "properties": {
+                                    "reason": {
+                                        "type": "string",
+                                        "minLength": 5
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Rejected",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "rejected": {
+                                            "type": "boolean"
+                                        },
+                                        "id": {
+                                            "type": "string"
+                                        },
+                                        "reason": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid JSON, reason missing/too short, or already rejected",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Admin authorization required",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Learning not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
                     }
                 }
             }

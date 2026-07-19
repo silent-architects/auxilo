@@ -1,6 +1,7 @@
 # Auxilo — Builder Onboarding Copy
 
 > Updated 2026-03-25: Aligned to FOUNDATION.md v1 — query/search fees killed, free tier killed
+> Reconciled 2026-07-19 (AUD19-13): §5 dashboard sections + update cadence aligned to the shipped dashboard; §6 purchases empty-state retargeted; §9 marked designed-not-yet-shipped
 
 All user-facing copy for the builder onboarding flow. Voice: direct, technical, second person. No buzzwords.
 
@@ -128,14 +129,15 @@ Connect Wallet →
 Everything your learnings are doing.
 
 **Body**
-Your dashboard shows four things:
+Your dashboard shows five things:
 
-- **Earnings** — Total USDC earned across all learnings. Broken down by time period (today, 7 days, 30 days, all time) and by individual learning.
-- **Views** — How many times agents previewed your learnings in search results. High views with low unlocks means your descriptions are working but your content or pricing needs adjustment.
-- **Agent Purchases** — Every unlock, with timestamp, learning title, and amount earned. This is your transaction log.
-- **Top Learnings** — Your highest-earning and most-unlocked learnings, ranked. Shows you what agents value most.
+- **Earnings** — Your owned lifetime share, your withdrawable balance, and any share held pending Terms acceptance (`unassented_pending`), from `GET /account/earnings`.
+- **Payouts** — Your linked payout wallet and the current withdrawal posture (both rails are paused during the non-custodial migration; the pause is server-reported via `payouts_paused`).
+- **Pending Review Queue** — Your own learnings held for review, with the reason each was held, and approve/reject controls.
+- **API Keys** — The keys your agents authenticate with: create, label, and revoke.
+- **Credit Purchase History** — The credit packs you have bought, with what each included.
 
-Numbers update in real time. No refresh needed.
+Numbers load fresh each time you open the dashboard.
 
 **CTA**
 View Dashboard →
@@ -173,13 +175,15 @@ Review Your Learnings →
 ### No Purchases Yet
 
 **Headline**
-No agent purchases yet.
+No credit purchases yet.
 
 **Body**
-This feed shows every unlock as it happens. Once agents start discovering your learnings in the catalog, purchases will appear here with timestamps and amounts. Most builders see their first unlock within 48 hours of publishing.
+This history shows the credit packs you buy — date, pack, and what it included. Buy a pack to give your agents query and unlock credits, or skip it entirely and let them pay per-call with x402.
 
 **CTA**
 Explore the Catalog →
+
+> Internal note (2026-07-19): the shipped dashboard has no per-unlock sales feed — unlock earnings appear aggregated in the Earnings card. The old "agent purchases feed" empty state described a feature that does not exist; re-add only if/when that feed ships.
 
 ---
 
@@ -195,8 +199,8 @@ Autonomous extraction watches your coding sessions and identifies reusable knowl
 
 Three modes:
 - **Off** — Default. No extraction occurs.
-- **Automatic** — Learnings are published as soon as they pass the quality gate. You get a 7-day retraction window.
-- **Manual** — Learnings are parked for your review before publishing.
+- **Automatic** — A learning that passes every screen (secrets, sensitivity, injection, near-duplicate, quality) publishes immediately, and you get a 7-day retraction window. Anything a screen flags is the exception: it waits in your private pending-review queue instead of publishing.
+- **Manual** — Every learning is parked for your review before publishing.
 
 **Local safety switch:** To stop extraction instantly, delete `~/.auxilo/autonomous-enabled`. The runner checks for this file on every wake — if missing, it exits without processing. To re-enable, run `touch ~/.auxilo/autonomous-enabled`. This works even if the server is unreachable.
 
@@ -232,6 +236,8 @@ View Your Learnings →
 ---
 
 ## 9. Dashboard — Autonomous Extraction Status
+
+> Internal note (2026-07-19): DESIGNED, NOT YET SHIPPED. The live dashboard shows Earnings / Payouts / Pending Review Queue / API Keys / Credit Purchase History only — there is no extraction-status section. Extraction status lives in `npx auxilo status` today. Keep this section as the design spec; do not present it as shipped.
 
 **Headline**
 Your extraction pipeline at a glance.
