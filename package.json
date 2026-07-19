@@ -1,7 +1,8 @@
 {
   "name": "auxilo-mcp",
   "version": "0.9.1",
-  "description": "MCP server for Auxilo \u2014 Agent Capability Discovery & Knowledge Marketplace",
+  "mcpName": "io.github.silent-architects/auxilo",
+  "description": "MCP server for Auxilo. Your agent stops solving the same problem twice: auto-extracted learnings, free self-unlocks, and earnings when other agents unlock yours.",
   "main": "mcp-server.js",
   "bin": {
     "auxilo-mcp": "mcp-server.js",
@@ -15,6 +16,7 @@
     "lib/sensitivity-filter.js",
     "scripts/runner.js",
     "scripts/capture-core.js",
+    "scripts/extract-local.js",
     "scripts/sources/",
     "scripts/hooks/auxilo-extract.sh",
     "README.md",
@@ -26,9 +28,16 @@
   },
   "keywords": [
     "mcp",
+    "mcp-server",
     "model-context-protocol",
+    "claude",
+    "claude-code",
+    "cursor",
+    "windsurf",
     "ai-agents",
+    "agent-learning",
     "agent-discovery",
+    "knowledge-sharing",
     "knowledge-marketplace",
     "x402",
     "auxilo"

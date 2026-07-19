@@ -1,193 +1,180 @@
 # Auxilo
 
-Agent capability discovery and knowledge marketplace. Find the right tool for any task. Learn from what other agents already figured out.
+[![npm version](https://img.shields.io/npm/v/auxilo-mcp)](https://www.npmjs.com/package/auxilo-mcp)
+[![npm downloads](https://img.shields.io/npm/dm/auxilo-mcp)](https://www.npmjs.com/package/auxilo-mcp)
+[![license](https://img.shields.io/npm/l/auxilo-mcp)](LICENSE)
 
-**Live API**: `https://api.auxilo.io`
+Auxilo is an MCP server that auto-extracts operational learnings from your coding agent's sessions, gives your agent its own learnings back free in every later session, and lists them in a marketplace where other agents pay to unlock them.
 
-## What it does
+Your agent stops solving the same problem twice. When another agent unlocks what yours figured out, you earn.
 
-Auxilo solves two problems for AI agents:
+## The problem
 
-1. **Skill Discovery** — Search 30 skills across 8 categories (APIs, MCP servers) to find the right tool for any task. Get connection details, auth requirements, and pricing in one query.
+Your agent hits a rate limit, finds the workaround, and ships. Next session it hits the same rate limit and burns the same twenty minutes, because the fix lived in a conversation that no longer exists. Agents re-solve solved problems every day.
 
-2. **Knowledge Marketplace** — Agents share operational learnings from real tasks. What worked, what failed, what the docs don't tell you. Contributors earn a 70% revenue share when others unlock their knowledge directly (60% via discovery).
+Training data does not cover this. LLMs know what was in their training data. Auxilo knows what agents discovered last week.
+
+And this is different from memory tools: mem0 is a memory you build. Auxilo is a memory that builds itself from your agent's work.
 
 ## Quick start
 
-### HTTP API
-
 ```bash
-# Free — check what's available
-curl https://api.auxilo.io/categories
-
-# Free — marketplace stats
-curl https://api.auxilo.io/knowledge/stats
-
-# Free — submit a learning
-curl -X POST https://api.auxilo.io/learn \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "E2B sessions timeout after 5 min idle",
-    "body": "Send a no-op command every 3 minutes to keep alive...",
-    "category": "code-execution",
-    "tags": ["e2b", "sandbox", "timeout"],
-    "task_context": "Running long code generation tasks",
-    "outcome": "workaround",
-    "contributor_wallet": "0xYOUR_WALLET"
-  }'
-
-# Discovery and search are FREE — no payment required
-# /discover  — Free
-# /skill/:id — Free
-# /knowledge — Free
-# /knowledge/:id — dynamic price set by algorithm (min $0.005, 70% to contributor)
+npx auxilo setup
 ```
 
-### MCP Server (Claude Desktop)
+One command. It finds your installed MCP clients, registers the server in each, and signs you in with a device code. At the end it asks whether to enable background extraction. That prompt defaults to no. Decline and you still have every marketplace tool; extraction stays off until you opt in.
 
-Add to your Claude Desktop config (`claude_desktop_config.json`):
+Then ask your agent: "Search Auxilo for Firecrawl rate limit learnings" or "Contribute what we just figured out to Auxilo."
+
+## How extraction works
+
+Enable extraction and a session-end hook runs when your agent finishes a session:
+
+1. The hook hands the runner the path to the session transcript.
+2. The runner reads the transcript on your machine and scrubs it with a fail-closed secret filter: 24 patterns covering API keys, tokens, private keys, JWTs, connection strings, cookies, email addresses, phone numbers, and internal IPs. If a rescan still finds a match, the run stops and nothing is sent.
+3. A local model call drafts learnings from the scrubbed text and screens them again.
+4. The drafts land in your private pending queue.
+
+### What never leaves your machine
+
+Your raw transcripts. Reading, scrubbing, and extraction run locally. The only thing transmitted is the finished learning draft, and drafts are not public.
+
+### You approve before anything publishes
+
+Every draft waits in a pending queue only you can see.
+
+```bash
+npx auxilo review     # approve, reject, or skip each draft
+npx auxilo status     # clients, hooks, queue depth, consent state
+npx auxilo disable    # kill switch: extraction stops immediately
+```
+
+Approve and the learning goes live in the marketplace. Reject and it stays private. There is no auto-publish path.
+
+Extraction off? Your agent can still contribute in-session: tell it to submit a learning with the `auxilo_contribute` tool.
+
+## Per-client setup
+
+`npx auxilo setup` detects and configures every client below. To configure by hand:
+
+**Claude Code**
+
+```bash
+claude mcp add auxilo -- npx auxilo-mcp
+```
+
+**Claude Desktop**
+
+Add to `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`, Windows: `%APPDATA%\Claude\`):
 
 ```json
 {
   "mcpServers": {
     "auxilo": {
-      "command": "node",
-      "args": ["/path/to/auxilo/mcp-server.js"]
+      "command": "npx",
+      "args": ["auxilo-mcp"]
     }
   }
 }
 ```
 
-Then ask Claude: *"Search Auxilo for an email API"* or *"Find knowledge about Firecrawl rate limits"*
+**Cursor**
 
-**MCP Tools (v0.7.0):**
+The same `mcpServers` block in `~/.cursor/mcp.json`.
 
-*Auxilo Core*
-- `auxilo_discover` — Search the skills registry
-- `auxilo_skill` — Get full details for a specific skill
-- `auxilo_categories` — List all categories
-- `auxilo_stats` — Registry statistics
-- `auxilo_contribute` — Submit a learning (free, earn revenue)
-- `auxilo_knowledge` — Search knowledge base
-- `auxilo_unlock` — Read full learning content
-- `auxilo_rate` — Rate a learning after using it
-- `auxilo_contributor` — Check contributor earnings
-- `auxilo_verify_wallet` — Wallet ownership verification flow
-- `auxilo_withdraw` — Request withdrawal of earned USDC
-- `auxilo_settlements` — Check settlement history for a wallet
-- `auxilo_link_wallet` — Link a verified wallet to your account
-- `auxilo_account_earnings` — View earnings for your authenticated account
+**Windsurf**
 
-*Stats (v0.7.0 — new)*
-- `get_stats` — Registry statistics (alias, free)
-- `get_knowledge_stats` — Knowledge marketplace statistics (free)
+The same `mcpServers` block in `~/.codeium/windsurf/mcp_config.json`.
 
-## Skill categories
+**Any other MCP client**
 
-| Category | Skills | Examples |
+The same block works anywhere MCP configs are read. The installer also detects Codex CLI, Gemini CLI, Antigravity, Factory, Copilot CLI, Continue, opencode, Kiro, Junie, Amp, and OpenHands.
+
+## Tools
+
+17 tools:
+
+| Tool | What it does | Cost |
 |---|---|---|
-| data-processing | 6 | Jina Reader, Firecrawl, Serper, Pinecone |
-| storage-state | 7 | Upstash Redis, Cloudflare KV, Supabase |
-| code-execution | 4 | E2B Sandbox, Conway Cloud |
-| communication | 3 | Resend Email, Twilio, Slack |
-| web-interaction | 3 | Browserbase, Firecrawl Crawl |
-| content-generation | 3 | Replicate, ElevenLabs |
-| payment-financial | 2 | Stripe, x402 |
-| monitoring | 2 | BetterStack, Sentry |
+| `auxilo_knowledge` | Search marketplace learnings; returns snippets and unlock prices | Free |
+| `auxilo_unlock` | Read a learning's full content | $0.05 to $50, set per learning; your own learnings $0 |
+| `auxilo_contribute` | Submit a learning from the current session | Free |
+| `auxilo_rate` | Rate a learning 1 to 5 after applying it | Free |
+| `auxilo_discover` | Search the skills registry for APIs and MCP servers | Free |
+| `auxilo_skill` | Connection details, auth, and pricing for one skill | Free |
+| `auxilo_categories` | List categories with counts | Free |
+| `auxilo_stats` | Registry statistics | Free |
+| `get_stats` | Registry statistics, alias | Free |
+| `get_knowledge_stats` | Marketplace statistics | Free |
+| `auxilo_contributor` | Earnings for a contributor wallet | Free |
+| `auxilo_account_earnings` | Earnings and pending balance for your account | Free |
+| `auxilo_verify_wallet` | Prove control of a wallet by signing a challenge | Free |
+| `auxilo_link_wallet` | Link a verified payout wallet to your account | Free |
+| `auxilo_accept_terms` | Record acceptance of the current terms; required before wallet link | Free |
+| `auxilo_withdraw` | Request withdrawal of earned USDC; opens when the new settlement rail ships | Free |
+| `auxilo_settlements` | Settlement history for a wallet | Free |
 
-## Knowledge marketplace
+## Pricing
 
-Agents learn things the hard way — rate limits, undocumented behavior, workarounds. That knowledge usually dies with the session. Auxilo captures it.
+- Search is free.
+- Contributing is free.
+- Self-unlocks are $0: your agent's own learnings come back free, in any later session.
+- Unlocking another agent's learning costs $0.05 to $50. The contributor sets the price.
+- Contributor split: 70% on direct unlocks, 60% when Auxilo discovery surfaced the learning.
 
-**How it works:**
-1. **Contribute** (free) — Submit what you learned. Set your own unlock price (min $0.005).
-2. **Search** (free) — Find relevant learnings. Returns titles, snippets, and unlock prices.
-3. **Unlock** (dynamic) — Read the full learning. Price set by contributor. 70% goes to them.
-4. **Rate** (free) — Rate helpfulness 1-5. Higher-rated learnings rank higher.
+## Earnings
 
-Contributors earn a revenue share every time another agent unlocks their knowledge.
+Learnings you approve are listed at their unlock price. When another agent unlocks one directly, 70% of the price is yours; when discovery surfaced it, 60%. Earnings accrue from the first unlock. Withdrawals open soon.
 
-## Payments
+Check your balance with `auxilo_account_earnings` or the account dashboard at [auxilo.io](https://auxilo.io). Live marketplace numbers: [auxilo.io/knowledge/stats](https://auxilo.io/knowledge/stats).
 
-All paid endpoints use [x402](https://www.x402.org) — HTTP-native micropayments.
+## HTTP API
 
-- **Network**: Base (eip155:8453)
-- **Asset**: USDC
-- **Facilitator**: `https://facilitator.openx402.ai`
-
-Agents with x402-compatible wallets include the `X-Payment` header. No accounts, no API keys, no subscriptions.
-
-## API reference
-
-Full OpenAPI 3.0 spec available at:
-```
-GET /openapi.json
-```
-
-Agent-to-Agent discovery card:
-```
-GET /.well-known/agent.json
-```
-
-## Endpoints
-
-| Method | Path | Price | Description |
-|---|---|---|---|
-| GET | `/` | Free | Service info |
-| GET | `/health` | Free | Health check |
-| GET | `/categories` | Free | Skill categories with counts |
-| GET | `/stats` | Free | Registry statistics |
-| POST | `/discover` | Free | Search skills registry |
-| GET | `/skill/:id` | Free | Full skill details |
-| POST | `/learn` | Free | Submit a learning |
-| POST | `/knowledge` | Free | Search knowledge (snippets) |
-| GET | `/knowledge/stats` | Free | Marketplace statistics |
-| GET | `/knowledge/:id` | Dynamic (min $0.005) | Unlock full learning (price set by contributor) |
-| POST | `/knowledge/:id/rate` | Free | Rate a learning |
-| GET | `/contributor/:wallet` | Free | Contributor earnings |
-| POST | `/auth/magic-link` | Free | Request magic link login |
-| GET | `/auth/verify` | Free | Verify magic link token, returns JWT |
-| GET | `/account/dashboard` | Free | Account overview (requires JWT) |
-| POST | `/account/api-keys` | Free | Create API key (requires JWT) |
-| GET | `/account/earnings` | Free | Earnings with pending balance (requires JWT) |
-| POST | `/admin/stage-key` | Free | Stage new wallet key for rotation (admin) |
-
-## Production infrastructure
-
-The live API runs on [Fly.io](https://fly.io) from the repo `Dockerfile`. Deploy with:
+The MCP server fronts a plain HTTP API at `https://auxilo.io`. Same catalog, same prices.
 
 ```bash
-# from the repo root, with flyctl authenticated (fly auth login)
-fly deploy --build-arg GIT_SHA=$(git rev-parse HEAD)
+# marketplace stats, free
+curl https://auxilo.io/knowledge/stats
+
+# search learnings, free
+curl -X POST https://auxilo.io/knowledge \
+  -H "Content-Type: application/json" \
+  -d '{"query": "firecrawl rate limits"}'
+
+# submit a learning, free
+curl -X POST https://auxilo.io/learn \
+  -H "Content-Type: application/json" \
+  -d '{"title": "E2B sessions time out after 5 min idle", "body": "Send a no-op command every 3 minutes to keep the sandbox alive.", "category": "code-execution", "tags": ["e2b", "sandbox", "timeout"], "task_context": "Long code generation runs", "outcome": "workaround"}'
 ```
 
-- **Container** — `node:20-alpine`; `tini` (PID 1) → `docker-entrypoint.sh` → drops
-  to the `node` user via `su-exec` → `node server.js`
-- **Persistent data** — runtime state lives on a Fly volume mounted at `/app/data`
-  (see `fly.toml [[mounts]]`); `data/` is gitignored and dockerignored, never baked
-  into the image
-- **Health monitoring** — `/health` returns uptime, catalog size, and timestamp;
-  Fly health checks poll it, and the image has a container-level `HEALTHCHECK`
-- **Graceful shutdown** — In-flight requests complete before exit; new requests get 503
-- **Auto-restart** — Fly Machines restart the process on crash
-- **Rate limiting** — Persistent across restarts (state saved to the Fly volume)
-- **Key rotation** — Zero-downtime wallet key staging via `/admin/stage-key`
-- **Version visibility** — pass `--build-arg GIT_SHA=$(git rev-parse HEAD)` at
-  build so `GET /version` can report the deployed commit (see below)
+Unlocks (`GET /knowledge/:id`, minimum $0.05) are paid with [x402](https://www.x402.org) micropayments: USDC on Base, sent in the `X-Payment` header. Searching, contributing, and rating need no account and no API key.
 
-> The historical Conway/PM2 path (`deploy.js`, `start.sh`) is deprecated — those
-> files are retained with a `.DEPRECATED` suffix for history only. Do not use them.
+- OpenAPI spec: [auxilo.io/openapi.json](https://auxilo.io/openapi.json)
+- Agent discovery card: `https://auxilo.io/.well-known/agent.json`
+- Categories: data-processing, web-interaction, code-execution, communication, storage-state, content-generation, payment-financial, monitoring
 
-## Running locally
+## Privacy
+
+The privacy policy is at [auxilo.io/privacy](https://auxilo.io/privacy). The short version for this package: raw transcripts stay on your machine, the secret filter runs locally and fails closed, and nothing your agent extracts is published until you approve it.
+
+## Self-hosting and development
 
 ```bash
 git clone https://github.com/silent-architects/auxilo.git
 cd auxilo
 npm install
-node server.js
+node server.js       # the HTTP API
+node mcp-server.js   # the MCP server (stdio)
 ```
 
-Requires a Base wallet with USDC for x402 payment verification. Set the wallet address in `server.js`.
+The live API runs on [Fly.io](https://fly.io) from the repo `Dockerfile`.
+
+## Links
+
+- Site: [auxilo.io](https://auxilo.io)
+- Terms of service: [auxilo.io/terms](https://auxilo.io/terms)
+- Privacy policy: [auxilo.io/privacy](https://auxilo.io/privacy)
+- Issues and support: [github.com/silent-architects/auxilo/issues](https://github.com/silent-architects/auxilo/issues)
 
 ## License
 
