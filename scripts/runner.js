@@ -36,11 +36,9 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const { spawn } = require('child_process');
 const { scanText, SENSITIVITY_FILTER_VERSION } = require('../lib/sensitivity-filter.js');
-const { ClaudeCodeSource } = require('./sources/claude-code.js');
-const { OpenClawSource } = require('./sources/openclaw.js');
-const { GeminiCliSource } = require('./sources/gemini-cli.js');
-const { AntigravitySource } = require('./sources/antigravity.js');
+const { TranscriptSource } = require('./sources/source.interface.js');
 const { GenericJsonlSource } = require('./sources/generic-jsonl.js');
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -87,14 +85,42 @@ const PENDING_DIR = path.join(AUXILO_DIR, 'pending-learnings');
 const LEDGER_PATH = path.join(AUXILO_DIR, 'ledger.json');
 const LOG_PATH = path.join(AUXILO_DIR, 'extract.log');
 
-// ─── Source Registry (§4.4) ─────────────────────────────────────────────────
+// ─── Source Registry (§4.4 / UC-3 dynamic) ──────────────────────────────────
+//
+// UC-3: the registry is built by enumerating scripts/sources/*.js — a new
+// adapter self-registers by dropping a file in that exports a TranscriptSource
+// subclass with a static `id`. Excluded by name: the abstract interface, and
+// generic-jsonl (the config-instantiated single-file FALLBACK, not a
+// discoverable source — its detect() is deliberately inert).
+//
+// Per-file try/catch: one broken adapter must never kill the runner
+// (fail-silent degradation, UC §5). Duplicate ids: first file wins
+// (alphabetical), so a rogue copy can't shadow an established adapter.
 
-const SOURCES = [
-  ClaudeCodeSource,
-  OpenClawSource,
-  GeminiCliSource,
-  AntigravitySource,
-];
+const SOURCE_REGISTRY_EXCLUDE = new Set(['source.interface.js', 'generic-jsonl.js']);
+
+function loadSources() {
+  const dir = path.join(__dirname, 'sources');
+  const classes = [];
+  let files = [];
+  try {
+    files = fs.readdirSync(dir).filter(f => f.endsWith('.js') && !SOURCE_REGISTRY_EXCLUDE.has(f)).sort();
+  } catch { return classes; }
+  for (const f of files) {
+    let mod;
+    try { mod = require(`./sources/${f}`); } catch { continue; } // broken adapter — skip silently
+    for (const exported of Object.values(mod || {})) {
+      if (typeof exported !== 'function') continue;
+      if (!(exported.prototype instanceof TranscriptSource)) continue;
+      if (!exported.id || exported.id === 'abstract') continue;
+      if (classes.some(c => c.id === exported.id)) continue;
+      classes.push(exported);
+    }
+  }
+  return classes;
+}
+
+const SOURCES = loadSources();
 
 async function enumerateActiveSources(filter) {
   const active = [];
@@ -233,6 +259,69 @@ function listPendingFiles() {
 
 // ─── Upload ─────────────────────────────────────────────────────────────────
 
+/**
+ * Submit finished learnings to POST /learn, classifying each response
+ * truthfully (P1-13b / SPEC3 A2):
+ *   2xx + status 'approved'        → published (seamless)
+ *   2xx + status 'pending_review'  → held (the contributor review queue)
+ *   anything else / network error  → rejected
+ *
+ * Every submission carries `submission_channel: 'extraction'` UNCONDITIONALLY.
+ * SPEC3 §3.2 trust analysis: the marker is a BRAKE, never a gas pedal — a
+ * pre-B1 server destructures known fields only and ignores it; a post-B1
+ * server uses it to HOLD extraction-channel items behind standing consent.
+ * Shipping it dark means the brake is in the field before scoring ever arms
+ * (see the AUXILO_SCORE_EXTRACTION sequencing constraint in extract-local.js).
+ *
+ * `quality_self_assessment` passes through spread-if-present — extract-local
+ * only attaches it when the A1 score gate is on.
+ *
+ * @param {Array<object>} learnings
+ * @param {string} sourceType
+ * @param {object} [opts]  { fetchImpl, baseUrl, apiKey } — injectable for tests
+ * @returns {Promise<{published:number, held:number, rejected:number}>}
+ */
+async function submitLearnings(learnings, sourceType, opts = {}) {
+  const fetchImpl = opts.fetchImpl || fetch;
+  const baseUrl = opts.baseUrl || BASE_URL;
+  const apiKey = opts.apiKey !== undefined ? opts.apiKey : API_KEY;
+
+  let published = 0;
+  let held = 0;
+  let rejected = 0;
+  for (const l of learnings) {
+    try {
+      const res = await fetchImpl(`${baseUrl}/learn`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': apiKey,
+          'Idempotency-Key': crypto.randomUUID(),
+        },
+        body: JSON.stringify({
+          title: l.title,
+          body: l.body,
+          category: l.category,
+          tags: l.tags,
+          task_context: l.task_context,
+          outcome: l.outcome,
+          contributor_agent: `auxilo-hook/${sourceType}`,
+          submission_channel: 'extraction',
+          ...(l.quality_self_assessment && { quality_self_assessment: l.quality_self_assessment }),
+        }),
+      });
+      if (!res.ok) { rejected += 1; continue; }
+      let body = {};
+      try { body = await res.json(); } catch { /* tolerate non-JSON 2xx */ }
+      if (body && body.status === 'pending_review') held += 1;
+      else published += 1;
+    } catch (_) {
+      rejected += 1;
+    }
+  }
+  return { published, held, rejected };
+}
+
 async function postExtract(transcript, sessionId, sourceType, _scrubReport) {
   // CLIENT-SIDE extraction (2026-07-02). Server /extract is deprecated (410) — Auxilo
   // does not pay to extract. The local model (via `claude -p`) extracts + self-screens
@@ -247,38 +336,39 @@ async function postExtract(transcript, sessionId, sourceType, _scrubReport) {
   }
   if (skipped) {
     log(`[runner] ${skipped}`);
-    return { learnings_published: 0, learnings_rejected: 0, extraction_id: 'client-skip' };
+    return { learnings_published: 0, learnings_held: 0, learnings_rejected: 0, extraction_id: 'client-skip' };
   }
 
-  let published = 0;
-  let rejected = 0;
-  for (const l of learnings) {
-    try {
-      const res = await fetch(`${BASE_URL}/learn`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': API_KEY,
-          'Idempotency-Key': crypto.randomUUID(),
-        },
-        body: JSON.stringify({
-          title: l.title,
-          body: l.body,
-          category: l.category,
-          tags: l.tags,
-          task_context: l.task_context,
-          outcome: l.outcome,
-          contributor_agent: `auxilo-hook/${sourceType}`,
-        }),
-      });
-      if (res.ok) published += 1;
-      else rejected += 1;
-    } catch (_) {
-      rejected += 1;
-    }
-  }
-  log(`[runner] client-side extraction: ${learnings.length} candidate(s), published=${published} rejected=${rejected}`);
-  return { learnings_published: published, learnings_rejected: rejected, extraction_id: `client-${sessionId}` };
+  const { published, held, rejected } = await submitLearnings(learnings, sourceType);
+  // NOTE: token-free prose — the digest-parsed `published=`/`held=`/`rejected=`
+  // tokens live ONLY on the per-run caller log lines. This line previously
+  // carried `published=` too and the digest double-counted every extraction
+  // (its dedup only drops byte-identical lines). P1-13b.
+  log(`[runner] client-side extraction: ${learnings.length} candidate(s) → ${published} live, ${held} held for review, ${rejected} rejected`);
+  return { learnings_published: published, learnings_held: held, learnings_rejected: rejected, extraction_id: `client-${sessionId}` };
+}
+
+// ─── Held-items local notification (LW-18 layer 2) ──────────────────────────
+
+/**
+ * macOS notification when a run holds items for review: COUNT ONLY, no titles,
+ * no content (pending bodies are adversarial by assumption — LW-18 threat
+ * model). Fail-silent: darwin-only, detached osascript spawn, every error
+ * swallowed; a broken notifier must never fail the run. AUXILO_NO_NOTIFY=1
+ * disables (tests, headless CI).
+ */
+function notifyHeld(count) {
+  try {
+    if (!count || count <= 0) return;
+    if (process.platform !== 'darwin') return;
+    if (process.env.AUXILO_NO_NOTIFY === '1') return;
+    const msg = `${count} learning(s) held for your review — run npx auxilo review`;
+    const child = spawn('/usr/bin/osascript', [
+      '-e', `display notification ${JSON.stringify(msg)} with title "Auxilo"`,
+    ], { stdio: 'ignore', detached: true });
+    child.unref();
+    child.on('error', () => { /* fail-silent */ });
+  } catch { /* fail-silent */ }
 }
 
 // ─── Install Hooks (B15) ────────────────────────────────────────────────────
@@ -362,26 +452,38 @@ function installHooks() {
 // Renamed 2026-07-15: the original label carried a dead pre-Fly host prefix (legacy-label purge).
 const SWEEPER_LABEL = 'io.auxilo.sweeper';
 
-function installSweeper() {
-  const repoRoot = path.resolve(__dirname, '..');
-  const binRoot = path.join(AUXILO_DIR, 'bin');
-
-  // 1. Copy executable surface, preserving relative layout so requires resolve.
-  const filesToCopy = [
+/**
+ * The sweeper copy manifest. Sources rows are DERIVED by enumerating
+ * scripts/sources/*.js (UC-3): a new adapter file is automatically installed —
+ * the d8c7099 bug class (adapter added, manifest not, installed sweepers crash
+ * with MODULE_NOT_FOUND) is now structurally impossible. Exported for the
+ * manifest-closure test in test/wave3-client-funnel.test.js.
+ */
+function sweeperManifest(repoRoot = path.resolve(__dirname, '..')) {
+  const sourceRows = [];
+  try {
+    for (const f of fs.readdirSync(path.join(repoRoot, 'scripts', 'sources')).filter(f => f.endsWith('.js')).sort()) {
+      sourceRows.push([`scripts/sources/${f}`, `scripts/sources/${f}`, 0o644]);
+    }
+  } catch { /* missing dir surfaces as missing-file errors below */ }
+  return [
     ['scripts/auxilo-sweeper-wrapper.sh', 'auxilo-sweeper-wrapper.sh', 0o755],
     ['scripts/runner.js', 'scripts/runner.js', 0o755],
-    ['scripts/sources/source.interface.js', 'scripts/sources/source.interface.js', 0o644],
-    ['scripts/sources/claude-code.js', 'scripts/sources/claude-code.js', 0o644],
-    ['scripts/sources/openclaw.js', 'scripts/sources/openclaw.js', 0o644],
-    ['scripts/sources/gemini-cli.js', 'scripts/sources/gemini-cli.js', 0o644],
-    ['scripts/sources/antigravity.js', 'scripts/sources/antigravity.js', 0o644],
-    ['scripts/sources/generic-jsonl.js', 'scripts/sources/generic-jsonl.js', 0o644],
+    ...sourceRows,
     ['lib/sensitivity-filter.js', 'lib/sensitivity-filter.js', 0o644],
     // Client-side extraction (2026-07-02) — required by the sweep path since /extract went 410.
     // Missing from this manifest until 2026-07-19: installed sweepers crashed with
     // "Cannot find module './extract-local.js'" while queue files were retained.
     ['scripts/extract-local.js', 'scripts/extract-local.js', 0o644],
   ];
+}
+
+function installSweeper() {
+  const repoRoot = path.resolve(__dirname, '..');
+  const binRoot = path.join(AUXILO_DIR, 'bin');
+
+  // 1. Copy executable surface, preserving relative layout so requires resolve.
+  const filesToCopy = sweeperManifest(repoRoot);
   for (const [src, dest, mode] of filesToCopy) {
     const srcPath = path.join(repoRoot, src);
     const destPath = path.join(binRoot, dest);
@@ -741,7 +843,8 @@ async function main() {
 
     try {
       const result = await postExtract(cleaned, sessionId, sourceType, report);
-      log(`[runner] ✓ published=${result.learnings_published || 0} rejected=${result.learnings_rejected || 0} ${DIGEST_ACCOUNT} (extraction: ${result.extraction_id})`);
+      log(`[runner] ✓ published=${result.learnings_published || 0} held=${result.learnings_held || 0} rejected=${result.learnings_rejected || 0} ${DIGEST_ACCOUNT} (extraction: ${result.extraction_id})`);
+      notifyHeld(result.learnings_held || 0); // LW-18 layer 2: count-only, fail-silent
       // Mark only after a successful upload so a failed POST can be retried.
       const ledger = loadLedger();
       ledgerMark(ledger, sourceType, sessionId, contentSha, sessionRef.mtime);
@@ -758,13 +861,15 @@ async function main() {
     const pending = listPendingFiles();
     log(`[runner] Flushing ${pending.length} pending queue file(s)...`);
     let flushed = 0;
+    let flushHeld = 0;
     for (const qf of pending) {
       try {
         const payload = JSON.parse(fs.readFileSync(qf, 'utf-8'));
         const result = await postExtract(
           payload.transcript, payload.sessionId, payload.source, payload.scrubReport
         );
-        log(`[runner] ✓ Flushed ${path.basename(qf)}: published=${result.learnings_published || 0} rejected=${result.learnings_rejected || 0} ${DIGEST_ACCOUNT}`);
+        log(`[runner] ✓ Flushed ${path.basename(qf)}: published=${result.learnings_published || 0} held=${result.learnings_held || 0} rejected=${result.learnings_rejected || 0} ${DIGEST_ACCOUNT}`);
+        flushHeld += result.learnings_held || 0;
         deleteQueueFile(qf);
         flushed++;
       } catch (err) {
@@ -772,6 +877,7 @@ async function main() {
       }
     }
     log(`[runner] Flush complete: ${flushed}/${pending.length} succeeded`);
+    notifyHeld(flushHeld); // LW-18 layer 2: count-only, fail-silent
     process.exit(0);
   }
 
@@ -787,6 +893,7 @@ async function main() {
   let totalProcessed = 0;
   let totalSkipped = 0;
   let totalFailed = 0;
+  let totalHeld = 0;
 
   for (const source of sources) {
     log(`[runner] Discovering sessions from ${source.label} (${source.type})...`);
@@ -885,7 +992,8 @@ async function main() {
 
       try {
         const result = await postExtract(cleaned, sessionRef.sessionId, source.type, report);
-        log(`[runner]   ✓ published=${result.learnings_published || 0} rejected=${result.learnings_rejected || 0} ${DIGEST_ACCOUNT} (extraction: ${result.extraction_id})`);
+        log(`[runner]   ✓ published=${result.learnings_published || 0} held=${result.learnings_held || 0} rejected=${result.learnings_rejected || 0} ${DIGEST_ACCOUNT} (extraction: ${result.extraction_id})`);
+        totalHeld += result.learnings_held || 0;
         ledgerMark(ledger, source.type, sessionRef.sessionId, sha, sessionRef.mtime);
         deleteQueueFile(queueFile);
         saveLedger(ledger);
@@ -900,6 +1008,7 @@ async function main() {
 
   saveLedger(ledger);
   log(`[runner] Summary: ${totalDiscovered} discovered, ${totalProcessed} processed, ${totalSkipped} skipped, ${totalFailed} failed`);
+  notifyHeld(totalHeld); // LW-18 layer 2: one notification per sweep, count-only
   process.exit(totalFailed > 0 ? 1 : 0);
 }
 
@@ -909,6 +1018,7 @@ module.exports = {
   parseArgs, writeQueueFile, deleteQueueFile, listPendingFiles,
   loadLedger, saveLedger, ledgerHighWater, ledgerHas, ledgerMark,
   installHooks, installSweeper, installDigest, printStatus, scrubAndVerify, enumerateActiveSources,
+  loadSources, SOURCES, sweeperManifest, submitLearnings, notifyHeld,
   KILL_SWITCH_PATH, PENDING_DIR, LEDGER_PATH,
 };
 

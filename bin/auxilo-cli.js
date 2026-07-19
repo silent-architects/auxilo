@@ -106,7 +106,9 @@ const CONSENT_TEXT = `
       for everything) is available in your account settings. You earn 70%
       of sales.
   You can stop any time with \`auxilo disable\` (local kill-switch) and review
-  every run in ~/.auxilo/extract.log. Saying No installs the MCP server only.
+  every run in ~/.auxilo/extract.log. Saying No installs the MCP server only —
+  no session-end capture hook is written into any client config unless you say
+  Yes, and any capture hooks left by an earlier install are removed.
 `;
 
 async function cmdSetup(flags) {
@@ -194,7 +196,11 @@ async function cmdSetup(flags) {
     }
   }
 
-  // 4. Runner install + Claude Code hook --------------------------------------
+  // 4. Runner install + review notice -----------------------------------------
+  // UC-1a (GOV-3): NO capture hook is written into any third-party client
+  // config here — only files under our own ~/.auxilo/bin, plus the
+  // SessionStart review notice (a count-only account-status surface, not a
+  // capture hook). Capture hooks are written ONLY after consent=Yes (step 5).
   console.log('');
   try {
     const { binRoot } = installer.installRunner(HOME);
@@ -206,52 +212,93 @@ async function cmdSetup(flags) {
 
   const claudeCode = chosen.find((c) => c.id === 'claude-code');
   if (claudeCode) {
+    // LW-18: SessionStart held-count notice ("N learnings held for your
+    // review") — fail-silent, ≤1 per 4h, count-only. Installed regardless of
+    // extraction consent: the review queue also holds MCP contributions.
     try {
-      const hook = installer.registerClaudeCodeHook(HOME);
-      if (hook.changed) {
-        console.log(`  ✓ Claude Code SessionEnd hook registered (${hook.hookCmd})`);
-        if (hook.removedLegacy.length > 0) {
-          console.log(`    (replaced legacy hook entr${hook.removedLegacy.length === 1 ? 'y' : 'ies'}: ${hook.removedLegacy.join(', ')})`);
-        }
-      } else {
-        console.log('  ✓ Claude Code SessionEnd hook already registered (no changes)');
-      }
+      const notice = installer.registerClaudeCodeSessionStartNotice(HOME);
+      console.log(notice.changed
+        ? `  ✓ Claude Code SessionStart review notice registered (${notice.hookCmd})`
+        : '  ✓ Claude Code SessionStart review notice already registered (no changes)');
     } catch (err) {
-      console.error(`  ✗ Hook registration SKIPPED — ${err.message}`);
+      console.error(`  ✗ Review notice SKIPPED — ${err.message}`);
     }
   }
 
-  // UC-1: capture hooks for every other chosen client that supports one.
-  try {
-    for (const r of installer.installCaptureHooks(HOME, chosen)) {
-      if (r.error) {
-        console.error(`  ✗ ${r.name}: SKIPPED — ${r.error}`);
-      } else if (r.changed) {
-        console.log(`  ✓ ${r.name}: capture hook registered (${r.event})`);
-        if (r.notes) console.log(`    ${r.notes}`);
-      } else {
-        console.log(`  ✓ ${r.name}: capture hook already registered`);
-        if (r.notes) console.log(`    ${r.notes}`);
-      }
-    }
-  } catch (err) {
-    console.error(`  ✗ Capture hooks SKIPPED — ${err.message}`);
-  }
-
-  // 5. Explicit consent (default No) ------------------------------------------
+  // 5. Explicit consent (default No), THEN capture hooks ----------------------
   console.log(CONSENT_TEXT);
   const consented = await askYesNo('  Enable background extraction?', false);
+  let extractionArmed = false;
   if (consented) {
     try {
       await installer.recordConsent({ action: 'grant', apiKey: creds.api_key, baseUrl });
       installer.enableSentinel(HOME);
+      extractionArmed = true;
       console.log('  ✓ Consent recorded; background extraction ENABLED (~/.auxilo/autonomous-enabled)');
     } catch (err) {
       console.error(`  ✗ Could not record consent on server: ${err.message}`);
-      console.error('    Background extraction NOT enabled (no sentinel created). Re-run `auxilo setup` to retry.');
+      console.error('    Background extraction NOT enabled (no sentinel created, no hooks written). Re-run `auxilo setup` to retry.');
     }
   } else {
     console.log('  ✓ Background extraction left OFF (MCP-only install). Enable later by re-running `auxilo setup`.');
+  }
+
+  if (extractionArmed) {
+    // Consent recorded — NOW write the capture hooks (UC-1a ordering).
+    if (claudeCode) {
+      try {
+        const hook = installer.registerClaudeCodeHook(HOME);
+        if (hook.changed) {
+          console.log(`  ✓ Claude Code SessionEnd hook registered (${hook.hookCmd})`);
+          if (hook.removedLegacy.length > 0) {
+            console.log(`    (replaced legacy hook entr${hook.removedLegacy.length === 1 ? 'y' : 'ies'}: ${hook.removedLegacy.join(', ')})`);
+          }
+        } else {
+          console.log('  ✓ Claude Code SessionEnd hook already registered (no changes)');
+        }
+      } catch (err) {
+        console.error(`  ✗ Hook registration SKIPPED — ${err.message}`);
+      }
+    }
+
+    // UC-1: capture hooks for every other chosen client that supports one.
+    try {
+      for (const r of installer.installCaptureHooks(HOME, chosen)) {
+        if (r.error) {
+          console.error(`  ✗ ${r.name}: SKIPPED — ${r.error}`);
+        } else if (r.changed) {
+          console.log(`  ✓ ${r.name}: capture hook registered (${r.event})`);
+          if (r.notes) console.log(`    ${r.notes}`);
+        } else {
+          console.log(`  ✓ ${r.name}: capture hook already registered`);
+          if (r.notes) console.log(`    ${r.notes}`);
+        }
+      }
+    } catch (err) {
+      console.error(`  ✗ Capture hooks SKIPPED — ${err.message}`);
+    }
+  } else {
+    // UC-1a: consent not granted (No, or consent record failed) — ensure NO
+    // capture-hook artifact remains in any client config, including ones a
+    // pre-UC-1a install wrote before the consent step.
+    try {
+      const removedHook = installer.removeClaudeCodeHook(HOME);
+      if (removedHook.changed) {
+        console.log(`  ✓ Removed pre-existing Claude Code SessionEnd capture hook (${removedHook.removed.join(', ')})`);
+      }
+    } catch (err) {
+      console.error(`  ✗ Claude Code hook cleanup SKIPPED — ${err.message}`);
+    }
+    try {
+      const allClients = installer.detectClients(HOME); // clean beyond the chosen set
+      for (const r of installer.removeCaptureHooks(HOME, allClients)) {
+        if (r.error) console.error(`  ✗ ${r.name}: capture-hook cleanup SKIPPED — ${r.error}`);
+        else if (r.changed) console.log(`  ✓ ${r.name}: removed pre-existing capture hook`);
+      }
+    } catch (err) {
+      console.error(`  ✗ Capture-hook cleanup SKIPPED — ${err.message}`);
+    }
+    console.log('  ✓ No capture hooks are present in any client config.');
   }
 
   // 6. Rules-file snippet (UC-0 agent-prompted contribution; opt-in, default No)

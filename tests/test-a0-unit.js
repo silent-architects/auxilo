@@ -1,4 +1,12 @@
 /**
+ * ╔═══════════════════════════════════════════════════════════════════════╗
+ * ║ RETIRED (LW-10, 2026-07-19) — DO NOT RUN.                             ║
+ * ║ Hangs after T-A0-UNIT-007: a mocked RPC promise never resolves under  ║
+ * ║ the proxyquire viem fake (verified with a 25s watchdog). Kept as a    ║
+ * ║ historical verification record; tx-manager coverage lives in test/.   ║
+ * ║ See tests/README.md.                                                  ║
+ * ╚═══════════════════════════════════════════════════════════════════════╝
+ *
  * tests/test-a0-unit.js
  *
  * SPEC-A0 Transaction Manager Verification

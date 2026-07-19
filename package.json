@@ -17,6 +17,7 @@
     "scripts/runner.js",
     "scripts/capture-core.js",
     "scripts/extract-local.js",
+    "scripts/review-notice.js",
     "scripts/sources/",
     "scripts/hooks/auxilo-extract.sh",
     "README.md",

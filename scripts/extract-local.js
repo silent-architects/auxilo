@@ -19,7 +19,24 @@ const os = require('os');
 
 const CATEGORIES = ['data-processing', 'web-interaction', 'code-execution', 'communication', 'storage-state', 'content-generation', 'payment-financial', 'monitoring'];
 
-const EXTRACTION_PROMPT = `You are extracting reusable OPERATIONAL LEARNINGS from an AI agent's session transcript, to publish to a PUBLIC knowledge marketplace read by other AI agents.
+/**
+ * SPEC3 slice A1 gate — score-at-extraction, BUILT BUT DARK by default.
+ *
+ * ┌─ CRITICAL SEQUENCING CONSTRAINT (SPEC3-BUILDER-REVIEW-LOOP §3.1/§8) ──────┐
+ * │ Under a server WITHOUT the B1 extraction-channel hold, a clean /learn     │
+ * │ submission carrying a floor-passing quality_self_assessment publishes    │
+ * │ IMMEDIATELY (seamlessEligible). Turning this gate on against such a      │
+ * │ server silently flips hook extraction from "everything held" to "clean   │
+ * │ items auto-publish" — an unrecorded consent change (2026-06-10 class).   │
+ * │ Do NOT set AUXILO_SCORE_EXTRACTION=1 until the server holds              │
+ * │ submission_channel:'extraction' items behind standing consent (B1).      │
+ * └───────────────────────────────────────────────────────────────────────────┘
+ */
+function scoreExtractionEnabled(env = process.env) {
+  return env.AUXILO_SCORE_EXTRACTION === '1';
+}
+
+const EXTRACTION_PROMPT_BASE = `You are extracting reusable OPERATIONAL LEARNINGS from an AI agent's session transcript, to publish to a PUBLIC knowledge marketplace read by other AI agents.
 
 Extract 0 to 5 GENUINE learnings: non-obvious solutions, workarounds, API quirks, error root-causes, integration gotchas — the kind of thing that cost real debugging or combined multiple sources. SKIP trivial lookups, well-documented standard approaches, opinions, and conversation.
 
@@ -31,11 +48,35 @@ Output STRICT JSON ONLY — an array (possibly empty []) of objects with these k
   "category": one of ${JSON.stringify(CATEGORIES)}
   "tags": array of lowercase keyword strings
   "task_context": one sentence describing the task
-  "outcome": one of "success","partial","failure","workaround"
+  "outcome": one of "success","partial","failure","workaround"`;
+
+/** A1: rubric addendum — appended ONLY when scoreExtractionEnabled(). */
+const QUALITY_RUBRIC_ADDENDUM = `
+  "quality_self_assessment": an object scoring the learning honestly on four
+  dimensions, each an INTEGER 1-5: "specificity" (precise and detailed, not
+  vague), "actionability" (another agent can directly use it), "novelty"
+  (non-obvious; an LLM would likely get it wrong), "completeness" (context,
+  reproduction steps, caveats), plus "total" (the exact sum of the four).
+  A learning worth publishing scores at least 14/20 with no dimension below 3.
+  If a learning honestly scores below that bar, DROP it from the array rather
+  than inflating the numbers.`;
+
+const PROMPT_SUFFIX = `
 No prose, no explanation, no markdown code fences — just the raw JSON array.
 
 TRANSCRIPT:
 `;
+
+/** Build the extraction prompt for the current (or injected) gate state. */
+function buildExtractionPrompt(opts = {}) {
+  const withScore = opts.scoreExtraction !== undefined
+    ? Boolean(opts.scoreExtraction)
+    : scoreExtractionEnabled();
+  return EXTRACTION_PROMPT_BASE + (withScore ? QUALITY_RUBRIC_ADDENDUM : '') + PROMPT_SUFFIX;
+}
+
+/** Back-compat export: the default (gate-evaluated-at-call) prompt. */
+const EXTRACTION_PROMPT = buildExtractionPrompt({ scoreExtraction: false });
 
 /** Resolve the `claude` binary — hook/launchd env may have a minimal PATH. */
 function resolveClaudeBin() {
@@ -63,7 +104,7 @@ function resolveClaudeBin() {
  */
 function extractWithClaudeCode(transcript) {
   const bin = resolveClaudeBin();
-  const input = EXTRACTION_PROMPT + String(transcript).slice(0, 200000);
+  const input = buildExtractionPrompt() + String(transcript).slice(0, 200000);
   // Do NOT pass ANTHROPIC_API_KEY through — we want the user's logged-in Claude
   // subscription (OAuth), not an API key (which would bill someone). Delete it.
   const childEnv = { ...process.env, AUXILO_EXTRACTING: '1' };
@@ -79,8 +120,41 @@ function extractWithClaudeCode(transcript) {
   return { ok: true, out, reason: null };
 }
 
-/** Defensively parse a JSON array of learnings out of model output. */
-function parseLearnings(raw) {
+/**
+ * A1: validate a model-emitted quality_self_assessment. Returns the normalized
+ * object, or null when malformed/missing — the caller then OMITS the field
+ * entirely (never fabricate; the server's `awaiting_quality` hold is the
+ * correct fallback and is deliberately not a 400 — AUD19-6 quarantines rather
+ * than bounces).
+ */
+const QUALITY_DIMENSIONS = ['specificity', 'actionability', 'novelty', 'completeness'];
+function validateQualityAssessment(qa) {
+  if (!qa || typeof qa !== 'object' || Array.isArray(qa)) return null;
+  const out = {};
+  let sum = 0;
+  for (const dim of QUALITY_DIMENSIONS) {
+    const v = qa[dim];
+    if (!Number.isInteger(v) || v < 1 || v > 5) return null;
+    out[dim] = v;
+    sum += v;
+  }
+  if (!Number.isInteger(qa.total) || qa.total !== sum) return null;
+  out.total = sum;
+  return out;
+}
+
+/**
+ * Defensively parse a JSON array of learnings out of model output.
+ * A1: `quality_self_assessment` is attached ONLY when (a) the score gate is on
+ * (opts.scoreExtraction, default = env AUXILO_SCORE_EXTRACTION) AND (b) the
+ * assessment validates. Gate OFF strips the field even if the model emits one,
+ * so a dark 0.9.3 client can never arm seamless publish (see the sequencing
+ * constraint at scoreExtractionEnabled).
+ */
+function parseLearnings(raw, opts = {}) {
+  const withScore = opts.scoreExtraction !== undefined
+    ? Boolean(opts.scoreExtraction)
+    : scoreExtractionEnabled();
   let s = String(raw || '').trim();
   const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fence) s = fence[1].trim();
@@ -92,14 +166,21 @@ function parseLearnings(raw) {
   if (!Array.isArray(arr)) return [];
   return arr
     .filter(l => l && typeof l.title === 'string' && typeof l.body === 'string' && l.title.length >= 10 && l.body.length >= 50)
-    .map(l => ({
-      title: l.title,
-      body: l.body,
-      category: CATEGORIES.includes(l.category) ? l.category : 'code-execution',
-      tags: Array.isArray(l.tags) ? l.tags.slice(0, 8).map(String) : [],
-      task_context: typeof l.task_context === 'string' ? l.task_context : '',
-      outcome: ['success', 'partial', 'failure', 'workaround'].includes(l.outcome) ? l.outcome : 'success',
-    }));
+    .map(l => {
+      const out = {
+        title: l.title,
+        body: l.body,
+        category: CATEGORIES.includes(l.category) ? l.category : 'code-execution',
+        tags: Array.isArray(l.tags) ? l.tags.slice(0, 8).map(String) : [],
+        task_context: typeof l.task_context === 'string' ? l.task_context : '',
+        outcome: ['success', 'partial', 'failure', 'workaround'].includes(l.outcome) ? l.outcome : 'success',
+      };
+      if (withScore) {
+        const qa = validateQualityAssessment(l.quality_self_assessment);
+        if (qa) out.quality_self_assessment = qa;
+      }
+      return out;
+    });
 }
 
 /**
@@ -116,4 +197,8 @@ async function extractLocally(transcript, sourceType) {
   return { learnings: parseLearnings(out) };
 }
 
-module.exports = { extractLocally, parseLearnings, resolveClaudeBin, EXTRACTION_PROMPT, CATEGORIES };
+module.exports = {
+  extractLocally, parseLearnings, resolveClaudeBin, CATEGORIES,
+  EXTRACTION_PROMPT, buildExtractionPrompt, scoreExtractionEnabled,
+  validateQualityAssessment, QUALITY_DIMENSIONS,
+};

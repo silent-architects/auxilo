@@ -84,6 +84,27 @@ function computeClosure() {
       }
     }
   }
+  // UC-3: runner.js loadSources() requires every scripts/sources/*.js
+  // DYNAMICALLY (template-literal require the static walker cannot see).
+  // Those files are part of the real runtime require set, so fold the whole
+  // dir in — and walk each adapter's own static requires too.
+  const sourcesDir = path.join(REPO_ROOT, 'scripts', 'sources');
+  for (const f of fs.readdirSync(sourcesDir).filter((f) => f.endsWith('.js'))) {
+    const rel = `scripts/sources/${f}`;
+    if (closure.has(rel)) continue;
+    closure.add(rel);
+    queue.push(rel);
+  }
+  while (queue.length > 0) {
+    const fileRel = queue.shift();
+    for (const [spec, resolved] of relativeRequiresOf(fileRel)) {
+      assert.ok(resolved, `unresolvable relative require ${spec} in ${fileRel}`);
+      if (!closure.has(resolved)) {
+        closure.add(resolved);
+        queue.push(resolved);
+      }
+    }
+  }
   return closure;
 }
 
@@ -107,6 +128,10 @@ describe('Runner packaging closure', () => {
       'scripts/extract-local.js',
       'lib/sensitivity-filter.js',
       'scripts/sources/generic-jsonl.js',
+      // Dynamically-registered adapters (UC-3 loadSources) — folded in by the
+      // sources-dir enumeration in computeClosure.
+      'scripts/sources/claude-code.js',
+      'scripts/sources/cline.js',
     ]) {
       assert.ok(closure.has(known), `closure must include ${known}`);
     }
