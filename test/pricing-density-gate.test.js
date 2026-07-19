@@ -444,3 +444,93 @@ test('structural: submission path prices through calculateLearningPrice (gate ac
   assert.ok(src.includes('pricingEngine.calculateLearningPrice(syntheticForPricing, learnings)'),
     'new submissions must flow through the density-gated formula');
 });
+
+// ─── F1 (Gate-A): loud request-path pins ─────────────────────────────────────
+// The zero-server.js rollout (spec §2.3) RELIES on every request-path caller
+// short-circuiting on stored pricing.current_price BEFORE any engine call —
+// otherwise the base refresh would fire on hot paths with no 15%/day damping.
+// These are loud test()-level pins (describe-body asserts can print ✖ yet
+// exit 0 under the npm test flags — see the r01-launch-blockers reviewer note).
+// Whitespace-normalized exact-chain matching: a reorder mutation (engine
+// first) changes the string and fails the pin.
+
+function normalizedServerSource() {
+  return fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8').replace(/\s+/g, ' ');
+}
+
+test('request-path pin: SEARCH resolves stored current_price BEFORE the engine (no engine-first reorder)', () => {
+  const src = normalizedServerSource();
+  assert.ok(src.includes(
+    'const resolvedPrice = r.pricing?.current_price || pricingEngine.getCurrentPrice?.(r, learnings) || r.unlock_price || DEFAULT_UNLOCK_PRICE;'),
+    'search result chain must be pricing?.current_price -> engine -> unlock_price -> default, in that order');
+});
+
+test('request-path pin: UNLOCK resolves stored current_price BEFORE the engine (no engine-first reorder)', () => {
+  const src = normalizedServerSource();
+  assert.ok(src.includes(
+    'UNLOCK_PRICE = learning.pricing?.current_price || pricingEngine.getCurrentPrice?.(learning, learnings) || learning.unlock_price || DEFAULT_UNLOCK_PRICE;'),
+    'unlock charge chain must be pricing?.current_price -> engine -> unlock_price -> default, in that order');
+});
+
+test('request-path pin: HOMEPAGE displayPrice resolves stored current_price BEFORE the engine (no engine-first reorder)', () => {
+  const src = normalizedServerSource();
+  assert.ok(src.includes('function displayPrice(l)'), 'displayPrice helper must exist');
+  assert.ok(src.includes(
+    'p = l.pricing?.current_price || pricingEngine.getCurrentPrice?.(l, learnings) || l.unlock_price || DEFAULT_UNLOCK_PRICE;'),
+    'homepage display chain must be pricing?.current_price -> engine -> unlock_price -> default, in that order');
+});
+
+// ─── F2 (Gate-A): same-contributor items can never open the gate ─────────────
+
+test('F2: a contributor cannot farm their own tag-neighbors to open the gate (account id)', () => {
+  // Post-200 attack: 3 self-approved one-shared-tag fillers (Jaccard ~0.14,
+  // under the 0.4 similar threshold) from the SAME account as the candidate.
+  const me = candidate({ contributor_account_id: 'acc_attacker', contributor_wallet: '0xaaa' });
+  const ownFillers = [1, 2, 3].map(i => ({
+    ...neighborOf(i), contributor_account_id: 'acc_attacker', contributor_wallet: '0xaaa',
+  }));
+  const price = calculateLearningPrice(me, [...fillerCatalog(207), ...ownFillers]);
+  assert.ok(Math.abs(price - CODE_COST * 1.5 * NOQA_Q) < EPS,
+    `own-account farm must stay capped at 1.5x, got ${price}`);
+});
+
+test('F2: wallet-only match is also excluded (either identity axis blocks the farm)', () => {
+  const me = candidate({ contributor_wallet: '0xfarmwallet' });
+  const ownFillers = [1, 2, 3].map(i => ({ ...neighborOf(i), contributor_wallet: '0xfarmwallet' }));
+  const price = calculateLearningPrice(me, [...fillerCatalog(207), ...ownFillers]);
+  assert.ok(Math.abs(price - CODE_COST * 1.5 * NOQA_Q) < EPS,
+    `own-wallet farm must stay capped at 1.5x, got ${price}`);
+});
+
+test('F2: genuine third-party neighbors still open the gate; own fillers neither help nor block', () => {
+  const me = candidate({ contributor_account_id: 'acc_attacker' });
+  const genuine = [1, 2, 3].map(i => ({ ...neighborOf(i), contributor_account_id: `acc_other_${i}` }));
+  const own = [4, 5, 6].map(i => ({ ...neighborOf(i), contributor_account_id: 'acc_attacker' }));
+  const price = calculateLearningPrice(me, [...fillerCatalog(204), ...genuine, ...own]);
+  assert.ok(Math.abs(price - CODE_COST * 3.0 * NOQA_Q) < EPS,
+    `3 genuine neighbors must still open the gate, got ${price}`);
+});
+
+test('F2 is one-directional: own near-duplicates still count as SIMILAR and lower the premium', () => {
+  // 4 same-contributor identical-tag items → similarCount 4 → raw 1.0 tier.
+  // Self-duplicates keep LOWERING premiums; they only stop RAISING them.
+  const me = candidate({ contributor_account_id: 'acc_attacker' });
+  const ownDups = [1, 2, 3, 4].map(i => ({ ...similarOf(i), contributor_account_id: 'acc_attacker' }));
+  const price = calculateLearningPrice(me, [...fillerCatalog(206), ...ownDups]);
+  assert.ok(Math.abs(price - CODE_COST * 1.0 * NOQA_Q) < EPS,
+    `own duplicates must still drop the tier to 1.0x, got ${price}`);
+});
+
+test('F2 null-safety: anonymous items (no account, no wallet) never match each other', () => {
+  // Candidate with no contributor identity + identity-less neighbors: the
+  // exclusion must not fire on null===null, so genuine anonymous neighbors
+  // still open the gate. (Also pins the submission-time semantics: the
+  // submission synthetic carries no contributor fields — flagged for the
+  // server.js wave to add them so the farm is blocked at submission too,
+  // not just from the first cron refresh.)
+  const me = candidate(); // no contributor fields
+  const anonNeighbors = [1, 2, 3].map(i => neighborOf(i)); // no contributor fields
+  const price = calculateLearningPrice(me, [...fillerCatalog(207), ...anonNeighbors]);
+  assert.ok(Math.abs(price - CODE_COST * 3.0 * NOQA_Q) < EPS,
+    `anonymous neighbors must still count (no null identity matching), got ${price}`);
+});
