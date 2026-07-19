@@ -8224,9 +8224,9 @@ function renderLiveCatalogStats(html) {
       range = `$${Math.min(...prices).toFixed(2)} to $${Math.max(...prices).toFixed(2)}`;
     }
     return html
-      .replace(/(id="lc-learnings"[^>]*>)[^<]*</g, `$1${count}<`)
-      .replace(/(id="lc-categories"[^>]*>)[^<]*</g, `$1${cats}<`)
-      .replace(/(id="lc-price-range"[^>]*>)[^<]*</g, `$1${range}<`);
+      .replace(/(id="lc-learnings"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${count}<`)
+      .replace(/(id="lc-categories"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${cats}<`)
+      .replace(/(id="lc-price-range"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${range}<`);
   } catch (e) {
     console.error('[live-stats] render failed, serving static values:', e.message);
     return html;
@@ -8264,7 +8264,7 @@ app.get('/earnings', (c) => {
         ? learnings.filter(l => !l.status || l.status === 'approved')
         : learnings;
       const llLearnings  = visibleLearnings.length.toLocaleString('en-US');
-      const llUnlocks    = visibleLearnings.reduce((s, l) => s + (l.quality.unlocks || 0), 0).toLocaleString('en-US');
+      const llUnlocks    = visibleLearnings.reduce((s, l) => s + (l.quality?.unlocks || 0), 0).toLocaleString('en-US');
       const llCategories = new Set(visibleLearnings.map(l => l.category)).size.toLocaleString('en-US');
       html = html
         .replace(/(id="ll-learnings"[^>]*>)[^<]*</,  `$1${llLearnings}<`)
