@@ -3340,7 +3340,7 @@
         "/account/api-keys": {
             "post": {
                 "summary": "Generate API key",
-                "description": "Creates a new `axl_` prefixed API key for the authenticated account. The raw key is returned **exactly once** — store it securely. Only the SHA-256 hash is persisted. Keys can be used in the `X-API-Key` header as an alternative to per-request x402 payments.",
+                "description": "Creates a new `axl_` prefixed API key for the authenticated account (browser session only — keys cannot mint keys; scoped minting without a session goes through the device flow). The raw key is returned **exactly once** — store it securely. Only the SHA-256 hash is persisted. Keys can be used in the `X-API-Key` header as an alternative to per-request x402 payments. Scopes (Wave 3.4 D2, ranked): `read` < `earnings-read` < `contribute` (default) < `admin`. `admin` is NEVER issuable via the API (403 ADMIN_SCOPE_NOT_ISSUABLE); pre-existing admin keys are grandfathered.",
                 "operationId": "createApiKey",
                 "tags": [
                     "Account"
@@ -3360,6 +3360,21 @@
                                         "type": "string",
                                         "description": "Human-readable label for this key",
                                         "example": "prod-agent-1"
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "description": "Label for this key (labeled path; max 50 chars, unique among active keys)",
+                                        "example": "ci-runner-1"
+                                    },
+                                    "scope": {
+                                        "type": "string",
+                                        "enum": [
+                                            "read",
+                                            "earnings-read",
+                                            "contribute"
+                                        ],
+                                        "default": "contribute",
+                                        "description": "Key scope. read = catalog + unlock + rate; earnings-read = + GET /account/earnings; contribute = + learn/extract/retract/review/consent/link-wallet. admin is not issuable."
                                     }
                                 }
                             }
@@ -3404,6 +3419,109 @@
                     },
                     "404": {
                         "description": "Account not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "admin scope requested (ADMIN_SCOPE_NOT_ISSUABLE)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/account/api-keys/rotate": {
+            "post": {
+                "summary": "Rotate an API key",
+                "description": "Rotates a key: mints a replacement with the SAME label and the target's effective scope (capability-preserving, never escalating; grandfathered legacy read keys rotate into explicit v2 earnings-read), stamps scope_version 2, and deactivates the old key immediately. Raw key returned exactly once. Auth: a browser session may rotate any of the account's keys by `label`; an API key may rotate ONLY ITSELF (no label needed; naming another key returns 403 KEY_SELF_ROTATE_ONLY).",
+                "operationId": "rotateApiKey",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    },
+                    {
+                        "apiKeyAuth": []
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "label": {
+                                        "type": "string",
+                                        "description": "Required for session callers: the label of the key to rotate. Optional for key callers (must match the presented key if given)."
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Key rotated — new raw key shown once",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "api_key": {
+                                            "type": "string"
+                                        },
+                                        "label": {
+                                            "type": "string"
+                                        },
+                                        "scope": {
+                                            "type": "string"
+                                        },
+                                        "rotated_from": {
+                                            "type": "string",
+                                            "nullable": true
+                                        },
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "label missing (session caller)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "KEY_SELF_ROTATE_ONLY — a key may only rotate itself",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Key not found",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -3659,7 +3777,7 @@
         "/auth/device": {
             "post": {
                 "summary": "Start device-code login (used by `npx auxilo setup`)",
-                "description": "Begins the device-authorization flow: returns a short human-readable user_code, a high-entropy device_code (the polling secret — required to retrieve the minted API key; the user_code alone can never harvest it), and a verification_url the human opens in a browser. The client then polls GET /auth/device/status with the device_code. Codes expire after expires_in seconds (600).",
+                "description": "Begins the device-authorization flow: returns a short human-readable user_code, a high-entropy device_code (the polling secret — required to retrieve the minted API key; the user_code alone can never harvest it), and a verification_url the human opens in a browser. The client then polls GET /auth/device/status with the device_code. Codes expire after expires_in seconds (600). Wave 3.4 (D2/NF-3): an optional JSON body {scope, label} requests the scope of the key that will be minted at authorization (read | earnings-read | contribute; default contribute; admin refused with 400 ADMIN_SCOPE_NOT_ISSUABLE) and its label (default 'Device Login Key'; auto-suffixed on active-label collision). The authorized /auth/device/status payload echoes the minted scope and label.",
                 "operationId": "startDeviceAuth",
                 "tags": [
                     "Auth"
@@ -3694,6 +3812,31 @@
                                             "example": 5,
                                             "description": "Minimum seconds between status polls (enforced with 429 slow_down)."
                                         }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "scope": {
+                                        "type": "string",
+                                        "enum": [
+                                            "read",
+                                            "earnings-read",
+                                            "contribute"
+                                        ],
+                                        "default": "contribute"
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "maxLength": 50
                                     }
                                 }
                             }
@@ -3748,6 +3891,19 @@
                                         "email": {
                                             "type": "string",
                                             "description": "Present only on the authorized response."
+                                        },
+                                        "scope": {
+                                            "type": "string",
+                                            "enum": [
+                                                "read",
+                                                "earnings-read",
+                                                "contribute"
+                                            ],
+                                            "description": "Wave 3.4: scope of the minted key (echo of the POST /auth/device request; absent on pre-3.4 servers). Present only when status=authorized."
+                                        },
+                                        "label": {
+                                            "type": "string",
+                                            "description": "Wave 3.4: label of the minted key (auto-suffixed on collision). Present only when status=authorized."
                                         }
                                     }
                                 }

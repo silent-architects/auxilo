@@ -22,6 +22,20 @@ const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+
+// Wave 3.4 test-stability (pre-existing race, surfaced at the Wave 3.4 gate):
+// this suite fixtures the accounts store, and so does
+// test/api-key-validation.test.js — node --test runs files as CONCURRENT
+// processes, so two backup/restore cycles on the shared data/accounts.json
+// clobbered each other (intermittent 4-test failures in the recordTosAcceptance
+// block). Isolate this suite onto its own tmp store via AUXILO_ACCOUNTS_FILE
+// (same idiom as AUXILO_IDENTITY_FILE). MUST precede the lib/accounts.js
+// require — the module reads the env var at load time.
+process.env.AUXILO_ACCOUNTS_FILE = path.join(
+  fs.mkdtempSync(path.join(os.tmpdir(), 'auxilo-tos-accounts-')),
+  'accounts.json'
+);
 
 const {
   CURRENT_TOS_VERSION,
@@ -89,7 +103,9 @@ describe('getTosStatus', () => {
 
 // ─── 4. recordTosAcceptance — the capture (version-gated, server-stamped) ────────
 
-const ACCOUNTS_FILE = path.join(__dirname, '..', 'data', 'accounts.json');
+// Wave 3.4: points at the isolated AUXILO_ACCOUNTS_FILE tmp store set above —
+// NOT the live data/accounts.json (see the race note at the top of the file).
+const ACCOUNTS_FILE = process.env.AUXILO_ACCOUNTS_FILE;
 const BACKUP_FILE = ACCOUNTS_FILE + '.tos-test-backup';
 
 describe('recordTosAcceptance', () => {

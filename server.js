@@ -1008,7 +1008,14 @@ const {
   requireAuth,
   requireSessionOrApiKey,
   resolveAccountFromRequest,
+  resolveAccountAndKeyFromRequest,
   validateApiKey,
+  // D2 (Wave 3.4): scope model is single-sourced in lib/accounts.js — the
+  // inline validators below (extract, retract, /learn, dualAuthDynamic) and
+  // the key-management routes use these instead of a local re-declaration.
+  hasMinScope,
+  rotateKeyEntry,
+  removeFromKeyIndex,
   linkWallet,
   getClientIp,
   setStripeConnectId,
@@ -1031,12 +1038,12 @@ const {
 const requireSession = requireAuth; // alias used by /pipeline/* and /referral/* routes
 
 // GOV-3: scope ranking for the routes that validate API keys inline (no
-// middleware). Mirrors SCOPE_RANK in lib/accounts.js. A read-scoped key must
-// not be able to trigger contributor actions (extract, retract, self-review).
-const SCOPE_RANK = { read: 1, contribute: 2, admin: 3 };
-function hasMinScope(scope, minScope) {
-  return (SCOPE_RANK[scope] || 0) >= (SCOPE_RANK[minScope] || 0);
-}
+// middleware) lives in lib/accounts.js (SCOPE_RANK / hasMinScope, imported
+// above) — D2 (Wave 3.4) removed the duplicate declaration here so the
+// taxonomy (read < earnings-read < contribute < admin) has ONE source. A
+// read-scoped key must not trigger contributor actions (extract, retract,
+// self-review); enforcement passes keyResult.effective_scope (grandfather-
+// aware) to hasMinScope.
 
 // ─── Write-Ahead Log (SPEC-A2 / C3) ────────────────────────────────────────
 const { createWalEntry, markStepComplete, commitWal, abortWal, getPendingWalEntries } = require('./lib/wal.js');
@@ -2648,8 +2655,13 @@ async function dualAuthDynamic(c, price_usd, description, creditType, requiredSc
             return c.json({ error: 'Invalid API key' }, 401);
         }
 
-        // Scope enforcement: admin supersedes all scopes
-        if (requiredScope && result.scope !== 'admin' && result.scope !== requiredScope) {
+        // Scope enforcement — D2 (Wave 3.4): RANK check, not exact match. The
+        // old exact-match (`scope !== 'admin' && scope !== requiredScope`)
+        // treated HIGHER privilege as insufficient: with requiredScope 'read',
+        // the default installer key (device-login, scope 'contribute') was
+        // 403'd on the API-key/credit unlock path. effective_scope carries the
+        // grandfather mapping for pre-D2 keys.
+        if (requiredScope && !hasMinScope(result.effective_scope || result.scope, requiredScope)) {
             return c.json({ error: 'API key scope insufficient', required: requiredScope, actual: result.scope }, 403);
         }
 
@@ -3179,27 +3191,40 @@ rateLimiterCleanupInterval.unref();
 setupAccountRoutes(app);
 
 // ── GET /account/api-keys — list key metadata (D2: scoped keys) ──────────────
-app.get('/account/api-keys', requireAuth, (c) => {
+// D2 (Wave 3.4): session-or-key at 'read' — metadata only (labels, scopes,
+// timestamps, hash prefix; never the raw key or full hash), so a CI machine can
+// verify its own key's scope without a browser session.
+app.get('/account/api-keys', requireSessionOrApiKey('read'), (c) => {
   const account = loadAccounts()[c.get('accountId')];
   if (!account) return c.json({ error: 'Account not found' }, 404);
   migrateToApiKeysArray(account);
 
   return c.json({
     keys: (account.api_keys || []).map(k => ({
+      id:           k.id || null,
       label:        k.label || k.name || 'default',
       created_at:   k.created_at,
       last_used_at: k.last_used_at || null,
       active:       k.active !== false,
-      scope:        k.scope || 'admin',
+      // D2: display matches enforcement — unscoped legacy keys index fail-closed
+      // as 'read' (the old `|| 'admin'` fallback here contradicted that).
+      scope:        k.scope || 'read',
+      grandfathered: !(k.scope_version >= 2),
       hash_prefix:  k.hash ? k.hash.slice(0, 8) + '...' : null,
     })),
   });
 });
 
 // ── DELETE /account/api-keys/:label — revoke a key by label (D2) ─────────────
-app.delete('/account/api-keys/:label', requireAuth, async (c) => {
+// Wave 3.4: session callers may revoke ANY of the account's keys; a KEY caller
+// may revoke ONLY the key it presented (self-revoke / logout) — otherwise one
+// leaked key could disable every other key on the account (DoS + lateral
+// movement). Self-identification is by hash of the presented raw key.
+app.delete('/account/api-keys/:label', async (c) => {
+  const auth = await resolveAccountAndKeyFromRequest(c, 'read');
+  if (auth.error) return c.json({ error: auth.error }, auth.status);
   const label    = c.req.param('label');
-  const accountId = c.get('accountId');
+  const accountId = auth.accountId;
 
   // Serialize read-modify-write so a concurrent key creation / settings mutation
   // on the same account cannot lost-update the api_keys array.
@@ -3213,6 +3238,14 @@ app.delete('/account/api-keys/:label', requireAuth, async (c) => {
     const key = account.api_keys.find(k => (k.label || k.name) === label && k.active !== false);
     if (!key) return c.json({ error: 'Key not found' }, 404);
 
+    // D2: key callers are limited to self-revoke.
+    if (!auth.viaSession && key.hash !== auth.keyHash) {
+      return c.json({
+        error: 'An API key may only revoke itself. Use a logged-in session to revoke other keys.',
+        code: 'KEY_SELF_REVOKE_ONLY',
+      }, 403);
+    }
+
     // Cannot delete last active key
     const activeCount = account.api_keys.filter(k => k.active !== false).length;
     if (activeCount <= 1) {
@@ -3220,7 +3253,6 @@ app.delete('/account/api-keys/:label', requireAuth, async (c) => {
     }
 
     key.active = false;
-    const { removeFromKeyIndex } = require('./lib/accounts.js');
     removeFromKeyIndex(key.hash);
     saveAccounts(accts);
 
@@ -3230,8 +3262,92 @@ app.delete('/account/api-keys/:label', requireAuth, async (c) => {
   }
 });
 
-// ─── Device Code Login Flow (Change 3) ───────────────────────────────────────────
+// ── POST /account/api-keys/rotate — rotate a key (D2, Wave 3.4) ──────────────
+// Session callers rotate any key by body {label}; a KEY caller rotates ONLY
+// itself (no label needed; a label naming another key is refused). The
+// replacement preserves the target's EFFECTIVE scope (never escalates — a
+// grandfathered legacy 'read' key rotates into an explicit v2 'earnings-read'
+// key with identical powers), keeps the label, and is stamped scope_version 2.
+// The old key stops validating immediately. Raw key is returned exactly once.
+// Lock order: account lock only (no earnings/learnings locks — RUNBOOK §9).
+app.post('/account/api-keys/rotate', async (c) => {
+  const auth = await resolveAccountAndKeyFromRequest(c, 'read');
+  if (auth.error) return c.json({ error: auth.error }, auth.status);
+  const accountId = auth.accountId;
+
+  let body;
+  try { body = await c.req.json(); } catch { body = {}; }
+  const label = body && typeof body.label === 'string' ? body.label : null;
+
+  const releaseAccountLock = await acquireAccountLock(accountId);
+  try {
+    const accts   = loadAccounts();
+    const account = accts[accountId];
+    if (!account) return c.json({ error: 'Account not found' }, 404);
+    migrateToApiKeysArray(account);
+
+    let target;
+    if (auth.viaSession) {
+      if (!label) return c.json({ error: 'label is required (session callers name the key to rotate)' }, 400);
+      target = account.api_keys.find(k => (k.label || k.name) === label && k.active !== false);
+    } else {
+      target = account.api_keys.find(k => k.hash === auth.keyHash && k.active !== false);
+      if (target && label && (target.label || target.name) !== label) {
+        return c.json({
+          error: 'An API key may only rotate itself. Use a logged-in session to rotate other keys.',
+          code: 'KEY_SELF_ROTATE_ONLY',
+        }, 403);
+      }
+    }
+    if (!target) return c.json({ error: 'Key not found' }, 404);
+
+    const { rawKey, entry, oldHash } = rotateKeyEntry(account, target);
+    saveAccounts(accts);
+    removeFromKeyIndex(oldHash);
+    addToKeyIndex(entry.hash, accountId, entry.scope, entry.id, account.api_keys.length - 1, entry.label);
+    console.log(`[accounts] Rotated API key for account ${accountId}: ${entry.label} (${target.id || 'legacy'} -> ${entry.id}, scope: ${entry.scope})`);
+
+    return c.json({
+      api_key: rawKey,
+      label:   entry.label,
+      scope:   entry.scope,
+      rotated_from: target.id || null,
+      message: 'Store this key — it will not be shown again. The previous key no longer works.',
+    }, 201);
+  } finally {
+    releaseAccountLock();
+  }
+});
+
+// ─── Device Code Login Flow (Change 3; D2/NF-3 Wave 3.4 scope selection) ─────────
 app.post('/auth/device', async (c) => {
+  // D2/NF-3 (Wave 3.4): optional JSON body { scope, label } lets `auxilo init`
+  // mint a purpose-scoped key for CI / a second machine. Backward compatible:
+  // no body (all pre-0.9.4 clients) keeps today's exact behavior — a
+  // 'contribute' "Device Login Key". 'admin' is NEVER issuable here (400).
+  // The scope is validated NOW (fail fast, before the human authorizes).
+  let body = {};
+  try { body = await c.req.json(); } catch { body = {}; }
+  const DEVICE_SCOPES = ['read', 'earnings-read', 'contribute'];
+  let requestedScope = 'contribute';
+  if (body && body.scope !== undefined) {
+    if (body.scope === 'admin') {
+      return c.json({ error: 'admin scope cannot be issued via the device flow', code: 'ADMIN_SCOPE_NOT_ISSUABLE' }, 400);
+    }
+    if (!DEVICE_SCOPES.includes(body.scope)) {
+      return c.json({ error: `scope must be one of: ${DEVICE_SCOPES.join(', ')}` }, 400);
+    }
+    requestedScope = body.scope;
+  }
+  let requestedLabel = null;
+  if (body && body.label !== undefined) {
+    if (typeof body.label !== 'string' || body.label.trim() === '') {
+      return c.json({ error: 'label must be a non-empty string' }, 400);
+    }
+    // eslint-disable-next-line no-control-regex
+    requestedLabel = body.label.replace(/[\x00-\x1f\x7f]/g, '').trim().slice(0, 50);
+  }
+
   // user_code: short, human-readable, shown on the verification page. NOT a secret.
   const userCode = crypto.randomBytes(4).toString('hex').toUpperCase().slice(0, 8);
   // A-1: device_code is the polling secret — high-entropy (32 bytes), returned
@@ -3243,6 +3359,8 @@ app.post('/auth/device', async (c) => {
     status: 'pending',
     created_at: Date.now(),
     device_code: deviceCode,
+    requested_scope: requestedScope,
+    requested_label: requestedLabel,
   });
   deviceSecretIndex.set(deviceCode, userCode);
   return c.json({
@@ -3251,6 +3369,7 @@ app.post('/auth/device', async (c) => {
     verification_url: `${baseUrl}/auth/device/verify?code=${userCode}`,
     expires_in: 600,
     interval: 5,
+    scope: requestedScope,
   });
 });
 
@@ -3296,6 +3415,8 @@ app.get('/auth/device/status', (c) => {
     const apiKey = entry.api_key;
     const accountId = entry.account_id;
     const email = entry.email;
+    const grantedScope = entry.scope;
+    const grantedLabel = entry.label;
     deviceSecretIndex.delete(deviceCode);
     deviceCodeStore.delete(userCode);
     return c.json({
@@ -3303,6 +3424,11 @@ app.get('/auth/device/status', (c) => {
       api_key: apiKey,
       account_id: accountId,
       email,
+      // D2/NF-3 (Wave 3.4): echo what was actually minted so `auxilo init`
+      // can detect a scope downgrade (e.g. pre-Wave-3.4 server ignoring the
+      // requested scope) and WARN instead of silently mislabeling the key.
+      scope: grantedScope,
+      label: grantedLabel,
     });
   }
   return c.json({ status: 'pending' });
@@ -3436,29 +3562,51 @@ app.post('/auth/device/authorize', async (c) => {
     const account = deviceAccounts[payload.accountId];
     if (!account) return c.json({ error: 'Account not found' }, 404);
     migrateToApiKeysArray(account); // ensures account.api_keys is an array
-    // Create contribute-scoped key
-    const rawKey = 'axl_c_' + crypto.randomBytes(24).toString('base64url');
+
+    // D2 (Wave 3.4): the 10-key cap the labeled creation path enforces now
+    // applies here too (this path was uncapped — repeated setups could grow
+    // keys without bound). Counted on ACTIVE keys, same as label uniqueness.
+    const activeKeys = account.api_keys.filter(k => k.active !== false);
+    if (activeKeys.length >= 10) {
+      return c.json({ error: 'Maximum 10 API keys per account — revoke one (auxilo dashboard or DELETE /account/api-keys/:label) and retry' }, 400);
+    }
+
+    // D2/NF-3 (Wave 3.4): mint the scope requested at POST /auth/device
+    // (validated there; never 'admin'). Default preserves today's behavior.
+    const keyScope = entry.requested_scope || 'contribute';
+    // Label: requested (auxilo init) or the historical default. Auto-suffix on
+    // an ACTIVE-label collision so revoke/rotate-by-label stays unambiguous.
+    const baseLabel = entry.requested_label || 'Device Login Key';
+    let keyLabel = baseLabel;
+    for (let n = 2; activeKeys.some(k => (k.label || k.name) === keyLabel); n++) {
+      keyLabel = `${baseLabel}-${n}`.slice(0, 56);
+    }
+
+    const SCOPE_KEY_PREFIXES = { read: 'axl_r_', 'earnings-read': 'axl_e_', contribute: 'axl_c_' };
+    const rawKey = (SCOPE_KEY_PREFIXES[keyScope] || 'axl_c_') + crypto.randomBytes(24).toString('base64url');
     const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
     const keyId = 'key_' + crypto.randomBytes(4).toString('hex');
-    const keyLabel = 'Device Login Key';
     account.api_keys.push({
       id: keyId,
       hash: keyHash,
       label: keyLabel,
       name: keyLabel,
-      scope: 'contribute',
+      scope: keyScope,
+      scope_version: 2, // D2: strict (non-grandfathered) scope semantics
       active: true,
       created_at: Date.now(),
     });
     const keyIndex = account.api_keys.length - 1;
     saveAccounts(deviceAccounts);
     // A-2: register in the O(1) in-memory index so validateApiKey() finds it now.
-    addToKeyIndex(keyHash, payload.accountId, 'contribute', keyId, keyIndex, keyLabel);
-    // Update device code store
+    addToKeyIndex(keyHash, payload.accountId, keyScope, keyId, keyIndex, keyLabel);
+    // Update device code store (scope/label echoed to the poller by /status).
     entry.status = 'authorized';
     entry.api_key = rawKey;
     entry.account_id = payload.accountId;
     entry.email = payload.email || account.email;
+    entry.scope = keyScope;
+    entry.label = keyLabel;
     return c.json({ status: 'authorized' });
   } finally {
     releaseAccountLock();
@@ -4324,7 +4472,12 @@ app.post('/account/link-wallet', requireSessionOrApiKey(), async (c) => {
 });
 
 // GET /account/earnings — view earnings for the authenticated account
-app.get('/account/earnings', requireSessionOrApiKey('read'), async (c) => {
+// D2 (Wave 3.4): earnings is the account's FINANCIAL surface (wallet, balances,
+// per-learning earnings) — gated at 'earnings-read', no longer reachable by the
+// lowest-privilege 'read' scope. Pre-D2 read keys are grandfathered (their
+// effective scope is 'earnings-read' — see effectiveScopeForKeyEntry); the
+// default setup key (contribute) ranks above and keeps working.
+app.get('/account/earnings', requireSessionOrApiKey('earnings-read'), async (c) => {
   const accountId = c.get('accountId');
 
   // AU-7: Check account cache before hitting disk
@@ -4975,9 +5128,11 @@ app.post('/learn', async (c) => {
       }, 429);
     }
 
-    // Scope enforcement: only contribute and admin keys can POST /learn
+    // Scope enforcement: only contribute-or-higher keys can POST /learn.
+    // D2 (Wave 3.4): normalized from the exact admin/contribute pair to the
+    // rank check (same admitted set; 'read' and 'earnings-read' refused).
     const keyResult = validateApiKey(learnApiKey);
-    if (keyResult.valid && keyResult.scope !== 'admin' && keyResult.scope !== 'contribute') {
+    if (keyResult.valid && !hasMinScope(keyResult.effective_scope || keyResult.scope, 'contribute')) {
       return c.json({ error: 'API key scope insufficient', required: 'contribute', actual: keyResult.scope }, 403);
     }
     if (keyResult.valid) apiKeyAccountId = keyResult.accountId;
@@ -5767,7 +5922,7 @@ app.post('/extract', async (c) => {
   }
 
   // GOV-3: extraction is a contributor action: read-scoped keys cannot trigger it.
-  if (!hasMinScope(keyResult.scope, 'contribute')) {
+  if (!hasMinScope(keyResult.effective_scope || keyResult.scope, 'contribute')) {
     return c.json({ error: `API key scope '${keyResult.scope}' is insufficient (requires contribute)` }, 403);
   }
 
@@ -6265,7 +6420,7 @@ app.delete('/learn/:id', async (c) => {
   if (!keyResult.valid) return c.json({ error: 'Invalid API key' }, 401);
 
   // GOV-3: retraction is a contributor action: read-scoped keys cannot retract.
-  if (!hasMinScope(keyResult.scope, 'contribute')) {
+  if (!hasMinScope(keyResult.effective_scope || keyResult.scope, 'contribute')) {
     return c.json({ error: `API key scope '${keyResult.scope}' is insufficient (requires contribute)` }, 403);
   }
 
