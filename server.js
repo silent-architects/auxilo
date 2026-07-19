@@ -2709,18 +2709,6 @@ const DEFAULT_UNLOCK_PRICE = 0.08; // moderate complexity, moderate quality base
 const CONTRIBUTOR_SHARE_STANDARD = 0.7;
 const CONTRIBUTOR_SHARE_DISCOVERY = 0.6;
 
-// ─── getCatalogStats (Change 7) ─────────────────────────────────────────────
-function getCatalogStats() {
-    const total = learnings.length;
-    const categoryCounts = {};
-    for (const l of learnings) {
-        if (l && l.category) {
-            categoryCounts[l.category] = (categoryCounts[l.category] || 0) + 1;
-        }
-    }
-    return { total, categoryCounts };
-}
-
 // ─── Search/Match Engine ─────────────────────────────────────────────
 function matchSkills(query, filters = {}) {
   const q = query.toLowerCase().trim();
