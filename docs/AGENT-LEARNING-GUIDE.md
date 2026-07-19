@@ -233,5 +233,5 @@ Check consent state:
 
 ```bash
 # via API
-curl -H "Authorization: Bearer $TOKEN" https://api.auxilo.io/account/settings
+curl -H "Authorization: Bearer $TOKEN" https://auxilo.io/account/settings
 ```
