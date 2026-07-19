@@ -234,58 +234,6 @@
     "created_at": "2026-02-22T00:00:00Z"
   },
   {
-    "id": "conway-cloud-vm",
-    "name": "Agent-Native Cloud VM",
-    "description": "Full Linux VMs designed for AI agents. Provision, deploy code, execute commands — all via API with x402 payments. No human accounts needed. Firecracker microVM isolation.",
-    "category": "code-execution",
-    "tags": ["vm", "cloud", "compute", "linux", "agent", "x402", "conway"],
-    "type": "api",
-    "connection": {
-      "protocol": "x402",
-      "endpoint": "https://api.conway.tech/v1",
-      "auth": "x402",
-      "docs": "https://docs.conway.tech/cloud"
-    },
-    "pricing": { "model": "per_call", "cost_usd": "0.01", "note": "~$0.01-0.03/hr for minimal VM configs" },
-    "quality": { "reliability": 85, "verified": true },
-    "dependencies": {
-      "bins": [],
-      "apis": ["api.conway.tech"],
-      "auth": ["x402_wallet"],
-      "runtime": ["network"]
-    },
-    "content_preview": "Conway Cloud. POST /sandboxes to create VM. /exec to run commands. /files to read/write. All paid via x402 USDC on Base. Agent-first infrastructure.",
-    "author": "Conway Research",
-    "version": "1.0.0",
-    "created_at": "2026-02-22T00:00:00Z"
-  },
-  {
-    "id": "conway-compute",
-    "name": "Multi-Model AI Inference",
-    "description": "Access frontier AI models (Claude, GPT, Gemini) through a single API with x402 payments. No API keys or accounts needed. Pay per token.",
-    "category": "content-generation",
-    "tags": ["ai", "inference", "llm", "claude", "gpt", "x402", "conway"],
-    "type": "api",
-    "connection": {
-      "protocol": "x402",
-      "endpoint": "https://api.conway.tech/v1/compute",
-      "auth": "x402",
-      "docs": "https://docs.conway.tech/compute"
-    },
-    "pricing": { "model": "per_call", "cost_usd": "0.01", "note": "Varies by model. Pay-per-token via x402." },
-    "quality": { "reliability": 85, "verified": true },
-    "dependencies": {
-      "bins": [],
-      "apis": ["api.conway.tech"],
-      "auth": ["x402_wallet"],
-      "runtime": ["network"]
-    },
-    "content_preview": "Conway Compute. Single API for multiple frontier models. POST /compute/chat with model + messages. Paid via x402 USDC. No API keys required.",
-    "author": "Conway Research",
-    "version": "1.0.0",
-    "created_at": "2026-02-22T00:00:00Z"
-  },
-  {
     "id": "stripe-x402",
     "name": "Stripe Payment Processing (x402)",
     "description": "Accept payments through Stripe with x402 protocol support. Process credit cards, subscriptions, and invoices. Traditional payment rails with agent-native interface.",

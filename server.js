@@ -94,7 +94,7 @@ const app = new Hono();
 //
 // Exact-match allowlist (fails safe: any origin not listed gets no CORS headers).
 // Production frontend is now https://auxilo.io (the Fly deploy). The old
-// auxilo.slamagency.com host and the Conway VM dev origin are retired.
+// auxilo.slamagency.com host and the legacy VM dev origin are retired.
 //
 // localhost (any port) is allowed for local development. The check is a startsWith
 // on the scheme+host prefix so http://localhost:3000, :5173, etc. all pass while

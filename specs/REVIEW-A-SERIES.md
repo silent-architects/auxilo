@@ -3,7 +3,7 @@
 ## Overview
 This document serves as the formal 5-role review and sign-off for the A-Series implementation (SPEC A0-A4). It validates that all critical vulnerabilities have been addressed, cross-spec integrations are stable, operational readiness is achieved, and test coverage is comprehensive.
 
-**Status: READY FOR CONWAY VM DEPLOYMENT**
+**Status: READY FOR PROD VM DEPLOYMENT**
 
 ## 1. GOV-1 (Security Lead)
 **Responsibility**: Address all C/H findings, ensure no new vulnerabilities are introduced.
@@ -54,4 +54,4 @@ This document serves as the formal 5-role review and sign-off for the A-Series i
 - **Sign-Off Status**: ✅ **SIGNED OFF**
 
 ---
-**Next Action**: Proceed to Conway VM Deploy.
+**Next Action**: Proceed to Prod VM Deploy.

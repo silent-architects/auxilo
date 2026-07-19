@@ -6,7 +6,7 @@
  * Transport layer for the autonomous extraction pipeline:
  *   1. Check kill-switch sentinel + recursion guard (A5.2)
  *   2. Enumerate active sources via TranscriptSource interface (A5.1)
- *   3. For each new session: readSession() → client-side scrub → write queue file → POST /extract
+ *   3. For each new session: readSession() → client-side scrub → write queue file → local extraction → POST /learn
  *   4. On success: update ledger, delete queue file. On failure: leave queue file.
  *
  * Usage:
@@ -23,7 +23,7 @@
  *   node scripts/runner.js --force              # ignore ledger high-water
  *
  * Environment:
- *   AUXILO_API_KEY      — API key for authenticated /extract calls (REQUIRED unless --dry-run)
+ *   AUXILO_API_KEY      — API key for authenticated /learn submissions (REQUIRED unless --dry-run)
  *   AUXILO_BASE_URL     — Server URL (default: http://localhost:49152)
  *   AUXILO_EXTRACTING   — Recursion guard (A5.2); set to "1" by this runner
  *
@@ -186,7 +186,7 @@ function ledgerMark(ledger, sourceId, sessionId, sha, mtime) {
 let queueCounter = Date.now();
 
 /**
- * Write a queue file BEFORE POSTing to /extract.
+ * Write a queue file BEFORE local extraction and the /learn submissions.
  * B6: Uses O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW with mode 0o600 to prevent
  * symlink attacks on the pending-learnings directory.
  *
@@ -359,7 +359,7 @@ function installHooks() {
 // ~/Documents would still be TCC-blocked) — and point the LaunchAgent plist
 // at the installed copy. Re-run after changing any of these files.
 
-// Renamed from tech.conway.auxilo-sweeper (dead pre-Fly host prefix) — TD-CONWAY-1, 2026-07-15.
+// Renamed 2026-07-15: the original label carried a dead pre-Fly host prefix (legacy-label purge).
 const SWEEPER_LABEL = 'io.auxilo.sweeper';
 
 function installSweeper() {
@@ -442,7 +442,7 @@ function installSweeper() {
 
 // ─── Install Daily Digest (P1-13 follow-up) ─────────────────────────────────
 //
-// Same TCC root cause as the sweeper: the original tech.conway.auxilo-digest
+// Same TCC root cause as the sweeper: the original digest
 // plist ran node against jobs/daily-digest.js under ~/Documents, which launchd
 // cannot read ("Unknown system error -11" in daily-digest.stderr.log). The
 // digest is a purely local job — it summarizes ~/.auxilo/extract.log — so the
@@ -450,7 +450,7 @@ function installSweeper() {
 // daily-digest.js is self-contained (fs/path/os only), so it is the only file
 // to copy. Re-run after changing it.
 
-// Renamed from tech.conway.auxilo-digest (dead pre-Fly host prefix) — TD-CONWAY-1, 2026-07-15.
+// Renamed 2026-07-15: the original label carried a dead pre-Fly host prefix (legacy-label purge).
 const DIGEST_LABEL = 'io.auxilo.digest';
 
 function installDigest() {
@@ -728,7 +728,7 @@ async function main() {
     }
 
     if (args.dryRun) {
-      log(`[runner] [DRY RUN] Would upload ${cleaned.length} chars to ${BASE_URL}/extract`);
+      log(`[runner] [DRY RUN] Would extract locally from ${cleaned.length} scrubbed chars, then submit finished learnings to ${BASE_URL}/learn`);
       process.exit(0);
     }
 
@@ -851,7 +851,7 @@ async function main() {
       }
 
       if (args.dryRun) {
-        log(`[runner]   [DRY RUN] Would upload ${cleaned.length} chars to ${BASE_URL}/extract`);
+        log(`[runner]   [DRY RUN] Would extract locally from ${cleaned.length} scrubbed chars, then submit finished learnings to ${BASE_URL}/learn`);
         totalProcessed++;
         continue;
       }

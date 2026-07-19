@@ -16,8 +16,8 @@ let credentials = {};
 try {
     credentials = JSON.parse(fs.readFileSync(CRED_PATH, 'utf8'));
 } catch { /* no credentials file — unauthenticated mode */ }
-// LW-17: default was a long-dead Conway sandbox URL — fresh installs without
-// credentials.json pointed every tool call at it.
+// LW-17: default was a long-dead sandbox URL on a retired host, so fresh installs
+// without credentials.json pointed every tool call at it.
 const AUXILO_BASE = credentials.base_url || 'https://auxilo.io';
 
 function baseHeaders(extra = {}) {

@@ -10,7 +10,7 @@
 
 These were decided in the 2026-02-25 strategy session. Don't revisit unless Tyler reopens.
 
-1. **Runtime-agnostic** — Auxilo works with ANY agent runtime (OpenClaw, Claude Code, Conway, CrewAI, custom). No vendor lock-in. No partnerships required.
+1. **Runtime-agnostic** — Auxilo works with ANY agent runtime (OpenClaw, Claude Code, CrewAI, custom). No vendor lock-in. No partnerships required.
 2. **Dual payment rails** — x402 (crypto-native) AND API key + credits (traditional). Both hit the same endpoints. Builders earn the same regardless of which rail the buyer used.
 3. **API key path is demand-side unlock** — Without it, agents can't buy learnings. One-sided marketplace dies. This is not optional.
 4. **Wallet-less start for builders** — Publish learnings without a wallet. Earnings accumulate. Connect wallet later to withdraw. Defer crypto friction until money is waiting.

@@ -179,17 +179,17 @@ describe('B3: LaunchAgent plist', () => {
   // present on Linux CI, and is absent on a dev machine until setup is run, so
   // these checks skip when the plist is not installed and run in full where it is.
   const plistPath = path.join(os.homedir(), 'Library', 'LaunchAgents',
-    'tech.conway.auxilo-digest.plist');
+    'io.auxilo.digest.plist');
   const skipReason = !fs.existsSync(plistPath) &&
     'LaunchAgent plist not installed on this host (macOS-only local ops artifact)';
 
-  it('tech.conway.auxilo-digest.plist exists', { skip: skipReason }, () => {
+  it('io.auxilo.digest.plist exists', { skip: skipReason }, () => {
     assert.ok(fs.existsSync(plistPath), `plist must exist at ${plistPath}`);
   });
 
   it('plist contains correct label', { skip: skipReason }, () => {
     const content = fs.readFileSync(plistPath, 'utf-8');
-    assert.ok(content.includes('tech.conway.auxilo-digest'));
+    assert.ok(content.includes('io.auxilo.digest'));
   });
 
   it('plist schedules at 07:00', { skip: skipReason }, () => {

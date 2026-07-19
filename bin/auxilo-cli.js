@@ -90,12 +90,16 @@ const CONSENT_TEXT = `
   --------------------------------
   If you opt in, a session-end hook runs after each session in your wired
   clients (Claude Code, Cursor, Gemini CLI, …) and a local runner:
-    • READS the session transcript from your machine,
-    • SCRUBS it locally (sensitivity filter: API keys, tokens, emails, PII —
-      redacted BEFORE anything leaves your machine),
-    • UPLOADS only the scrubbed transcript to Auxilo (${'POST /extract'}),
-      where reusable learnings are extracted, quality-gated, moderated, and
-      published to the marketplace under your account. You earn 70% of sales.
+    • READS the session transcript on your machine,
+    • SCRUBS it locally (sensitivity filter: API keys, tokens, emails, PII
+      are redacted first),
+    • EXTRACTS reusable learnings locally, using your own model (the runner
+      invokes your local \`claude\` CLI). The transcript itself, scrubbed or
+      not, is never uploaded and never leaves your machine.
+    • UPLOADS only the finished learning drafts (title, body, category,
+      tags, task context, outcome) to Auxilo (${'POST /learn'}), where they
+      are quality gated, moderated, and published to the marketplace under
+      your account. You earn 70% of sales.
   You can stop any time with \`auxilo disable\` (local kill-switch) and review
   every run in ~/.auxilo/extract.log. Saying No installs the MCP server only.
 `;

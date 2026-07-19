@@ -24,7 +24,7 @@ test
 coverage
 .nyc_output
 
-# One-off deploy helpers for the old Conway VM flow — unused on Fly
+# One-off deploy helpers from the retired pre-Fly VM flow (unused on Fly)
 deploy.js
 deploy-*.js
 deploy-to-vm.sh

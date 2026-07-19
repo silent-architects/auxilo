@@ -176,7 +176,7 @@ Required: `~/.openclaw/agents/*/sessions/*.jsonl` (the real OpenClaw runtime dir
 1. Rewrite `jobs/daily-digest.js` to aggregate per-Builder, not across `unique_accounts`.
 2. Each Builder's digest includes: published learning titles, retraction deadlines (publish+7d), rejected candidates with reasons, total earnings from autonomous extraction for the day.
 3. Send via MailerSend (existing integration — do not add a new subprocessor). If MailerSend send fails, append to `~/.auxilo/extract.log` as the fallback per my prior directive (this is the "email fallback" you misread as stdout-only).
-4. Wire to scheduler: `~/Library/LaunchAgents/tech.conway.auxilo-digest.plist` running at 07:00 daily. `plutil -lint` must pass. Do NOT `launchctl load` — leave loading for the deploy gate. *(2026-07-15: label renamed `io.auxilo.digest` — dead Conway host prefix purged; see PUNCH-LIST TD-CONWAY-1.)*
+4. Wire to scheduler: `~/Library/LaunchAgents/io.auxilo.digest.plist` running at 07:00 daily. `plutil -lint` must pass. Do NOT `launchctl load` — leave loading for the deploy gate. *(2026-07-15: label renamed `io.auxilo.digest`, purging a dead legacy host prefix.)*
 
 **Acceptance:** test in `test/p2-1a-runner.test.js` (or a new `test/p2-1a-digest.test.js`) mocks MailerSend and verifies per-Builder aggregation shape. `plutil -lint` on the plist passes.
 

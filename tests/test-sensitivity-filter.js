@@ -40,10 +40,10 @@ console.log('--- Clean Learnings (should pass) ---');
 
 runTest('SF-001: Normal learning passes filter', () => {
   const result = scanLearning({
-    title: 'Conway exec API nohup causes 30s timeout — use setsid and disown',
-    body: 'When using the Conway exec API to start long-running processes, nohup alone causes the exec call to hang. Use setsid to create a new session and disown to detach.',
-    task_context: 'Starting a Node.js server on a Conway VM via the exec API.',
-    tags: ['conway', 'exec-api', 'nohup', 'setsid'],
+    title: 'Cloud VM exec API nohup causes 30s timeout, use setsid and disown',
+    body: 'When using a cloud VM exec API to start long-running processes, nohup alone causes the exec call to hang. Use setsid to create a new session and disown to detach.',
+    task_context: 'Starting a Node.js server on a cloud VM via its exec API.',
+    tags: ['cloud-vm', 'exec-api', 'nohup', 'setsid'],
   });
   assert.strictEqual(result.clean, true, 'Normal learning should pass');
 });
@@ -127,14 +127,14 @@ runTest('SF-013: GitHub token caught', () => {
   assert.strictEqual(result.clean, false, 'GitHub token should be caught');
 });
 
-runTest('SF-014: Conway API key caught', () => {
+runTest('SF-014: VM provider API key caught', () => {
   const result = scanLearning({
-    title: 'Conway VM exec auth',
-    body: 'Set the auth header to cnwy_k__HYcupmK8d9f2jN7xAbcDefGhiJklMnO for Conway API access.',
-    task_context: 'Conway API calls.',
-    tags: ['conway'],
+    title: 'Cloud VM exec auth',
+    body: 'Set the auth header to cnwy_k__HYcupmK8d9f2jN7xAbcDefGhiJklMnO for the VM provider API.',
+    task_context: 'Cloud VM provider API calls.',
+    tags: ['cloud-vm'],
   });
-  assert.strictEqual(result.clean, false, 'Conway API key should be caught');
+  assert.strictEqual(result.clean, false, 'VM provider API key should be caught');
 });
 
 runTest('SF-015: JWT in body caught', () => {
