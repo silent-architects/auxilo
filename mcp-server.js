@@ -60,6 +60,57 @@ function fenceUnlockResult(data) {
   };
 }
 
+// AUD19-5: decide how the unlock handler presents a payment-required response.
+// 402 = x402-first challenge (server >= AUD19-5: accepts[] merged with the
+// options envelope, served cold). 401-with-options = legacy servers that only
+// returned the options block — same meaning, no accepts[]. Returns null when
+// the response is not a payment challenge (caller falls through to
+// fenceUnlockResult). Pure (no I/O) — unit-tested.
+function unlockPaymentRequired(status, data, http_endpoint) {
+  const isChallenge = status === 402 || (status === 401 && data && data.options);
+  if (!isChallenge) return null;
+  const price = data.accepts?.[0]?.maxAmountRequired
+    ? `$${(Number(data.accepts[0].maxAmountRequired) / 1_000_000).toFixed(4)}`
+    : (data.options?.x402_payment?.price_usd != null
+        ? `$${Number(data.options.x402_payment.price_usd).toFixed(4)}` : 'dynamic');
+  return {
+    status: 'payment_required',
+    cost: `${price} USDC on Base (set by contributor)`,
+    how_to_pay: 'Pass an x402 payment via the x_payment argument, or configure an API key with unlock credits (npx auxilo setup).',
+    http_endpoint,
+    payment_details: data,
+  };
+}
+
+// AUD19-7 (DASH/ROUTE): shape the status-and-routing response for
+// auxilo_withdraw from a GET /account/earnings body. This tool reports
+// balances and the payout path; it NEVER moves funds and never calls
+// POST /withdraw. Pure (no I/O) — unit-tested.
+function shapeWithdrawStatus(e) {
+  return {
+    payout_model: 'Earnings from on-chain-settled sales are paid to your linked wallet at sale time. Only the legacy accrued balance below is withdrawable.',
+    legacy_pending_balance_usd: e.pending_balance,
+    held_pending_terms_acceptance_usd: e.unassented_pending,
+    payouts_paused: e.payouts_paused,
+    how_to_withdraw_legacy_balance: e.payouts_paused
+      ? 'Withdrawals of the legacy balance are paused during the settlement migration. Your balance is recorded and payable under the Terms; watch https://auxilo.io/status for the reopen.'
+      : 'Withdraw from your dashboard: https://auxilo.io/dashboard (bank payout via Stripe; $0.50 minimum, $0.25 fee).',
+    get_paid_at_sale_time: 'auxilo_accept_terms -> auxilo_verify_wallet -> auxilo_link_wallet',
+  };
+}
+
+// AUD19-7: the verify-wallet surface legitimately needs only the wallet-
+// verification flow. Forwarding the raw args object let a caller mint OTHER
+// challenge types (/wallet/challenge honors action:'withdrawal') through an
+// undocumented passthrough — closed: only wallet + signature ever travel, so
+// the server's default (verification) action always applies. Pure — unit-tested.
+function verifyWalletRequestBody(args) {
+  return {
+    wallet: args.wallet,
+    ...(args.signature && { signature: args.signature }),
+  };
+}
+
 // Review-seamless: build the approve_clean dry-run plan from a summary payload.
 // Pure (no I/O) so the dry-run shape is unit-testable; the selection itself is
 // reviewLib.selectForBulkApprove, the SAME function the CLI uses.
@@ -269,20 +320,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_withdraw',
-      description: 'Request withdrawal of earned USDC. Requires a valid cryptographic signature of: "auxilo-withdraw-{wallet}-{amount}-{timestamp}". NOTE: withdrawals are TEMPORARILY PAUSED during the non-custodial settlement migration — this call currently returns HTTP 503 with code "withdraw_paused_noncustodial_migration". Earned balances are safe and become payable on the new on-chain rail; there is nothing to retry until the pause lifts.',
+      description: 'Check how your earnings are paid out, and how to receive any legacy accrued balance. HOW PAYOUT WORKS NOW: earnings from sales settled on-chain are paid directly to your linked, verified wallet at the moment of sale — there is no balance to withdraw for those, because Auxilo never holds your share. LEGACY BALANCE: earnings accrued before direct settlement sit in your account\'s pending balance; withdraw them from your dashboard at https://auxilo.io/dashboard (bank payout via Stripe; $0.50 minimum, $0.25 flat fee), where you sign in with the email on your account. This tool reports your current balances and payout status; it does not move funds. To be paid at sale time going forward: auxilo_accept_terms, then auxilo_verify_wallet, then auxilo_link_wallet.',
       inputSchema: {
         type: 'object',
         properties: {
-          wallet: { type: 'string', description: 'Verified contributor wallet address (0x...)' },
-          signature: { type: 'string', description: 'Signature of the withdrawal payload' },
-          timestamp: { type: 'number', description: 'Unix timestamp in milliseconds (must be within 5 mins of server time)' }
+          session_token: { type: 'string', description: 'Optional JWT session token from /auth/verify. If omitted, your configured API key authenticates the account.' }
         },
-        required: ['wallet', 'signature', 'timestamp']
+        required: []
       }
     },
     {
       name: 'auxilo_settlements',
-      description: 'Check settlement history and processing status for withdrawals on a given wallet. Free.',
+      description: 'Check settlement history and processing status for a given wallet. Lists on-chain router settlements (per-sale receipts paid to your wallet at sale time), not only withdrawal history. Free.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -304,7 +353,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_link_wallet',
-      description: 'Link a verified wallet address to your Auxilo account. Authenticates with your configured API key automatically, or pass a session_token (JWT from magic link login). The wallet must have been previously verified via auxilo_verify_wallet. One wallet per account. Required to withdraw earnings. TWO-STEP FLOW (linking requires FRESH proof you control the wallet, bound to your account): (1) call with just the wallet — the server returns 401 link_signature_required with an EIP-712 challenge payload (single-use, 5-minute expiry, the account id is bound into the signed action string); (2) sign that exact typed-data payload with the wallet\'s private key and call again with the signature. A signature for another account\'s challenge will not verify. NOTE: you must first accept the current Terms via auxilo_accept_terms — linking a payout wallet triggers the §5.10 payment-collection agency and returns 403 TERMS_NOT_ACCEPTED until acceptance is on file. If the link adopts previously wallet-only submissions into your account, the response lists their ids (adopted_learning_ids).',
+      description: 'Link a verified wallet address to your Auxilo account. Authenticates with your configured API key automatically, or pass a session_token (JWT from magic link login). The wallet must have been previously verified via auxilo_verify_wallet. One wallet per account. Required to be paid at sale time on the on-chain settlement rail (and to receive any legacy balance on the USDC rail if it reopens). TWO-STEP FLOW (linking requires FRESH proof you control the wallet, bound to your account): (1) call with just the wallet — the server returns 401 link_signature_required with an EIP-712 challenge payload (single-use, 5-minute expiry, the account id is bound into the signed action string); (2) sign that exact typed-data payload with the wallet\'s private key and call again with the signature. A signature for another account\'s challenge will not verify. NOTE: you must first accept the current Terms via auxilo_accept_terms — linking a payout wallet triggers the §5.10 payment-collection agency and returns 403 TERMS_NOT_ACCEPTED until acceptance is on file. If the link adopts previously wallet-only submissions into your account, the response lists their ids (adopted_learning_ids).',
       inputSchema: {
         type: 'object',
         properties: {
@@ -317,7 +366,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_account_earnings',
-      description: 'View earnings for your authenticated Auxilo account. Authenticates with your configured API key automatically, or pass a session_token (JWT). Returns total gross, contributor share, pending balance, total withdrawn, whether withdrawal is available (can_withdraw), and held_pending_assent — undisbursable receipts recorded before you accepted the current Terms, released to your withdrawable balance when you accept via auxilo_accept_terms. Free.',
+      description: 'View earnings for your authenticated Auxilo account. Authenticates with your configured API key automatically, or pass a session_token (JWT). Returns total gross, contributor share, pending balance, total withdrawn, whether withdrawal is available (can_withdraw), and held_pending_assent — undisbursable receipts recorded before you accepted the current Terms, released to your withdrawable balance when you accept via auxilo_accept_terms. Earnings from on-chain-settled sales are paid to your wallet at sale time and appear in settlement history, not in pending balance. Free.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -459,10 +508,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         const resp = await fetch(`${AUXILO_BASE}/knowledge/${args.id}`, { headers });
         const data = await resp.json();
-        if (resp.status === 402) {
-          const price = data.accepts?.[0]?.maxAmountRequired ? `$${(Number(data.accepts[0].maxAmountRequired) / 1_000_000).toFixed(4)}` : 'dynamic';
-          return text({ status: 'payment_required', cost: `${price} USDC on Base (set by contributor)`, http_endpoint: `${AUXILO_BASE}/knowledge/${args.id}`, payment_details: data });
-        }
+        // AUD19-5: handle BOTH the 402-first challenge (server >= the fix,
+        // accepts[] served cold) and the legacy 401-with-options shape from
+        // older live servers — same meaning, no accepts[].
+        const challenge = unlockPaymentRequired(resp.status, data, `${AUXILO_BASE}/knowledge/${args.id}`);
+        if (challenge) return text(challenge);
         // LW-3(a): fence the contributor body so the LLM treats it as data, not instructions.
         return text(fenceUnlockResult(data));
       }
@@ -478,33 +528,36 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'auxilo_verify_wallet': {
         const url = args.signature ? `${AUXILO_BASE}/wallet/verify` : `${AUXILO_BASE}/wallet/challenge`;
+        // AUD19-7: whitelist the request body — only wallet + signature travel.
+        // (Forwarding raw args let a caller mint a withdrawal-action challenge
+        // through an undocumented passthrough; the MCP surface only needs the
+        // default verification action.)
         const resp = await fetch(url, {
           method: 'POST',
           headers: baseHeaders(),
-          body: JSON.stringify(args)
+          body: JSON.stringify(verifyWalletRequestBody(args))
         });
         return text(await resp.json());
       }
 
       case 'auxilo_withdraw': {
-        const resp = await fetch(`${AUXILO_BASE}/withdraw`, {
-          method: 'POST',
-          headers: baseHeaders(),
-          body: JSON.stringify(args)
+        // AUD19-7 (DASH/ROUTE): honest status-and-routing tool. Reads
+        // GET /account/earnings and reports balances + the real payout path.
+        // It never attempts a custodial withdrawal (no POST /withdraw) — new
+        // earnings settle to the linked wallet at sale time; the legacy
+        // balance exits via the dashboard (Stripe) rail.
+        const resp = await fetch(`${AUXILO_BASE}/account/earnings`, {
+          headers: baseHeaders(args.session_token ? { 'Authorization': `Bearer ${args.session_token}` } : {}),
         });
-        const data = await resp.json();
-        // R-01: the custodial USDC rail is paused during the non-custodial
-        // migration and returns 503 withdraw_paused_noncustodial_migration.
-        // Surface that as a plain, human-legible note instead of a raw error
-        // blob so the agent doesn't treat it as a transient failure to retry.
-        if (resp.status === 503 && data && data.code === 'withdraw_paused_noncustodial_migration') {
+        const e = await resp.json();
+        if (resp.status === 401) {
           return text({
-            status: 'paused',
-            message: 'Withdrawals are temporarily paused while Auxilo migrates to direct on-chain (non-custodial) settlement. Your earned balance is safe and will be payable on the new rail once the migration completes. This is expected — do not retry; nothing is wrong with your account or signature.',
-            server_response: data,
+            error: 'Not authenticated. Run npx auxilo setup to create credentials, or pass session_token. Balances are account-scoped.',
+            server_response: e,
           });
         }
-        return text(data);
+        if (!resp.ok) return text(e);
+        return text(shapeWithdrawStatus(e));
       }
 
       case 'auxilo_settlements': {
@@ -678,7 +731,7 @@ function text(obj) {
 // LW-3(a): export the pure helpers so they can be unit-tested without starting
 // the stdio transport. When this file is required (not run directly), stop here
 // before the CLI dispatch and MCP startup below.
-module.exports = { fenceUnlockResult, UNTRUSTED_CONTENT_ADVISORY, baseHeaders, planApproveClean };
+module.exports = { fenceUnlockResult, UNTRUSTED_CONTENT_ADVISORY, baseHeaders, planApproveClean, unlockPaymentRequired, shapeWithdrawStatus, verifyWalletRequestBody };
 if (require.main !== module) {
   return;
 }

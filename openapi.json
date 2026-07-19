@@ -343,8 +343,21 @@
                                 }
                             }
                         }
+                    },
+                    "error": {
+                        "type": "string",
+                        "description": "Present when the challenge is merged with an options envelope (no-credential or credits-exhausted requests) or on a failed payment.",
+                        "example": "Payment required"
+                    },
+                    "message": {
+                        "type": "string"
+                    },
+                    "options": {
+                        "type": "object",
+                        "description": "Auth options envelope (merged, additive — AUD19-5). api_key: { header, format, obtain, how_to_authenticate }; x402_payment: { header, price_usd, description, protocol }; reset_at on the credits-exhausted shape."
                     }
-                }
+                },
+                "description": "x402 payment challenge. On unauthenticated requests to payable resources the challenge is MERGED with the auth options envelope (additive keys: error, message, options.api_key { header, format, obtain, how_to_authenticate }, options.x402_payment { header, price_usd, description, protocol }); on the credits-exhausted API-key path the envelope instead carries error: \"Credits exhausted\", credits, and options.reset_at. In router (non-custodial) mode accepts[0] carries payTo = the router contract and an extra.router hint."
             },
             "Error": {
                 "type": "object",
@@ -1262,7 +1275,7 @@
         "/knowledge/{id}": {
             "get": {
                 "summary": "Unlock full learning (dynamic price)",
-                "description": "Read the full learning body. Dynamic price: floor $0.05, default $0.08, ceiling $50.00 USDC (contributor may override within the floor/ceiling). Contributor split: 70% on direct unlocks, 60% when the unlock was discovery-driven (surfaced by a recent POST /knowledge search from the same account). Auth is dual-path: an X-API-Key (deducts a purchased unlock credit) OR an x402 X-Payment header. With NEITHER header the endpoint currently returns 401 with an options envelope describing both paths (the x402 accepts[] descriptor is only issued once an X-Payment header is present); a 402-first redesign is planned. Check unlock_price_usd in search results to see the cost before unlocking.",
+                "description": "Read the full learning body. Dynamic price: floor $0.05, default $0.08, ceiling $50.00 USDC (contributor may override within the floor/ceiling). Contributor split: 70% on direct unlocks, 60% when the unlock was discovery-driven (surfaced by a recent POST /knowledge search from the same account). Auth is dual-path: an X-API-Key (deducts a purchased unlock credit) OR an x402 X-Payment header. With NEITHER header the endpoint returns 402 with the full x402 accepts[] challenge MERGED with an options envelope describing both auth paths (AUD19-5: 402-first — a standards-conforming x402 client can pay cold). Check unlock_price_usd in search results to see the cost before unlocking.",
                 "operationId": "unlockLearning",
                 "security": [
                     {
@@ -1295,7 +1308,7 @@
                         }
                     },
                     "402": {
-                        "description": "API-key path with credits exhausted (options + reset_at), or an X-Payment header that failed verification (x402 accepts[] descriptor)",
+                        "description": "Payment required. Three shapes, ALL carrying the x402 accepts[] descriptor: (1) no X-API-Key and no X-Payment header — x402Version + accepts[] merged with { error: \"Payment required\", message, options: { api_key: { header, format, obtain, how_to_authenticate }, x402_payment: { header, price_usd, description, protocol } } } (header X-Payment-Required: true); (2) API-key path with credits exhausted — { x402Version, accepts, error: \"Credits exhausted\", message, credits, options: { x402_payment, reset_at } }; (3) an X-Payment header that failed verification — { error, accepts }.",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -1315,7 +1328,7 @@
                         }
                     },
                     "401": {
-                        "description": "No X-API-Key and no X-Payment header. Body: { error, message, options: { api_key: { header, format, obtain }, x402_payment: { header, price_usd, description, protocol } } }",
+                        "description": "Invalid API key (an X-API-Key header was presented but not recognized). Requests with NO credentials no longer 401 — they receive the 402 challenge above (AUD19-5).",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -1323,50 +1336,7 @@
                                     "properties": {
                                         "error": {
                                             "type": "string",
-                                            "example": "Authentication required"
-                                        },
-                                        "message": {
-                                            "type": "string"
-                                        },
-                                        "options": {
-                                            "type": "object",
-                                            "properties": {
-                                                "api_key": {
-                                                    "type": "object",
-                                                    "properties": {
-                                                        "header": {
-                                                            "type": "string",
-                                                            "example": "X-API-Key"
-                                                        },
-                                                        "format": {
-                                                            "type": "string",
-                                                            "example": "axl_XXX"
-                                                        },
-                                                        "obtain": {
-                                                            "type": "string"
-                                                        }
-                                                    }
-                                                },
-                                                "x402_payment": {
-                                                    "type": "object",
-                                                    "properties": {
-                                                        "header": {
-                                                            "type": "string",
-                                                            "example": "X-Payment"
-                                                        },
-                                                        "price_usd": {
-                                                            "type": "number"
-                                                        },
-                                                        "description": {
-                                                            "type": "string"
-                                                        },
-                                                        "protocol": {
-                                                            "type": "string",
-                                                            "example": "x402 (https://www.x402.org)"
-                                                        }
-                                                    }
-                                                }
-                                            }
+                                            "example": "Invalid API key"
                                         }
                                     }
                                 }
