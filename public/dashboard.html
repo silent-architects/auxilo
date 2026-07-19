@@ -915,11 +915,15 @@
     if (!grid) return;
     grid.textContent = '';
 
-    // R-01 §5.10: held (unassented) funds are earnings that require accepting the
-    // updated Terms before they can be released/withdrawn. Read defensively: only
-    // surface the held line when the server actually sends a non-zero field.
+    // R-01 §5.10 / CP-7: receipts recorded before Terms acceptance are
+    // UNDISBURSABLE RECEIPTS, not money held for the builder — the copy below
+    // must never read as "we're holding your money" (CP-7 disposition policy).
+    // Read defensively: prefer the public field name (held_pending_assent,
+    // AUD19-8b), fall back to legacy names; only render when non-zero.
     var held = 0;
-    if (data && typeof data.unassented_pending === 'number') {
+    if (data && typeof data.held_pending_assent === 'number') {
+      held = data.held_pending_assent;
+    } else if (data && typeof data.unassented_pending === 'number') {
       held = data.unassented_pending;
     } else if (data && typeof data.held === 'number') {
       held = data.held;
@@ -935,8 +939,10 @@
     if (held > 0) {
       // Insert directly under the withdrawable share so the two are read together,
       // and make clear this amount is NOT included in the withdrawable figure.
+      // CP-7 framing: an undisbursable receipt released on Terms acceptance —
+      // never "money we're holding for you".
       items.splice(1, 0, {
-        label: 'Held: accept Terms to release',
+        label: 'Undisbursable receipts — released on Terms acceptance',
         value: fmt(held),
         held: true,
       });
@@ -957,13 +963,13 @@
       wrap.appendChild(lbl);
       wrap.appendChild(val);
 
-      // Held balance gets a short explainer pointing at the Terms gate above.
+      // CP-7 explainer: undisbursable receipt, released on Terms acceptance.
       if (item.held) {
         var heldNote = document.createElement('div');
         heldNote.style.fontSize = '11px';
         heldNote.style.color = 'var(--slate)';
         heldNote.style.marginTop = '4px';
-        heldNote.textContent = 'Not included in your withdrawable share. Accept the updated Terms above to release it.';
+        heldNote.textContent = 'Receipts recorded before you accepted the current Terms. Not part of your balance or withdrawable share — accepting the Terms above releases them to your withdrawable share immediately.';
         wrap.appendChild(heldNote);
       }
 
@@ -1049,7 +1055,7 @@
       cryptoWrap.appendChild(note);
     } else {
       var noWallet = document.createElement('div');
-      noWallet.textContent = 'No wallet linked. USDC withdrawals on Base are rolling out on our non-custodial rail (coming soon). You can link a wallet now with the CLI command "auxilo link-wallet" to be ready. Bank withdrawals via Stripe are available in the section below when your balance is ready.';
+      noWallet.textContent = 'No wallet linked. USDC withdrawals on Base are rolling out on our non-custodial rail (coming soon). You can link a wallet now through your agent: verify it with auxilo_verify_wallet, then link it with auxilo_link_wallet — linking asks the wallet to sign a one-time challenge proving you control it. Bank withdrawals via Stripe are available in the section below when your balance is ready.';
       cryptoWrap.appendChild(noWallet);
     }
 
