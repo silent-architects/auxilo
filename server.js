@@ -2522,7 +2522,7 @@ function _routerAccepts(amount, pathname, description, routerCtx) {
   };
 }
 
-async function verifyPaymentOrReject(c, price_usd, description, routerCtx = null) {
+async function verifyPaymentOrReject(c, price_usd, description, routerCtx = null, authOptions = null) {
   const amount = String(Math.round(price_usd * 1_000_000));
   const paymentHeader = c.req.header('X-Payment');
   const routerMode = !!(routerCtx && x402Router.routerEnabled());
@@ -2530,10 +2530,20 @@ async function verifyPaymentOrReject(c, price_usd, description, routerCtx = null
   if (!paymentHeader) {
     c.status(402);
     c.header('X-Payment-Required', 'true');
+    // AUD19-5: when the caller (dualAuthDynamic Path 3) supplies authOptions,
+    // merge the api-key/x402 options envelope into the 402 challenge —
+    // additive, so options-block consumers keep working while standards-
+    // conforming x402 clients get accepts[] cold.
+    const optionsBlock = authOptions ? {
+      error: 'Payment required',
+      message: 'This endpoint requires either an API key (with unlock credits) or an x402 payment.',
+      options: authOptions,
+    } : {};
     if (routerMode) {
       return c.json({
         x402Version: 2,
-        accepts: [_routerAccepts(amount, new URL(c.req.url).pathname, description, routerCtx)]
+        accepts: [_routerAccepts(amount, new URL(c.req.url).pathname, description, routerCtx)],
+        ...optionsBlock,
       });
     }
     return c.json({
@@ -2553,7 +2563,8 @@ async function verifyPaymentOrReject(c, price_usd, description, routerCtx = null
           name: 'USD Coin',
           version: '2'
         }
-      }]
+      }],
+      ...optionsBlock,
     });
   }
 
@@ -2787,7 +2798,33 @@ async function dualAuthDynamic(c, price_usd, description, creditType, requiredSc
         if (creditType) {
             const creditResult = await deductCredit(result.accountId, creditType);
             if (!creditResult.success) {
+                // AUD19-5 (§3.3-2): include the x402 accepts[] challenge so a
+                // keyed-but-exhausted agent can fall back to per-call payment
+                // without a second round trip. Entry mirrors the challenge
+                // verifyPaymentOrReject mints (custodial or router arm).
+                const _amount = String(Math.round(price_usd * 1_000_000));
+                const _pathname = new URL(c.req.url).pathname;
+                const _routerMode = !!(routerCtx && x402Router.routerEnabled());
                 return c.json({
+                    x402Version: 2,
+                    accepts: [_routerMode
+                        ? _routerAccepts(_amount, _pathname, description, routerCtx)
+                        : {
+                            scheme: 'exact',
+                            network: 'eip155:8453',
+                            maxAmountRequired: _amount,
+                            resource: _pathname,
+                            description,
+                            mimeType: 'application/json',
+                            payTo: WALLET,
+                            maxTimeoutSeconds: 30,
+                            asset: USDC_BASE,
+                            extra: {
+                                assetTransferMethod: 'eip3009',
+                                name: 'USD Coin',
+                                version: '2'
+                            }
+                        }],
                     error: 'Credits exhausted',
                     message: creditResult.message,
                     credits: creditResult.status,
@@ -2817,24 +2854,24 @@ async function dualAuthDynamic(c, price_usd, description, creditType, requiredSc
         return verifyPaymentOrReject(c, price_usd, description, routerCtx);
     }
 
-    // Path 3: Neither
-    return c.json({
-        error: 'Authentication required',
-        message: 'This endpoint requires either an API key or x402 payment.',
-        options: {
-            api_key: {
-                header: 'X-API-Key',
-                format: 'axl_XXX',
-                obtain: 'POST /auth/magic-link -> GET /auth/verify -> POST /account/api-keys'
-            },
-            x402_payment: {
-                header: 'X-Payment',
-                price_usd: price_usd,
-                description: description,
-                protocol: 'x402 (https://www.x402.org)'
-            }
-        }
-    }, 401);
+    // Path 3: Neither credential — AUD19-5: answer 402-first with the full x402
+    // challenge PLUS the api-key option, so standards-conforming x402 clients can
+    // pay cold and keyed agents learn how to authenticate. (Was: 401 with options
+    // only — the accepts[] descriptor was unreachable until an INVALID payment.)
+    return verifyPaymentOrReject(c, price_usd, description, routerCtx, {
+        api_key: {
+            header: 'X-API-Key',
+            format: 'axl_XXX',
+            obtain: 'POST /auth/magic-link -> GET /auth/verify -> POST /account/api-keys',
+            how_to_authenticate: 'npx auxilo setup',
+        },
+        x402_payment: {
+            header: 'X-Payment',
+            price_usd: price_usd,
+            description: description,
+            protocol: 'x402 (https://www.x402.org)',
+        },
+    });
 }
 
 const MIN_UNLOCK_PRICE = 0.05;     // approved pricing floor — matches lib/pricing.js (GTM-2 fix, PUNCH-LIST §17)
