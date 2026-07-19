@@ -586,15 +586,31 @@ Four-lane audit (agent onboarding/install, first contribution + first unlock, hu
 > **2026-07-19 phase-2 (same session):** funnel-fixes-aud19 (Gate-A: SHIP-WITH-FIXES → fixed → SHIP) + docs-reconcile-aud19 merged and DEPLOYED v36 (health-verified; openapi 53 paths live). AUD19-4/6/8 server-side LIVE; AUD19-3 live incl. account-bound EIP-712 link challenge + platform-wallet refusal. MCP half rides npm auxilo-mcp@0.9.2 (Tyler-gated).
 > **2026-07-19 reconciliation (same session):** prod v34 == `r01-noncustodial-launch` tip `d4eb050` byte-for-byte (144/144 shipped source files). `wip-snapshot-2026-07-04` retired — final snapshot commit `fea3136`, unique PUNCH-LIST prose ported here (CP-6 status, CP-7, LW-5). Working branch for these fixes: `audit-quick-wins-2026-07-19` (from d4eb050).
 
+## 27. Marketing-Copy Launch-Quality Review (2026-07-19)
+
+6-seat copy panel (direct-response, advertising, conversion, positioning, voice, buyer-job lenses) over the 7 public marketing pages, reconciled against the 2026-07-18 locked positioning decisions (D1 hero + single-conversion E1 stand; contradicting findings recorded-and-closed in the spec, not built). Build spec: `~/.auxilo/handoffs/BUILD-SPEC-COPY-LAUNCH-2026-07-19.md`.
+
+| ID | Item | Priority | Owner | Status |
+|---|---|---|---|---|
+| COPY-1 | Mechanical copy bugs: stale "17 Auxilo tools" (for-agents), dead `/#api-integration` anchor (how-it-works close), "$0.08+ avg" mislabel → "starting price", for-builders og/twitter title mismatch, "seamless" ×4 + JSON-LD mirrors | P1 | BUILD-3 | OPEN |
+| COPY-2 | Homepage reframe (spec WP-1): add the missing $0 self-unlock proof block (locked memory-first position's core fact, absent site-wide), replace investor-voice "Competitive Moat / Why Auxilo Wins / flywheel" section with reader-benefit + real-moat copy, present-tense the market headline | P1 | BUILD-3 + GROWTH-1 gate | OPEN |
+| COPY-3 | CTA layer completion post-E1 (spec WP-2): nav "Get Started" → action-named, how-it-works close, earnings hero/mid CTAs, sign-in expectation setters, pricing dual close | P1 | BUILD-3 | OPEN |
+| COPY-4 | Builder-verb accrual realignment while withdrawals paused ("Start getting paid" → "Start banking earnings" etc.) + voice mechanicals + terminology canon (unlock/builder/agent; "purchase"/"contributor" retired from human copy) | P1 | BUILD-3 | OPEN |
+| COPY-5 | for-agents H1 promotion + free-search empty-shelf risk-reversal; pricing H1 promotion (spec WP-5/6a). "Request a learning" mechanism deliberately excluded (future product item) | P1 | BUILD-3 | OPEN |
+| COPY-6 | Credit-pack CTA + 70%-split copy qualifier — **gated on AUD19-2 decision**; no funding copy until it lands | P1 | BUILD-3 + CFO-1 | ON HOLD |
+| COPY-7 | Fold panel voice laws + verb policy into private-canon BRAND_GUIDELINES.md / GTM.md | P2 | GROWTH-1 | OPEN |
+
+> Verification gates in spec §5 (grep gates, SSR `lc-*` anchor integrity, FAQ JSON-LD parity, truth bounds, drift guard, visual QA). Gate flow per D4: Gate A → BUILD-3 + SPEC-2 + GROWTH-1 → Tyler deploys.
+
 ## Counts
 
 | Priority | Open | On Hold | Deferred | Done/Verified | Total |
 |----------|------|---------|----------|---------------|-------|
 | P0 (blocks launch) | **4** | 0 | 0 | **29** | 33 |
-| P1 (blocks real money / production) | **11** | 5 | 1 | 68 | 85 |
-| P2 (blocks scale) | **7** | 1 | 0 | 23 | 31 |
+| P1 (blocks real money / production) | **16** | 6 | 1 | 68 | 91 |
+| P2 (blocks scale) | **8** | 1 | 0 | 23 | 32 |
 | P3 (polish) | 0 | 0 | 0 | 3 | 3 |
-| **Total** | **22** | **6** | **1** | **123** | **152** |
+| **Total** | **28** | **7** | **1** | **123** | **159** |
 
 > **2026-06-10 Launch Wave**: LW-1–LW-10 added (§20, spec `specs/BUILD-SPEC-LAUNCH-WAVE.md`). 4 P0 + 6 P1 OPEN. P0 launch gate re-opened until LW-1–LW-4 land.
 
