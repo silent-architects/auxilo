@@ -30,10 +30,14 @@ process.env.AUXILO_DATA_DIR = TMP_DATA;
 
 const { describe, it, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('crypto');
+const { spawn } = require('child_process');
 
 const selfReview = require('../lib/self-review.js');
 const reviewLib = require('../lib/review.js');
 const cleanLane = require('../lib/clean-lane.js');
+
+const REPO_ROOT = path.join(__dirname, '..');
 
 const SERVER_SRC = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf-8');
 const MCP_SRC = fs.readFileSync(path.join(__dirname, '..', 'mcp-server.js'), 'utf-8');
@@ -533,6 +537,21 @@ describe('server.js clean-lane routes: FLAG-DARK posture (structural)', () => {
     assert.match(slice, /shouldFreezeCleanLane/);
     assert.match(slice, /catch \(guardErr\)/);
   });
+
+  it('Gate-A F2: the dark 404 body is the catch-all shape — no fingerprint', () => {
+    const guard = sliceAt(SERVER_SRC, 'function cleanLaneDarkGuard', 800);
+    assert.match(guard, /No endpoint at \$\{c\.req\.method\} \$\{c\.req\.path\}/,
+      'dark guard must return the catch-all message shape');
+    assert.match(guard, /See GET \/api for all available endpoints/,
+      'dark guard must return the catch-all help string');
+  });
+
+  it('Gate-A F3: the affirmation-mismatch error never echoes the expected sentence', () => {
+    const slice = sliceAt(SERVER_SRC, "app.post('/account/clean-lane/grant'", 4800);
+    assert.match(slice, /AFFIRMATION_TEXT_MISMATCH/);
+    assert.ok(!slice.includes('expected_affirmation'),
+      'the API error must not teach callers the affirmation sentence — dashboard/CLI carry it');
+  });
 });
 
 describe('never-agent-enrollable (GOV-3 invariant, SPEC3 §4.2)', () => {
@@ -573,5 +592,304 @@ describe('openapi.json documents the B1 contract', () => {
   it('the DARK clean-lane routes are NOT advertised while dark', () => {
     assert.ok(!OPENAPI_SRC.includes('/account/clean-lane'),
       'dark consent routes must not be published in openapi until C1 activation');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// F. Behavioral: boot the real server — auto-freeze guardrail END TO END
+//    (Gate-A F1 on fcf606b: token-presence pins cannot detect a disabled
+//    brake — a `false &&` mutation at either guardrail call site survived
+//    them. This leg kills BOTH mutations behaviorally: the post-retraction
+//    freeze via the status read after retract, the pre-publish freeze via
+//    the re-grant-then-submit hold. Boot pattern: pricing-visibility.)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RAW_API_KEY = 'axl_' + 'a'.repeat(40);
+const BOOT_ACCOUNT = 'acc_spec3boot';
+
+function bootFixtureCatalog() {
+  // Clone a real seed record so every field migrations/scoring expect exists.
+  // Non-empty catalog = no CS-1 re-seeding.
+  const seed = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'seed-knowledge.json'), 'utf-8'));
+  const base = Array.isArray(seed) ? seed[0] : seed.learnings[0];
+  assert.ok(base, 'seed-knowledge.json must contain at least one learning');
+  const l = JSON.parse(JSON.stringify(base));
+  l.id = 'boot_seed_1';
+  l.status = 'approved';
+  return [l];
+}
+
+function bootFixtureAccounts() {
+  const now = new Date().toISOString();
+  return {
+    [BOOT_ACCOUNT]: {
+      id: BOOT_ACCOUNT,
+      email: 'spec3-boot@test.local',
+      created_at: now,
+      tos_version: '2026-07-04-payee-agency-a1',
+      accepted_at: now,
+      api_keys: [{
+        id: 'key_spec3boot',
+        hash: crypto.createHash('sha256').update(RAW_API_KEY).digest('hex'),
+        label: 'spec3-boot',
+        scope: 'contribute',
+        scope_version: 2,
+        created_at: now,
+        active: true,
+      }],
+    },
+  };
+}
+
+/** A clean, floor+threshold-passing extraction-channel /learn payload.
+ *  Bodies are deliberately boring tech prose: no names, paths, handles,
+ *  client/company phrasing — they must pass the regex sensitivity layer. */
+function extractionPayload(n) {
+  const topics = {
+    1: {
+      title: 'Retry idempotent requests with jittered backoff on 502',
+      body: 'Exponential backoff with jitter resolves intermittent 502 errors from upstream gateways when retrying idempotent requests. Cap retries at five attempts and honor any retry-after header the gateway returns before the next attempt.',
+      tags: ['http', 'retry', 'backoff'],
+    },
+    2: {
+      title: 'Enable write-ahead logging before concurrent sqlite readers',
+      body: 'Enable write-ahead logging mode in embedded sqlite databases before allowing concurrent readers; otherwise a long-running write transaction blocks every reader and the stalls surface as random query timeouts under load.',
+      tags: ['sqlite', 'wal', 'concurrency'],
+    },
+    3: {
+      title: 'Set server name indication explicitly behind tls-terminating proxies',
+      body: 'Set the server name indication field explicitly when connecting through a reverse proxy that terminates tls for many hostnames; without it certificate validation fails intermittently depending on which backend certificate the proxy presents first.',
+      tags: ['tls', 'sni', 'proxy'],
+    },
+    4: {
+      title: 'Pin cron schedules in utc to avoid daylight saving drift',
+      body: 'Cron schedules run in the timezone of the host daemon, not the calling shell; pin every schedule in utc and convert at render time, or jobs silently shift by an hour across daylight saving transitions.',
+      tags: ['cron', 'timezone', 'scheduling'],
+    },
+  };
+  const t = topics[n];
+  return {
+    ...t,
+    category: 'code-execution',
+    task_context: 'spec3 b1 behavioral boot test',
+    outcome: 'success',
+    contributor_agent: 'auxilo-hook/claude-code',
+    submission_channel: 'extraction',
+    quality_self_assessment: { specificity: 4, actionability: 4, novelty: 4, completeness: 4, total: 16 },
+  };
+}
+
+function bootServerWithEnv(tmpDir, extraEnv) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, ['server.js'], {
+      cwd: tmpDir,
+      env: {
+        ...process.env,
+        NODE_ENV: 'test',
+        // dummy key so the boot survives the WALLET_PRIVATE_KEY gate
+        WALLET_PRIVATE_KEY: '0x' + '11'.repeat(32),
+        // regex-only sensitivity: the LLM layer fails CLOSED without a real
+        // key, which would hold every submission and mask the lane under test
+        LLM_SENSITIVITY_ENABLED: 'false',
+        // lib modules (accounts, clean-lane, audit writer) resolve their data
+        // dir through the SYMLINKED lib/ (realpath = repo), so they must be
+        // pointed at the staged data dir explicitly
+        AUXILO_DATA_DIR: path.join(tmpDir, 'data'),
+        AUXILO_ACCOUNTS_FILE: path.join(tmpDir, 'data', 'accounts.json'),
+        ...extraEnv,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let out = '';
+    let settled = false;
+    const settle = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+    const timer = setTimeout(() => settle({ child, out, up: false }), 20_000);
+    const onData = (buf) => {
+      out += buf.toString();
+      if (out.includes('Auxilo running at')) settle({ child, out, up: true });
+      if (out.includes('EADDRINUSE') || out.includes('UNCAUGHT EXCEPTION')) settle({ child, out, up: false });
+    };
+    child.stdout.on('data', onData);
+    child.stderr.on('data', onData);
+    child.on('exit', () => settle({ child, out, up: false }));
+  });
+}
+
+async function bootWithRetry(tmpDir, extraEnv) {
+  // Hardcoded port 3000: another test file's boot can hold it briefly under
+  // the parallel runner. Retry on EADDRINUSE (pricing-visibility pattern).
+  let boot = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    boot = await bootServerWithEnv(tmpDir, extraEnv);
+    if (boot.up) return boot;
+    boot.child.kill('SIGKILL');
+    if (!boot.out.includes('EADDRINUSE')) return boot;
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+  return boot;
+}
+
+describe('behavioral: clean-lane guardrail + channel-hold end to end', () => {
+  it('freeze fires at BOTH call sites; dark 404 is un-fingerprintable; grant row while dark still holds', { timeout: 240_000 }, async (t) => {
+    let nodeModulesDir;
+    try {
+      const honoEntry = require.resolve('hono', { paths: [REPO_ROOT] });
+      nodeModulesDir = honoEntry.slice(0, honoEntry.lastIndexOf(`${path.sep}node_modules${path.sep}`) + '/node_modules'.length);
+    } catch {
+      t.skip('hono not resolvable from repo root — skipping real boot (structural pins remain enforcing)');
+      return;
+    }
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'auxilo-spec3boot-'));
+    let child = null;
+    const base = 'http://127.0.0.1:3000';
+    const H = { 'X-API-Key': RAW_API_KEY, 'Content-Type': 'application/json' };
+    const get = async (p, expectStatus = 200) => {
+      const res = await fetch(`${base}${p}`, { headers: H });
+      assert.equal(res.status, expectStatus, `GET ${p} → ${res.status}`);
+      return res.json();
+    };
+    const post = async (p, body, expectStatus) => {
+      const res = await fetch(`${base}${p}`, { method: 'POST', headers: H, body: JSON.stringify(body) });
+      assert.equal(res.status, expectStatus, `POST ${p} → ${res.status}: ${JSON.stringify(await res.clone().json().catch(() => ({})))}`);
+      return res.json();
+    };
+    const grantBody = {
+      consent_version: cleanLane.CLEAN_LANE_CONSENT_VERSION,
+      agree: true,
+      affirmation: cleanLane.CLEAN_LANE_AFFIRMATION,
+    };
+
+    try {
+      // ── Stage the sandbox (pricing-visibility pattern) ────────────────────
+      for (const f of ['server.js', 'seed-knowledge.json', 'skills.json', 'openapi.json', 'package.json', 'model_config.json']) {
+        const src = path.join(REPO_ROOT, f);
+        if (fs.existsSync(src)) fs.copyFileSync(src, path.join(tmpDir, f));
+      }
+      const staged = fs.readFileSync(path.join(tmpDir, 'server.js'), 'utf-8');
+      const patched = staged.replace(/^const WALLET = '0x[0-9a-fA-F]{40}';$/m,
+        "const WALLET = '0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A';");
+      assert.notEqual(patched, staged, 'expected exactly one WALLET const line to patch for the boot gate');
+      fs.writeFileSync(path.join(tmpDir, 'server.js'), patched);
+      for (const d of ['lib', 'public', 'prompts']) {
+        const src = path.join(REPO_ROOT, d);
+        if (fs.existsSync(src)) fs.symlinkSync(src, path.join(tmpDir, d));
+      }
+      fs.symlinkSync(nodeModulesDir, path.join(tmpDir, 'node_modules'));
+      fs.mkdirSync(path.join(tmpDir, 'data'));
+      fs.writeFileSync(path.join(tmpDir, 'data', 'learnings.json'), JSON.stringify(bootFixtureCatalog(), null, 2));
+      fs.writeFileSync(path.join(tmpDir, 'data', 'accounts.json'), JSON.stringify(bootFixtureAccounts(), null, 2));
+
+      // ══ BOOT 1: flag LIT ══════════════════════════════════════════════════
+      let boot = await bootWithRetry(tmpDir, { EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED: 'true' });
+      child = boot.child;
+      if (!boot.up) {
+        t.skip(`server did not reach listen — skipping behavioral leg (structural pins remain enforcing). Output tail: ${boot.out.slice(-400)}`);
+        return;
+      }
+
+      // No consent yet → status visible (flag on) and inactive.
+      const s0 = await get('/account/clean-lane');
+      assert.equal(s0.clean_lane_active, false);
+      assert.equal(s0.consent_version_current, cleanLane.CLEAN_LANE_CONSENT_VERSION);
+
+      // Grant (strengthened clickwrap).
+      const g1 = await post('/account/clean-lane/grant', grantBody, 200);
+      assert.equal(g1.clean_lane_active, true);
+      assert.equal(g1.min_auto_publish_quality, 16);
+
+      // Submission 1: clean + 16/20 + extraction → AUTO-PUBLISHES with stamps + notice.
+      const r1 = await post('/learn', extractionPayload(1), 201);
+      assert.equal(r1.status, 'approved', `expected clean-lane auto-publish, got ${r1.status} (${JSON.stringify(r1.review_reason || [])})`);
+      assert.equal(r1.published_via, 'clean_lane_standing_consent');
+      assert.ok(typeof r1.standing_consent_notice === 'string' && r1.standing_consent_notice.includes('Retractable until'));
+      assert.ok(r1.retractable_until);
+
+      // Retract it → 1/1 in 30d = 100% > 5% → the POST-RETRACTION guardrail
+      // site must freeze the lane NOW.
+      const delRes = await fetch(`${base}/learn/${r1.id}?reason=retract`, { method: 'DELETE', headers: H });
+      assert.equal(delRes.status, 200, `retraction → ${delRes.status}`);
+      const del = await delRes.json();
+      assert.equal(del.status, 'retracted');
+
+      // KILLS the post-retraction `false &&` mutation: with the guardrail
+      // disabled there, the lane would still read active/grant here.
+      const s1 = await get('/account/clean-lane');
+      assert.equal(s1.clean_lane_active, false, 'retraction-rate breach must freeze the lane at the retraction site');
+      assert.equal(s1.last_action, 'freeze');
+      assert.equal(s1.freeze_reason, 'retraction_rate');
+
+      // Frozen lane → next clean+scored extraction item HOLDS.
+      const r2 = await post('/learn', extractionPayload(2), 201);
+      assert.equal(r2.status, 'pending_review');
+      assert.ok(r2.review_reason.includes('standing_consent_off'), `expected standing_consent_off, got ${JSON.stringify(r2.review_reason)}`);
+
+      // Explicit human re-grant reactivates the lane...
+      const g2 = await post('/account/clean-lane/grant', grantBody, 200);
+      assert.equal(g2.clean_lane_active, true);
+
+      // ...but the 30d stats still show the breach, so the PRE-PUBLISH
+      // guardrail site must freeze again and HOLD this item.
+      // KILLS the pre-publish `false &&` mutation: with the guardrail disabled
+      // there, this submission would auto-publish 'approved'.
+      const r3 = await post('/learn', extractionPayload(3), 201);
+      assert.equal(r3.status, 'pending_review', 're-grant under a standing breach must re-freeze at the publish site, never publish');
+      assert.ok(r3.review_reason.includes('standing_consent_off'), `expected standing_consent_off, got ${JSON.stringify(r3.review_reason)}`);
+      const s2 = await get('/account/clean-lane');
+      assert.equal(s2.last_action, 'freeze', 'the pre-publish guardrail must have re-frozen the lane');
+
+      // Bonus lane coverage: both held items sit in ready_to_publish — one
+      // counted bulk-approve away (the B1 contract, behaviorally).
+      const summary = await get('/account/pending/summary');
+      const lanes = Object.fromEntries(summary.items.map((r) => [r.title, r.lane]));
+      assert.equal(lanes[extractionPayload(2).title], 'ready_to_publish');
+      assert.equal(lanes[extractionPayload(3).title], 'ready_to_publish');
+      assert.ok(summary.approvable_count >= 2);
+
+      // Leave an ACTIVE grant row on disk for the dark boot below.
+      await post('/account/clean-lane/grant', grantBody, 200);
+
+      child.kill('SIGKILL');
+      child = null;
+
+      // ══ BOOT 2: flag DARK (absent), SAME data dir ═════════════════════════
+      boot = await bootWithRetry(tmpDir, {});
+      child = boot.child;
+      if (!boot.up) {
+        t.skip(`dark re-boot did not reach listen — lit-leg assertions above already ran. Output tail: ${boot.out.slice(-400)}`);
+        return;
+      }
+
+      // F2: the dark 404 must be byte-shape-identical to the catch-all 404 —
+      // same keys, same error/help, same message pattern — so the routes'
+      // existence cannot be fingerprinted by a body diff.
+      const darkRes = await fetch(`${base}/account/clean-lane`, { headers: H });
+      assert.equal(darkRes.status, 404);
+      const dark = await darkRes.json();
+      const unknownRes = await fetch(`${base}/account/definitely-not-a-route`, { headers: H });
+      assert.equal(unknownRes.status, 404);
+      const unknown = await unknownRes.json();
+      assert.deepEqual(Object.keys(dark).sort(), Object.keys(unknown).sort(), 'dark 404 body keys must match the catch-all');
+      assert.equal(dark.error, unknown.error);
+      assert.equal(dark.help, unknown.help);
+      assert.equal(dark.message, 'No endpoint at GET /account/clean-lane');
+      assert.equal(unknown.message, 'No endpoint at GET /account/definitely-not-a-route');
+      await post('/account/clean-lane/grant', grantBody, 404);
+
+      // The reviewer's forged-grant-row probe: an ACTIVE grant row exists on
+      // disk, but with the flag dark the lane must not arm — clean+scored
+      // extraction items still HOLD.
+      const r4 = await post('/learn', extractionPayload(4), 201);
+      assert.equal(r4.status, 'pending_review', 'a grant row on disk must be inert while the flag is dark');
+      assert.ok(r4.review_reason.includes('standing_consent_off'), `expected standing_consent_off, got ${JSON.stringify(r4.review_reason)}`);
+    } finally {
+      if (child) child.kill('SIGKILL');
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });

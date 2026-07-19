@@ -6845,7 +6845,10 @@ app.post('/account/accept-terms', requireSessionOrApiKey('contribute'), async (c
 // version — this build records, it never decides.
 function cleanLaneDarkGuard(c) {
   if (cleanLaneFlagEnabled(process.env)) return null;
-  return c.json({ error: 'Not found' }, 404);
+  // Gate-A F2 (fcf606b): return the catch-all 404's EXACT shape (server.js
+  // notFound handler) — a distinct body would fingerprint the routes'
+  // existence while dark, defeating the argued 404 posture.
+  return c.json({ error: 'Not found', message: `No endpoint at ${c.req.method} ${c.req.path}`, help: 'See GET /api for all available endpoints' }, 404);
 }
 
 // GET /account/clean-lane — consent status for the caller's account. Read scope.
@@ -6906,12 +6909,14 @@ app.post('/account/clean-lane/grant', async (c) => {
       code: 'AFFIRMATION_REQUIRED',
     }, 400);
   }
-  // Strengthened for this lane: the VERBATIM human checkbox sentence on the wire.
+  // Strengthened for this lane: the VERBATIM human checkbox sentence on the
+  // wire. Gate-A F3 (fcf606b): the error deliberately does NOT echo the
+  // expected sentence — the API needn't teach callers the affirmation; the
+  // dashboard/CLI enrollment surfaces carry it.
   if (affirmation !== CLEAN_LANE_AFFIRMATION) {
     return c.json({
-      error: 'affirmation must be the exact consent sentence, transmitted verbatim.',
+      error: 'affirmation must be the exact consent sentence from the enrollment surface, transmitted verbatim.',
       code: 'AFFIRMATION_TEXT_MISMATCH',
-      expected_affirmation: CLEAN_LANE_AFFIRMATION,
     }, 400);
   }
   let minQuality = MIN_AUTO_PUBLISH_QUALITY_DEFAULT;
