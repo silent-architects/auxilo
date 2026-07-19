@@ -95,6 +95,20 @@ describe('convertUnassentedToPending', () => {
   it('is a no-op for an unknown / new identity (nothing to convert)', () => {
     assert.equal(convertUnassentedToPending({}, { account_id: 'acc_missing' }), 0);
   });
+  it('AUD19-8: repeat conversion after fresh accrual moves ONLY the new amount (sweep idempotency)', () => {
+    const earnings = { acc_x: initEarningsEntry('acc_x', null) };
+    earnings.acc_x.unassented_pending = 1.0;
+    assert.equal(convertUnassentedToPending(earnings, { account_id: 'acc_x' }), 1.0);
+    // New held value lands after the first conversion (e.g. a WAL replay of a
+    // pre-assent unlock) — the next sweep moves only that.
+    earnings.acc_x.unassented_pending = 0.25;
+    assert.equal(convertUnassentedToPending(earnings, { account_id: 'acc_x' }), 0.25);
+    assert.equal(earnings.acc_x.pending_balance, 1.25);
+    assert.equal(earnings.acc_x.unassented_pending, 0);
+    // And a third call with nothing held moves nothing.
+    assert.equal(convertUnassentedToPending(earnings, { account_id: 'acc_x' }), 0);
+    assert.equal(earnings.acc_x.pending_balance, 1.25);
+  });
   it('resolves and converts a wallet-keyed entry too', () => {
     const w = '0xabc0000000000000000000000000000000000001';
     const earnings = { [w]: initEarningsEntry(null, w) };
@@ -164,21 +178,52 @@ describe('server.js: accrual gate + WAL replay + conversion wiring', () => {
     assert.ok(/else if \(agency_in_force !== false\)/.test(SERVER_SRC));
     assert.ok(/earningsEntry\.unassented_pending = \(earningsEntry\.unassented_pending \|\| 0\) \+ contributor_earned/.test(SERVER_SRC));
   });
-  it('accept-terms converts held → pending on a non-idempotent acceptance', () => {
+  it('AUD19-8: accept-terms sweeps held → pending on EVERY acceptance, including idempotent re-accepts (accept-then-crash cure)', () => {
     const i = SERVER_SRC.indexOf("app.post('/account/accept-terms'");
     assert.notEqual(i, -1);
-    const h = SERVER_SRC.slice(i, i + 5500);
-    assert.ok(h.includes('convertUnassentedToPending(earnings'));
-    assert.ok(/if \(moved > 0\) safeWrite\(EARNINGS_FILE, earnings\)/.test(h));
-    assert.ok(h.includes('!result.alreadyAccepted')); // same non-idempotent guard as the durable append
+    const h = SERVER_SRC.slice(i, i + 7000);
+    // The sweep replaces the old inside-the-guard conversion. It must run on BOTH
+    // branches: the durable-log append stays guarded by !result.alreadyAccepted,
+    // but the sweep runs after/outside that guard so a re-accept after an
+    // accept-then-crash still converts the stranded held balance.
+    assert.ok(h.includes('sweepHeldEarnings(accountId)'), 'accept-terms must call the held-balance sweep');
+    assert.ok(h.includes('!result.alreadyAccepted'), 'durable append keeps its non-idempotent guard');
+    assert.ok(h.includes('OUTSIDE the !alreadyAccepted guard'),
+      'the sweep is documented + placed outside the first-accept-only guard (the crash cure)');
+    const guardAt = h.indexOf('!result.alreadyAccepted');
+    const sweepAt = h.indexOf('sweepHeldEarnings(accountId)');
+    assert.ok(sweepAt > guardAt, 'sweep call sits after the guarded durable-append block');
   });
-  it('link-wallet converts held balance AFTER the migration (P1-B strand fix)', () => {
+  it('AUD19-8: link-wallet sweeps held balance AFTER the migration (P1-B strand fix, now unconditional)', () => {
     const i = SERVER_SRC.indexOf("app.post('/account/link-wallet'");
     assert.notEqual(i, -1);
-    const h = SERVER_SRC.slice(i, i + 4500);
+    const h = SERVER_SRC.slice(i, i + 6000);
     const migAt = h.indexOf('lazyMigrateOnWalletLink');
-    const convAt = h.indexOf('convertUnassentedToPending');
-    assert.ok(migAt !== -1 && convAt !== -1 && convAt > migAt,
-      'link-wallet must call convertUnassentedToPending after lazyMigrateOnWalletLink so accept-then-link does not strand funds');
+    const sweepAt = h.indexOf('sweepHeldEarnings');
+    assert.ok(migAt !== -1 && sweepAt !== -1 && sweepAt > migAt,
+      'link-wallet must sweep held balance after lazyMigrateOnWalletLink so accept-then-link does not strand funds');
+  });
+  it('AUD19-8: GET /account/earnings runs the self-healing sweep before reporting', () => {
+    const i = SERVER_SRC.indexOf("app.get('/account/earnings'");
+    assert.notEqual(i, -1);
+    const h = SERVER_SRC.slice(i, i + 3000);
+    assert.ok(h.includes('sweepHeldEarnings(accountId)'),
+      'the earnings read must sweep first so releasable value is never reported as held');
+  });
+  it('AUD19-8: sweepHeldEarnings gates on the agency predicate and takes the shared earnings lock', () => {
+    const i = SERVER_SRC.indexOf('async function sweepHeldEarnings');
+    assert.notEqual(i, -1, 'sweep helper must exist');
+    const h = SERVER_SRC.slice(i, i + 2500);
+    assert.ok(h.includes('isPayeeAgencyInForce'), 'never moves money unless §5.10 is in force');
+    assert.ok(h.includes('acquireEarningsLock'),
+      'sweep runs post-assent (withdrawals possible) so it MUST hold the same earnings lock both rails use');
+    assert.ok(h.includes('convertUnassentedToPending'), 'conversion goes through the one CP-6 helper');
+    assert.ok(h.includes('safeWrite(EARNINGS_FILE'), 'persists the conversion');
+  });
+  it('AUD19-8(b): GET /account/earnings exposes held_pending_assent in both branches', () => {
+    const i = SERVER_SRC.indexOf("app.get('/account/earnings'");
+    const h = SERVER_SRC.slice(i, i + 6000);
+    const matches = h.match(/held_pending_assent:/g) || [];
+    assert.ok(matches.length >= 2, `held_pending_assent must appear in the zero-state AND normal branches (found ${matches.length})`);
   });
 });

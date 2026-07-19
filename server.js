@@ -22,7 +22,7 @@ const {
   isLlmSensitivityEnabled,
 } = require('./lib/content-sensitivity-llm.js'); // LW-16 content-sensitivity gate (LLM semantic layer)
 const { findNearDuplicate } = require('./lib/similarity.js'); // LW-14
-const { listOwnPending, applySelfDecision, summarizeOwnPending, applyBulkDecisions, BULK_MAX: SELF_REVIEW_BULK_MAX } = require('./lib/self-review.js'); // LW-15 + review-seamless
+const { listOwnPending, applySelfDecision, summarizeOwnPending, applyBulkDecisions, BULK_MAX: SELF_REVIEW_BULK_MAX, meetsQualityFloor, QUALITY_FLOOR_TOTAL, QUALITY_FLOOR_DIMENSION, adoptWalletOrphans } = require('./lib/self-review.js'); // LW-15 + review-seamless + AUD19-3/-6
 const { validateOfacRedirect } = require('./lib/ofac-redirect.js'); // S-6: OFAC redirect allowlist
 
 // ─── Phase 2.1a: Autonomous Extraction Pipeline ─────────────────────────────
@@ -3758,6 +3758,121 @@ function acquireAccountLock(accountId) {
   return acquire;
 }
 
+// ── AUD19-8(a): idempotent held-balance sweep ───────────────────────────────
+//
+// CP-6's original conversion ran ONCE, inside accept-terms' !alreadyAccepted
+// branch. Accept-then-crash (acceptance persisted, conversion lost) therefore
+// stranded `unassented_pending` forever: re-accept is idempotent and converted
+// nothing, and no other path swept. This helper is the cure: whenever the
+// payee-agency (§5.10) is in force for an account AND its earnings entry holds
+// unassented balance, convert it to withdrawable pending_balance. Safe to call
+// on every read — idempotent (no-op at held == 0), and it moves money exactly
+// once.
+//
+// LOCKING: the original conversion was lock-free, argued safe because it ran
+// only on FIRST acceptance, when no withdrawal could be in flight (withdrawals
+// are acceptance-gated). The sweep breaks that precondition — it runs on every
+// earnings read, post-assent — so it takes the SAME shared earnings lock both
+// withdrawal rails hold (acquireEarningsLock on the resolved entry key).
+// Ordering at sites that also hold the account lock (accept-terms,
+// link-wallet) is account-lock → earnings-lock, identical to the Stripe
+// withdraw path — no inversion, no deadlock. The held>0 pre-check runs
+// without the lock so the hot path (GET /account/earnings with nothing held)
+// costs one map lookup.
+//
+// Call sites: POST /account/accept-terms (BOTH branches — the crash cure),
+// GET /account/earnings (self-healing on every balance read), and
+// POST /account/link-wallet (post-migration; route is terms-gated).
+async function sweepHeldEarnings(accountId) {
+  if (!accountId) return 0;
+  const acct = loadAccounts()[accountId];
+  // Authoritative read + fail-closed: no account or agency not in force → never move money.
+  if (!acct || !isPayeeAgencyInForce(acct)) return 0;
+
+  const identity = { account_id: accountId, wallet: acct.wallet || null };
+
+  // Cheap no-lock pre-check: nothing held → nothing to do.
+  const { entry: preEntry, key: earningsKey, source: preSource } = resolveEarningsEntry(earnings, identity);
+  if (preSource === 'new' || !earningsKey) return 0;
+  if (!(typeof preEntry.unassented_pending === 'number' && preEntry.unassented_pending > 0)) return 0;
+
+  const releaseEarningsLock = await acquireEarningsLock(earningsKey);
+  try {
+    // Re-resolve inside the lock so the conversion acts on the authoritative entry.
+    const moved = convertUnassentedToPending(earnings, identity);
+    if (moved > 0) {
+      safeWrite(EARNINGS_FILE, earnings);
+      console.log(`[cp6-sweep] converted ${moved.toFixed(6)} held → withdrawable for ${accountId}`);
+    }
+    return moved;
+  } finally {
+    releaseEarningsLock();
+  }
+}
+
+// ── AUD19-3(c): pending_review queue-entry ops alert (batched/throttled) ────
+//
+// Nothing previously notified anyone when an item entered pending_review — the
+// admin queue and the self-review queue are both pull-only, so items rot
+// unnoticed (LW-18 / the 2026-06-11 stalled-funnel incident, and the terminal
+// case: wallet-only orphans nobody could even approve). This wires
+// sendOpsAlert to queue entry WITHOUT spam: entries accumulate a counter and
+// at most one summary email goes out per PENDING_REVIEW_ALERT_INTERVAL_MS
+// (default 6h). On a failed/rate-limited send the count is restored so it
+// reports in the next alert instead of vanishing. Fire-and-forget: never
+// blocks or fails the request path (sendOpsAlert never throws and carries its
+// own global 5-minute floor).
+const PENDING_REVIEW_ALERT_INTERVAL_MS =
+  parseInt(process.env.PENDING_REVIEW_ALERT_INTERVAL_MS || '', 10) > 0
+    ? parseInt(process.env.PENDING_REVIEW_ALERT_INTERVAL_MS, 10)
+    : 6 * 60 * 60 * 1000;
+let _pendingAlertLastSentAt = 0;
+let _pendingAlertNewCount = 0;
+let _pendingAlertLatest = null;
+
+function notePendingReviewEntries(count, context = {}) {
+  if (!Number.isInteger(count) || count <= 0) return;
+  _pendingAlertNewCount += count;
+  _pendingAlertLatest = {
+    source: context.source || 'unknown',
+    id: context.id || null,
+    orphaned: !!context.orphaned,
+  };
+
+  const now = Date.now();
+  if (now - _pendingAlertLastSentAt < PENDING_REVIEW_ALERT_INTERVAL_MS) return;
+
+  const newCount = _pendingAlertNewCount;
+  const latest = _pendingAlertLatest;
+  _pendingAlertLastSentAt = now;
+  _pendingAlertNewCount = 0;
+
+  let totalPending = 0;
+  let orphanPending = 0;
+  for (const l of learnings) {
+    if (l && l.status === 'pending_review') {
+      totalPending += 1;
+      if (!l.contributor_account_id) orphanPending += 1;
+    }
+  }
+
+  const body =
+    `${newCount} new item(s) entered the pending_review queue since the last alert.\n` +
+    `Queue now: ${totalPending} pending total, ${orphanPending} of them account-less (wallet-only orphans awaiting adoption).\n` +
+    `Latest entry: ${latest.id || 'n/a'} via ${latest.source}${latest.orphaned ? ' (ORPHANED — no account bound)' : ''}.\n` +
+    `Review: auxilo review (CLI) / dashboard review queue / GET /admin/moderation/queue.`;
+
+  sendOpsAlert(`pending_review queue: ${newCount} new (${totalPending} total)`, body)
+    .then((res) => {
+      if (!res || !res.ok) {
+        // Not delivered (unconfigured / rate-limited / transport error): fold the
+        // count back so the next alert still reports it.
+        _pendingAlertNewCount += newCount;
+      }
+    })
+    .catch(() => { _pendingAlertNewCount += newCount; });
+}
+
 // POST /account/connect-stripe: onboard a Stripe Express connected account
 app.post('/account/connect-stripe', requireAuth, async (c) => {
   const accountId = c.get('accountId');
@@ -4054,19 +4169,37 @@ app.post('/account/link-wallet', requireSessionOrApiKey(), async (c) => {
     // Lazy migrate any pre-existing wallet-keyed earnings entry to account-keyed
     const migrated = lazyMigrateOnWalletLink(earnings, result.wallet, accountId);
     if (migrated) {
-      // CP-6 P1-B: the accept-then-link ordering would otherwise STRAND held balance. A
-      // wallet-only contributor accrues to `unassented_pending` under the wallet key; when they
-      // later create an account and accept, accept-terms runs its conversion BEFORE the wallet is
-      // linked (wallet is null then) so it resolves nothing, and the migration above carries the
-      // held balance in as `unassented_pending`. This route is terms-gated (:3857), so the agency
-      // is in force here — convert the just-migrated held balance to withdrawable now, so a
-      // Builder who did everything right isn't left with permanently non-withdrawable funds.
-      convertUnassentedToPending(earnings, { account_id: accountId, wallet: result.wallet });
       safeWrite(EARNINGS_FILE, earnings);
       console.log(`[p0.5] Lazy migrated wallet-keyed earnings to account ${accountId} on wallet link`);
     }
 
-    return c.json({ message: 'Wallet linked', wallet: result.wallet, account_id: accountId });
+    // CP-6 P1-B / AUD19-8(a): the accept-then-link ordering would otherwise STRAND held
+    // balance. A wallet-only contributor accrues to `unassented_pending` under the wallet
+    // key; when they later create an account and accept, accept-terms runs its sweep BEFORE
+    // the wallet is linked (wallet is null then) so it resolves nothing, and the migration
+    // above carries the held balance in as `unassented_pending`. This route is terms-gated,
+    // so the agency is in force here — sweep held → withdrawable now (idempotent, takes the
+    // shared earnings lock, persists internally; runs regardless of `migrated` so a
+    // pre-existing account-keyed held balance converts too).
+    await sweepHeldEarnings(accountId);
+
+    // AUD19-3(b): the account just PROVED ownership of this wallet (verified signature +
+    // link) — adopt any wallet-only orphaned learnings bearing it, binding
+    // contributor_account_id so the whole self-review stack (queue/decide/CLI/dashboard/MCP)
+    // works on them. Wallet source is result.wallet (the verified, just-linked address —
+    // never a claimed one).
+    const adoptedCount = adoptWalletOrphans(learnings, accountId, result.wallet);
+    if (adoptedCount > 0) {
+      safeWrite(LEARNINGS_FILE, learnings);
+      console.log(`[AUD19-3] adopted ${adoptedCount} wallet-only learning(s) into account ${accountId} on wallet link`);
+    }
+
+    return c.json({
+      message: 'Wallet linked',
+      wallet: result.wallet,
+      account_id: accountId,
+      ...(adoptedCount > 0 && { adopted_learnings: adoptedCount }),
+    });
   } finally {
     releaseAccountLock();
   }
@@ -4091,6 +4224,17 @@ app.get('/account/earnings', requireSessionOrApiKey('read'), async (c) => {
     return c.json({ error: 'Account not found' }, 404);
   }
 
+  // AUD19-8(a): self-healing sweep on every balance read. If the agency (§5.10)
+  // is in force and anything sits in the held bucket (e.g. after an
+  // accept-then-crash, or a WAL replay that landed held post-assent), convert it
+  // BEFORE reporting — so the response never shows releasable value as held.
+  // Idempotent; takes the shared earnings lock internally; no-op on the hot path.
+  try {
+    await sweepHeldEarnings(accountId);
+  } catch (sweepErr) {
+    console.error('[account/earnings] held-balance sweep failed:', sweepErr.message);
+  }
+
   const { entry, source } = resolveEarningsEntry(earnings, {
     account_id: accountId,
     wallet: account.wallet || null,
@@ -4100,8 +4244,10 @@ app.get('/account/earnings', requireSessionOrApiKey('read'), async (c) => {
   const canWithdraw = hasWallet && source !== 'new' && (entry.pending_balance || 0) > 0;
 
   if (source === 'new') {
-    // No earnings yet — return zero state. unassented_pending is surfaced in BOTH
+    // No earnings yet — return zero state. The held bucket is surfaced in BOTH
     // branches (MISS-03/BUX-3) so a consumer always has the held-vs-owned split.
+    // AUD19-8(b): `held_pending_assent` is the public name; `unassented_pending`
+    // stays for backward compatibility with existing consumers.
     return c.json({
       account_id: accountId,
       wallet: account.wallet || null,
@@ -4109,6 +4255,7 @@ app.get('/account/earnings', requireSessionOrApiKey('read'), async (c) => {
       total_gross: 0,
       total_contributor: 0,
       total_contributor_gross: 0,
+      held_pending_assent: 0,
       unassented_pending: 0,
       pending_balance: 0,
       total_withdrawn: 0,
@@ -4142,7 +4289,8 @@ app.get('/account/earnings', requireSessionOrApiKey('read'), async (c) => {
     total_gross: entry.total_gross || 0,
     total_contributor: contributorOwned,          // owned lifetime share (excludes held)
     total_contributor_gross: contributorGross,    // lifetime gross including held
-    unassented_pending: heldPending,              // held until §5.10 acceptance (not owned)
+    held_pending_assent: heldPending,             // AUD19-8(b): undisbursable receipts, released on §5.10 acceptance
+    unassented_pending: heldPending,              // legacy alias of held_pending_assent (back-compat)
     pending_balance: entry.pending_balance || 0,  // withdrawable subset of owned
     total_withdrawn: entry.total_withdrawn || 0,
     withdrawal_count: entry.withdrawal_count || 0,
@@ -5036,17 +5184,27 @@ app.post('/learn', async (c) => {
   //   - content-sensitivity clean (NOT sensitive)
   //   - quality self-score present
   const qualityPresent = !!quality_self_assessment;
+  // AUD19-6: server-side quality floor. Shape validation passed above; the floor
+  // (total >= 14, every dimension >= 3 — lib/self-review.js) decides seamless
+  // eligibility. Below-floor submissions are QUARANTINED to pending_review with
+  // review_reason 'below_quality_floor' — never hard-rejected (the prompt-side
+  // gate already tells agents not to submit < 14; a below-floor arrival is more
+  // likely mis-scored good content than spam, and a 400 would teach clients to
+  // omit the assessment entirely, regressing to 'awaiting_quality').
+  const qualityMeetsFloor = qualityPresent && meetsQualityFloor(quality_self_assessment);
   const learnReviewReasons = [];
   if (FORCE_ALL_REVIEW) learnReviewReasons.push('forced_review');
   if (injectionScreen.flagged) learnReviewReasons.push('injection');
   if (nearDup.verdict !== 'clean') learnReviewReasons.push('near_duplicate');
   if (contentSensitivity.sensitive) learnReviewReasons.push('content_sensitivity');
   if (!qualityPresent) learnReviewReasons.push('awaiting_quality');
+  if (qualityPresent && !qualityMeetsFloor) learnReviewReasons.push('below_quality_floor');
   const seamlessEligible = !FORCE_ALL_REVIEW &&
     !injectionScreen.flagged &&
     nearDup.verdict === 'clean' &&
     !contentSensitivity.sensitive &&
-    qualityPresent;
+    qualityPresent &&
+    qualityMeetsFloor;
 
   // JWT extraction already done above (moved before identity gate for Change 1)
 
@@ -5125,6 +5283,15 @@ app.post('/learn', async (c) => {
   learnings.push(learning);
   safeWrite(LEARNINGS_FILE, learnings);
 
+  // AUD19-3(c): batched/throttled ops alert on queue entry (fire-and-forget).
+  if (learning.status === 'pending_review') {
+    notePendingReviewEntries(1, {
+      source: '/learn',
+      id: learning.id,
+      orphaned: !learning.contributor_account_id,
+    });
+  }
+
   // E1: Advisory if builder price differs > 3x from calculated (per V2 spec)
   const pricingAdvisory = (unlock_price !== undefined &&
     (Number(unlock_price) > calculatedPrice * 3 || Number(unlock_price) < calculatedPrice * 0.3))
@@ -5135,6 +5302,18 @@ app.post('/learn', async (c) => {
       }
     : undefined;
 
+  // AUD19-4/-3(a): a pending_review response must tell the contributor HOW to
+  // act — the queue is otherwise invisible (LW-18 stalled-funnel incident).
+  // Account-bound: point at the three self-review surfaces. Wallet-only (no
+  // account): the item is held bound to the wallet and becomes reviewable via
+  // the adoption cure once the operator creates an account and links the SAME
+  // wallet (AUD19-3b) — say exactly that, with the command.
+  const howToReview = learning.status !== 'pending_review'
+    ? undefined
+    : (learning.contributor_account_id
+      ? 'This submission is held for YOUR review — approve or reject it yourself: run `auxilo review` (CLI), open your dashboard review queue at ' + ((process.env.BASE_URL || 'https://auxilo.io') + '/dashboard') + ', or GET /account/pending with your API key.'
+      : 'This submission is held and bound to your wallet, but no account is attached, so it cannot be reviewed yet. Run `npx auxilo setup` to create an account and API key, then verify and link this SAME wallet (auxilo_verify_wallet + auxilo_link_wallet) — your held submissions are adopted into your review queue automatically (`auxilo review`, dashboard, or GET /account/pending).');
+
   return c.json({
     id: learning.id,
     message: learning.status === 'pending_review'
@@ -5143,6 +5322,7 @@ app.post('/learn', async (c) => {
     status: learning.status,
     // LW-16: when held, tell the contributor WHY (seamless otherwise).
     ...(learning.status === 'pending_review' && { review_reason: learnReviewReasons }),
+    ...(howToReview && { how_to_review: howToReview }),
     unlock_price: resolvedPrice,
     pricing: learning.pricing,
     contributor_wallet: learning.contributor_wallet,
@@ -5895,6 +6075,16 @@ app.post('/extract', async (c) => {
       learnings.push(entry);
     }
     safeWrite(LEARNINGS_FILE, learnings);
+
+    // AUD19-3(c): batched/throttled ops alert on queue entry (fire-and-forget).
+    const extractPendingEntries = pendingCatalogEntries.filter((e) => e && e.status === 'pending_review');
+    if (extractPendingEntries.length > 0) {
+      notePendingReviewEntries(extractPendingEntries.length, {
+        source: '/extract',
+        id: extractPendingEntries[extractPendingEntries.length - 1].id,
+        orphaned: !extractPendingEntries[extractPendingEntries.length - 1].contributor_account_id,
+      });
+    }
   }
 
   // ── Step 18: Response (§3.2 / §3.3) ──────────────────────────────────
@@ -6138,25 +6328,22 @@ app.post('/account/accept-terms', requireSessionOrApiKey('contribute'), async (c
       } catch (logErr) {
         console.error('[tos] durable acceptance-log append failed:', logErr.message);
       }
+    }
 
-      // CP-6: the payee-agency is now in force for this Builder. Move any Builder Share
-      // received on their behalf and HELD (unassented_pending) before this acceptance into
-      // the withdrawable pending_balance — the moment it becomes agency-covered. Lock-free
-      // and correct: this only ever moves money on the FIRST acceptance (afterwards
-      // isPayeeAgencyInForce is true, so nothing new lands in the held bucket), and a
-      // withdrawal cannot be in flight before the first acceptance (withdrawals are
-      // acceptance-gated). The mutate+safeWrite is synchronous → atomic w.r.t. the unlock
-      // handler's write on the shared `earnings` singleton.
-      try {
-        const acctForConv = loadAccounts()[accountId];
-        const moved = convertUnassentedToPending(earnings, {
-          account_id: accountId,
-          wallet: (acctForConv && acctForConv.wallet) || null,
-        });
-        if (moved > 0) safeWrite(EARNINGS_FILE, earnings);
-      } catch (convErr) {
-        console.error('[tos] CP-6 unassented→pending conversion failed:', convErr.message);
-      }
+    // CP-6 / AUD19-8(a): the payee-agency is now in force for this Builder — move any
+    // Builder Share received on their behalf and HELD (unassented_pending) into the
+    // withdrawable pending_balance. DELIBERATELY OUTSIDE the !alreadyAccepted guard:
+    // the original first-accept-only conversion meant a crash between
+    // recordTosAcceptance and the conversion stranded the held balance forever
+    // (re-accept is idempotent and converted nothing). The sweep is idempotent
+    // (no-op at held == 0) and takes the shared earnings lock internally, so
+    // running it on every accept — including idempotent re-accepts — is the cure,
+    // not a risk. Lock ordering here is account-lock → earnings-lock, same as the
+    // Stripe withdraw path.
+    try {
+      await sweepHeldEarnings(accountId);
+    } catch (convErr) {
+      console.error('[tos] CP-6 unassented→pending sweep failed:', convErr.message);
     }
 
     return c.json({
@@ -7792,12 +7979,37 @@ function resolveSelfReviewAccount(c, minScope = 'read') {
   return resolveAccountFromRequest(c, minScope);
 }
 
+// AUD19-3(b): lazy retroactive orphan cure. Accounts that linked their wallet
+// BEFORE this deploy never re-fire the link-wallet adoption hook, so their
+// wallet-only orphans (contributor_account_id: null) would stay unreviewable
+// forever. Run adoption on the pending read paths too: if this account has a
+// linked wallet, adopt any orphaned learnings bearing it. OWNERSHIP CHECK is
+// against the VERIFIED link — account.wallet is only ever set through
+// linkWallet (which requires prior signature verification), and we re-check the
+// verifiedWallets store for defense in depth. Never a claimed/request wallet.
+function adoptOrphansForAccount(accountId) {
+  if (!accountId) return 0;
+  const acct = loadAccounts()[accountId];
+  if (!acct || !acct.wallet || typeof acct.wallet !== 'string') return 0;
+  const walletLower = acct.wallet.toLowerCase();
+  if (!verifiedWallets[walletLower]) return 0;
+  const adopted = adoptWalletOrphans(learnings, accountId, walletLower);
+  if (adopted > 0) {
+    safeWrite(LEARNINGS_FILE, learnings);
+    console.log(`[AUD19-3] lazily adopted ${adopted} wallet-only learning(s) into account ${accountId}`);
+  }
+  return adopted;
+}
+
 // GET /account/pending — list the CALLER's OWN pending_review learnings (full body
 // + reviewer safety signals) so a human can judge before approving. Paginated.
 app.get('/account/pending', async (c) => {
   const auth = await resolveSelfReviewAccount(c, 'read');
   if (!auth.accountId) return c.json({ error: auth.error }, auth.status);
   const accountId = auth.accountId;
+
+  // AUD19-3(b): retroactive wallet-orphan adoption before listing.
+  adoptOrphansForAccount(accountId);
 
   const url = new URL(c.req.url, 'http://localhost');
   let limit = parseInt(url.searchParams.get('limit') || '50', 10);
@@ -7873,6 +8085,9 @@ app.get('/account/pending/summary', async (c) => {
   const auth = await resolveSelfReviewAccount(c, 'read');
   if (!auth.accountId) return c.json({ error: auth.error }, auth.status);
   const accountId = auth.accountId;
+
+  // AUD19-3(b): retroactive wallet-orphan adoption before summarizing.
+  adoptOrphansForAccount(accountId);
 
   const summary = summarizeOwnPending(learnings, accountId);
   return c.json({ account_id: accountId, ...summary });
@@ -8781,6 +8996,15 @@ app.post('/pipeline/:id/approve', requireSession, async (c) => {
   // Both writes succeeded — discard the WAL entry
   commitWal(walId);
   // ─────────────────────────────────────────────────────────────────────────
+
+  // AUD19-3(c): batched/throttled ops alert on queue entry (fire-and-forget).
+  if (CONTENT_MODERATION_ENABLED && published.length > 0) {
+    notePendingReviewEntries(published.length, {
+      source: 'chat_pipeline',
+      id: published[published.length - 1].id,
+      orphaned: false, // pipeline learnings are always account-bound (see contributor_account_id above)
+    });
+  }
 
   return c.json({
     published_count: published.length,

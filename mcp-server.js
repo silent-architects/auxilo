@@ -183,7 +183,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_contribute',
-      description: 'Submit operational knowledge you discovered during this session to the Auxilo marketplace. WHEN TO USE: Call this AFTER you solve a non-trivial problem that required debugging, experimentation, or combining information from multiple sources. Call it when you discover undocumented behavior, a workaround, or a subtle edge case. Do NOT call it for trivial lookups or standard documentation answers. QUALITY GATE: Self-assess on Specificity, Actionability, Novelty, Completeness (1-5 each). Only submit if total >= 14/20, no dimension below 3. DEDUP: Search auxilo_knowledge first to avoid duplicates. SENSITIVITY (mandatory self-screen): never include secrets, credentials, API keys, PII, private filesystem paths, or proprietary/client business content — generalize to placeholders or omit; this is a PUBLIC marketplace. PRICING: Leave unlock_price unset to let the dynamic pricing engine calculate automatically (recommended). If setting manually: $0.05-$0.10 common techniques, $0.10-$1.00 specific solutions, $1.00-$10.00 novel discoveries, $10.00-$50.00 breakthroughs. Minimum $0.05, maximum $50.00. Free to submit — you earn 70% when others unlock.',
+      description: 'Submit operational knowledge you discovered during this session to the Auxilo marketplace. WHEN TO USE: Call this AFTER you solve a non-trivial problem that required debugging, experimentation, or combining information from multiple sources. Call it when you discover undocumented behavior, a workaround, or a subtle edge case. Do NOT call it for trivial lookups or standard documentation answers. QUALITY GATE: Self-assess on Specificity, Actionability, Novelty, Completeness (1-5 each) and ALWAYS include your scores in quality_self_assessment — a submission WITHOUT it is held for manual review instead of publishing seamlessly. Only submit if total >= 14/20, no dimension below 3 (the server quarantines below-floor submissions for review). DEDUP: Search auxilo_knowledge first to avoid duplicates. SENSITIVITY (mandatory self-screen): never include secrets, credentials, API keys, PII, private filesystem paths, or proprietary/client business content — generalize to placeholders or omit; this is a PUBLIC marketplace. PRICING: Leave unlock_price unset to let the dynamic pricing engine calculate automatically (recommended). If setting manually: $0.05-$0.10 common techniques, $0.10-$1.00 specific solutions, $1.00-$10.00 novel discoveries, $10.00-$50.00 breakthroughs. Minimum $0.05, maximum $50.00. Free to submit — you earn 70% when others unlock. If the result is status pending_review, follow its how_to_review instructions (self-approval via `auxilo review`, the dashboard queue, or GET /account/pending).',
       inputSchema: {
         type: 'object',
         properties: {
@@ -193,12 +193,25 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           tags: { type: 'array', items: { type: 'string' }, description: 'Relevant keywords' },
           task_context: { type: 'string', description: 'What task were you performing?' },
           outcome: { type: 'string', enum: ['success', 'partial', 'failure', 'workaround'] },
+          quality_self_assessment: {
+            type: 'object',
+            description: 'Your quality self-assessment. ALWAYS include this — without it the submission is held for manual review. Score each dimension 1-5; total MUST equal their sum (server-verified). Submissions below the floor (total < 14 or any dimension < 3) are quarantined for review rather than published.',
+            properties: {
+              specificity: { type: 'integer', minimum: 1, maximum: 5, description: 'How precise and detailed? (1-5)' },
+              actionability: { type: 'integer', minimum: 1, maximum: 5, description: 'Can another agent directly use this? (1-5)' },
+              novelty: { type: 'integer', minimum: 1, maximum: 5, description: 'Non-obvious / would an LLM get it wrong? (1-5)' },
+              completeness: { type: 'integer', minimum: 1, maximum: 5, description: 'Full context, reproduction steps, caveats? (1-5)' },
+              total: { type: 'integer', minimum: 4, maximum: 20, description: 'Sum of the four dimensions (server rejects mismatched totals)' },
+              reasoning: { type: 'string', description: 'Optional: one-line justification for your scores' },
+            },
+            required: ['specificity', 'actionability', 'novelty', 'completeness', 'total'],
+          },
           contributor_wallet: { type: 'string', description: 'Your Base wallet (0x...) for revenue share' },
           unlock_price: { type: 'number', description: 'Price in USD to unlock this learning (min $0.05, default auto-calculated). Set higher for deep, high-value knowledge.' },
           contributor_agent: { type: 'string', description: 'Optional: identify yourself' },
           related_skills: { type: 'array', items: { type: 'string' }, description: 'Optional: related Auxilo skill IDs' },
         },
-        required: ['title', 'body', 'category', 'tags', 'task_context', 'outcome'],
+        required: ['title', 'body', 'category', 'tags', 'task_context', 'outcome', 'quality_self_assessment'],
       },
     },
     {
@@ -303,7 +316,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_account_earnings',
-      description: 'View earnings for your authenticated Auxilo account. Authenticates with your configured API key automatically, or pass a session_token (JWT). Returns total gross, contributor share, pending balance, total withdrawn, and whether withdrawal is available (can_withdraw). Free.',
+      description: 'View earnings for your authenticated Auxilo account. Authenticates with your configured API key automatically, or pass a session_token (JWT). Returns total gross, contributor share, pending balance, total withdrawn, whether withdrawal is available (can_withdraw), and held_pending_assent — undisbursable receipts recorded before you accepted the current Terms, released to your withdrawable balance when you accept via auxilo_accept_terms. Free.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -409,6 +422,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             tags: args.tags,
             task_context: args.task_context,
             outcome: args.outcome,
+            // AUD19-4: pass the quality self-assessment through — without it the
+            // server can never seamless-publish (qualityPresent is false) and every
+            // MCP contribution lands pending_review with 'awaiting_quality'.
+            ...(args.quality_self_assessment && { quality_self_assessment: args.quality_self_assessment }),
             ...(args.contributor_wallet && { contributor_wallet: args.contributor_wallet }),
             unlock_price: args.unlock_price,
             contributor_agent: args.contributor_agent,

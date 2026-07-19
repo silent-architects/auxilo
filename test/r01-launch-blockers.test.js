@@ -211,7 +211,10 @@ describe('3. value_signal recompute (lib/pricing.js)', () => {
 // ─── 4. Held balance leak into dashboard headline (MISS-03/BUX-3) ────────────────
 
 describe('4. GET /account/earnings splits held from owned', () => {
-  const h = sliceHandler("app.get('/account/earnings'", 3200);
+  // AUD19-8: window widened 3200 → 6500 — the handler grew (self-healing held
+  // sweep + held_pending_assent field) and the populated-branch assertions sit
+  // beyond the old window.
+  const h = sliceHandler("app.get('/account/earnings'", 6500);
 
   it('exposes unassented_pending as a distinct field in BOTH branches', () => {
     // two occurrences: the source==='new' zero state and the populated return
@@ -322,7 +325,8 @@ describe('8. FB-1: /dmca route is wired (Terms §5.9.4(b) links /dmca)', () => {
 });
 
 describe('8. FB-2: earnings API is server-authoritative about the payout pause', () => {
-  const h = sliceHandler("app.get('/account/earnings'", 4500);
+  // AUD19-8: window widened 4500 → 6500 (see the held-sweep note above).
+  const h = sliceHandler("app.get('/account/earnings'", 6500);
   it('GET /account/earnings returns payouts_paused derived from the kill-switch', () => {
     assert.ok(h.includes('payouts_paused'), 'must surface a payouts_paused flag');
     assert.ok(h.includes("process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true'"),
