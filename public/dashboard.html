@@ -1055,7 +1055,7 @@
       cryptoWrap.appendChild(note);
     } else {
       var noWallet = document.createElement('div');
-      noWallet.textContent = 'No wallet linked. USDC withdrawals on Base are rolling out on our non-custodial rail (coming soon). You can link a wallet now with the CLI command "auxilo link-wallet" to be ready. Bank withdrawals via Stripe are available in the section below when your balance is ready.';
+      noWallet.textContent = 'No wallet linked. USDC withdrawals on Base are rolling out on our non-custodial rail (coming soon). You can link a wallet now through your agent: verify it with auxilo_verify_wallet, then link it with auxilo_link_wallet — linking asks the wallet to sign a one-time challenge proving you control it. Bank withdrawals via Stripe are available in the section below when your balance is ready.';
       cryptoWrap.appendChild(noWallet);
     }
 

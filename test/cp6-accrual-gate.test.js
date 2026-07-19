@@ -197,7 +197,7 @@ describe('server.js: accrual gate + WAL replay + conversion wiring', () => {
   it('AUD19-8: link-wallet sweeps held balance AFTER the migration (P1-B strand fix, now unconditional)', () => {
     const i = SERVER_SRC.indexOf("app.post('/account/link-wallet'");
     assert.notEqual(i, -1);
-    const h = SERVER_SRC.slice(i, i + 6000);
+    const h = SERVER_SRC.slice(i, i + 10000); // handler grew with the HIGH-1 challenge flow
     const migAt = h.indexOf('lazyMigrateOnWalletLink');
     const sweepAt = h.indexOf('sweepHeldEarnings');
     assert.ok(migAt !== -1 && sweepAt !== -1 && sweepAt > migAt,

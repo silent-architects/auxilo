@@ -237,7 +237,8 @@ describe('server.js wiring — CP-4 enforcement points (structural)', () => {
 
   it('E-1: the wallet-link geo screen runs BEFORE the wallet is linked', () => {
     const gateIdx = src.indexOf("geoEmbargoGate(c, '/account/link-wallet')");
-    const linkIdx = src.indexOf('linkWallet(accountId, wallet, verifiedWallets)');
+    // AUD19 MED-2: linkWallet gained a platformWallets refusal arg.
+    const linkIdx = src.indexOf('linkWallet(accountId, wallet, verifiedWallets, PLATFORM_WALLETS)');
     assert.ok(gateIdx > 0 && linkIdx > 0, 'both markers must exist');
     assert.ok(gateIdx < linkIdx, 'geo screen must precede linkWallet()');
   });

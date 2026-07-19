@@ -304,11 +304,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_link_wallet',
-      description: 'Link a verified wallet address to your Auxilo account. Authenticates with your configured API key automatically, or pass a session_token (JWT from magic link login). The wallet must have been previously verified via auxilo_verify_wallet. One wallet per account. Required to withdraw earnings. NOTE: you must first accept the current Terms via auxilo_accept_terms — linking a payout wallet triggers the §5.10 payment-collection agency and returns 403 TERMS_NOT_ACCEPTED until acceptance is on file.',
+      description: 'Link a verified wallet address to your Auxilo account. Authenticates with your configured API key automatically, or pass a session_token (JWT from magic link login). The wallet must have been previously verified via auxilo_verify_wallet. One wallet per account. Required to withdraw earnings. TWO-STEP FLOW (linking requires FRESH proof you control the wallet, bound to your account): (1) call with just the wallet — the server returns 401 link_signature_required with an EIP-712 challenge payload (single-use, 5-minute expiry, the account id is bound into the signed action string); (2) sign that exact typed-data payload with the wallet\'s private key and call again with the signature. A signature for another account\'s challenge will not verify. NOTE: you must first accept the current Terms via auxilo_accept_terms — linking a payout wallet triggers the §5.10 payment-collection agency and returns 403 TERMS_NOT_ACCEPTED until acceptance is on file. If the link adopts previously wallet-only submissions into your account, the response lists their ids (adopted_learning_ids).',
       inputSchema: {
         type: 'object',
         properties: {
           wallet: { type: 'string', description: 'Verified wallet address (0x...) to link to your account' },
+          signature: { type: 'string', description: 'EIP-712 signature of the link challenge, produced by the wallet\'s key. Omit on the first call to receive the challenge payload to sign.' },
           session_token: { type: 'string', description: 'Optional JWT session token from /auth/verify. If omitted, your configured API key authenticates the account.' },
         },
         required: ['wallet'],
@@ -526,9 +527,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           headers: baseHeaders(
             args.session_token ? { 'Authorization': `Bearer ${args.session_token}` } : {}
           ),
-          body: JSON.stringify({ wallet: args.wallet }),
+          // HIGH-1: pass the link signature through when present (step 2 of the
+          // two-step link flow — see the tool description).
+          body: JSON.stringify({
+            wallet: args.wallet,
+            ...(args.signature && { signature: args.signature }),
+          }),
         });
-        return text(await resp.json());
+        const data = await resp.json();
+        // HIGH-1: the challenge response is expected, not an error — surface it
+        // as the next step so the agent signs and calls again instead of
+        // treating the 401 as a failure.
+        if (resp.status === 401 && data && data.code === 'link_signature_required') {
+          return text({
+            status: 'signature_required',
+            message: 'Expected first-step response: sign the eip712 payload below with the wallet\'s private key (EIP-712 typed data — the account id is bound into the action string), then call auxilo_link_wallet again with the same wallet plus the signature. The challenge is single-use and expires in 5 minutes.',
+            server_response: data,
+          });
+        }
+        return text(data);
       }
 
       case 'auxilo_account_earnings': {

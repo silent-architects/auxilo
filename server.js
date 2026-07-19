@@ -10,8 +10,11 @@ const {
   createNonce,
   consumeNonce,
   verifyChallengeSignature,
+  linkAction,
+  verifyLinkSignature,
   verifyWithdrawalSignature,
   EIP712_DOMAIN,
+  CHALLENGE_TYPES,
 } = require('./lib/eip712.js');
 const { scanLearning, scanText, getRedactionHint, SENSITIVITY_FILTER_VERSION } = require('./lib/sensitivity-filter.js');
 const { screenLearningSafe } = require('./lib/injection-screen.js'); // LW-13 / LW-3(b)
@@ -4114,13 +4117,35 @@ app.post('/withdraw/stripe', requireAuth, async (c) => {
 // ─── Phase 0.5: Account Wallet + Earnings Endpoints (SPEC-P0.5) ──────────────
 
 // POST /account/link-wallet — link a verified wallet to the authenticated account
+//
+// AUD19 Gate-A HIGH-1 (account-bound proof of wallet control): global
+// `verifiedWallets` membership is NOT proof that the LINKING ACCOUNT controls
+// the wallet — every wallet-only contributor's wallet is in that set by
+// construction, and /wallet/verify is unauthenticated and account-blind. Without
+// a fresh, account-bound proof, any ToS-accepted account could link any
+// verified wallet and — via the adoption/migration/sweep hooks below — take over
+// that wallet's learnings and earnings while the 409-uniqueness check locked the
+// real owner out. So linking now demands an EIP-712 LINK challenge signed by
+// the wallet's key with the accountId bound INTO the signed action string
+// (`link:acc_…`): the signature attests "this wallet's key-holder authorizes
+// linking to THIS account", cannot be replayed for another account, and the
+// nonce is single-use.
+//
+// Flow: POST { wallet } (no signature) → 401 link_signature_required + the
+// challenge/typed-data to sign. POST { wallet, signature } → verify + link.
+//
+// GRANDFATHERING: accounts that linked BEFORE this deploy keep their wallet —
+// linking is one-time (linkWallet 409s when account.wallet is already set), so
+// no existing link is re-validated or retro-invalidated. Acceptable because the
+// pre-deploy cohort is the platform's own accounts (no real external builders
+// yet, per the launch record); every link from this deploy forward is proven.
 app.post('/account/link-wallet', requireSessionOrApiKey(), async (c) => {
   let body;
   try { body = await c.req.json(); } catch {
     return c.json({ error: 'Invalid JSON body' }, 400);
   }
 
-  const { wallet } = body || {};
+  const { wallet, signature } = body || {};
   const accountId = c.get('accountId');
 
   // GOV-3: fail closed if sanctions screening has never loaded a list.
@@ -4149,13 +4174,80 @@ app.post('/account/link-wallet', requireSessionOrApiKey(), async (c) => {
     return termsNotAcceptedResponse(c);
   }
 
+  // HIGH-1: fresh, account-bound proof of wallet control (see route comment).
+  if (!wallet || !isAddress(wallet)) {
+    return c.json({ error: 'Valid wallet address required' }, 400);
+  }
+
+  if (!signature) {
+    // Step 1: no signature yet — issue the account-bound link challenge.
+    // Rate-limited on the same counter as /wallet/challenge so this route
+    // cannot be used to mint unlimited nonces.
+    if (!checkChallengeRateLimit(wallet)) {
+      return c.json({ error: 'Rate limited. Try again later.' }, 429);
+    }
+    const action = linkAction(accountId);
+    const { nonce, timestamp, expires_at } = createNonce(wallet, action);
+    return c.json({
+      error: 'A fresh signature from this wallet is required to link it to your account.',
+      code: 'link_signature_required',
+      how_to: 'Sign the eip712 payload below with the wallet\'s key, then call POST /account/link-wallet again with { "wallet", "signature" }. The challenge expires in 5 minutes and is single-use.',
+      challenge: nonce,
+      timestamp,
+      expires_at,
+      eip712: {
+        domain: {
+          name: EIP712_DOMAIN.name,
+          version: EIP712_DOMAIN.version,
+          chainId: EIP712_DOMAIN.chainId,
+          verifyingContract: EIP712_DOMAIN.verifyingContract,
+        },
+        types: { Challenge: CHALLENGE_TYPES.Challenge },
+        primaryType: 'Challenge',
+        // The account-bound action string is part of the SIGNED message — a
+        // signature produced for this challenge can only ever link this wallet
+        // to this account.
+        message: { wallet, nonce, timestamp, action },
+      },
+    }, 401);
+  }
+
+  // Step 2: signature presented — consume the nonce (single-use, C7 idiom) and
+  // verify it is a LINK nonce bound to THIS account, then verify the EIP-712
+  // signature was produced by the wallet's key over that exact bound message.
+  // TEST_MODE bypass mirrors /wallet/verify: never in production.
+  if (!(process.env.NODE_ENV !== 'production' && process.env.TEST_MODE === '1' && signature === 'test-bypass')) {
+    const linkNonce = consumeNonce(wallet);
+    if (!linkNonce || linkNonce.action !== linkAction(accountId)) {
+      return c.json({
+        error: 'No active link challenge for this wallet and account (expired, already used, or issued for a different account). Request a new one by calling this endpoint without a signature.',
+        code: 'link_challenge_invalid',
+      }, 401);
+    }
+    let linkSigValid = false;
+    try {
+      linkSigValid = await verifyLinkSignature(wallet, accountId, linkNonce.nonce, linkNonce.timestamp, signature);
+    } catch (sigErr) {
+      console.error('[link-wallet] signature verification error:', sigErr.message);
+      linkSigValid = false;
+    }
+    if (!linkSigValid) {
+      return c.json({ error: 'Link signature verification failed', code: 'link_signature_invalid' }, 401);
+    }
+  } else {
+    consumeNonce(wallet); // clean up any pending nonce in test mode
+  }
+
   // Serialize the linkWallet read-modify-write so a concurrent settings/connect-stripe
   // mutation on the same account cannot lost-update (linkWallet does its own
   // loadAccounts->mutate->saveAccounts internally).
   const releaseAccountLock = await acquireAccountLock(accountId);
   try {
-    // linkWallet validates format, verified status, uniqueness, and no-existing-wallet constraints
-    const result = linkWallet(accountId, wallet, verifiedWallets);
+    // linkWallet validates format, verified status, uniqueness, no-existing-wallet,
+    // and (AUD19 MED-2) refuses platform wallets — the live platform wallet is
+    // auto-verified at boot, so without the refusal any ToS-accepted account
+    // could claim it and drain platform-attributed balances via the hooks below.
+    const result = linkWallet(accountId, wallet, verifiedWallets, PLATFORM_WALLETS);
     if (!result.success) {
       return c.json({ error: result.error }, result.status_code || 400);
     }
@@ -4180,25 +4272,44 @@ app.post('/account/link-wallet', requireSessionOrApiKey(), async (c) => {
     // above carries the held balance in as `unassented_pending`. This route is terms-gated,
     // so the agency is in force here — sweep held → withdrawable now (idempotent, takes the
     // shared earnings lock, persists internally; runs regardless of `migrated` so a
-    // pre-existing account-keyed held balance converts too).
-    await sweepHeldEarnings(accountId);
+    // pre-existing account-keyed held balance converts too). LOW-4: wrapped like
+    // the other sweep call sites — a sweep failure must not 500 a link that the
+    // account record already persisted (the earnings sweep self-heals on the
+    // next GET /account/earnings anyway).
+    try {
+      await sweepHeldEarnings(accountId);
+    } catch (sweepErr) {
+      console.error('[link-wallet] held-balance sweep failed:', sweepErr.message);
+    }
 
-    // AUD19-3(b): the account just PROVED ownership of this wallet (verified signature +
-    // link) — adopt any wallet-only orphaned learnings bearing it, binding
-    // contributor_account_id so the whole self-review stack (queue/decide/CLI/dashboard/MCP)
-    // works on them. Wallet source is result.wallet (the verified, just-linked address —
-    // never a claimed one).
-    const adoptedCount = adoptWalletOrphans(learnings, accountId, result.wallet);
-    if (adoptedCount > 0) {
-      safeWrite(LEARNINGS_FILE, learnings);
-      console.log(`[AUD19-3] adopted ${adoptedCount} wallet-only learning(s) into account ${accountId} on wallet link`);
+    // AUD19-3(b): the account just PROVED ownership of this wallet (fresh
+    // account-bound link signature above) — adopt any wallet-only orphaned
+    // learnings bearing it, binding contributor_account_id so the whole
+    // self-review stack (queue/decide/CLI/dashboard/MCP) works on them. Wallet
+    // source is result.wallet (the verified, just-linked address — never a
+    // claimed one). LOW-4: adoption failure must not 500 the completed link;
+    // the lazy cure on GET /account/pending re-runs it.
+    let adoptedIds = [];
+    try {
+      adoptedIds = adoptWalletOrphans(learnings, accountId, result.wallet);
+      if (adoptedIds.length > 0) {
+        safeWrite(LEARNINGS_FILE, learnings);
+        console.log(`[AUD19-3] adopted ${adoptedIds.length} wallet-only learning(s) into account ${accountId} on wallet link`);
+      }
+    } catch (adoptErr) {
+      console.error('[link-wallet] wallet-orphan adoption failed:', adoptErr.message);
     }
 
     return c.json({
       message: 'Wallet linked',
       wallet: result.wallet,
       account_id: accountId,
-      ...(adoptedCount > 0 && { adopted_learnings: adoptedCount }),
+      // MED-3: surface exactly what changed hands so the operator can audit the
+      // adoption (ids, not just a count).
+      ...(adoptedIds.length > 0 && {
+        adopted_learnings: adoptedIds.length,
+        adopted_learning_ids: adoptedIds,
+      }),
     });
   } finally {
     releaseAccountLock();
@@ -7993,12 +8104,12 @@ function adoptOrphansForAccount(accountId) {
   if (!acct || !acct.wallet || typeof acct.wallet !== 'string') return 0;
   const walletLower = acct.wallet.toLowerCase();
   if (!verifiedWallets[walletLower]) return 0;
-  const adopted = adoptWalletOrphans(learnings, accountId, walletLower);
-  if (adopted > 0) {
+  const adoptedIds = adoptWalletOrphans(learnings, accountId, walletLower);
+  if (adoptedIds.length > 0) {
     safeWrite(LEARNINGS_FILE, learnings);
-    console.log(`[AUD19-3] lazily adopted ${adopted} wallet-only learning(s) into account ${accountId}`);
+    console.log(`[AUD19-3] lazily adopted ${adoptedIds.length} wallet-only learning(s) into account ${accountId}`);
   }
-  return adopted;
+  return adoptedIds.length;
 }
 
 // GET /account/pending — list the CALLER's OWN pending_review learnings (full body

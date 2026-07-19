@@ -33,6 +33,16 @@ const {
   listOwnPending,
   applySelfDecision,
 } = require('../lib/self-review.js');
+const {
+  EIP712_DOMAIN,
+  CHALLENGE_TYPES,
+  createNonce,
+  consumeNonce,
+  linkAction,
+  verifyLinkSignature,
+} = require('../lib/eip712.js');
+const { linkWallet } = require('../lib/accounts.js');
+const { privateKeyToAccount } = require('viem/accounts');
 
 const SERVER_SRC = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf-8');
 const MCP_SRC = fs.readFileSync(path.join(__dirname, '..', 'mcp-server.js'), 'utf-8');
@@ -122,20 +132,20 @@ function orphan(id, status, extra = {}) {
 describe('adoptWalletOrphans (AUD19-3b)', () => {
   it('adopts a null-account, matching-wallet pending item: binds ownership + stamps provenance', () => {
     const learnings = [orphan('lrn_o1', 'pending_review')];
-    const n = adoptWalletOrphans(learnings, 'acc_new', W.toLowerCase());
-    assert.equal(n, 1);
+    const ids = adoptWalletOrphans(learnings, 'acc_new', W.toLowerCase());
+    assert.deepEqual(ids, ['lrn_o1']); // MED-3: ids returned, not just a count
     assert.equal(learnings[0].contributor_account_id, 'acc_new');
     assert.equal(learnings[0].ownership_adopted.via, 'verified_wallet_link');
     assert.equal(learnings[0].ownership_adopted.by, 'acc_new');
   });
   it('is case-insensitive on the wallet address', () => {
     const learnings = [orphan('lrn_o2', 'pending_review')];
-    const n = adoptWalletOrphans(learnings, 'acc_new', W); // mixed-case input
-    assert.equal(n, 1);
+    const ids = adoptWalletOrphans(learnings, 'acc_new', W); // mixed-case input
+    assert.equal(ids.length, 1);
   });
   it('adopts across statuses (published wallet-only items regain retraction/attribution too)', () => {
     const learnings = [orphan('lrn_o3', 'pending_review'), orphan('lrn_o4', 'approved')];
-    assert.equal(adoptWalletOrphans(learnings, 'acc_new', W), 2);
+    assert.deepEqual(adoptWalletOrphans(learnings, 'acc_new', W), ['lrn_o3', 'lrn_o4']);
   });
   it('NEVER touches already-owned items or other wallets; returns the exact count', () => {
     const learnings = [
@@ -144,21 +154,21 @@ describe('adoptWalletOrphans (AUD19-3b)', () => {
       { id: 'lrn_otherw', status: 'pending_review', contributor_account_id: null, contributor_wallet: '0xdead000000000000000000000000000000000001' },
       { id: 'lrn_nowallet', status: 'pending_review', contributor_account_id: null, contributor_wallet: null },
     ];
-    const n = adoptWalletOrphans(learnings, 'acc_new', W);
-    assert.equal(n, 1);
+    const ids = adoptWalletOrphans(learnings, 'acc_new', W);
+    assert.deepEqual(ids, ['lrn_o5']);
     assert.equal(learnings[1].contributor_account_id, 'acc_other'); // foreign ownership untouched
     assert.equal(learnings[2].contributor_account_id, null);
     assert.equal(learnings[3].contributor_account_id, null);
   });
   it('is idempotent: a second adoption pass adopts nothing', () => {
     const learnings = [orphan('lrn_o6', 'pending_review')];
-    assert.equal(adoptWalletOrphans(learnings, 'acc_new', W), 1);
-    assert.equal(adoptWalletOrphans(learnings, 'acc_new', W), 0);
+    assert.equal(adoptWalletOrphans(learnings, 'acc_new', W).length, 1);
+    assert.equal(adoptWalletOrphans(learnings, 'acc_new', W).length, 0);
   });
   it('no-ops safely on missing inputs', () => {
-    assert.equal(adoptWalletOrphans(null, 'acc', W), 0);
-    assert.equal(adoptWalletOrphans([], null, W), 0);
-    assert.equal(adoptWalletOrphans([orphan('x', 'pending_review')], 'acc', null), 0);
+    assert.deepEqual(adoptWalletOrphans(null, 'acc', W), []);
+    assert.deepEqual(adoptWalletOrphans([], null, W), []);
+    assert.deepEqual(adoptWalletOrphans([orphan('x', 'pending_review')], 'acc', null), []);
   });
   it('END-TO-END CURE: invisible orphan → adopt → listed → self-approvable', () => {
     const learnings = [orphan('lrn_cure', 'pending_review', { body: 'the held learning body', category: 'monitoring', created_at: 'now' })];
@@ -166,7 +176,7 @@ describe('adoptWalletOrphans (AUD19-3b)', () => {
     assert.equal(listOwnPending(learnings, 'acc_new').length, 0);
     assert.equal(applySelfDecision(learnings, 'acc_new', 'lrn_cure', 'approve').code, 'forbidden');
     // Adoption (server calls this only with the account's VERIFIED linked wallet).
-    assert.equal(adoptWalletOrphans(learnings, 'acc_new', W), 1);
+    assert.equal(adoptWalletOrphans(learnings, 'acc_new', W).length, 1);
     // After: visible and decidable — the whole existing review stack works.
     const listed = listOwnPending(learnings, 'acc_new');
     assert.equal(listed.length, 1);
@@ -181,9 +191,9 @@ describe('server.js: adoption wiring (AUD19-3b)', () => {
   it('link-wallet adopts orphans with the just-verified wallet (result.wallet, never a claimed one)', () => {
     const i = SERVER_SRC.indexOf("app.post('/account/link-wallet'");
     assert.notEqual(i, -1);
-    const h = SERVER_SRC.slice(i, i + 6000);
+    const h = SERVER_SRC.slice(i, i + 10000); // handler grew with the HIGH-1 challenge flow
     assert.ok(h.includes('adoptWalletOrphans(learnings, accountId, result.wallet)'));
-    assert.ok(/adoptedCount > 0[\s\S]{0,200}safeWrite\(LEARNINGS_FILE/.test(h), 'persists only when something adopted');
+    assert.ok(/adoptedIds\.length > 0[\s\S]{0,220}safeWrite\(LEARNINGS_FILE/.test(h), 'persists only when something adopted');
   });
   it('pending read paths run the lazy retroactive cure with a VERIFIED-wallet ownership check', () => {
     const i = SERVER_SRC.indexOf('function adoptOrphansForAccount');
@@ -276,6 +286,143 @@ describe('mcp-server.js: auxilo_contribute quality passthrough (AUD19-4)', () =>
     const i = MCP_SRC.indexOf("name: 'auxilo_account_earnings'");
     const h = MCP_SRC.slice(i, i + 1200);
     assert.ok(h.includes('held_pending_assent'));
+  });
+});
+
+// ─── Gate-A HIGH-1: account-bound proof of wallet control at link time ──────────
+//
+// The takeover chain the review found: /wallet/verify is unauthenticated and
+// account-blind; every wallet-only contributor's wallet is in verifiedWallets
+// by construction; linkWallet checked only global-set membership + uniqueness.
+// So any ToS-accepted attacker account could link a victim's verified wallet
+// and the adoption/migration/sweep hooks would hand it the victim's learnings
+// and earnings, with the 409-uniqueness check locking the real owner out. The
+// fix: linking demands a FRESH EIP-712 signature by the wallet's key over a
+// single-use nonce whose signed action string carries the linking accountId.
+
+const OWNER_PK = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d'; // well-known dev key, never used on-chain
+const ATTACKER_PK = '0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba'; // second well-known dev key
+const ownerAccount = privateKeyToAccount(OWNER_PK);
+const attackerAccount = privateKeyToAccount(ATTACKER_PK);
+const OWNER_WALLET = ownerAccount.address;
+
+function signLink(signer, wallet, accountId, nonce, timestamp) {
+  return signer.signTypedData({
+    domain: EIP712_DOMAIN,
+    types: CHALLENGE_TYPES,
+    primaryType: 'Challenge',
+    message: { wallet, nonce, timestamp: BigInt(timestamp), action: linkAction(accountId) },
+  });
+}
+
+describe('link challenge crypto (HIGH-1)', () => {
+  it('HAPPY PATH: the wallet key signing its own account-bound link challenge verifies', async () => {
+    const { nonce, timestamp } = createNonce(OWNER_WALLET, linkAction('acc_owner'));
+    const sig = await signLink(ownerAccount, OWNER_WALLET, 'acc_owner', nonce, timestamp);
+    const consumed = consumeNonce(OWNER_WALLET);
+    assert.equal(consumed.action, linkAction('acc_owner'));
+    assert.equal(await verifyLinkSignature(OWNER_WALLET, 'acc_owner', consumed.nonce, consumed.timestamp, sig), true);
+  });
+  it('ATTACKER KEY: a signature from any other key never verifies for the wallet', async () => {
+    const { nonce, timestamp } = createNonce(OWNER_WALLET, linkAction('acc_attacker'));
+    // Attacker signs with THEIR key, claiming the victim's wallet.
+    const sig = await signLink(attackerAccount, OWNER_WALLET, 'acc_attacker', nonce, timestamp);
+    const consumed = consumeNonce(OWNER_WALLET);
+    assert.equal(await verifyLinkSignature(OWNER_WALLET, 'acc_attacker', consumed.nonce, consumed.timestamp, sig), false);
+  });
+  it('CROSS-ACCOUNT REPLAY: a signature minted for one account fails verification for another', async () => {
+    const { nonce, timestamp } = createNonce(OWNER_WALLET, linkAction('acc_owner'));
+    const sig = await signLink(ownerAccount, OWNER_WALLET, 'acc_owner', nonce, timestamp);
+    const consumed = consumeNonce(OWNER_WALLET);
+    // The accountId is inside the SIGNED message — verifying for a different
+    // account changes the message and the signature no longer matches.
+    assert.equal(await verifyLinkSignature(OWNER_WALLET, 'acc_other', consumed.nonce, consumed.timestamp, sig), false);
+  });
+  it('NONCE REPLAY: the link nonce is single-use — a second consume returns null', () => {
+    createNonce(OWNER_WALLET, linkAction('acc_owner'));
+    assert.notEqual(consumeNonce(OWNER_WALLET), null);
+    assert.equal(consumeNonce(OWNER_WALLET), null);
+  });
+  it('ACTION BINDING: a generic verify-challenge nonce is distinguishable from a link nonce', () => {
+    createNonce(OWNER_WALLET, 'challenge');
+    const consumed = consumeNonce(OWNER_WALLET);
+    // The server-side gate checks action === linkAction(accountId); a plain
+    // 'challenge' nonce (from /wallet/challenge) must never satisfy it.
+    assert.notEqual(consumed.action, linkAction('acc_owner'));
+  });
+});
+
+describe('server.js: link-wallet demands account-bound proof (HIGH-1 wiring)', () => {
+  const i = SERVER_SRC.indexOf("app.post('/account/link-wallet'");
+  const h = SERVER_SRC.slice(i, i + 10000);
+  it('no signature → returns the account-bound challenge (link_signature_required), rate-limited', () => {
+    assert.ok(h.includes("code: 'link_signature_required'"));
+    assert.ok(h.includes('checkChallengeRateLimit(wallet)'), 'challenge minting shares the /wallet/challenge rate limit');
+    assert.ok(h.includes('linkAction(accountId)'), 'the accountId is bound into the challenge action');
+  });
+  it('signature path consumes the nonce and verifies the account-bound signature BEFORE linking', () => {
+    const consumeAt = h.indexOf('consumeNonce(wallet)');
+    const verifyAt = h.indexOf('verifyLinkSignature');
+    const linkAt = h.indexOf('linkWallet(accountId');
+    assert.ok(consumeAt !== -1 && verifyAt !== -1 && linkAt !== -1);
+    assert.ok(consumeAt < verifyAt && verifyAt < linkAt,
+      'consume (single-use) → verify → link, in that order');
+    assert.ok(h.includes("linkNonce.action !== linkAction(accountId)"),
+      'a nonce issued for another account (or a non-link nonce) is rejected');
+  });
+  it('adoption/migration/sweep run only AFTER the proof (takeover chain broken)', () => {
+    const verifyAt = h.indexOf('verifyLinkSignature');
+    for (const hook of ['lazyMigrateOnWalletLink', 'sweepHeldEarnings', 'adoptWalletOrphans']) {
+      assert.ok(h.indexOf(hook) > verifyAt, `${hook} must sit after signature verification`);
+    }
+  });
+  it('TEST_MODE bypass is production-gated (mirrors /wallet/verify)', () => {
+    assert.ok(/NODE_ENV !== 'production' && process\.env\.TEST_MODE === '1' && signature === 'test-bypass'/.test(h));
+  });
+  it('MED-3: the response surfaces adopted_learning_ids, not just a count', () => {
+    assert.ok(h.includes('adopted_learning_ids'));
+  });
+  it('grandfathering is documented at the route (no retro-invalidation of existing links)', () => {
+    // The policy lives in the comment block ABOVE app.post — look at the region
+    // leading into the handler, not just the handler body.
+    const lead = SERVER_SRC.slice(Math.max(0, i - 2500), i);
+    assert.ok(lead.includes('GRANDFATHERING'));
+  });
+});
+
+// ─── Gate-A MED-2: platform-wallet linking refusal ──────────────────────────────
+
+describe('linkWallet refuses platform wallets (MED-2)', () => {
+  const PLATFORM = '0xA19Cf92cc1daCf742f0E50b4128cAD3A86A81EC4';
+  it('linking a platform wallet → 403, before any account/disk access', () => {
+    const r = linkWallet('acc_x', PLATFORM, { [PLATFORM.toLowerCase()]: true }, [PLATFORM]);
+    assert.equal(r.success, false);
+    assert.equal(r.status_code, 403);
+    assert.ok(/platform wallet/i.test(r.error));
+  });
+  it('refusal is case-insensitive', () => {
+    const r = linkWallet('acc_x', PLATFORM.toLowerCase(), { [PLATFORM.toLowerCase()]: true }, [PLATFORM.toUpperCase().replace('0X', '0x')]);
+    assert.equal(r.success, false);
+    assert.equal(r.status_code, 403);
+  });
+  it('server passes PLATFORM_WALLETS into linkWallet at the route', () => {
+    assert.ok(SERVER_SRC.includes('linkWallet(accountId, wallet, verifiedWallets, PLATFORM_WALLETS)'));
+  });
+});
+
+describe('mcp-server.js: auxilo_link_wallet carries the two-step flow (HIGH-1 client)', () => {
+  it('inputSchema declares the signature parameter', () => {
+    const i = MCP_SRC.indexOf("name: 'auxilo_link_wallet'");
+    const h = MCP_SRC.slice(i, MCP_SRC.indexOf("name: 'auxilo_account_earnings'", i));
+    assert.ok(h.includes('signature:'), 'signature in schema');
+    assert.ok(/TWO-STEP FLOW/.test(h), 'description teaches the challenge flow');
+  });
+  it('handler passes the signature through and surfaces the challenge as a next step, not an error', () => {
+    const i = MCP_SRC.indexOf("case 'auxilo_link_wallet':");
+    const h = MCP_SRC.slice(i, i + 2200);
+    assert.ok(h.includes('signature: args.signature'));
+    assert.ok(h.includes("'link_signature_required'"));
+    assert.ok(h.includes("status: 'signature_required'"));
   });
 });
 
