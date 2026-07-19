@@ -76,8 +76,14 @@ describe('CS-1 behavioral: fresh install seeds the catalog', () => {
     // The server's runtime deps (hono etc.) are not in package.json — CI's
     // `npm ci` won't install them. Skip the boot there; structural guard above
     // still enforces the fix.
+    // Resolve the ACTUAL node_modules dir hono lives in — in a git worktree the
+    // repo root has no node_modules and resolution walks up to the main checkout,
+    // so symlinking REPO_ROOT/node_modules would stage nothing and the boot
+    // would die on `Cannot find module 'hono'` instead of exercising the seed.
+    let nodeModulesDir;
     try {
-      require.resolve('hono', { paths: [REPO_ROOT] });
+      const honoEntry = require.resolve('hono', { paths: [REPO_ROOT] });
+      nodeModulesDir = honoEntry.slice(0, honoEntry.lastIndexOf(`${path.sep}node_modules${path.sep}`) + '/node_modules'.length);
     } catch {
       t.skip('hono not resolvable from repo root — skipping real cold boot (structural guard still enforces declaration order)');
       return;
@@ -92,10 +98,11 @@ describe('CS-1 behavioral: fresh install seeds the catalog', () => {
         const src = path.join(REPO_ROOT, f);
         if (fs.existsSync(src)) fs.copyFileSync(src, path.join(tmpDir, f));
       }
-      for (const d of ['lib', 'public', 'prompts', 'node_modules']) {
+      for (const d of ['lib', 'public', 'prompts']) {
         const src = path.join(REPO_ROOT, d);
         if (fs.existsSync(src)) fs.symlinkSync(src, path.join(tmpDir, d));
       }
+      fs.symlinkSync(nodeModulesDir, path.join(tmpDir, 'node_modules'));
 
       const output = await new Promise((resolve, reject) => {
         child = spawn(process.execPath, ['server.js'], {
