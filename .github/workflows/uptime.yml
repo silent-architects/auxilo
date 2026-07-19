@@ -1,0 +1,40 @@
+# External uptime + TLS-cert monitor (LW-5 partial, AUD19-1 follow-up).
+# Runs on GitHub's infra — independent of the Fly machine, so it can catch
+# whole-host/DNS/cert failures the in-process crash-email path cannot.
+# On failure GitHub emails the repo watchers (default notification settings).
+# api.auxilo.io ran WITHOUT a TLS cert until 2026-07-19 and nothing noticed —
+# this job exists so that class of outage pages someone within the hour.
+name: uptime
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch: {}
+permissions: {}
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Health probes (both hosts)
+        run: |
+          set -e
+          for host in auxilo.io api.auxilo.io; do
+            echo "== https://$host/health =="
+            # 3 attempts, 10s timeout each — transient blips don't page
+            ok=0
+            for i in 1 2 3; do
+              code=$(curl -sS -o /dev/null -w "%{http_code}" -m 10 "https://$host/health") && [ "$code" = "200" ] && { ok=1; break; }
+              echo "attempt $i failed (code=${code:-n/a}); retrying in 10s"; sleep 10
+            done
+            [ "$ok" = "1" ] || { echo "::error::$host /health failing"; exit 1; }
+          done
+      - name: TLS cert expiry (fail under 14 days)
+        run: |
+          set -e
+          for host in auxilo.io api.auxilo.io; do
+            end=$(echo | openssl s_client -servername "$host" -connect "$host:443" 2>/dev/null | openssl x509 -noout -enddate | cut -d= -f2)
+            end_s=$(date -d "$end" +%s)
+            days=$(( (end_s - $(date +%s)) / 86400 ))
+            echo "$host cert expires in $days days ($end)"
+            [ "$days" -ge 14 ] || { echo "::error::$host cert expires in $days days"; exit 1; }
+          done
