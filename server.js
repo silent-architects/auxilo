@@ -344,6 +344,14 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
+// Backup-cleanup state read by safeWrite(). Declared here — above the startup
+// migration/seed blocks — because those blocks call safeWrite() during module
+// init; a later `let` leaves these in the temporal dead zone and safeWrite()
+// throws "Cannot access 'cleanupRunning' before initialization" mid-write
+// (cold-start seeding failed this way on a fresh install).
+let lastBackupCleanup = 0;
+let cleanupRunning = false; // M-G: prevent concurrent backup cleanup
+
 const LEARNINGS_FILE = path.join(DATA_DIR, 'learnings.json');
 const RATINGS_FILE = path.join(DATA_DIR, 'ratings.jsonl');
 const EARNINGS_FILE = path.join(DATA_DIR, 'earnings.json');
@@ -759,8 +767,6 @@ function writeAndSync(filepath, content) {
   }
 }
 
-let lastBackupCleanup = 0;
-let cleanupRunning = false; // M-G: prevent concurrent backup cleanup
 /**
  * Redact a client IP for consent/audit logs.
  *

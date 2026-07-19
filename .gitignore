@@ -1,4 +1,6 @@
-node_modules/
+# no trailing slash — also ignores a node_modules SYMLINK (dev worktrees link
+# a sibling checkout's install; the slash form matches directories only)
+node_modules
 data/
 *.log
 .DS_Store
