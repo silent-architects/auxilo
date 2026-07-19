@@ -22,7 +22,7 @@ const {
   isLlmSensitivityEnabled,
 } = require('./lib/content-sensitivity-llm.js'); // LW-16 content-sensitivity gate (LLM semantic layer)
 const { findNearDuplicate } = require('./lib/similarity.js'); // LW-14
-const { listOwnPending, applySelfDecision } = require('./lib/self-review.js'); // LW-15
+const { listOwnPending, applySelfDecision, summarizeOwnPending, applyBulkDecisions, BULK_MAX: SELF_REVIEW_BULK_MAX } = require('./lib/self-review.js'); // LW-15 + review-seamless
 const { validateOfacRedirect } = require('./lib/ofac-redirect.js'); // S-6: OFAC redirect allowlist
 
 // ─── Phase 2.1a: Autonomous Extraction Pipeline ─────────────────────────────
@@ -7833,6 +7833,66 @@ app.post('/account/pending/:id/reject', async (c) => {
   safeWrite(LEARNINGS_FILE, learnings);
   console.log(`[LW-15] [AUDIT] self_reject account=${accountId} learning=${id}${reason ? ` reason="${reason}"` : ''}`);
   return c.json({ rejected: true, id, status: result.learning.status });
+});
+
+// ─── Review-seamless: triage summary + counted bulk decisions ───────────────
+//
+// Same account-scoped contract as the LW-15 routes above (resolveSelfReviewAccount,
+// ownership enforced in lib/self-review.js). These routes make a LARGE pending
+// backlog reviewable without weakening the consent contract: nothing goes
+// public except through a decision the contributor explicitly submitted, and
+// the bulk route refuses any batch whose confirm_count does not equal the
+// number of decisions (counted-confirmation rail, 2026-06-10 incident lesson).
+
+// GET /account/pending/summary: compact triage rows + counts for the CALLER's
+// OWN pending_review learnings. No bodies (scanning surface; full bodies stay
+// on GET /account/pending). Read scope, like the listing.
+app.get('/account/pending/summary', async (c) => {
+  const auth = await resolveSelfReviewAccount(c, 'read');
+  if (!auth.accountId) return c.json({ error: auth.error }, auth.status);
+  const accountId = auth.accountId;
+
+  const summary = summarizeOwnPending(learnings, accountId);
+  return c.json({ account_id: accountId, ...summary });
+});
+
+// POST /account/pending/bulk: apply up to SELF_REVIEW_BULK_MAX approve/reject
+// decisions in one call. Body: { decisions: [{id, decision, reason?}],
+// confirm_count: <decisions.length> }. Contribute scope (mutation), idempotent
+// per id, per-id results; ONE safeWrite after the batch. Validation and
+// ownership semantics are applyBulkDecisions (lib/self-review.js).
+app.post('/account/pending/bulk', async (c) => {
+  const auth = await resolveSelfReviewAccount(c, 'contribute');
+  if (!auth.accountId) return c.json({ error: auth.error }, auth.status);
+  const accountId = auth.accountId;
+
+  let body;
+  try { body = await c.req.json(); } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+  const decisions = body ? body.decisions : undefined;
+  const confirmCount = body ? body.confirm_count : undefined;
+
+  const outcome = applyBulkDecisions(learnings, accountId, decisions, { confirmCount });
+  if (!outcome.ok) {
+    return c.json({ error: outcome.error, code: outcome.code }, outcome.status);
+  }
+
+  if (outcome.counts.changed > 0) {
+    safeWrite(LEARNINGS_FILE, learnings);
+    for (const r of outcome.results) {
+      if (r.ok && r.changed) {
+        console.log(`[REVIEW-BULK] [AUDIT] self_${r.decision} account=${accountId} learning=${r.id} (bulk)`);
+      }
+    }
+  }
+  console.log(`[REVIEW-BULK] [AUDIT] bulk_summary account=${accountId} submitted=${outcome.counts.processed} approved=${outcome.counts.approved} rejected=${outcome.counts.rejected} idempotent=${outcome.counts.idempotent} failed=${outcome.counts.failed}`);
+
+  return c.json({
+    bulk_max: SELF_REVIEW_BULK_MAX,
+    ...outcome.counts,
+    results: outcome.results,
+  });
 });
 
 // ─── S21-3: Content Reporting Endpoint ──────────────────────────────────────

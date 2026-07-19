@@ -343,20 +343,108 @@ async function cmdDisable(flags) {
 // The human gate that makes background extraction safe to re-enable:
 //   extract -> pending_review -> `auxilo review` -> approve the safe ones.
 // Operates ONLY on the caller's own pending learnings (account-scoped API key).
+//
+// Review-seamless (2026-07-18): the default view is now a triage summary table
+// (quality desc, clean before flagged), with bulk modes that batch through
+// POST /account/pending/bulk. HARD RULE for every bulk APPROVE path: print the
+// exact list and count first, then require the operator to TYPE THE COUNT.
+// There is no --yes bypass on any approve path; publishing always costs one
+// typed number (2026-06-10 mass-publish lesson).
 
-/** Print one candidate's full detail for the interactive reviewer. */
-function printCandidate(l, n, total) {
-  console.log(`\n──────────────────────────────────────────────────────────────`);
-  console.log(`[${n}/${total}] ${l.title}`);
-  console.log(`  id:       ${l.id}`);
-  console.log(`  category: ${l.category}${l.outcome ? `   outcome: ${l.outcome}` : ''}`);
-  if (l.tags && l.tags.length) console.log(`  tags:     ${l.tags.join(', ')}`);
-  if (l.created_at) console.log(`  created:  ${l.created_at}`);
-  const flags = review.formatFlags(l);
-  if (flags) console.log(`  ⚠ flags:  ${flags}`);
-  console.log(`  ----------------------------------------------------------`);
-  console.log(l.body || '(no body)');
-  console.log(`  ----------------------------------------------------------`);
+/** Truncate + pad a string to an exact width (for the triage table). */
+function fit(s, width) {
+  const str = String(s == null ? '' : s);
+  if (str.length > width) return str.slice(0, Math.max(0, width - 1)) + '…';
+  return str.padEnd(width);
+}
+
+/** Short flag codes for a summary row: 'clean' or e.g. 'inj+sens'. */
+function shortFlags(row) {
+  if (row.screens_passed) return 'clean';
+  const map = { injection: 'inj', content_sensitivity: 'sens', near_duplicate: 'dup' };
+  return (row.flags || []).map((f) => map[f] || f).join('+') || 'flagged';
+}
+
+/** One compact triage line (shared by the table and rapid mode). */
+function triageLine(row, n, total) {
+  const q = row.quality == null ? ' --' : String(row.quality).padStart(3);
+  return `  ${String(n).padStart(String(total).length)}. q=${q}  ${fit(shortFlags(row), 9)} ${fit(row.category || '', 20)} ${fit(row.title || '(no title)', 52)}`;
+}
+
+/** Print the triage summary: counts, then clean rows, then flagged rows. */
+function printSummaryTable(summary) {
+  const items = summary.items || [];
+  const clean = items.filter((r) => r.screens_passed);
+  const flagged = items.filter((r) => !r.screens_passed);
+
+  console.log(`\n${summary.pending_count} learning(s) pending your review: ${clean.length} passed every platform screen, ${flagged.length} flagged.`);
+  const bands = summary.counts && summary.counts.by_quality_band;
+  if (bands) {
+    console.log(`Quality bands: 18-20: ${bands['18-20'] || 0} · 14-17: ${bands['14-17'] || 0} · 10-13: ${bands['10-13'] || 0} · below 10: ${bands.below_10 || 0} · unscored: ${bands.unscored || 0}`);
+  }
+  if (Array.isArray(summary.near_dup_clusters) && summary.near_dup_clusters.length > 0) {
+    console.log(`Near-duplicate clusters among your pending items: ${summary.near_dup_clusters.length} (review these together)`);
+  }
+
+  if (clean.length > 0) {
+    console.log(`\nCLEAN (passed every screen) - sorted by quality:`);
+    clean.forEach((r, i) => console.log(triageLine(r, i + 1, clean.length)));
+  }
+  if (flagged.length > 0) {
+    console.log(`\nFLAGGED (a platform screen raised a signal) - review individually:`);
+    flagged.forEach((r, i) => console.log(triageLine(r, i + 1, flagged.length)));
+  }
+  console.log('');
+}
+
+/**
+ * The counted confirmation: print the exact selection, then require the
+ * operator to type the exact count. Returns true ONLY on an exact match.
+ * No flag bypasses this for approve paths.
+ */
+async function confirmByTypedCount(rows, actionLabel) {
+  console.log(`\n${actionLabel} the following ${rows.length} learning(s):`);
+  rows.forEach((r) => {
+    const q = r.quality == null ? '--' : r.quality;
+    console.log(`  ${r.id}  q=${q}  [${shortFlags(r)}]  ${r.title || '(no title)'}`);
+  });
+  console.log(`\nCount: ${rows.length}.`);
+  const answer = await ask(`Type the count (${rows.length}) to confirm, anything else aborts: `);
+  if (answer !== String(rows.length)) {
+    console.log('Aborted. Nothing changed.');
+    return false;
+  }
+  return true;
+}
+
+/** Run a confirmed selection through the bulk endpoint in chunks, with progress. */
+async function runBulk({ apiKey, baseUrl, rows, decision, reason }) {
+  const decisions = rows.map((r) => (decision === 'reject' && reason)
+    ? { id: r.id, decision, reason }
+    : { id: r.id, decision });
+  const totals = await review.submitBulkChunked({
+    apiKey,
+    baseUrl,
+    decisions,
+    onChunk: ({ chunkIndex, chunkCount, response }) => {
+      console.log(`  chunk ${chunkIndex + 1}/${chunkCount}: approved ${response.approved || 0}, rejected ${response.rejected || 0}, already done ${response.idempotent || 0}, failed ${response.failed || 0}`);
+    },
+  });
+  for (const r of totals.results) {
+    if (!r.ok) console.error(`  ! ${r.id || `entry #${r.index}`}: ${r.error || r.code}`);
+  }
+  return totals;
+}
+
+/** Parse --min-quality into an integer 0-20 (default DEFAULT_QUALITY_THRESHOLD). */
+function parseMinQuality(flags) {
+  if (flags['min-quality'] === undefined) return review.DEFAULT_QUALITY_THRESHOLD;
+  const n = parseInt(flags['min-quality'], 10);
+  if (!Number.isFinite(n) || n < 0 || n > 20) {
+    console.error('Invalid --min-quality (expected an integer 0-20).');
+    process.exit(1);
+  }
+  return n;
 }
 
 async function cmdReview(flags) {
@@ -368,80 +456,129 @@ async function cmdReview(flags) {
   const baseUrl = resolveBaseUrl(flags);
   const apiKey = creds.api_key;
 
-  let res;
+  // ── Summary FIRST, always (triage before any decision surface) ────────────
+  let summary;
   try {
-    res = await review.fetchPending({ apiKey, baseUrl, limit: 200 });
+    summary = await review.fetchPendingSummary({ apiKey, baseUrl });
   } catch (err) {
-    console.error(`Could not fetch pending review queue: ${err.message}`);
+    console.error(`Could not fetch pending review summary: ${err.message}`);
     process.exit(1);
   }
 
-  const items = res.learnings || [];
-  const total = res.pending_count != null ? res.pending_count : items.length;
-
-  if (items.length === 0) {
+  const rows = summary.items || [];
+  if (rows.length === 0) {
     console.log('No learnings pending your review. Nothing to do.');
     return;
   }
 
-  // ── --list: non-interactive inspection, no mutations ──────────────────────
-  if (flags.list) {
-    console.log(`\n${total} learning(s) pending your review:\n`);
-    items.forEach((l, i) => {
-      const flagStr = review.formatFlags(l);
-      console.log(`  ${i + 1}. ${l.title}  [${l.id}]${flagStr ? `  ⚠ ${flagStr}` : ''}`);
-    });
-    console.log('');
+  printSummaryTable(summary);
+
+  // ── --list: summary only, no mutations ────────────────────────────────────
+  if (flags.list) return;
+
+  // ── --approve-clean: bulk-approve items that passed EVERY platform screen
+  //    AND clear the quality threshold. Typed-count confirmation, no bypass. ──
+  if (flags['approve-clean']) {
+    const minQuality = parseMinQuality(flags);
+    const sel = review.selectForBulkApprove(rows, { mode: 'clean', minQuality });
+    console.log(`approve-clean selection: ${sel.selected.length} of ${rows.length} pending (threshold: quality >= ${minQuality}).`);
+    if (sel.excluded_flagged.length) console.log(`  excluded ${sel.excluded_flagged.length} screen-flagged item(s) (review those individually).`);
+    if (sel.excluded_low_quality.length) console.log(`  excluded ${sel.excluded_low_quality.length} below the quality threshold.`);
+    if (sel.excluded_unscored.length) console.log(`  excluded ${sel.excluded_unscored.length} with no quality score (pass --min-quality 0 to include).`);
+    if (sel.selected.length === 0) { console.log('Nothing qualifies. No changes made.'); return; }
+
+    if (!await confirmByTypedCount(sel.selected, 'APPROVE and PUBLISH')) return;
+    const totals = await runBulk({ apiKey, baseUrl, rows: sel.selected, decision: 'approve' });
+    console.log(`\nDone. Approved ${totals.approved} (already approved earlier: ${totals.idempotent}, failed: ${totals.failed}). Flagged and below-threshold items stay pending.`);
     return;
   }
 
-  // ── --all-reject: bulk reject the whole batch (incident escape hatch) ─────
-  if (flags['all-reject']) {
-    const ok = flags.yes || await askYesNo(`Reject ALL ${items.length} pending learning(s)? This cannot be undone`, false);
-    if (!ok) { console.log('Aborted — nothing changed.'); return; }
-    let rejected = 0;
-    for (const l of items) {
-      try {
-        await review.submitDecision({ apiKey, baseUrl, id: l.id, decision: 'reject' });
-        rejected += 1;
-        console.log(`  ✗ rejected (${rejected}/${items.length}): ${l.title}`);
-      } catch (err) {
-        console.error(`  ! failed to reject ${l.id}: ${err.message}`);
-      }
+  // ── --all: bulk-approve everything EXCEPT screen-flagged items unless
+  //    --include-flagged. Typed-count confirmation, no bypass. ───────────────
+  if (flags.all) {
+    const includeFlagged = flags['include-flagged'] === true;
+    const sel = review.selectForBulkApprove(rows, { mode: 'all', includeFlagged });
+    if (includeFlagged && sel.selected.some((r) => !r.screens_passed)) {
+      console.log('WARNING: --include-flagged is set. This selection INCLUDES items a platform screen flagged (possible injection, sensitive content, or near-duplicates). Approving publishes them publicly.');
+    } else if (sel.excluded_flagged.length) {
+      console.log(`Excluding ${sel.excluded_flagged.length} screen-flagged item(s) (pass --include-flagged to include them; safer to review those individually).`);
     }
-    console.log(`\nDone. Rejected ${rejected} of ${items.length}.`);
+    if (sel.selected.length === 0) { console.log('Nothing qualifies. No changes made.'); return; }
+
+    if (!await confirmByTypedCount(sel.selected, 'APPROVE and PUBLISH')) return;
+    const totals = await runBulk({ apiKey, baseUrl, rows: sel.selected, decision: 'approve' });
+    console.log(`\nDone. Approved ${totals.approved} (already approved earlier: ${totals.idempotent}, failed: ${totals.failed}).`);
     return;
   }
 
-  // ── interactive (default) ─────────────────────────────────────────────────
-  console.log(`\n${total} learning(s) pending your review.`);
-  console.log('For each: [a]pprove (go live) · [r]eject (stays private) · [s]kip · [q]uit\n');
+  // ── --all-reject: bulk reject the whole batch (incident escape hatch).
+  //    Now batched through the bulk endpoint. --yes keeps its scripted-incident
+  //    bypass because rejection is the SAFE direction (nothing goes public). ──
+  if (flags['all-reject']) {
+    const ok = flags.yes || await confirmByTypedCount(rows, 'REJECT (keep private)');
+    if (!ok) return;
+    const totals = await runBulk({ apiKey, baseUrl, rows, decision: 'reject' });
+    console.log(`\nDone. Rejected ${totals.rejected} of ${rows.length} (already rejected earlier: ${totals.idempotent}, failed: ${totals.failed}).`);
+    return;
+  }
 
-  let approved = 0, rejected = 0, skipped = 0, seen = 0;
-  for (const l of items) {
-    seen += 1;
-    printCandidate(l, seen, items.length);
+  // ── interactive rapid mode (default): y/n/s per item, one line each.
+  //    [v] shows the full body before deciding; decisions post one at a time
+  //    through the same single-item endpoints as before. ──────────────────────
+  const bodies = new Map();
+  try {
+    let offset = 0;
+    const pageLimit = 200;
+    for (;;) {
+      const page = await review.fetchPending({ apiKey, baseUrl, limit: pageLimit, offset });
+      for (const l of page.learnings || []) bodies.set(l.id, l);
+      offset += (page.learnings || []).length;
+      if (!page.learnings || page.learnings.length === 0 || offset >= (page.pending_count || 0)) break;
+    }
+  } catch (err) {
+    console.error(`Could not fetch pending bodies: ${err.message}`);
+    process.exit(1);
+  }
+
+  console.log('Rapid review. Per item: [y] approve (goes live) · [n] reject (stays private) · [v] view full body · [s] skip · [q] quit\n');
+
+  let approved = 0, rejected = 0, skipped = 0;
+  const ordered = rows; // clean-first, quality desc (server order preserved by printSummaryTable groups)
+  for (let i = 0; i < ordered.length; i++) {
+    const row = ordered[i];
+    console.log(triageLine(row, i + 1, ordered.length));
     let choice = '';
-    while (!['a', 'r', 's', 'q'].includes(choice)) {
-      choice = (await ask('  approve / reject / skip / quit [a/r/s/q]? ')).toLowerCase().slice(0, 1);
+    for (;;) {
+      choice = (await ask('    [y/n/v/s/q]? ')).toLowerCase().slice(0, 1);
+      if (choice === 'v') {
+        const full = bodies.get(row.id);
+        console.log('    ------------------------------------------------------------');
+        console.log(full && full.body ? full.body : '(body not loaded)');
+        if (full) {
+          const flagStr = review.formatFlags(full);
+          if (flagStr) console.log(`    ⚠ flags: ${flagStr}`);
+        }
+        console.log('    ------------------------------------------------------------');
+        continue;
+      }
+      if (['y', 'n', 's', 'q'].includes(choice)) break;
     }
     if (choice === 'q') { console.log('  Stopping. Remaining items left pending.'); break; }
-    if (choice === 's') { skipped += 1; console.log('  → skipped (still pending)'); continue; }
+    if (choice === 's') { skipped += 1; continue; }
     try {
-      if (choice === 'a') {
-        await review.submitDecision({ apiKey, baseUrl, id: l.id, decision: 'approve' });
-        approved += 1; console.log('  ✓ approved — now live');
+      if (choice === 'y') {
+        await review.submitDecision({ apiKey, baseUrl, id: row.id, decision: 'approve' });
+        approved += 1; console.log('    ✓ approved, now live');
       } else {
-        const reason = await ask('  reason (optional, Enter to skip): ');
-        await review.submitDecision({ apiKey, baseUrl, id: l.id, decision: 'reject', reason: reason || undefined });
-        rejected += 1; console.log('  ✗ rejected — stays private');
+        await review.submitDecision({ apiKey, baseUrl, id: row.id, decision: 'reject' });
+        rejected += 1; console.log('    ✗ rejected, stays private');
       }
     } catch (err) {
-      console.error(`  ! decision failed: ${err.message} (item left pending)`);
+      console.error(`    ! decision failed: ${err.message} (item left pending)`);
     }
   }
 
-  console.log(`\nReview complete: approved ${approved}, rejected ${rejected}, skipped ${skipped} of ${items.length}.`);
+  console.log(`\nReview complete: approved ${approved}, rejected ${rejected}, skipped ${skipped} of ${ordered.length}.`);
 }
 
 // ─── Entry point ────────────────────────────────────────────────────────────
@@ -456,8 +593,24 @@ Commands:
             Flags: --re-auth, --base-url <url>
   status    Show install/auth/extraction status.
   review    Review YOUR pending-review learnings (from background extraction)
-            and approve/reject each before it goes public.
-            Flags: --list (inspect only), --all-reject [--yes], --base-url <url>
+            and approve/reject before anything goes public. Default: triage
+            summary table first (quality desc, clean vs flagged), then rapid
+            y/n/s review.
+            Flags:
+              --list            summary table only, no changes
+              --approve-clean   bulk-approve items that passed EVERY platform
+                                screen AND quality >= threshold (default 14;
+                                tune with --min-quality N). Prints the exact
+                                list, then requires typing the count.
+              --all             bulk-approve everything EXCEPT screen-flagged
+                                items (add --include-flagged to include them).
+                                Same typed-count confirmation.
+              --min-quality N   quality threshold for --approve-clean (0-20)
+              --all-reject      reject the whole batch [--yes for scripted
+                                incident response; rejects stay private]
+              --base-url <url>
+            Bulk approvals ALWAYS require typing the exact count. No flag
+            skips that step.
   disable   Turn off background extraction (local kill-switch; optional
             server-side consent revoke).
 

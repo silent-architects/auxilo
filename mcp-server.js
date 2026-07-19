@@ -10,6 +10,11 @@ const {
   ListToolsRequestSchema,
 } = require('@modelcontextprotocol/sdk/types.js');
 
+// Review-seamless: pure selection + chunking helpers shared with the CLI so the
+// MCP dry run and the confirmed run use the SAME logic (lib/review.js ships in
+// the npm package alongside this file).
+const reviewLib = require('./lib/review.js');
+
 // Credential file reading — auto-configure base URL and API key
 const CRED_PATH = path.join(os.homedir(), '.auxilo', 'credentials.json');
 let credentials = {};
@@ -53,6 +58,54 @@ function fenceUnlockResult(data) {
     content_advisory: data.content_advisory || UNTRUSTED_CONTENT_ADVISORY,
     body_fenced,
   };
+}
+
+// Review-seamless: build the approve_clean dry-run plan from a summary payload.
+// Pure (no I/O) so the dry-run shape is unit-testable; the selection itself is
+// reviewLib.selectForBulkApprove, the SAME function the CLI uses.
+function planApproveClean(summary, opts = {}) {
+  const minQuality = Number.isFinite(opts.min_quality) ? opts.min_quality : reviewLib.DEFAULT_QUALITY_THRESHOLD;
+  const sel = reviewLib.selectForBulkApprove((summary && summary.items) || [], { mode: 'clean', minQuality });
+  const brief = (r) => ({ id: r.id, title: r.title, category: r.category, quality: r.quality });
+  return {
+    dry_run: true,
+    min_quality: minQuality,
+    pending_count: summary ? summary.pending_count : 0,
+    would_approve_count: sel.selected.length,
+    would_approve: sel.selected.map(brief),
+    excluded_flagged_count: sel.excluded_flagged.length,
+    excluded_flagged: sel.excluded_flagged.map((r) => ({ ...brief(r), flags: r.flags })),
+    excluded_low_quality_count: sel.excluded_low_quality.length,
+    excluded_unscored_count: sel.excluded_unscored.length,
+    next_step: sel.selected.length > 0
+      ? `Show the operator this list and count (${sel.selected.length}). Only after their explicit confirmation, call auxilo_review again with {action:"approve_clean", dry_run:false, confirm:true, expected_count:${sel.selected.length}}. Approved items become PUBLIC immediately.`
+      : 'Nothing qualifies at this threshold. No follow-up call needed.',
+  };
+}
+
+// Review-seamless: POST one confirmed decision batch through the counted bulk
+// endpoint, chunked at the server cap. Used by approve/reject/approve_clean.
+async function postBulkChunks(headers, decisions) {
+  const totals = { approved: 0, rejected: 0, idempotent: 0, failed: 0, results: [] };
+  for (const chunk of reviewLib.chunkDecisions(decisions)) {
+    const resp = await fetch(`${AUXILO_BASE}/account/pending/bulk`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ decisions: chunk, confirm_count: chunk.length }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      totals.error = data.error || `HTTP ${resp.status}`;
+      totals.error_code = data.code;
+      return totals;
+    }
+    totals.approved += data.approved || 0;
+    totals.rejected += data.rejected || 0;
+    totals.idempotent += data.idempotent || 0;
+    totals.failed += data.failed || 0;
+    if (Array.isArray(data.results)) totals.results.push(...data.results);
+  }
+  return totals;
 }
 
 const server = new Server(
@@ -273,6 +326,24 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: 'auxilo_review',
+      description: 'Review YOUR OWN pending-review learnings (from background extraction) so they can be approved to the public marketplace or rejected to stay private. Account-scoped: only the authenticated account\'s own pending items are ever visible or affected. ACTIONS: "list" returns the triage summary (counts + compact rows with quality score and platform screen verdicts: injection, content sensitivity, near-duplicate). "approve" / "reject" apply explicit decisions to the ids you pass (the operator must have named or confirmed these items). "approve_clean" selects every item that passed ALL platform screens AND has quality >= min_quality (default 14/20); it is DRY-RUN BY DEFAULT and returns exactly what WOULD be approved. CONSENT CONTRACT: nothing goes public without the contributor\'s explicit approval. So before executing approve_clean you MUST show the operator the dry-run list and count and get their confirmation, then call again with dry_run:false, confirm:true, and expected_count set to the dry-run count. The server also enforces a counted-confirmation gate on every bulk call. Requires your configured API key (or session_token).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['list', 'approve', 'reject', 'approve_clean'], description: 'What to do. Start with "list".' },
+          ids: { type: 'array', items: { type: 'string' }, description: 'Learning ids for action approve/reject. These must be items the operator explicitly chose.' },
+          reason: { type: 'string', description: 'Optional rejection reason (action reject; max 500 chars).' },
+          dry_run: { type: 'boolean', description: 'approve_clean only. Default TRUE: report what would be approved without changing anything. Set false only together with confirm:true and expected_count after the operator confirmed the dry-run list.' },
+          confirm: { type: 'boolean', description: 'approve_clean only. Must be exactly true to execute. Never set this without the operator\'s explicit go-ahead on the dry-run output.' },
+          expected_count: { type: 'number', description: 'approve_clean execute only. The count from the dry run, echoed back. If the live selection differs (queue changed), nothing is approved and a fresh dry run is returned.' },
+          min_quality: { type: 'number', description: 'approve_clean quality threshold 0-20 (default 14). 0 includes unscored items.' },
+          session_token: { type: 'string', description: 'Optional JWT session token from /auth/verify. If omitted, your configured API key authenticates the account.' },
+        },
+        required: ['action'],
+      },
+    },
+    {
       name: 'get_stats',
       description: 'Get Auxilo registry statistics — catalog size, skill types, and query volume. Free.',
       inputSchema: { type: 'object', properties: {} },
@@ -480,6 +551,74 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return text(await resp.json());
       }
 
+      case 'auxilo_review': {
+        // Same auth idiom as the other account tools: session JWT when
+        // provided, else the configured API key via baseHeaders().
+        const headers = baseHeaders(
+          args.session_token ? { 'Authorization': `Bearer ${args.session_token}` } : {}
+        );
+
+        if (args.action === 'list') {
+          const resp = await fetch(`${AUXILO_BASE}/account/pending/summary`, { headers });
+          return text(await resp.json());
+        }
+
+        if (args.action === 'approve' || args.action === 'reject') {
+          if (!Array.isArray(args.ids) || args.ids.length === 0) {
+            return text({ error: `action "${args.action}" requires a non-empty ids array. Run {action:"list"} first and pass the ids the operator chose.` });
+          }
+          const decisions = args.ids.map((id) => (args.action === 'reject' && args.reason)
+            ? { id, decision: 'reject', reason: args.reason }
+            : { id, decision: args.action });
+          const totals = await postBulkChunks(headers, decisions);
+          return text({ action: args.action, submitted: decisions.length, ...totals });
+        }
+
+        if (args.action === 'approve_clean') {
+          const summaryResp = await fetch(`${AUXILO_BASE}/account/pending/summary`, { headers });
+          const summary = await summaryResp.json();
+          if (!summaryResp.ok) return text(summary);
+
+          const plan = planApproveClean(summary, args);
+
+          // DRY RUN unless the operator-confirmed execute contract is complete:
+          // dry_run explicitly false AND confirm exactly true.
+          if (args.dry_run !== false || args.confirm !== true) {
+            return text(plan);
+          }
+
+          // Counted confirmation: the execute call must echo the dry-run count.
+          if (!Number.isInteger(args.expected_count)) {
+            return text({
+              error: 'expected_count is required to execute approve_clean: echo the would_approve_count from the dry run. This is the counted-confirmation gate.',
+              ...plan,
+            });
+          }
+          if (args.expected_count !== plan.would_approve_count) {
+            return text({
+              error: `Selection changed since the dry run (expected ${args.expected_count}, now ${plan.would_approve_count}). Nothing was approved. Re-run the dry run and re-confirm with the operator.`,
+              ...plan,
+            });
+          }
+          if (plan.would_approve_count === 0) {
+            return text({ action: 'approve_clean', approved: 0, message: 'Nothing qualifies at this threshold.' });
+          }
+
+          const decisions = plan.would_approve.map((r) => ({ id: r.id, decision: 'approve' }));
+          const totals = await postBulkChunks(headers, decisions);
+          return text({
+            action: 'approve_clean',
+            executed: true,
+            min_quality: plan.min_quality,
+            submitted: decisions.length,
+            ...totals,
+            note: 'Approved items are now PUBLIC on the marketplace. Screen-flagged and below-threshold items remain pending for individual review.',
+          });
+        }
+
+        return text({ error: `Unknown action: ${args.action}. Use list, approve, reject, or approve_clean.` });
+      }
+
       case 'get_stats': {
         const resp = await fetch(`${AUXILO_BASE}/stats`, { headers: baseHeaders() });
         return text(await resp.json());
@@ -505,7 +644,7 @@ function text(obj) {
 // LW-3(a): export the pure helpers so they can be unit-tested without starting
 // the stdio transport. When this file is required (not run directly), stop here
 // before the CLI dispatch and MCP startup below.
-module.exports = { fenceUnlockResult, UNTRUSTED_CONTENT_ADVISORY, baseHeaders };
+module.exports = { fenceUnlockResult, UNTRUSTED_CONTENT_ADVISORY, baseHeaders, planApproveClean };
 if (require.main !== module) {
   return;
 }
