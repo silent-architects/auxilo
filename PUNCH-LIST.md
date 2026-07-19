@@ -609,15 +609,24 @@ Four-lane audit (agent onboarding/install, first contribution + first unlock, hu
 
 > Verification gates in spec §5 (grep gates, SSR `lc-*` anchor integrity, FAQ JSON-LD parity, truth bounds, drift guard, visual QA). Gate flow per D4: Gate A → BUILD-3 + SPEC-2 + GROWTH-1 → Tyler deploys.
 
+## 28. CAT-1 Catalog-Health Pass (2026-07-19)
+
+Catalog-health pass over the live marketplace (health indicators H1–H12, demand-multiplier surface, dedup/category balance). Full findings with evidence: `~/.auxilo/handoffs/CAT1-CATALOG-HEALTH-2026-07-19.md` (PRIVATE — keep out of this repo). The pass's report-only/watch items live in the handoff; tracked build items below.
+
+| ID | Item | Priority | Owner | Status |
+|---|---|---|---|---|
+| CH-1 | **Public pricing analytics leak raw-catalog visibility** (handoff §7 + H11 FAIL): `GET /pricing/categories` iterated the raw `learnings` array with no status filter → publicly reported 940 learnings (incl. pending_review/rejected/retracted) vs the 58 visible per `/knowledge/stats`, with pending default prices mixed into public avg_price — the exact inflated-stats class that was a 2026-06-12 launch blocker. Same-class audit hit CONFIRMED on `GET /contributor/:wallet/pricing-insights` (unauthenticated), which additionally exposed **titles** of non-approved learnings via `top_earning_learnings`. | P1 | CAT-1 + BUILD-2 | ✅ **FIXED 2026-07-19** (spec note `~/.auxilo/handoffs/SPEC-CAT1-VISIBILITY-2026-07-19.md`). Both endpoints now draw from `visibleLearningsList()` — the SAME predicate as `/knowledge/stats` (LW-QA) / search / `GET /knowledge/:id`; a wallet whose learnings are all non-approved now 404s from pricing-insights (matches `GET /knowledge/:id` posture). Regression: `test/pricing-visibility.test.js` — structural predicate-agreement guards (CI-enforcing) + behavioral boot against a mixed-status fixture asserting `/knowledge/stats`, `/pricing/categories`, and pricing-insights totals agree. **Gate-A adversarial review 2026-07-19: SHIP (clean)** — reviewer reproduced every test leg and swept ALL other raw-`learnings` read sites; one same-class catch fixed in the same wave: `POST /discover` `knowledge_hint` advertised the raw catalog count (server.js:4758, unauthenticated) → now `visibleLearningsList()`, structural guard added. Suite-hygiene riders in the same wave: stale `0.9.1` literal in test/r01-launch-blockers.test.js → 0.9.2 (missed by 3e3587a), and test/cold-start-seed.test.js behavioral leg now resolves the real node_modules dir (was staging a dead symlink in git worktrees → false FAIL; the AUD19-14 "environment-only" note, now cured). Full suite 797/793/0 fail. NOT deployed — rides next Fly deploy. |
+| CH-2 | **`GET /contributor/:wallet` `learnings_submitted` counts non-approved submissions** (Gate-A reviewer, 2026-07-19; also noted in the CH-1 spec note): unauthenticated route counts pending/rejected/retracted for ANY wallet (server.js:7382, 7395) — count-only (no titles/prices), but it reveals a wallet has hidden submissions and now disagrees with the fixed sibling `/pricing-insights` (visible-only / 404). Deliberately NOT changed in CH-1: "submitted" is arguably the builder's own-tally semantics. Needs an intended-semantics decision (own-dashboard vs public predicate) before the pair is called consistent. | P2 | SPEC-3 | OPEN — one-line fix once semantics are ruled. |
+
 ## Counts
 
 | Priority | Open | On Hold | Deferred | Done/Verified | Total |
 |----------|------|---------|----------|---------------|-------|
 | P0 (blocks launch) | **4** | 0 | 0 | **29** | 33 |
-| P1 (blocks real money / production) | **16** | 6 | 2 | 68 | 92 |
+| P1 (blocks real money / production) | **16** | 6 | 2 | 69 | 93 |
 | P2 (blocks scale) | **8** | 1 | 0 | 23 | 32 |
 | P3 (polish) | 0 | 0 | 0 | 3 | 3 |
-| **Total** | **28** | **7** | **2** | **123** | **160** |
+| **Total** | **28** | **7** | **2** | **124** | **161** |
 
 > **2026-06-10 Launch Wave**: LW-1–LW-10 added (§20, spec `specs/BUILD-SPEC-LAUNCH-WAVE.md`). 4 P0 + 6 P1 OPEN. P0 launch gate re-opened until LW-1–LW-4 land.
 
