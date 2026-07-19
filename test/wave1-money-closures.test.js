@@ -244,24 +244,26 @@ describe('AUD19-10: unlock handler compensation wiring (source)', () => {
 // ════════════════════════════════════════════════════════════════════════════
 
 describe('LW-7: purchase ledger is durable proof of delivered unlocks', () => {
-  it('record/has round-trip; repeat unlocks bump count and preserve first_ts', () => {
+  // Wave 2b F4: recordPurchase is now async (store-level write mutex) — the
+  // call sites are fire-and-forget, but tests await for determinism.
+  it('record/has round-trip; repeat unlocks bump count and preserve first_ts', async () => {
     const acct = 'acc_w1_ledger';
     const lrn = 'lrn_w1_ledger';
     assert.equal(ledger.hasPurchase(acct, lrn), false);
-    ledger.recordPurchase(acct, lrn, 1000);
+    await ledger.recordPurchase(acct, lrn, 1000);
     assert.equal(ledger.hasPurchase(acct, lrn), true);
-    ledger.recordPurchase(acct, lrn, 2000);
+    await ledger.recordPurchase(acct, lrn, 2000);
     const entry = ledger.loadLedger()[`${acct}:${lrn}`];
     assert.equal(entry.count, 2);
     assert.equal(entry.first_ts, 1000, 'first purchase timestamp preserved');
     assert.equal(entry.last_ts, 2000);
   });
 
-  it('durability: a record far older than the 30-day accrual-cap window still proves purchase', () => {
+  it('durability: a record far older than the 30-day accrual-cap window still proves purchase', async () => {
     const acct = 'acc_w1_ledger_old';
     const lrn = 'lrn_w1_ledger_old';
     const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
-    ledger.recordPurchase(acct, lrn, ninetyDaysAgo);
+    await ledger.recordPurchase(acct, lrn, ninetyDaysAgo);
     assert.equal(ledger.hasPurchase(acct, lrn), true,
       'the ledger is never pruned — rating rights do not expire');
   });

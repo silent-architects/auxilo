@@ -191,7 +191,7 @@ describe('server.js: adoption wiring (AUD19-3b)', () => {
   it('link-wallet adopts orphans with the just-verified wallet (result.wallet, never a claimed one)', () => {
     const i = SERVER_SRC.indexOf("app.post('/account/link-wallet'");
     assert.notEqual(i, -1);
-    const h = SERVER_SRC.slice(i, i + 10000); // handler grew with the HIGH-1 challenge flow
+    const h = SERVER_SRC.slice(i, i + 16000); // handler grew with the HIGH-1 challenge flow + CP-2 capture (Wave 2b)
     assert.ok(h.includes('adoptWalletOrphans(learnings, accountId, result.wallet)'));
     assert.ok(/adoptedIds\.length > 0[\s\S]{0,220}safeWrite\(LEARNINGS_FILE/.test(h), 'persists only when something adopted');
   });
@@ -354,7 +354,7 @@ describe('link challenge crypto (HIGH-1)', () => {
 
 describe('server.js: link-wallet demands account-bound proof (HIGH-1 wiring)', () => {
   const i = SERVER_SRC.indexOf("app.post('/account/link-wallet'");
-  const h = SERVER_SRC.slice(i, i + 10000);
+  const h = SERVER_SRC.slice(i, i + 16000); // widened for CP-2 capture (Wave 2b)
   it('no signature → returns the account-bound challenge (link_signature_required), rate-limited', () => {
     assert.ok(h.includes("code: 'link_signature_required'"));
     assert.ok(h.includes('checkChallengeRateLimit(wallet)'), 'challenge minting shares the /wallet/challenge rate limit');

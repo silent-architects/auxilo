@@ -54,17 +54,26 @@ function routeSlice(marker) {
 // 1. Structural: the enforcing guard
 // ─────────────────────────────────────────────────────────────────────────────
 describe('structural: pricing analytics use the shared visibility predicate', () => {
-  it('visibleLearningsList() and /knowledge/stats share the exact predicate', () => {
-    const helper = routeSlice('function visibleLearningsList()');
-    assert.ok(helper.includes(PREDICATE), 'helper must use the canonical predicate');
+  it('visibleCatalog() holds the canonical predicate exactly once; list helper and /knowledge/stats delegate', () => {
+    // Wave-2b unification (Gate-A merge guidance): the predicate literal lives in
+    // exactly ONE place — visibleCatalog(). Everything else must CALL a helper,
+    // never inline the predicate (inline copies are the drift class CH-1 closed).
+    const catalogHelper = routeSlice('function visibleCatalog()');
+    assert.ok(catalogHelper.includes(PREDICATE), 'visibleCatalog must hold the canonical predicate');
+    assert.equal(SERVER_SRC.split(PREDICATE).length - 1, 1,
+      'the predicate literal must appear exactly once in server.js (inside visibleCatalog)');
+    const listHelper = routeSlice('function visibleLearningsList()');
+    assert.ok(listHelper.includes('return visibleCatalog()'),
+      'visibleLearningsList must delegate to visibleCatalog');
     const stats = routeSlice("app.get('/knowledge/stats'");
-    assert.ok(stats.includes(PREDICATE), '/knowledge/stats must use the canonical predicate');
+    assert.ok(/visible(Catalog|LearningsList)\(\)/.test(stats),
+      '/knowledge/stats must draw from the shared helper, not an inline predicate');
   });
 
   it('/pricing/categories iterates visibleLearningsList(), not the raw array', () => {
     const slice = routeSlice("app.get('/pricing/categories'");
-    assert.ok(slice.includes('visibleLearningsList()'),
-      '/pricing/categories must draw from visibleLearningsList()');
+    assert.ok(/visible(Catalog|LearningsList)\(\)/.test(slice),
+      '/pricing/categories must draw from the shared visibility helper');
     assert.ok(!slice.includes('of learnings)'),
       '/pricing/categories must not iterate the raw learnings array — that leaks pending/rejected/retracted counts');
   });
@@ -81,8 +90,8 @@ describe('structural: pricing analytics use the shared visibility predicate', ()
 
   it('/contributor/:wallet/pricing-insights filters from visibleLearningsList()', () => {
     const slice = routeSlice("app.get('/contributor/:wallet/pricing-insights'");
-    assert.ok(slice.includes('visibleLearningsList().filter'),
-      'pricing-insights must draw from visibleLearningsList()');
+    assert.ok(/visible(Catalog|LearningsList)\(\)\.filter/.test(slice),
+      'pricing-insights must draw from the shared visibility helper');
     assert.ok(!/\blearnings\.(filter|map|forEach)\(/.test(slice),
       'pricing-insights must not read the raw learnings array — top_earning_learnings would leak non-approved titles');
   });
