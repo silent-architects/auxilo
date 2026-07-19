@@ -1037,6 +1037,8 @@ const { acquireWalletLock, getActiveLockCount } = require('./lib/wallet-lock.js'
 
 // ─── Phase 0.3: Credit System (SPEC-P0.3) ──────────────────────────────────
 const { deductCredit, getCreditStatus } = require('./lib/credits.js');
+// AUD19-2: per-(buyer, learning) accrual cap — 1 credited accrual / 30 days.
+const { isAccrualCapped, recordAccrual } = require('./lib/unlock-attribution.js');
 
 // ─── Phase 0.4: Stripe Integration (SPEC-P0.4) ─────────────────────────────
 const {
@@ -1066,8 +1068,14 @@ const { computeCurrentPrice, getLockedPrice, lockPrice } = pricingEngine;
  * IMPL-A2-02: payload stores contributor_earned + platform_earned separately.
  */
 function replayUnlock(entry) {
-  const { learning_id, builder_wallet, contributor_account_id, unlock_price, contributor_earned, platform_earned, settled_onchain, settlement_tx, settlement_bps, agency_in_force } = entry.payload;
+  const { learning_id, builder_wallet, contributor_account_id, unlock_price, contributor_earned, platform_earned, settled_onchain, settlement_tx, settlement_bps, agency_in_force, amount_paid_usd } = entry.payload;
   const steps = entry.steps_completed || [];
+
+  // AUD19-2: gross books the amount actually paid (the accrual basis stored at
+  // unlock time) for post-cutover entries. Pre-cutover entries carry no
+  // amount_paid_usd and replay the list price exactly as they always did —
+  // the forward-only cutover restates nothing. Never recomputed from price.
+  const grossAmount = (typeof amount_paid_usd === 'number') ? amount_paid_usd : unlock_price;
 
   // If learnings write didn't complete, we can't determine the learning state.
   // Log and preserve the WAL entry for manual review rather than guess.
@@ -1094,7 +1102,7 @@ function replayUnlock(entry) {
     }
     const earningsEntry = earnings[resolvedKey];
 
-    earningsEntry.total_gross += unlock_price;
+    earningsEntry.total_gross += grossAmount;
     earningsEntry.total_contributor += contributor_earned;
     earningsEntry.total_platform += platform_earned;
     if (settled_onchain) {
@@ -1130,7 +1138,7 @@ function replayUnlock(entry) {
     if (!earningsEntry.by_learning[learning_id]) {
       earningsEntry.by_learning[learning_id] = { gross: 0, contributor: 0, platform: 0, unlocks: 0 };
     }
-    earningsEntry.by_learning[learning_id].gross += unlock_price;
+    earningsEntry.by_learning[learning_id].gross += grossAmount;
     earningsEntry.by_learning[learning_id].contributor += contributor_earned;
     earningsEntry.by_learning[learning_id].platform += platform_earned;
     earningsEntry.by_learning[learning_id].unlocks += 1;
@@ -2794,6 +2802,11 @@ async function dualAuthDynamic(c, price_usd, description, creditType, requiredSc
                     }
                 }, 402);
             }
+            // AUD19-2: expose the consumed credit's pro-rata unit price so the
+            // unlock handler can accrue on the amount the buyer actually paid.
+            if (typeof creditResult.unit_price_usd === 'number') {
+                c.set('creditUnitPrice', creditResult.unit_price_usd);
+            }
         }
 
         return null;  // Same contract as verifyPaymentOrReject
@@ -3644,7 +3657,13 @@ app.post('/webhook/stripe', async (c) => {
     const queries = parseInt(pack_queries, 10) || 0;
     const unlocks = parseInt(pack_unlocks, 10) || 0;
 
-    const creditResult = await addPurchasedCredits(account_id, queries, unlocks);
+    // AUD19-2: lot the unlocks at the pack's pro-rata unit price (pack price
+    // attributes 100% to unlocks — ratified design). Unknown pack falls back
+    // to the credits.js default rather than a fabricated price.
+    const unlockUnitPrice = (PACKS[pack_id] && unlocks > 0)
+        ? PACKS[pack_id].price_usd / unlocks
+        : undefined;
+    const creditResult = await addPurchasedCredits(account_id, queries, unlocks, { unlock_unit_price_usd: unlockUnitPrice });
     if (!creditResult.success) {
         console.error('[stripe] Failed to add credits for', account_id);
         // Still return 200 to prevent Stripe retries — log for manual review
@@ -6834,17 +6853,46 @@ app.get('/knowledge/:id', async (c) => {
   // the existing pending_balance accounting.
   const routerSettlement = c.get('x402RouterSettlement') || null;
 
+  // AUD19-2: buyer identity, funding source, and accrual basis.
+  // `callerAccountId` (top of handler) is captured BEFORE dualAuthDynamic
+  // authenticates the API key, so it is null on the credit path — every
+  // identity-sensitive decision below (wash guard, accrual cap, WAL
+  // attribution) re-reads the POST-auth account id here.
+  const buyerAccountId = c.get('accountId') || callerAccountId || null;
+  const fundingSource = routerSettlement ? 'router'
+    : (c.get('authMethod') === 'api_key' ? 'credit_pack' : 'x402');
+  // Accrue on the amount the buyer actually paid, never the list price.
+  // Credit path: min(list, credit unit price) — the pro-rata pack rate the
+  // consumed credit actually cost ($0.00 for referral/free-grant lots).
+  // x402/router: the buyer pays full list on-chain — basis = list by construction.
+  const creditUnit = c.get('creditUnitPrice');
+  const accrualBasis = (fundingSource === 'credit_pack')
+    ? Math.min(UNLOCK_PRICE, (typeof creditUnit === 'number' && Number.isFinite(creditUnit)) ? creditUnit : UNLOCK_PRICE)
+    : UNLOCK_PRICE;
+
+  // AUD19-2: per-(buyer, learning) accrual cap — 1 credited accrual per buyer
+  // account per learning per 30 days, applied at the ACCRUAL decision only.
+  // The buyer still gets the content (their credit still burns); the
+  // contributor just doesn't accrue again. Account (credit) path only:
+  // anonymous x402 settles real money at full list price (revenue-backed).
+  const accrualCapped = (fundingSource === 'credit_pack') && !!buyerAccountId
+    && isAccrualCapped(buyerAccountId, id);
+
   // Track unlock
   learning.quality.unlocks = (learning.quality.unlocks || 0) + 1;
 
-  // E2: Demand tracking — unlock counters for rolling windows
+  // E2: Demand tracking — unlock counters for rolling windows.
+  // AUD19-2: capped repeat unlocks do NOT bump demand — repeat unlocks from a
+  // single buyer must not pump the dynamic-pricing demand multiplier.
   if (!learning.demand) learning.demand = { search_impressions_7d: 0, search_impressions_30d: 0, unlocks_7d: 0, unlocks_30d: 0 };
-  learning.demand.unlocks_7d++;
-  learning.demand.unlocks_30d++;
+  if (!accrualCapped) {
+    learning.demand.unlocks_7d++;
+    learning.demand.unlocks_30d++;
+  }
 
-  // Track earnings with source attribution
-  const contributorEarned = UNLOCK_PRICE * CONTRIBUTOR_SHARE;
-  const platformEarned = UNLOCK_PRICE * (1 - CONTRIBUTOR_SHARE);
+  // Track earnings with source attribution (AUD19-2: on the PAID basis)
+  const contributorEarned = accrualBasis * CONTRIBUTOR_SHARE;
+  const platformEarned = accrualBasis * (1 - CONTRIBUTOR_SHARE);
 
   // SPEC-P0.5: Resolve contributor earnings entry via account_id (preferred) or wallet fallback
   const contribWallet = learning.contributor_wallet;
@@ -6858,8 +6906,11 @@ app.get('/knowledge/:id', async (c) => {
   // WITHOUT crediting anything (no revenue counters, no earnings entry, no WAL).
   const callerWallet = (c.get('walletAddress') || c.req.header('X-Wallet-Address') || '').toLowerCase();
   const contribWalletLower = contribWallet ? contribWallet.toLowerCase() : null;
+  // AUD19-2: the account arm compares the POST-auth buyerAccountId — the old
+  // pre-auth `callerAccountId` was always null on the API-key path, which left
+  // the account arm of this guard dead against exactly the buyers it targets.
   const isSelfUnlock =
-    (callerAccountId && contribAccountId && callerAccountId === contribAccountId) ||
+    (buyerAccountId && contribAccountId && buyerAccountId === contribAccountId) ||
     (callerWallet && contribWalletLower && callerWallet === contribWalletLower);
 
   if (isSelfUnlock) {
@@ -6928,7 +6979,38 @@ app.get('/knowledge/:id', async (c) => {
     });
   }
 
-  learning.earnings.gross_usd = (learning.earnings.gross_usd || 0) + UNLOCK_PRICE;
+  // AUD19-2: capped repeat unlock — serve the content, accrue NOTHING. Exact
+  // mirror of the M-2 shape: no revenue counters, no earnings entry, no WAL.
+  // quality.unlocks (bumped above) persists for catalog consistency; the
+  // demand counters were deliberately NOT bumped.
+  if (accrualCapped) {
+    safeWrite(LEARNINGS_FILE, learnings);
+    const {
+      injection_flags: _ifc, possible_duplicate_of: _pdc,
+      possible_duplicate_similarity: _psc, moderation: _modc,
+      sensitivity_signals: _ssc, sensitivity_source: _ssrcc,
+      ...cappedLearning
+    } = learning;
+    return c.json({
+      ...cappedLearning,
+      content_advisory: UNTRUSTED_CONTENT_ADVISORY,
+      _revenue: {
+        unlock_price_usd: UNLOCK_PRICE,
+        amount_paid_usd: accrualBasis,
+        contributor_earned_usd: 0,
+        platform_earned_usd: 0,
+        // 1 credited accrual per (buyer, learning) per 30 days — repeat
+        // unlocks inside the window serve content without a new accrual.
+        accrual_capped: true,
+      },
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  // AUD19-2: gross books the amount actually paid (the accrual basis) — the
+  // ledger is cash-true from cutover. UNLOCK_PRICE remains the displayed /
+  // charged price and the x402 settle amount.
+  learning.earnings.gross_usd = (learning.earnings.gross_usd || 0) + accrualBasis;
   learning.earnings.contributor_share_usd = (learning.earnings.contributor_share_usd || 0) + contributorEarned;
   learning.earnings.platform_share_usd = (learning.earnings.platform_share_usd || 0) + platformEarned;
 
@@ -6952,13 +7034,13 @@ app.get('/knowledge/:id', async (c) => {
 
   const activeEntry = earnings[resolvedEarningsKey];
 
-  activeEntry.total_gross += UNLOCK_PRICE;
+  activeEntry.total_gross += accrualBasis;
   activeEntry.total_contributor += contributorEarned;
   activeEntry.total_platform += platformEarned;
   if (!activeEntry.by_learning[id]) {
     activeEntry.by_learning[id] = { gross: 0, contributor: 0, platform: 0, unlocks: 0 };
   }
-  activeEntry.by_learning[id].gross += UNLOCK_PRICE;
+  activeEntry.by_learning[id].gross += accrualBasis;
   activeEntry.by_learning[id].contributor += contributorEarned;
   activeEntry.by_learning[id].platform += platformEarned;
   activeEntry.by_learning[id].unlocks += 1;
@@ -7006,6 +7088,13 @@ app.get('/knowledge/:id', async (c) => {
   }
   activeEntry.last_updated = new Date().toISOString();
 
+  // AUD19-2: arm the per-(buyer, learning) accrual cap BEFORE the WAL write —
+  // a crash from here is replayed from the WAL (the accrual WILL land), so the
+  // cap must already cover the next attempt.
+  if (fundingSource === 'credit_pack' && buyerAccountId) {
+    recordAccrual(buyerAccountId, id);
+  }
+
   // SPEC-A2 C3: WAL-protected dual write — crash-safe atomicity
   // IMPL-A2-02: payload stores contributor_earned + platform_earned separately (not gross amount)
   // SPEC-P0.5: include contributor_account_id in WAL payload for recovery
@@ -7014,9 +7103,18 @@ app.get('/knowledge/:id', async (c) => {
     builder_wallet: contribWallet,
     contributor_account_id: contribAccountId,
     unlock_price: UNLOCK_PRICE,
+    // AUD19-2: the accrual basis (amount actually paid) is decided exactly once,
+    // HERE, and stored — replayUnlock replays it verbatim, never recomputes.
+    amount_paid_usd: accrualBasis,
+    funding_source: fundingSource, // credit_pack | x402 | router
     contributor_earned: contributorEarned,
     platform_earned: platformEarned,
     purchaser_key_label: c.get('keyLabel') || null,  // D2: which key environment unlocked
+    // AUD19-2: purchaser identity — makes future collusion questions answerable
+    // from the WAL + unlock history without a runtime fraud engine.
+    purchaser_account_id: buyerAccountId,
+    purchaser_ip_redacted: redactIp(getClientIp(c)),
+    purchaser_ua: c.req.header('user-agent') || null,
     // R-01: replayUnlock must know an on-chain-settled unlock never credits
     // pending_balance, even when replayed after a crash.
     settled_onchain: !!routerSettlement,
@@ -7049,6 +7147,8 @@ app.get('/knowledge/:id', async (c) => {
     content_advisory: UNTRUSTED_CONTENT_ADVISORY,
     _revenue: {
       unlock_price_usd: UNLOCK_PRICE,
+      // AUD19-2: the amount the buyer actually paid — the accrual basis.
+      amount_paid_usd: accrualBasis,
       contributor_earned_usd: contributorEarned,
       platform_earned_usd: platformEarned,
       // R-01: present only when the unlock settled non-custodially on-chain.
@@ -9322,7 +9422,9 @@ app.post('/referral/track', requireSession, async (c) => {
   }
 
   // Credit referee immediately ($5 credit)
-  await addPurchasedCredits(referee_account_id, 200, 40); // ~$5 worth
+  // AUD19-2: referral grants are $0-revenue mints — their unlock lots carry a
+  // $0.00 unit price so they accrue $0 contributor share when spent.
+  await addPurchasedCredits(referee_account_id, 200, 40, { unlock_unit_price_usd: 0 }); // ~$5 worth
 
   saveReferrals();
 
@@ -9361,7 +9463,8 @@ async function vestReferrerCredits(refereeAccountId) {
   }
 
   // Credit referrer ($5)
-  await addPurchasedCredits(referrerId, 200, 40); // ~$5 worth
+  // AUD19-2: $0-revenue grant lot — accrues $0 contributor share when spent.
+  await addPurchasedCredits(referrerId, 200, 40, { unlock_unit_price_usd: 0 }); // ~$5 worth
 
   // Fix C: Mark this referee as vested to prevent re-vesting on duplicate webhooks
   if (!referrerData.vested_referees) referrerData.vested_referees = [];
