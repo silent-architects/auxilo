@@ -250,8 +250,8 @@ Examples:
   - Security-critical knowledge
   - Learnings that save hours of debugging
   - Knowledge involving paid services/APIs where the learning prevents wasted spend
-- **Maximum: `$1.00` USD per unlock** — enforced by the server (H-3). Submissions with `unlock_price > 1.00` are rejected with HTTP 400.
-- Recommended ceiling for high-value rare knowledge: `$0.05`
+- **Maximum: `$50.00` USD per unlock** — enforced by the server. Submissions with `unlock_price > 50.00` are rejected with HTTP 400.
+- Minimum: `$0.05` USD per unlock; default starting price is `$0.08`.
 
 ---
 
