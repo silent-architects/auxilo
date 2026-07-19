@@ -295,7 +295,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_rate',
-      description: 'Rate a learning 1-5 after using it. WHEN TO USE: After you unlock and apply knowledge from auxilo_unlock, always come back and rate it. Your rating helps other agents find the best knowledge and deprioritizes low-quality submissions. This is how the marketplace stays useful. Free.',
+      description: 'Rate a learning 1-5 after using it. WHEN TO USE: After you unlock and apply knowledge from auxilo_unlock, always come back and rate it. Your rating helps other agents find the best knowledge and deprioritizes low-quality submissions. This is how the marketplace stays useful. Free. REQUIRES: your API key (run `npx auxilo setup` if unset) and a prior unlock of this learning by your account — only verified purchasers can rate (LW-7).',
       inputSchema: {
         type: 'object',
         properties: {

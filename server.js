@@ -1030,15 +1030,19 @@ function hasMinScope(scope, minScope) {
 }
 
 // ─── Write-Ahead Log (SPEC-A2 / C3) ────────────────────────────────────────
-const { createWalEntry, markStepComplete, commitWal, getPendingWalEntries } = require('./lib/wal.js');
+const { createWalEntry, markStepComplete, commitWal, abortWal, getPendingWalEntries } = require('./lib/wal.js');
 
 // ─── WAL Crash Recovery (SPEC-A2 / C3) ─────────────────────────────────────
 const { acquireWalletLock, getActiveLockCount } = require('./lib/wallet-lock.js');
 
 // ─── Phase 0.3: Credit System (SPEC-P0.3) ──────────────────────────────────
-const { deductCredit, getCreditStatus } = require('./lib/credits.js');
+const { deductCredit, refundCredit, getCreditStatus } = require('./lib/credits.js');
 // AUD19-2: per-(buyer, learning) accrual cap — 1 credited accrual / 30 days.
-const { isAccrualCapped, recordAccrual } = require('./lib/unlock-attribution.js');
+// AUD19-10: unrecordAccrual un-arms the cap when a refunded delivery failure
+// was the request that armed it.
+const { isAccrualCapped, recordAccrual, unrecordAccrual } = require('./lib/unlock-attribution.js');
+// LW-7: durable purchaser ledger — rating eligibility (proof of prior unlock).
+const { recordPurchase, hasPurchase } = require('./lib/purchase-ledger.js');
 
 // ─── Phase 0.4: Stripe Integration (SPEC-P0.4) ─────────────────────────────
 const {
@@ -1942,7 +1946,8 @@ async function refreshOFACList() {
           '[Auxilo][OFAC] Linked-wallet re-screen HIT — account(s) suspended',
           `The 24h SDN refresh matched ${sweep.hits} account-linked wallet(s) not previously suspended. ` +
           `Newly suspended: ${sweep.suspended.join(', ')}. Withdrawals and all authed routes are blocked ` +
-          `for these accounts (disabled_at). Release requires manual compliance review per docs/AML-PROGRAM.md.`
+          `for these accounts (disabled_at). Release requires manual compliance review per docs/AML-PROGRAM.md.`,
+          { category: 'ofac' }
         ).catch(() => {});
       } else {
         const stillNote = sweep.alreadySuspended > 0
@@ -2102,7 +2107,8 @@ function geoEmbargoGate(c, endpoint) {
     `country=${decision.country}${decision.region ? ` region=${decision.region}` : ''} (level=${decision.level}). ` +
     `No funds moved and no wallet was linked. Logged to data/geo-blocks.log. ` +
     `Comprehensive-country OFAC control per docs/AML-PROGRAM.md §4.3 G-2 (CP-4). ` +
-    `Region-level UA matches are best-effort — see the region-limitation note in lib/geo-embargo.js.`
+    `Region-level UA matches are best-effort — see the region-limitation note in lib/geo-embargo.js.`,
+    { category: 'geo-embargo' }
   ).catch(() => {});
 
   return c.json(
@@ -2217,7 +2223,7 @@ async function _verifyPayment(paymentHeader, price_usd, pathname, amount, router
   // touches below is unreachable when the flag is unset.
   const routerMode = !!(routerCtx && x402Router.routerEnabled());
 
-  // ── x402 payment requirements (must match what x402Gate advertised in the
+  // ── x402 payment requirements (must match what verifyPaymentOrReject advertised in the
   //    402, since the client signs its authorization against these). The
   //    EIP-3009 signature only covers from/to/value/validAfter/validBefore/
   //    nonce, but the facilitator matches amount/payTo/asset/network too. ──
@@ -2405,92 +2411,11 @@ async function _verifyPayment(paymentHeader, price_usd, pathname, amount, router
   return { verified, rateLimited: false, settlementTx };
 }
 
-function x402Gate(price_usd, description) {
-  const amount = String(Math.round(price_usd * 1_000_000));
-
-  return async (c, next) => {
-    const paymentHeader = c.req.header('X-Payment');
-
-    if (!paymentHeader) {
-      c.status(402);
-      c.header('X-Payment-Required', 'true');
-      return c.json({
-        x402Version: 2,
-        accepts: [{
-          scheme: 'exact',
-          network: 'eip155:8453',
-          maxAmountRequired: amount,
-          resource: new URL(c.req.url).pathname,
-          description,
-          mimeType: 'application/json',
-          payTo: WALLET,
-          maxTimeoutSeconds: 30,
-          asset: USDC_BASE,
-          extra: {
-            assetTransferMethod: 'eip3009',
-            name: 'USD Coin',
-            version: '2'
-          }
-        }]
-      });
-    }
-
-    // CP-4 (AML-PROGRAM §4.3 G-2 / E-2): screen the buyer's geo before settling.
-    // A payment header is present here (settlement is imminent), so this fires
-    // only at the money-movement moment. Fail-open on missing geo (advisory).
-    const geoBuyerBlock = geoEmbargoGate(c, `${new URL(c.req.url).pathname} (x402 buyer)`);
-    if (geoBuyerBlock) return geoBuyerBlock;
-
-    const { verified, rateLimited, replayBlocked, settleFailed } = await _verifyPayment(
-      paymentHeader, price_usd, new URL(c.req.url).pathname, amount
-    );
-
-    if (rateLimited) {
-      return c.json({
-        error: 'Payment verification temporarily unavailable',
-        retry_after: 5
-      }, 503);
-    }
-
-    // S21-1: Reject replayed transaction hashes
-    if (replayBlocked) {
-      c.status(402);
-      return c.json({ error: 'Payment already used' });
-    }
-
-    // Money blocker fix: on-chain settlement did not complete — funds were NOT
-    // captured, so we must NOT serve the resource. Fail closed.
-    if (settleFailed) {
-      c.status(402);
-      return c.json({ error: 'Payment settlement failed on-chain (funds not captured). Retry with a fresh payment authorization.' });
-    }
-
-    if (!verified) {
-      c.status(402);
-      return c.json({
-        error: 'Payment verification failed',
-        accepts: [{
-          scheme: 'exact',
-          network: 'eip155:8453',
-          maxAmountRequired: amount,
-          resource: new URL(c.req.url).pathname,
-          description,
-          mimeType: 'application/json',
-          payTo: WALLET,
-          maxTimeoutSeconds: 30,
-          asset: USDC_BASE,
-          extra: {
-            assetTransferMethod: 'eip3009',
-            name: 'USD Coin',
-            version: '2'
-          }
-        }]
-      });
-    }
-
-    await next();
-  };
-}
+// AUD19-13 (INFO-5): the legacy static-price middleware pair `x402Gate` +
+// `dualAuth` was deleted here 2026-07-19 — zero route callers (grep-verified;
+// x402Gate's only caller was dualAuth itself). Every live paid route goes
+// through dualAuthDynamic → verifyPaymentOrReject, which carries the AUD19-5
+// 402-first contract the dead pair predated.
 
 // ─── Dynamic Payment Verification (for routes where price isn't known at registration) ──
 
@@ -2501,6 +2426,31 @@ function x402Gate(price_usd, description) {
 // sign the standard TransferWithAuthorization to payTo — the router's
 // Transfer path settles those. Only reachable when X402_ROUTER_ADDRESS is set
 // AND the route supplied a contributor context.
+// LOW-1 (reviewer debt, 2026-07-19): the ONE custodial accepts[] entry every
+// 402 emitter mints. Three call sites — the cold no-header branch, the
+// invalid-payment retry branch (both verifyPaymentOrReject), and the
+// credits-exhausted fallback (dualAuthDynamic) — previously hand-duplicated
+// this literal; a drifted copy would show different challenges to the same
+// client depending on which branch it hit. Single source of truth now.
+function _custodialAccepts(amount, pathname, description) {
+  return {
+    scheme: 'exact',
+    network: 'eip155:8453',
+    maxAmountRequired: amount,
+    resource: pathname,
+    description,
+    mimeType: 'application/json',
+    payTo: WALLET,
+    maxTimeoutSeconds: 30,
+    asset: USDC_BASE,
+    extra: {
+      assetTransferMethod: 'eip3009',
+      name: 'USD Coin',
+      version: '2'
+    }
+  };
+}
+
 function _routerAccepts(amount, pathname, description, routerCtx) {
   const hint = x402Router.createRouterHint({
     contributor: routerCtx.contributor,
@@ -2548,22 +2498,7 @@ async function verifyPaymentOrReject(c, price_usd, description, routerCtx = null
     }
     return c.json({
       x402Version: 2,
-      accepts: [{
-        scheme: 'exact',
-        network: 'eip155:8453',
-        maxAmountRequired: amount,
-        resource: new URL(c.req.url).pathname,
-        description,
-        mimeType: 'application/json',
-        payTo: WALLET,
-        maxTimeoutSeconds: 30,
-        asset: USDC_BASE,
-        extra: {
-          assetTransferMethod: 'eip3009',
-          name: 'USD Coin',
-          version: '2'
-        }
-      }],
+      accepts: [_custodialAccepts(amount, new URL(c.req.url).pathname, description)],
       ...optionsBlock,
     });
   }
@@ -2585,19 +2520,24 @@ async function verifyPaymentOrReject(c, price_usd, description, routerCtx = null
   }
 
   // S21-1: Reject replayed transaction hashes
+  // LOW-2 (reviewer debt): every 402 emitter sets X-Payment-Required, not just
+  // the cold branch — clients key retry logic off the header, not body shape.
   if (replayBlocked) {
     c.status(402);
+    c.header('X-Payment-Required', 'true');
     return c.json({ error: 'Payment already used' });
   }
 
   // Money blocker fix: settlement did not complete — fail closed, do not serve.
   if (settleFailed) {
     c.status(402);
+    c.header('X-Payment-Required', 'true');
     return c.json({ error: 'Payment settlement failed on-chain (funds not captured). Retry with a fresh payment authorization.' });
   }
 
   if (!verified) {
     c.status(402);
+    c.header('X-Payment-Required', 'true');
     if (routerMode) {
       return c.json({
         error: 'Payment verification failed',
@@ -2606,22 +2546,7 @@ async function verifyPaymentOrReject(c, price_usd, description, routerCtx = null
     }
     return c.json({
       error: 'Payment verification failed',
-      accepts: [{
-        scheme: 'exact',
-        network: 'eip155:8453',
-        maxAmountRequired: amount,
-        resource: new URL(c.req.url).pathname,
-        description,
-        mimeType: 'application/json',
-        payTo: WALLET,
-        maxTimeoutSeconds: 30,
-        asset: USDC_BASE,
-        extra: {
-          assetTransferMethod: 'eip3009',
-          name: 'USD Coin',
-          version: '2'
-        }
-      }]
+      accepts: [_custodialAccepts(amount, new URL(c.req.url).pathname, description)]
     });
   }
 
@@ -2636,94 +2561,7 @@ async function verifyPaymentOrReject(c, price_usd, description, routerCtx = null
 
 // ── Dual Auth: x402 OR API Key (SPEC-P0.2) ─────────────────────────────────
 
-function dualAuth(price_usd, description, creditType, requiredScope) {
-    const x402Middleware = x402Gate(price_usd, description);
-    return async (c, next) => {
-        // Fix 4: X-API-Key takes precedence; Authorization: Bearer is the fallback
-        let apiKey = c.req.header('X-API-Key');
-        if (!apiKey) {
-            const authHeader = c.req.header('Authorization') || '';
-            if (authHeader.startsWith('Bearer ')) apiKey = authHeader.slice(7);
-        }
-        const payment = c.req.header('X-Payment');
-
-        // Path 1: API key present -- validate and bypass x402
-        if (apiKey) {
-            const result = validateApiKey(apiKey);
-            if (!result.valid) {
-                return c.json({ error: 'Invalid API key' }, 401);
-            }
-
-            // Scope enforcement: admin supersedes all scopes
-            if (requiredScope && result.scope !== 'admin' && result.scope !== requiredScope) {
-                return c.json({ error: 'API key scope insufficient', required: requiredScope, actual: result.scope }, 403);
-            }
-
-            c.set('accountId', result.accountId);
-            c.set('authMethod', 'api_key');
-            c.set('keyLabel', result.key_label || 'default');
-
-            // Update last_used_at for the key (best-effort, non-blocking)
-            if (result.key_index >= 0) {
-                try {
-                    const _accts = loadAccounts();
-                    const _acct  = _accts[result.accountId];
-                    if (_acct && _acct.api_keys && _acct.api_keys[result.key_index]) {
-                        _acct.api_keys[result.key_index].last_used_at = new Date().toISOString();
-                        saveAccounts(_accts);
-                    }
-                } catch { /* non-fatal */ }
-            }
-
-            // Credit check (Phase 0.3)
-            if (creditType) {
-                const creditResult = await deductCredit(result.accountId, creditType);
-                if (!creditResult.success) {
-                    return c.json({
-                        error: 'Credits exhausted',
-                        message: creditResult.message,
-                        credits: creditResult.status,
-                        options: {
-                            x402_payment: {
-                                header: 'X-Payment',
-                                price_usd,
-                                description,
-                                protocol: 'x402 (https://www.x402.org)'
-                            },
-                            reset_at: creditResult.status.period_end
-                        }
-                    }, 402);
-                }
-            }
-
-            return next();
-        }
-
-        // Path 2: x402 payment present -- delegate to existing x402Gate
-        if (payment) {
-            return x402Middleware(c, next);
-        }
-
-        // Path 3: Neither -- 401 with both options
-        return c.json({
-            error: 'Authentication required',
-            message: 'This endpoint requires either an API key or x402 payment.',
-            options: {
-                api_key: {
-                    header: 'X-API-Key',
-                    format: 'axl_XXX',
-                    obtain: 'POST /auth/magic-link -> GET /auth/verify -> POST /account/api-keys'
-                },
-                x402_payment: {
-                    header: 'X-Payment',
-                    price_usd: price_usd,
-                    description: description,
-                    protocol: 'x402 (https://www.x402.org)'
-                }
-            }
-        }, 401);
-    };
-}
+// (static dualAuth middleware deleted 2026-07-19 — see the AUD19-13 note above)
 
 // ── Optional Auth: extract API key if present, but don't require auth or payment ──
 // Used for free discovery/search endpoints that benefit from knowing the caller
@@ -2805,26 +2643,13 @@ async function dualAuthDynamic(c, price_usd, description, creditType, requiredSc
                 const _amount = String(Math.round(price_usd * 1_000_000));
                 const _pathname = new URL(c.req.url).pathname;
                 const _routerMode = !!(routerCtx && x402Router.routerEnabled());
+                // LOW-2: 402 emitters always set X-Payment-Required.
+                c.header('X-Payment-Required', 'true');
                 return c.json({
                     x402Version: 2,
                     accepts: [_routerMode
                         ? _routerAccepts(_amount, _pathname, description, routerCtx)
-                        : {
-                            scheme: 'exact',
-                            network: 'eip155:8453',
-                            maxAmountRequired: _amount,
-                            resource: _pathname,
-                            description,
-                            mimeType: 'application/json',
-                            payTo: WALLET,
-                            maxTimeoutSeconds: 30,
-                            asset: USDC_BASE,
-                            extra: {
-                                assetTransferMethod: 'eip3009',
-                                name: 'USD Coin',
-                                version: '2'
-                            }
-                        }],
+                        : _custodialAccepts(_amount, _pathname, description)],
                     error: 'Credits exhausted',
                     message: creditResult.message,
                     credits: creditResult.status,
@@ -3229,7 +3054,7 @@ function checkApiKeyRateLimit(apiKey, pattern) {
 
 /**
  * Hono middleware: applies per-API-key rate limiting to paid endpoints.
- * Must be called after dualAuth sets 'accountId' / 'authMethod' on context.
+ * Must be called after auth (optionalAuth / dualAuthDynamic) sets 'accountId' / 'authMethod' on context.
  * Only fires when authMethod === 'api_key'; x402 callers pass through.
  */
 function apiKeyRateLimitMiddleware(patternHint) {
@@ -3921,7 +3746,7 @@ function notePendingReviewEntries(count, context = {}) {
     `Latest entry: ${latest.id || 'n/a'} via ${latest.source}${latest.orphaned ? ' (ORPHANED — no account bound)' : ''}.\n` +
     `Review: auxilo review (CLI) / dashboard review queue / GET /admin/moderation/queue.`;
 
-  sendOpsAlert(`pending_review queue: ${newCount} new (${totalPending} total)`, body)
+  sendOpsAlert(`pending_review queue: ${newCount} new (${totalPending} total)`, body, { category: 'pending-review' })
     .then((res) => {
       if (!res || !res.ok) {
         // Not delivered (unconfigured / rate-limited / transport error): fold the
@@ -4598,7 +4423,7 @@ app.get('/api/info', (c) => {
       '/learn': { price: 'free', method: 'POST', description: 'Submit operational knowledge. Body: { title, body, category, tags, task_context, outcome, contributor_wallet }' },
       '/knowledge': { price: 'free', method: 'POST', description: 'Search knowledge. Returns snippets. Body: { "query": "what you need" }' },
       '/knowledge/:id': { price: '$0.05', method: 'GET', description: 'Unlock full learning. 70% goes to contributor.' },
-      '/knowledge/:id/rate': { price: 'free', method: 'POST', description: 'Rate a learning 1-5 after using it.' },
+      '/knowledge/:id/rate': { price: 'free', method: 'POST', description: 'Rate a learning 1-5 after using it. Requires your API key and a prior unlock of the learning by your account (LW-7).', auth: 'session-or-api-key' },
       '/knowledge/stats': { price: 'free', method: 'GET', description: 'Knowledge marketplace statistics' },
       '/contributor/:wallet': { price: 'free', method: 'GET', description: 'Contributor earnings dashboard' },
       '/contributor/:wallet/settlements': { price: 'free', method: 'GET', description: 'Settlement history for a contributor wallet' },
@@ -5634,7 +5459,7 @@ const circuitBreaker = {
       this.softAlertSent = true;
       const msg = `[CIRCUIT-BREAKER] Soft alert: daily extraction spend $${this.spendUsd.toFixed(4)} >= $25 threshold`;
       console.warn(msg);
-      sendOpsAlert('extraction spend soft-alert ($25)', msg);
+      sendOpsAlert('extraction spend soft-alert ($25)', msg, { category: 'extraction-spend' });
     }
     persistCircuitBreaker();
   },
@@ -5647,7 +5472,7 @@ const circuitBreaker = {
       this.killSwitchActive = true;
       const msg = `[CIRCUIT-BREAKER] KILL SWITCH: daily extraction spend $${this.spendUsd.toFixed(4)} >= $100. Route disabled.`;
       console.error(msg);
-      sendOpsAlert('extraction KILL SWITCH ($100) — /extract disabled', msg);
+      sendOpsAlert('extraction KILL SWITCH ($100) — /extract disabled', msg, { category: 'extraction-spend' });
       persistCircuitBreaker();
       return 'kill_switch';
     }
@@ -6705,7 +6530,11 @@ app.post('/knowledge', optionalAuth(), apiKeyRateLimitMiddleware('/knowledge'), 
     .slice(0, Math.min(limit, 15));
 
   // FIX 2B: Record server-side search attribution for each result shown.
-  // accountId is set by dualAuth when an API key is used; null for x402 callers.
+  // accountId is set by the optionalAuth() middleware on this route when an API
+  // key is used (validated BEFORE this handler runs); null for x402 callers.
+  // AUD19-15: this is the WRITE side of the discovery-premium cache — the key
+  // is the AUTHENTICATED account id, so the unlock-side read must use the
+  // POST-auth identity (buyerAccountId) or nothing ever matches.
   const callerAccountId = c.get('accountId') || null;
   for (const r of results) {
     recordSearchSource(callerAccountId, r.id);
@@ -6827,17 +6656,14 @@ app.get('/knowledge/:id', async (c) => {
     lockPrice(learning.id, UNLOCK_PRICE);
   }
 
-  // FIX 2C: Discovery premium via server-side cache (NOT client ?source= query param).
-  // Cache entry set by POST /knowledge when this learning appeared in search results.
-  // Single-use: entry is deleted after consumption to prevent re-use.
-  const callerAccountId = c.get('accountId') || null;
-  const cacheKey = `${callerAccountId}:${id}`;
-  const cachedAt = callerAccountId ? searchSourceCache.get(cacheKey) : undefined;
-  const isFromSearch = cachedAt !== undefined && (Date.now() - cachedAt < SEARCH_SOURCE_TTL_MS);
-  if (callerAccountId && isFromSearch) searchSourceCache.delete(cacheKey); // single-use
-  const source = isFromSearch ? 'search' : 'direct';
-  const CONTRIBUTOR_SHARE = (source === 'search') ? CONTRIBUTOR_SHARE_DISCOVERY : CONTRIBUTOR_SHARE_STANDARD;
-  const shareLabel = (source === 'search') ? '60%' : '70%';
+  // FIX 2C / AUD19-15: the discovery-premium cache read moved BELOW the
+  // auth/payment step — this route has no auth middleware, so a pre-auth
+  // `c.get('accountId')` is ALWAYS null on the API-key path and the old read
+  // here left the 60% discovery share dead (same pre-auth-staleness class as
+  // the M-2 wash-guard fix below). Pre-auth consumers (402 description,
+  // router split bps) quote the STANDARD 70% share by construction: x402
+  // payers are anonymous, never cached by recordSearchSource, and always
+  // accrue at the standard share. Discovery premium is credit-path-only.
 
   // R-01 router mode (rewire step 3): resolve + validate the contributor
   // wallet BEFORE settlement. A learning only rides the non-custodial rail if
@@ -6853,7 +6679,11 @@ app.get('/knowledge/:id', async (c) => {
     if (rwLower && /^0x[0-9a-f]{40}$/.test(rwLower) && verifiedWallets[rwLower]) {
       routerCtx = {
         contributor: rw,
-        contributorBps: Math.round(CONTRIBUTOR_SHARE * 10000),
+        // AUD19-15: router settlements are anonymous x402 (no account, never
+        // cached by recordSearchSource) — the split is ALWAYS the standard
+        // share, fixed here BEFORE settlement so it can never be re-decided
+        // after money moves on-chain.
+        contributorBps: Math.round(CONTRIBUTOR_SHARE_STANDARD * 10000),
       };
     }
   }
@@ -6880,9 +6710,11 @@ app.get('/knowledge/:id', async (c) => {
     }
   }
 
-  // Dynamic x402 verification — price comes from the learning itself
+  // Dynamic x402 verification — price comes from the learning itself.
+  // AUD19-15: the challenge quotes the standard 70% share — x402 payers are
+  // anonymous and never qualify for the discovery split (see block above).
   const rejection = await dualAuthDynamic(c, UNLOCK_PRICE,
-    `Unlock "${learning.title}" — ${UNLOCK_PRICE} USDC. ${shareLabel} goes to contributor.`, 'unlock', 'read', routerCtx);
+    `Unlock "${learning.title}" — ${UNLOCK_PRICE} USDC. 70% goes to contributor.`, 'unlock', 'read', routerCtx);
   if (rejection) return rejection;
 
   // Set when (and only when) this unlock actually settled through the router.
@@ -6891,11 +6723,11 @@ app.get('/knowledge/:id', async (c) => {
   const routerSettlement = c.get('x402RouterSettlement') || null;
 
   // AUD19-2: buyer identity, funding source, and accrual basis.
-  // `callerAccountId` (top of handler) is captured BEFORE dualAuthDynamic
-  // authenticates the API key, so it is null on the credit path — every
-  // identity-sensitive decision below (wash guard, accrual cap, WAL
-  // attribution) re-reads the POST-auth account id here.
-  const buyerAccountId = c.get('accountId') || callerAccountId || null;
+  // The POST-auth account id — dualAuthDynamic sets 'accountId' when it
+  // validates an API key. Every identity-sensitive decision below (discovery
+  // attribution, wash guard, accrual cap, WAL attribution) reads THIS, never a
+  // pre-auth capture (which is always null on the API-key path).
+  const buyerAccountId = c.get('accountId') || null;
   const fundingSource = routerSettlement ? 'router'
     : (c.get('authMethod') === 'api_key' ? 'credit_pack' : 'x402');
   // Accrue on the amount the buyer actually paid, never the list price.
@@ -6907,6 +6739,21 @@ app.get('/knowledge/:id', async (c) => {
     ? Math.min(UNLOCK_PRICE, (typeof creditUnit === 'number' && Number.isFinite(creditUnit)) ? creditUnit : UNLOCK_PRICE)
     : UNLOCK_PRICE;
 
+  // AUD19-15: discovery-premium attribution, decided on the POST-auth identity.
+  // The cache write side (POST /knowledge → recordSearchSource) keys on the
+  // account id resolved by optionalAuth, so this read uses the same identity —
+  // buyerAccountId — or nothing ever matches. Credit-path only: x402/router
+  // settlements are anonymous (no account → never cached → standard share),
+  // and the router split bps were already fixed at the standard share when the
+  // 402 challenge was minted. Single-use: consumed on hit.
+  const discoveryCacheKey = `${buyerAccountId}:${id}`;
+  const cachedAt = (fundingSource === 'credit_pack' && buyerAccountId)
+    ? searchSourceCache.get(discoveryCacheKey) : undefined;
+  const isFromSearch = cachedAt !== undefined && (Date.now() - cachedAt < SEARCH_SOURCE_TTL_MS);
+  if (isFromSearch) searchSourceCache.delete(discoveryCacheKey); // single-use
+  const source = isFromSearch ? 'search' : 'direct';
+  const CONTRIBUTOR_SHARE = (source === 'search') ? CONTRIBUTOR_SHARE_DISCOVERY : CONTRIBUTOR_SHARE_STANDARD;
+
   // AUD19-2: per-(buyer, learning) accrual cap — 1 credited accrual per buyer
   // account per learning per 30 days, applied at the ACCRUAL decision only.
   // The buyer still gets the content (their credit still burns); the
@@ -6914,6 +6761,20 @@ app.get('/knowledge/:id', async (c) => {
   // anonymous x402 settles real money at full list price (revenue-backed).
   const accrualCapped = (fundingSource === 'credit_pack') && !!buyerAccountId
     && isAccrualCapped(buyerAccountId, id);
+
+  // AUD19-10: compensation state. The buyer's credit was already burned inside
+  // dualAuthDynamic; every mutation from here to the response is tracked so a
+  // failed delivery can cancel the WAL, roll the in-memory ledger back, and
+  // refund the credit (+ its consumed lot) in the same request.
+  let walId = null;
+  let accrualArmed = false;
+  const _rb = {
+    qualityUnlocks: learning.quality.unlocks || 0,
+    demand: learning.demand ? { ...learning.demand } : null,
+    learningEarnings: learning.earnings ? { ...learning.earnings } : null,
+    earningsKey: null, earningsWasNew: false, earningsSnapshot: null,
+  };
+  try {
 
   // Track unlock
   learning.quality.unlocks = (learning.quality.unlocks || 0) + 1;
@@ -6943,8 +6804,8 @@ app.get('/knowledge/:id', async (c) => {
   // WITHOUT crediting anything (no revenue counters, no earnings entry, no WAL).
   const callerWallet = (c.get('walletAddress') || c.req.header('X-Wallet-Address') || '').toLowerCase();
   const contribWalletLower = contribWallet ? contribWallet.toLowerCase() : null;
-  // AUD19-2: the account arm compares the POST-auth buyerAccountId — the old
-  // pre-auth `callerAccountId` was always null on the API-key path, which left
+  // AUD19-2: the account arm compares the POST-auth buyerAccountId — a
+  // pre-auth capture was always null on the API-key path, which left
   // the account arm of this guard dead against exactly the buyers it targets.
   const isSelfUnlock =
     (buyerAccountId && contribAccountId && buyerAccountId === contribAccountId) ||
@@ -7022,6 +6883,12 @@ app.get('/knowledge/:id', async (c) => {
   // demand counters were deliberately NOT bumped.
   if (accrualCapped) {
     safeWrite(LEARNINGS_FILE, learnings);
+    // LW-7: a capped repeat still DELIVERED content — it proves purchase for
+    // rating eligibility even though it accrues nothing. Best-effort: a ledger
+    // write failure must never fail a paid delivery.
+    try { recordPurchase(buyerAccountId, id); } catch (e) {
+      console.error('[LW-7] purchase-ledger write failed (capped path):', e && e.message);
+    }
     const {
       injection_flags: _ifc, possible_duplicate_of: _pdc,
       possible_duplicate_similarity: _psc, moderation: _modc,
@@ -7070,6 +6937,12 @@ app.get('/knowledge/:id', async (c) => {
   }
 
   const activeEntry = earnings[resolvedEarningsKey];
+
+  // AUD19-10: deep-snapshot the contributor's earnings entry BEFORE mutating it
+  // (a new entry is simply deleted on rollback).
+  _rb.earningsKey = resolvedEarningsKey;
+  _rb.earningsWasNew = (earningsSource === 'new');
+  _rb.earningsSnapshot = _rb.earningsWasNew ? null : JSON.parse(JSON.stringify(activeEntry));
 
   activeEntry.total_gross += accrualBasis;
   activeEntry.total_contributor += contributorEarned;
@@ -7130,12 +7003,13 @@ app.get('/knowledge/:id', async (c) => {
   // cap must already cover the next attempt.
   if (fundingSource === 'credit_pack' && buyerAccountId) {
     recordAccrual(buyerAccountId, id);
+    accrualArmed = true; // AUD19-10: THIS request armed the cap — safe to un-arm on refund
   }
 
   // SPEC-A2 C3: WAL-protected dual write — crash-safe atomicity
   // IMPL-A2-02: payload stores contributor_earned + platform_earned separately (not gross amount)
   // SPEC-P0.5: include contributor_account_id in WAL payload for recovery
-  const walId = createWalEntry('unlock', {
+  walId = createWalEntry('unlock', {
     learning_id: id,
     builder_wallet: contribWallet,
     contributor_account_id: contribAccountId,
@@ -7168,6 +7042,17 @@ app.get('/knowledge/:id', async (c) => {
 
   commitWal(walId);
 
+  // LW-7: delivery succeeded — record proof of purchase for rating eligibility.
+  // Sits AFTER the WAL commit so a refunded delivery failure can never mint
+  // rating rights. Account-authenticated buyers only (anonymous x402 has no
+  // account); the self-unlock path above returns before reaching this.
+  // Best-effort: a ledger write failure must never fail a paid delivery.
+  if (buyerAccountId) {
+    try { recordPurchase(buyerAccountId, id); } catch (e) {
+      console.error('[LW-7] purchase-ledger write failed (unlock path):', e && e.message);
+    }
+  }
+
   // LW-13 / LW-16: strip moderation-internal fields from the buyer-facing unlock response
   const {
     injection_flags: _if, possible_duplicate_of: _pd,
@@ -7199,11 +7084,106 @@ app.get('/knowledge/:id', async (c) => {
     },
     timestamp: new Date().toISOString()
   });
+
+  } catch (deliveryErr) {
+    // AUD19-10: delivery failed AFTER payment was taken. Two arms:
+    //
+    // x402/router arm — real money settled on-chain; the surviving WAL
+    // replaying the accrual at restart is the DESIGNED behavior (the payment
+    // is real, the accrual must land). Rethrow to the app-level error handler;
+    // no compensation is possible for an on-chain settle (pre-existing
+    // residual, out of scope per BUILD-SPEC-WAVE1).
+    if (fundingSource !== 'credit_pack' || !buyerAccountId) {
+      throw deliveryErr;
+    }
+
+    // Credit arm — the buyer's credit burned with no content delivered.
+    // Compensate in-request: cancel the WAL, roll the in-memory ledger back,
+    // refund the credit + consumed lot, un-arm the accrual cap. This block
+    // must NEVER throw (it is the error path).
+    console.error(`[AUD19-10] unlock delivery failed for ${id} (account ${buyerAccountId}):`,
+      deliveryErr && deliveryErr.message);
+
+    // 1. Cancel the WAL FIRST. If the entry cannot be removed, replay WILL
+    //    re-land the accrual on restart — refunding too would double-pay
+    //    (contributor accrues + buyer refunded), so keep the credit burned
+    //    and page ops for a manual restore instead.
+    const walCancelled = walId ? abortWal(walId) : true;
+    if (!walCancelled) {
+      sendOpsAlert('unlock delivery failed — WAL abort failed, credit NOT refunded',
+        `learning=${id} account=${buyerAccountId} wal=${walId}\n` +
+        `Delivery error: ${deliveryErr && deliveryErr.message}\n` +
+        `The WAL entry survives and will replay the accrual; the buyer's credit was NOT refunded ` +
+        `(refunding would double-pay). Manually restore 1 unlock credit after confirming the replay.`,
+        { category: 'unlock-refund' }).catch(() => {});
+      return c.json({
+        error: 'Unlock delivery failed. Your credit could not be automatically refunded — support has been alerted.',
+        code: 'DELIVERY_FAILED',
+        credit_refunded: false,
+      }, 500);
+    }
+
+    // 2. Roll back the in-memory ledger so a later flush cannot persist a
+    //    phantom accrual for a refunded unlock. (__wallet_index writes are
+    //    deliberately NOT rolled back: the index maps a real wallet to its
+    //    real account, is value-idempotent, and carries no money.)
+    try {
+      learning.quality.unlocks = _rb.qualityUnlocks;
+      if (_rb.demand) {
+        learning.demand = _rb.demand;
+      } else if (learning.demand) {
+        // demand object was created (zeroed) by this request, then bumped —
+        // zero the unlock counters it bumped; impressions were untouched.
+        learning.demand.unlocks_7d = 0;
+        learning.demand.unlocks_30d = 0;
+      }
+      if (_rb.learningEarnings && learning.earnings) {
+        learning.earnings = _rb.learningEarnings;
+      }
+      if (_rb.earningsKey) {
+        if (_rb.earningsWasNew) delete earnings[_rb.earningsKey];
+        else if (_rb.earningsSnapshot) earnings[_rb.earningsKey] = _rb.earningsSnapshot;
+      }
+    } catch (rbErr) {
+      console.error('[AUD19-10] in-memory rollback failed (continuing to refund):', rbErr && rbErr.message);
+    }
+
+    // 3. Refund the credit + its consumed lot at the unit price it carried.
+    //    4. Un-arm the accrual cap iff THIS request armed it (see
+    //    unrecordAccrual's safety argument) so the buyer's retry accrues
+    //    normally instead of $0.
+    try {
+      await refundCredit(buyerAccountId, 'unlock',
+        (typeof creditUnit === 'number' && Number.isFinite(creditUnit)) ? creditUnit : undefined);
+      if (accrualArmed) unrecordAccrual(buyerAccountId, id);
+      console.error(`[AUD19-10] credit refunded to ${buyerAccountId} for failed unlock of ${id}`);
+      return c.json({
+        error: 'Unlock delivery failed — your credit has been refunded. Please retry.',
+        code: 'DELIVERY_FAILED_CREDIT_REFUNDED',
+        credit_refunded: true,
+      }, 500);
+    } catch (refundErr) {
+      console.error('[AUD19-10] refund FAILED:', refundErr && refundErr.message);
+      sendOpsAlert('unlock delivery failed AND refund failed',
+        `learning=${id} account=${buyerAccountId}\n` +
+        `Delivery error: ${deliveryErr && deliveryErr.message}\n` +
+        `Refund error: ${refundErr && refundErr.message}\n` +
+        `WAL cancelled: yes. Manually restore 1 unlock credit (unit price ${creditUnit}).`,
+        { category: 'unlock-refund' }).catch(() => {});
+      return c.json({
+        error: 'Unlock delivery failed. Your credit could not be automatically refunded — support has been alerted.',
+        code: 'DELIVERY_FAILED',
+        credit_refunded: false,
+      }, 500);
+    }
+  }
 });
 
 // Rate a learning (FREE — quality signal)
-// IR-H-001 FIX: per-IP + per-learning rate limit prevents rating manipulation
-const ratingLimitMap = new Map(); // key: `${ip}:${learningId}` → timestamp
+// LW-7: authenticated + proof-of-purchase. Ratings feed ranking (computeScore)
+// and dynamic pricing, so anonymous rating was a manipulation surface.
+// IR-H-001 FIX (re-keyed by LW-7): per-ACCOUNT + per-learning cooldown.
+const ratingLimitMap = new Map(); // key: `${accountId}:${learningId}` → timestamp
 
 // FIX 2A: Server-side discovery-premium attribution cache.
 // Tracks which learnings were shown to which account via /knowledge search.
@@ -7227,16 +7207,29 @@ function recordSearchSource(accountId, learningId) {
 const RATING_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour per IP per learning
 const RATING_NOTES_MAX = 1000; // D-6: max chars stored per rating note
 
-app.post('/knowledge/:id/rate', async (c) => {
+app.post('/knowledge/:id/rate', requireSessionOrApiKey('read'), async (c) => {
   const id = c.req.param('id');
   const idx = learnings.findIndex(l => l.id === id);
 
   if (idx === -1) return c.json({ error: 'Learning not found', id }, 404);
 
-  // IR-H-001 FIX: rate limit by IP + learning ID
-  // IR-H-003 FIX: Use canonical getClientIp() instead of inline extraction
-  const raterIp = getClientIp(c);
-  const rateKey = `${raterIp}:${id}`;
+  // LW-7: only verified purchasers rate. requireSessionOrApiKey (above) set
+  // the authenticated account; the durable purchase ledger proves this account
+  // actually unlocked this learning (recorded at delivery success; self-unlocks
+  // are never recorded, so contributors cannot rate their own learnings).
+  // Anonymous x402 buyers have no account → cannot rate (breaking change,
+  // LW-7 — documented in PUNCH-LIST §21).
+  const raterAccountId = c.get('accountId');
+  if (!hasPurchase(raterAccountId, id)) {
+    return c.json({
+      error: 'Rating requires a prior unlock of this learning by your account.',
+      code: 'UNLOCK_REQUIRED_TO_RATE',
+    }, 403);
+  }
+
+  // LW-7: cooldown re-keyed from IP to account (IP cooldowns are trivially
+  // rotated; the account is the identity that had to pay to get here).
+  const rateKey = `${raterAccountId}:${id}`;
   const lastRating = ratingLimitMap.get(rateKey) || 0;
   if (Date.now() - lastRating < RATING_COOLDOWN_MS) {
     return c.json({ error: 'Already rated this learning recently. Try again later.', retry_after: Math.ceil((RATING_COOLDOWN_MS - (Date.now() - lastRating)) / 1000) }, 429);
@@ -7285,7 +7278,8 @@ app.post('/knowledge/:id/rate', async (c) => {
   safeWrite(LEARNINGS_FILE, learnings);
 
   // Append-only JSONL log (crash-safe, distinct from safeWrite)
-  const ratingEntry = { learning_id: id, helpfulness, notes: notes || null, timestamp: new Date().toISOString() };
+  // LW-7: rater_account_id recorded for future anomaly review (who rated what).
+  const ratingEntry = { learning_id: id, helpfulness, notes: notes || null, rater_account_id: raterAccountId, timestamp: new Date().toISOString() };
   fs.appendFileSync(RATINGS_FILE, JSON.stringify(ratingEntry) + '\n');
 
   return c.json({
@@ -9620,7 +9614,7 @@ process.on('uncaughtException', (err) => {
   console.error(err.stack || err);
   // Best-effort ops alert BEFORE exit. Give the email a moment; exit when it settles.
   // 2s hard backstop so we never hang a broken process indefinitely.
-  sendOpsAlert('UNCAUGHT EXCEPTION — process exiting', `${err.message}\n\n${(err.stack || String(err)).slice(0, 1500)}`)
+  sendOpsAlert('UNCAUGHT EXCEPTION — process exiting', `${err.message}\n\n${(err.stack || String(err)).slice(0, 1500)}`, { category: 'crash' })
     .finally(() => process.exit(1));
   setTimeout(() => process.exit(1), 2000).unref();
 });
