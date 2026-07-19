@@ -588,17 +588,18 @@ Four-lane audit (agent onboarding/install, first contribution + first unlock, hu
 
 ## 27. Marketing-Copy Launch-Quality Review (2026-07-19)
 
-6-seat copy panel (direct-response, advertising, conversion, positioning, voice, buyer-job lenses) over the 7 public marketing pages, reconciled against the 2026-07-18 locked positioning decisions (D1 hero + single-conversion E1 stand; contradicting findings recorded-and-closed in the spec, not built). Build spec: `~/.auxilo/handoffs/BUILD-SPEC-COPY-LAUNCH-2026-07-19.md`.
+6-seat copy panel (direct-response, advertising, conversion, positioning, voice, buyer-job lenses) over the 7 public marketing pages. Contested findings were re-judged in a fully-briefed adjudication round (Tyler ruled the panel's assessment governs): **all four contested seats updated toward the 2026-07-18 locked decisions on their own reasoning** (D1 hero + single-conversion E1 stand), contributing new riders, one consensus work item (demo-section conversion, in COPY-2), staged triggers (COPY-8), and a hero-resolve challenger test plan. Build spec: `~/.auxilo/handoffs/BUILD-SPEC-COPY-LAUNCH-2026-07-19.md` (§1 adjudication record).
 
 | ID | Item | Priority | Owner | Status |
 |---|---|---|---|---|
 | COPY-1 | Mechanical copy bugs: stale "17 Auxilo tools" (for-agents), dead `/#api-integration` anchor (how-it-works close), "$0.08+ avg" mislabel → "starting price", for-builders og/twitter title mismatch, "seamless" ×4 + JSON-LD mirrors | P1 | BUILD-3 | OPEN |
-| COPY-2 | Homepage reframe (spec WP-1): add the missing $0 self-unlock proof block (locked memory-first position's core fact, absent site-wide), replace investor-voice "Competitive Moat / Why Auxilo Wins / flywheel" section with reader-benefit + real-moat copy, present-tense the market headline | P1 | BUILD-3 + GROWTH-1 gate | OPEN |
+| COPY-2 | Homepage reframe (spec WP-1): add the missing $0 self-unlock proof block (locked memory-first position's core fact, absent site-wide; cross-operator-reuse closing guard + present-tense client-scope rule), replace investor-voice "Competitive Moat / Why Auxilo Wins / flywheel" section with reader-benefit + real-moat copy, present-tense the market headline, demo-section conversion + hinge line (WP-1d, adjudication consensus) | P1 | BUILD-3 + GROWTH-1 gate | OPEN |
 | COPY-3 | CTA layer completion post-E1 (spec WP-2): nav "Get Started" → action-named, how-it-works close, earnings hero/mid CTAs, sign-in expectation setters, pricing dual close | P1 | BUILD-3 | OPEN |
 | COPY-4 | Builder-verb accrual realignment while withdrawals paused ("Start getting paid" → "Start banking earnings" etc.) + voice mechanicals + terminology canon (unlock/builder/agent; "purchase"/"contributor" retired from human copy) | P1 | BUILD-3 | OPEN |
 | COPY-5 | for-agents H1 promotion + free-search empty-shelf risk-reversal; pricing H1 promotion (spec WP-5/6a). "Request a learning" mechanism deliberately excluded (future product item) | P1 | BUILD-3 | OPEN |
 | COPY-6 | Credit-pack CTA + 70%-split copy qualifier — **gated on AUD19-2 decision**; no funding copy until it lands | P1 | BUILD-3 + CFO-1 | ON HOLD |
 | COPY-7 | Fold panel voice laws + verb policy into private-canon BRAND_GUIDELINES.md / GTM.md | P2 | GROWTH-1 | OPEN |
+| COPY-8 | Staged copy triggers (spec WP-7): Show HN gate → homepage buyer-demand rebalance (catalog >100 + ≥5 real builders; non-self-unlock guard metric) · UC launch (§21) → universal automatic-capture copy sweep · mem0-tell signal in 30-day window → hero-resolve challenger A/B (challengers on file, spec §1) | P1 at trigger | GROWTH-1 + BUILD-3 | DEFERRED (staged) |
 
 > Verification gates in spec §5 (grep gates, SSR `lc-*` anchor integrity, FAQ JSON-LD parity, truth bounds, drift guard, visual QA). Gate flow per D4: Gate A → BUILD-3 + SPEC-2 + GROWTH-1 → Tyler deploys.
 
@@ -607,10 +608,10 @@ Four-lane audit (agent onboarding/install, first contribution + first unlock, hu
 | Priority | Open | On Hold | Deferred | Done/Verified | Total |
 |----------|------|---------|----------|---------------|-------|
 | P0 (blocks launch) | **4** | 0 | 0 | **29** | 33 |
-| P1 (blocks real money / production) | **16** | 6 | 1 | 68 | 91 |
+| P1 (blocks real money / production) | **16** | 6 | 2 | 68 | 92 |
 | P2 (blocks scale) | **8** | 1 | 0 | 23 | 32 |
 | P3 (polish) | 0 | 0 | 0 | 3 | 3 |
-| **Total** | **28** | **7** | **1** | **123** | **159** |
+| **Total** | **28** | **7** | **2** | **123** | **160** |
 
 > **2026-06-10 Launch Wave**: LW-1–LW-10 added (§20, spec `specs/BUILD-SPEC-LAUNCH-WAVE.md`). 4 P0 + 6 P1 OPEN. P0 launch gate re-opened until LW-1–LW-4 land.
 
