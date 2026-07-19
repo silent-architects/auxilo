@@ -4580,8 +4580,10 @@ app.post('/discover', optionalAuth(), apiKeyRateLimitMiddleware('/discover'), as
       dependencies: r.dependencies || { bins: [], apis: [], auth: [], runtime: [] },
       relevance: r.relevance
     })),
-    knowledge_hint: learnings.length > 0
-      ? `Auxilo also has ${learnings.length} operational learnings from other agents. Try POST /knowledge to find tips before using these tools.`
+    // CAT-1 §7 fix (Gate-A reviewer catch): advertise only the visible-catalog
+    // count — the raw length includes pending/rejected/retracted learnings.
+    knowledge_hint: visibleLearningsList().length > 0
+      ? `Auxilo also has ${visibleLearningsList().length} operational learnings from other agents. Try POST /knowledge to find tips before using these tools.`
       : null,
     timestamp: new Date().toISOString()
   });
@@ -7292,8 +7294,11 @@ app.post('/knowledge/:id/rate', requireSessionOrApiKey('read'), async (c) => {
 
 // ─── E2: GET /pricing/categories — Category demand & pricing analytics (PUBLIC) ──
 app.get('/pricing/categories', (c) => {
+  // CAT-1 §7 fix: public analytics must use the same visibility predicate as
+  // GET /knowledge/stats (visibleLearningsList). Iterating the raw array leaked
+  // counts/avg_price of pending_review, rejected, and retracted learnings.
   const categoryData = {};
-  for (const learning of learnings) {
+  for (const learning of visibleLearningsList()) {
     const cat = learning.category;
     if (!cat) continue;
     if (!categoryData[cat]) {
@@ -7322,7 +7327,10 @@ app.get('/pricing/categories', (c) => {
 // ─── E2: GET /contributor/:wallet/pricing-insights — Builder analytics (PUBLIC) ──
 app.get('/contributor/:wallet/pricing-insights', (c) => {
   const wallet = c.req.param('wallet');
-  const builderLearnings = learnings.filter(l => l.contributor_wallet === wallet.toLowerCase());
+  // CAT-1 §7 fix: same visibility predicate as GET /knowledge/stats. This endpoint
+  // is unauthenticated, and top_earning_learnings exposes TITLES — without the
+  // filter it leaked titles of pending/rejected/retracted learnings for any wallet.
+  const builderLearnings = visibleLearningsList().filter(l => l.contributor_wallet === wallet.toLowerCase());
 
   if (builderLearnings.length === 0) return c.json({ error: 'No learnings found for this wallet' }, 404);
 
