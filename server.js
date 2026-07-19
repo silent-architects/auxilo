@@ -25,7 +25,28 @@ const {
   isLlmSensitivityEnabled,
 } = require('./lib/content-sensitivity-llm.js'); // LW-16 content-sensitivity gate (LLM semantic layer)
 const { findNearDuplicate } = require('./lib/similarity.js'); // LW-14
-const { listOwnPending, applySelfDecision, summarizeOwnPending, applyBulkDecisions, BULK_MAX: SELF_REVIEW_BULK_MAX, meetsQualityFloor, QUALITY_FLOOR_TOTAL, QUALITY_FLOOR_DIMENSION, adoptWalletOrphans } = require('./lib/self-review.js'); // LW-15 + review-seamless + AUD19-3/-6
+const { listOwnPending, applySelfDecision, summarizeOwnPending, applyBulkDecisions, BULK_MAX: SELF_REVIEW_BULK_MAX, meetsQualityFloor, QUALITY_FLOOR_TOTAL, QUALITY_FLOOR_DIMENSION, adoptWalletOrphans, LANES: SELF_REVIEW_LANES } = require('./lib/self-review.js'); // LW-15 + review-seamless + AUD19-3/-6 + SPEC3-B1 lanes
+// SPEC3 B1/C1: extraction channel-hold + clean-lane standing consent (FLAG-DARK:
+// EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED, default OFF). The channel marker is a
+// BRAKE, never a gas pedal — see lib/clean-lane.js header for the trust analysis.
+const {
+  cleanLaneFlagEnabled,
+  normalizeSubmissionChannel,
+  deriveAssessor,
+  cleanLaneActive,
+  evaluateExtractionPublish,
+  computeCleanLaneRetractionStats,
+  shouldFreezeCleanLane,
+  getCleanLaneState,
+  appendCleanLaneRow,
+  CLEAN_LANE_CONSENT_VERSION,
+  CLEAN_LANE_AFFIRMATION,
+  MIN_AUTO_PUBLISH_QUALITY_DEFAULT,
+  MIN_AUTO_PUBLISH_QUALITY_MIN,
+  MIN_AUTO_PUBLISH_QUALITY_MAX,
+  HOLD_STANDING_CONSENT_OFF,
+  PUBLISHED_VIA_CLEAN_LANE,
+} = require('./lib/clean-lane.js');
 const { validateOfacRedirect } = require('./lib/ofac-redirect.js'); // S-6: OFAC redirect allowlist
 
 // ─── Phase 2.1a: Autonomous Extraction Pipeline ─────────────────────────────
@@ -5145,7 +5166,16 @@ app.post('/learn', async (c) => {
 
   const { title, body: rawContent, category, tags, task_context, outcome,
     contributor_wallet, contributor_agent, related_skills, unlock_price,
-    quality_self_assessment, extraction_context } = body;
+    quality_self_assessment, extraction_context, submission_channel } = body;
+
+  // SPEC3 B1: client-asserted submission channel — enum direct|extraction,
+  // default AND unknown → 'direct' (today's path; a typo'd client must degrade
+  // to shipped behavior, never into the held lane). Persisted on the learning.
+  // TRUST NOTE (GOV-3): a lying client claiming 'direct' merely reaches the
+  // already-shipped seamless path any contribute-key holder has — the marker
+  // is a brake on the extraction channel, never a new gas pedal, and it is
+  // NOT a security boundary.
+  const submissionChannel = normalizeSubmissionChannel(submission_channel);
 
   // LW-3(a): the body sanitizer (strips HTML, markdown images, base64 blobs,
   // non-allowlisted URLs) previously ran ONLY on the /extract path. Apply it to
@@ -5323,6 +5353,11 @@ app.post('/learn', async (c) => {
     if (reasoning !== undefined && typeof reasoning !== 'string') {
       return c.json({ error: 'quality_self_assessment.reasoning must be a string' }, 400);
     }
+
+    // SPEC3 B1 (assessor provenance, §3.2): the server DERIVES who scored the
+    // item and OVERWRITES any client-sent assessor — display provenance is
+    // server-derived from channel + contributor_agent, never client-trusted.
+    quality_self_assessment.assessor = deriveAssessor(submissionChannel, contributor_agent);
   }
 
   // ── extraction_context validation (SPEC-P1.1) ───────────────────────────────
@@ -5477,12 +5512,72 @@ app.post('/learn', async (c) => {
   if (contentSensitivity.sensitive) learnReviewReasons.push('content_sensitivity');
   if (!qualityPresent) learnReviewReasons.push('awaiting_quality');
   if (qualityPresent && !qualityMeetsFloor) learnReviewReasons.push('below_quality_floor');
-  const seamlessEligible = !FORCE_ALL_REVIEW &&
+  const seamlessScreensAndScore = !FORCE_ALL_REVIEW &&
     !injectionScreen.flagged &&
     nearDup.verdict === 'clean' &&
     !contentSensitivity.sensitive &&
     qualityPresent &&
     qualityMeetsFloor;
+
+  // ── SPEC3 B1 channel-hold + C1 clean lane (§3.1 amendment) ────────────────
+  // Under the pre-B1 predicate, a clean, floor-passing /learn submission
+  // publishes IMMEDIATELY — so the moment the 0.9.3 extractor starts emitting
+  // scores (AUXILO_SCORE_EXTRACTION=1), hook extraction would silently flip
+  // from everything-held to clean-items-auto-publish as a side effect of a
+  // client prompt change. Refused (2026-06-10 lesson): extraction-channel
+  // items that pass everything are HELD (reason 'standing_consent_off', lane
+  // ready_to_publish — one counted bulk-approve away) unless the account's
+  // clean-lane standing consent is active (C1: flag-dark, default OFF; D1
+  // Option-B direction ratified 2026-07-19, activation counsel-gated).
+  // Direct-channel submissions are byte-identical to today.
+  let seamlessEligible = seamlessScreensAndScore;
+  let cleanLanePublish = null; // set ⇒ this item publishes via the standing-consent lane
+  if (seamlessScreensAndScore && submissionChannel === 'extraction') {
+    const laneFlagOn = cleanLaneFlagEnabled(process.env);
+    // forceReload: never auto-publish on a cached grant a concurrent revoke
+    // already withdrew (§3.5.4 in-flight recheck discipline).
+    const laneState = (laneFlagOn && contributor_account_id)
+      ? getCleanLaneState(contributor_account_id, { forceReload: true })
+      : null;
+    const laneAccount = contributor_account_id ? loadAccounts()[contributor_account_id] : null;
+    const laneVerdict = evaluateExtractionPublish({
+      flagEnabled: laneFlagOn,
+      consentState: laneState,
+      qualityTotal: quality_self_assessment.total,
+      accountSuspended: !!(laneAccount && laneAccount.disabled_at),
+    });
+    if (laneVerdict.decision === 'auto_publish') {
+      // Retraction-rate auto-freeze guardrail (SPEC3 §7): checked BEFORE every
+      // unattended publish. Breach ⇒ freeze the lane (explicit human re-grant
+      // required to reactivate), alert ops, and hold THIS item too.
+      const laneStats = computeCleanLaneRetractionStats(learnings, contributor_account_id);
+      if (shouldFreezeCleanLane(laneStats)) {
+        try {
+          appendCleanLaneRow({
+            accountId: contributor_account_id,
+            action: 'freeze',
+            reason: 'retraction_rate',
+            stats: laneStats,
+          });
+        } catch (freezeErr) {
+          console.error('[clean-lane] freeze append failed:', freezeErr.message);
+        }
+        sendOpsAlert(
+          'clean-lane AUTO-FREEZE: retraction rate exceeded 5%',
+          `account=${contributor_account_id} retracted ${laneStats.retractions}/${laneStats.publishes} clean-lane publishes in 30d. ` +
+          'Auto-publish frozen; items fall back to pending_review. Reactivation requires an explicit re-grant.',
+          { category: 'clean-lane' }
+        );
+        seamlessEligible = false;
+        learnReviewReasons.push(HOLD_STANDING_CONSENT_OFF);
+      } else {
+        cleanLanePublish = laneVerdict; // { consent_version, min_quality }
+      }
+    } else {
+      seamlessEligible = false;
+      learnReviewReasons.push(laneVerdict.reason); // standing_consent_off | below_auto_publish_threshold
+    }
+  }
 
   // JWT extraction already done above (moved before identity gate for Change 1)
 
@@ -5525,8 +5620,17 @@ app.post('/learn', async (c) => {
     contributor_key_label: c.get('keyLabel') || null,  // D2: which key environment contributed
     contributor_agent: contributor_agent || 'unknown',
     related_skills: related_skills || [],
+    // SPEC3 B1: normalized submission channel, persisted for lane/provenance.
+    submission_channel: submissionChannel,
     ...(quality_self_assessment && { quality_self_assessment }),
     ...(extraction_context && { extraction_context }),
+    // SPEC3 C1: standing-consent publish stamps (audit parity with the
+    // chat-pipeline's published_via stamps) + the 7-day retraction deadline.
+    ...(cleanLanePublish && {
+      published_via: PUBLISHED_VIA_CLEAN_LANE,
+      standing_consent_version: cleanLanePublish.consent_version,
+      retractable_until: new Date(Date.now() + EXTRACT_RETRACTION_DAYS * 86400000).toISOString(),
+    }),
     quality: { unlocks: 0, ratings: 0, avg_helpfulness: 0, helpfulness_scores: [], score: 0 },
     earnings: { gross_usd: 0, contributor_share_usd: 0, platform_share_usd: 0 },
     // S21-2 / LW-16: Content moderation status.
@@ -5609,6 +5713,17 @@ app.post('/learn', async (c) => {
     // LW-16: when held, tell the contributor WHY (seamless otherwise).
     ...(learning.status === 'pending_review' && { review_reason: learnReviewReasons }),
     ...(howToReview && { how_to_review: howToReview }),
+    // SPEC3 C1 (§4.3): per-publish notice for standing-consent publishes — the
+    // human must reliably learn about every unattended publish while the
+    // retraction window is live. (The rollup email rides the C1 activation
+    // wave; this response line is the in-band half.)
+    ...(cleanLanePublish && {
+      published_via: PUBLISHED_VIA_CLEAN_LANE,
+      retractable_until: learning.retractable_until,
+      standing_consent_notice: `Published under your standing consent (${cleanLanePublish.consent_version}). ` +
+        `Retractable until ${learning.retractable_until}: DELETE /learn/${learning.id}?reason=retract, ` +
+        '`auxilo review`, or your dashboard.',
+    }),
     unlock_price: resolvedPrice,
     pricing: learning.pricing,
     contributor_wallet: learning.contributor_wallet,
@@ -6520,6 +6635,38 @@ app.delete('/learn/:id', async (c) => {
     learning.status = 'retracted';
     safeWrite(LEARNINGS_FILE, learnings);
 
+    // SPEC3 C1 guardrail (§7): a retraction of a clean-lane-published item
+    // re-evaluates the account's 30-day retraction rate; a breach (>5%)
+    // freezes the lane NOW rather than at the next publish attempt. Best
+    // effort: the retraction itself must never fail on a guardrail error.
+    // No account/earnings lock is taken here (learnings lock is held; the
+    // consent append is a leaf file write).
+    if (learning.published_via === PUBLISHED_VIA_CLEAN_LANE) {
+      try {
+        const laneState = getCleanLaneState(accountId, { forceReload: true });
+        if (cleanLaneActive(laneState)) {
+          const laneStats = computeCleanLaneRetractionStats(learnings, accountId);
+          if (shouldFreezeCleanLane(laneStats)) {
+            appendCleanLaneRow({
+              accountId,
+              action: 'freeze',
+              reason: 'retraction_rate',
+              stats: laneStats,
+            });
+            sendOpsAlert(
+              'clean-lane AUTO-FREEZE: retraction rate exceeded 5%',
+              `account=${accountId} retracted ${laneStats.retractions}/${laneStats.publishes} clean-lane publishes in 30d ` +
+              `(latest: ${learningId}). Auto-publish frozen; items fall back to pending_review. ` +
+              'Reactivation requires an explicit re-grant.',
+              { category: 'clean-lane' }
+            );
+          }
+        }
+      } catch (guardErr) {
+        console.error('[clean-lane] retraction-rate guardrail check failed:', guardErr.message);
+      }
+    }
+
     return c.json({
       id: learningId,
       status: 'retracted',
@@ -6671,6 +6818,170 @@ app.post('/account/accept-terms', requireSessionOrApiKey('contribute'), async (c
       message: 'Terms accepted',
       version: result.version,
       accepted_at: result.accepted_at,
+    }, 200);
+  } finally {
+    releaseAccountLock();
+  }
+});
+
+// ── SPEC3 C1 (FLAG-DARK): clean-lane standing consent ───────────────────────
+//
+// The consent artifact that can arm auto-publish for clean, scored,
+// extraction-channel learnings (D1 Option-B DIRECTION ratified 2026-07-19;
+// consent-text/ToS wording is counsel-gated, so this entire surface ships
+// DARK). Gate: EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED === 'true' (default OFF,
+// absent OFF). While dark ALL THREE routes 404 BEFORE auth — a 503 would admit
+// the surface exists and invite retries; 404 is indistinguishable from the
+// route never existing, which is what "dark" means for a consent surface whose
+// text counsel has not signed.
+//
+// NEVER-AGENT-ENROLLABLE (GOV-3 invariant, SPEC3 §4.2): mcp-server.js exposes
+// NO tool for these routes (test-pinned — the MCP surface may only LINK to the
+// dashboard opt-in). The grant additionally requires the L-2 clickwrap posture
+// STRENGTHENED: exact current consent_version + agree:true + the VERBATIM
+// human affirmation sentence on the wire; the durable hash-chained row then
+// evidences a human-shaped affirmation, not a version echo. The grant records
+// tos_version_at_grant so counsel can condition activation on a specific ToS
+// version — this build records, it never decides.
+function cleanLaneDarkGuard(c) {
+  if (cleanLaneFlagEnabled(process.env)) return null;
+  return c.json({ error: 'Not found' }, 404);
+}
+
+// GET /account/clean-lane — consent status for the caller's account. Read scope.
+app.get('/account/clean-lane', async (c) => {
+  const dark = cleanLaneDarkGuard(c);
+  if (dark) return dark;
+  const auth = await resolveSelfReviewAccount(c, 'read');
+  if (!auth.accountId) return c.json({ error: auth.error }, auth.status);
+
+  const state = getCleanLaneState(auth.accountId, { forceReload: true });
+  return c.json({
+    account_id: auth.accountId,
+    clean_lane_active: cleanLaneActive(state),
+    consent_version_current: CLEAN_LANE_CONSENT_VERSION,
+    ...(state && {
+      last_action: state.action,
+      last_action_at: state.timestamp,
+      consent_version_recorded: state.consent_version,
+      ...(state.action === 'grant' && {
+        min_auto_publish_quality: state.min_auto_publish_quality,
+        tos_version_at_grant: state.tos_version_at_grant,
+      }),
+      ...(state.action === 'freeze' && { freeze_reason: state.reason || null }),
+    }),
+  });
+});
+
+// POST /account/clean-lane/grant — record the standing consent (versioned
+// clickwrap). Contribute scope minimum (D2 scoped-keys rule); session JWT also
+// accepted. Body: { consent_version, agree: true, affirmation: <verbatim
+// CLEAN_LANE_AFFIRMATION>, min_auto_publish_quality? (int 14-20, default 16) }.
+app.post('/account/clean-lane/grant', async (c) => {
+  const dark = cleanLaneDarkGuard(c);
+  if (dark) return dark;
+  const auth = await resolveSelfReviewAccount(c, 'contribute');
+  if (!auth.accountId) return c.json({ error: auth.error }, auth.status);
+  const accountId = auth.accountId;
+
+  let body;
+  try { body = await c.req.json(); } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+  const { consent_version, agree, affirmation, min_auto_publish_quality } = body || {};
+
+  // Versioned clickwrap: the caller can only bind to the CURRENT version — a
+  // stale/unknown version is a 409, mirroring POST /account/accept-terms.
+  if (consent_version !== CLEAN_LANE_CONSENT_VERSION) {
+    return c.json({
+      error: 'consent_version must be the current clean-lane consent version',
+      code: 'CONSENT_VERSION_MISMATCH',
+      current_consent_version: CLEAN_LANE_CONSENT_VERSION,
+    }, 409);
+  }
+  // L-2: the affirmation must be transmitted, not implied by an authenticated POST.
+  if (agree !== true) {
+    return c.json({
+      error: 'You must affirmatively agree — resend with { "agree": true } and the affirmation sentence.',
+      code: 'AFFIRMATION_REQUIRED',
+    }, 400);
+  }
+  // Strengthened for this lane: the VERBATIM human checkbox sentence on the wire.
+  if (affirmation !== CLEAN_LANE_AFFIRMATION) {
+    return c.json({
+      error: 'affirmation must be the exact consent sentence, transmitted verbatim.',
+      code: 'AFFIRMATION_TEXT_MISMATCH',
+      expected_affirmation: CLEAN_LANE_AFFIRMATION,
+    }, 400);
+  }
+  let minQuality = MIN_AUTO_PUBLISH_QUALITY_DEFAULT;
+  if (min_auto_publish_quality !== undefined) {
+    if (!Number.isInteger(min_auto_publish_quality) ||
+        min_auto_publish_quality < MIN_AUTO_PUBLISH_QUALITY_MIN ||
+        min_auto_publish_quality > MIN_AUTO_PUBLISH_QUALITY_MAX) {
+      return c.json({ error: `min_auto_publish_quality must be an integer ${MIN_AUTO_PUBLISH_QUALITY_MIN}-${MIN_AUTO_PUBLISH_QUALITY_MAX}` }, 400);
+    }
+    minQuality = min_auto_publish_quality;
+  }
+
+  // Serialize per-account consent writes (lock order: account lock only — no
+  // earnings/learnings lock is ever taken here).
+  const releaseAccountLock = await acquireAccountLock(accountId);
+  try {
+    const account = loadAccounts()[accountId];
+    if (!account) return c.json({ error: 'Account not found' }, 401);
+    if (account.disabled_at) return c.json({ error: 'Account suspended' }, 403);
+
+    const row = appendCleanLaneRow({
+      accountId,
+      action: 'grant',
+      minAutoPublishQuality: minQuality,
+      // ToS version gate: record which ToS version this consent was granted
+      // under ('none' when the account never accepted) — activation policy is
+      // counsel's, the record is ours.
+      tosVersionAtGrant: account.tos_version || 'none',
+      ipRedacted: redactIp(getClientIp(c)),
+      userAgent: c.req.header('user-agent') || 'unknown',
+      acceptPath: c.req.header('X-API-Key') ? 'cli-api' : 'web',
+    });
+    console.log(`[CLEAN-LANE] [AUDIT] grant account=${accountId} version=${row.consent_version} min_quality=${row.min_auto_publish_quality} path=${row.accept_path}`);
+    return c.json({
+      message: 'Clean-lane standing consent recorded. Qualifying extracted learnings will auto-publish with a per-publish notice and a 7-day retraction window.',
+      clean_lane_active: true,
+      consent_version: row.consent_version,
+      min_auto_publish_quality: row.min_auto_publish_quality,
+      tos_version_at_grant: row.tos_version_at_grant,
+      granted_at: row.timestamp,
+    }, 200);
+  } finally {
+    releaseAccountLock();
+  }
+});
+
+// POST /account/clean-lane/revoke — immediate for future submissions (they
+// hold with standing_consent_off); already-published items keep their 7-day
+// retraction remedy. Contribute scope.
+app.post('/account/clean-lane/revoke', async (c) => {
+  const dark = cleanLaneDarkGuard(c);
+  if (dark) return dark;
+  const auth = await resolveSelfReviewAccount(c, 'contribute');
+  if (!auth.accountId) return c.json({ error: auth.error }, auth.status);
+  const accountId = auth.accountId;
+
+  const releaseAccountLock = await acquireAccountLock(accountId);
+  try {
+    const row = appendCleanLaneRow({
+      accountId,
+      action: 'revoke',
+      ipRedacted: redactIp(getClientIp(c)),
+      userAgent: c.req.header('user-agent') || 'unknown',
+      acceptPath: c.req.header('X-API-Key') ? 'cli-api' : 'web',
+    });
+    console.log(`[CLEAN-LANE] [AUDIT] revoke account=${accountId}`);
+    return c.json({
+      message: 'Clean-lane standing consent revoked. Future extraction submissions will hold for your review; already-published learnings keep their 7-day retraction window.',
+      clean_lane_active: false,
+      revoked_at: row.timestamp,
     }, 200);
   } finally {
     releaseAccountLock();
@@ -8761,17 +9072,59 @@ app.post('/account/pending/:id/reject', async (c) => {
 // number of decisions (counted-confirmation rail, 2026-06-10 incident lesson).
 
 // GET /account/pending/summary: compact triage rows + counts for the CALLER's
-// OWN pending_review learnings. No bodies (scanning surface; full bodies stay
-// on GET /account/pending). Read scope, like the listing.
+// OWN pending_review learnings. No bodies by default (scanning surface; full
+// bodies stay on GET /account/pending). Read scope, like the listing.
+//
+// SPEC3 B1 (§2.2/§5.2/§5.5, all additive — no params ⇒ pre-B1 shape + new
+// count fields): rows gain `lane`/`quality_assessor`; counts gain
+// `approvable_count`/`needs_score_count`/`by_lane`/`by_signal`; row filters
+// `lane`/`flag`/`signal`/`category`/`ids`; pagination `limit`/`offset`
+// (COUNTS never paginate — rows do); `full=1` attaches bodies, bounded to
+// explicit ids or a forced small page (never the 174KB dump class again).
 app.get('/account/pending/summary', async (c) => {
   const auth = await resolveSelfReviewAccount(c, 'read');
   if (!auth.accountId) return c.json({ error: auth.error }, auth.status);
   const accountId = auth.accountId;
 
-  // AUD19-3(b): retroactive wallet-orphan adoption before summarizing.
+  // AUD19-3(b): retroactive wallet-orphan adoption before summarizing
+  // (idempotent; runs ahead of param validation so the cure is never skipped).
   await adoptOrphansForAccount(accountId);
 
-  const summary = summarizeOwnPending(learnings, accountId);
+  const url = new URL(c.req.url, 'http://localhost');
+  const q = url.searchParams;
+  const opts = {};
+  if (q.has('lane')) {
+    const lane = q.get('lane');
+    if (!SELF_REVIEW_LANES.includes(lane)) {
+      return c.json({ error: `lane must be one of: ${SELF_REVIEW_LANES.join(', ')}` }, 400);
+    }
+    opts.lane = lane;
+  }
+  if (q.has('flag')) {
+    const flag = q.get('flag');
+    if (!['injection', 'content_sensitivity', 'near_duplicate'].includes(flag)) {
+      return c.json({ error: 'flag must be one of: injection, content_sensitivity, near_duplicate' }, 400);
+    }
+    opts.flag = flag;
+  }
+  if (q.has('signal')) opts.signal = q.get('signal');
+  if (q.has('category')) opts.category = q.get('category');
+  if (q.has('ids')) {
+    opts.ids = q.get('ids').split(',').map((s) => s.trim()).filter(Boolean);
+  }
+  if (q.has('limit')) {
+    const limit = parseInt(q.get('limit'), 10);
+    if (!Number.isInteger(limit) || limit < 1) return c.json({ error: 'limit must be a positive integer' }, 400);
+    opts.limit = Math.min(limit, 200);
+  }
+  if (q.has('offset')) {
+    const offset = parseInt(q.get('offset'), 10);
+    if (!Number.isInteger(offset) || offset < 0) return c.json({ error: 'offset must be a non-negative integer' }, 400);
+    opts.offset = offset;
+  }
+  if (q.get('full') === '1' || q.get('full') === 'true') opts.full = true;
+
+  const summary = summarizeOwnPending(learnings, accountId, opts);
   return c.json({ account_id: accountId, ...summary });
 });
 
