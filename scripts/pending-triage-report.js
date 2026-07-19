@@ -12,7 +12,7 @@
  *   node scripts/pending-triage-report.js <learnings.json>          local file
  *   node scripts/pending-triage-report.js --file /path/learnings.json
  *   node scripts/pending-triage-report.js --file data.json --account acc_xxx
- *   node scripts/pending-triage-report.js --url https://api.auxilo.io --key axl_xxx
+ *   node scripts/pending-triage-report.js --url https://auxilo.io --key axl_xxx
  *   Flags: --top N   preview size (default 10)
  *
  * File mode reads a learnings.json (e.g. copied down from prod) and analyzes
