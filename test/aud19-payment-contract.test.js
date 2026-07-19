@@ -82,11 +82,45 @@ describe('AUD19-5: verifyPaymentOrReject carries the merged options envelope', (
     assert.ok(noHeader.includes("c.header('X-Payment-Required', 'true')"));
   });
 
-  it('challenge consistency: the cold custodial accepts[] entry is byte-identical to the invalid-payment one', () => {
-    const literals = [...vporSlice.matchAll(/accepts: \[\{([\s\S]*?)\}\]/g)].map(m => m[1].replace(/\s+/g, ' ').trim());
-    assert.equal(literals.length, 2, 'expected exactly two inline custodial accepts literals (cold + invalid-payment)');
-    assert.equal(literals[0], literals[1],
-      'a client that fails a payment and retries must see the same challenge it would see cold');
+  it('challenge consistency (Wave-1 LOW-1): all three custodial accepts[] emitters mint from the ONE shared helper', () => {
+    // The old assertion pinned two byte-identical inline literals; the Wave-1
+    // reviewer-debt fix replaces duplication with a single _custodialAccepts
+    // source of truth. Three-way consistency is now structural: cold,
+    // invalid-payment, and credits-exhausted all call the same helper, and no
+    // inline custodial literal survives anywhere in either auth slice.
+    const helperDefs = SERVER_SRC.split('function _custodialAccepts(').length - 1;
+    assert.equal(helperDefs, 1, '_custodialAccepts must be defined exactly once');
+
+    const helperBody = slice(SERVER_SRC, 'function _custodialAccepts(', 'function _routerAccepts(');
+    for (const key of ["scheme: 'exact'", "network: 'eip155:8453'", 'payTo: WALLET',
+      'asset: USDC_BASE', "assetTransferMethod: 'eip3009'", "name: 'USD Coin'", "version: '2'"]) {
+      assert.ok(helperBody.includes(key), `helper must carry ${key}`);
+    }
+
+    const cold = slice(vporSlice, 'if (!paymentHeader) {', '// CP-4');
+    assert.ok(cold.includes('accepts: [_custodialAccepts('), 'cold branch mints via the helper');
+
+    const invalid = slice(vporSlice, 'if (!verified) {', '// R-01: surface the on-chain split');
+    assert.ok(invalid.includes('accepts: [_custodialAccepts('), 'invalid-payment branch mints via the helper');
+
+    const credits = slice(dadSlice, 'if (!creditResult.success) {', 'return null;');
+    assert.ok(credits.includes('_custodialAccepts('), 'credits-exhausted branch mints via the helper');
+
+    // No hand-duplicated custodial literal may survive in either slice.
+    assert.ok(!vporSlice.includes('assetTransferMethod'),
+      'no inline custodial accepts literal may remain in verifyPaymentOrReject');
+    assert.ok(!dadSlice.includes('assetTransferMethod'),
+      'no inline custodial accepts literal may remain in dualAuthDynamic');
+  });
+
+  it('every 402 emitter sets X-Payment-Required (Wave-1 LOW-2)', () => {
+    const statusCount = vporSlice.split('c.status(402)').length - 1;
+    const headerCount = vporSlice.split("c.header('X-Payment-Required', 'true')").length - 1;
+    assert.equal(statusCount, 4, 'verifyPaymentOrReject has four 402 branches (cold, replay, settle-failed, invalid)');
+    assert.equal(headerCount, statusCount, 'each 402 branch must set X-Payment-Required');
+    const credits = slice(dadSlice, 'if (!creditResult.success) {', 'return null;');
+    assert.ok(credits.includes("c.header('X-Payment-Required', 'true')"),
+      'the credits-exhausted 402 must set X-Payment-Required too');
   });
 
   it('invalid-payment branch is unchanged: error + accepts, no options merge (regression)', () => {
@@ -132,9 +166,10 @@ describe('AUD19-5: dualAuthDynamic Path 3 answers 402-first', () => {
     assert.ok(credits.includes('x402Version: 2'), 'credits-exhausted body must carry x402Version');
     assert.ok(credits.includes('accepts: ['), 'credits-exhausted body must carry accepts[]');
     assert.ok(credits.includes('_routerAccepts('), 'router arm must serve the router hint');
-    assert.ok(credits.includes('payTo: WALLET') && credits.includes('asset: USDC_BASE')
-      && credits.includes("assetTransferMethod: 'eip3009'"),
-      'custodial arm must mirror the standard challenge entry');
+    // Wave-1 LOW-1: the custodial arm mirrors the standard challenge entry by
+    // minting from the SAME helper the verifyPaymentOrReject branches use.
+    assert.ok(credits.includes('_custodialAccepts('),
+      'custodial arm must mint the shared standard challenge entry');
     // The pre-existing body keys survive (additive change).
     for (const key of ["error: 'Credits exhausted'", 'message: creditResult.message',
       'credits: creditResult.status', 'reset_at: creditResult.status.period_end']) {
