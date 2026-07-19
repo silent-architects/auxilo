@@ -7062,6 +7062,7 @@ app.get('/knowledge/:id', async (c) => {
 
     return c.json({
       ...selfLearning,
+      quality: stripOpsCounters(selfLearning.quality),
       _revenue: {
         unlock_price_usd: UNLOCK_PRICE,
         contributor_earned_usd: 0,
@@ -7103,6 +7104,7 @@ app.get('/knowledge/:id', async (c) => {
     } = learning;
     return c.json({
       ...cappedLearning,
+      quality: stripOpsCounters(cappedLearning.quality),
       content_advisory: UNTRUSTED_CONTENT_ADVISORY,
       _revenue: {
         unlock_price_usd: UNLOCK_PRICE,
@@ -7260,6 +7262,13 @@ app.get('/knowledge/:id', async (c) => {
     });
   }
 
+// Gate-A W2B-2: buyer-facing responses must not leak the ops-only raw counter.
+function stripOpsCounters(quality) {
+  if (!quality || typeof quality !== 'object') return quality;
+  const { unlocks_total: _ut, ...pub } = quality;
+  return pub;
+}
+
   // LW-13 / LW-16: strip moderation-internal fields from the buyer-facing unlock response
   const {
     injection_flags: _if, possible_duplicate_of: _pd,
@@ -7270,6 +7279,7 @@ app.get('/knowledge/:id', async (c) => {
 
   return c.json({
     ...publicLearning,
+    quality: stripOpsCounters(publicLearning.quality),
     // LW-3(a): untrusted-content envelope. `body` above stays RAW (programmatic
     // consumers parse it); this advisory is the contract signal that it is
     // unverified third-party data, not instructions.
@@ -9447,6 +9457,13 @@ app.post('/pipeline/:id/approve', requireSession, async (c) => {
   const published = [];
   const rejected_for_sensitivity = [];
 
+  // Wave 2b + Gate-A W2B-1: acquire the catalog lock ABOVE the approval loop.
+  // The loop is fully synchronous (scanLearning is sync), but the lock acquisition
+  // itself awaits — pushing entries before holding the lock re-opened the
+  // C3-pipeline crash window when another holder (e.g. a retraction's audit
+  // append) persisted our un-WAL'd pushes. Lock-order rule unaffected: no
+  // account/earnings lock is held here; learnings stays the innermost leaf.
+  const releaseLearningsLock = await acquireLearningsLock();
   for (const idx of approved) {
     if (idx < 0 || idx >= pipeline.learnings.length) continue;
     const pl = pipeline.learnings[idx];
@@ -9505,10 +9522,9 @@ app.post('/pipeline/:id/approve', requireSession, async (c) => {
   // a re-approve that would duplicate every learning.  The WAL ensures that on
   // restart we detect the partial write and complete step-2 before serving
   // any traffic.
-  // Wave 2b (RUNBOOK §9): catalog write lock around the dual write (the pushes
-  // above are in the same synchronous segment — nothing can interleave between
-  // them and this persist).
-  const releaseLearningsLock = await acquireLearningsLock();
+  // Wave 2b (RUNBOOK §9): the catalog lock is held since before the approval
+  // loop (see W2B-1 above), so the pushes and this WAL-guarded dual write are
+  // one uninterruptible critical section.
   let walId;
   try {
     walId = createWalEntry('pipeline_approve', { pipeline_id: pipeline.id });
