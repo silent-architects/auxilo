@@ -6,8 +6,11 @@
  *   - Has required top-level fields
  *   - autonomous-extraction skill exists
  *   - auxilo_contribute tool in MCP tools array
- *   - auxilo_extract tool in MCP tools array
- *   - auxilo_consent tool in MCP tools array
+ *   - mcp.tools exactly matches the registry in mcp-server.js (17 tools)
+ *   - extraction is NOT advertised as an MCP tool (it is the REST pair
+ *     POST /extract + POST /extract/consent, listed in endpoints.paid);
+ *     site-revision corrected the earlier drift that listed auxilo_extract
+ *     and auxilo_consent in mcp.tools with schemas
  *   - contributor_agent field in auxilo_contribute input schema
  *   - tool_schemas object exists
  *
@@ -82,14 +85,25 @@ describe('B11: MCP tools array', () => {
       'tools must include auxilo_contribute');
   });
 
-  it('auxilo_extract tool exists', () => {
-    assert.ok(agent.mcp.tools.includes('auxilo_extract'),
-      'tools must include auxilo_extract');
+  it('mcp.tools exactly matches the mcp-server.js registry', () => {
+    // Source of truth: the ListToolsRequestSchema handler in mcp-server.js.
+    // Same extraction logic as scripts/check-surface-drift.sh.
+    const src = fs.readFileSync(path.join(__dirname, '..', 'mcp-server.js'), 'utf-8');
+    const start = src.indexOf('server.setRequestHandler(ListToolsRequestSchema');
+    const end = src.indexOf('server.setRequestHandler(CallToolRequestSchema');
+    assert.ok(start !== -1 && end > start, 'must find the ListTools handler block');
+    const block = src.slice(start, end);
+    const canonical = [...block.matchAll(/name: '([a-z_]+)'/g)].map(m => m[1]).sort();
+    const advertised = [...agent.mcp.tools].sort();
+    assert.deepStrictEqual(advertised, canonical,
+      'agent.json mcp.tools must exactly match the registered tool set');
   });
 
-  it('auxilo_consent tool exists', () => {
-    assert.ok(agent.mcp.tools.includes('auxilo_consent'),
-      'tools must include auxilo_consent');
+  it('extraction is NOT advertised as an MCP tool', () => {
+    assert.ok(!agent.mcp.tools.includes('auxilo_extract'),
+      'auxilo_extract is not a registered MCP tool; extraction is the REST pair');
+    assert.ok(!agent.mcp.tools.includes('auxilo_consent'),
+      'auxilo_consent is not a registered MCP tool; consent is POST /extract/consent');
   });
 });
 
@@ -108,17 +122,15 @@ describe('B11: tool_schemas', () => {
       'input_schema must have contributor_agent property');
   });
 
-  it('auxilo_extract schema has required source, transcript, transcript_sha256', () => {
-    const schema = agent.mcp.tool_schemas.auxilo_extract;
-    assert.ok(schema, 'auxilo_extract schema must exist');
-    assert.deepStrictEqual(schema.input_schema.required,
-      ['source', 'transcript', 'transcript_sha256']);
-  });
-
-  it('auxilo_extract transcript has maxLength', () => {
-    const schema = agent.mcp.tool_schemas.auxilo_extract;
-    assert.equal(schema.input_schema.properties.transcript.maxLength, 262144,
-      'transcript maxLength must be 262144');
+  it('tool_schemas carries no schema for a tool outside the registry', () => {
+    assert.ok(!agent.mcp.tool_schemas.auxilo_extract,
+      'no schema may be advertised for the unregistered auxilo_extract');
+    assert.ok(!agent.mcp.tool_schemas.auxilo_consent,
+      'no schema may be advertised for the unregistered auxilo_consent');
+    for (const name of Object.keys(agent.mcp.tool_schemas)) {
+      assert.ok(agent.mcp.tools.includes(name),
+        `tool_schemas.${name} must correspond to an advertised tool`);
+    }
   });
 });
 
@@ -144,18 +156,12 @@ describe('ITEM 6: P2.1a paid endpoints', () => {
   });
 });
 
-describe('ITEM 6: tool_schemas gaps', () => {
-  it('auxilo_consent schema exists with action enum', () => {
-    const schema = agent.mcp.tool_schemas.auxilo_consent;
-    assert.ok(schema, 'auxilo_consent schema must exist');
-    assert.deepStrictEqual(schema.input_schema.required, ['action']);
-    assert.deepStrictEqual(schema.input_schema.properties.action.enum, ['grant', 'revoke']);
-  });
-
-  it('auxilo_extract schema includes client_scrub_report', () => {
-    const schema = agent.mcp.tool_schemas.auxilo_extract;
-    assert.ok(schema.input_schema.properties.client_scrub_report,
-      'auxilo_extract must include client_scrub_report');
-    assert.equal(schema.input_schema.properties.client_scrub_report.type, 'object');
+describe('ITEM 6: extraction surface routing', () => {
+  it('extraction flow is documented as REST, not as MCP tool schemas', () => {
+    // The consent + extract flow lives in endpoints.paid (asserted above).
+    // The mcp section must route readers there instead of advertising
+    // tool schemas for unregistered tools.
+    assert.ok(agent.mcp.note && agent.mcp.note.includes('/extract'),
+      'mcp.note must point extraction readers at the REST pair');
   });
 });

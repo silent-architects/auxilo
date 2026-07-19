@@ -90,6 +90,22 @@ process.umask(0o077);
 
 const app = new Hono();
 
+// Host-normalization: collapse the www hostname to the apex domain.
+// Fly serves both auxilo.io and www.auxilo.io against this same app (see
+// fly.toml: flyctl certs add www.auxilo.io); nothing before this rewrites
+// the Host, so https://www.auxilo.io/* returned 200 as duplicate content
+// instead of redirecting. This must run before any other middleware
+// (including CORS below) so the redirect fires before any other header work.
+const CANONICAL_HOST = 'auxilo.io';
+app.use('*', async (c, next) => {
+  const host = c.req.header('host') || '';
+  if (host === `www.${CANONICAL_HOST}`) {
+    const reqUrl = new URL(c.req.url);
+    return c.redirect(`https://${CANONICAL_HOST}${reqUrl.pathname}${reqUrl.search}`, 301);
+  }
+  await next();
+});
+
 // IR-M-003 FIX: CORS origin restriction (only allow expected frontends).
 //
 // Exact-match allowlist (fails safe: any origin not listed gets no CORS headers).
@@ -8015,8 +8031,10 @@ app.get('/.well-known/security.txt', (c) => {
   }
 });
 
-// How It Works — static page
+// How It Works — server-rendered recent-discoveries band, static fallback
 app.get('/how-it-works', (c) => {
+  const live = serveHtmlWithLiveData(c, 'how-it-works.html');
+  if (live) return live;
   const res = serveStatic(c, 'how-it-works.html');
   if (res) return res;
   return c.text('How It Works page not found', 404);
@@ -8030,13 +8048,19 @@ app.get('/status', (c) => {
 });
 
 // ─── Standalone marketing / informational pages ───────────────────────
+// Both persona pages server-render the recent-discoveries band and the live
+// catalog stats (count-truth: no hardcoded catalog numbers), static fallback.
 app.get('/for-builders', (c) => {
+  const live = serveHtmlWithLiveData(c, 'for-builders.html');
+  if (live) return live;
   const res = serveStatic(c, 'for-builders.html');
   if (res) return res;
   return c.text('For Builders page not found', 404);
 });
 
 app.get('/for-agents', (c) => {
+  const live = serveHtmlWithLiveData(c, 'for-agents.html');
+  if (live) return live;
   const res = serveStatic(c, 'for-agents.html');
   if (res) return res;
   return c.text('For Agents page not found', 404);
@@ -8047,6 +8071,103 @@ app.get('/pricing', (c) => {
   if (res) return res;
   return c.text('Pricing page not found', 404);
 });
+
+// ─── Recent-discoveries band + live catalog stats (site revision, E3 + count-truth) ──
+// Pages that used to repeat the one worked example now render a band of real
+// recent learnings (category, title, quality score, price) at serve time, and
+// hardcoded catalog counts render live. Same visibility predicate as
+// GET /knowledge/stats and GET /earnings. A failed render degrades to the
+// static page (placeholder comment stays, band renders empty), never a 500.
+const RECENT_BAND_PLACEHOLDER = '<!-- SSR:RECENT_LEARNINGS -->';
+
+function escapeHtmlText(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function visibleLearningsList() {
+  return CONTENT_MODERATION_ENABLED
+    ? learnings.filter(l => !l.status || l.status === 'approved')
+    : learnings;
+}
+
+function displayPrice(l) {
+  let p = getLockedPrice(l.id);
+  if (p === null || p === undefined) {
+    p = l.pricing?.current_price
+      || pricingEngine.getCurrentPrice?.(l, learnings)
+      || l.unlock_price
+      || DEFAULT_UNLOCK_PRICE;
+  }
+  // Display clamp to the public bounds; the unlock route is the price authority.
+  return Math.min(50, Math.max(0.05, Number(p) || DEFAULT_UNLOCK_PRICE));
+}
+
+function renderRecentLearnings(html) {
+  if (!html.includes(RECENT_BAND_PLACEHOLDER)) return html;
+  try {
+    const rows = visibleLearningsList()
+      .slice()
+      .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+      .slice(0, 6)
+      .map(l => {
+        const score = l.quality?.score;
+        const scoreSpan = (typeof score === 'number' && score > 0 && score <= 1)
+          ? `<span class="discovery-score">Quality: ${score.toFixed(2)}</span>`
+          : '';
+        return '<div class="discovery-row">'
+          + `<span class="discovery-cat">${escapeHtmlText(l.category || 'general')}</span>`
+          + `<span class="discovery-title">${escapeHtmlText(l.title || '')}</span>`
+          + scoreSpan
+          + `<span class="discovery-price">$${displayPrice(l).toFixed(2)}</span>`
+          + '</div>';
+      })
+      .join('\n');
+    return html.replace(RECENT_BAND_PLACEHOLDER, rows);
+  } catch (e) {
+    console.error('[recent-band] render failed, serving static band:', e.message);
+    return html;
+  }
+}
+
+function renderLiveCatalogStats(html) {
+  try {
+    const visible = visibleLearningsList();
+    const count = visible.length.toLocaleString('en-US');
+    const cats = new Set(visible.map(l => l.category)).size.toLocaleString('en-US');
+    let range = '$0.05 to $50.00';
+    if (visible.length) {
+      const prices = visible.map(displayPrice);
+      range = `$${Math.min(...prices).toFixed(2)} to $${Math.max(...prices).toFixed(2)}`;
+    }
+    return html
+      .replace(/(id="lc-learnings"[^>]*>)[^<]*</g, `$1${count}<`)
+      .replace(/(id="lc-categories"[^>]*>)[^<]*</g, `$1${cats}<`)
+      .replace(/(id="lc-price-range"[^>]*>)[^<]*</g, `$1${range}<`);
+  } catch (e) {
+    console.error('[live-stats] render failed, serving static values:', e.message);
+    return html;
+  }
+}
+
+function serveHtmlWithLiveData(c, file) {
+  try {
+    const filePath = path.join(PUBLIC_DIR, file);
+    if (fs.existsSync(filePath)) {
+      let html = fs.readFileSync(filePath, 'utf8');
+      html = renderRecentLearnings(html);
+      html = renderLiveCatalogStats(html);
+      c.header('Content-Type', 'text/html; charset=utf-8');
+      c.header('Cache-Control', 'public, max-age=3600');
+      // Quiet phase: no-op while ANALYTICS_DOMAIN is unset (returns html as is).
+      return c.body(injectAnalytics(html, ANALYTICS_DOMAIN));
+    }
+  } catch (e) {
+    console.error(`[live-data] server-render failed for ${file}, falling back:`, e.message);
+  }
+  return null;
+}
 
 app.get('/earnings', (c) => {
   // Server-render the three live-ledger numbers into the raw HTML so non-JS

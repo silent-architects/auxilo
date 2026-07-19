@@ -209,9 +209,15 @@
             "auxilo_knowledge",
             "auxilo_unlock",
             "auxilo_rate",
+            "auxilo_verify_wallet",
+            "auxilo_withdraw",
+            "auxilo_settlements",
             "auxilo_contributor",
-            "auxilo_extract",
-            "auxilo_consent"
+            "auxilo_link_wallet",
+            "auxilo_account_earnings",
+            "auxilo_accept_terms",
+            "get_stats",
+            "get_knowledge_stats"
         ],
         "tool_schemas": {
             "auxilo_contribute": {
@@ -226,46 +232,9 @@
                         "contributor_agent": { "type": "string", "description": "Agent identifier stamp (e.g. auxilo-autonomous-extractor/0.1.0)" }
                     }
                 }
-            },
-            "auxilo_extract": {
-                "description": "Submit a scrubbed transcript for server-side extraction (P2.1a)",
-                "input_schema": {
-                    "type": "object",
-                    "required": ["source", "transcript", "transcript_sha256"],
-                    "properties": {
-                        "source": {
-                            "type": "object",
-                            "properties": {
-                                "type": { "type": "string", "enum": ["claude-code", "openclaw"] },
-                                "session_id": { "type": "string" }
-                            }
-                        },
-                        "transcript": { "type": "string", "maxLength": 262144 },
-                        "transcript_sha256": { "type": "string" },
-                        "client_scrub_report": {
-                            "type": "object",
-                            "description": "Optional client-side scrub report (server re-scans regardless)",
-                            "properties": {
-                                "scrubber_version": { "type": "string" },
-                                "patterns_matched": { "type": "array", "items": { "type": "string" } },
-                                "clean": { "type": "boolean" }
-                            }
-                        }
-                    }
-                }
-            },
-            "auxilo_consent": {
-                "description": "Grant or revoke autonomous extraction consent",
-                "input_schema": {
-                    "type": "object",
-                    "required": ["action"],
-                    "properties": {
-                        "action": { "type": "string", "enum": ["grant", "revoke"] },
-                        "consent_version": { "type": "string", "description": "ISO date; server-defaulted if omitted" }
-                    }
-                }
             }
-        }
+        },
+        "note": "Extraction is not an MCP tool. The extraction flow is the REST pair POST /extract and POST /extract/consent, listed under endpoints.paid above."
     },
     "operator": {
         "name": "Auxilo, LLC",

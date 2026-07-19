@@ -114,10 +114,22 @@ done
 [ "${LINK_FAILED}" -eq 0 ] && echo "  ✅ all internal legal-doc links resolve to a route"
 
 echo ""
+echo "── predeploy-check: machine-surface drift guard ──"
+# Tool enumerations on every public surface must exactly match mcp-server.js,
+# openapi.json paths must match canonical prefixes, and the four version
+# strings must agree. See scripts/check-surface-drift.sh for the full contract.
+if bash "${SCRIPT_DIR}/check-surface-drift.sh"; then
+  echo "  ✅ machine surfaces agree"
+else
+  FAILED=1
+  echo "  ❌ machine-surface drift detected (see output above)"
+fi
+
+echo ""
 if [ "${FAILED}" -ne 0 ]; then
   echo "🛑 predeploy-check FAILED — do NOT deploy. Resolve the items above first."
   exit 1
 fi
 
-echo "✅ predeploy-check PASSED — no [[ fill-blanks, ToS version in sync."
+echo "✅ predeploy-check PASSED — no [[ fill-blanks, ToS version in sync, surfaces agree."
 exit 0
