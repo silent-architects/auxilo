@@ -300,9 +300,12 @@ describe('CORRECTION 1.5: appendAuditRow guard prevents silent catalog mutation'
 
   it('response includes audit_ref on successful retraction (structural)', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf-8');
+    // SPEC3-B1 sanctioned window widen (2026-07-19): the clean-lane
+    // retraction-rate guardrail block now sits between the catalog mutation
+    // and the response — the audit_ref contract itself is unchanged.
     const retractSection = src.slice(
       src.indexOf('Audit succeeded'),
-      src.indexOf('Audit succeeded') + 500
+      src.indexOf('Audit succeeded') + 2600
     );
     assert.ok(retractSection.includes('audit_ref: auditResult.audit_id'),
       'successful retraction response must include audit_ref');

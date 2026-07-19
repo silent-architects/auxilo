@@ -412,9 +412,12 @@ describe('planApproveClean: MCP dry-run shape', () => {
 
 describe('server.js: summary + bulk routes (structural)', () => {
   it('summary route: read scope, summarizeOwnPending, inside the self-review region', () => {
-    const h = sliceAt(SERVER_SRC, "app.get('/account/pending/summary'", 900);
+    // SPEC3-B1 sanctioned pin update (2026-07-19): the route grew param parsing
+    // (lane/flag/signal/category/ids/limit/offset/full) and the helper call
+    // gained the opts argument — window widened, callsite pin updated.
+    const h = sliceAt(SERVER_SRC, "app.get('/account/pending/summary'", 3600);
     assert.ok(h.includes("resolveSelfReviewAccount(c, 'read')"), 'summary must use read scope');
-    assert.ok(h.includes('summarizeOwnPending(learnings, accountId)'), 'summary must use the pure ownership-scoped helper');
+    assert.ok(h.includes('summarizeOwnPending(learnings, accountId, opts)'), 'summary must use the pure ownership-scoped helper');
   });
 
   it('bulk route: contribute scope, counted confirm passthrough, applyBulkDecisions', () => {

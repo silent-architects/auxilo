@@ -1033,6 +1033,15 @@
                                         "maximum": 50,
                                         "default": 0.05,
                                         "description": "Price in USD to unlock this learning (min $0.05, max $50.00). Set higher for deep, high-value knowledge. Contributors earn 70% of the unlock price."
+                                    },
+                                    "submission_channel": {
+                                        "type": "string",
+                                        "enum": [
+                                            "direct",
+                                            "extraction"
+                                        ],
+                                        "default": "direct",
+                                        "description": "SPEC3-B1: which pipeline produced this submission. 'extraction' marks background hook extraction; clean, scored extraction-channel items are HELD for the contributor's review (review_reason 'standing_consent_off', lane 'ready_to_publish') unless the account's clean-lane standing consent is active. Unknown values are treated as 'direct'. The marker is client-asserted and is a brake on the extraction channel, never a security boundary."
                                     }
                                 }
                             }
@@ -3132,6 +3141,243 @@
                                 }
                             }
                         }
+                    }
+                }
+            }
+        },
+        "/account/pending/summary": {
+            "get": {
+                "summary": "Pending-review triage summary (lanes, counts, compact rows)",
+                "description": "Compact triage view of YOUR OWN pending_review learnings: full-set counts plus compact rows (no bodies by default). SPEC3-B1: every row carries a `lane` — 'ready_to_publish' (passed all screens, quality >= 14), 'needs_score' (passed screens, unscored/below floor), 'needs_your_eyes' (flagged) — and the summary carries `approvable_count`, the exact count the bulk approve-clean gate will select at the default threshold. Counts are ALWAYS computed over the full own-pending set; filters and limit/offset narrow rows only. `full=1` attaches bodies, bounded to explicit ids or a page of at most 25 rows.",
+                "operationId": "accountPendingSummary",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "apiKeyAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "lane",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "ready_to_publish",
+                                "needs_score",
+                                "needs_your_eyes"
+                            ]
+                        },
+                        "description": "Only rows in this lane"
+                    },
+                    {
+                        "name": "flag",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "injection",
+                                "content_sensitivity",
+                                "near_duplicate"
+                            ]
+                        },
+                        "description": "Only rows carrying this screen flag"
+                    },
+                    {
+                        "name": "signal",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Only rows carrying this sensitivity signal name (or 'injection' / 'near_duplicate'); see counts.by_signal for available keys"
+                    },
+                    {
+                        "name": "category",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Only rows in this category"
+                    },
+                    {
+                        "name": "ids",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Comma-separated learning ids (own pending only; max 200)"
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 200
+                        },
+                        "description": "Page size. ABSENT = all rows (pre-B1 compatibility); clients that understand pagination should always send one."
+                    },
+                    {
+                        "name": "offset",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "default": 0
+                        },
+                        "description": "Page offset"
+                    },
+                    {
+                        "name": "full",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "1",
+                                "true"
+                            ]
+                        },
+                        "description": "Attach full bodies to returned rows. Bounded: requires explicit ids, or the page is forced to at most 25 rows."
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Triage summary",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "account_id": {
+                                            "type": "string"
+                                        },
+                                        "pending_count": {
+                                            "type": "integer",
+                                            "description": "Total own pending items (full set, never paginated)"
+                                        },
+                                        "clean_count": {
+                                            "type": "integer",
+                                            "description": "COMPATIBILITY ONLY (screens verdict). Builder surfaces must lead with lanes and never render 'clean'."
+                                        },
+                                        "flagged_count": {
+                                            "type": "integer"
+                                        },
+                                        "approvable_count": {
+                                            "type": "integer",
+                                            "description": "Rows in lane ready_to_publish — exactly what bulk approve-clean selects at the default threshold"
+                                        },
+                                        "needs_score_count": {
+                                            "type": "integer"
+                                        },
+                                        "counts": {
+                                            "type": "object",
+                                            "properties": {
+                                                "by_category": {
+                                                    "type": "object"
+                                                },
+                                                "by_screen": {
+                                                    "type": "object"
+                                                },
+                                                "by_quality_band": {
+                                                    "type": "object"
+                                                },
+                                                "by_signal": {
+                                                    "type": "object",
+                                                    "description": "Histogram over sensitivity signal names + injection + near_duplicate"
+                                                },
+                                                "by_lane": {
+                                                    "type": "object"
+                                                }
+                                            }
+                                        },
+                                        "items": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "title": {
+                                                        "type": "string"
+                                                    },
+                                                    "category": {
+                                                        "type": "string"
+                                                    },
+                                                    "quality": {
+                                                        "type": "integer",
+                                                        "nullable": true
+                                                    },
+                                                    "quality_source": {
+                                                        "type": "string",
+                                                        "nullable": true
+                                                    },
+                                                    "quality_assessor": {
+                                                        "type": "string",
+                                                        "nullable": true,
+                                                        "description": "Who scored it: 'operator-agent', 'extractor-local/<client>' (server-derived), or 'server-import'"
+                                                    },
+                                                    "screens_passed": {
+                                                        "type": "boolean"
+                                                    },
+                                                    "flags": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "lane": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "ready_to_publish",
+                                                            "needs_score",
+                                                            "needs_your_eyes"
+                                                        ]
+                                                    },
+                                                    "sensitivity_signals": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "string"
+                                                        },
+                                                        "description": "Signal names only (present when flagged)"
+                                                    },
+                                                    "created_at": {
+                                                        "type": "string"
+                                                    },
+                                                    "body": {
+                                                        "type": "string",
+                                                        "description": "Only with full=1"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "returned_count": {
+                                            "type": "integer"
+                                        },
+                                        "truncated": {
+                                            "type": "boolean",
+                                            "description": "True when pagination cut the filtered row list"
+                                        },
+                                        "near_dup_clusters": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid lane/flag/limit/offset parameter"
+                    },
+                    "401": {
+                        "description": "Missing/invalid credentials"
                     }
                 }
             }
