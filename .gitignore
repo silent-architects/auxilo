@@ -21,3 +21,9 @@ contracts/cache/
 contracts/broadcast/
 contracts/lib/
 contracts/lcov.info
+
+# Internal docs live locally only (post-2026-07-01 leak convention). Tracked
+# files (the served legal docs + agent guides) are unaffected by this rule —
+# it only prevents `git add` from sweeping restored internal docs into the
+# PUBLIC repo. (AUD19 audit, 2026-07-19)
+docs/*

@@ -1926,7 +1926,7 @@
     var nav = document.querySelector('.nav-links');
     var btn = document.getElementById('hamburger');
     if (!nav) return;
-    var isOpen = nav.classList.toggle('open');
+    var isOpen = nav.classList.toggle('nav-open');
     if (btn) btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
   };
 

@@ -57,3 +57,7 @@ outputs
 
 # Never bake data tarballs into the image
 *.tgz
+
+# Foundry build artifacts — regenerable from tracked .sol sources; never bake into the image (AUD19-12)
+contracts/out/
+contracts/cache/
