@@ -373,7 +373,14 @@ function installSweeper() {
     ['scripts/sources/source.interface.js', 'scripts/sources/source.interface.js', 0o644],
     ['scripts/sources/claude-code.js', 'scripts/sources/claude-code.js', 0o644],
     ['scripts/sources/openclaw.js', 'scripts/sources/openclaw.js', 0o644],
+    ['scripts/sources/gemini-cli.js', 'scripts/sources/gemini-cli.js', 0o644],
+    ['scripts/sources/antigravity.js', 'scripts/sources/antigravity.js', 0o644],
+    ['scripts/sources/generic-jsonl.js', 'scripts/sources/generic-jsonl.js', 0o644],
     ['lib/sensitivity-filter.js', 'lib/sensitivity-filter.js', 0o644],
+    // Client-side extraction (2026-07-02) — required by the sweep path since /extract went 410.
+    // Missing from this manifest until 2026-07-19: installed sweepers crashed with
+    // "Cannot find module './extract-local.js'" while queue files were retained.
+    ['scripts/extract-local.js', 'scripts/extract-local.js', 0o644],
   ];
   for (const [src, dest, mode] of filesToCopy) {
     const srcPath = path.join(repoRoot, src);
