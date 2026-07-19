@@ -752,31 +752,5 @@
     "author": "Anthropic",
     "version": "1.0.0",
     "created_at": "2026-02-22T00:00:00Z"
-  },
-  {
-    "id": "renderly",
-    "name": "Web Content Extraction API",
-    "description": "Convert any public URL to clean markdown, structured data, or readable text. Purpose-built for AI agents that need to consume web content. Pay-per-request via x402 micropayments on Base.",
-    "category": "web-interaction",
-    "tags": ["web scraping", "markdown", "content extraction", "html to text", "x402", "agent tools"],
-    "type": "api",
-    "connection": {
-      "protocol": "x402",
-      "endpoint": "https://3000-725fa3fea775ba39db5a2e3703fa4557.life.conway.tech",
-      "auth": "x402",
-      "docs": "https://3000-725fa3fea775ba39db5a2e3703fa4557.life.conway.tech/llms.txt"
-    },
-    "pricing": { "model": "per_call", "cost_usd": "0.0005-0.001", "note": "$0.001 markdown, $0.001 extract, $0.0005 readable. USDC on Base." },
-    "quality": { "reliability": 90, "verified": true },
-    "dependencies": {
-      "bins": [],
-      "apis": ["3000-725fa3fea775ba39db5a2e3703fa4557.life.conway.tech"],
-      "auth": ["x402_wallet"],
-      "runtime": ["network"]
-    },
-    "content_preview": "Renderly. POST /markdown for clean markdown. POST /extract for structured data (title, meta, headings, links, images). POST /readable for stripped text. All x402 gated. Free endpoints: /, /health, /pricing, /test, /llms.txt.",
-    "author": "Conway Automaton",
-    "version": "0.3.1",
-    "created_at": "2026-02-22T00:00:00Z"
   }
 ]

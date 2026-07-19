@@ -23,9 +23,7 @@ const {
 } = require('./lib/content-sensitivity-llm.js'); // LW-16 content-sensitivity gate (LLM semantic layer)
 const { findNearDuplicate } = require('./lib/similarity.js'); // LW-14
 const { listOwnPending, applySelfDecision } = require('./lib/self-review.js'); // LW-15
-const { fetchPage, stripNonContent, htmlToMarkdown, extractStructured, validateUrl, LLMS_TXT } = require('./lib/renderly.js');
 const { validateOfacRedirect } = require('./lib/ofac-redirect.js'); // S-6: OFAC redirect allowlist
-const { checkRenderlyRateLimit } = require('./lib/renderly-ratelimit.js'); // S-5: renderly per-caller cap
 
 // ─── Phase 2.1a: Autonomous Extraction Pipeline ─────────────────────────────
 const { extractWithRetry } = require('./lib/providers/anthropic.js');
@@ -3065,10 +3063,6 @@ const RATE_LIMIT_CONFIG = {
   '/learn':      50,
   '/knowledge':  50,  // matches /knowledge POST
   '/extract':    20,
-  // S-5 FIX: the renderly URL-proxy fetches caller-supplied URLs. Even with
-  // resolve-and-pin (S-1) closing the internal-proxy primitive, a tight cap
-  // blunts SSRF-based scanning / metadata polling and outbound-fetch abuse.
-  '/renderly':   15,  // 15 req/min per API key
 };
 
 // Store: Map<apiKey, Map<endpointPattern, number[]>>
@@ -3244,54 +3238,8 @@ const rateLimiterCleanupInterval = setInterval(() => {
       apiKeyRateLimitStore.delete(apiKey);
     }
   }
-  // S-5: sweep the renderly limiter store too.
-  for (const [key, timestamps] of renderlyRateLimitStore) {
-    const trimmed = timestamps.filter(ts => ts > windowStart);
-    if (trimmed.length === 0) renderlyRateLimitStore.delete(key);
-    else renderlyRateLimitStore.set(key, trimmed);
-  }
 }, 5 * 60 * 1000);
 rateLimiterCleanupInterval.unref();
-
-// ─── S-5 FIX: Renderly per-caller outbound-fetch rate limit ──────────────────
-// The renderly URL-proxy routes use dualAuth, which delegates x402 callers to
-// x402Gate (that never sets a verified walletAddress on context) — so the
-// generic apiKeyRateLimitMiddleware's per-wallet branch can't cap them. This
-// dedicated middleware runs AFTER dualAuth and caps BOTH auth classes:
-//   • api_key callers → keyed on accountId
-//   • x402 / other     → keyed on the trusted-proxy-derived client IP
-// at RATE_LIMIT_CONFIG['/renderly'] requests per minute. This is the x402 cap
-// the audit calls for, scoped to the SSRF-bearing routes.
-const renderlyRateLimitStore = new Map(); // Map<callerKey, number[]>
-
-function renderlyRateLimitMiddleware() {
-  return async (c, next) => {
-    const limit = RATE_LIMIT_CONFIG['/renderly'];
-    const accountId = c.get('accountId');
-    // api_key callers are keyed by account; everyone else (x402) by client IP.
-    const callerKey = accountId ? `acct:${accountId}` : `ip:${getClientIp(c)}`;
-
-    const now = Date.now();
-    const { allowed, remaining, resetAt } = checkRenderlyRateLimit(
-      renderlyRateLimitStore, callerKey, limit, RATE_LIMIT_WINDOW_MS, now
-    );
-
-    c.header('X-RateLimit-Limit', String(limit));
-    c.header('X-RateLimit-Remaining', String(remaining));
-    c.header('X-RateLimit-Reset', String(resetAt));
-
-    if (!allowed) {
-      c.header('Retry-After', String(Math.max(1, resetAt - Math.floor(now / 1000))));
-      return c.json({
-        error: 'Too Many Requests',
-        message: `Rate limit of ${limit} requests/minute exceeded for the renderly API.`,
-        retry_after: Math.max(1, resetAt - Math.floor(now / 1000)),
-      }, 429);
-    }
-
-    return next();
-  };
-}
 
 // ─── Phase 0.1: Account Routes (SPEC-P0.1) ──────────────────────────────────
 setupAccountRoutes(app);
@@ -4343,13 +4291,6 @@ app.get('/api/info', (c) => {
       '/checkout/success': { price: 'free', method: 'GET', description: 'Stripe payment success landing page (redirect target)' },
       '/checkout/cancel': { price: 'free', method: 'GET', description: 'Stripe payment cancelled landing page (redirect target)' },
       '/report': { price: 'free', method: 'POST', description: 'Report harmful or inappropriate content. Body: { learning_id, reason, details? }', auth: 'public', rateLimit: '10/hour per IP' },
-      '/renderly': { price: 'free', method: 'GET', description: 'Renderly service info — web content extraction API' },
-      '/renderly/markdown': { price: '$0.001', method: 'POST', description: 'Convert URL to clean markdown. Body: { "url": "https://..." }' },
-      '/renderly/extract': { price: '$0.001', method: 'POST', description: 'Extract structured data from URL. Body: { "url": "https://..." }' },
-      '/renderly/readable': { price: '$0.0005', method: 'POST', description: 'Get readable text from URL. Body: { "url": "https://..." }' },
-      '/renderly/llms.txt': { price: 'free', method: 'GET', description: 'Renderly LLM-readable service description' },
-      '/renderly/health': { price: 'free', method: 'GET', description: 'Renderly health check' },
-      '/renderly/pricing': { price: 'free', method: 'GET', description: 'Renderly pricing info' },
       '/pricing/categories': { price: 'free', method: 'GET', description: 'Knowledge pricing analytics by category — avg price, conversion rate, impression and unlock counts.' },
       '/contributor/:wallet/pricing-insights': { price: 'free', method: 'GET', description: 'Pricing insights for a contributor wallet — price distribution, top earners, avg price.' },
     },
@@ -8258,102 +8199,6 @@ app.get('/legal/subprocessors', (c) => serveLegalPage(c, 'SUBPROCESSORS.md', 'Su
 app.get('/legal/supported-clients', (c) => serveLegalPage(c, 'SUPPORTED-CLIENTS.md', 'Supported Clients'));
 // FB-1: /dmca is incorporated into the Terms (§5.9.4(b)) and must resolve, not 404.
 app.get('/dmca', (c) => serveLegalPage(c, 'DMCA-POLICY.md', 'DMCA Copyright Policy'));
-
-// ─── Renderly — Web Content Extraction API ───────────────────────────
-
-app.get('/renderly', (c) => {
-  return c.json({
-    service: 'Renderly',
-    version: '0.3.1',
-    description: 'Web content extraction API — convert any URL to clean markdown, structured data, or readable text',
-    parent: 'Auxilo',
-    endpoints: {
-      '/renderly/markdown': { method: 'POST', price: '$0.001', description: 'Convert URL to clean markdown' },
-      '/renderly/extract': { method: 'POST', price: '$0.001', description: 'Extract structured data (title, description, headings, links, images, meta)' },
-      '/renderly/readable': { method: 'POST', price: '$0.0005', description: 'Get readable text content' },
-      '/renderly/llms.txt': { method: 'GET', price: 'free', description: 'LLM-readable service description' },
-      '/renderly/health': { method: 'GET', price: 'free' },
-      '/renderly/pricing': { method: 'GET', price: 'free' },
-    },
-    payment: { network: 'Base', token: 'USDC', protocol: 'x402' },
-    wallet: WALLET,
-  });
-});
-
-app.post('/renderly/markdown', dualAuth(0.001, 'Convert URL to markdown', 'query'), renderlyRateLimitMiddleware(), async (c) => {
-  try {
-    const { url } = await c.req.json();
-    // IR-M-007 FIX: Properly destructure validateUrl result — return error string, not object
-    const validation = validateUrl(url);
-    if (!validation.valid) return c.json({ error: validation.error }, 400);
-    const { html } = await fetchPage(validation.url);
-    const stripped = stripNonContent(html);
-    const markdown = htmlToMarkdown(stripped);
-    return c.json({ url: validation.url, markdown, length: markdown.length, service: 'Renderly v0.3.1' });
-  } catch (e) {
-    // SD-1 FIX: never reflect the internal fetch error to the caller — the
-    // distinguishing message (HTTP status / SSRF-blocked / ECONNREFUSED) is an
-    // SSRF info-leak oracle. Return a fixed generic error; log server-side only.
-    console.error(`[renderly/markdown] fetch failed: ${e && e.message}`);
-    return c.json({ error: 'Failed to process URL' }, 500);
-  }
-});
-
-app.post('/renderly/extract', dualAuth(0.001, 'Extract structured data from URL', 'query'), renderlyRateLimitMiddleware(), async (c) => {
-  try {
-    const { url } = await c.req.json();
-    // IR-M-007 FIX: Properly destructure validateUrl result — return error string, not object
-    const validation = validateUrl(url);
-    if (!validation.valid) return c.json({ error: validation.error }, 400);
-    const { html } = await fetchPage(validation.url);
-    const data = extractStructured(html, validation.url);
-    return c.json({ url: validation.url, ...data, service: 'Renderly v0.3.1' });
-  } catch (e) {
-    // SD-1 FIX: generic caller-facing error, distinguishing detail logged only.
-    console.error(`[renderly/extract] fetch failed: ${e && e.message}`);
-    return c.json({ error: 'Failed to process URL' }, 500);
-  }
-});
-
-app.post('/renderly/readable', dualAuth(0.0005, 'Get readable text from URL', 'query'), renderlyRateLimitMiddleware(), async (c) => {
-  try {
-    const { url } = await c.req.json();
-    // IR-M-007 FIX: Properly destructure validateUrl result — return error string, not object
-    const validation = validateUrl(url);
-    if (!validation.valid) return c.json({ error: validation.error }, 400);
-    const { html } = await fetchPage(validation.url);
-    const stripped = stripNonContent(html);
-    const markdown = htmlToMarkdown(stripped);
-    const readable = markdown.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[#*_`~>|-]/g, '').replace(/\n{3,}/g, '\n\n').trim();
-    return c.json({ url: validation.url, text: readable, length: readable.length, service: 'Renderly v0.3.1' });
-  } catch (e) {
-    // SD-1 FIX: generic caller-facing error, distinguishing detail logged only.
-    console.error(`[renderly/readable] fetch failed: ${e && e.message}`);
-    return c.json({ error: 'Failed to process URL' }, 500);
-  }
-});
-
-app.get('/renderly/llms.txt', (c) => {
-  c.header('Content-Type', 'text/plain');
-  return c.body(LLMS_TXT);
-});
-
-app.get('/renderly/health', (c) => {
-  return c.json({ status: 'healthy', service: 'Renderly', version: '0.3.1', timestamp: new Date().toISOString() });
-});
-
-app.get('/renderly/pricing', (c) => {
-  return c.json({
-    service: 'Renderly',
-    pricing: {
-      '/renderly/markdown': { price: '$0.001', description: 'Full markdown conversion' },
-      '/renderly/extract': { price: '$0.001', description: 'Structured data extraction' },
-      '/renderly/readable': { price: '$0.0005', description: 'Plain readable text' },
-    },
-    payment: { network: 'Base', token: 'USDC', protocol: 'x402' },
-    wallet: WALLET,
-  });
-});
 
 // ── OpenClaw Adapter Routes ──────────────────────────────────────────────────
 // S9-1: All OpenClaw endpoints require admin auth (S-3 audit finding)

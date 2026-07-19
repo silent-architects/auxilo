@@ -78,14 +78,6 @@ Then ask Claude: *"Search Auxilo for an email API"* or *"Find knowledge about Fi
 - `auxilo_link_wallet` — Link a verified wallet to your account
 - `auxilo_account_earnings` — View earnings for your authenticated account
 
-*Renderly (v0.7.0 — new)*
-- `renderly_markdown` — Convert any public URL to clean markdown ($0.001)
-- `renderly_extract` — Extract structured data from any URL ($0.001)
-- `renderly_readable` — Get plain readable text from any URL ($0.0005)
-- `renderly_llms_txt` — Get the LLM-readable Renderly service description (free)
-- `renderly_health` — Check Renderly service health (free)
-- `renderly_pricing` — Get Renderly pricing info (free)
-
 *Stats (v0.7.0 — new)*
 - `get_stats` — Registry statistics (alias, free)
 - `get_knowledge_stats` — Knowledge marketplace statistics (free)
