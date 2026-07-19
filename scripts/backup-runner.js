@@ -146,9 +146,9 @@ function parseKeyHex(keyHex) {
 }
 
 /** Async generator: plaintext chunks in, framed AUXBKUP1 ciphertext out. */
-async function* encryptGen(source, keyHex, ivOverride) {
+async function* encryptGen(source, keyHex) {
   const key = parseKeyHex(keyHex);
-  const iv = ivOverride || crypto.randomBytes(IV_LEN);
+  const iv = crypto.randomBytes(IV_LEN); // fresh IV per backup — GCM must never reuse (Gate-A F5: caller-supplied IV removed)
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
   yield Buffer.concat([MAGIC, iv]);
   for await (const chunk of source) {
