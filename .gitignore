@@ -1,4 +1,6 @@
-node_modules/
+# no trailing slash — also ignores a node_modules SYMLINK (dev worktrees link
+# a sibling checkout's install; the slash form matches directories only)
+node_modules
 data/
 *.log
 .DS_Store
@@ -19,3 +21,9 @@ contracts/cache/
 contracts/broadcast/
 contracts/lib/
 contracts/lcov.info
+
+# Internal docs live locally only (post-2026-07-01 leak convention). Tracked
+# files (the served legal docs + agent guides) are unaffected by this rule —
+# it only prevents `git add` from sweeping restored internal docs into the
+# PUBLIC repo. (AUD19 audit, 2026-07-19)
+docs/*

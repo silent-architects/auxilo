@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" />
-  <link rel="stylesheet" href="/styles.css?v=4" />
+  <link rel="stylesheet" href="/styles.css?v=8" />
   <style>
     /* ── Dashboard layout ───────────────────────────────────────────── */
     .dash-wrap {
@@ -323,6 +323,91 @@
       gap: 8px;
     }
 
+    /* ── Review-seamless triage additions ───────────────────────────── */
+    .count-badge {
+      display: inline-block;
+      min-width: 22px;
+      padding: 1px 8px;
+      margin-left: 8px;
+      border-radius: 999px;
+      background: rgba(201,168,76,0.15);
+      border: 1px solid rgba(201,168,76,0.3);
+      color: var(--aurum);
+      font-size: 12px;
+      font-weight: 600;
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    .bulk-bar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .triage-table-wrap { overflow-x: auto; }
+
+    .triage-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .triage-table th {
+      text-align: left;
+      padding: 8px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--slate);
+      border-bottom: 1px solid rgba(229,229,227,0.12);
+      white-space: nowrap;
+    }
+
+    .triage-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid rgba(229,229,227,0.06);
+      vertical-align: middle;
+    }
+
+    .triage-title-btn {
+      background: none;
+      border: none;
+      padding: 0;
+      color: var(--ivory);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: left;
+      text-decoration: underline;
+      text-decoration-color: rgba(229,229,227,0.25);
+    }
+
+    .triage-title-btn:hover { text-decoration-color: var(--aurum); }
+
+    .triage-group-row td {
+      padding-top: 14px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--aurum);
+      border-bottom: none;
+    }
+
+    .triage-detail-cell { padding: 0 10px 14px; }
+
+    .tag-clean {
+      background: rgba(52,211,153,0.1);
+      color: #6EE7B7;
+      border: 1px solid rgba(52,211,153,0.2);
+    }
+
+    .triage-row-done td { opacity: 0.45; }
+
     /* ── API key input area ─────────────────────────────────────────── */
     .apikey-row {
       display: flex;
@@ -561,9 +646,9 @@
 
     <!-- Pending review queue -->
     <div class="dash-card">
-      <div class="dash-card-title">Pending Review Queue</div>
+      <div class="dash-card-title">Pending Review Queue <span id="pending-count-badge" class="count-badge" style="display:none">0</span></div>
       <p style="font-size:13px;color:var(--slate);margin-bottom:16px;line-height:1.6">
-        Learnings extracted by your agents land here before going public. Review each one, then approve or reject.
+        Learnings extracted by your agents land here before going public. Nothing is published until you approve it. Items that passed every platform screen are grouped first so you can approve them together; flagged items deserve an individual look.
       </p>
       <button class="btn btn-ghost btn-sm" onclick="loadPendingQueue()" style="margin-bottom:16px">Load queue</button>
       <div id="pending-alert" class="alert" style="display:none;margin-bottom:12px"></div>
@@ -714,6 +799,7 @@
     loadEarnings();
     loadApiKeys();
     loadPurchases();
+    loadPendingBadge(); // review-seamless: surface the pending count without a click
     // Payout loads after earnings to know the balance
   }
 
@@ -829,11 +915,15 @@
     if (!grid) return;
     grid.textContent = '';
 
-    // R-01 §5.10: held (unassented) funds are earnings that require accepting the
-    // updated Terms before they can be released/withdrawn. Read defensively: only
-    // surface the held line when the server actually sends a non-zero field.
+    // R-01 §5.10 / CP-7: receipts recorded before Terms acceptance are
+    // UNDISBURSABLE RECEIPTS, not money held for the builder — the copy below
+    // must never read as "we're holding your money" (CP-7 disposition policy).
+    // Read defensively: prefer the public field name (held_pending_assent,
+    // AUD19-8b), fall back to legacy names; only render when non-zero.
     var held = 0;
-    if (data && typeof data.unassented_pending === 'number') {
+    if (data && typeof data.held_pending_assent === 'number') {
+      held = data.held_pending_assent;
+    } else if (data && typeof data.unassented_pending === 'number') {
       held = data.unassented_pending;
     } else if (data && typeof data.held === 'number') {
       held = data.held;
@@ -849,8 +939,10 @@
     if (held > 0) {
       // Insert directly under the withdrawable share so the two are read together,
       // and make clear this amount is NOT included in the withdrawable figure.
+      // CP-7 framing: an undisbursable receipt released on Terms acceptance —
+      // never "money we're holding for you".
       items.splice(1, 0, {
-        label: 'Held: accept Terms to release',
+        label: 'Undisbursable receipts — released on Terms acceptance',
         value: fmt(held),
         held: true,
       });
@@ -871,13 +963,13 @@
       wrap.appendChild(lbl);
       wrap.appendChild(val);
 
-      // Held balance gets a short explainer pointing at the Terms gate above.
+      // CP-7 explainer: undisbursable receipt, released on Terms acceptance.
       if (item.held) {
         var heldNote = document.createElement('div');
         heldNote.style.fontSize = '11px';
         heldNote.style.color = 'var(--slate)';
         heldNote.style.marginTop = '4px';
-        heldNote.textContent = 'Not included in your withdrawable share. Accept the updated Terms above to release it.';
+        heldNote.textContent = 'Receipts recorded before you accepted the current Terms. Not part of your balance or withdrawable share — accepting the Terms above releases them to your withdrawable share immediately.';
         wrap.appendChild(heldNote);
       }
 
@@ -963,7 +1055,7 @@
       cryptoWrap.appendChild(note);
     } else {
       var noWallet = document.createElement('div');
-      noWallet.textContent = 'No wallet linked. USDC withdrawals on Base are rolling out on our non-custodial rail (coming soon). You can link a wallet now with the CLI command "auxilo link-wallet" to be ready. Bank withdrawals via Stripe are available in the section below when your balance is ready.';
+      noWallet.textContent = 'No wallet linked. USDC withdrawals on Base are rolling out on our non-custodial rail (coming soon). You can link a wallet now through your agent: verify it with auxilo_verify_wallet, then link it with auxilo_link_wallet — linking asks the wallet to sign a one-time challenge proving you control it. Bank withdrawals via Stripe are available in the section below when your balance is ready.';
       cryptoWrap.appendChild(noWallet);
     }
 
@@ -1167,10 +1259,35 @@
       });
   }
 
-  // ── Pending queue ────────────────────────────────────────────────────
+  // ── Pending queue (review-seamless triage) ───────────────────────────
+  // Uses the login session (Bearer JWT via apiFetch). The self-review
+  // endpoints accept the session token, so no API key is needed in the browser.
+  // ALL dynamic data rendered via textContent/createElement (XSS-safe, per the
+  // file-wide rule above). Bulk actions go through POST /account/pending/bulk
+  // in chunks, each with the counted confirm_count the server requires, and
+  // never run without a confirm dialog showing the exact count.
+
+  var _triageRows = [];          // compact rows from /account/pending/summary
+  var _triageBodies = null;      // id -> full learning (lazy, paged fetch)
+  var _triageSelected = {};      // id -> true
+
+  function pendingBadgeSet(count) {
+    var badge = document.getElementById('pending-count-badge');
+    if (!badge) return;
+    badge.textContent = String(count);
+    badge.style.display = count > 0 ? '' : 'none';
+  }
+
+  function loadPendingBadge() {
+    apiFetch('/account/pending/summary')
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (res.ok && typeof res.data.pending_count === 'number') pendingBadgeSet(res.data.pending_count);
+      })
+      .catch(function () {});
+  }
+
   window.loadPendingQueue = function () {
-    // Uses the login session (Bearer JWT via apiFetch). The self-review
-    // endpoints accept the session token, so no API key is needed in the browser.
     hideAlert('pending-alert');
     var contentEl = document.getElementById('pending-content');
     if (contentEl) {
@@ -1184,7 +1301,7 @@
       contentEl.appendChild(loading);
     }
 
-    apiFetch('/account/pending')
+    apiFetch('/account/pending/summary')
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); })
       .then(function (res) {
         if (!res.ok) {
@@ -1193,7 +1310,11 @@
           if (contentEl) contentEl.textContent = '';
           return;
         }
-        renderPendingQueue(res.data.learnings || []);
+        _triageRows = res.data.items || [];
+        _triageBodies = null;
+        _triageSelected = {};
+        pendingBadgeSet(res.data.pending_count || 0);
+        renderTriage(res.data);
       })
       .catch(function () {
         showAlert('pending-alert', 'Request failed. Check your connection.', 'error');
@@ -1201,12 +1322,60 @@
       });
   };
 
-  function renderPendingQueue(learnings) {
+  // Lazy body loader: pages through GET /account/pending (200 per page) once,
+  // so expanding a row can show the full text without one request per item.
+  function ensurePendingBodies() {
+    if (_triageBodies) return Promise.resolve(_triageBodies);
+    var map = {};
+    function page(offset) {
+      return apiFetch('/account/pending?limit=200&offset=' + offset)
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+        .then(function (res) {
+          if (!res.ok) throw new Error(res.data.error || 'load failed');
+          var items = res.data.learnings || [];
+          items.forEach(function (l) { map[l.id] = l; });
+          var next = offset + items.length;
+          if (items.length > 0 && next < (res.data.pending_count || 0)) return page(next);
+          _triageBodies = map;
+          return map;
+        });
+    }
+    return page(0);
+  }
+
+  function selectedCount() {
+    return Object.keys(_triageSelected).length;
+  }
+
+  function setRowChecked(id, checked) {
+    if (checked) _triageSelected[id] = true;
+    else delete _triageSelected[id];
+    var box = document.getElementById('triage-check-' + id);
+    if (box) box.checked = !!checked;
+    updateBulkBar();
+  }
+
+  function updateBulkBar() {
+    var n = selectedCount();
+    var approveBtn = document.getElementById('bulk-approve-btn');
+    var rejectBtn = document.getElementById('bulk-reject-btn');
+    if (approveBtn) {
+      approveBtn.textContent = 'Approve selected (' + n + ')';
+      approveBtn.disabled = n === 0;
+    }
+    if (rejectBtn) {
+      rejectBtn.textContent = 'Reject selected (' + n + ')';
+      rejectBtn.disabled = n === 0;
+    }
+  }
+
+  function renderTriage(summary) {
     var el = document.getElementById('pending-content');
     if (!el) return;
     el.textContent = '';
 
-    if (!learnings.length) {
+    var rows = summary.items || [];
+    if (!rows.length) {
       var empty = document.createElement('div');
       empty.className = 'empty-state';
       empty.textContent = 'No pending learnings. Your queue is clear.';
@@ -1214,127 +1383,265 @@
       return;
     }
 
+    var clean = rows.filter(function (r) { return r.screens_passed; });
+    var flagged = rows.filter(function (r) { return !r.screens_passed; });
+
     var countLine = document.createElement('p');
     countLine.style.fontSize = '13px';
     countLine.style.color = 'var(--slate)';
-    countLine.style.marginBottom = '16px';
-    countLine.textContent = learnings.length + ' item' + (learnings.length !== 1 ? 's' : '') + ' waiting for your review.';
+    countLine.style.marginBottom = '12px';
+    countLine.textContent = rows.length + ' item' + (rows.length !== 1 ? 's' : '') + ' waiting for your review: '
+      + clean.length + ' passed every platform screen, ' + flagged.length + ' flagged for an individual look.';
     el.appendChild(countLine);
 
-    learnings.forEach(function (item) {
-      el.appendChild(buildPendingCard(item));
-    });
-  }
+    // Bulk bar
+    var bar = document.createElement('div');
+    bar.className = 'bulk-bar';
 
-  function buildPendingCard(item) {
-    var card = document.createElement('div');
-    card.className = 'pending-item';
-    card.id = 'pending-card-' + item.id;
-
-    // Header: title
-    var header = document.createElement('div');
-    header.className = 'pending-item-header';
-    var titleEl = document.createElement('div');
-    titleEl.className = 'pending-item-title';
-    titleEl.textContent = item.title || '(no title)'; // textContent -- safe
-    header.appendChild(titleEl);
-    card.appendChild(header);
-
-    // Meta: category, tags
-    var meta = document.createElement('div');
-    meta.className = 'pending-item-meta';
-
-    if (item.category) {
-      var catTag = document.createElement('span');
-      catTag.className = 'tag tag-category';
-      catTag.textContent = item.category; // textContent -- safe
-      meta.appendChild(catTag);
-    }
-
-    // Safety flags (injection_flags, sensitivity_signals)
-    if (item.injection_flags && item.injection_flags.length) {
-      item.injection_flags.forEach(function (flag) {
-        var t = document.createElement('span');
-        t.className = 'tag tag-danger';
-        t.textContent = 'injection: ' + flag; // textContent -- safe
-        meta.appendChild(t);
+    var selCleanBtn = document.createElement('button');
+    selCleanBtn.className = 'btn btn-ghost btn-sm';
+    selCleanBtn.textContent = 'Select clean (' + clean.length + ')';
+    selCleanBtn.onclick = function () {
+      _triageSelected = {};
+      clean.forEach(function (r) { _triageSelected[r.id] = true; });
+      rows.forEach(function (r) {
+        var box = document.getElementById('triage-check-' + r.id);
+        if (box) box.checked = !!_triageSelected[r.id];
       });
-    }
+      updateBulkBar();
+    };
+    bar.appendChild(selCleanBtn);
 
-    if (item.sensitivity_signals && item.sensitivity_signals.length) {
-      item.sensitivity_signals.forEach(function (sig) {
-        var t = document.createElement('span');
-        t.className = 'tag tag-warn';
-        t.textContent = 'sensitive: ' + sig; // textContent -- safe
-        meta.appendChild(t);
-      });
-    }
+    var selAllBtn = document.createElement('button');
+    selAllBtn.className = 'btn btn-ghost btn-sm';
+    selAllBtn.textContent = 'Select all (' + rows.length + ')';
+    selAllBtn.onclick = function () {
+      rows.forEach(function (r) { setRowChecked(r.id, true); });
+    };
+    bar.appendChild(selAllBtn);
 
-    if (item.possible_duplicate_of) {
-      var dupTag = document.createElement('span');
-      dupTag.className = 'tag tag-warn';
-      var sim = item.possible_duplicate_similarity !== undefined
-        ? Math.round(item.possible_duplicate_similarity * 100) + '% match'
-        : 'possible duplicate';
-      dupTag.textContent = 'duplicate: ' + sim; // textContent -- safe
-      meta.appendChild(dupTag);
-    }
-
-    card.appendChild(meta);
-
-    // Body: untrusted content -- rendered as PLAIN TEXT in pre element
-    var bodyWrap = document.createElement('div');
-    bodyWrap.className = 'pending-body-wrap';
-
-    var bodyPre = document.createElement('pre');
-    bodyPre.className = 'pending-body';
-    bodyPre.textContent = item.body || '(no body)'; // textContent -- XSS safe
-    bodyWrap.appendChild(bodyPre);
-    card.appendChild(bodyWrap);
-
-    // Date
-    if (item.created_at) {
-      var dateLine = document.createElement('div');
-      dateLine.style.fontSize = '11px';
-      dateLine.style.color = 'var(--slate)';
-      dateLine.style.marginBottom = '12px';
-      var d = new Date(item.created_at);
-      dateLine.textContent = 'Submitted: ' + (isNaN(d.getTime()) ? item.created_at : d.toLocaleString()); // textContent -- safe
-      card.appendChild(dateLine);
-    }
-
-    // Action buttons
-    var actions = document.createElement('div');
-    actions.className = 'pending-actions';
+    var clearBtn = document.createElement('button');
+    clearBtn.className = 'btn btn-ghost btn-sm';
+    clearBtn.textContent = 'Clear';
+    clearBtn.onclick = function () {
+      rows.forEach(function (r) { setRowChecked(r.id, false); });
+    };
+    bar.appendChild(clearBtn);
 
     var approveBtn = document.createElement('button');
     approveBtn.className = 'btn btn-primary btn-sm';
-    approveBtn.textContent = 'Approve';
-    approveBtn.onclick = function () { doPendingAction(item.id, 'approve', card); };
-    actions.appendChild(approveBtn);
+    approveBtn.id = 'bulk-approve-btn';
+    approveBtn.disabled = true;
+    approveBtn.textContent = 'Approve selected (0)';
+    approveBtn.onclick = function () { bulkDecide('approve'); };
+    bar.appendChild(approveBtn);
 
     var rejectBtn = document.createElement('button');
     rejectBtn.className = 'btn btn-danger btn-sm';
+    rejectBtn.id = 'bulk-reject-btn';
+    rejectBtn.disabled = true;
+    rejectBtn.textContent = 'Reject selected (0)';
+    rejectBtn.onclick = function () { bulkDecide('reject'); };
+    bar.appendChild(rejectBtn);
+
+    el.appendChild(bar);
+
+    // Triage table
+    var wrap = document.createElement('div');
+    wrap.className = 'triage-table-wrap';
+    var table = document.createElement('table');
+    table.className = 'triage-table';
+
+    var thead = document.createElement('thead');
+    var headRow = document.createElement('tr');
+    ['', 'Quality', 'Category', 'Screens', 'Title', 'Submitted'].forEach(function (label) {
+      var th = document.createElement('th');
+      th.textContent = label;
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    var tbody = document.createElement('tbody');
+    function addGroupRow(label) {
+      var tr = document.createElement('tr');
+      tr.className = 'triage-group-row';
+      var td = document.createElement('td');
+      td.colSpan = 6;
+      td.textContent = label;
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }
+    if (clean.length) {
+      addGroupRow('Passed every screen (' + clean.length + ')');
+      clean.forEach(function (r) { tbody.appendChild(buildTriageRow(r)); });
+    }
+    if (flagged.length) {
+      addGroupRow('Flagged by a screen (' + flagged.length + ')');
+      flagged.forEach(function (r) { tbody.appendChild(buildTriageRow(r)); });
+    }
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    el.appendChild(wrap);
+
+    // Bulk result area
+    var resultEl = document.createElement('div');
+    resultEl.className = 'alert';
+    resultEl.style.display = 'none';
+    resultEl.style.marginTop = '12px';
+    resultEl.id = 'bulk-result';
+    el.appendChild(resultEl);
+
+    updateBulkBar();
+  }
+
+  function verdictTags(row) {
+    var holder = document.createElement('span');
+    if (row.screens_passed) {
+      var ok = document.createElement('span');
+      ok.className = 'tag tag-clean';
+      ok.textContent = 'clean';
+      holder.appendChild(ok);
+      return holder;
+    }
+    (row.flags || []).forEach(function (f) {
+      var t = document.createElement('span');
+      t.className = f === 'injection' ? 'tag tag-danger' : 'tag tag-warn';
+      t.style.marginRight = '4px';
+      t.textContent = f === 'content_sensitivity' ? 'sensitive'
+        : f === 'near_duplicate' ? 'duplicate'
+        : f; // textContent -- safe
+      holder.appendChild(t);
+    });
+    return holder;
+  }
+
+  function buildTriageRow(row) {
+    var tr = document.createElement('tr');
+    tr.id = 'triage-row-' + row.id;
+
+    // Checkbox
+    var tdCheck = document.createElement('td');
+    var box = document.createElement('input');
+    box.type = 'checkbox';
+    box.id = 'triage-check-' + row.id;
+    box.onchange = function () { setRowChecked(row.id, box.checked); };
+    tdCheck.appendChild(box);
+    tr.appendChild(tdCheck);
+
+    // Quality
+    var tdQ = document.createElement('td');
+    tdQ.textContent = row.quality == null ? '--' : (row.quality + '/20');
+    tr.appendChild(tdQ);
+
+    // Category
+    var tdCat = document.createElement('td');
+    if (row.category) {
+      var catTag = document.createElement('span');
+      catTag.className = 'tag tag-category';
+      catTag.textContent = row.category; // textContent -- safe
+      tdCat.appendChild(catTag);
+    }
+    tr.appendChild(tdCat);
+
+    // Screen verdicts
+    var tdV = document.createElement('td');
+    tdV.appendChild(verdictTags(row));
+    tr.appendChild(tdV);
+
+    // Title (click to expand full body + single-item actions)
+    var tdTitle = document.createElement('td');
+    var titleBtn = document.createElement('button');
+    titleBtn.className = 'triage-title-btn';
+    titleBtn.textContent = row.title || '(no title)'; // textContent -- safe
+    titleBtn.onclick = function () { toggleTriageDetail(row, tr); };
+    tdTitle.appendChild(titleBtn);
+    tr.appendChild(tdTitle);
+
+    // Submitted
+    var tdDate = document.createElement('td');
+    if (row.created_at) {
+      var d = new Date(row.created_at);
+      tdDate.textContent = isNaN(d.getTime()) ? row.created_at : d.toLocaleDateString(); // textContent -- safe
+      tdDate.style.whiteSpace = 'nowrap';
+      tdDate.style.color = 'var(--slate)';
+      tdDate.style.fontSize = '12px';
+    }
+    tr.appendChild(tdDate);
+
+    return tr;
+  }
+
+  function toggleTriageDetail(row, tr) {
+    var existing = document.getElementById('triage-detail-' + row.id);
+    if (existing) { existing.remove(); return; }
+
+    var detailTr = document.createElement('tr');
+    detailTr.id = 'triage-detail-' + row.id;
+    var td = document.createElement('td');
+    td.colSpan = 6;
+    td.className = 'triage-detail-cell';
+
+    var bodyWrap = document.createElement('div');
+    bodyWrap.className = 'pending-body-wrap';
+    var bodyPre = document.createElement('pre');
+    bodyPre.className = 'pending-body';
+    bodyPre.textContent = 'Loading full text...';
+    bodyWrap.appendChild(bodyPre);
+    td.appendChild(bodyWrap);
+
+    // Single-item actions (same endpoints as before)
+    var actions = document.createElement('div');
+    actions.className = 'pending-actions';
+    var approveBtn = document.createElement('button');
+    approveBtn.className = 'btn btn-primary btn-sm';
+    approveBtn.textContent = 'Approve';
+    approveBtn.onclick = function () { doPendingAction(row.id, 'approve', detailTr, tr); };
+    actions.appendChild(approveBtn);
+    var rejectBtn = document.createElement('button');
+    rejectBtn.className = 'btn btn-danger btn-sm';
     rejectBtn.textContent = 'Reject';
-    rejectBtn.onclick = function () { doPendingAction(item.id, 'reject', card); };
+    rejectBtn.onclick = function () { doPendingAction(row.id, 'reject', detailTr, tr); };
     actions.appendChild(rejectBtn);
+    td.appendChild(actions);
 
-    card.appendChild(actions);
-
-    // Result area
     var resultEl = document.createElement('div');
     resultEl.className = 'alert';
     resultEl.style.display = 'none';
     resultEl.style.marginTop = '10px';
-    resultEl.id = 'pending-result-' + item.id;
-    card.appendChild(resultEl);
+    resultEl.id = 'pending-result-' + row.id;
+    td.appendChild(resultEl);
 
-    return card;
+    detailTr.appendChild(td);
+    tr.parentNode.insertBefore(detailTr, tr.nextSibling);
+
+    ensurePendingBodies()
+      .then(function (map) {
+        var full = map[row.id];
+        // Body is untrusted third-party-adjacent content: PLAIN TEXT only.
+        bodyPre.textContent = (full && full.body) ? full.body : '(no body)'; // textContent -- XSS safe
+      })
+      .catch(function () {
+        bodyPre.textContent = 'Could not load the full text. Approve or reject from the CLI, or retry.';
+      });
   }
 
-  function doPendingAction(id, action, cardEl) {
+  function markRowDecided(id, action) {
+    var tr = document.getElementById('triage-row-' + id);
+    if (tr) {
+      tr.className = 'triage-row-done';
+      var box = document.getElementById('triage-check-' + id);
+      if (box) { box.checked = false; box.disabled = true; }
+    }
+    delete _triageSelected[id];
+    _triageRows = _triageRows.filter(function (r) { return r.id !== id; });
+    pendingBadgeSet(_triageRows.length);
+    updateBulkBar();
+  }
+
+  function doPendingAction(id, action, detailTr, rowTr) {
     var resultEl = document.getElementById('pending-result-' + id);
-    var btns = cardEl ? cardEl.querySelectorAll('button') : [];
+    var btns = detailTr ? detailTr.querySelectorAll('button') : [];
     btns.forEach(function (b) { b.disabled = true; });
 
     var url = '/account/pending/' + encodeURIComponent(id) + '/' + action;
@@ -1353,6 +1660,7 @@
             resultEl.style.display = '';
           }
           btns.forEach(function (b) { b.style.display = 'none'; });
+          markRowDecided(id, action);
         } else {
           btns.forEach(function (b) { b.disabled = false; });
           if (resultEl) {
@@ -1370,6 +1678,72 @@
           resultEl.style.display = '';
         }
       });
+  }
+
+  // Bulk decisions: confirm dialog with the EXACT count, then chunked calls to
+  // POST /account/pending/bulk (100 per chunk, counted confirm_count each).
+  function bulkDecide(decision) {
+    var ids = Object.keys(_triageSelected);
+    if (ids.length === 0) return;
+
+    var confirmMsg = decision === 'approve'
+      ? ('Approve ' + ids.length + ' learning(s)?\n\nEach one will be published to the public marketplace immediately. This confirmation is your approval of every item in the selection.')
+      : ('Reject ' + ids.length + ' learning(s)?\n\nThey stay private and will not be published.');
+    if (!window.confirm(confirmMsg)) return;
+
+    var approveBtn = document.getElementById('bulk-approve-btn');
+    var rejectBtn = document.getElementById('bulk-reject-btn');
+    if (approveBtn) approveBtn.disabled = true;
+    if (rejectBtn) rejectBtn.disabled = true;
+
+    var chunks = [];
+    for (var i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
+
+    var totals = { approved: 0, rejected: 0, idempotent: 0, failed: 0 };
+
+    function runChunk(idx) {
+      if (idx >= chunks.length) return Promise.resolve();
+      var decisions = chunks[idx].map(function (id) { return { id: id, decision: decision }; });
+      return apiFetch('/account/pending/bulk', {
+        method: 'POST',
+        body: JSON.stringify({ decisions: decisions, confirm_count: decisions.length }),
+      })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+        .then(function (res) {
+          if (!res.ok) throw new Error(res.data.error || 'Bulk call failed.');
+          totals.approved += res.data.approved || 0;
+          totals.rejected += res.data.rejected || 0;
+          totals.idempotent += res.data.idempotent || 0;
+          totals.failed += res.data.failed || 0;
+          (res.data.results || []).forEach(function (r) {
+            if (r.ok && r.id) markRowDecided(r.id, decision);
+          });
+          return runChunk(idx + 1);
+        });
+    }
+
+    runChunk(0)
+      .then(function () {
+        var parts = [];
+        if (totals.approved) parts.push(totals.approved + ' approved (now live)');
+        if (totals.rejected) parts.push(totals.rejected + ' rejected (stay private)');
+        if (totals.idempotent) parts.push(totals.idempotent + ' already decided');
+        if (totals.failed) parts.push(totals.failed + ' failed');
+        showBulkResult((parts.join(', ') || 'No changes') + '.', totals.failed ? 'error' : 'success');
+        updateBulkBar();
+      })
+      .catch(function (err) {
+        showBulkResult((err && err.message ? err.message : 'Bulk request failed.') + ' Items already decided stayed decided; reload the queue and retry the rest.', 'error');
+        updateBulkBar();
+      });
+  }
+
+  function showBulkResult(msg, type) {
+    var el = document.getElementById('bulk-result');
+    if (!el) return;
+    el.textContent = msg; // textContent -- safe
+    el.className = 'alert alert-' + (type || 'info');
+    el.style.display = '';
   }
 
   // ── API Keys ─────────────────────────────────────────────────────────
@@ -1558,7 +1932,7 @@
     var nav = document.querySelector('.nav-links');
     var btn = document.getElementById('hamburger');
     if (!nav) return;
-    var isOpen = nav.classList.toggle('open');
+    var isOpen = nav.classList.toggle('nav-open');
     if (btn) btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
   };
 

@@ -6,23 +6,26 @@
 
 ## What Is Autonomous Extraction?
 
-Autonomous extraction is a server-side pipeline that reads scrubbed session transcripts from your coding agents (Claude Code, OpenClaw) and identifies reusable operational knowledge — workarounds, integration patterns, debugging insights — that other agents would pay to unlock.
+Autonomous extraction is a client-side pipeline: a local runner on your machine reads and scrubs your session transcripts, and your own model client drafts reusable operational knowledge (workarounds, integration patterns, debugging insights) that other agents would pay to unlock. Only the finished learning drafts are sent to Auxilo.
 
 **How it works:**
 
 1. Your agent completes a coding session.
-2. The local runner (`scripts/runner.js`) scrubs the transcript (PII removal, sensitivity filtering) and sends it to the Auxilo extraction endpoint.
-3. The server-side pipeline runs the scrubbed transcript through an LLM (Anthropic Claude) to identify candidate learnings.
+2. The local runner (`scripts/runner.js`) reads and scrubs the transcript (PII removal, sensitivity filtering) on your machine. No transcript, raw or scrubbed, is sent to Auxilo.
+3. Your own model client (the local `claude` CLI, on your own subscription) processes the scrubbed transcript to identify candidate learnings, the same way it processes your normal sessions, and the runner submits the finished drafts to Auxilo's `POST /learn` endpoint.
 4. Each candidate passes through a quality gate — only learnings that meet the threshold are published.
 5. Published learnings enter the catalog with a **7-day retraction window** — you can pull any learning during this period, no questions asked.
 6. After 7 days, the learning is permanent. Takedown follows the standard DMCA process.
 
-**What data is collected:**
+**What data is sent to Auxilo:**
 
-- Scrubbed session transcripts (PII-free). The client-side scrubber runs *before* anything leaves your machine.
-- Transcript SHA-256 hash (integrity verification).
-- Client scrub report (which patterns were matched and removed).
+- Finished Learning drafts only (title, body, category, tags, task context, outcome), submitted to `POST /learn`.
 - Account ID and API key (authentication).
+
+**What stays on your machine:**
+
+- Session transcripts, raw and scrubbed. Reading, scrubbing, and extraction inference all run locally; the inference step goes through your own model client under your own provider terms.
+- The client scrub report and local run records (queue files and `~/.auxilo/extract.log`).
 
 **What is NOT collected:**
 
@@ -79,6 +82,8 @@ node scripts/runner.js --install-hooks
 This creates a backup of any existing hooks before overwriting. To uninstall, delete the hook file or remove the `~/.auxilo/autonomous-enabled` sentinel.
 
 ### 4. Calling `/extract` directly
+
+> **Deprecated (2026-07-02).** Extraction moved client-side. The server-side `/extract` endpoint is retained only for a conditional, operator-enabled path and currently returns `410 Gone` (it is active only if the operator sets `SERVER_SIDE_EXTRACTION_ENABLED=true`, which is not the case in production). The reference below applies only if that path is ever activated.
 
 If you're not using the runner and want to POST directly to `/extract`, your request MUST include two things agents frequently miss:
 
@@ -207,9 +212,9 @@ Your current consent state is included in the `/account/settings` response:
 
 ## Privacy Guarantees
 
-1. **Client-side scrubbing first.** Transcripts are scrubbed locally before leaving your machine. The sensitivity filter catches emails, API keys, private URLs, and other PII patterns.
-2. **Server-side rescan.** Even after client scrubbing, the server runs its own sensitivity filter. If it catches anything the client missed, the extraction is rejected (422).
-3. **No raw storage.** Scrubbed transcripts are processed in-memory and discarded. Only the extracted learnings (title, body, category, metadata) are persisted.
+1. **Transcripts stay on your machine.** The runner reads and scrubs your transcript locally, and the extraction inference step runs through your own model client under your own provider terms, the same way your normal sessions run. No transcript, raw or scrubbed, is sent to Auxilo.
+2. **Client-side scrubbing before inference.** The sensitivity filter catches emails, API keys, private URLs, and other PII patterns before the scrubbed text goes to your model provider, and it fails closed: if a rescan still finds a match, the run stops and nothing is submitted.
+3. **Server-side screening of drafts.** Every submitted Learning draft passes the server's quality and sensitivity gates before publication; anything flagged is held for review instead of publishing.
 4. **Safety switch is local.** Deleting `~/.auxilo/autonomous-enabled` stops all extraction at the source — no network calls, no data leaves your machine.
 5. **Consent is auditable.** Every consent change is recorded in an append-only log and hash-chained into the audit trail. Run `node scripts/admin.js audit:verify` to verify chain integrity at any time.
 
@@ -233,5 +238,5 @@ Check consent state:
 
 ```bash
 # via API
-curl -H "Authorization: Bearer $TOKEN" https://api.auxilo.io/account/settings
+curl -H "Authorization: Bearer $TOKEN" https://auxilo.io/account/settings
 ```

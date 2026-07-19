@@ -10,14 +10,19 @@ const {
   ListToolsRequestSchema,
 } = require('@modelcontextprotocol/sdk/types.js');
 
+// Review-seamless: pure selection + chunking helpers shared with the CLI so the
+// MCP dry run and the confirmed run use the SAME logic (lib/review.js ships in
+// the npm package alongside this file).
+const reviewLib = require('./lib/review.js');
+
 // Credential file reading — auto-configure base URL and API key
 const CRED_PATH = path.join(os.homedir(), '.auxilo', 'credentials.json');
 let credentials = {};
 try {
     credentials = JSON.parse(fs.readFileSync(CRED_PATH, 'utf8'));
 } catch { /* no credentials file — unauthenticated mode */ }
-// LW-17: default was a long-dead Conway sandbox URL — fresh installs without
-// credentials.json pointed every tool call at it.
+// LW-17: default was a long-dead sandbox URL on a retired host, so fresh installs
+// without credentials.json pointed every tool call at it.
 const AUXILO_BASE = credentials.base_url || 'https://auxilo.io';
 
 function baseHeaders(extra = {}) {
@@ -53,6 +58,105 @@ function fenceUnlockResult(data) {
     content_advisory: data.content_advisory || UNTRUSTED_CONTENT_ADVISORY,
     body_fenced,
   };
+}
+
+// AUD19-5: decide how the unlock handler presents a payment-required response.
+// 402 = x402-first challenge (server >= AUD19-5: accepts[] merged with the
+// options envelope, served cold). 401-with-options = legacy servers that only
+// returned the options block — same meaning, no accepts[]. Returns null when
+// the response is not a payment challenge (caller falls through to
+// fenceUnlockResult). Pure (no I/O) — unit-tested.
+function unlockPaymentRequired(status, data, http_endpoint) {
+  const isChallenge = status === 402 || (status === 401 && data && data.options);
+  if (!isChallenge) return null;
+  const price = data.accepts?.[0]?.maxAmountRequired
+    ? `$${(Number(data.accepts[0].maxAmountRequired) / 1_000_000).toFixed(4)}`
+    : (data.options?.x402_payment?.price_usd != null
+        ? `$${Number(data.options.x402_payment.price_usd).toFixed(4)}` : 'dynamic');
+  return {
+    status: 'payment_required',
+    cost: `${price} USDC on Base (set by contributor)`,
+    how_to_pay: 'Pass an x402 payment via the x_payment argument, or configure an API key with unlock credits (npx auxilo setup).',
+    http_endpoint,
+    payment_details: data,
+  };
+}
+
+// AUD19-7 (DASH/ROUTE): shape the status-and-routing response for
+// auxilo_withdraw from a GET /account/earnings body. This tool reports
+// balances and the payout path; it NEVER moves funds and never calls
+// POST /withdraw. Pure (no I/O) — unit-tested.
+function shapeWithdrawStatus(e) {
+  return {
+    payout_model: 'Earnings from on-chain-settled sales are paid to your linked wallet at sale time. Only the legacy accrued balance below is withdrawable.',
+    legacy_pending_balance_usd: e.pending_balance,
+    held_pending_terms_acceptance_usd: e.unassented_pending,
+    payouts_paused: e.payouts_paused,
+    how_to_withdraw_legacy_balance: e.payouts_paused
+      ? 'Withdrawals of the legacy balance are paused during the settlement migration. Your balance is recorded and payable under the Terms; watch https://auxilo.io/status for the reopen.'
+      : 'Withdraw from your dashboard: https://auxilo.io/dashboard (bank payout via Stripe; $0.50 minimum, $0.25 fee).',
+    get_paid_at_sale_time: 'auxilo_accept_terms -> auxilo_verify_wallet -> auxilo_link_wallet',
+  };
+}
+
+// AUD19-7: the verify-wallet surface legitimately needs only the wallet-
+// verification flow. Forwarding the raw args object let a caller mint OTHER
+// challenge types (/wallet/challenge honors action:'withdrawal') through an
+// undocumented passthrough — closed: only wallet + signature ever travel, so
+// the server's default (verification) action always applies. Pure — unit-tested.
+function verifyWalletRequestBody(args) {
+  return {
+    wallet: args.wallet,
+    ...(args.signature && { signature: args.signature }),
+  };
+}
+
+// Review-seamless: build the approve_clean dry-run plan from a summary payload.
+// Pure (no I/O) so the dry-run shape is unit-testable; the selection itself is
+// reviewLib.selectForBulkApprove, the SAME function the CLI uses.
+function planApproveClean(summary, opts = {}) {
+  const minQuality = Number.isFinite(opts.min_quality) ? opts.min_quality : reviewLib.DEFAULT_QUALITY_THRESHOLD;
+  const sel = reviewLib.selectForBulkApprove((summary && summary.items) || [], { mode: 'clean', minQuality });
+  const brief = (r) => ({ id: r.id, title: r.title, category: r.category, quality: r.quality });
+  return {
+    dry_run: true,
+    min_quality: minQuality,
+    pending_count: summary ? summary.pending_count : 0,
+    would_approve_count: sel.selected.length,
+    would_approve: sel.selected.map(brief),
+    excluded_flagged_count: sel.excluded_flagged.length,
+    excluded_flagged: sel.excluded_flagged.map((r) => ({ ...brief(r), flags: r.flags })),
+    excluded_low_quality_count: sel.excluded_low_quality.length,
+    excluded_unscored_count: sel.excluded_unscored.length,
+    next_step: sel.selected.length > 0
+      ? `Show the operator this list and count (${sel.selected.length}). Only after their explicit confirmation, call auxilo_review again with {action:"approve_clean", dry_run:false, confirm:true, expected_count:${sel.selected.length}}. Approved items become PUBLIC immediately.`
+      : 'Nothing qualifies at this threshold. No follow-up call needed.',
+  };
+}
+
+// Review-seamless: POST one confirmed decision batch through the counted bulk
+// endpoint, chunked at the server cap. Used by approve/reject/approve_clean.
+async function postBulkChunks(headers, decisions) {
+  const totals = { approved: 0, rejected: 0, idempotent: 0, failed: 0, results: [] };
+  for (const chunk of reviewLib.chunkDecisions(decisions)) {
+    const resp = await fetch(`${AUXILO_BASE}/account/pending/bulk`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ decisions: chunk, confirm_count: chunk.length }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      totals.error = data.error || `HTTP ${resp.status}`;
+      totals.error_code = data.code;
+      return totals;
+    }
+    totals.approved += data.approved || 0;
+    totals.rejected += data.rejected || 0;
+    totals.idempotent += data.idempotent || 0;
+    totals.failed += data.failed || 0;
+    if (Array.isArray(data.results)) totals.results.push(...data.results);
+  }
+  return totals;
 }
 
 const server = new Server(
@@ -130,7 +234,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_contribute',
-      description: 'Submit operational knowledge you discovered during this session to the Auxilo marketplace. WHEN TO USE: Call this AFTER you solve a non-trivial problem that required debugging, experimentation, or combining information from multiple sources. Call it when you discover undocumented behavior, a workaround, or a subtle edge case. Do NOT call it for trivial lookups or standard documentation answers. QUALITY GATE: Self-assess on Specificity, Actionability, Novelty, Completeness (1-5 each). Only submit if total >= 14/20, no dimension below 3. DEDUP: Search auxilo_knowledge first to avoid duplicates. SENSITIVITY (mandatory self-screen): never include secrets, credentials, API keys, PII, private filesystem paths, or proprietary/client business content — generalize to placeholders or omit; this is a PUBLIC marketplace. PRICING: Leave unlock_price unset to let the dynamic pricing engine calculate automatically (recommended). If setting manually: $0.05-$0.10 common techniques, $0.10-$1.00 specific solutions, $1.00-$10.00 novel discoveries, $10.00-$50.00 breakthroughs. Minimum $0.05, maximum $50.00. Free to submit — you earn 70% when others unlock.',
+      description: 'Submit operational knowledge you discovered during this session to the Auxilo marketplace. WHEN TO USE: Call this AFTER you solve a non-trivial problem that required debugging, experimentation, or combining information from multiple sources. Call it when you discover undocumented behavior, a workaround, or a subtle edge case. Do NOT call it for trivial lookups or standard documentation answers. QUALITY GATE: Self-assess on Specificity, Actionability, Novelty, Completeness (1-5 each) and ALWAYS include your scores in quality_self_assessment — a submission WITHOUT it is held for manual review instead of publishing seamlessly. Only submit if total >= 14/20, no dimension below 3 (the server quarantines below-floor submissions for review). DEDUP: Search auxilo_knowledge first to avoid duplicates. SENSITIVITY (mandatory self-screen): never include secrets, credentials, API keys, PII, private filesystem paths, or proprietary/client business content — generalize to placeholders or omit; this is a PUBLIC marketplace. PRICING: Leave unlock_price unset to let the dynamic pricing engine calculate automatically (recommended). If setting manually: $0.05-$0.10 common techniques, $0.10-$1.00 specific solutions, $1.00-$10.00 novel discoveries, $10.00-$50.00 breakthroughs. Minimum $0.05, maximum $50.00. Free to submit — you earn 70% when others unlock. If the result is status pending_review, follow its how_to_review instructions (self-approval via `auxilo review`, the dashboard queue, or GET /account/pending).',
       inputSchema: {
         type: 'object',
         properties: {
@@ -140,12 +244,25 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           tags: { type: 'array', items: { type: 'string' }, description: 'Relevant keywords' },
           task_context: { type: 'string', description: 'What task were you performing?' },
           outcome: { type: 'string', enum: ['success', 'partial', 'failure', 'workaround'] },
+          quality_self_assessment: {
+            type: 'object',
+            description: 'Your quality self-assessment. ALWAYS include this — without it the submission is held for manual review. Score each dimension 1-5; total MUST equal their sum (server-verified). Submissions below the floor (total < 14 or any dimension < 3) are quarantined for review rather than published.',
+            properties: {
+              specificity: { type: 'integer', minimum: 1, maximum: 5, description: 'How precise and detailed? (1-5)' },
+              actionability: { type: 'integer', minimum: 1, maximum: 5, description: 'Can another agent directly use this? (1-5)' },
+              novelty: { type: 'integer', minimum: 1, maximum: 5, description: 'Non-obvious / would an LLM get it wrong? (1-5)' },
+              completeness: { type: 'integer', minimum: 1, maximum: 5, description: 'Full context, reproduction steps, caveats? (1-5)' },
+              total: { type: 'integer', minimum: 4, maximum: 20, description: 'Sum of the four dimensions (server rejects mismatched totals)' },
+              reasoning: { type: 'string', description: 'Optional: one-line justification for your scores' },
+            },
+            required: ['specificity', 'actionability', 'novelty', 'completeness', 'total'],
+          },
           contributor_wallet: { type: 'string', description: 'Your Base wallet (0x...) for revenue share' },
           unlock_price: { type: 'number', description: 'Price in USD to unlock this learning (min $0.05, default auto-calculated). Set higher for deep, high-value knowledge.' },
           contributor_agent: { type: 'string', description: 'Optional: identify yourself' },
           related_skills: { type: 'array', items: { type: 'string' }, description: 'Optional: related Auxilo skill IDs' },
         },
-        required: ['title', 'body', 'category', 'tags', 'task_context', 'outcome'],
+        required: ['title', 'body', 'category', 'tags', 'task_context', 'outcome', 'quality_self_assessment'],
       },
     },
     {
@@ -166,7 +283,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_unlock',
-      description: 'Unlock full learning content by ID. Price is set by the contributor (min $0.05 USDC). 70% goes to the contributor who shared this knowledge. Check unlock_price_usd in search results to see the cost before unlocking.',
+      description: 'Unlock full learning content by ID. Price is set by the contributor (min $0.05 USDC). 70% of the amount you pay goes to the contributor who shared this knowledge. Check unlock_price_usd in search results to see the cost before unlocking.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -203,20 +320,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_withdraw',
-      description: 'Request withdrawal of earned USDC. Requires a valid cryptographic signature of: "auxilo-withdraw-{wallet}-{amount}-{timestamp}". NOTE: withdrawals are TEMPORARILY PAUSED during the non-custodial settlement migration — this call currently returns HTTP 503 with code "withdraw_paused_noncustodial_migration". Earned balances are safe and become payable on the new on-chain rail; there is nothing to retry until the pause lifts.',
+      description: 'Check how your earnings are paid out, and how to receive any legacy accrued balance. HOW PAYOUT WORKS NOW: earnings from sales settled on-chain are paid directly to your linked, verified wallet at the moment of sale — there is no balance to withdraw for those, because Auxilo never holds your share. LEGACY BALANCE: earnings accrued before direct settlement sit in your account\'s pending balance; withdraw them from your dashboard at https://auxilo.io/dashboard (bank payout via Stripe; $0.50 minimum, $0.25 flat fee), where you sign in with the email on your account. This tool reports your current balances and payout status; it does not move funds. To be paid at sale time going forward: auxilo_accept_terms, then auxilo_verify_wallet, then auxilo_link_wallet.',
       inputSchema: {
         type: 'object',
         properties: {
-          wallet: { type: 'string', description: 'Verified contributor wallet address (0x...)' },
-          signature: { type: 'string', description: 'Signature of the withdrawal payload' },
-          timestamp: { type: 'number', description: 'Unix timestamp in milliseconds (must be within 5 mins of server time)' }
+          session_token: { type: 'string', description: 'Optional JWT session token from /auth/verify. If omitted, your configured API key authenticates the account.' }
         },
-        required: ['wallet', 'signature', 'timestamp']
+        required: []
       }
     },
     {
       name: 'auxilo_settlements',
-      description: 'Check settlement history and processing status for withdrawals on a given wallet. Free.',
+      description: 'Check settlement history and processing status for a given wallet. Lists on-chain router settlements (per-sale receipts paid to your wallet at sale time), not only withdrawal history. Free.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -238,11 +353,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_link_wallet',
-      description: 'Link a verified wallet address to your Auxilo account. Authenticates with your configured API key automatically, or pass a session_token (JWT from magic link login). The wallet must have been previously verified via auxilo_verify_wallet. One wallet per account. Required to withdraw earnings. NOTE: you must first accept the current Terms via auxilo_accept_terms — linking a payout wallet triggers the §5.10 payment-collection agency and returns 403 TERMS_NOT_ACCEPTED until acceptance is on file.',
+      description: 'Link a verified wallet address to your Auxilo account. Authenticates with your configured API key automatically, or pass a session_token (JWT from magic link login). The wallet must have been previously verified via auxilo_verify_wallet. One wallet per account. Required to be paid at sale time on the on-chain settlement rail (and to receive any legacy balance on the USDC rail if it reopens). TWO-STEP FLOW (linking requires FRESH proof you control the wallet, bound to your account): (1) call with just the wallet — the server returns 401 link_signature_required with an EIP-712 challenge payload (single-use, 5-minute expiry, the account id is bound into the signed action string); (2) sign that exact typed-data payload with the wallet\'s private key and call again with the signature. A signature for another account\'s challenge will not verify. NOTE: you must first accept the current Terms via auxilo_accept_terms — linking a payout wallet triggers the §5.10 payment-collection agency and returns 403 TERMS_NOT_ACCEPTED until acceptance is on file. If the link adopts previously wallet-only submissions into your account, the response lists their ids (adopted_learning_ids).',
       inputSchema: {
         type: 'object',
         properties: {
           wallet: { type: 'string', description: 'Verified wallet address (0x...) to link to your account' },
+          signature: { type: 'string', description: 'EIP-712 signature of the link challenge, produced by the wallet\'s key. Omit on the first call to receive the challenge payload to sign.' },
           session_token: { type: 'string', description: 'Optional JWT session token from /auth/verify. If omitted, your configured API key authenticates the account.' },
         },
         required: ['wallet'],
@@ -250,7 +366,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_account_earnings',
-      description: 'View earnings for your authenticated Auxilo account. Authenticates with your configured API key automatically, or pass a session_token (JWT). Returns total gross, contributor share, pending balance, total withdrawn, and whether withdrawal is available (can_withdraw). Free.',
+      description: 'View earnings for your authenticated Auxilo account. Authenticates with your configured API key automatically, or pass a session_token (JWT). Returns total gross, contributor share, pending balance, total withdrawn, whether withdrawal is available (can_withdraw), and held_pending_assent — undisbursable receipts recorded before you accepted the current Terms, released to your withdrawable balance when you accept via auxilo_accept_terms. Earnings from on-chain-settled sales are paid to your wallet at sale time and appear in settlement history, not in pending balance. Free.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -273,55 +389,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: 'renderly_markdown',
-      description: 'Convert any public URL to clean markdown. Strips navigation, ads, and boilerplate — returns only the meaningful content. Costs $0.001 USDC via x402 or API key.',
+      name: 'auxilo_review',
+      description: 'Review YOUR OWN pending-review learnings (from background extraction) so they can be approved to the public marketplace or rejected to stay private. Account-scoped: only the authenticated account\'s own pending items are ever visible or affected. ACTIONS: "list" returns the triage summary (counts + compact rows with quality score and platform screen verdicts: injection, content sensitivity, near-duplicate). "approve" / "reject" apply explicit decisions to the ids you pass (the operator must have named or confirmed these items). "approve_clean" selects every item that passed ALL platform screens AND has quality >= min_quality (default 14/20); it is DRY-RUN BY DEFAULT and returns exactly what WOULD be approved. CONSENT CONTRACT: nothing goes public without the contributor\'s explicit approval. So before executing approve_clean you MUST show the operator the dry-run list and count and get their confirmation, then call again with dry_run:false, confirm:true, and expected_count set to the dry-run count. The server also enforces a counted-confirmation gate on every bulk call. Requires your configured API key (or session_token).',
       inputSchema: {
         type: 'object',
         properties: {
-          url: { type: 'string', description: 'Public URL to convert to markdown' },
-          x_payment: { type: 'string', description: 'x402 payment header' },
+          action: { type: 'string', enum: ['list', 'approve', 'reject', 'approve_clean'], description: 'What to do. Start with "list".' },
+          ids: { type: 'array', items: { type: 'string' }, description: 'Learning ids for action approve/reject. These must be items the operator explicitly chose.' },
+          reason: { type: 'string', description: 'Optional rejection reason (action reject; max 500 chars).' },
+          dry_run: { type: 'boolean', description: 'approve_clean only. Default TRUE: report what would be approved without changing anything. Set false only together with confirm:true and expected_count after the operator confirmed the dry-run list.' },
+          confirm: { type: 'boolean', description: 'approve_clean only. Must be exactly true to execute. Never set this without the operator\'s explicit go-ahead on the dry-run output.' },
+          expected_count: { type: 'number', description: 'approve_clean execute only. The count from the dry run, echoed back. If the live selection differs (queue changed), nothing is approved and a fresh dry run is returned.' },
+          min_quality: { type: 'number', description: 'approve_clean quality threshold 0-20 (default 14). 0 includes unscored items.' },
+          session_token: { type: 'string', description: 'Optional JWT session token from /auth/verify. If omitted, your configured API key authenticates the account.' },
         },
-        required: ['url'],
+        required: ['action'],
       },
-    },
-    {
-      name: 'renderly_extract',
-      description: 'Extract structured data from any public URL — title, description, headings, links, images, and meta tags. Costs $0.001 USDC via x402 or API key.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          url: { type: 'string', description: 'Public URL to extract structured data from' },
-          x_payment: { type: 'string', description: 'x402 payment header' },
-        },
-        required: ['url'],
-      },
-    },
-    {
-      name: 'renderly_readable',
-      description: 'Get plain readable text from any public URL — no markdown formatting, no HTML, just the content. Costs $0.0005 USDC via x402 or API key.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          url: { type: 'string', description: 'Public URL to extract readable text from' },
-          x_payment: { type: 'string', description: 'x402 payment header' },
-        },
-        required: ['url'],
-      },
-    },
-    {
-      name: 'renderly_llms_txt',
-      description: 'Get the LLM-readable service description for Renderly — what it does, endpoints, and usage. Free.',
-      inputSchema: { type: 'object', properties: {} },
-    },
-    {
-      name: 'renderly_health',
-      description: 'Check Renderly service health status. Free.',
-      inputSchema: { type: 'object', properties: {} },
-    },
-    {
-      name: 'renderly_pricing',
-      description: 'Get Renderly pricing information for all endpoints. Free.',
-      inputSchema: { type: 'object', properties: {} },
     },
     {
       name: 'get_stats',
@@ -389,6 +472,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             tags: args.tags,
             task_context: args.task_context,
             outcome: args.outcome,
+            // AUD19-4: pass the quality self-assessment through — without it the
+            // server can never seamless-publish (qualityPresent is false) and every
+            // MCP contribution lands pending_review with 'awaiting_quality'.
+            ...(args.quality_self_assessment && { quality_self_assessment: args.quality_self_assessment }),
             ...(args.contributor_wallet && { contributor_wallet: args.contributor_wallet }),
             unlock_price: args.unlock_price,
             contributor_agent: args.contributor_agent,
@@ -421,10 +508,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         const resp = await fetch(`${AUXILO_BASE}/knowledge/${args.id}`, { headers });
         const data = await resp.json();
-        if (resp.status === 402) {
-          const price = data.accepts?.[0]?.maxAmountRequired ? `$${(Number(data.accepts[0].maxAmountRequired) / 1_000_000).toFixed(4)}` : 'dynamic';
-          return text({ status: 'payment_required', cost: `${price} USDC on Base (set by contributor)`, http_endpoint: `${AUXILO_BASE}/knowledge/${args.id}`, payment_details: data });
-        }
+        // AUD19-5: handle BOTH the 402-first challenge (server >= the fix,
+        // accepts[] served cold) and the legacy 401-with-options shape from
+        // older live servers — same meaning, no accepts[].
+        const challenge = unlockPaymentRequired(resp.status, data, `${AUXILO_BASE}/knowledge/${args.id}`);
+        if (challenge) return text(challenge);
         // LW-3(a): fence the contributor body so the LLM treats it as data, not instructions.
         return text(fenceUnlockResult(data));
       }
@@ -440,33 +528,36 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'auxilo_verify_wallet': {
         const url = args.signature ? `${AUXILO_BASE}/wallet/verify` : `${AUXILO_BASE}/wallet/challenge`;
+        // AUD19-7: whitelist the request body — only wallet + signature travel.
+        // (Forwarding raw args let a caller mint a withdrawal-action challenge
+        // through an undocumented passthrough; the MCP surface only needs the
+        // default verification action.)
         const resp = await fetch(url, {
           method: 'POST',
           headers: baseHeaders(),
-          body: JSON.stringify(args)
+          body: JSON.stringify(verifyWalletRequestBody(args))
         });
         return text(await resp.json());
       }
 
       case 'auxilo_withdraw': {
-        const resp = await fetch(`${AUXILO_BASE}/withdraw`, {
-          method: 'POST',
-          headers: baseHeaders(),
-          body: JSON.stringify(args)
+        // AUD19-7 (DASH/ROUTE): honest status-and-routing tool. Reads
+        // GET /account/earnings and reports balances + the real payout path.
+        // It never attempts a custodial withdrawal (no POST /withdraw) — new
+        // earnings settle to the linked wallet at sale time; the legacy
+        // balance exits via the dashboard (Stripe) rail.
+        const resp = await fetch(`${AUXILO_BASE}/account/earnings`, {
+          headers: baseHeaders(args.session_token ? { 'Authorization': `Bearer ${args.session_token}` } : {}),
         });
-        const data = await resp.json();
-        // R-01: the custodial USDC rail is paused during the non-custodial
-        // migration and returns 503 withdraw_paused_noncustodial_migration.
-        // Surface that as a plain, human-legible note instead of a raw error
-        // blob so the agent doesn't treat it as a transient failure to retry.
-        if (resp.status === 503 && data && data.code === 'withdraw_paused_noncustodial_migration') {
+        const e = await resp.json();
+        if (resp.status === 401) {
           return text({
-            status: 'paused',
-            message: 'Withdrawals are temporarily paused while Auxilo migrates to direct on-chain (non-custodial) settlement. Your earned balance is safe and will be payable on the new rail once the migration completes. This is expected — do not retry; nothing is wrong with your account or signature.',
-            server_response: data,
+            error: 'Not authenticated. Run npx auxilo setup to create credentials, or pass session_token. Balances are account-scoped.',
+            server_response: e,
           });
         }
-        return text(data);
+        if (!resp.ok) return text(e);
+        return text(shapeWithdrawStatus(e));
       }
 
       case 'auxilo_settlements': {
@@ -489,9 +580,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           headers: baseHeaders(
             args.session_token ? { 'Authorization': `Bearer ${args.session_token}` } : {}
           ),
-          body: JSON.stringify({ wallet: args.wallet }),
+          // HIGH-1: pass the link signature through when present (step 2 of the
+          // two-step link flow — see the tool description).
+          body: JSON.stringify({
+            wallet: args.wallet,
+            ...(args.signature && { signature: args.signature }),
+          }),
         });
-        return text(await resp.json());
+        const data = await resp.json();
+        // HIGH-1: the challenge response is expected, not an error — surface it
+        // as the next step so the agent signs and calls again instead of
+        // treating the 401 as a failure.
+        if (resp.status === 401 && data && data.code === 'link_signature_required') {
+          return text({
+            status: 'signature_required',
+            message: 'Expected first-step response: sign the eip712 payload below with the wallet\'s private key (EIP-712 typed data — the account id is bound into the action string), then call auxilo_link_wallet again with the same wallet plus the signature. The challenge is single-use and expires in 5 minutes.',
+            server_response: data,
+          });
+        }
+        return text(data);
       }
 
       case 'auxilo_account_earnings': {
@@ -531,82 +638,72 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return text(await resp.json());
       }
 
-      case 'renderly_markdown': {
-        const headers = baseHeaders();
-        if (args.x_payment) headers['X-Payment'] = args.x_payment;
+      case 'auxilo_review': {
+        // Same auth idiom as the other account tools: session JWT when
+        // provided, else the configured API key via baseHeaders().
+        const headers = baseHeaders(
+          args.session_token ? { 'Authorization': `Bearer ${args.session_token}` } : {}
+        );
 
-        const resp = await fetch(`${AUXILO_BASE}/renderly/markdown`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ url: args.url }),
-        });
-        const data = await resp.json();
-        if (resp.status === 402) {
+        if (args.action === 'list') {
+          const resp = await fetch(`${AUXILO_BASE}/account/pending/summary`, { headers });
+          return text(await resp.json());
+        }
+
+        if (args.action === 'approve' || args.action === 'reject') {
+          if (!Array.isArray(args.ids) || args.ids.length === 0) {
+            return text({ error: `action "${args.action}" requires a non-empty ids array. Run {action:"list"} first and pass the ids the operator chose.` });
+          }
+          const decisions = args.ids.map((id) => (args.action === 'reject' && args.reason)
+            ? { id, decision: 'reject', reason: args.reason }
+            : { id, decision: args.action });
+          const totals = await postBulkChunks(headers, decisions);
+          return text({ action: args.action, submitted: decisions.length, ...totals });
+        }
+
+        if (args.action === 'approve_clean') {
+          const summaryResp = await fetch(`${AUXILO_BASE}/account/pending/summary`, { headers });
+          const summary = await summaryResp.json();
+          if (!summaryResp.ok) return text(summary);
+
+          const plan = planApproveClean(summary, args);
+
+          // DRY RUN unless the operator-confirmed execute contract is complete:
+          // dry_run explicitly false AND confirm exactly true.
+          if (args.dry_run !== false || args.confirm !== true) {
+            return text(plan);
+          }
+
+          // Counted confirmation: the execute call must echo the dry-run count.
+          if (!Number.isInteger(args.expected_count)) {
+            return text({
+              error: 'expected_count is required to execute approve_clean: echo the would_approve_count from the dry run. This is the counted-confirmation gate.',
+              ...plan,
+            });
+          }
+          if (args.expected_count !== plan.would_approve_count) {
+            return text({
+              error: `Selection changed since the dry run (expected ${args.expected_count}, now ${plan.would_approve_count}). Nothing was approved. Re-run the dry run and re-confirm with the operator.`,
+              ...plan,
+            });
+          }
+          if (plan.would_approve_count === 0) {
+            return text({ action: 'approve_clean', approved: 0, message: 'Nothing qualifies at this threshold.' });
+          }
+
+          const decisions = plan.would_approve.map((r) => ({ id: r.id, decision: 'approve' }));
+          const totals = await postBulkChunks(headers, decisions);
           return text({
-            status: 'payment_required',
-            cost: '$0.001 USDC on Base',
-            http_endpoint: `${AUXILO_BASE}/renderly/markdown`,
-            payment_details: data,
+            action: 'approve_clean',
+            executed: true,
+            min_quality: plan.min_quality,
+            submitted: decisions.length,
+            ...totals,
+            note: 'Approved items are now PUBLIC on the marketplace. Screen-flagged and below-threshold items remain pending for individual review.',
           });
         }
-        return text(data);
-      }
 
-      case 'renderly_extract': {
-        const headers = baseHeaders();
-        if (args.x_payment) headers['X-Payment'] = args.x_payment;
-
-        const resp = await fetch(`${AUXILO_BASE}/renderly/extract`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ url: args.url }),
-        });
-        const data = await resp.json();
-        if (resp.status === 402) {
-          return text({
-            status: 'payment_required',
-            cost: '$0.001 USDC on Base',
-            http_endpoint: `${AUXILO_BASE}/renderly/extract`,
-            payment_details: data,
-          });
-        }
-        return text(data);
-      }
-
-      case 'renderly_readable': {
-        const headers = baseHeaders();
-        if (args.x_payment) headers['X-Payment'] = args.x_payment;
-
-        const resp = await fetch(`${AUXILO_BASE}/renderly/readable`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ url: args.url }),
-        });
-        const data = await resp.json();
-        if (resp.status === 402) {
-          return text({
-            status: 'payment_required',
-            cost: '$0.0005 USDC on Base',
-            http_endpoint: `${AUXILO_BASE}/renderly/readable`,
-            payment_details: data,
-          });
-        }
-        return text(data);
-      }
-
-      case 'renderly_llms_txt': {
-        const resp = await fetch(`${AUXILO_BASE}/renderly/llms.txt`, { headers: baseHeaders() });
-        return text(await resp.json());
-      }
-
-      case 'renderly_health': {
-        const resp = await fetch(`${AUXILO_BASE}/renderly/health`, { headers: baseHeaders() });
-        return text(await resp.json());
-      }
-
-      case 'renderly_pricing': {
-        const resp = await fetch(`${AUXILO_BASE}/renderly/pricing`, { headers: baseHeaders() });
-        return text(await resp.json());
+        return text({ error: `Unknown action: ${args.action}. Use list, approve, reject, or approve_clean.` });
       }
 
       case 'get_stats': {
@@ -634,7 +731,7 @@ function text(obj) {
 // LW-3(a): export the pure helpers so they can be unit-tested without starting
 // the stdio transport. When this file is required (not run directly), stop here
 // before the CLI dispatch and MCP startup below.
-module.exports = { fenceUnlockResult, UNTRUSTED_CONTENT_ADVISORY, baseHeaders };
+module.exports = { fenceUnlockResult, UNTRUSTED_CONTENT_ADVISORY, baseHeaders, planApproveClean, unlockPaymentRequired, shapeWithdrawStatus, verifyWalletRequestBody };
 if (require.main !== module) {
   return;
 }

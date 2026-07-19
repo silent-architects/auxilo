@@ -1,7 +1,7 @@
 # Privacy Policy
 
 **Effective Date: March 17, 2026**
-**Last Updated: July 6, 2026**
+**Last Updated: July 18, 2026**
 
 ---
 
@@ -30,7 +30,7 @@ When Builders submit Learnings to the Platform, we collect:
 - **Learning content.** The full text, title, body, categories, tags, and any metadata included in the submission.
 - **Submission metadata.** Timestamps, quality scores assigned by our automated systems, publication status, sensitivity filter results, and content categorization data.
 - **Builder wallet address.** The wallet address associated with each submission, used for earnings attribution and payout settlement.
-- **Autonomous extraction transcripts.** When Builders enable Autonomous Extraction (ToS §5.9.3), redacted session transcripts are transmitted to our servers for processing. Raw transcripts are not permanently stored; after extraction they are replaced by a SHA-256 content hash retained for audit purposes. The client-side runner applies a PII redaction pass before transmission.
+- **Autonomous extraction Learning drafts.** When Builders enable Autonomous Extraction (ToS §5.9.3), session transcripts are processed locally on the Builder's machine, and the extraction inference step runs through the Builder's own model client under the Builder's own provider terms, the same way the Builder's normal agent sessions run. Our servers do not receive session transcripts, raw or scrubbed. What we collect is the finished Learning draft (title, body, category, tags, task context, and outcome) that the runner submits. An optional server-side extraction path exists in our software but is disabled and not currently active; if it is ever activated, we will update this policy and Section 3.8 first (see Section 7.6).
 
 ### 1.3 Transaction and Payment Data
 
@@ -71,6 +71,17 @@ For clarity, we do not collect:
 - Private keys or seed phrases.
 - Social security numbers or government identification numbers.
 - Financial account numbers (bank accounts, credit card numbers) — x402 payments are blockchain-native and credit pack payments are processed by third-party payment processors who handle card data directly.
+
+### 1.7 Withdrawal Notification Waitlist
+
+If you join the waitlist on our status or builder pages to be told when withdrawals open, we collect:
+
+- **Email address.** The address you enter in the signup form.
+- **Signup details.** The date and time you joined and which page you signed up from.
+
+We use your email address to notify you when withdrawals go live and to send you occasional updates about that rollout. We do not use it for anything else, we do not sell it, and we do not share it beyond the sub-processors listed in Section 3.8 (our email delivery provider sends the notification). We do not store your IP address with your waitlist entry, and we will not send you marketing emails unless you separately opt in.
+
+You can have your address removed from the waitlist at any time by emailing hello@auxilo.io, and we will delete it.
 
 ---
 
@@ -154,7 +165,7 @@ We engage the following third-party sub-processors to process personal data on o
 
 | Sub-Processor | Purpose | Data Categories Shared |
 |---|---|---|
-| Anthropic, PBC | Conversation text processing for Learning extraction (manual and autonomous) via the Claude API | Redacted conversation text uploaded by the Builder (temporarily, during extraction only; PII scrubbed before transmission) |
+| Anthropic, PBC | Automated sensitivity screening of submitted Learning content before publication, via the Claude API | Submitted Learning text (title, body, tags) only; no session transcripts (extraction runs on the Builder's machine; see Section 7.6) |
 | Resend, Inc. | Transactional email delivery (magic-link sign-in emails and account/operational notifications) | Email address and email content, for delivery only |
 | Stripe, Inc. | Payment processing for credit pack purchases and Builder withdrawals via Stripe Connect | Email address, payout destination information, transaction amounts |
 | Coinbase, Inc. (Base network) | Blockchain settlement of x402 micropayments on the Base Ethereum Layer 2 network | Wallet addresses, transaction amounts, payment proofs (recorded on-chain and inherently public) |
@@ -262,7 +273,9 @@ The auxilo.io website loads its display fonts from Google Fonts (`fonts.googleap
 
 ### 7.6 LLM Providers (Autonomous Extraction)
 
-When Builders enable Autonomous Extraction (ToS §5.9.3), redacted session transcripts are transmitted to our LLM subprocessor(s) for the sole purpose of extracting candidate Learnings. At the effective date, the sole such subprocessor is **Anthropic, PBC** under commercial terms that prohibit Anthropic from using submitted content for model training. Auxilo applies client-side and server-side PII redaction before any transcript reaches the subprocessor. For the current subprocessor list, see §3.8 and https://auxilo.io/legal/subprocessors.
+When Builders enable Autonomous Extraction (ToS §5.9.3), the extraction inference step runs on the Builder's side, not ours. The Builder's own model client processes the locally scrubbed session transcript under the Builder's own agreement with their model provider, the same way it processes the Builder's normal agent sessions. Our servers do not receive session transcripts, raw or scrubbed, and no transcript passes through an LLM subprocessor engaged by Auxilo. The only extraction output transmitted to Auxilo is the finished Learning draft (title, body, category, tags, task context, and outcome).
+
+Our software also contains an optional server-side extraction path. It is disabled by default and is not currently active. If we ever activate it, session transcripts would be processed by an LLM subprocessor on our behalf, and we will update this policy and the sub-processor list in Section 3.8 before doing so. For the current subprocessor list, see §3.8 and https://auxilo.io/legal/subprocessors.
 
 ---
 
@@ -384,4 +397,4 @@ We aim to respond to all privacy-related inquiries within 30 days.
 
 ---
 
-*This Privacy Policy was last updated on July 6, 2026.*
+*This Privacy Policy was last updated on July 18, 2026.*

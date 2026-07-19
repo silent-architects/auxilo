@@ -101,7 +101,7 @@ stand before ANY mainnet flag-enable.**
    server-side salt→hint store (TTL 15 min, cap 5000, single-use on settle
    success) pins the advertised split so the settle broadcasts exactly what
    the buyer signed. SCOPE DECISION: `x402Gate` fixed-price platform-service
-   routes (extract, renderly, …) intentionally STAY on the legacy
+   routes (extract, …) intentionally STAY on the legacy
    payTo-platform rail even in router mode — those payments are for Auxilo's
    own services, no third-party funds, no custody exposure.
 3. **Unlock handler — DONE 2026-07-03 (flag-gated).** Resolves + validates the

@@ -10,8 +10,11 @@ const {
   createNonce,
   consumeNonce,
   verifyChallengeSignature,
+  linkAction,
+  verifyLinkSignature,
   verifyWithdrawalSignature,
   EIP712_DOMAIN,
+  CHALLENGE_TYPES,
 } = require('./lib/eip712.js');
 const { scanLearning, scanText, getRedactionHint, SENSITIVITY_FILTER_VERSION } = require('./lib/sensitivity-filter.js');
 const { screenLearningSafe } = require('./lib/injection-screen.js'); // LW-13 / LW-3(b)
@@ -22,10 +25,8 @@ const {
   isLlmSensitivityEnabled,
 } = require('./lib/content-sensitivity-llm.js'); // LW-16 content-sensitivity gate (LLM semantic layer)
 const { findNearDuplicate } = require('./lib/similarity.js'); // LW-14
-const { listOwnPending, applySelfDecision } = require('./lib/self-review.js'); // LW-15
-const { fetchPage, stripNonContent, htmlToMarkdown, extractStructured, validateUrl, LLMS_TXT } = require('./lib/renderly.js');
+const { listOwnPending, applySelfDecision, summarizeOwnPending, applyBulkDecisions, BULK_MAX: SELF_REVIEW_BULK_MAX, meetsQualityFloor, QUALITY_FLOOR_TOTAL, QUALITY_FLOOR_DIMENSION, adoptWalletOrphans } = require('./lib/self-review.js'); // LW-15 + review-seamless + AUD19-3/-6
 const { validateOfacRedirect } = require('./lib/ofac-redirect.js'); // S-6: OFAC redirect allowlist
-const { checkRenderlyRateLimit } = require('./lib/renderly-ratelimit.js'); // S-5: renderly per-caller cap
 
 // ─── Phase 2.1a: Autonomous Extraction Pipeline ─────────────────────────────
 const { extractWithRetry } = require('./lib/providers/anthropic.js');
@@ -60,6 +61,12 @@ const { acquireEarningsLock } = require('./lib/earnings-lock.js');
 const { sendOpsAlert } = require('./lib/ops-alert.js');
 // CP-4 (AML-PROGRAM §4.3 G-2): IP-geolocation embargo screen (pure decision engine).
 const geoEmbargo = require('./lib/geo-embargo.js');
+// Quiet phase: payout-notification waitlist (validation, dedupe, storage, and
+// the per-IP limiter live in lib; the routes below own transport only).
+const { addToWaitlist, waitlistCount, isWaitlistRateLimited } = require('./lib/waitlist.js');
+// Quiet phase: inert-by-default analytics readiness (Plausible). Everything is
+// a no-op unless ANALYTICS_DOMAIN is set; see lib/analytics.js.
+const { resolveAnalyticsDomain, injectAnalytics, buildContentSecurityPolicy } = require('./lib/analytics.js');
 
 // ─── S21-4: SESSION_SECRET Startup Validation ──────────────────────────────
 // If SESSION_SECRET is unset in production, sessions use an ephemeral key and
@@ -86,11 +93,27 @@ process.umask(0o077);
 
 const app = new Hono();
 
+// Host-normalization: collapse the www hostname to the apex domain.
+// Fly serves both auxilo.io and www.auxilo.io against this same app (see
+// fly.toml: flyctl certs add www.auxilo.io); nothing before this rewrites
+// the Host, so https://www.auxilo.io/* returned 200 as duplicate content
+// instead of redirecting. This must run before any other middleware
+// (including CORS below) so the redirect fires before any other header work.
+const CANONICAL_HOST = 'auxilo.io';
+app.use('*', async (c, next) => {
+  const host = c.req.header('host') || '';
+  if (host === `www.${CANONICAL_HOST}`) {
+    const reqUrl = new URL(c.req.url);
+    return c.redirect(`https://${CANONICAL_HOST}${reqUrl.pathname}${reqUrl.search}`, 301);
+  }
+  await next();
+});
+
 // IR-M-003 FIX: CORS origin restriction (only allow expected frontends).
 //
 // Exact-match allowlist (fails safe: any origin not listed gets no CORS headers).
 // Production frontend is now https://auxilo.io (the Fly deploy). The old
-// auxilo.slamagency.com host and the Conway VM dev origin are retired.
+// auxilo.slamagency.com host and the legacy VM dev origin are retired.
 //
 // localhost (any port) is allowed for local development. The check is a startsWith
 // on the scheme+host prefix so http://localhost:3000, :5173, etc. all pass while
@@ -126,17 +149,13 @@ app.use('*', async (c, next) => {
 // Google Fonts hosts, and a hard frame-ancestors 'none' / object-src 'none' to
 // block clickjacking and plugin embedding. The same headers are harmless on JSON
 // API responses (no inline content there to govern).
-const CONTENT_SECURITY_POLICY = [
-  "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com",
-  "img-src 'self' data:",
-  "connect-src 'self'",
-  "frame-ancestors 'none'",
-  "object-src 'none'",
-  "base-uri 'self'",
-].join('; ');
+// Quiet phase (analytics readiness): the policy string is assembled in
+// lib/analytics.js so the ANALYTICS_DOMAIN-unset default provably matches the
+// pre-analytics policy byte-for-byte (test/analytics-gating.test.js pins the
+// exact string). With ANALYTICS_DOMAIN set, script-src and connect-src gain
+// ONLY https://plausible.io; no other directive changes.
+const ANALYTICS_DOMAIN = resolveAnalyticsDomain(process.env.ANALYTICS_DOMAIN);
+const CONTENT_SECURITY_POLICY = buildContentSecurityPolicy(ANALYTICS_DOMAIN);
 app.use('*', async (c, next) => {
   await next();
   c.header('X-Content-Type-Options', 'nosniff');
@@ -327,6 +346,14 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
+
+// Backup-cleanup state read by safeWrite(). Declared here — above the startup
+// migration/seed blocks — because those blocks call safeWrite() during module
+// init; a later `let` leaves these in the temporal dead zone and safeWrite()
+// throws "Cannot access 'cleanupRunning' before initialization" mid-write
+// (cold-start seeding failed this way on a fresh install).
+let lastBackupCleanup = 0;
+let cleanupRunning = false; // M-G: prevent concurrent backup cleanup
 
 const LEARNINGS_FILE = path.join(DATA_DIR, 'learnings.json');
 const RATINGS_FILE = path.join(DATA_DIR, 'ratings.jsonl');
@@ -743,8 +770,6 @@ function writeAndSync(filepath, content) {
   }
 }
 
-let lastBackupCleanup = 0;
-let cleanupRunning = false; // M-G: prevent concurrent backup cleanup
 /**
  * Redact a client IP for consent/audit logs.
  *
@@ -1012,6 +1037,8 @@ const { acquireWalletLock, getActiveLockCount } = require('./lib/wallet-lock.js'
 
 // ─── Phase 0.3: Credit System (SPEC-P0.3) ──────────────────────────────────
 const { deductCredit, getCreditStatus } = require('./lib/credits.js');
+// AUD19-2: per-(buyer, learning) accrual cap — 1 credited accrual / 30 days.
+const { isAccrualCapped, recordAccrual } = require('./lib/unlock-attribution.js');
 
 // ─── Phase 0.4: Stripe Integration (SPEC-P0.4) ─────────────────────────────
 const {
@@ -1041,8 +1068,14 @@ const { computeCurrentPrice, getLockedPrice, lockPrice } = pricingEngine;
  * IMPL-A2-02: payload stores contributor_earned + platform_earned separately.
  */
 function replayUnlock(entry) {
-  const { learning_id, builder_wallet, contributor_account_id, unlock_price, contributor_earned, platform_earned, settled_onchain, settlement_tx, settlement_bps, agency_in_force } = entry.payload;
+  const { learning_id, builder_wallet, contributor_account_id, unlock_price, contributor_earned, platform_earned, settled_onchain, settlement_tx, settlement_bps, agency_in_force, amount_paid_usd } = entry.payload;
   const steps = entry.steps_completed || [];
+
+  // AUD19-2: gross books the amount actually paid (the accrual basis stored at
+  // unlock time) for post-cutover entries. Pre-cutover entries carry no
+  // amount_paid_usd and replay the list price exactly as they always did —
+  // the forward-only cutover restates nothing. Never recomputed from price.
+  const grossAmount = (typeof amount_paid_usd === 'number') ? amount_paid_usd : unlock_price;
 
   // If learnings write didn't complete, we can't determine the learning state.
   // Log and preserve the WAL entry for manual review rather than guess.
@@ -1069,7 +1102,7 @@ function replayUnlock(entry) {
     }
     const earningsEntry = earnings[resolvedKey];
 
-    earningsEntry.total_gross += unlock_price;
+    earningsEntry.total_gross += grossAmount;
     earningsEntry.total_contributor += contributor_earned;
     earningsEntry.total_platform += platform_earned;
     if (settled_onchain) {
@@ -1105,7 +1138,7 @@ function replayUnlock(entry) {
     if (!earningsEntry.by_learning[learning_id]) {
       earningsEntry.by_learning[learning_id] = { gross: 0, contributor: 0, platform: 0, unlocks: 0 };
     }
-    earningsEntry.by_learning[learning_id].gross += unlock_price;
+    earningsEntry.by_learning[learning_id].gross += grossAmount;
     earningsEntry.by_learning[learning_id].contributor += contributor_earned;
     earningsEntry.by_learning[learning_id].platform += platform_earned;
     earningsEntry.by_learning[learning_id].unlocks += 1;
@@ -2489,7 +2522,7 @@ function _routerAccepts(amount, pathname, description, routerCtx) {
   };
 }
 
-async function verifyPaymentOrReject(c, price_usd, description, routerCtx = null) {
+async function verifyPaymentOrReject(c, price_usd, description, routerCtx = null, authOptions = null) {
   const amount = String(Math.round(price_usd * 1_000_000));
   const paymentHeader = c.req.header('X-Payment');
   const routerMode = !!(routerCtx && x402Router.routerEnabled());
@@ -2497,10 +2530,20 @@ async function verifyPaymentOrReject(c, price_usd, description, routerCtx = null
   if (!paymentHeader) {
     c.status(402);
     c.header('X-Payment-Required', 'true');
+    // AUD19-5: when the caller (dualAuthDynamic Path 3) supplies authOptions,
+    // merge the api-key/x402 options envelope into the 402 challenge —
+    // additive, so options-block consumers keep working while standards-
+    // conforming x402 clients get accepts[] cold.
+    const optionsBlock = authOptions ? {
+      error: 'Payment required',
+      message: 'This endpoint requires either an API key (with unlock credits) or an x402 payment.',
+      options: authOptions,
+    } : {};
     if (routerMode) {
       return c.json({
         x402Version: 2,
-        accepts: [_routerAccepts(amount, new URL(c.req.url).pathname, description, routerCtx)]
+        accepts: [_routerAccepts(amount, new URL(c.req.url).pathname, description, routerCtx)],
+        ...optionsBlock,
       });
     }
     return c.json({
@@ -2520,7 +2563,8 @@ async function verifyPaymentOrReject(c, price_usd, description, routerCtx = null
           name: 'USD Coin',
           version: '2'
         }
-      }]
+      }],
+      ...optionsBlock,
     });
   }
 
@@ -2754,7 +2798,33 @@ async function dualAuthDynamic(c, price_usd, description, creditType, requiredSc
         if (creditType) {
             const creditResult = await deductCredit(result.accountId, creditType);
             if (!creditResult.success) {
+                // AUD19-5 (§3.3-2): include the x402 accepts[] challenge so a
+                // keyed-but-exhausted agent can fall back to per-call payment
+                // without a second round trip. Entry mirrors the challenge
+                // verifyPaymentOrReject mints (custodial or router arm).
+                const _amount = String(Math.round(price_usd * 1_000_000));
+                const _pathname = new URL(c.req.url).pathname;
+                const _routerMode = !!(routerCtx && x402Router.routerEnabled());
                 return c.json({
+                    x402Version: 2,
+                    accepts: [_routerMode
+                        ? _routerAccepts(_amount, _pathname, description, routerCtx)
+                        : {
+                            scheme: 'exact',
+                            network: 'eip155:8453',
+                            maxAmountRequired: _amount,
+                            resource: _pathname,
+                            description,
+                            mimeType: 'application/json',
+                            payTo: WALLET,
+                            maxTimeoutSeconds: 30,
+                            asset: USDC_BASE,
+                            extra: {
+                                assetTransferMethod: 'eip3009',
+                                name: 'USD Coin',
+                                version: '2'
+                            }
+                        }],
                     error: 'Credits exhausted',
                     message: creditResult.message,
                     credits: creditResult.status,
@@ -2769,6 +2839,11 @@ async function dualAuthDynamic(c, price_usd, description, creditType, requiredSc
                     }
                 }, 402);
             }
+            // AUD19-2: expose the consumed credit's pro-rata unit price so the
+            // unlock handler can accrue on the amount the buyer actually paid.
+            if (typeof creditResult.unit_price_usd === 'number') {
+                c.set('creditUnitPrice', creditResult.unit_price_usd);
+            }
         }
 
         return null;  // Same contract as verifyPaymentOrReject
@@ -2779,24 +2854,24 @@ async function dualAuthDynamic(c, price_usd, description, creditType, requiredSc
         return verifyPaymentOrReject(c, price_usd, description, routerCtx);
     }
 
-    // Path 3: Neither
-    return c.json({
-        error: 'Authentication required',
-        message: 'This endpoint requires either an API key or x402 payment.',
-        options: {
-            api_key: {
-                header: 'X-API-Key',
-                format: 'axl_XXX',
-                obtain: 'POST /auth/magic-link -> GET /auth/verify -> POST /account/api-keys'
-            },
-            x402_payment: {
-                header: 'X-Payment',
-                price_usd: price_usd,
-                description: description,
-                protocol: 'x402 (https://www.x402.org)'
-            }
-        }
-    }, 401);
+    // Path 3: Neither credential — AUD19-5: answer 402-first with the full x402
+    // challenge PLUS the api-key option, so standards-conforming x402 clients can
+    // pay cold and keyed agents learn how to authenticate. (Was: 401 with options
+    // only — the accepts[] descriptor was unreachable until an INVALID payment.)
+    return verifyPaymentOrReject(c, price_usd, description, routerCtx, {
+        api_key: {
+            header: 'X-API-Key',
+            format: 'axl_XXX',
+            obtain: 'POST /auth/magic-link -> GET /auth/verify -> POST /account/api-keys',
+            how_to_authenticate: 'npx auxilo setup',
+        },
+        x402_payment: {
+            header: 'X-Payment',
+            price_usd: price_usd,
+            description: description,
+            protocol: 'x402 (https://www.x402.org)',
+        },
+    });
 }
 
 const MIN_UNLOCK_PRICE = 0.05;     // approved pricing floor — matches lib/pricing.js (GTM-2 fix, PUNCH-LIST §17)
@@ -3063,10 +3138,6 @@ const RATE_LIMIT_CONFIG = {
   '/learn':      50,
   '/knowledge':  50,  // matches /knowledge POST
   '/extract':    20,
-  // S-5 FIX: the renderly URL-proxy fetches caller-supplied URLs. Even with
-  // resolve-and-pin (S-1) closing the internal-proxy primitive, a tight cap
-  // blunts SSRF-based scanning / metadata polling and outbound-fetch abuse.
-  '/renderly':   15,  // 15 req/min per API key
 };
 
 // Store: Map<apiKey, Map<endpointPattern, number[]>>
@@ -3242,54 +3313,8 @@ const rateLimiterCleanupInterval = setInterval(() => {
       apiKeyRateLimitStore.delete(apiKey);
     }
   }
-  // S-5: sweep the renderly limiter store too.
-  for (const [key, timestamps] of renderlyRateLimitStore) {
-    const trimmed = timestamps.filter(ts => ts > windowStart);
-    if (trimmed.length === 0) renderlyRateLimitStore.delete(key);
-    else renderlyRateLimitStore.set(key, trimmed);
-  }
 }, 5 * 60 * 1000);
 rateLimiterCleanupInterval.unref();
-
-// ─── S-5 FIX: Renderly per-caller outbound-fetch rate limit ──────────────────
-// The renderly URL-proxy routes use dualAuth, which delegates x402 callers to
-// x402Gate (that never sets a verified walletAddress on context) — so the
-// generic apiKeyRateLimitMiddleware's per-wallet branch can't cap them. This
-// dedicated middleware runs AFTER dualAuth and caps BOTH auth classes:
-//   • api_key callers → keyed on accountId
-//   • x402 / other     → keyed on the trusted-proxy-derived client IP
-// at RATE_LIMIT_CONFIG['/renderly'] requests per minute. This is the x402 cap
-// the audit calls for, scoped to the SSRF-bearing routes.
-const renderlyRateLimitStore = new Map(); // Map<callerKey, number[]>
-
-function renderlyRateLimitMiddleware() {
-  return async (c, next) => {
-    const limit = RATE_LIMIT_CONFIG['/renderly'];
-    const accountId = c.get('accountId');
-    // api_key callers are keyed by account; everyone else (x402) by client IP.
-    const callerKey = accountId ? `acct:${accountId}` : `ip:${getClientIp(c)}`;
-
-    const now = Date.now();
-    const { allowed, remaining, resetAt } = checkRenderlyRateLimit(
-      renderlyRateLimitStore, callerKey, limit, RATE_LIMIT_WINDOW_MS, now
-    );
-
-    c.header('X-RateLimit-Limit', String(limit));
-    c.header('X-RateLimit-Remaining', String(remaining));
-    c.header('X-RateLimit-Reset', String(resetAt));
-
-    if (!allowed) {
-      c.header('Retry-After', String(Math.max(1, resetAt - Math.floor(now / 1000))));
-      return c.json({
-        error: 'Too Many Requests',
-        message: `Rate limit of ${limit} requests/minute exceeded for the renderly API.`,
-        retry_after: Math.max(1, resetAt - Math.floor(now / 1000)),
-      }, 429);
-    }
-
-    return next();
-  };
-}
 
 // ─── Phase 0.1: Account Routes (SPEC-P0.1) ──────────────────────────────────
 setupAccountRoutes(app);
@@ -3669,7 +3694,13 @@ app.post('/webhook/stripe', async (c) => {
     const queries = parseInt(pack_queries, 10) || 0;
     const unlocks = parseInt(pack_unlocks, 10) || 0;
 
-    const creditResult = await addPurchasedCredits(account_id, queries, unlocks);
+    // AUD19-2: lot the unlocks at the pack's pro-rata unit price (pack price
+    // attributes 100% to unlocks — ratified design). Unknown pack falls back
+    // to the credits.js default rather than a fabricated price.
+    const unlockUnitPrice = (PACKS[pack_id] && unlocks > 0)
+        ? PACKS[pack_id].price_usd / unlocks
+        : undefined;
+    const creditResult = await addPurchasedCredits(account_id, queries, unlocks, { unlock_unit_price_usd: unlockUnitPrice });
     if (!creditResult.success) {
         console.error('[stripe] Failed to add credits for', account_id);
         // Still return 200 to prevent Stripe retries — log for manual review
@@ -3784,6 +3815,121 @@ function acquireAccountLock(accountId) {
   entry.chain = newChain;
   entry.count++;
   return acquire;
+}
+
+// ── AUD19-8(a): idempotent held-balance sweep ───────────────────────────────
+//
+// CP-6's original conversion ran ONCE, inside accept-terms' !alreadyAccepted
+// branch. Accept-then-crash (acceptance persisted, conversion lost) therefore
+// stranded `unassented_pending` forever: re-accept is idempotent and converted
+// nothing, and no other path swept. This helper is the cure: whenever the
+// payee-agency (§5.10) is in force for an account AND its earnings entry holds
+// unassented balance, convert it to withdrawable pending_balance. Safe to call
+// on every read — idempotent (no-op at held == 0), and it moves money exactly
+// once.
+//
+// LOCKING: the original conversion was lock-free, argued safe because it ran
+// only on FIRST acceptance, when no withdrawal could be in flight (withdrawals
+// are acceptance-gated). The sweep breaks that precondition — it runs on every
+// earnings read, post-assent — so it takes the SAME shared earnings lock both
+// withdrawal rails hold (acquireEarningsLock on the resolved entry key).
+// Ordering at sites that also hold the account lock (accept-terms,
+// link-wallet) is account-lock → earnings-lock, identical to the Stripe
+// withdraw path — no inversion, no deadlock. The held>0 pre-check runs
+// without the lock so the hot path (GET /account/earnings with nothing held)
+// costs one map lookup.
+//
+// Call sites: POST /account/accept-terms (BOTH branches — the crash cure),
+// GET /account/earnings (self-healing on every balance read), and
+// POST /account/link-wallet (post-migration; route is terms-gated).
+async function sweepHeldEarnings(accountId) {
+  if (!accountId) return 0;
+  const acct = loadAccounts()[accountId];
+  // Authoritative read + fail-closed: no account or agency not in force → never move money.
+  if (!acct || !isPayeeAgencyInForce(acct)) return 0;
+
+  const identity = { account_id: accountId, wallet: acct.wallet || null };
+
+  // Cheap no-lock pre-check: nothing held → nothing to do.
+  const { entry: preEntry, key: earningsKey, source: preSource } = resolveEarningsEntry(earnings, identity);
+  if (preSource === 'new' || !earningsKey) return 0;
+  if (!(typeof preEntry.unassented_pending === 'number' && preEntry.unassented_pending > 0)) return 0;
+
+  const releaseEarningsLock = await acquireEarningsLock(earningsKey);
+  try {
+    // Re-resolve inside the lock so the conversion acts on the authoritative entry.
+    const moved = convertUnassentedToPending(earnings, identity);
+    if (moved > 0) {
+      safeWrite(EARNINGS_FILE, earnings);
+      console.log(`[cp6-sweep] converted ${moved.toFixed(6)} held → withdrawable for ${accountId}`);
+    }
+    return moved;
+  } finally {
+    releaseEarningsLock();
+  }
+}
+
+// ── AUD19-3(c): pending_review queue-entry ops alert (batched/throttled) ────
+//
+// Nothing previously notified anyone when an item entered pending_review — the
+// admin queue and the self-review queue are both pull-only, so items rot
+// unnoticed (LW-18 / the 2026-06-11 stalled-funnel incident, and the terminal
+// case: wallet-only orphans nobody could even approve). This wires
+// sendOpsAlert to queue entry WITHOUT spam: entries accumulate a counter and
+// at most one summary email goes out per PENDING_REVIEW_ALERT_INTERVAL_MS
+// (default 6h). On a failed/rate-limited send the count is restored so it
+// reports in the next alert instead of vanishing. Fire-and-forget: never
+// blocks or fails the request path (sendOpsAlert never throws and carries its
+// own global 5-minute floor).
+const PENDING_REVIEW_ALERT_INTERVAL_MS =
+  parseInt(process.env.PENDING_REVIEW_ALERT_INTERVAL_MS || '', 10) > 0
+    ? parseInt(process.env.PENDING_REVIEW_ALERT_INTERVAL_MS, 10)
+    : 6 * 60 * 60 * 1000;
+let _pendingAlertLastSentAt = 0;
+let _pendingAlertNewCount = 0;
+let _pendingAlertLatest = null;
+
+function notePendingReviewEntries(count, context = {}) {
+  if (!Number.isInteger(count) || count <= 0) return;
+  _pendingAlertNewCount += count;
+  _pendingAlertLatest = {
+    source: context.source || 'unknown',
+    id: context.id || null,
+    orphaned: !!context.orphaned,
+  };
+
+  const now = Date.now();
+  if (now - _pendingAlertLastSentAt < PENDING_REVIEW_ALERT_INTERVAL_MS) return;
+
+  const newCount = _pendingAlertNewCount;
+  const latest = _pendingAlertLatest;
+  _pendingAlertLastSentAt = now;
+  _pendingAlertNewCount = 0;
+
+  let totalPending = 0;
+  let orphanPending = 0;
+  for (const l of learnings) {
+    if (l && l.status === 'pending_review') {
+      totalPending += 1;
+      if (!l.contributor_account_id) orphanPending += 1;
+    }
+  }
+
+  const body =
+    `${newCount} new item(s) entered the pending_review queue since the last alert.\n` +
+    `Queue now: ${totalPending} pending total, ${orphanPending} of them account-less (wallet-only orphans awaiting adoption).\n` +
+    `Latest entry: ${latest.id || 'n/a'} via ${latest.source}${latest.orphaned ? ' (ORPHANED — no account bound)' : ''}.\n` +
+    `Review: auxilo review (CLI) / dashboard review queue / GET /admin/moderation/queue.`;
+
+  sendOpsAlert(`pending_review queue: ${newCount} new (${totalPending} total)`, body)
+    .then((res) => {
+      if (!res || !res.ok) {
+        // Not delivered (unconfigured / rate-limited / transport error): fold the
+        // count back so the next alert still reports it.
+        _pendingAlertNewCount += newCount;
+      }
+    })
+    .catch(() => { _pendingAlertNewCount += newCount; });
 }
 
 // POST /account/connect-stripe: onboard a Stripe Express connected account
@@ -4027,13 +4173,35 @@ app.post('/withdraw/stripe', requireAuth, async (c) => {
 // ─── Phase 0.5: Account Wallet + Earnings Endpoints (SPEC-P0.5) ──────────────
 
 // POST /account/link-wallet — link a verified wallet to the authenticated account
+//
+// AUD19 Gate-A HIGH-1 (account-bound proof of wallet control): global
+// `verifiedWallets` membership is NOT proof that the LINKING ACCOUNT controls
+// the wallet — every wallet-only contributor's wallet is in that set by
+// construction, and /wallet/verify is unauthenticated and account-blind. Without
+// a fresh, account-bound proof, any ToS-accepted account could link any
+// verified wallet and — via the adoption/migration/sweep hooks below — take over
+// that wallet's learnings and earnings while the 409-uniqueness check locked the
+// real owner out. So linking now demands an EIP-712 LINK challenge signed by
+// the wallet's key with the accountId bound INTO the signed action string
+// (`link:acc_…`): the signature attests "this wallet's key-holder authorizes
+// linking to THIS account", cannot be replayed for another account, and the
+// nonce is single-use.
+//
+// Flow: POST { wallet } (no signature) → 401 link_signature_required + the
+// challenge/typed-data to sign. POST { wallet, signature } → verify + link.
+//
+// GRANDFATHERING: accounts that linked BEFORE this deploy keep their wallet —
+// linking is one-time (linkWallet 409s when account.wallet is already set), so
+// no existing link is re-validated or retro-invalidated. Acceptable because the
+// pre-deploy cohort is the platform's own accounts (no real external builders
+// yet, per the launch record); every link from this deploy forward is proven.
 app.post('/account/link-wallet', requireSessionOrApiKey(), async (c) => {
   let body;
   try { body = await c.req.json(); } catch {
     return c.json({ error: 'Invalid JSON body' }, 400);
   }
 
-  const { wallet } = body || {};
+  const { wallet, signature } = body || {};
   const accountId = c.get('accountId');
 
   // GOV-3: fail closed if sanctions screening has never loaded a list.
@@ -4062,13 +4230,80 @@ app.post('/account/link-wallet', requireSessionOrApiKey(), async (c) => {
     return termsNotAcceptedResponse(c);
   }
 
+  // HIGH-1: fresh, account-bound proof of wallet control (see route comment).
+  if (!wallet || !isAddress(wallet)) {
+    return c.json({ error: 'Valid wallet address required' }, 400);
+  }
+
+  if (!signature) {
+    // Step 1: no signature yet — issue the account-bound link challenge.
+    // Rate-limited on the same counter as /wallet/challenge so this route
+    // cannot be used to mint unlimited nonces.
+    if (!checkChallengeRateLimit(wallet)) {
+      return c.json({ error: 'Rate limited. Try again later.' }, 429);
+    }
+    const action = linkAction(accountId);
+    const { nonce, timestamp, expires_at } = createNonce(wallet, action);
+    return c.json({
+      error: 'A fresh signature from this wallet is required to link it to your account.',
+      code: 'link_signature_required',
+      how_to: 'Sign the eip712 payload below with the wallet\'s key, then call POST /account/link-wallet again with { "wallet", "signature" }. The challenge expires in 5 minutes and is single-use.',
+      challenge: nonce,
+      timestamp,
+      expires_at,
+      eip712: {
+        domain: {
+          name: EIP712_DOMAIN.name,
+          version: EIP712_DOMAIN.version,
+          chainId: EIP712_DOMAIN.chainId,
+          verifyingContract: EIP712_DOMAIN.verifyingContract,
+        },
+        types: { Challenge: CHALLENGE_TYPES.Challenge },
+        primaryType: 'Challenge',
+        // The account-bound action string is part of the SIGNED message — a
+        // signature produced for this challenge can only ever link this wallet
+        // to this account.
+        message: { wallet, nonce, timestamp, action },
+      },
+    }, 401);
+  }
+
+  // Step 2: signature presented — consume the nonce (single-use, C7 idiom) and
+  // verify it is a LINK nonce bound to THIS account, then verify the EIP-712
+  // signature was produced by the wallet's key over that exact bound message.
+  // TEST_MODE bypass mirrors /wallet/verify: never in production.
+  if (!(process.env.NODE_ENV !== 'production' && process.env.TEST_MODE === '1' && signature === 'test-bypass')) {
+    const linkNonce = consumeNonce(wallet);
+    if (!linkNonce || linkNonce.action !== linkAction(accountId)) {
+      return c.json({
+        error: 'No active link challenge for this wallet and account (expired, already used, or issued for a different account). Request a new one by calling this endpoint without a signature.',
+        code: 'link_challenge_invalid',
+      }, 401);
+    }
+    let linkSigValid = false;
+    try {
+      linkSigValid = await verifyLinkSignature(wallet, accountId, linkNonce.nonce, linkNonce.timestamp, signature);
+    } catch (sigErr) {
+      console.error('[link-wallet] signature verification error:', sigErr.message);
+      linkSigValid = false;
+    }
+    if (!linkSigValid) {
+      return c.json({ error: 'Link signature verification failed', code: 'link_signature_invalid' }, 401);
+    }
+  } else {
+    consumeNonce(wallet); // clean up any pending nonce in test mode
+  }
+
   // Serialize the linkWallet read-modify-write so a concurrent settings/connect-stripe
   // mutation on the same account cannot lost-update (linkWallet does its own
   // loadAccounts->mutate->saveAccounts internally).
   const releaseAccountLock = await acquireAccountLock(accountId);
   try {
-    // linkWallet validates format, verified status, uniqueness, and no-existing-wallet constraints
-    const result = linkWallet(accountId, wallet, verifiedWallets);
+    // linkWallet validates format, verified status, uniqueness, no-existing-wallet,
+    // and (AUD19 MED-2) refuses platform wallets — the live platform wallet is
+    // auto-verified at boot, so without the refusal any ToS-accepted account
+    // could claim it and drain platform-attributed balances via the hooks below.
+    const result = linkWallet(accountId, wallet, verifiedWallets, PLATFORM_WALLETS);
     if (!result.success) {
       return c.json({ error: result.error }, result.status_code || 400);
     }
@@ -4082,19 +4317,56 @@ app.post('/account/link-wallet', requireSessionOrApiKey(), async (c) => {
     // Lazy migrate any pre-existing wallet-keyed earnings entry to account-keyed
     const migrated = lazyMigrateOnWalletLink(earnings, result.wallet, accountId);
     if (migrated) {
-      // CP-6 P1-B: the accept-then-link ordering would otherwise STRAND held balance. A
-      // wallet-only contributor accrues to `unassented_pending` under the wallet key; when they
-      // later create an account and accept, accept-terms runs its conversion BEFORE the wallet is
-      // linked (wallet is null then) so it resolves nothing, and the migration above carries the
-      // held balance in as `unassented_pending`. This route is terms-gated (:3857), so the agency
-      // is in force here — convert the just-migrated held balance to withdrawable now, so a
-      // Builder who did everything right isn't left with permanently non-withdrawable funds.
-      convertUnassentedToPending(earnings, { account_id: accountId, wallet: result.wallet });
       safeWrite(EARNINGS_FILE, earnings);
       console.log(`[p0.5] Lazy migrated wallet-keyed earnings to account ${accountId} on wallet link`);
     }
 
-    return c.json({ message: 'Wallet linked', wallet: result.wallet, account_id: accountId });
+    // CP-6 P1-B / AUD19-8(a): the accept-then-link ordering would otherwise STRAND held
+    // balance. A wallet-only contributor accrues to `unassented_pending` under the wallet
+    // key; when they later create an account and accept, accept-terms runs its sweep BEFORE
+    // the wallet is linked (wallet is null then) so it resolves nothing, and the migration
+    // above carries the held balance in as `unassented_pending`. This route is terms-gated,
+    // so the agency is in force here — sweep held → withdrawable now (idempotent, takes the
+    // shared earnings lock, persists internally; runs regardless of `migrated` so a
+    // pre-existing account-keyed held balance converts too). LOW-4: wrapped like
+    // the other sweep call sites — a sweep failure must not 500 a link that the
+    // account record already persisted (the earnings sweep self-heals on the
+    // next GET /account/earnings anyway).
+    try {
+      await sweepHeldEarnings(accountId);
+    } catch (sweepErr) {
+      console.error('[link-wallet] held-balance sweep failed:', sweepErr.message);
+    }
+
+    // AUD19-3(b): the account just PROVED ownership of this wallet (fresh
+    // account-bound link signature above) — adopt any wallet-only orphaned
+    // learnings bearing it, binding contributor_account_id so the whole
+    // self-review stack (queue/decide/CLI/dashboard/MCP) works on them. Wallet
+    // source is result.wallet (the verified, just-linked address — never a
+    // claimed one). LOW-4: adoption failure must not 500 the completed link;
+    // the lazy cure on GET /account/pending re-runs it.
+    let adoptedIds = [];
+    try {
+      adoptedIds = adoptWalletOrphans(learnings, accountId, result.wallet);
+      if (adoptedIds.length > 0) {
+        safeWrite(LEARNINGS_FILE, learnings);
+        console.log(`[AUD19-3] adopted ${adoptedIds.length} wallet-only learning(s) into account ${accountId} on wallet link`);
+      }
+    } catch (adoptErr) {
+      console.error('[link-wallet] wallet-orphan adoption failed:', adoptErr.message);
+    }
+
+    return c.json({
+      message: 'Wallet linked',
+      wallet: result.wallet,
+      account_id: accountId,
+      // MED-3: surface exactly what changed hands so the operator can audit the
+      // adoption (ids, not just a count).
+      ...(adoptedIds.length > 0 && {
+        adopted_learnings: adoptedIds.length,
+        adopted_learning_ids: adoptedIds,
+      }),
+    });
   } finally {
     releaseAccountLock();
   }
@@ -4119,6 +4391,17 @@ app.get('/account/earnings', requireSessionOrApiKey('read'), async (c) => {
     return c.json({ error: 'Account not found' }, 404);
   }
 
+  // AUD19-8(a): self-healing sweep on every balance read. If the agency (§5.10)
+  // is in force and anything sits in the held bucket (e.g. after an
+  // accept-then-crash, or a WAL replay that landed held post-assent), convert it
+  // BEFORE reporting — so the response never shows releasable value as held.
+  // Idempotent; takes the shared earnings lock internally; no-op on the hot path.
+  try {
+    await sweepHeldEarnings(accountId);
+  } catch (sweepErr) {
+    console.error('[account/earnings] held-balance sweep failed:', sweepErr.message);
+  }
+
   const { entry, source } = resolveEarningsEntry(earnings, {
     account_id: accountId,
     wallet: account.wallet || null,
@@ -4128,8 +4411,10 @@ app.get('/account/earnings', requireSessionOrApiKey('read'), async (c) => {
   const canWithdraw = hasWallet && source !== 'new' && (entry.pending_balance || 0) > 0;
 
   if (source === 'new') {
-    // No earnings yet — return zero state. unassented_pending is surfaced in BOTH
+    // No earnings yet — return zero state. The held bucket is surfaced in BOTH
     // branches (MISS-03/BUX-3) so a consumer always has the held-vs-owned split.
+    // AUD19-8(b): `held_pending_assent` is the public name; `unassented_pending`
+    // stays for backward compatibility with existing consumers.
     return c.json({
       account_id: accountId,
       wallet: account.wallet || null,
@@ -4137,6 +4422,7 @@ app.get('/account/earnings', requireSessionOrApiKey('read'), async (c) => {
       total_gross: 0,
       total_contributor: 0,
       total_contributor_gross: 0,
+      held_pending_assent: 0,
       unassented_pending: 0,
       pending_balance: 0,
       total_withdrawn: 0,
@@ -4170,7 +4456,8 @@ app.get('/account/earnings', requireSessionOrApiKey('read'), async (c) => {
     total_gross: entry.total_gross || 0,
     total_contributor: contributorOwned,          // owned lifetime share (excludes held)
     total_contributor_gross: contributorGross,    // lifetime gross including held
-    unassented_pending: heldPending,              // held until §5.10 acceptance (not owned)
+    held_pending_assent: heldPending,             // AUD19-8(b): undisbursable receipts, released on §5.10 acceptance
+    unassented_pending: heldPending,              // legacy alias of held_pending_assent (back-compat)
     pending_balance: entry.pending_balance || 0,  // withdrawable subset of owned
     total_withdrawn: entry.total_withdrawn || 0,
     withdrawal_count: entry.withdrawal_count || 0,
@@ -4218,7 +4505,12 @@ function serveStatic(c, relPath, cacheControl) {
     if (!fs.existsSync(filePath)) return null; // Signal: file not found
     const ext   = path.extname(filePath).toLowerCase();
     const mime  = MIME_TYPES[ext] || 'application/octet-stream';
-    const content = fs.readFileSync(filePath);
+    let content = fs.readFileSync(filePath);
+    // Quiet phase: inert unless ANALYTICS_DOMAIN is set. With it unset (the
+    // default) the guard is false and the served bytes are untouched.
+    if (ANALYTICS_DOMAIN && ext === '.html') {
+      content = injectAnalytics(content.toString('utf8'), ANALYTICS_DOMAIN);
+    }
     return new Response(content, {
       status: 200,
       // HTML defaults to a short cache (content changes between deploys);
@@ -4336,13 +4628,6 @@ app.get('/api/info', (c) => {
       '/checkout/success': { price: 'free', method: 'GET', description: 'Stripe payment success landing page (redirect target)' },
       '/checkout/cancel': { price: 'free', method: 'GET', description: 'Stripe payment cancelled landing page (redirect target)' },
       '/report': { price: 'free', method: 'POST', description: 'Report harmful or inappropriate content. Body: { learning_id, reason, details? }', auth: 'public', rateLimit: '10/hour per IP' },
-      '/renderly': { price: 'free', method: 'GET', description: 'Renderly service info — web content extraction API' },
-      '/renderly/markdown': { price: '$0.001', method: 'POST', description: 'Convert URL to clean markdown. Body: { "url": "https://..." }' },
-      '/renderly/extract': { price: '$0.001', method: 'POST', description: 'Extract structured data from URL. Body: { "url": "https://..." }' },
-      '/renderly/readable': { price: '$0.0005', method: 'POST', description: 'Get readable text from URL. Body: { "url": "https://..." }' },
-      '/renderly/llms.txt': { price: 'free', method: 'GET', description: 'Renderly LLM-readable service description' },
-      '/renderly/health': { price: 'free', method: 'GET', description: 'Renderly health check' },
-      '/renderly/pricing': { price: 'free', method: 'GET', description: 'Renderly pricing info' },
       '/pricing/categories': { price: 'free', method: 'GET', description: 'Knowledge pricing analytics by category — avg price, conversion rate, impression and unlock counts.' },
       '/contributor/:wallet/pricing-insights': { price: 'free', method: 'GET', description: 'Pricing insights for a contributor wallet — price distribution, top earners, avg price.' },
     },
@@ -5066,17 +5351,27 @@ app.post('/learn', async (c) => {
   //   - content-sensitivity clean (NOT sensitive)
   //   - quality self-score present
   const qualityPresent = !!quality_self_assessment;
+  // AUD19-6: server-side quality floor. Shape validation passed above; the floor
+  // (total >= 14, every dimension >= 3 — lib/self-review.js) decides seamless
+  // eligibility. Below-floor submissions are QUARANTINED to pending_review with
+  // review_reason 'below_quality_floor' — never hard-rejected (the prompt-side
+  // gate already tells agents not to submit < 14; a below-floor arrival is more
+  // likely mis-scored good content than spam, and a 400 would teach clients to
+  // omit the assessment entirely, regressing to 'awaiting_quality').
+  const qualityMeetsFloor = qualityPresent && meetsQualityFloor(quality_self_assessment);
   const learnReviewReasons = [];
   if (FORCE_ALL_REVIEW) learnReviewReasons.push('forced_review');
   if (injectionScreen.flagged) learnReviewReasons.push('injection');
   if (nearDup.verdict !== 'clean') learnReviewReasons.push('near_duplicate');
   if (contentSensitivity.sensitive) learnReviewReasons.push('content_sensitivity');
   if (!qualityPresent) learnReviewReasons.push('awaiting_quality');
+  if (qualityPresent && !qualityMeetsFloor) learnReviewReasons.push('below_quality_floor');
   const seamlessEligible = !FORCE_ALL_REVIEW &&
     !injectionScreen.flagged &&
     nearDup.verdict === 'clean' &&
     !contentSensitivity.sensitive &&
-    qualityPresent;
+    qualityPresent &&
+    qualityMeetsFloor;
 
   // JWT extraction already done above (moved before identity gate for Change 1)
 
@@ -5155,6 +5450,15 @@ app.post('/learn', async (c) => {
   learnings.push(learning);
   safeWrite(LEARNINGS_FILE, learnings);
 
+  // AUD19-3(c): batched/throttled ops alert on queue entry (fire-and-forget).
+  if (learning.status === 'pending_review') {
+    notePendingReviewEntries(1, {
+      source: '/learn',
+      id: learning.id,
+      orphaned: !learning.contributor_account_id,
+    });
+  }
+
   // E1: Advisory if builder price differs > 3x from calculated (per V2 spec)
   const pricingAdvisory = (unlock_price !== undefined &&
     (Number(unlock_price) > calculatedPrice * 3 || Number(unlock_price) < calculatedPrice * 0.3))
@@ -5165,6 +5469,18 @@ app.post('/learn', async (c) => {
       }
     : undefined;
 
+  // AUD19-4/-3(a): a pending_review response must tell the contributor HOW to
+  // act — the queue is otherwise invisible (LW-18 stalled-funnel incident).
+  // Account-bound: point at the three self-review surfaces. Wallet-only (no
+  // account): the item is held bound to the wallet and becomes reviewable via
+  // the adoption cure once the operator creates an account and links the SAME
+  // wallet (AUD19-3b) — say exactly that, with the command.
+  const howToReview = learning.status !== 'pending_review'
+    ? undefined
+    : (learning.contributor_account_id
+      ? 'This submission is held for YOUR review — approve or reject it yourself: run `auxilo review` (CLI), open your dashboard review queue at ' + ((process.env.BASE_URL || 'https://auxilo.io') + '/dashboard') + ', or GET /account/pending with your API key.'
+      : 'This submission is held and bound to your wallet, but no account is attached, so it cannot be reviewed yet. Run `npx auxilo setup` to create an account and API key, then verify and link this SAME wallet (auxilo_verify_wallet + auxilo_link_wallet) — your held submissions are adopted into your review queue automatically (`auxilo review`, dashboard, or GET /account/pending).');
+
   return c.json({
     id: learning.id,
     message: learning.status === 'pending_review'
@@ -5173,6 +5489,7 @@ app.post('/learn', async (c) => {
     status: learning.status,
     // LW-16: when held, tell the contributor WHY (seamless otherwise).
     ...(learning.status === 'pending_review' && { review_reason: learnReviewReasons }),
+    ...(howToReview && { how_to_review: howToReview }),
     unlock_price: resolvedPrice,
     pricing: learning.pricing,
     contributor_wallet: learning.contributor_wallet,
@@ -5925,6 +6242,16 @@ app.post('/extract', async (c) => {
       learnings.push(entry);
     }
     safeWrite(LEARNINGS_FILE, learnings);
+
+    // AUD19-3(c): batched/throttled ops alert on queue entry (fire-and-forget).
+    const extractPendingEntries = pendingCatalogEntries.filter((e) => e && e.status === 'pending_review');
+    if (extractPendingEntries.length > 0) {
+      notePendingReviewEntries(extractPendingEntries.length, {
+        source: '/extract',
+        id: extractPendingEntries[extractPendingEntries.length - 1].id,
+        orphaned: !extractPendingEntries[extractPendingEntries.length - 1].contributor_account_id,
+      });
+    }
   }
 
   // ── Step 18: Response (§3.2 / §3.3) ──────────────────────────────────
@@ -6168,25 +6495,22 @@ app.post('/account/accept-terms', requireSessionOrApiKey('contribute'), async (c
       } catch (logErr) {
         console.error('[tos] durable acceptance-log append failed:', logErr.message);
       }
+    }
 
-      // CP-6: the payee-agency is now in force for this Builder. Move any Builder Share
-      // received on their behalf and HELD (unassented_pending) before this acceptance into
-      // the withdrawable pending_balance — the moment it becomes agency-covered. Lock-free
-      // and correct: this only ever moves money on the FIRST acceptance (afterwards
-      // isPayeeAgencyInForce is true, so nothing new lands in the held bucket), and a
-      // withdrawal cannot be in flight before the first acceptance (withdrawals are
-      // acceptance-gated). The mutate+safeWrite is synchronous → atomic w.r.t. the unlock
-      // handler's write on the shared `earnings` singleton.
-      try {
-        const acctForConv = loadAccounts()[accountId];
-        const moved = convertUnassentedToPending(earnings, {
-          account_id: accountId,
-          wallet: (acctForConv && acctForConv.wallet) || null,
-        });
-        if (moved > 0) safeWrite(EARNINGS_FILE, earnings);
-      } catch (convErr) {
-        console.error('[tos] CP-6 unassented→pending conversion failed:', convErr.message);
-      }
+    // CP-6 / AUD19-8(a): the payee-agency is now in force for this Builder — move any
+    // Builder Share received on their behalf and HELD (unassented_pending) into the
+    // withdrawable pending_balance. DELIBERATELY OUTSIDE the !alreadyAccepted guard:
+    // the original first-accept-only conversion meant a crash between
+    // recordTosAcceptance and the conversion stranded the held balance forever
+    // (re-accept is idempotent and converted nothing). The sweep is idempotent
+    // (no-op at held == 0) and takes the shared earnings lock internally, so
+    // running it on every accept — including idempotent re-accepts — is the cure,
+    // not a risk. Lock ordering here is account-lock → earnings-lock, same as the
+    // Stripe withdraw path.
+    try {
+      await sweepHeldEarnings(accountId);
+    } catch (convErr) {
+      console.error('[tos] CP-6 unassented→pending sweep failed:', convErr.message);
     }
 
     return c.json({
@@ -6566,17 +6890,46 @@ app.get('/knowledge/:id', async (c) => {
   // the existing pending_balance accounting.
   const routerSettlement = c.get('x402RouterSettlement') || null;
 
+  // AUD19-2: buyer identity, funding source, and accrual basis.
+  // `callerAccountId` (top of handler) is captured BEFORE dualAuthDynamic
+  // authenticates the API key, so it is null on the credit path — every
+  // identity-sensitive decision below (wash guard, accrual cap, WAL
+  // attribution) re-reads the POST-auth account id here.
+  const buyerAccountId = c.get('accountId') || callerAccountId || null;
+  const fundingSource = routerSettlement ? 'router'
+    : (c.get('authMethod') === 'api_key' ? 'credit_pack' : 'x402');
+  // Accrue on the amount the buyer actually paid, never the list price.
+  // Credit path: min(list, credit unit price) — the pro-rata pack rate the
+  // consumed credit actually cost ($0.00 for referral/free-grant lots).
+  // x402/router: the buyer pays full list on-chain — basis = list by construction.
+  const creditUnit = c.get('creditUnitPrice');
+  const accrualBasis = (fundingSource === 'credit_pack')
+    ? Math.min(UNLOCK_PRICE, (typeof creditUnit === 'number' && Number.isFinite(creditUnit)) ? creditUnit : UNLOCK_PRICE)
+    : UNLOCK_PRICE;
+
+  // AUD19-2: per-(buyer, learning) accrual cap — 1 credited accrual per buyer
+  // account per learning per 30 days, applied at the ACCRUAL decision only.
+  // The buyer still gets the content (their credit still burns); the
+  // contributor just doesn't accrue again. Account (credit) path only:
+  // anonymous x402 settles real money at full list price (revenue-backed).
+  const accrualCapped = (fundingSource === 'credit_pack') && !!buyerAccountId
+    && isAccrualCapped(buyerAccountId, id);
+
   // Track unlock
   learning.quality.unlocks = (learning.quality.unlocks || 0) + 1;
 
-  // E2: Demand tracking — unlock counters for rolling windows
+  // E2: Demand tracking — unlock counters for rolling windows.
+  // AUD19-2: capped repeat unlocks do NOT bump demand — repeat unlocks from a
+  // single buyer must not pump the dynamic-pricing demand multiplier.
   if (!learning.demand) learning.demand = { search_impressions_7d: 0, search_impressions_30d: 0, unlocks_7d: 0, unlocks_30d: 0 };
-  learning.demand.unlocks_7d++;
-  learning.demand.unlocks_30d++;
+  if (!accrualCapped) {
+    learning.demand.unlocks_7d++;
+    learning.demand.unlocks_30d++;
+  }
 
-  // Track earnings with source attribution
-  const contributorEarned = UNLOCK_PRICE * CONTRIBUTOR_SHARE;
-  const platformEarned = UNLOCK_PRICE * (1 - CONTRIBUTOR_SHARE);
+  // Track earnings with source attribution (AUD19-2: on the PAID basis)
+  const contributorEarned = accrualBasis * CONTRIBUTOR_SHARE;
+  const platformEarned = accrualBasis * (1 - CONTRIBUTOR_SHARE);
 
   // SPEC-P0.5: Resolve contributor earnings entry via account_id (preferred) or wallet fallback
   const contribWallet = learning.contributor_wallet;
@@ -6590,8 +6943,11 @@ app.get('/knowledge/:id', async (c) => {
   // WITHOUT crediting anything (no revenue counters, no earnings entry, no WAL).
   const callerWallet = (c.get('walletAddress') || c.req.header('X-Wallet-Address') || '').toLowerCase();
   const contribWalletLower = contribWallet ? contribWallet.toLowerCase() : null;
+  // AUD19-2: the account arm compares the POST-auth buyerAccountId — the old
+  // pre-auth `callerAccountId` was always null on the API-key path, which left
+  // the account arm of this guard dead against exactly the buyers it targets.
   const isSelfUnlock =
-    (callerAccountId && contribAccountId && callerAccountId === contribAccountId) ||
+    (buyerAccountId && contribAccountId && buyerAccountId === contribAccountId) ||
     (callerWallet && contribWalletLower && callerWallet === contribWalletLower);
 
   if (isSelfUnlock) {
@@ -6660,7 +7016,38 @@ app.get('/knowledge/:id', async (c) => {
     });
   }
 
-  learning.earnings.gross_usd = (learning.earnings.gross_usd || 0) + UNLOCK_PRICE;
+  // AUD19-2: capped repeat unlock — serve the content, accrue NOTHING. Exact
+  // mirror of the M-2 shape: no revenue counters, no earnings entry, no WAL.
+  // quality.unlocks (bumped above) persists for catalog consistency; the
+  // demand counters were deliberately NOT bumped.
+  if (accrualCapped) {
+    safeWrite(LEARNINGS_FILE, learnings);
+    const {
+      injection_flags: _ifc, possible_duplicate_of: _pdc,
+      possible_duplicate_similarity: _psc, moderation: _modc,
+      sensitivity_signals: _ssc, sensitivity_source: _ssrcc,
+      ...cappedLearning
+    } = learning;
+    return c.json({
+      ...cappedLearning,
+      content_advisory: UNTRUSTED_CONTENT_ADVISORY,
+      _revenue: {
+        unlock_price_usd: UNLOCK_PRICE,
+        amount_paid_usd: accrualBasis,
+        contributor_earned_usd: 0,
+        platform_earned_usd: 0,
+        // 1 credited accrual per (buyer, learning) per 30 days — repeat
+        // unlocks inside the window serve content without a new accrual.
+        accrual_capped: true,
+      },
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  // AUD19-2: gross books the amount actually paid (the accrual basis) — the
+  // ledger is cash-true from cutover. UNLOCK_PRICE remains the displayed /
+  // charged price and the x402 settle amount.
+  learning.earnings.gross_usd = (learning.earnings.gross_usd || 0) + accrualBasis;
   learning.earnings.contributor_share_usd = (learning.earnings.contributor_share_usd || 0) + contributorEarned;
   learning.earnings.platform_share_usd = (learning.earnings.platform_share_usd || 0) + platformEarned;
 
@@ -6684,13 +7071,13 @@ app.get('/knowledge/:id', async (c) => {
 
   const activeEntry = earnings[resolvedEarningsKey];
 
-  activeEntry.total_gross += UNLOCK_PRICE;
+  activeEntry.total_gross += accrualBasis;
   activeEntry.total_contributor += contributorEarned;
   activeEntry.total_platform += platformEarned;
   if (!activeEntry.by_learning[id]) {
     activeEntry.by_learning[id] = { gross: 0, contributor: 0, platform: 0, unlocks: 0 };
   }
-  activeEntry.by_learning[id].gross += UNLOCK_PRICE;
+  activeEntry.by_learning[id].gross += accrualBasis;
   activeEntry.by_learning[id].contributor += contributorEarned;
   activeEntry.by_learning[id].platform += platformEarned;
   activeEntry.by_learning[id].unlocks += 1;
@@ -6738,6 +7125,13 @@ app.get('/knowledge/:id', async (c) => {
   }
   activeEntry.last_updated = new Date().toISOString();
 
+  // AUD19-2: arm the per-(buyer, learning) accrual cap BEFORE the WAL write —
+  // a crash from here is replayed from the WAL (the accrual WILL land), so the
+  // cap must already cover the next attempt.
+  if (fundingSource === 'credit_pack' && buyerAccountId) {
+    recordAccrual(buyerAccountId, id);
+  }
+
   // SPEC-A2 C3: WAL-protected dual write — crash-safe atomicity
   // IMPL-A2-02: payload stores contributor_earned + platform_earned separately (not gross amount)
   // SPEC-P0.5: include contributor_account_id in WAL payload for recovery
@@ -6746,9 +7140,18 @@ app.get('/knowledge/:id', async (c) => {
     builder_wallet: contribWallet,
     contributor_account_id: contribAccountId,
     unlock_price: UNLOCK_PRICE,
+    // AUD19-2: the accrual basis (amount actually paid) is decided exactly once,
+    // HERE, and stored — replayUnlock replays it verbatim, never recomputes.
+    amount_paid_usd: accrualBasis,
+    funding_source: fundingSource, // credit_pack | x402 | router
     contributor_earned: contributorEarned,
     platform_earned: platformEarned,
     purchaser_key_label: c.get('keyLabel') || null,  // D2: which key environment unlocked
+    // AUD19-2: purchaser identity — makes future collusion questions answerable
+    // from the WAL + unlock history without a runtime fraud engine.
+    purchaser_account_id: buyerAccountId,
+    purchaser_ip_redacted: redactIp(getClientIp(c)),
+    purchaser_ua: c.req.header('user-agent') || null,
     // R-01: replayUnlock must know an on-chain-settled unlock never credits
     // pending_balance, even when replayed after a crash.
     settled_onchain: !!routerSettlement,
@@ -6781,6 +7184,8 @@ app.get('/knowledge/:id', async (c) => {
     content_advisory: UNTRUSTED_CONTENT_ADVISORY,
     _revenue: {
       unlock_price_usd: UNLOCK_PRICE,
+      // AUD19-2: the amount the buyer actually paid — the accrual basis.
+      amount_paid_usd: accrualBasis,
       contributor_earned_usd: contributorEarned,
       platform_earned_usd: platformEarned,
       // R-01: present only when the unlock settled non-custodially on-chain.
@@ -7822,12 +8227,37 @@ function resolveSelfReviewAccount(c, minScope = 'read') {
   return resolveAccountFromRequest(c, minScope);
 }
 
+// AUD19-3(b): lazy retroactive orphan cure. Accounts that linked their wallet
+// BEFORE this deploy never re-fire the link-wallet adoption hook, so their
+// wallet-only orphans (contributor_account_id: null) would stay unreviewable
+// forever. Run adoption on the pending read paths too: if this account has a
+// linked wallet, adopt any orphaned learnings bearing it. OWNERSHIP CHECK is
+// against the VERIFIED link — account.wallet is only ever set through
+// linkWallet (which requires prior signature verification), and we re-check the
+// verifiedWallets store for defense in depth. Never a claimed/request wallet.
+function adoptOrphansForAccount(accountId) {
+  if (!accountId) return 0;
+  const acct = loadAccounts()[accountId];
+  if (!acct || !acct.wallet || typeof acct.wallet !== 'string') return 0;
+  const walletLower = acct.wallet.toLowerCase();
+  if (!verifiedWallets[walletLower]) return 0;
+  const adoptedIds = adoptWalletOrphans(learnings, accountId, walletLower);
+  if (adoptedIds.length > 0) {
+    safeWrite(LEARNINGS_FILE, learnings);
+    console.log(`[AUD19-3] lazily adopted ${adoptedIds.length} wallet-only learning(s) into account ${accountId}`);
+  }
+  return adoptedIds.length;
+}
+
 // GET /account/pending — list the CALLER's OWN pending_review learnings (full body
 // + reviewer safety signals) so a human can judge before approving. Paginated.
 app.get('/account/pending', async (c) => {
   const auth = await resolveSelfReviewAccount(c, 'read');
   if (!auth.accountId) return c.json({ error: auth.error }, auth.status);
   const accountId = auth.accountId;
+
+  // AUD19-3(b): retroactive wallet-orphan adoption before listing.
+  adoptOrphansForAccount(accountId);
 
   const url = new URL(c.req.url, 'http://localhost');
   let limit = parseInt(url.searchParams.get('limit') || '50', 10);
@@ -7885,6 +8315,69 @@ app.post('/account/pending/:id/reject', async (c) => {
   safeWrite(LEARNINGS_FILE, learnings);
   console.log(`[LW-15] [AUDIT] self_reject account=${accountId} learning=${id}${reason ? ` reason="${reason}"` : ''}`);
   return c.json({ rejected: true, id, status: result.learning.status });
+});
+
+// ─── Review-seamless: triage summary + counted bulk decisions ───────────────
+//
+// Same account-scoped contract as the LW-15 routes above (resolveSelfReviewAccount,
+// ownership enforced in lib/self-review.js). These routes make a LARGE pending
+// backlog reviewable without weakening the consent contract: nothing goes
+// public except through a decision the contributor explicitly submitted, and
+// the bulk route refuses any batch whose confirm_count does not equal the
+// number of decisions (counted-confirmation rail, 2026-06-10 incident lesson).
+
+// GET /account/pending/summary: compact triage rows + counts for the CALLER's
+// OWN pending_review learnings. No bodies (scanning surface; full bodies stay
+// on GET /account/pending). Read scope, like the listing.
+app.get('/account/pending/summary', async (c) => {
+  const auth = await resolveSelfReviewAccount(c, 'read');
+  if (!auth.accountId) return c.json({ error: auth.error }, auth.status);
+  const accountId = auth.accountId;
+
+  // AUD19-3(b): retroactive wallet-orphan adoption before summarizing.
+  adoptOrphansForAccount(accountId);
+
+  const summary = summarizeOwnPending(learnings, accountId);
+  return c.json({ account_id: accountId, ...summary });
+});
+
+// POST /account/pending/bulk: apply up to SELF_REVIEW_BULK_MAX approve/reject
+// decisions in one call. Body: { decisions: [{id, decision, reason?}],
+// confirm_count: <decisions.length> }. Contribute scope (mutation), idempotent
+// per id, per-id results; ONE safeWrite after the batch. Validation and
+// ownership semantics are applyBulkDecisions (lib/self-review.js).
+app.post('/account/pending/bulk', async (c) => {
+  const auth = await resolveSelfReviewAccount(c, 'contribute');
+  if (!auth.accountId) return c.json({ error: auth.error }, auth.status);
+  const accountId = auth.accountId;
+
+  let body;
+  try { body = await c.req.json(); } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+  const decisions = body ? body.decisions : undefined;
+  const confirmCount = body ? body.confirm_count : undefined;
+
+  const outcome = applyBulkDecisions(learnings, accountId, decisions, { confirmCount });
+  if (!outcome.ok) {
+    return c.json({ error: outcome.error, code: outcome.code }, outcome.status);
+  }
+
+  if (outcome.counts.changed > 0) {
+    safeWrite(LEARNINGS_FILE, learnings);
+    for (const r of outcome.results) {
+      if (r.ok && r.changed) {
+        console.log(`[REVIEW-BULK] [AUDIT] self_${r.decision} account=${accountId} learning=${r.id} (bulk)`);
+      }
+    }
+  }
+  console.log(`[REVIEW-BULK] [AUDIT] bulk_summary account=${accountId} submitted=${outcome.counts.processed} approved=${outcome.counts.approved} rejected=${outcome.counts.rejected} idempotent=${outcome.counts.idempotent} failed=${outcome.counts.failed}`);
+
+  return c.json({
+    bulk_max: SELF_REVIEW_BULK_MAX,
+    ...outcome.counts,
+    results: outcome.results,
+  });
 });
 
 // ─── S21-3: Content Reporting Endpoint ──────────────────────────────────────
@@ -7994,6 +8487,45 @@ app.get('/admin/reports', adminAuth('read'), (c) => {
   });
 });
 
+// ─── Quiet phase: payout-notification waitlist ──────────────────────────────
+// Public capture for the accrue-only window (withdrawals paused during the
+// non-custodial migration; see /status). Validation, normalization, dedupe,
+// the growth ceiling, and the per-IP limiter live in lib/waitlist.js; these
+// routes own transport only. Storage is data/waitlist.json, an array of
+// { email, ts, source } records: no IP addresses are ever persisted, and
+// data/ is gitignored so the list never enters git.
+
+// POST /waitlist: join the withdrawal-notification list
+app.post('/waitlist', async (c) => {
+  const clientIp = getClientIp(c);
+
+  // Rate limit: 10 signups per IP per hour (mirrors the /report limiter).
+  if (isWaitlistRateLimited(clientIp)) {
+    return c.json({ error: 'Rate limit exceeded. Try again later.' }, 429);
+  }
+
+  let body;
+  try { body = await c.req.json(); } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+
+  const { email, source } = body || {};
+  const result = addToWaitlist(email, source);
+  if (!result.ok) {
+    return c.json({ error: result.error }, result.status);
+  }
+
+  // Silent success on duplicates: the response body and status are identical
+  // whether the email is new to the list or not, so this endpoint cannot be
+  // used to probe list membership.
+  return c.json({ ok: true });
+});
+
+// GET /waitlist/count: aggregate count only (no emails), for social proof
+app.get('/waitlist/count', (c) => {
+  return c.json({ count: waitlistCount() });
+});
+
 // ─── Static File Endpoints ───────────────────────────────────────────
 
 // OpenAPI spec (FREE)
@@ -8028,8 +8560,10 @@ app.get('/.well-known/security.txt', (c) => {
   }
 });
 
-// How It Works — static page
+// How It Works — server-rendered recent-discoveries band, static fallback
 app.get('/how-it-works', (c) => {
+  const live = serveHtmlWithLiveData(c, 'how-it-works.html');
+  if (live) return live;
   const res = serveStatic(c, 'how-it-works.html');
   if (res) return res;
   return c.text('How It Works page not found', 404);
@@ -8043,13 +8577,19 @@ app.get('/status', (c) => {
 });
 
 // ─── Standalone marketing / informational pages ───────────────────────
+// Both persona pages server-render the recent-discoveries band and the live
+// catalog stats (count-truth: no hardcoded catalog numbers), static fallback.
 app.get('/for-builders', (c) => {
+  const live = serveHtmlWithLiveData(c, 'for-builders.html');
+  if (live) return live;
   const res = serveStatic(c, 'for-builders.html');
   if (res) return res;
   return c.text('For Builders page not found', 404);
 });
 
 app.get('/for-agents', (c) => {
+  const live = serveHtmlWithLiveData(c, 'for-agents.html');
+  if (live) return live;
   const res = serveStatic(c, 'for-agents.html');
   if (res) return res;
   return c.text('For Agents page not found', 404);
@@ -8060,6 +8600,119 @@ app.get('/pricing', (c) => {
   if (res) return res;
   return c.text('Pricing page not found', 404);
 });
+
+// ─── Recent-discoveries band + live catalog stats (site revision, E3 + count-truth) ──
+// Pages that used to repeat the one worked example now render a band of real
+// recent learnings (category, title, quality score, price) at serve time, and
+// hardcoded catalog counts render live. Same visibility predicate as
+// GET /knowledge/stats and GET /earnings. A failed render degrades to the
+// static page (placeholder comment stays, band renders empty), never a 500.
+const RECENT_BAND_PLACEHOLDER = '<!-- SSR:RECENT_LEARNINGS -->';
+
+function escapeHtmlText(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function visibleLearningsList() {
+  return CONTENT_MODERATION_ENABLED
+    ? learnings.filter(l => !l.status || l.status === 'approved')
+    : learnings;
+}
+
+function displayPrice(l) {
+  let p = getLockedPrice(l.id);
+  if (p === null || p === undefined) {
+    p = l.pricing?.current_price
+      || pricingEngine.getCurrentPrice?.(l, learnings)
+      || l.unlock_price
+      || DEFAULT_UNLOCK_PRICE;
+  }
+  // Display clamp to the public bounds; the unlock route is the price authority.
+  return Math.min(50, Math.max(0.05, Number(p) || DEFAULT_UNLOCK_PRICE));
+}
+
+function renderRecentLearnings(html) {
+  if (!html.includes(RECENT_BAND_PLACEHOLDER)) return html;
+  try {
+    // Newest per category: one row per distinct category (its newest item),
+    // newest categories first, 6 rows. If fewer than 6 distinct categories
+    // exist, backfill with the newest remaining items regardless of category.
+    const sorted = visibleLearningsList()
+      .slice()
+      .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    const byCategory = new Map();
+    for (const l of sorted) {
+      const cat = l.category || 'general';
+      if (!byCategory.has(cat)) byCategory.set(cat, l);
+    }
+    const picks = [...byCategory.values()].slice(0, 6);
+    if (picks.length < 6) {
+      const chosen = new Set(picks.map(l => l.id));
+      for (const l of sorted) {
+        if (picks.length >= 6) break;
+        if (!chosen.has(l.id)) { picks.push(l); chosen.add(l.id); }
+      }
+    }
+    const rows = picks
+      .map(l => {
+        const score = pricingEngine.qualityScore01?.(l) ?? l.quality?.score;
+        const scoreSpan = (typeof score === 'number' && score > 0 && score <= 1)
+          ? `<span class="discovery-score">Quality: ${score.toFixed(2)}</span>`
+          : '';
+        return '<div class="discovery-row">'
+          + `<span class="discovery-cat">${escapeHtmlText(l.category || 'general')}</span>`
+          + `<span class="discovery-title">${escapeHtmlText(l.title || '')}</span>`
+          + scoreSpan
+          + `<span class="discovery-price">$${displayPrice(l).toFixed(2)}</span>`
+          + '</div>';
+      })
+      .join('\n');
+    return html.replace(RECENT_BAND_PLACEHOLDER, rows);
+  } catch (e) {
+    console.error('[recent-band] render failed, serving static band:', e.message);
+    return html;
+  }
+}
+
+function renderLiveCatalogStats(html) {
+  try {
+    const visible = visibleLearningsList();
+    const count = visible.length.toLocaleString('en-US');
+    const cats = new Set(visible.map(l => l.category)).size.toLocaleString('en-US');
+    let range = '$0.05 to $50.00';
+    if (visible.length) {
+      const prices = visible.map(displayPrice);
+      range = `$${Math.min(...prices).toFixed(2)} to $${Math.max(...prices).toFixed(2)}`;
+    }
+    return html
+      .replace(/(id="lc-learnings"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${count}<`)
+      .replace(/(id="lc-categories"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${cats}<`)
+      .replace(/(id="lc-price-range"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${range}<`);
+  } catch (e) {
+    console.error('[live-stats] render failed, serving static values:', e.message);
+    return html;
+  }
+}
+
+function serveHtmlWithLiveData(c, file) {
+  try {
+    const filePath = path.join(PUBLIC_DIR, file);
+    if (fs.existsSync(filePath)) {
+      let html = fs.readFileSync(filePath, 'utf8');
+      html = renderRecentLearnings(html);
+      html = renderLiveCatalogStats(html);
+      c.header('Content-Type', 'text/html; charset=utf-8');
+      c.header('Cache-Control', 'public, max-age=3600');
+      // Quiet phase: no-op while ANALYTICS_DOMAIN is unset (returns html as is).
+      return c.body(injectAnalytics(html, ANALYTICS_DOMAIN));
+    }
+  } catch (e) {
+    console.error(`[live-data] server-render failed for ${file}, falling back:`, e.message);
+  }
+  return null;
+}
 
 app.get('/earnings', (c) => {
   // Server-render the three live-ledger numbers into the raw HTML so non-JS
@@ -8074,7 +8727,7 @@ app.get('/earnings', (c) => {
         ? learnings.filter(l => !l.status || l.status === 'approved')
         : learnings;
       const llLearnings  = visibleLearnings.length.toLocaleString('en-US');
-      const llUnlocks    = visibleLearnings.reduce((s, l) => s + (l.quality.unlocks || 0), 0).toLocaleString('en-US');
+      const llUnlocks    = visibleLearnings.reduce((s, l) => s + (l.quality?.unlocks || 0), 0).toLocaleString('en-US');
       const llCategories = new Set(visibleLearnings.map(l => l.category)).size.toLocaleString('en-US');
       html = html
         .replace(/(id="ll-learnings"[^>]*>)[^<]*</,  `$1${llLearnings}<`)
@@ -8082,7 +8735,8 @@ app.get('/earnings', (c) => {
         .replace(/(id="ll-categories"[^>]*>)[^<]*</, `$1${llCategories}<`);
       c.header('Content-Type', 'text/html; charset=utf-8');
       c.header('Cache-Control', 'public, max-age=3600');
-      return c.body(html);
+      // Quiet phase: no-op while ANALYTICS_DOMAIN is unset (returns html as is).
+      return c.body(injectAnalytics(html, ANALYTICS_DOMAIN));
     }
   } catch (e) {
     console.error('[earnings] server-render failed, falling back to static:', e.message);
@@ -8198,7 +8852,8 @@ function serveLegalPage(c, filename, title) {
 </html>`;
     c.header('Content-Type', 'text/html; charset=utf-8');
     c.header('Cache-Control', 'public, max-age=3600');
-    return c.body(html);
+    // Quiet phase: no-op while ANALYTICS_DOMAIN is unset (returns html as is).
+    return c.body(injectAnalytics(html, ANALYTICS_DOMAIN));
   } catch {
     return c.text(`${title} not found`, 404);
   }
@@ -8210,102 +8865,6 @@ app.get('/legal/subprocessors', (c) => serveLegalPage(c, 'SUBPROCESSORS.md', 'Su
 app.get('/legal/supported-clients', (c) => serveLegalPage(c, 'SUPPORTED-CLIENTS.md', 'Supported Clients'));
 // FB-1: /dmca is incorporated into the Terms (§5.9.4(b)) and must resolve, not 404.
 app.get('/dmca', (c) => serveLegalPage(c, 'DMCA-POLICY.md', 'DMCA Copyright Policy'));
-
-// ─── Renderly — Web Content Extraction API ───────────────────────────
-
-app.get('/renderly', (c) => {
-  return c.json({
-    service: 'Renderly',
-    version: '0.3.1',
-    description: 'Web content extraction API — convert any URL to clean markdown, structured data, or readable text',
-    parent: 'Auxilo',
-    endpoints: {
-      '/renderly/markdown': { method: 'POST', price: '$0.001', description: 'Convert URL to clean markdown' },
-      '/renderly/extract': { method: 'POST', price: '$0.001', description: 'Extract structured data (title, description, headings, links, images, meta)' },
-      '/renderly/readable': { method: 'POST', price: '$0.0005', description: 'Get readable text content' },
-      '/renderly/llms.txt': { method: 'GET', price: 'free', description: 'LLM-readable service description' },
-      '/renderly/health': { method: 'GET', price: 'free' },
-      '/renderly/pricing': { method: 'GET', price: 'free' },
-    },
-    payment: { network: 'Base', token: 'USDC', protocol: 'x402' },
-    wallet: WALLET,
-  });
-});
-
-app.post('/renderly/markdown', dualAuth(0.001, 'Convert URL to markdown', 'query'), renderlyRateLimitMiddleware(), async (c) => {
-  try {
-    const { url } = await c.req.json();
-    // IR-M-007 FIX: Properly destructure validateUrl result — return error string, not object
-    const validation = validateUrl(url);
-    if (!validation.valid) return c.json({ error: validation.error }, 400);
-    const { html } = await fetchPage(validation.url);
-    const stripped = stripNonContent(html);
-    const markdown = htmlToMarkdown(stripped);
-    return c.json({ url: validation.url, markdown, length: markdown.length, service: 'Renderly v0.3.1' });
-  } catch (e) {
-    // SD-1 FIX: never reflect the internal fetch error to the caller — the
-    // distinguishing message (HTTP status / SSRF-blocked / ECONNREFUSED) is an
-    // SSRF info-leak oracle. Return a fixed generic error; log server-side only.
-    console.error(`[renderly/markdown] fetch failed: ${e && e.message}`);
-    return c.json({ error: 'Failed to process URL' }, 500);
-  }
-});
-
-app.post('/renderly/extract', dualAuth(0.001, 'Extract structured data from URL', 'query'), renderlyRateLimitMiddleware(), async (c) => {
-  try {
-    const { url } = await c.req.json();
-    // IR-M-007 FIX: Properly destructure validateUrl result — return error string, not object
-    const validation = validateUrl(url);
-    if (!validation.valid) return c.json({ error: validation.error }, 400);
-    const { html } = await fetchPage(validation.url);
-    const data = extractStructured(html, validation.url);
-    return c.json({ url: validation.url, ...data, service: 'Renderly v0.3.1' });
-  } catch (e) {
-    // SD-1 FIX: generic caller-facing error, distinguishing detail logged only.
-    console.error(`[renderly/extract] fetch failed: ${e && e.message}`);
-    return c.json({ error: 'Failed to process URL' }, 500);
-  }
-});
-
-app.post('/renderly/readable', dualAuth(0.0005, 'Get readable text from URL', 'query'), renderlyRateLimitMiddleware(), async (c) => {
-  try {
-    const { url } = await c.req.json();
-    // IR-M-007 FIX: Properly destructure validateUrl result — return error string, not object
-    const validation = validateUrl(url);
-    if (!validation.valid) return c.json({ error: validation.error }, 400);
-    const { html } = await fetchPage(validation.url);
-    const stripped = stripNonContent(html);
-    const markdown = htmlToMarkdown(stripped);
-    const readable = markdown.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[#*_`~>|-]/g, '').replace(/\n{3,}/g, '\n\n').trim();
-    return c.json({ url: validation.url, text: readable, length: readable.length, service: 'Renderly v0.3.1' });
-  } catch (e) {
-    // SD-1 FIX: generic caller-facing error, distinguishing detail logged only.
-    console.error(`[renderly/readable] fetch failed: ${e && e.message}`);
-    return c.json({ error: 'Failed to process URL' }, 500);
-  }
-});
-
-app.get('/renderly/llms.txt', (c) => {
-  c.header('Content-Type', 'text/plain');
-  return c.body(LLMS_TXT);
-});
-
-app.get('/renderly/health', (c) => {
-  return c.json({ status: 'healthy', service: 'Renderly', version: '0.3.1', timestamp: new Date().toISOString() });
-});
-
-app.get('/renderly/pricing', (c) => {
-  return c.json({
-    service: 'Renderly',
-    pricing: {
-      '/renderly/markdown': { price: '$0.001', description: 'Full markdown conversion' },
-      '/renderly/extract': { price: '$0.001', description: 'Structured data extraction' },
-      '/renderly/readable': { price: '$0.0005', description: 'Plain readable text' },
-    },
-    payment: { network: 'Base', token: 'USDC', protocol: 'x402' },
-    wallet: WALLET,
-  });
-});
 
 // ── OpenClaw Adapter Routes ──────────────────────────────────────────────────
 // S9-1: All OpenClaw endpoints require admin auth (S-3 audit finding)
@@ -8686,6 +9245,15 @@ app.post('/pipeline/:id/approve', requireSession, async (c) => {
   commitWal(walId);
   // ─────────────────────────────────────────────────────────────────────────
 
+  // AUD19-3(c): batched/throttled ops alert on queue entry (fire-and-forget).
+  if (CONTENT_MODERATION_ENABLED && published.length > 0) {
+    notePendingReviewEntries(published.length, {
+      source: 'chat_pipeline',
+      id: published[published.length - 1].id,
+      orphaned: false, // pipeline learnings are always account-bound (see contributor_account_id above)
+    });
+  }
+
   return c.json({
     published_count: published.length,
     published,
@@ -8891,7 +9459,9 @@ app.post('/referral/track', requireSession, async (c) => {
   }
 
   // Credit referee immediately ($5 credit)
-  await addPurchasedCredits(referee_account_id, 200, 40); // ~$5 worth
+  // AUD19-2: referral grants are $0-revenue mints — their unlock lots carry a
+  // $0.00 unit price so they accrue $0 contributor share when spent.
+  await addPurchasedCredits(referee_account_id, 200, 40, { unlock_unit_price_usd: 0 }); // ~$5 worth
 
   saveReferrals();
 
@@ -8930,7 +9500,8 @@ async function vestReferrerCredits(refereeAccountId) {
   }
 
   // Credit referrer ($5)
-  await addPurchasedCredits(referrerId, 200, 40); // ~$5 worth
+  // AUD19-2: $0-revenue grant lot — accrues $0 contributor share when spent.
+  await addPurchasedCredits(referrerId, 200, 40, { unlock_unit_price_usd: 0 }); // ~$5 worth
 
   // Fix C: Mark this referee as vested to prevent re-vesting on duplicate webhooks
   if (!referrerData.vested_referees) referrerData.vested_referees = [];

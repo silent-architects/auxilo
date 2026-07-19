@@ -65,14 +65,14 @@ section { padding: var(--section-pad); }
 .section-divider {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   margin-bottom: 56px;
 }
 
 .section-divider .mark {
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  width: 30px;
+  height: 30px;
 }
 
 .section-divider .line {
@@ -334,9 +334,6 @@ section { padding: var(--section-pad); }
 }
 
 /* ── Learning Example ────────────────────────────────────────────── */
-#learning-example {
-  padding: 80px 0 40px;
-}
 #learning-example .section-label {
   text-align: center;
 }
@@ -508,9 +505,6 @@ section { padding: var(--section-pad); }
 }
 
 /* ── Compounding Earnings ────────────────────────────────────────── */
-#compounding-earnings {
-  padding: 80px 0;
-}
 #compounding-earnings .section-label {
   text-align: center;
 }
@@ -724,12 +718,6 @@ section { padding: var(--section-pad); }
 }
 
 /* ── The Market ──────────────────────────────────────────────────── */
-#the-market {
-  padding: 80px 0;
-  background: rgba(255,255,255,0.018);
-  border-top: 1px solid rgba(229,229,227,0.06);
-  border-bottom: 1px solid rgba(229,229,227,0.06);
-}
 #the-market .section-label {
   text-align: center;
 }
@@ -763,11 +751,6 @@ section { padding: var(--section-pad); }
 }
 
 /* ── Why Auxilo Wins ─────────────────────────────────────────────── */
-#why-auxilo {
-  padding: 80px 0;
-  background: var(--obsidian);
-}
-
 #why-auxilo .section-label {
   text-align: center;
 }
@@ -830,13 +813,13 @@ section { padding: var(--section-pad); }
 }
 
 #for-builders h2 {
-  font-size: clamp(32px, 4vw, 52px);
-  font-weight: 700;
+  font-size: clamp(28px, 3.5vw, 42px);
+  font-weight: 500;
   letter-spacing: -0.02em;
   color: var(--ivory);
   max-width: 660px;
   margin-bottom: 20px;
-  line-height: 1.1;
+  line-height: 1.15;
 }
 
 .builders-grid {
@@ -891,7 +874,7 @@ section { padding: var(--section-pad); }
 #for-agents { background: var(--obsidian); }
 
 #for-agents h2 {
-  font-size: clamp(28px, 3.5vw, 46px);
+  font-size: clamp(28px, 3.5vw, 42px);
   font-weight: 500;
   letter-spacing: -0.02em;
   color: var(--ivory);
@@ -1039,10 +1022,13 @@ section { padding: var(--section-pad); }
   tab-size: 2;
 }
 
-.code-block pre .c { color: #7C8A9A; } /* comment — #7C8A9A on #111 = 5.36:1 (WCAG AA); was #5C6A78 = 3.41:1 (fail) */
-.code-block pre .k { color: #C9A84C; } /* keyword / key */
-.code-block pre .s { color: #98C379; } /* string */
-.code-block pre .n { color: #61AFEF; } /* number */
+/* Monochrome-plus-gold syntax (visual pass P7): comments slate, code ivory,
+   only the load-bearing token (key/command) in aurum. No blue, no green;
+   green stays reserved for the /status "operational" semantic only. */
+.code-block pre .c { color: #7C8A9A; } /* comment — #7C8A9A on #111 = 5.36:1 (WCAG AA) */
+.code-block pre .k { color: #C9A84C; } /* keyword / key — the one gold token */
+.code-block pre .s { color: var(--ivory); } /* string */
+.code-block pre .n { color: var(--ivory); } /* number */
 .code-block pre .p { color: var(--slate); } /* punctuation */
 
 /* ── Pricing ───────────────────────────────────────────────────────────────── */
@@ -1053,7 +1039,7 @@ section { padding: var(--section-pad); }
 }
 
 #pricing h2 {
-  font-size: clamp(28px, 3.5vw, 44px);
+  font-size: clamp(28px, 3.5vw, 42px);
   font-weight: 500;
   letter-spacing: -0.02em;
   color: var(--ivory);
@@ -1191,7 +1177,7 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
 #api-integration { background: var(--obsidian); }
 
 #api-integration h2 {
-  font-size: clamp(28px, 3.5vw, 44px);
+  font-size: clamp(28px, 3.5vw, 42px);
   font-weight: 500;
   letter-spacing: -0.02em;
   color: var(--ivory);
@@ -1249,7 +1235,7 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
 }
 
 .ep-method.post { background: rgba(201,168,76,0.18); color: var(--aurum); }
-.ep-method.get  { background: rgba(97,175,239,0.15); color: #61AFEF; }
+.ep-method.get  { background: rgba(229,229,227,0.12); color: var(--ash); }
 
 .ep-path {
   font-family: var(--mono);
@@ -1688,18 +1674,39 @@ abbr[title] {
   cursor: help;
 }
 
-/* ── Section Background Alternation ──────────────────────────────── */
+/* ── Section Rhythm: two-step raised / ground system (visual pass, Move 2) ──
+   "Raised" sections carry a legible tint + hairlines; "ground" sections stay
+   obsidian and return the brand triangle texture (same data-URI as .hero-bg,
+   alpha baked in via stroke-opacity). Strict A/B/A/B per page. */
+.section-raised,
 #learning-example,
+#the-market,
+.explore-section,
 #for-builders,
 #pricing {
-  background: rgba(255,255,255,0.035);
-  border-top: 1px solid rgba(229,229,227,0.08);
-  border-bottom: 1px solid rgba(229,229,227,0.08);
+  background: rgba(255,255,255,0.05);
+  border-top: 1px solid rgba(229,229,227,0.1);
+  border-bottom: 1px solid rgba(229,229,227,0.1);
 }
 
-#compounding-earnings,
-#the-market {
-  background: rgba(255,255,255,0.02);
+.section-ground,
+#how-it-works,
+#why-auxilo,
+#footer-cta,
+#compounding-earnings {
+  background-color: var(--obsidian);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cpolygon points='60,10 100,90 20,90' fill='none' stroke='%23C9A84C' stroke-opacity='0.018' stroke-width='1.5'/%3E%3Cline x1='60' y1='50' x2='115' y2='50' stroke='%23C9A84C' stroke-opacity='0.018' stroke-width='1'/%3E%3C/svg%3E");
+  background-size: 120px 120px;
+}
+
+@media (max-width: 600px) {
+  .section-ground,
+  #how-it-works,
+  #why-auxilo,
+  #footer-cta,
+  #compounding-earnings {
+    background-size: 90px 90px;
+  }
 }
 
 /* ── Line Chart (Earnings Projection) ──────────────────────────────────────── */
@@ -2134,4 +2141,238 @@ abbr[title] {
     padding: 16px 12px;
     font-size: 12px;
   }
+}
+
+/* ── Hero install block (E1: the primary conversion is the command) ───────── */
+.hero-install {
+  max-width: 560px;
+  margin-bottom: 32px;
+}
+
+.hero-install .hero-setup-block {
+  text-align: left;
+}
+
+.hero-install .hero-setup-block pre {
+  font-size: 16px;
+  padding: 18px 20px;
+  color: var(--aurum);
+}
+
+.hero-trust {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+}
+
+.hero-trust li {
+  position: relative;
+  padding: 6px 0 6px 22px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--slate-text);
+}
+
+.hero-trust li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 13px;
+  width: 8px;
+  height: 8px;
+  background: none;
+  border: 1.5px solid var(--aurum-border);
+  transform: rotate(45deg);
+}
+
+.hero-trust code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ash);
+  background: rgba(255,255,255,0.05);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+@media (max-width: 600px) {
+  .hero-install { max-width: 100%; }
+  .hero-install .hero-setup-block pre { font-size: 14px; }
+}
+
+/* ── Pull-stats: ledger tier — exactly one gold figure per strip (Move 1) ── */
+span.pull-stat-num.pull-stat-num, .pull-stat-num.pull-stat-num.pull-stat-num {
+  font-size: clamp(48px, 7vw, 88px);
+  font-weight: 500;
+  font-family: var(--mono);
+  color: var(--aurum);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+span.pull-stat-secondary.pull-stat-secondary, .pull-stat-secondary.pull-stat-secondary.pull-stat-secondary {
+  font-size: clamp(28px, 4vw, 40px);
+  font-weight: 500;
+  font-family: var(--mono);
+  color: var(--ivory);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.pull-stat-caption {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--slate);
+  margin-top: 8px;
+}
+
+.ledger-strip.ledger-strip {
+  padding: 64px 0;
+  border-top: 1px solid var(--aurum-border);
+  border-bottom: 1px solid rgba(229,229,227,0.08);
+}
+
+/* ── Recent discoveries band (E3: real learnings, server-rendered) ────────── */
+.discovery-band {
+  border-top: 1px solid rgba(229,229,227,0.08);
+  border-bottom: 1px solid rgba(229,229,227,0.08);
+}
+
+.discovery-row {
+  display: grid;
+  grid-template-columns: 150px 1fr auto auto;
+  align-items: baseline;
+  gap: 16px;
+  padding: 14px 4px;
+  border-bottom: 1px solid rgba(229,229,227,0.06);
+}
+
+.discovery-row:last-child { border-bottom: none; }
+
+.discovery-cat {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--aurum);
+  letter-spacing: 0.04em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.discovery-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ivory);
+  line-height: 1.45;
+  min-width: 0;
+}
+
+.discovery-score {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--slate);
+  white-space: nowrap;
+}
+
+.discovery-price {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--aurum);
+  white-space: nowrap;
+  justify-self: end;
+}
+
+.discovery-band-note {
+  font-size: 13px;
+  color: var(--slate);
+  margin-top: 14px;
+  line-height: 1.6;
+}
+
+@media (max-width: 700px) {
+  .discovery-row {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "cat cat"
+      "title title"
+      "score price";
+    row-gap: 4px;
+  }
+  .discovery-cat { grid-area: cat; }
+  .discovery-title { grid-area: title; }
+  .discovery-score { grid-area: score; }
+  .discovery-price { grid-area: price; }
+}
+
+/* ── Mobile texture + eyebrow fixes (visual pass P2/P3) ───────────────────── */
+@media (max-width: 600px) {
+  .hero-bg {
+    background-size: 90px 90px;
+    opacity: 0.02;
+  }
+  body .hero-eyebrow,
+  body .page-hero-eyebrow,
+  body .section-label {
+    letter-spacing: 0.12em;
+    font-size: 10px;
+  }
+}
+
+/* ── Value-tiers table: stacked cards under 600px (visual pass P8) ─────────
+   The PRICE RANGE and EXAMPLE columns are the proof; never push the proof
+   off-screen on the device developers actually browse. */
+@media (max-width: 600px) {
+  .value-tiers-table-wrap {
+    overflow-x: visible;
+    border: none;
+    border-radius: 0;
+  }
+  .value-tiers-table-wrap::after { display: none; }
+  .value-tiers-table { min-width: 0; }
+  .value-tiers-table thead { display: none; }
+  .value-tiers-table,
+  .value-tiers-table tbody,
+  .value-tiers-table tr,
+  .value-tiers-table td {
+    display: block;
+    width: 100%;
+  }
+  .value-tiers-table tr {
+    border: 1px solid rgba(229,229,227,0.1);
+    border-radius: 6px;
+    margin-bottom: 12px;
+    padding: 16px 16px 8px;
+    background: rgba(255,255,255,0.02);
+  }
+  .value-tiers-table td {
+    border-bottom: none;
+    padding: 6px 0;
+  }
+  .value-tiers-table td.tier-name {
+    font-size: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(229,229,227,0.08);
+    margin-bottom: 6px;
+  }
+  .value-tiers-table td:not(.tier-name)::before {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--slate);
+    margin-bottom: 2px;
+  }
+  .value-tiers-table td:nth-child(2)::before { content: 'What it covers'; }
+  .value-tiers-table td.price-range::before { content: 'Price range'; }
+  .value-tiers-table td.example-text::before { content: 'Example'; }
+}
+
+/* Range strings in a ledger strip: compact mono so the range holds one line */
+span.pull-stat-range.pull-stat-range, .pull-stat-range.pull-stat-range.pull-stat-range {
+  font-size: clamp(16px, 1.5vw, 19px);
+  letter-spacing: 0;
+  line-height: 1.3;
+  display: block;
+  padding: 6px 0;
 }

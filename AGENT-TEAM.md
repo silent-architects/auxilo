@@ -64,7 +64,7 @@ Test cases are written BEFORE implementation. Builders never implement without a
   - Reviews all code changes for OWASP Top 10, injection vectors, auth bypass
   - Maintains SECURITY-AUDIT.md — tracks findings, fix status, re-audit results
   - Threat models every new endpoint before it goes live
-  - Reviews deployment configuration (Conway VM, environment variables, key management)
+  - Reviews deployment configuration (production VM, environment variables, key management)
   - Sign-off required before any deployment
 - **Does NOT**: Write production code (dedicated review context — never builds what it audits)
 - **Critical constraint**: This role NEVER shares a context with a build role. Separation is the point.
@@ -176,7 +176,7 @@ Test cases are written BEFORE implementation. Builders never implement without a
   - Writes test cases BEFORE implementation begins (from BUILD-SPEC)
   - Runs full regression checklist after every build
   - Tests edge cases: concurrent requests, malformed input, empty states, large payloads
-  - Validates deployment on Conway VM matches local behavior
+  - Validates deployment on the production VM matches local behavior
   - Maintains test scripts and documents test results
   - Sign-off required before deployment
 - **Does NOT**: Write production code, make architectural decisions
@@ -209,7 +209,7 @@ Test cases are written BEFORE implementation. Builders never implement without a
   - Monitors quality gate pass/fail rates — flags if pass rate drops below 60% (too strict) or exceeds 95% (too lenient)
   - Tracks category distribution — flags imbalances (e.g., >40% of catalog in one category, <3% in any category)
   - Identifies high-value catalog gaps ("zero learnings on X topic" where search demand exists)
-  - Validates pricing engine output against foundation price bands ($0.05 floor, $50 ceiling, max 15% daily change)
+  - Validates pricing engine output against foundation price bands ($0.05 floor, $50 ceiling, reprices bounded 50% to 300% of base)
   - Runs dedup sweeps — identifies near-duplicate learnings that fragment demand
   - Flags stale learnings (>90 days, zero unlocks, no ratings) for repricing or archival
   - Reports catalog health metrics to EXEC-1: total learnings, avg price, category distribution, quality gate rates
@@ -238,7 +238,7 @@ Test cases are written BEFORE implementation. Builders never implement without a
    f. CFO-1 — if touches ANY file in outputs/ (models, decks, financial numbers)
    g. QA — runs test cases, regression checklist
    h. PM — final sign-off
-7. Deploy to Conway VM
+7. Deploy to the production VM
 8. QA validates live deployment
 9. PM marks task complete in TASKS.md
 10. Exec PM runs full contamination scan — verifies all upstream files reflect any changes

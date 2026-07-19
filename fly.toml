@@ -12,7 +12,7 @@
 # are pending.
 
 app = "auxilo"
-primary_region = "iad"   # US East — matches Conway's us-east proximity
+primary_region = "iad"   # US East (kept from the prior host's region for latency continuity)
 kill_signal   = "SIGTERM"
 kill_timeout  = "30s"
 

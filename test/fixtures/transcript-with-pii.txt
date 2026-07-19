@@ -1,1 +1,1 @@
-Human: I need to configure my Stripe integration with the API key sk_live_abc123def456ghi789jkl012mno and connect my database at postgres://admin:s3cr3tP@ss@10.0.1.50:5432/myapp. My email is tyler@conway.tech and I can be reached at +1-512-555-0147.
+Human: I need to configure my Stripe integration with the API key sk_live_abc123def456ghi789jkl012mno and connect my database at postgres://admin:s3cr3tP@ss@10.0.1.50:5432/myapp. My email is tyler@retired-vm.tech and I can be reached at +1-512-555-0147.

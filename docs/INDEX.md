@@ -29,7 +29,7 @@ Documentation and source that also ship publicly, by location:
 
 | Location | Contents |
 |---|---|
-| root | `README.md` (quickstart), `CLAUDE.md` (repo governance), `AGENTS.md` / `AGENT-TEAM.md` (agent roles + instructions), `ORCHESTRATOR.md` (sprint pattern), `TASKS.md` + `PUNCH-LIST.md` (task tracking), `MIGRATION-FLY.md` (fly.io migration), `openapi.json` (API spec) |
+| root | `README.md` (quickstart), `CLAUDE.md` (repo governance), `AGENTS.md` / `AGENT-TEAM.md` (agent roles + instructions), `ORCHESTRATOR.md` (sprint pattern), `TASKS.md` + `PUNCH-LIST.md` (task tracking), `openapi.json` (API spec). The one-off fly.io migration runbook was retired 2026-07 (migration complete, source environment decommissioned). |
 | `public/` | Static site + assets served by the API (`index.html`, `how-it-works.html`, `.well-known/`, `llms.txt`, `security.txt`) |
 | `specs/` | Public build/test specs — the P2.1a autonomous-extraction series (`REWORK-P2.1a.md`, `TEST-P2.1a.md`, `BUILD-SPEC-P2.1a-*.md`) |
 | `lib/`, `scripts/`, `jobs/`, `config/` | Server library modules, install/runner scripts, scheduled jobs, config |

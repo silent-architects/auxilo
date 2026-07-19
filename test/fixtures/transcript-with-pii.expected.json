@@ -1,5 +1,5 @@
 {
   "clean": false,
   "expected_patterns": ["stripe_key", "connection_string", "internal_ip", "email_address"],
-  "notes": "sk_live_ triggers stripe_key; postgres:// with @ triggers connection_string; 10.0.1.50 triggers internal_ip; tyler@conway.tech triggers email_address"
+  "notes": "sk_live_ triggers stripe_key; postgres:// with @ triggers connection_string; 10.0.1.50 triggers internal_ip; tyler@retired-vm.tech triggers email_address"
 }

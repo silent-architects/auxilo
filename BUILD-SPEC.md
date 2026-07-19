@@ -4,7 +4,7 @@
 
 ## CRITICAL: Read Before Changing Anything
 
-This is an **additive build**. Auxilo v0.1.0 is live in production on a Conway Cloud VM. Every existing endpoint, MCP tool, and payment flow must continue working exactly as-is after this build.
+This is an **additive build**. Auxilo v0.1.0 is live in production on a legacy cloud VM (pre-Fly). Every existing endpoint, MCP tool, and payment flow must continue working exactly as-is after this build.
 
 ### DO NOT modify these existing components:
 - The `x402Gate()` function (lines 25-84 of server.js) — working in production
@@ -591,10 +591,10 @@ case 'auxilo_contributor': {
 
 #### `seed-knowledge.json`
 Create 20-30 learning objects using the data model above. Source from real operational experience with:
-- Tool quirks (Firecrawl, E2B, Conway API, x402 payment flows)
+- Tool quirks (Firecrawl, E2B, the legacy host API, x402 payment flows)
 - MCP debugging patterns
 - Hono framework tips
-- Conway VM deployment gotchas
+- Legacy VM deployment gotchas
 - JSON persistence patterns on minimal VMs
 
 Use platform wallet `0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6` as `contributor_wallet` for all seeds. All quality scores start at zero.
@@ -660,8 +660,8 @@ After the build, ALL of these must still work:
 ## Deployment
 
 After local testing passes:
-1. Copy updated files to Conway VM (sandbox ID: `725fa3fea775ba39db5a2e3703fa4557`)
+1. Copy updated files to the prod VM (legacy sandbox `725fa3fea775ba39db5a2e3703fa4557`)
 2. Restart the server on the VM
-3. Verify live endpoint: `https://3000-725fa3fea775ba39db5a2e3703fa4557.life.conway.tech/`
+3. Verify the live endpoint (the sandbox's public URL)
 4. Verify `/knowledge/stats` returns on live
 5. Update Claude Desktop MCP config if mcp-server.js path changed (it shouldn't)

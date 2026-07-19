@@ -6,15 +6,27 @@ on:
 
 jobs:
   predeploy-guard:
-    name: Predeploy Guard (OPS-1)
+    name: Predeploy Guard (OPS-1 + machine-surface drift)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      # The drift guard (scripts/check-surface-drift.sh, invoked by
+      # predeploy-check.sh) uses inline `node -e` for JSON parsing, so the
+      # job needs Node even though the legal-doc checks are pure bash/grep.
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       # BLOCKING: fails the build if any served legal doc still contains a
       # `[[...]]` fill-blank (e.g. [[DEPLOY-DATE]], [[LEGAL-ENTITY ...]]), or
       # if the ToS "Current Amendment" id has drifted from the server's
-      # CURRENT_TOS_VERSION (Gate-B Condition B). See scripts/predeploy-check.sh.
+      # CURRENT_TOS_VERSION (Gate-B Condition B), or if any public tool
+      # enumeration drifts from mcp-server.js (surplus or missing tools),
+      # openapi.json carries a non-canonical path, or the four version
+      # strings disagree. See scripts/predeploy-check.sh and
+      # scripts/check-surface-drift.sh.
       - name: Run predeploy check
         run: bash scripts/predeploy-check.sh
 

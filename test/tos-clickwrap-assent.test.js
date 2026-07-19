@@ -239,7 +239,9 @@ describe('server.js: blocking clickwrap gates', () => {
   });
 
   it('link-wallet gates on acceptance BEFORE linking (and before the lock)', () => {
-    const h = sliceHandler("app.post('/account/link-wallet'");
+    // AUD19 HIGH-1: window widened — the handler grew with the account-bound
+    // link-challenge flow, pushing the lock + linkWallet call past the default span.
+    const h = sliceHandler("app.post('/account/link-wallet'", 10000);
     const gateAt = h.indexOf('hasAcceptedCurrentTos');
     const lockAt = h.indexOf('acquireAccountLock');
     const linkAt = h.indexOf('linkWallet(accountId');

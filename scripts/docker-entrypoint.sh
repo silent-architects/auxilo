@@ -1,7 +1,7 @@
 #!/bin/sh
 # scripts/docker-entrypoint.sh — production entrypoint for the Fly container.
 #
-# Why this exists: Fly volumes restored from Conway tarballs had root:root
+# Why this exists: Fly volumes restored from the legacy host's tarballs had root:root
 # ownership on files (tar preserves source ownership by default). The
 # `node` user (uid 1000) couldn't read them and the server crashed with
 # EACCES on startup. Earlier fix (commit 1ecf811) removed `USER node`

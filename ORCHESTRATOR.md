@@ -29,7 +29,7 @@ Each sprint session consumes a full context window. By the time Track 2 finishes
 │     a. Planner agent → BUILD-SPEC + test plan           │
 │     b. Builder agent → implementation (fresh context)   │
 │     c. QA agent → test execution (fresh context)        │
-│     d. Deploy agent → Conway VM push (fresh context)    │
+│     d. Deploy agent → prod VM push (fresh context)      │
 │  5. Update PUNCH-LIST.md + SPRINT-XX.md with results    │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -75,7 +75,7 @@ This means the Orchestrator's context stays small — it only holds the punchlis
 **Writes**: Test results, pass/fail report
 **Fresh context**: Yes — explicitly isolated from build context
 
-### 5. Deploy Agent (Conway VM push + live validation)
+### 5. Deploy Agent (prod VM push + live validation)
 **Model**: Sonnet
 **Context load**: Light (~30K tokens)
 **Reads**: DEPLOY-GUIDE.md, source files to upload, live validation checklist
@@ -181,7 +181,7 @@ Current architecture:
 - Runtime: Node.js + Hono (server.js ~1500 lines)
 - Storage: JSON files in data/
 - Auth: Magic link + JWT (Phase 0.1) + x402 (existing)
-- Deployment: Conway Cloud VM
+- Deployment: legacy cloud VM (pre-Fly)
 
 ## Dependencies
 These items are DONE and available:
@@ -270,17 +270,17 @@ Write to: sprints/{sprint_id}/{item_id}-qa-result.md
 - VERDICT: PASS or FAIL (with reasons if FAIL)
 ```
 
-### Deploy Prompt (Conway VM Push)
+### Deploy Prompt (Prod VM Push)
 
 ```markdown
-# Deploy: Push {item_id} to Conway VM
+# Deploy: Push {item_id} to the prod VM
 
 ## Your Role
 You are the deployment agent. Read: DEPLOY-GUIDE.md (your complete operational manual)
 
 ## Credentials
-- API Key: Read from ~/.conway/config.json
-- Wallet Key: Read from ~/.conway/wallet.json (if needed for start.sh update)
+- API Key: Read from the legacy host CLI's config file in $HOME
+- Wallet Key: Read from the legacy host CLI's wallet file in $HOME (if needed for start.sh update)
 
 ## Files to Deploy
 {list of changed files from BUILD-SPEC}
@@ -423,7 +423,7 @@ Task(subagent_type="general-purpose", prompt=<qa_prompt>)
   → QA runs tests, writes results to disk
 
 Task(subagent_type="general-purpose", prompt=<deploy_prompt>)
-  → Deploy agent pushes to Conway VM, writes results to disk
+  → Deploy agent pushes to the prod VM, writes results to disk
 ```
 
 Each Task agent:

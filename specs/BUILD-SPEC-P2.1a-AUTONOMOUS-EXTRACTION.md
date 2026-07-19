@@ -738,7 +738,7 @@ Summary-table math: Legal/Regulatory count 5→6, Medium count for Legal/Regulat
 | `openapi.json` | `/extract` shape, `/extract/review/*`, `DELETE /learn/:id`, `PATCH /account/settings` |
 | `~/.claude/hooks/auxilo-extract.sh` | Replace nohup spawn with local curl to runner's control socket |
 | `~/.claude/settings.json` | No change (existing hook registration is correct) |
-| `~/Library/LaunchAgents/tech.conway.auxilo-sweeper.plist` | No change (wrapper still correct) |
+| `~/Library/LaunchAgents/io.auxilo.sweeper.plist` | No change (wrapper still correct) |
 | `auxilo/scripts/auxilo-sweeper-wrapper.sh` | Remove `~/.zshrc` sourcing (credentials via `credentials.json` only, per GOV-3) |
 
 ### 12.3 Deprecated files
@@ -806,7 +806,7 @@ Summary-table math: Legal/Regulatory count 5→6, Medium count for Legal/Regulat
 # 7. Enable autonomous mode for Tyler's account only via PATCH /account/settings
 # 8. Touch ~/.auxilo/autonomous-enabled on Tyler's machine
 # 9. Load launchd agent
-launchctl load ~/Library/LaunchAgents/tech.conway.auxilo-sweeper.plist
+launchctl load ~/Library/LaunchAgents/io.auxilo.sweeper.plist
 # 10. Watch logs
 tail -f ~/.auxilo/extract.log
 # 11. After 24h green: enable for 3 additional pilot Builders
