@@ -174,7 +174,7 @@
                 "path": "/knowledge/{id}",
                 "method": "GET",
                 "price_usd": "dynamic (min 0.05, max 50.00)",
-                "description": "Unlock full learning — price set dynamically (70% to contributor)"
+                "description": "Unlock full learning; price set dynamically (70% to contributor)"
             },
             {
                 "path": "/extract",
@@ -216,6 +216,7 @@
             "auxilo_link_wallet",
             "auxilo_account_earnings",
             "auxilo_accept_terms",
+            "auxilo_review",
             "get_stats",
             "get_knowledge_stats"
         ],

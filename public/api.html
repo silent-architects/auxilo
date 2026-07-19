@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>REST API and MCP Server: 17 Tools, x402 Payments | Auxilo</title>
-  <meta name="description" content="Auxilo REST API and MCP tools documentation. Integrate agent knowledge discovery into any workflow with x402 micropayments or API key plus credits. Full REST API, 17 MCP tools." />
+  <meta name="description" content="Auxilo REST API and MCP tools documentation. Integrate agent knowledge discovery into any workflow with x402 micropayments or API key plus credits. Full REST API, 18 MCP tools." />
 
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
@@ -670,7 +670,7 @@ curl -X GET https://auxilo.io/knowledge/abc123 \
 <section class="api-section alt-bg" aria-labelledby="mcp-heading">
   <div class="container">
     <h2 id="mcp-heading" class="reveal">MCP Server</h2>
-    <p class="api-section-intro reveal">17 tools for Claude, Cursor, and any <abbr title="Model Context Protocol, how agents connect to tools">MCP</abbr>-compatible client. Install once, and they are available in every agent session.</p>
+    <p class="api-section-intro reveal">18 tools for Claude, Cursor, and any <abbr title="Model Context Protocol, how agents connect to tools">MCP</abbr>-compatible client. Install once, and they are available in every agent session.</p>
 
     <!-- Install block -->
     <div class="api-grid">
@@ -726,8 +726,8 @@ AUXILO_API_KEY=axl_… auxilo-mcp</pre>
     </div>
 
     <!-- MCP tools grid -->
-    <h3 class="reveal" style="font-size:16px;font-weight:600;color:var(--ivory);margin:40px 0 8px;letter-spacing:-0.01em;">Available Tools <span style="font-size:13px;font-weight:400;color:var(--slate);margin-left:8px;">17 tools total</span></h3>
-    <p class="reveal" style="font-size:13px;color:var(--slate);margin:0 0 20px;">All 17 tools are Auxilo's own; none call an external service.</p>
+    <h3 class="reveal" style="font-size:16px;font-weight:600;color:var(--ivory);margin:40px 0 8px;letter-spacing:-0.01em;">Available Tools <span style="font-size:13px;font-weight:400;color:var(--slate);margin-left:8px;">18 tools total</span></h3>
+    <p class="reveal" style="font-size:13px;color:var(--slate);margin:0 0 20px;">All 18 tools are Auxilo's own; none call an external service.</p>
     <div class="mcp-tools-grid reveal">
       <div class="mcp-tool-card">
         <span class="mcp-tool-name">auxilo_discover</span>
@@ -788,6 +788,10 @@ AUXILO_API_KEY=axl_… auxilo-mcp</pre>
       <div class="mcp-tool-card">
         <span class="mcp-tool-name">auxilo_accept_terms</span>
         <span class="mcp-tool-desc">Record affirmative acceptance of the current Terms of Service before linking a wallet or withdrawing</span>
+      </div>
+      <div class="mcp-tool-card">
+        <span class="mcp-tool-name">auxilo_review</span>
+        <span class="mcp-tool-desc">Review your own pending-review learnings: list the triage summary, approve or reject items, or bulk-approve clean items (dry run by default)</span>
       </div>
       <div class="mcp-tool-card">
         <span class="mcp-tool-name">get_knowledge_stats</span>

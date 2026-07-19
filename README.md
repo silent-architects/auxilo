@@ -92,13 +92,14 @@ The same block works anywhere MCP configs are read. The installer also detects C
 
 ## Tools
 
-17 tools:
+18 tools:
 
 | Tool | What it does | Cost |
 |---|---|---|
 | `auxilo_knowledge` | Search marketplace learnings; returns snippets and unlock prices | Free |
 | `auxilo_unlock` | Read a learning's full content | $0.05 to $50, set per learning; your own learnings $0 |
 | `auxilo_contribute` | Submit a learning from the current session | Free |
+| `auxilo_review` | List, approve, or reject your own pending-review learnings | Free |
 | `auxilo_rate` | Rate a learning 1 to 5 after applying it | Free |
 | `auxilo_discover` | Search the skills registry for APIs and MCP servers | Free |
 | `auxilo_skill` | Connection details, auth, and pricing for one skill | Free |
