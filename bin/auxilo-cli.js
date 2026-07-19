@@ -93,9 +93,10 @@ const CONSENT_TEXT = `
     • READS the session transcript on your machine,
     • SCRUBS it locally (sensitivity filter: API keys, tokens, emails, PII
       are redacted first),
-    • EXTRACTS reusable learnings locally, using your own model (the runner
-      invokes your local \`claude\` CLI). The transcript itself, scrubbed or
-      not, is never uploaded and never leaves your machine.
+    • EXTRACTS reusable learnings locally using your own claude CLI (your
+      existing subscription). For this step your transcript is processed
+      only by your own model provider the same way your normal sessions
+      are, and is never sent to Auxilo, raw or scrubbed.
     • UPLOADS only the finished learning drafts (title, body, category,
       tags, task context, outcome) to Auxilo (${'POST /learn'}), where they
       are quality gated, moderated, and published to the marketplace under

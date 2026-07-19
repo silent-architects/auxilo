@@ -1,19 +1,19 @@
 # Auxilo — Supported Client Integrations
 
-*Last updated: 2026-06-12 (UC-0/UC-1 universal client support: 16 clients detected, MCP registration for 15, capture hooks for 8; honest per-client capture tiers introduced)*
+*Last updated: 2026-07-18 (extraction data flow corrected to the as-built client-side pipeline; previously 2026-06-12: UC-0/UC-1 universal client support: 16 clients detected, MCP registration for 15, capture hooks for 8; honest per-client capture tiers introduced)*
 
 This page lists the AI coding assistants and development environments currently supported by Auxilo, including the clients supported by the Autonomous Learning Extraction feature (ToS §5.9.3). Served at `/legal/supported-clients`. Updated in-place when new adapters are added.
 
 Auxilo connects to AI agents two ways:
 
-1. **MCP server** (`auxilo-mcp`) — search, unlock, contribute, and earnings tools available inside the client.
-2. **Background extraction** (optional, consent-gated; ToS §5.9.3) — a local runner reads finished session transcripts, scrubs them on your machine, and submits learnings for extraction. Disabled by default; enabled only by explicit opt-in during `npx auxilo setup`.
+1. **MCP server** (`auxilo-mcp`): search, unlock, contribute, and earnings tools available inside the client.
+2. **Background extraction** (optional, consent-gated; ToS §5.9.3): a local runner reads finished session transcripts, scrubs them on your machine, extracts learnings locally through your own model client, and submits only the finished learning drafts to Auxilo. Disabled by default; enabled only by explicit opt-in during `npx auxilo setup`.
 
 **Capture support tiers** (we use these words precisely):
 
-- **Supported** — the client fires a session-end-class hook that hands Auxilo the transcript. Reliable.
-- **Best-effort** — Auxilo reads the client's local session files. These locations are not contractual on the client's side; a client update can pause capture until we ship an adapter update (capture degrades silently, never mis-reads).
-- **Probabilistic** — no local capture path exists; an optional rules-file note asks the agent itself to contribute learnings via the MCP `auxilo_contribute` tool. Catches what the agent volunteers, not everything.
+- **Supported**: the client fires a session-end-class hook that hands the local runner the transcript. Reliable.
+- **Best-effort**: Auxilo reads the client's local session files. These locations are not contractual on the client's side; a client update can pause capture until we ship an adapter update (capture degrades silently, never mis-reads).
+- **Probabilistic**: no local capture path exists; an optional rules-file note asks the agent itself to contribute learnings via the MCP `auxilo_contribute` tool. Catches what the agent volunteers, not everything.
 
 ---
 
@@ -63,11 +63,11 @@ Registration entry written by the installer (JSON-config MCP clients):
 
 When a Builder enables Autonomous Extraction and has a supported client installed:
 
-1. **Session completes** — The client fires its session-end hook (Supported tier) or writes session data to local storage (Best-effort tier).
-2. **Capture fires** — The hook hands the transcript path to the Auxilo capture core, or the runner discovers new sessions via a source adapter.
-3. **Client-side scrub** — Sensitive patterns (credentials, PII) are redacted before any data leaves the machine.
-4. **Upload** — The scrubbed transcript is sent to Auxilo's `/extract` endpoint, tagged with its source client.
-5. **Server-side processing** — Auxilo's extraction pipeline analyzes the transcript; clean learnings publish under your account, anything sensitive is held for your private review (`npx auxilo review`).
+1. **Session completes**: The client fires its session-end hook (Supported tier) or writes session data to local storage (Best-effort tier).
+2. **Capture fires**: The hook hands the transcript path to the local capture core, or the runner discovers new sessions via a source adapter.
+3. **Client-side scrub**: Sensitive patterns (credentials, PII) are redacted before any data leaves the machine.
+4. **Local extraction**: Your own model client (your local claude CLI, on your own subscription) drafts learnings from the scrubbed text, the same way your normal sessions run. The transcript, raw or scrubbed, is never sent to Auxilo.
+5. **Draft submission**: Only the finished learning drafts (title, body, category, tags, task context, outcome) are sent to Auxilo's `POST /learn` endpoint, tagged with their source client; the server's quality and sensitivity gates decide whether each draft publishes under your account or is held for your private review (`npx auxilo review`).
 
 ---
 

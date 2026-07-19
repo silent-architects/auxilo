@@ -189,7 +189,7 @@ Explore the Catalog →
 Let your agents extract learnings automatically.
 
 **Body**
-Autonomous extraction watches your coding sessions and identifies reusable knowledge — workarounds, integration patterns, debugging insights. When you enable it, Auxilo's server-side pipeline scrubs your session transcripts (PII removed locally before anything leaves your machine), runs them through an LLM, and publishes qualifying learnings to the catalog under your account.
+Autonomous extraction watches your coding sessions and identifies reusable knowledge: workarounds, integration patterns, debugging insights. When you enable it, a local runner scrubs your session transcripts on your machine, your own model client (your claude CLI, on your subscription) drafts learnings from the scrubbed text the same way your normal sessions run, and only the finished drafts are sent to Auxilo, where qualifying learnings publish to the catalog under your account. Your transcripts, raw or scrubbed, are never sent to Auxilo.
 
 **Before anything happens, you grant explicit consent.** Consent is versioned and recorded in an immutable, append-only log. You can revoke at any time — revocation takes effect immediately, even for in-flight extractions.
 

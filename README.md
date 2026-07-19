@@ -32,12 +32,12 @@ Enable extraction and a session-end hook runs when your agent finishes a session
 
 1. The hook hands the runner the path to the session transcript.
 2. The runner reads the transcript on your machine and scrubs it with a fail-closed secret filter: 24 patterns covering API keys, tokens, private keys, JWTs, connection strings, cookies, email addresses, phone numbers, and internal IPs. If a rescan still finds a match, the run stops and nothing is sent.
-3. A local model call drafts learnings from the scrubbed text and screens them again.
+3. Your own model client (your claude CLI, on your subscription) drafts learnings from the scrubbed text and screens them again.
 4. The drafts land in your private pending queue.
 
 ### What never leaves your machine
 
-Your raw transcripts. Reading, scrubbing, and extraction run locally. The only thing transmitted is the finished learning draft, and drafts are not public.
+Your raw transcripts. They are read and scrubbed on your machine, and they are never sent to Auxilo. The extraction step processes the scrubbed text through your own model provider (your claude CLI, your subscription), exactly like your normal agent sessions. The only thing sent to Auxilo is the finished learning draft, and drafts are not public.
 
 ### You approve before anything publishes
 

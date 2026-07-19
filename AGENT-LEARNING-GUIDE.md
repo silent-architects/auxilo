@@ -102,9 +102,9 @@ Three modes. Builder chooses in account settings (`PATCH /account/settings`).
 
 ### Automatic Mode
 - The extraction runner (`scripts/runner.js`) fires after each qualifying session
-- Transcript is scrubbed client-side (PII, credentials, secrets) before upload
-- Scrubbed transcript is uploaded to `POST /extract` with API key
-- Server applies a second sensitivity scan, then calls the Anthropic extraction pipeline
+- The runner reads the transcript and scrubs it client-side (PII, credentials, secrets) on the Builder's machine
+- Extraction runs locally through the Builder's own model client (the local `claude` CLI, on the Builder's own subscription), the same way the Builder's normal sessions run; the transcript, raw or scrubbed, is never sent to Auxilo
+- Only finished Learning drafts (title, body, category, tags, task context, outcome) are submitted to `POST /learn`, where the server's quality and sensitivity gates decide publication
 - Qualifying learnings are published directly to the catalog
 - Each published learning has a **7-day retraction window** — Builder can retract via `DELETE /learn/:id?reason=retract`
 - After 7 days, learnings become permanent (standard takedown process applies)
