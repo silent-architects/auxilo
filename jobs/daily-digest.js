@@ -22,7 +22,7 @@
  *   0 — success (including empty digest)
  *   1 — hard error
  *
- * Scheduled via: ~/Library/LaunchAgents/tech.conway.auxilo-digest.plist
+ * Scheduled via: ~/Library/LaunchAgents/io.auxilo.digest.plist
  *
  * @module jobs/daily-digest
  */

@@ -172,24 +172,31 @@ describe('B3: Module shape', () => {
 });
 
 // ─── Plist validation ───────────────────────────────────────────────────────
+// These assert INSTALLED machine state (~/Library/LaunchAgents), which only
+// exists on macOS. CI runs ubuntu-latest, so skip off-darwin with a logged
+// reason rather than failing on an impossible precondition.
 
-describe('B3: LaunchAgent plist', () => {
-  it('tech.conway.auxilo-digest.plist exists', () => {
+const PLIST_SKIP = process.platform === 'darwin'
+  ? false
+  : `LaunchAgent plists are macOS machine state; not applicable on ${process.platform}`;
+
+describe('B3: LaunchAgent plist', { skip: PLIST_SKIP }, () => {
+  it('io.auxilo.digest.plist exists', () => {
     const plistPath = path.join(os.homedir(), 'Library', 'LaunchAgents',
-      'tech.conway.auxilo-digest.plist');
+      'io.auxilo.digest.plist');
     assert.ok(fs.existsSync(plistPath), `plist must exist at ${plistPath}`);
   });
 
   it('plist contains correct label', () => {
     const plistPath = path.join(os.homedir(), 'Library', 'LaunchAgents',
-      'tech.conway.auxilo-digest.plist');
+      'io.auxilo.digest.plist');
     const content = fs.readFileSync(plistPath, 'utf-8');
-    assert.ok(content.includes('tech.conway.auxilo-digest'));
+    assert.ok(content.includes('io.auxilo.digest'));
   });
 
   it('plist schedules at 07:00', () => {
     const plistPath = path.join(os.homedir(), 'Library', 'LaunchAgents',
-      'tech.conway.auxilo-digest.plist');
+      'io.auxilo.digest.plist');
     const content = fs.readFileSync(plistPath, 'utf-8');
     assert.ok(content.includes('<key>Hour</key>'));
     assert.ok(content.includes('<integer>7</integer>'));
@@ -197,7 +204,7 @@ describe('B3: LaunchAgent plist', () => {
 
   it('plist logs to ~/.auxilo/logs/', () => {
     const plistPath = path.join(os.homedir(), 'Library', 'LaunchAgents',
-      'tech.conway.auxilo-digest.plist');
+      'io.auxilo.digest.plist');
     const content = fs.readFileSync(plistPath, 'utf-8');
     assert.ok(content.includes('.auxilo/logs/'));
   });
