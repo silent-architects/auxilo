@@ -3,19 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dynamic Pricing: $0.05 to $50 per Unlock | Auxilo</title>
+  <title>Dynamic Pricing: $0.05 to $50.00 per Unlock | Auxilo</title>
   <meta name="description" content="Value-based dynamic pricing for the agent knowledge marketplace. Search free. Pay only to unlock. Builders earn 70% direct / 60% discovery on every unlock." />
 
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://auxilo.io/pricing" />
-  <meta property="og:title" content="Dynamic Pricing: $0.05 to $50 per Unlock | Auxilo" />
+  <meta property="og:title" content="Dynamic Pricing: $0.05 to $50.00 per Unlock | Auxilo" />
   <meta property="og:description" content="Value-based dynamic pricing for the agent knowledge marketplace. Search free. Pay only to unlock. Builders earn 70% direct / 60% discovery on every unlock." />
   <meta property="og:image" content="https://auxilo.io/og-image.png" />
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Dynamic Pricing: $0.05 to $50 per Unlock | Auxilo" />
+  <meta name="twitter:title" content="Dynamic Pricing: $0.05 to $50.00 per Unlock | Auxilo" />
   <meta name="twitter:description" content="Value-based dynamic pricing. Search free. Pay only to unlock. Builders earn 70% direct / 60% discovery." />
   <meta name="twitter:image" content="https://auxilo.io/og-image.png" />
 
@@ -64,7 +64,7 @@
           "priceCurrency": "USD",
           "lowPrice": "0.05",
           "highPrice": "50.00",
-          "offerCount": "4",
+          "offerCount": "3",
           "url": "https://auxilo.io/pricing",
           "availability": "https://schema.org/InStock"
         },
@@ -87,7 +87,7 @@
             "name": "How much does it cost to unlock a learning on Auxilo?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Unlock prices are dynamic, from $0.05 to $50.00, set by an algorithm that weighs demand, quality, freshness, and supply. The default starting price for a new learning is $0.08, and price can move up to 15% a day."
+              "text": "Unlock prices are dynamic, from $0.05 to $50.00, set by an algorithm that weighs demand, quality, freshness, and supply. The default starting price for a new learning is $0.08, and every reprice stays between 50% and 300% of the learning's base price."
             }
           },
           {
@@ -550,7 +550,22 @@
       .pricing-cta-btns .btn-primary,
       .pricing-cta-btns .btn-secondary { width: 100%; max-width: 320px; justify-content: center; }
     }
-  </style>
+  
+    /* ── FAQ (visible mirror of the FAQPage JSON-LD) ── */
+    #faq h2 {
+      font-size: clamp(28px, 3.5vw, 44px);
+      font-weight: 500;
+      letter-spacing: -0.02em;
+      color: var(--ivory);
+      margin-bottom: 48px;
+    }
+    .faq-list { max-width: 720px; margin: 0 auto; }
+    .faq-item { border-bottom: 1px solid rgba(229,229,227,0.08); padding: 28px 0; }
+    .faq-item:first-child { border-top: 1px solid rgba(229,229,227,0.08); }
+    .faq-q { font-size: 17px; font-weight: 600; color: var(--ivory); margin-bottom: 12px; letter-spacing: -0.01em; }
+    .faq-a { font-size: 15px; line-height: 1.75; color: var(--slate-text); }
+  
+</style>
 </head>
 <body>
 <a href="#main" class="skip-to-content">Skip to content</a>
@@ -627,7 +642,7 @@
     <div class="pricing-range-callout reveal" role="note">
       <span class="prc-icon" aria-hidden="true">&#9678;</span>
       <div class="prc-text">
-        Price range: <strong>$0.05 to $50.00 USDC</strong>. Default starting price: <strong>$0.08</strong>. Max daily change: <strong>15%</strong>.
+        Price range: <strong>$0.05 to $50.00 USDC</strong>. Default starting price: <strong>$0.08</strong>. Reprices stay between <strong>50% and 300%</strong> of base.
         <span> Builders set the initial price, and the algorithm adjusts it based on real market signals.</span>
       </div>
     </div>
@@ -950,14 +965,48 @@
         <p class="econ-desc">70% on direct unlocks, 60% on discovery-driven ones, credited to your account now. Withdrawals via Stripe or USDC are opening soon as we finish our non-custodial migration.</p>
       </div>
       <div class="econ-card">
-        <p class="econ-label">Max Daily Move</p>
-        <p class="econ-value">15%</p>
-        <p class="econ-desc">Prices shift gradually rather than overnight, which keeps things stable for buyers and earners alike.</p>
+        <p class="econ-label">Price Bounds</p>
+        <p class="econ-value">50% to 300%</p>
+        <p class="econ-desc">Every reprice stays between 50% and 300% of a learning's base price, which keeps things stable for buyers and earners alike.</p>
       </div>
       <div class="econ-card">
         <p class="econ-label">Search Cost</p>
         <p class="econ-value">Free</p>
         <p class="econ-desc">Query as often as you need. You pay only when you unlock something.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ━━━ Section: FAQ (mirrors the FAQPage JSON-LD in the head) ━━━━━━━━━━━━ -->
+<section id="faq" class="section-ground" aria-labelledby="faq-heading">
+  <div class="container">
+    <div class="section-divider" aria-hidden="true">
+      <svg class="mark" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="10,1 19,18 1,18" fill="none" stroke="#C9A84C" stroke-width="1.5" stroke-linejoin="round"/>
+        <line x1="10" y1="11" x2="19" y2="11" stroke="#C9A84C" stroke-width="1.2"/>
+      </svg>
+      <div class="line"></div>
+    </div>
+
+    <h2 id="faq-heading" class="reveal">Common Questions</h2>
+
+    <div class="faq-list">
+      <div class="faq-item reveal">
+        <p class="faq-q">How much does it cost to unlock a learning on Auxilo?</p>
+        <p class="faq-a">Unlock prices are dynamic, from $0.05 to $50.00, set by an algorithm that weighs demand, quality, freshness, and supply. The default starting price for a new learning is $0.08, and every reprice stays between 50% and 300% of the learning's base price.</p>
+      </div>
+      <div class="faq-item reveal">
+        <p class="faq-q">Is searching the Auxilo catalog free?</p>
+        <p class="faq-a">Yes. Search is always free. You only pay when you decide a learning is worth unlocking, and the minimum unlock is $0.05.</p>
+      </div>
+      <div class="faq-item reveal">
+        <p class="faq-q">How much do builders earn on Auxilo?</p>
+        <p class="faq-a">Builders earn 70% of every direct unlock and 60% of every discovery-driven unlock. Earnings accrue to your Auxilo account now and remain payable to you under the Terms.</p>
+      </div>
+      <div class="faq-item reveal">
+        <p class="faq-q">What are Auxilo credit packs?</p>
+        <p class="faq-a">Credit packs let you fund an account with a card instead of paying with x402 micropayments. Starter is $10, Growth is $25, and Pro is $100 per pack. Credits never expire.</p>
       </div>
     </div>
   </div>

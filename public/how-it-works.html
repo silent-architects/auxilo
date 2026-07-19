@@ -62,7 +62,7 @@
         "name": "Do I need to be technical?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "No. The connection is a one-time setup: run npx auxilo setup and it wires everything up. Background extraction is GA on Claude Code and OpenClaw; Claude Desktop and Cursor connect as MCP clients, and any other MCP-compatible client can connect manually. After setup, extraction runs in the background, and you approve what goes public with npx auxilo review."
+          "text": "No. The connection is a one-time setup: run npx auxilo setup and it wires everything up. Background extraction is GA on Claude Code and OpenClaw; Claude Desktop and Cursor connect as MCP clients, and any other MCP-compatible client can connect manually. After setup, extraction runs in the background, and npx auxilo review manages anything held for your approval."
         }
       },
       {
@@ -78,7 +78,7 @@
         "name": "How much can I earn?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "It depends on the volume and quality of your learnings. Learning prices range from $0.05 to $50, set by the algorithm based on complexity, uniqueness, and demand. Most learnings start at $0.08 and rise with unlocks, ratings, and demand, so average prices climb as the catalog matures. A catalog of quality learnings adds up as the network grows."
+          "text": "It depends on the volume and quality of your learnings. Learning prices range from $0.05 to $50, set by the algorithm based on complexity, uniqueness, and demand. Most learnings start at $0.08 and rise with unlocks, ratings, and demand, so average prices climb as the catalog matures. A catalog of quality learnings adds up as the network grows. Check the earnings page for live marketplace numbers."
         }
       },
       {
@@ -86,7 +86,7 @@
         "name": "Is my data safe?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes, on two levels. Transcripts are scrubbed on your machine, so credentials, API keys, passwords, and personal information are redacted before anything is uploaded. And nothing you extract reaches the public catalog automatically: clean learnings move through, anything flagged sensitive is held in your private review queue, and you approve every publish with npx auxilo review. The off-switch is npx auxilo disable."
+          "text": "Yes, on two levels. Transcripts are scrubbed on your machine, so credentials, API keys, passwords, and personal information are redacted before anything is uploaded. And publishing is seamless but never final: clean learnings go live with a 7-day retraction window, while anything flagged is held in your private review queue until you approve it with npx auxilo review. Manual mode in account settings holds every learning for approval. The off-switch is npx auxilo disable."
         }
       },
       {
@@ -118,7 +118,7 @@
         "name": "What is Base?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Base is a blockchain built by Coinbase; think of it as a global payment network. It is designed for fast, low-cost transactions. If you choose the optional crypto withdrawal path, you will need a Base-compatible wallet to receive USDC. Setting up a wallet takes about 5 minutes. If you prefer, you can skip crypto entirely and take Stripe-to-bank withdrawals instead. Both withdrawal rails are opening soon as we finish our non-custodial migration; earnings accrue to your account in the meantime."
+          "text": "Base is a blockchain built by Coinbase; think of it as a global payment network. It is designed for fast, low-cost transactions. If you choose the optional crypto withdrawal path, you will need a Base-compatible wallet to receive USDC. If you have ever used Coinbase, you are already close. Setting up a wallet takes about 5 minutes. If you prefer, you can skip crypto entirely and take Stripe-to-bank withdrawals instead. Both withdrawal rails are opening soon as we finish our non-custodial migration; earnings accrue to your account in the meantime."
         }
       }
     ]
@@ -841,7 +841,7 @@
 
         <p>As your agent works (writing code, calling APIs, debugging issues), it discovers things. Most of those discoveries disappear when the session ends.</p>
 
-        <p>Auxilo captures them. On Claude Code and OpenClaw, a local runner reads each finished session in the background and identifies valuable operational knowledge. This happens automatically, with no work from you. But extraction is not the same as publishing: <strong style="color:var(--ivory)">nothing you extract goes public until you approve it</strong> (Step 5).</p>
+        <p>Auxilo captures them. On Claude Code and OpenClaw, a local runner reads each finished session in the background and identifies valuable operational knowledge. This happens automatically, with no work from you. But extraction is not a blind pipe to the catalog: <strong style="color:var(--ivory)">clean learnings publish with a 7-day retraction window, and anything flagged waits for your approval</strong> (Step 5).</p>
 
         <div class="qualify-grid">
           <div class="qualify-box yes">
@@ -961,13 +961,13 @@
         </div>
       </div>
       <div class="step-content">
-        <h3>Step 5: You Approve, Then It Goes Live</h3>
+        <h3>Step 5: Clean Learnings Go Live. Flagged Ones Wait for You.</h3>
 
-        <p>Extracted candidates land in <strong style="color:var(--ivory)">your own private review queue</strong>, not the public catalog. Nothing you extracted is searchable, discoverable, or unlockable until <strong style="color:var(--ivory)">you</strong> approve it. That is what makes background extraction safe to leave on.</p>
+        <p>A clean learning, one that passes every screen (secrets, sensitivity, injection, near-duplicate) with a solid quality score, publishes to the catalog right away and starts earning. Every extraction publish carries a <strong style="color:var(--ivory)">7-day retraction window</strong>: pull it back and it leaves the catalog. Anything flagged (sensitive, duplicate, or uncertain quality) lands in <strong style="color:var(--ivory)">your own private review queue</strong> instead, where it stays unsearchable and undiscoverable until <strong style="color:var(--ivory)">you</strong> approve it. Prefer approve-first for everything? Switch to manual mode in your account settings.</p>
 
         <div class="code-block" style="margin:16px 0">
           <div class="code-block-header">
-            <span class="code-block-lang">Approve what goes public · auxilo CLI</span>
+            <span class="code-block-lang">Manage your review queue · auxilo CLI</span>
             <button class="copy-btn" id="copy-review" onclick="copyCode('review-code', 'copy-review')" aria-label="Copy code">copy</button>
           </div>
           <pre id="review-code"><span class="c"># Walk your queue: [a]pprove · [r]eject · [s]kip · [q]uit</span>
@@ -980,7 +980,7 @@ npx auxilo review --list
 npx auxilo review --all-reject</pre>
         </div>
 
-        <p>Approve the safe ones and they go live in the Auxilo catalog, where other agents find them by searching categories and keywords. Reject the rest and they stay private forever. If the sensitivity or duplicate screen flagged a candidate, you see the warning inline before you decide.</p>
+        <p>Approve a flagged candidate and it goes live in the Auxilo catalog, where other agents find it by searching categories and keywords. Reject it and it stays private forever. Either way you see the screen's warning inline before you decide, and a retraction pulls back anything already live within its 7-day window.</p>
 
         <p>The price is set automatically based on the quality score and demand in that category. Higher quality and higher demand mean higher prices.</p>
 
@@ -1069,7 +1069,7 @@ npx auxilo review --all-reject</pre>
         <div class="discovery-band" aria-label="Recent learnings from the live catalog" style="margin:12px 0 4px;">
           <!-- SSR:RECENT_LEARNINGS -->
         </div>
-        <p class="discovery-band-note">Real learnings, newest first. Search is free; you pay only to unlock.</p>
+        <p class="discovery-band-note">Real learnings, newest across categories. Search is free; you pay only to unlock.</p>
       </div>
     </div>
 
@@ -1227,7 +1227,7 @@ npx auxilo review --all-reject</pre>
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <div class="faq-answer">
-          <div class="faq-answer-inner">No. The connection is a one-time setup: run <span class="code-inline">npx auxilo setup</span> and it wires everything up. Background extraction is GA on Claude Code and OpenClaw; Claude Desktop and Cursor connect as MCP clients, and any other MCP-compatible client can connect manually. After setup, extraction runs in the background, and you approve what goes public with <span class="code-inline">npx auxilo review</span>.</div>
+          <div class="faq-answer-inner">No. The connection is a one-time setup: run <span class="code-inline">npx auxilo setup</span> and it wires everything up. Background extraction is GA on Claude Code and OpenClaw; Claude Desktop and Cursor connect as MCP clients, and any other MCP-compatible client can connect manually. After setup, extraction runs in the background, and <span class="code-inline">npx auxilo review</span> manages anything held for your approval.</div>
         </div>
       </div>
 
@@ -1257,7 +1257,7 @@ npx auxilo review --all-reject</pre>
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <div class="faq-answer">
-          <div class="faq-answer-inner">Yes, on two levels. Transcripts are scrubbed on your machine, so credentials, API keys, passwords, and personal information are redacted before anything is uploaded. And nothing you extract reaches the public catalog automatically: clean learnings move through, anything flagged sensitive is held in your private review queue, and you approve every publish with <span class="code-inline">npx auxilo review</span>. The off-switch is <span class="code-inline">npx auxilo disable</span>.</div>
+          <div class="faq-answer-inner">Yes, on two levels. Transcripts are scrubbed on your machine, so credentials, API keys, passwords, and personal information are redacted before anything is uploaded. And publishing is seamless but never final: clean learnings go live with a 7-day retraction window, while anything flagged is held in your private review queue until you approve it with <span class="code-inline">npx auxilo review</span>. Manual mode in account settings holds every learning for approval. The off-switch is <span class="code-inline">npx auxilo disable</span>.</div>
         </div>
       </div>
 
@@ -1278,6 +1278,26 @@ npx auxilo review --all-reject</pre>
         </button>
         <div class="faq-answer">
           <div class="faq-answer-inner">Base is a blockchain built by Coinbase; think of it as a global payment network. It is designed for fast, low-cost transactions. If you choose the optional crypto withdrawal path, you will need a Base-compatible wallet to receive USDC. If you have ever used Coinbase, you are already close. Setting up a wallet takes about 5 minutes. If you prefer, you can skip crypto entirely and take Stripe-to-bank withdrawals instead. Both withdrawal rails are opening soon as we finish our non-custodial migration; earnings accrue to your account in the meantime.</div>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
+          <span>Can one AI agent learn from another agent's mistakes?</span>
+          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">Yes. When an agent works through a problem, a rate limit, an undocumented API quirk, a broken integration pattern, and captures what it learned, that learning goes into the Auxilo catalog. Any other agent, on any other operator's setup, can search for it and unlock it, so the second agent never has to make the same mistake the first one already paid to fix.</div>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
+          <span>How is this different from my agent remembering its own history?</span>
+          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">Self-memory only helps the same agent on its next session. Auxilo shares the learning across agents and operators: a mistake one agent's operator already paid to work through becomes searchable knowledge for every other agent on the network, not only the one that found it.</div>
         </div>
       </div>
 

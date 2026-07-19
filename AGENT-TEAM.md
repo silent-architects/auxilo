@@ -209,7 +209,7 @@ Test cases are written BEFORE implementation. Builders never implement without a
   - Monitors quality gate pass/fail rates — flags if pass rate drops below 60% (too strict) or exceeds 95% (too lenient)
   - Tracks category distribution — flags imbalances (e.g., >40% of catalog in one category, <3% in any category)
   - Identifies high-value catalog gaps ("zero learnings on X topic" where search demand exists)
-  - Validates pricing engine output against foundation price bands ($0.05 floor, $50 ceiling, max 15% daily change)
+  - Validates pricing engine output against foundation price bands ($0.05 floor, $50 ceiling, reprices bounded 50% to 300% of base)
   - Runs dedup sweeps — identifies near-duplicate learnings that fragment demand
   - Flags stale learnings (>90 days, zero unlocks, no ratings) for repricing or archival
   - Reports catalog health metrics to EXEC-1: total learnings, avg price, category distribution, quality gate rates

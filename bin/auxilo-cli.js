@@ -98,9 +98,13 @@ const CONSENT_TEXT = `
       only by your own model provider the same way your normal sessions
       are, and is never sent to Auxilo, raw or scrubbed.
     • UPLOADS only the finished learning drafts (title, body, category,
-      tags, task context, outcome) to Auxilo (${'POST /learn'}), where they
-      are quality gated, moderated, and published to the marketplace under
-      your account. You earn 70% of sales.
+      tags, task context, outcome) to Auxilo (${'POST /learn'}). A draft
+      that passes every screen publishes to the marketplace immediately
+      under your account, and you can retract it for 7 days. A draft that
+      any screen flags (sensitive, duplicate, uncertain quality) waits in
+      your private queue for \`auxilo review\`. Manual mode (approve first,
+      for everything) is available in your account settings. You earn 70%
+      of sales.
   You can stop any time with \`auxilo disable\` (local kill-switch) and review
   every run in ~/.auxilo/extract.log. Saying No installs the MCP server only.
 `;

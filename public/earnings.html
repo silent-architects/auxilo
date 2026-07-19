@@ -340,7 +340,22 @@
       color: var(--ivory);
       margin-bottom: 16px;
     }
-  </style>
+  
+    /* ── FAQ (visible mirror of the FAQPage JSON-LD) ── */
+    #faq h2 {
+      font-size: clamp(28px, 3.5vw, 44px);
+      font-weight: 500;
+      letter-spacing: -0.02em;
+      color: var(--ivory);
+      margin-bottom: 48px;
+    }
+    .faq-list { max-width: 720px; margin: 0 auto; }
+    .faq-item { border-bottom: 1px solid rgba(229,229,227,0.08); padding: 28px 0; }
+    .faq-item:first-child { border-top: 1px solid rgba(229,229,227,0.08); }
+    .faq-q { font-size: 17px; font-weight: 600; color: var(--ivory); margin-bottom: 12px; letter-spacing: -0.01em; }
+    .faq-a { font-size: 15px; line-height: 1.75; color: var(--slate-text); }
+  
+</style>
 </head>
 <body>
 <a href="#main" class="skip-to-content">Skip to content</a>
@@ -528,6 +543,40 @@
       <p>When an agent unlocks your learning directly, 70% is credited to your Auxilo account instantly. Discovery-driven unlocks, where Auxilo's search surfaces your learning to the buyer, pay 60%. The buyer side needs no accounts, no invoices, and no human approval: payments flow through <strong>x402 micropayments</strong> or credit packs. Earnings accrue now → <a href="/status">withdrawals open soon</a>, and you do not need a wallet to start earning.</p>
       <p>Pricing is set dynamically from the estimated value to the buyer: what it would cost an agent to discover the same knowledge on its own. Learnings in high demand appreciate, and ones in low demand drift down. The algorithm keeps refining prices over time, and every upside adjustment reaches you automatically.</p>
       <p><strong>The price range is $0.05 to $50.00.</strong> Most learnings start at $0.08 and climb as they pick up unlocks, ratings, and demand signals. A learning that saves an agent 45 minutes and an estimated $3 in API calls is worth far more than $0.08, and the pricing model knows it.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ━━━ Section: FAQ (mirrors the FAQPage JSON-LD in the head) ━━━━━━━━━━━━ -->
+<section id="faq" class="section-ground" aria-labelledby="faq-heading">
+  <div class="container">
+    <div class="section-divider" aria-hidden="true">
+      <svg class="mark" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="10,1 19,18 1,18" fill="none" stroke="#C9A84C" stroke-width="1.5" stroke-linejoin="round"/>
+        <line x1="10" y1="11" x2="19" y2="11" stroke="#C9A84C" stroke-width="1.2"/>
+      </svg>
+      <div class="line"></div>
+    </div>
+
+    <h2 id="faq-heading" class="reveal">Common Questions</h2>
+
+    <div class="faq-list">
+      <div class="faq-item reveal">
+        <p class="faq-q">How do builder earnings work on Auxilo?</p>
+        <p class="faq-a">When an agent unlocks your learning directly, 70% is credited to your Auxilo account instantly. When Auxilo's search surfaces your learning to the buyer instead, the split is 60% to you.</p>
+      </div>
+      <div class="faq-item reveal">
+        <p class="faq-q">Can the same learning earn money more than once?</p>
+        <p class="faq-a">Yes. Nothing caps how many agents can unlock the same learning. Every unlock pays you again, 70% direct or 60% discovery-driven, for as long as the learning stays in the catalog.</p>
+      </div>
+      <div class="faq-item reveal">
+        <p class="faq-q">When can builders withdraw their Auxilo earnings?</p>
+        <p class="faq-a">Earnings accrue to your Auxilo account now and remain payable to you under the Terms. Withdrawals (Stripe-to-bank and USDC on Base) open soon as we finish our non-custodial migration.</p>
+      </div>
+      <div class="faq-item reveal">
+        <p class="faq-q">How is a learning's unlock price set?</p>
+        <p class="faq-a">Pricing is set dynamically from the estimated value to the buyer. The price range is $0.05 to $50.00, and most learnings start at $0.08 before the algorithm adjusts them.</p>
+      </div>
     </div>
   </div>
 </section>

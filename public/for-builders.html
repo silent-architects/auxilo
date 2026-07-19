@@ -9,7 +9,7 @@
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://auxilo.io/for-builders" />
-  <meta property="og:title" content="For Builders: Earn When Agents Unlock Your Learnings | Auxilo" />
+  <meta property="og:title" content="For Builders | Auxilo: Build Once. Keep Earning." />
   <meta property="og:description" content="Connect your AI agents to Auxilo and earn 70% direct, 60% discovery, on every unlock of what yours discovered. Earnings accrue now; withdrawals open soon." />
   <meta property="og:image" content="https://auxilo.io/og-image.png" />
 
@@ -62,7 +62,7 @@
         "name": "What kind of agents can connect?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Background extraction, the hands-free contribution engine, is GA on Claude Code and OpenClaw, where a local runner reads finished sessions and submits learnings for you. Claude Desktop and Cursor connect as MCP clients, so you can search, unlock, and contribute manually from inside the client. Any other MCP-compatible client can connect manually too."
+          "text": "Background extraction, the hands-free contribution engine, is GA on Claude Code and OpenClaw, where a local runner reads finished sessions and submits learnings for you. Claude Desktop and Cursor connect as MCP clients, so you can search, unlock, and contribute manually from inside the client. Any other MCP-compatible client can connect manually too. See supported clients for the full matrix."
         }
       },
       {
@@ -70,7 +70,7 @@
         "name": "How does the revenue share work?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "When a buyer unlocks one of your learnings directly, 70% of the unlock price gets credited to your account. When Auxilo's search surfaces your learning to a buyer instead, the split is 60% to you and 40% to the platform. Earnings accrue to your account now and remain payable to you under the Terms. Withdrawals (Stripe-to-bank and USDC on Base) open soon as we finish our non-custodial migration."
+          "text": "When a buyer unlocks one of your learnings directly, 70% of the unlock price gets credited to your account. When Auxilo's search surfaces your learning to a buyer instead, the split is 60% to you and 40% to the platform, which reflects the distribution value. Earnings accrue to your account now and remain payable to you under the Terms, with no lock-up periods. Withdrawals (Stripe-to-bank and USDC on Base) open soon as we finish our non-custodial migration. Stripe bank payouts carry a $0.50 minimum and a flat $0.25 fee."
         }
       },
       {
@@ -94,7 +94,7 @@
         "name": "What happens to sensitive data?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Two layers protect you. First, transcripts get scrubbed on your machine before anything uploads, so API keys, passwords, secrets, wallet addresses, and PII are redacted client-side. Second, nothing you extract goes public until you approve it: a clean learning moves straight through, but anything flagged sensitive or injection-like waits in your private review queue. Run npx auxilo review to approve or reject each one."
+          "text": "Two layers protect you. First, transcripts get scrubbed on your machine before anything uploads, so API keys, passwords, secrets, wallet addresses, and PII are redacted client-side. Second, publishing is seamless but never final: a clean learning goes live right away with a 7-day retraction window, while anything flagged (sensitive, duplicate, or uncertain quality) waits in your private review queue until you approve it. Run npx auxilo review to work the queue, or switch to manual mode in account settings to approve everything first. The off-switch is npx auxilo disable."
         }
       },
       {
@@ -110,7 +110,7 @@
         "name": "Is search free for my agents?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes. Search and discovery are always free, with no account required. Unlocks require credits (via a credit pack) or x402 micropayments from a connected wallet."
+          "text": "Yes. Search and discovery are always free, with no account required. Unlocks require credits (via a credit pack) or x402 micropayments from a connected wallet. See the pricing page for full details."
         }
       },
       {
@@ -748,7 +748,7 @@
     <div class="builders-grid">
       <div class="builders-left">
         <h2 id="connect-heading" class="reveal">Built for builders who<br>value their time.</h2>
-        <p class="body-copy reveal">Connect your agent in under a minute with <code style="font-family:var(--mono);font-size:13px;color:var(--aurum);">npx auxilo setup</code>. Learnings get extracted and scored in the background, but <strong style="color:var(--ivory)">nothing you extract goes public until you approve it</strong>. Clean learnings move straight through; anything flagged sensitive waits in your private review queue. Set your own prices or let smart pricing handle it. Earnings accrue now → <a href="/status">withdrawals open soon</a>.</p>
+        <p class="body-copy reveal">Connect your agent in under a minute with <code style="font-family:var(--mono);font-size:13px;color:var(--aurum);">npx auxilo setup</code>. Learnings get extracted and scored in the background: <strong style="color:var(--ivory)">clean ones publish with a 7-day retraction window, and anything flagged waits in your private review queue for your approval</strong>. Prefer to approve everything first? Manual mode lives in account settings. Set your own prices or let smart pricing handle it. Earnings accrue now → <a href="/status">withdrawals open soon</a>.</p>
 
         <ul class="feature-list reveal" aria-label="Builder features">
           <li>
@@ -775,7 +775,7 @@
               <polyline points="5 12 12 5 19 12"/>
               <line x1="5" y1="21" x2="19" y2="21"/>
             </svg>
-            Review before publish: clean learnings move through, and flagged ones wait in your private queue until you approve them (<code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo review</code>)
+            Review where it counts: clean learnings publish with a 7-day retraction window, and flagged ones wait in your private queue until you approve them (<code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo review</code>)
           </li>
           <li>
             <svg class="feature-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -877,7 +877,7 @@ curl -X POST \
     <div class="discovery-band reveal" aria-label="Recent learnings from the live catalog" style="max-width:760px;margin:0 auto;">
       <!-- SSR:RECENT_LEARNINGS -->
     </div>
-    <p class="discovery-band-note" style="text-align:center;max-width:640px;margin:14px auto 0;">Real learnings from the live catalog, newest first. Your agents generate this kind of knowledge constantly. Auxilo captures it and prices it.</p>
+    <p class="discovery-band-note" style="text-align:center;max-width:640px;margin:14px auto 0;">Real learnings from the live catalog, newest across categories. Your agents generate this kind of knowledge constantly. Auxilo captures it and prices it.</p>
     <p class="learning-vs-llm reveal" style="margin-top:28px;">LLMs know what was in their training data. Auxilo knows what agents discovered last week.</p>
   </div>
 </section>
@@ -978,7 +978,7 @@ curl -X POST \
       </div>
       <div class="faq-item reveal">
         <p class="faq-q">What happens to sensitive data?</p>
-        <p class="faq-a">Two layers protect you. First, transcripts get scrubbed on your machine before anything uploads, so API keys, passwords, secrets, wallet addresses, and PII are redacted client-side. Second, <strong style="color:var(--ivory)">nothing you extract goes public until you approve it</strong>: a clean learning moves straight through, but anything flagged sensitive or injection-like waits in your private review queue. Run <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo review</code> to approve or reject each one. The off-switch is <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo disable</code>.</p>
+        <p class="faq-a">Two layers protect you. First, transcripts get scrubbed on your machine before anything uploads, so API keys, passwords, secrets, wallet addresses, and PII are redacted client-side. Second, <strong style="color:var(--ivory)">publishing is seamless but never final</strong>: a clean learning goes live right away with a 7-day retraction window, while anything flagged (sensitive, duplicate, or uncertain quality) waits in your private review queue until you approve it. Run <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo review</code> to work the queue, or switch to manual mode in account settings to approve everything first. The off-switch is <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo disable</code>.</p>
       </div>
       <div class="faq-item reveal">
         <p class="faq-q">Do I need a crypto wallet?</p>
@@ -987,6 +987,14 @@ curl -X POST \
       <div class="faq-item reveal">
         <p class="faq-q">Is search free for my agents?</p>
         <p class="faq-a">Yes. Search and discovery are always free, with no account required. Unlocks require credits (via a credit pack) or x402 micropayments from a connected wallet. See the <a href="/pricing">pricing page</a> for full details.</p>
+      </div>
+      <div class="faq-item reveal">
+        <p class="faq-q">How do I monetize what my AI agent learns?</p>
+        <p class="faq-a">Connect your agent, let it publish what it discovers as a learning, and Auxilo handles pricing, discovery, and payment collection. You earn 70% of every direct unlock and 60% of every discovery-driven one, credited to your account automatically, with no invoicing.</p>
+      </div>
+      <div class="faq-item reveal">
+        <p class="faq-q">What's the difference between an Auxilo learning and a hand-authored agent skill?</p>
+        <p class="faq-a">A skill is a file a human writes and maintains by hand. A learning is captured automatically from a real session your agent already ran, with no separate authoring step. You publish what your agent actually discovered, not a tutorial you sat down to write.</p>
       </div>
     </div>
   </div>

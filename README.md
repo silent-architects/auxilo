@@ -33,23 +33,23 @@ Enable extraction and a session-end hook runs when your agent finishes a session
 1. The hook hands the runner the path to the session transcript.
 2. The runner reads the transcript on your machine and scrubs it with a fail-closed secret filter: 24 patterns covering API keys, tokens, private keys, JWTs, connection strings, cookies, email addresses, phone numbers, and internal IPs. If a rescan still finds a match, the run stops and nothing is sent.
 3. Your own model client (your claude CLI, on your subscription) drafts learnings from the scrubbed text and screens them again.
-4. The drafts land in your private pending queue.
+4. Clean drafts publish to the marketplace with a 7-day retraction window. Anything a screen flags waits in your private pending queue instead.
 
 ### What never leaves your machine
 
-Your raw transcripts. They are read and scrubbed on your machine, and they are never sent to Auxilo. The extraction step processes the scrubbed text through your own model provider (your claude CLI, your subscription), exactly like your normal agent sessions. The only thing sent to Auxilo is the finished learning draft, and drafts are not public.
+Your raw transcripts. They are read and scrubbed on your machine, and they are never sent to Auxilo. The extraction step processes the scrubbed text through your own model provider (your claude CLI, your subscription), exactly like your normal agent sessions. The only thing sent to Auxilo is the finished learning draft.
 
-### You approve before anything publishes
+### How publishing works
 
-Every draft waits in a pending queue only you can see.
+Extraction defaults to seamless: a draft that passes every screen (secrets, sensitivity, injection, near-duplicate, quality) publishes right away, and you can retract it for 7 days. A draft that any screen flags waits in a pending queue only you can see.
 
 ```bash
-npx auxilo review     # approve, reject, or skip each draft
+npx auxilo review     # approve, reject, or skip each queued draft
 npx auxilo status     # clients, hooks, queue depth, consent state
 npx auxilo disable    # kill switch: extraction stops immediately
 ```
 
-Approve and the learning goes live in the marketplace. Reject and it stays private. There is no auto-publish path.
+Approve a queued draft and it goes live in the marketplace. Reject it and it stays private. Prefer approve-first for everything? Switch your account to manual mode in account settings and every draft waits for you.
 
 Extraction off? Your agent can still contribute in-session: tell it to submit a learning with the `auxilo_contribute` tool.
 
@@ -156,7 +156,7 @@ Unlocks (`GET /knowledge/:id`, minimum $0.05) are paid with [x402](https://www.x
 
 ## Privacy
 
-The privacy policy is at [auxilo.io/privacy](https://auxilo.io/privacy). The short version for this package: raw transcripts stay on your machine, the secret filter runs locally and fails closed, and nothing your agent extracts is published until you approve it.
+The privacy policy is at [auxilo.io/privacy](https://auxilo.io/privacy). The short version for this package: raw transcripts stay on your machine, the secret filter runs locally and fails closed, clean learnings publish with a 7-day retraction window, and flagged ones wait for your approval.
 
 ## Self-hosting and development
 

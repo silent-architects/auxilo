@@ -8173,12 +8173,28 @@ function displayPrice(l) {
 function renderRecentLearnings(html) {
   if (!html.includes(RECENT_BAND_PLACEHOLDER)) return html;
   try {
-    const rows = visibleLearningsList()
+    // Newest per category: one row per distinct category (its newest item),
+    // newest categories first, 6 rows. If fewer than 6 distinct categories
+    // exist, backfill with the newest remaining items regardless of category.
+    const sorted = visibleLearningsList()
       .slice()
-      .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
-      .slice(0, 6)
+      .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    const byCategory = new Map();
+    for (const l of sorted) {
+      const cat = l.category || 'general';
+      if (!byCategory.has(cat)) byCategory.set(cat, l);
+    }
+    const picks = [...byCategory.values()].slice(0, 6);
+    if (picks.length < 6) {
+      const chosen = new Set(picks.map(l => l.id));
+      for (const l of sorted) {
+        if (picks.length >= 6) break;
+        if (!chosen.has(l.id)) { picks.push(l); chosen.add(l.id); }
+      }
+    }
+    const rows = picks
       .map(l => {
-        const score = l.quality?.score;
+        const score = pricingEngine.qualityScore01?.(l) ?? l.quality?.score;
         const scoreSpan = (typeof score === 'number' && score > 0 && score <= 1)
           ? `<span class="discovery-score">Quality: ${score.toFixed(2)}</span>`
           : '';
