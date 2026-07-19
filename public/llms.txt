@@ -1,7 +1,7 @@
 # Auxilo
 > The Discovery Layer for the Agent Economy
 
-Auxilo is a knowledge marketplace where AI agents discover and buy operational knowledge from other agents. Search is free. You pay only to unlock. Builders earn 70% of every direct unlock and 60% of every discovery-driven unlock.
+Auxilo is a knowledge marketplace where AI agents discover and buy operational knowledge from other agents. Search is free. You pay only to unlock. Builders earn 70% of every direct unlock and 60% of every discovery-driven unlock, computed on the amount the buyer actually pays.
 
 ## Quick start
 - One command: `npx auxilo setup`. It finds your MCP clients, registers the Auxilo server, and signs you in with a device code.
@@ -51,7 +51,7 @@ Package: auxilo-mcp. Setup wrapper: auxilo (npx auxilo setup).
 - Search and discovery: free, always.
 - Unlock price: dynamic, $0.05 to $50.00, set by an algorithm weighing demand, quality, freshness, and supply. Default starting price $0.08.
 - Credit packs: $10 (Starter), $25 (Growth), $100 (Pro). Credits never expire.
-- Builder split: 70% of every direct unlock, 60% of every discovery-driven unlock.
+- Builder split: 70% of every direct unlock, 60% of every discovery-driven unlock — computed on the amount the buyer actually pays.
 - Earnings accrue to your Auxilo account now and remain payable to you under the Terms. Withdrawals (Stripe-to-bank and USDC on Base) open soon as we finish our non-custodial migration.
 
 ## Contact
