@@ -38,3 +38,38 @@ jobs:
             echo "$host cert expires in $days days ($end)"
             [ "$days" -ge 14 ] || { echo "::error::$host cert expires in $days days"; exit 1; }
           done
+
+  # Wave 2a (LW-4/LW-5): off-VM backup freshness. The on-box runner
+  # (scripts/backup-runner.js, 6h cadence) writes freshness/latest.json to the
+  # Tigris bucket after each VERIFIED upload. This job fails when the newest
+  # marker is older than 8h (6h cadence + 2h grace) — i.e. backups have
+  # silently stopped — and GitHub emails repo watchers, same channel as the
+  # probes above. Runs on GitHub infra: independent of the Fly machine AND the
+  # operator laptop. Credentials are repo secrets (read access to the backup
+  # bucket; backups themselves are AES-256-GCM encrypted — the freshness
+  # marker exposes only timestamps/sizes/hashes/row-counts, no PII).
+  backup-freshness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Backup freshness (fail if newest marker > 8h old)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AUXILO_BACKUP_FRESHNESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AUXILO_BACKUP_FRESHNESS_SECRET }}
+          BUCKET: ${{ secrets.AUXILO_BACKUP_FRESHNESS_BUCKET }}
+          AWS_ENDPOINT_URL_S3: https://fly.storage.tigris.dev
+          AWS_REGION: auto
+        run: |
+          set -e
+          # Hard-fail on missing secrets: a monitor that silently skips is not a monitor.
+          if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ] || [ -z "$BUCKET" ]; then
+            echo "::error::backup-freshness secrets not configured (AUXILO_BACKUP_FRESHNESS_*)"; exit 1
+          fi
+          aws s3api get-object --endpoint-url "$AWS_ENDPOINT_URL_S3" \
+            --bucket "$BUCKET" --key freshness/latest.json marker.json > /dev/null \
+            || { echo "::error::freshness marker missing from backup bucket"; exit 1; }
+          gen=$(python3 -c "import json; print(json.load(open('marker.json'))['generated_at'])")
+          obj=$(python3 -c "import json; print(json.load(open('marker.json'))['object_key'])")
+          age=$(( $(date +%s) - $(date -d "$gen" +%s) ))
+          echo "newest backup: $obj — marker generated_at=$gen (age ${age}s)"
+          [ "$age" -le 28800 ] || { echo "::error::backup marker is ${age}s old (> 8h) — off-VM backups are STALE"; exit 1; }

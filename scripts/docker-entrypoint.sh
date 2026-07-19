@@ -30,6 +30,19 @@ fi
 # needs write access to subdirs like /app/data/backups.
 chown node:node /app 2>/dev/null || true
 
+# Wave 2a (LW-4): off-VM backup runner — spawned as a crash-isolated
+# BACKGROUND sibling of the server, as the node user. Only starts when the
+# backup env is present (staged secrets activate at deploy), so local
+# `docker run` and unconfigured machines are unaffected. A supervisor/runner
+# failure can never block or kill the server: it is a separate process and
+# nothing here waits on it.
+if [ -n "${BACKUP_ENCRYPTION_KEY:-}" ] && [ -n "${BUCKET_NAME:-}${BACKUP_S3_BUCKET:-}" ]; then
+  echo "[entrypoint] starting backup supervisor (LW-4 off-VM backups)"
+  su-exec node sh /app/scripts/backup-supervisor.sh &
+else
+  echo "[entrypoint] backup env not set — off-VM backup runner disabled"
+fi
+
 # Hand off to node under the node user. `exec` replaces the shell
 # process so signals from tini → su-exec → node work correctly.
 exec su-exec node "$@"
