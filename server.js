@@ -60,6 +60,12 @@ const { acquireEarningsLock } = require('./lib/earnings-lock.js');
 const { sendOpsAlert } = require('./lib/ops-alert.js');
 // CP-4 (AML-PROGRAM §4.3 G-2): IP-geolocation embargo screen (pure decision engine).
 const geoEmbargo = require('./lib/geo-embargo.js');
+// Quiet phase: payout-notification waitlist (validation, dedupe, storage, and
+// the per-IP limiter live in lib; the routes below own transport only).
+const { addToWaitlist, waitlistCount, isWaitlistRateLimited } = require('./lib/waitlist.js');
+// Quiet phase: inert-by-default analytics readiness (Plausible). Everything is
+// a no-op unless ANALYTICS_DOMAIN is set; see lib/analytics.js.
+const { resolveAnalyticsDomain, injectAnalytics, buildContentSecurityPolicy } = require('./lib/analytics.js');
 
 // ─── S21-4: SESSION_SECRET Startup Validation ──────────────────────────────
 // If SESSION_SECRET is unset in production, sessions use an ephemeral key and
@@ -126,17 +132,13 @@ app.use('*', async (c, next) => {
 // Google Fonts hosts, and a hard frame-ancestors 'none' / object-src 'none' to
 // block clickjacking and plugin embedding. The same headers are harmless on JSON
 // API responses (no inline content there to govern).
-const CONTENT_SECURITY_POLICY = [
-  "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com",
-  "img-src 'self' data:",
-  "connect-src 'self'",
-  "frame-ancestors 'none'",
-  "object-src 'none'",
-  "base-uri 'self'",
-].join('; ');
+// Quiet phase (analytics readiness): the policy string is assembled in
+// lib/analytics.js so the ANALYTICS_DOMAIN-unset default provably matches the
+// pre-analytics policy byte-for-byte (test/analytics-gating.test.js pins the
+// exact string). With ANALYTICS_DOMAIN set, script-src and connect-src gain
+// ONLY https://plausible.io; no other directive changes.
+const ANALYTICS_DOMAIN = resolveAnalyticsDomain(process.env.ANALYTICS_DOMAIN);
+const CONTENT_SECURITY_POLICY = buildContentSecurityPolicy(ANALYTICS_DOMAIN);
 app.use('*', async (c, next) => {
   await next();
   c.header('X-Content-Type-Options', 'nosniff');
@@ -4218,7 +4220,12 @@ function serveStatic(c, relPath, cacheControl) {
     if (!fs.existsSync(filePath)) return null; // Signal: file not found
     const ext   = path.extname(filePath).toLowerCase();
     const mime  = MIME_TYPES[ext] || 'application/octet-stream';
-    const content = fs.readFileSync(filePath);
+    let content = fs.readFileSync(filePath);
+    // Quiet phase: inert unless ANALYTICS_DOMAIN is set. With it unset (the
+    // default) the guard is false and the served bytes are untouched.
+    if (ANALYTICS_DOMAIN && ext === '.html') {
+      content = injectAnalytics(content.toString('utf8'), ANALYTICS_DOMAIN);
+    }
     return new Response(content, {
       status: 200,
       // HTML defaults to a short cache (content changes between deploys);
@@ -7994,6 +8001,45 @@ app.get('/admin/reports', adminAuth('read'), (c) => {
   });
 });
 
+// ─── Quiet phase: payout-notification waitlist ──────────────────────────────
+// Public capture for the accrue-only window (withdrawals paused during the
+// non-custodial migration; see /status). Validation, normalization, dedupe,
+// the growth ceiling, and the per-IP limiter live in lib/waitlist.js; these
+// routes own transport only. Storage is data/waitlist.json, an array of
+// { email, ts, source } records: no IP addresses are ever persisted, and
+// data/ is gitignored so the list never enters git.
+
+// POST /waitlist: join the withdrawal-notification list
+app.post('/waitlist', async (c) => {
+  const clientIp = getClientIp(c);
+
+  // Rate limit: 10 signups per IP per hour (mirrors the /report limiter).
+  if (isWaitlistRateLimited(clientIp)) {
+    return c.json({ error: 'Rate limit exceeded. Try again later.' }, 429);
+  }
+
+  let body;
+  try { body = await c.req.json(); } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+
+  const { email, source } = body || {};
+  const result = addToWaitlist(email, source);
+  if (!result.ok) {
+    return c.json({ error: result.error }, result.status);
+  }
+
+  // Silent success on duplicates: the response body and status are identical
+  // whether the email is new to the list or not, so this endpoint cannot be
+  // used to probe list membership.
+  return c.json({ ok: true });
+});
+
+// GET /waitlist/count: aggregate count only (no emails), for social proof
+app.get('/waitlist/count', (c) => {
+  return c.json({ count: waitlistCount() });
+});
+
 // ─── Static File Endpoints ───────────────────────────────────────────
 
 // OpenAPI spec (FREE)
@@ -8082,7 +8128,8 @@ app.get('/earnings', (c) => {
         .replace(/(id="ll-categories"[^>]*>)[^<]*</, `$1${llCategories}<`);
       c.header('Content-Type', 'text/html; charset=utf-8');
       c.header('Cache-Control', 'public, max-age=3600');
-      return c.body(html);
+      // Quiet phase: no-op while ANALYTICS_DOMAIN is unset (returns html as is).
+      return c.body(injectAnalytics(html, ANALYTICS_DOMAIN));
     }
   } catch (e) {
     console.error('[earnings] server-render failed, falling back to static:', e.message);
@@ -8198,7 +8245,8 @@ function serveLegalPage(c, filename, title) {
 </html>`;
     c.header('Content-Type', 'text/html; charset=utf-8');
     c.header('Cache-Control', 'public, max-age=3600');
-    return c.body(html);
+    // Quiet phase: no-op while ANALYTICS_DOMAIN is unset (returns html as is).
+    return c.body(injectAnalytics(html, ANALYTICS_DOMAIN));
   } catch {
     return c.text(`${title} not found`, 404);
   }

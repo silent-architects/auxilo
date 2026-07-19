@@ -485,6 +485,30 @@
 
     .faq-a a:hover { text-decoration: underline; }
 
+    /* ── Payout waitlist capture (quiet phase) ── */
+    /* Reuses the shared email-capture pattern from styles.css
+       (.hero-email-capture, .email-input, .btn-primary); only the wrapper,
+       lead line, and result message are page-specific. */
+    .waitlist-capture {
+      margin-top: 20px;
+    }
+
+    .waitlist-line {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--ivory);
+      margin-bottom: 12px;
+    }
+
+    .waitlist-msg {
+      font-size: 13px;
+      margin-top: 10px;
+      display: none;
+    }
+
+    .waitlist-msg.ok  { display: block; color: var(--aurum); }
+    .waitlist-msg.err { display: block; color: #e74c3c; }
+
     /* ── Active nav link ── */
     #nav-builders-page { color: var(--aurum) !important; }
 
@@ -910,6 +934,14 @@ curl -X POST \
       <div class="faq-item reveal">
         <p class="faq-q">How does the revenue share work?</p>
         <p class="faq-a">When a buyer unlocks one of your learnings directly, 70% of the unlock price gets credited to your account. When Auxilo's search surfaces your learning to a buyer instead, the split is 60% to you and 40% to the platform, which reflects the distribution value. Earnings accrue to your account now and remain payable to you under the Terms, with no lock-up periods. Withdrawals (Stripe-to-bank and USDC on Base) open soon as we finish our non-custodial migration. Stripe bank payouts carry a $0.50 minimum and a flat $0.25 fee.</p>
+        <div class="waitlist-capture" id="payout-waitlist">
+          <p class="waitlist-line">Get notified when withdrawals open.</p>
+          <form class="hero-email-capture waitlist-form" id="waitlist-form" novalidate>
+            <input class="email-input" id="waitlist-email" type="email" name="email" placeholder="you@example.com" autocomplete="email" aria-label="Email address" required>
+            <button class="btn-primary" type="submit">Notify me</button>
+          </form>
+          <p class="waitlist-msg" id="waitlist-msg" role="status" aria-live="polite"></p>
+        </div>
       </div>
       <div class="faq-item reveal">
         <p class="faq-q">What's the minimum to start earning?</p>
@@ -1069,6 +1101,52 @@ curl -X POST \
       }
     }
   });
+
+  // Payout waitlist capture (quiet phase). POSTs to /waitlist; the server
+  // stores only { email, ts, source } and answers duplicates identically.
+  (function () {
+    const form  = document.getElementById('waitlist-form');
+    if (!form) return;
+    const input = document.getElementById('waitlist-email');
+    const btn   = form.querySelector('button');
+    const msg   = document.getElementById('waitlist-msg');
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    function show(text, cls) {
+      msg.textContent = text;
+      msg.className = 'waitlist-msg ' + cls;
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = (input.value || '').trim();
+      if (!EMAIL_RE.test(email)) {
+        input.classList.add('input-error');
+        show("That email didn't look right. Try again.", 'err');
+        return;
+      }
+      input.classList.remove('input-error');
+      btn.disabled = true;
+      try {
+        const res = await fetch('/waitlist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email, source: 'for-builders' })
+        });
+        if (res.ok) {
+          form.style.display = 'none';
+          show("You're on the list.", 'ok');
+        } else {
+          input.classList.add('input-error');
+          show("That email didn't look right. Try again.", 'err');
+        }
+      } catch (err) {
+        show("That email didn't look right. Try again.", 'err');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  })();
 </script>
 
 </body>

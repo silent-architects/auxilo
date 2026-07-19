@@ -1,7 +1,7 @@
 # Privacy Policy
 
 **Effective Date: March 17, 2026**
-**Last Updated: July 6, 2026**
+**Last Updated: July 18, 2026**
 
 ---
 
@@ -71,6 +71,17 @@ For clarity, we do not collect:
 - Private keys or seed phrases.
 - Social security numbers or government identification numbers.
 - Financial account numbers (bank accounts, credit card numbers) — x402 payments are blockchain-native and credit pack payments are processed by third-party payment processors who handle card data directly.
+
+### 1.7 Withdrawal Notification Waitlist
+
+If you join the waitlist on our status or builder pages to be told when withdrawals open, we collect:
+
+- **Email address.** The address you enter in the signup form.
+- **Signup details.** The date and time you joined and which page you signed up from.
+
+We use this information for two purposes: to notify you when withdrawals go live, and to send you product updates about your account. We do not use it for anything else, we do not sell it, and we do not share it beyond the sub-processors listed in Section 3.8 (our email delivery provider sends the notification). We do not store your IP address with your waitlist entry.
+
+You can have your address removed from the waitlist at any time by emailing hello@auxilo.io, and we will delete it.
 
 ---
 
@@ -384,4 +395,4 @@ We aim to respond to all privacy-related inquiries within 30 days.
 
 ---
 
-*This Privacy Policy was last updated on July 6, 2026.*
+*This Privacy Policy was last updated on July 18, 2026.*
