@@ -511,3 +511,28 @@ describe('Drive-ID scrub parity — client scrub path (runner.scrubAndVerify)', 
     assert.ok(report.patterns_matched.length > 0);
   });
 });
+
+// Gate-A 5C F2: the single-file (--transcript) oversize short-circuit must fire
+// BEFORE the raw readFileSync fallback — a refactor reordering the check would
+// silently reopen the OOM hole (spec §2.2). Behavioral, not structural.
+const { test: t5cF2 } = require('node:test');
+const assert5cF2 = require('node:assert');
+const { spawnSync: spawn5cF2 } = require('node:child_process');
+const fs5cF2 = require('node:fs');
+const path5cF2 = require('node:path');
+const os5cF2 = require('node:os');
+t5cF2('single-file --transcript oversize: exit 0, SKIPPED oversize, no processing (Gate-A 5C F2)', () => {
+  const dir = fs5cF2.mkdtempSync(path5cF2.join(os5cF2.tmpdir(), 'aux5cf2-'));
+  const big = path5cF2.join(dir, 'big.jsonl');
+  fs5cF2.writeFileSync(big, 'x'.repeat(8192));
+  // runner exits at the kill-switch sentinel before reading anything — arm it in the fixture HOME
+  fs5cF2.mkdirSync(path5cF2.join(dir, '.auxilo'), { recursive: true });
+  fs5cF2.writeFileSync(path5cF2.join(dir, '.auxilo', 'autonomous-enabled'), '1');
+  const r = spawn5cF2(process.execPath, [path5cF2.join(__dirname, '..', 'scripts', 'runner.js'), '--transcript', big, '--dry-run'], {
+    env: { ...process.env, AUXILO_MAX_SESSION_BYTES: '4096', AUXILO_EXTRACTING: '', HOME: dir },
+    encoding: 'utf8', timeout: 30000,
+  });
+  assert5cF2.strictEqual(r.status, 0, `expected exit 0, got ${r.status}\nstderr: ${r.stderr}`);
+  assert5cF2.match(r.stderr + r.stdout, /oversize|SESSION_TOO_LARGE/i, 'must announce the oversize skip');
+  fs5cF2.rmSync(dir, { recursive: true, force: true });
+});

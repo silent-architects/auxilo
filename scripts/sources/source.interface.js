@@ -137,8 +137,10 @@ class TranscriptSource {
     if (bytes === null && sessionRef && Number.isFinite(sessionRef.bytes)) {
       bytes = sessionRef.bytes;
     }
-    if (bytes !== null && bytes > maxBytes) {
-      throw new SessionTooLargeError(sessionRef, bytes, maxBytes);
+    // Gate-A 5C F1: unknown size fails CLOSED — a future adapter without byte
+    // metadata must not silently reopen the unbounded-read OOM class this cap exists for.
+    if (bytes === null || bytes > maxBytes) {
+      throw new SessionTooLargeError(sessionRef, bytes === null ? -1 : bytes, maxBytes);
     }
     return this.readSession(sessionRef);
   }

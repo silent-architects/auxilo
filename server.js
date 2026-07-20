@@ -1664,8 +1664,13 @@ async function resolveStuckSettlements() {
           const releaseLock2 = await acquireWalletLock(s.wallet.toLowerCase());
           try {
             const { key: eKeyS2, entry: entryS2, source: srcS2 } = resolveEarningsEntry(earnings, { wallet: s.wallet });
-            if (srcS2 !== 'new') {
+            // Gate-A 5A F-6b: marker-guard this legacy refund (crash between the
+            // balance write and the 'refunded' append was the last unmarked
+            // double-refund window; legacy-data-only path, no new writer creates
+            // status:'pending' settlement rows).
+            if (srcS2 !== 'new' && !hasProcessedSettlement(entryS2, `${s.id}:refund`)) {
               entryS2.pending_balance += s.amount;
+              markProcessedSettlement(entryS2, `${s.id}:refund`);
               safeWrite(EARNINGS_FILE, earnings);
             }
           } finally {
