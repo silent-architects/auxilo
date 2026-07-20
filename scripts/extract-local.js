@@ -17,7 +17,14 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const CATEGORIES = ['data-processing', 'web-interaction', 'code-execution', 'communication', 'storage-state', 'content-generation', 'payment-financial', 'monitoring'];
+// CI-5 (PUNCH-LIST §30, 2026-07-19): Auxilo is TECHNICAL-ONLY. The learning
+// taxonomy is these six tech categories; `communication` and `content-generation`
+// are RETIRED — the server 400s them (CATEGORY_OUT_OF_SCOPE) and this extractor
+// must never emit them. This file ships standalone in the npm package, so the
+// lists are duplicated here from lib/category-scope-migration.js (server truth);
+// test/ci5-scope-enforcement.test.js pins the copies equal.
+const CATEGORIES = ['data-processing', 'web-interaction', 'code-execution', 'storage-state', 'payment-financial', 'monitoring'];
+const RETIRED_CATEGORIES = ['communication', 'content-generation'];
 
 /**
  * SPEC3 slice A1 gate — score-at-extraction, BUILT BUT DARK by default.
@@ -40,6 +47,10 @@ const EXTRACTION_PROMPT_BASE = `You are extracting reusable OPERATIONAL LEARNING
 
 Extract 0 to 5 GENUINE learnings: non-obvious solutions, workarounds, API quirks, error root-causes, integration gotchas — the kind of thing that cost real debugging or combined multiple sources. SKIP trivial lookups, well-documented standard approaches, opinions, and conversation.
 
+HARD SCOPE RULE — TECHNICAL LEARNINGS ONLY (the marketplace accepts nothing else): extract ONLY technical/operational learnings — APIs, developer tools, code, infrastructure, data pipelines, monitoring/observability, payment/crypto TECHNOLOGY, debugging. NEVER extract interpersonal or communication strategy, copywriting/content/marketing insights, business or negotiation strategy, personal matters, or creative-writing technique — DROP such candidates entirely, do not relabel them. A technical learning about a messaging/email/notification API belongs under "web-interaction" or "code-execution"; content/data pipeline TECH belongs under "data-processing".
+
+SYSTEM-FACT TEST (CI-7): Extract ONLY when a system and a symptom are at the core — an error, an undocumented limitation, a reproducible behavior of an external tool/API/OS. If the candidate is advice about how to work (process, workflow, methodology, decision practice), do NOT extract it. "Odesli cannot resolve Tidal artist URLs" is a learning; "use a two-phase consultation workflow" is not, no matter how well it would score.
+
 MANDATORY SENSITIVITY SELF-SCREEN (the marketplace is PUBLIC): NEVER include secrets, credentials, API keys, tokens, private keys, or seed phrases; personal data (real people's names, emails, phone numbers, wallet addresses); private filesystem paths, internal hostnames, or infrastructure identifiers; proprietary, confidential, or client-specific business content. Rewrite specifics into generic placeholders (/Users/USER/..., API_KEY, "a client") or omit them. If a learning cannot be generalized without leaking private material, DROP it entirely.
 
 Output STRICT JSON ONLY — an array (possibly empty []) of objects with these keys:
@@ -58,6 +69,9 @@ const QUALITY_RUBRIC_ADDENDUM = `
   (non-obvious; an LLM would likely get it wrong), "completeness" (context,
   reproduction steps, caveats), plus "total" (the exact sum of the four).
   A learning worth publishing scores at least 14/20 with no dimension below 3.
+  High scores REQUIRE a system+symptom anchor — a named external system and a
+  concrete error/limitation/behavior; process or workflow advice cannot score
+  high no matter how polished (CI-7 system-fact test).
   If a learning honestly scores below that bar, DROP it from the array rather
   than inflating the numbers.`;
 
@@ -164,13 +178,25 @@ function parseLearnings(raw, opts = {}) {
   let arr;
   try { arr = JSON.parse(s.slice(start, end + 1)); } catch (_) { return []; }
   if (!Array.isArray(arr)) return [];
-  return arr
-    .filter(l => l && typeof l.title === 'string' && typeof l.body === 'string' && l.title.length >= 10 && l.body.length >= 50)
+  const shaped = arr
+    .filter(l => l && typeof l.title === 'string' && typeof l.body === 'string' && l.title.length >= 10 && l.body.length >= 50);
+  // CI-5 post-parse scope validation (defense-in-depth against prompt drift):
+  // a candidate whose category is outside the tech set is DROPPED entirely.
+  // The old coerce-unknown-to-'code-execution' fallback is gone — coercion
+  // would launder a non-tech candidate (e.g. one the model labeled
+  // 'communication') into the catalog wearing a tech label. Category-based,
+  // so it applies identically in BOTH score-gate states.
+  const inScope = shaped.filter(l => CATEGORIES.includes(l.category));
+  // Gate-A F5: make the drop observable — count to stderr (never stdout; the
+  // hook log captures it) so a silently over-dropping prompt is diagnosable.
+  const dropped = shaped.length - inScope.length;
+  if (dropped > 0) console.error(`[extract-local] dropped ${dropped} candidate(s) outside the technical category set (CI-5 scope)`);
+  return inScope
     .map(l => {
       const out = {
         title: l.title,
         body: l.body,
-        category: CATEGORIES.includes(l.category) ? l.category : 'code-execution',
+        category: l.category,
         tags: Array.isArray(l.tags) ? l.tags.slice(0, 8).map(String) : [],
         task_context: typeof l.task_context === 'string' ? l.task_context : '',
         outcome: ['success', 'partial', 'failure', 'workaround'].includes(l.outcome) ? l.outcome : 'success',
@@ -198,7 +224,7 @@ async function extractLocally(transcript, sourceType) {
 }
 
 module.exports = {
-  extractLocally, parseLearnings, resolveClaudeBin, CATEGORIES,
+  extractLocally, parseLearnings, resolveClaudeBin, CATEGORIES, RETIRED_CATEGORIES,
   EXTRACTION_PROMPT, buildExtractionPrompt, scoreExtractionEnabled,
   validateQualityAssessment, QUALITY_DIMENSIONS,
 };

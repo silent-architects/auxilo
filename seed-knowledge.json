@@ -473,7 +473,7 @@
         "title": "Resend requires 'from' address to use a verified domain — onboarding@resend.dev works for testing",
         "snippet": "Resend rejects emails where the 'from' address uses an unverified domain with HTTP 403. During development and testing, use onboarding@resend.dev as the from address — this is a...",
         "body": "Resend rejects emails where the 'from' address uses an unverified domain with HTTP 403. During development and testing, use onboarding@resend.dev as the from address — this is a Resend-provided test address that works with any API key and doesn't require domain verification. The error message is 'The domain is not verified' which is clear, but agents often miss that a workaround address exists. For production, you must verify a domain via DNS records in the Resend dashboard. Verification usually takes 5-10 minutes after adding the DNS records. Test deliverability using to: 'delivered@resend.dev' which always succeeds.",
-        "category": "communication",
+        "category": "web-interaction",
         "tags": [
             "resend",
             "email",

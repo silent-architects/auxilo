@@ -81,7 +81,11 @@ describe('Idempotency: checkIdempotency + recordExtraction', () => {
 
   it('/extract handler calls recordExtraction after processing', () => {
     const extractIdx = SERVER_SRC.indexOf("app.post('/extract'");
-    const handler = SERVER_SRC.slice(extractIdx, extractIdx + 24000);
+    // Window widened 24000 → 26000 (CI-5/CI-7 wave, 2026-07-19): the retired-
+    // category reject + the system-fact screen parity block sit inside the
+    // handler ahead of the recordExtraction call (same sanctioned pin-update
+    // class as the SPEC3-B1 window adjustments).
+    const handler = SERVER_SRC.slice(extractIdx, extractIdx + 26000);
     assert.ok(handler.includes('recordExtraction'),
       '/extract handler must call recordExtraction');
   });
