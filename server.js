@@ -5015,8 +5015,20 @@ app.get('/api/info', (c) => {
     wallet: WALLET,
     network: 'eip155:8453',
     protocol: 'x402',
-    catalog_size: skills.length,
-    categories: [...new Set(skills.map(s => s.category))],
+    // DR-5 fix (2026-07-20, CAT-1/BUILD-2, PUNCH-LIST §31): catalog_size used
+    // to be skills.length (the static 27-item skills.json capability catalog)
+    // while GET /knowledge/stats reported learnings_count from
+    // visibleLearningsList() (the crowd-contributed knowledge marketplace,
+    // ~103 visible) — two different data sources sharing one ambiguous name
+    // on the API's own front door. Ruling: "catalog_size" is now reserved
+    // everywhere it appears to mean the canonical visible-catalog count (same
+    // predicate as /knowledge/stats.learnings_count). The static skill
+    // catalog moves to skills_catalog_size/skills_categories so nothing about
+    // /discover or /skill/:id changes shape.
+    catalog_size: visibleLearningsList().length,
+    categories: [...new Set(visibleLearningsList().map(l => l.category))],
+    skills_catalog_size: skills.length,
+    skills_categories: [...new Set(skills.map(s => s.category))],
     endpoints: {
       '/api': { price: 'free', method: 'GET', description: 'API docs page (HTML). Machine clients: use /api/info for JSON.' },
       '/api/info': { price: 'free', method: 'GET', description: 'Service info JSON (API discovery)' },
@@ -5069,7 +5081,17 @@ app.get('/health', (c) => {
   return c.json({
     status: 'ok',
     uptime: process.uptime(),
-    catalog_size: skills.length,
+    // DR-5 fix (2026-07-20): was skills.length (the static 27-item
+    // skills.json capability catalog) — GET /knowledge/stats reported
+    // learnings_count: ~103 from the canonical visibility predicate at the
+    // same moment, and public/status.html renders this raw JSON on-page, so
+    // a visitor could see two disagreeing "catalog" numbers on the same
+    // site — same class as the 2026-06-12 inflated-stats blocker. catalog_size
+    // is cheap here: visibleCatalog() is a single filter over the in-memory
+    // learnings array (same cost class as the skills.length it replaces),
+    // and /health is polled every ~30min, so no caching is warranted.
+    catalog_size: visibleLearningsList().length,
+    skills_catalog_size: skills.length,
     // Wave 2b: effective global payment-switch state (observability — an
     // operator or monitor can see the pause without probing a paid endpoint).
     payments_enabled: paymentsEnabled(),
@@ -5121,9 +5143,19 @@ app.get('/categories', (c) => {
 });
 
 app.get('/stats', (c) => {
+  // DR-5 fix (2026-07-20): catalog_size/categories here were skills.length /
+  // skills-category-count (the static skill-discovery catalog) — see the
+  // /health and /api/info fix notes for the full rationale. Reserved for the
+  // canonical visible-catalog predicate now; skills_catalog_size /
+  // skills_categories carry the old values under an honest name. `types` and
+  // `queries` stay skill-discovery-scoped (that's genuinely what they are —
+  // /discover query telemetry — not a divergent catalog count).
+  const visibleLearnings = visibleLearningsList();
   return c.json({
-    catalog_size: skills.length,
-    categories: [...new Set(skills.map(s => s.category))].length,
+    catalog_size: visibleLearnings.length,
+    categories: new Set(visibleLearnings.map(l => l.category)).size,
+    skills_catalog_size: skills.length,
+    skills_categories: [...new Set(skills.map(s => s.category))].length,
     types: skills.reduce((acc, s) => { acc[s.type] = (acc[s.type] || 0) + 1; return acc; }, {}),
     queries: queryLog,
     uptime: process.uptime(),

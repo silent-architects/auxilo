@@ -26,6 +26,19 @@
  *      approved / legacy-no-status / pending_review / rejected / retracted
  *      learnings and assert the three endpoints agree. Self-skips (loudly)
  *      when hono isn't resolvable or port 3000 is contended.
+ *
+ * DR-5 (2026-07-20, PUNCH-LIST §31): GET /health reported catalog_size:
+ * skills.length — the static 27-item skills.json capability catalog — while
+ * GET /knowledge/stats reported learnings_count: ~103 from the SAME-LOOKING
+ * field name via visibleLearningsList(). public/status.html renders /health's
+ * raw JSON on-page, so a visitor could see two disagreeing "catalog" numbers
+ * on the same site — same class as the 2026-06-12 inflated-stats blocker,
+ * just a different root cause (a genuinely different data source, not a
+ * missing moderation filter). GET /api/info and GET /stats had the identical
+ * ambiguous field. Fix: catalog_size is now reserved everywhere it appears to
+ * mean the canonical visible-catalog count; the static skill catalog moved to
+ * skills_catalog_size (+ skills_categories) under an honest name so /discover
+ * and /skill/:id are unaffected.
  */
 
 'use strict';
@@ -111,6 +124,48 @@ describe('structural: pricing analytics use the shared visibility predicate', ()
       assert.ok(!/\blearnings\.filter\(/.test(line),
         `learnings_submitted must not count the raw learnings array — that reveals hidden submissions per wallet: ${line.trim()}`);
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DR-5: /health, /api/info, /stats must report the canonical catalog_size
+// ─────────────────────────────────────────────────────────────────────────────
+describe('structural (DR-5): /health, /api/info, /stats report the canonical catalog_size', () => {
+  it('/health.catalog_size uses visibleLearningsList(), not the raw skills catalog', () => {
+    const slice = routeSlice("app.get('/health'");
+    assert.ok(slice.includes('catalog_size: visibleLearningsList().length'),
+      '/health.catalog_size must equal visibleLearningsList().length — same predicate as /knowledge/stats.learnings_count');
+    assert.ok(!/(?<!skills_)catalog_size:\s*skills\.length/.test(slice),
+      '/health.catalog_size must not read the raw skills.length (the static skill-discovery catalog)');
+    assert.ok(slice.includes('skills_catalog_size: skills.length'),
+      '/health must still expose the static skill-discovery catalog size, under an unambiguous name');
+  });
+
+  it('/api/info.catalog_size uses visibleLearningsList(), not the raw skills catalog', () => {
+    const slice = routeSlice("app.get('/api/info'");
+    assert.ok(slice.includes('catalog_size: visibleLearningsList().length'),
+      '/api/info.catalog_size must equal visibleLearningsList().length');
+    assert.ok(!/(?<!skills_)catalog_size:\s*skills\.length/.test(slice),
+      '/api/info.catalog_size must not read the raw skills.length');
+    assert.ok(slice.includes('skills_catalog_size: skills.length'),
+      '/api/info must still expose the static skill-discovery catalog size, under an unambiguous name');
+  });
+
+  it('/stats.catalog_size uses visibleLearningsList(), not the raw skills catalog', () => {
+    const slice = routeSlice("app.get('/stats'");
+    assert.ok(/catalog_size:\s*visibleLearnings\.length/.test(slice) || slice.includes('catalog_size: visibleLearningsList().length'),
+      '/stats.catalog_size must derive from visibleLearningsList()/visibleCatalog()');
+    assert.ok(!/(?<!skills_)catalog_size:\s*skills\.length/.test(slice),
+      '/stats.catalog_size must not read the raw skills.length');
+    assert.ok(slice.includes('skills_catalog_size: skills.length'),
+      '/stats must still expose the static skill-discovery catalog size, under an unambiguous name');
+  });
+
+  it('no public JSON route still reports catalog_size: skills.length', () => {
+    // Historical bug shape, string form. Only the honest skills_catalog_size
+    // alias may still read the raw skills array.
+    assert.ok(!/(?<!skills_)catalog_size:\s*skills\.length/.test(SERVER_SRC),
+      'catalog_size must never read the raw skills.length anywhere in server.js — use skills_catalog_size instead');
   });
 });
 
@@ -241,6 +296,28 @@ describe('behavioral: the three public endpoints agree on visibility', () => {
 
       const stats = await get('/knowledge/stats');
       assert.equal(stats.learnings_count, 3, 'stats must count only the 3 visible learnings');
+
+      // DR-5: /health, /api/info, and GET /stats must agree with
+      // /knowledge/stats.learnings_count on catalog_size — the exact public
+      // contradiction (27 vs 103) this fix closes. The static skill catalog
+      // (skills.json, unrelated to this fixture) still surfaces, but under
+      // skills_catalog_size so it can never be mistaken for the marketplace
+      // catalog again.
+      const health = await get('/health');
+      assert.equal(health.catalog_size, stats.learnings_count,
+        '/health.catalog_size must agree with /knowledge/stats.learnings_count');
+      assert.equal(typeof health.skills_catalog_size, 'number');
+      assert.ok(health.skills_catalog_size > 0, 'skills_catalog_size must still report the static skill catalog');
+
+      const apiInfo = await get('/api/info');
+      assert.equal(apiInfo.catalog_size, stats.learnings_count,
+        '/api/info.catalog_size must agree with /knowledge/stats.learnings_count');
+      assert.equal(typeof apiInfo.skills_catalog_size, 'number');
+
+      const regStats = await get('/stats');
+      assert.equal(regStats.catalog_size, stats.learnings_count,
+        '/stats.catalog_size must agree with /knowledge/stats.learnings_count');
+      assert.equal(typeof regStats.skills_catalog_size, 'number');
 
       const cats = await get('/pricing/categories');
       const byCat = Object.fromEntries(cats.categories.map((c) => [c.category, c]));

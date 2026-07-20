@@ -730,13 +730,26 @@
                       "type": "string"
                     },
                     "catalog_size": {
-                      "type": "integer"
+                      "type": "integer",
+                      "description": "DR-5: canonical visible-catalog count (same predicate as GET /knowledge/stats.learnings_count)."
                     },
                     "categories": {
                       "type": "array",
                       "items": {
                         "type": "string"
-                      }
+                      },
+                      "description": "DR-5: categories present in the canonical visible catalog."
+                    },
+                    "skills_catalog_size": {
+                      "type": "integer",
+                      "description": "DR-5: static skill-discovery catalog size (skills.json), distinct from catalog_size."
+                    },
+                    "skills_categories": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "DR-5: categories present in the static skill-discovery catalog."
                     },
                     "endpoints": {
                       "type": "object"
@@ -773,7 +786,12 @@
                       "type": "number"
                     },
                     "catalog_size": {
-                      "type": "integer"
+                      "type": "integer",
+                      "description": "DR-5 (2026-07-20): canonical visible-catalog count — same predicate as GET /knowledge/stats.learnings_count. Was skills.length before the fix."
+                    },
+                    "skills_catalog_size": {
+                      "type": "integer",
+                      "description": "DR-5: static skill-discovery catalog size (skills.json), distinct from catalog_size."
                     },
                     "timestamp": {
                       "type": "string",
@@ -829,10 +847,20 @@
                   "type": "object",
                   "properties": {
                     "catalog_size": {
-                      "type": "integer"
+                      "type": "integer",
+                      "description": "DR-5: canonical visible-catalog count (same predicate as GET /knowledge/stats.learnings_count). Was skills.length before the fix."
                     },
                     "categories": {
-                      "type": "integer"
+                      "type": "integer",
+                      "description": "DR-5: distinct categories in the canonical visible catalog."
+                    },
+                    "skills_catalog_size": {
+                      "type": "integer",
+                      "description": "DR-5: static skill-discovery catalog size (skills.json), distinct from catalog_size."
+                    },
+                    "skills_categories": {
+                      "type": "integer",
+                      "description": "DR-5: distinct categories in the static skill-discovery catalog."
                     },
                     "types": {
                       "type": "object"
