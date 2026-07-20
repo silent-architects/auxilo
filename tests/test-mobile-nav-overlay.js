@@ -33,16 +33,24 @@
  *      `<nav id="main-nav">`, so the CSS check's premise holds.
  *
  *   2. DYNAMIC (runs only if the `playwright` package is resolvable --
- *      it is NOT a repo dependency, install it separately for this tier):
+ *      it is a devDependency, not a runtime dependency, so a plain
+ *      `npm install` in dev gets it but the published package does not):
  *      serves public/ over a throwaway static server, opens the hamburger
- *      at 375x812 on index/pricing/api, and asserts the containing-block
- *      geometry directly -- .nav-links fills the viewport and all 8 links
- *      are hit-testable via elementFromPoint. Also confirms at 1280x800
- *      that the hamburger stays hidden, .nav-links keeps its normal desktop
- *      layout (display:flex, position:static), and the nav still resolves a
- *      real backdrop-filter (via #main-nav or its ::before).
+ *      at 375x812 on all 8 shared-nav pages, and asserts the containing-
+ *      block geometry directly -- .nav-links fills the viewport and every
+ *      nav link on the page is hit-testable via elementFromPoint. Also
+ *      confirms at 1280x800 that the hamburger stays hidden, .nav-links
+ *      keeps its normal desktop layout (display:flex, position:static),
+ *      and the nav still resolves a real backdrop-filter (via #main-nav or
+ *      its ::before).
  *
- * Run: node tests/test-mobile-nav-overlay.js
+ *      CI installs playwright + Chromium and sets CI_REQUIRE_TIER2=1 so a
+ *      broken install fails the build loudly instead of silently falling
+ *      back to Tier-1-only coverage (see .github/workflows/ci.yml).
+ *
+ * Run: node tests/test-mobile-nav-overlay.js (invoked automatically by
+ * `npm test`, alongside the test/*.test.js suite -- not via a tests/*.js
+ * glob; see tests/README.md).
  */
 
 'use strict';
@@ -63,9 +71,20 @@ const NAV_PAGES = [
     'pricing.html', 'earnings.html', 'api.html', 'dashboard.html',
 ];
 
-// Subset actually driven through a browser for the dynamic tier (keeps
-// runtime reasonable; static tier still covers all 8 pages).
-const DYNAMIC_PAGES = ['index.html', 'pricing.html', 'api.html'];
+// All 8 shared-nav pages are driven through the browser for the dynamic
+// tier too (runtime stays under CI's budget -- see BUILD-4 follow-up,
+// PUNCH-LIST §31 DR-1).
+const DYNAMIC_PAGES = NAV_PAGES;
+
+// Expected .nav-links link count per dynamic page. The 7 marketing pages
+// share the full 8-link nav; dashboard.html is a distinct authenticated
+// shell with a shorter 5-link nav (no How It Works / Earnings, a Dashboard
+// CTA in place of Get Started) -- confirmed against the real DOM, not a
+// guess.
+const EXPECTED_LINK_COUNT = { 'dashboard.html': 5 };
+function expectedLinkCount(page) {
+    return EXPECTED_LINK_COUNT[page] || 8;
+}
 
 let passed = 0;
 let failed = 0;
@@ -281,7 +300,7 @@ async function runDynamicTests() {
 
     try {
         for (const page of DYNAMIC_PAGES) {
-            await runAsyncTest(`T-DR1-DYNAMIC-MOBILE-${page}: overlay fills viewport, all 8 links hit-testable`, async () => {
+            await runAsyncTest(`T-DR1-DYNAMIC-MOBILE-${page}: overlay fills viewport, all nav links hit-testable`, async () => {
                 const ctx = await browser.newContext({ viewport: { width: 375, height: 812 } });
                 const p = await ctx.newPage();
                 try {
@@ -303,7 +322,8 @@ async function runDynamicTests() {
                             return { text: a.textContent.trim(), hitOk: !!hit && (hit === a || a.contains(hit) || hit.contains(a)) };
                         });
                     });
-                    assert.strictEqual(links.length, 8, `expected 8 nav links, found ${links.length}`);
+                    const expected = expectedLinkCount(page);
+                    assert.strictEqual(links.length, expected, `expected ${expected} nav links, found ${links.length}`);
                     for (const link of links) {
                         assert.ok(link.hitOk, `link "${link.text}" should be hit-testable at its own center`);
                     }
@@ -358,11 +378,25 @@ async function main() {
 
     runStaticTests();
 
+    // CI sets CI_REQUIRE_TIER2=1 after installing playwright + chromium, so a
+    // broken install (missing devDependency, `playwright install` step
+    // skipped, etc.) fails the build instead of silently downgrading to
+    // Tier-1-only coverage.
+    const ciRequireTier2 = process.env.CI_REQUIRE_TIER2 === '1';
+
     if (isPlaywrightAvailable()) {
         await runDynamicTests();
+    } else if (ciRequireTier2) {
+        failed++;
+        const error = 'CI_REQUIRE_TIER2=1 but playwright is not resolvable -- Tier 2 would silently ' +
+            'skip. Fix the CI workflow (playwright devDependency + `npx playwright install chromium ' +
+            '--with-deps` before `npm test`) rather than removing this guard.';
+        failures.push({ name: 'T-DR1-TIER2-REQUIRED', error });
+        console.error('❌ T-DR1-TIER2-REQUIRED');
+        console.error(`   ${error}`);
     } else {
-        console.log('\n--- Tier 2: SKIPPED (playwright not installed; not a repo dependency) ---');
-        console.log('    Install it ad hoc to run the full browser-driven check: npm install --no-save playwright && npx playwright install chromium');
+        console.log('\n--- Tier 2: SKIPPED (playwright devDependency not installed on this machine) ---');
+        console.log('    Run `npm install` (it is in devDependencies) then `npx playwright install chromium` to enable it locally.');
     }
 
     console.log(`\n${'='.repeat(60)}`);
