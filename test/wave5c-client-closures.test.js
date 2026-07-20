@@ -70,6 +70,42 @@ function readJson(p) {
 // N3 — consent-gate integration (cmdSetup branches, executed for real)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Assertions shared by the two must-clean scenarios (b) and (c). */
+function assertNoCaptureArtifacts(home) {
+  // The kill-switch sentinel must NOT exist — extraction is not armed.
+  assert.ok(
+    !fs.existsSync(path.join(home, '.auxilo', 'autonomous-enabled')),
+    'sentinel must NOT be created when consent did not record'
+  );
+  // No auxilo-extract reference anywhere in Claude Code settings —
+  // including the pre-seeded STALE entry (the else-branch cleanup).
+  const settings = readJson(path.join(home, '.claude', 'settings.json'));
+  assert.ok(
+    !JSON.stringify(settings).includes('auxilo-extract'),
+    `no auxilo-extract capture hook may remain in settings.json: ${JSON.stringify(settings)}`
+  );
+  // Cursor capture hook stripped + shim deleted.
+  const cursorShim = installer.captureShimPath(home, 'cursor');
+  assert.ok(!fs.existsSync(cursorShim), 'stale cursor capture shim must be deleted');
+  const cursorHooksPath = path.join(home, '.cursor', 'hooks.json');
+  if (fs.existsSync(cursorHooksPath)) {
+    assert.ok(
+      !fs.readFileSync(cursorHooksPath, 'utf-8').includes('auxilo-capture'),
+      'stale cursor capture-hook config entry must be removed'
+    );
+  }
+}
+
+/** Consent-independent surfaces present in every scenario (boundary pin). */
+function assertConsentIndependentSurfaces(home) {
+  const settings = readJson(path.join(home, '.claude', 'settings.json'));
+  assert.ok(settings.mcpServers && settings.mcpServers.auxilo,
+    'MCP registration is NOT consent-gated');
+  const flatStart = JSON.stringify(settings.hooks && settings.hooks.SessionStart || []);
+  assert.ok(flatStart.includes('auxilo-review-notice'),
+    'SessionStart review notice is NOT consent-gated (count-only surface)');
+}
+
 describe('N3 — consent-gate integration (cmdSetup subprocess)', () => {
   const API_KEY = 'wave5c-test-key';
   let server;       // local HTTP server playing POST /extract/consent
@@ -192,41 +228,6 @@ describe('N3 — consent-gate integration (cmdSetup subprocess)', () => {
   const PROMPT_CLIENTS = { re: /Configure which clients\?/, send: 'all\n' };
   const consentPrompt = (answer) => ({ re: /Enable background extraction\?/, send: `${answer}\n` });
 
-  /** Assertions shared by the two must-clean scenarios (b) and (c). */
-  function assertNoCaptureArtifacts(home) {
-    // The kill-switch sentinel must NOT exist — extraction is not armed.
-    assert.ok(
-      !fs.existsSync(path.join(home, '.auxilo', 'autonomous-enabled')),
-      'sentinel must NOT be created when consent did not record'
-    );
-    // No auxilo-extract reference anywhere in Claude Code settings —
-    // including the pre-seeded STALE entry (the else-branch cleanup).
-    const settings = readJson(path.join(home, '.claude', 'settings.json'));
-    assert.ok(
-      !JSON.stringify(settings).includes('auxilo-extract'),
-      `no auxilo-extract capture hook may remain in settings.json: ${JSON.stringify(settings)}`
-    );
-    // Cursor capture hook stripped + shim deleted.
-    const cursorShim = installer.captureShimPath(home, 'cursor');
-    assert.ok(!fs.existsSync(cursorShim), 'stale cursor capture shim must be deleted');
-    const cursorHooksPath = path.join(home, '.cursor', 'hooks.json');
-    if (fs.existsSync(cursorHooksPath)) {
-      assert.ok(
-        !fs.readFileSync(cursorHooksPath, 'utf-8').includes('auxilo-capture'),
-        'stale cursor capture-hook config entry must be removed'
-      );
-    }
-  }
-
-  /** Consent-independent surfaces present in every scenario (boundary pin). */
-  function assertConsentIndependentSurfaces(home) {
-    const settings = readJson(path.join(home, '.claude', 'settings.json'));
-    assert.ok(settings.mcpServers && settings.mcpServers.auxilo,
-      'MCP registration is NOT consent-gated');
-    const flatStart = JSON.stringify(settings.hooks && settings.hooks.SessionStart || []);
-    assert.ok(flatStart.includes('auxilo-review-notice'),
-      'SessionStart review notice is NOT consent-gated (count-only surface)');
-  }
 
   it('(a) consent=Yes + server 200: sentinel + hooks/shims exist, exactly one grant call', async () => {
     const home = makeHome({ staleArtifacts: false });

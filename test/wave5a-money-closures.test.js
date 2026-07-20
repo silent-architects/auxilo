@@ -22,7 +22,7 @@
  * Runner: node --test test/wave5a-money-closures.test.js
  */
 
-const { describe, it } = require('node:test');
+const { describe, it, before } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
@@ -313,11 +313,14 @@ describe('CH-6: replace semantics + JSONL coherence (source + contract)', () => 
 // ════════════════════════════════════════════════════════════════════════════
 
 describe('AUD19-16(1): timeout branch debits at broadcast (source)', () => {
-  const w = withdrawSlice();
-  const timeoutBranch = w.slice(
-    w.indexOf("} else if (txResult.status === 'timeout') {"),
-    w.indexOf('} else {', w.indexOf("} else if (txResult.status === 'timeout') {"))
-  );
+  let w, timeoutBranch;
+  before(() => {
+    w = withdrawSlice();
+    timeoutBranch = w.slice(
+      w.indexOf("} else if (txResult.status === 'timeout') {"),
+      w.indexOf('} else {', w.indexOf("} else if (txResult.status === 'timeout') {"))
+    );
+  });
 
   it('disposition recorded in the WAL payload BEFORE the debit', () => {
     const dispAt = timeoutBranch.indexOf("updateWalPayload(walId, { broadcast_disposition: 'timeout', tx_hash: txResult.hash });");
