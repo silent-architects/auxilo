@@ -781,9 +781,19 @@ async function main() {
 
     let transcriptData;
     try {
-      transcriptData = await source.readSession(sessionRef);
+      // N1: capped read — the base-adapter path enforces AUXILO_MAX_SESSION_BYTES.
+      transcriptData = await source.readSessionCapped(sessionRef);
     } catch (err) {
-      // Fallback: treat the file as a plain pre-formatted transcript
+      if (err && err.code === 'SESSION_TOO_LARGE') {
+        // Oversize is a counted SKIP, and it must short-circuit BEFORE the raw
+        // readFileSync fallback below — that fallback is the exact unbounded
+        // read the cap exists to prevent.
+        console.error(`[runner] SKIPPED oversize session ${sessionRef.sessionId} (${err.bytes} bytes > cap ${err.maxBytes}; oversize_skipped=1)`);
+        log(`[runner] Skipped oversize session ${sessionRef.sessionId} (${err.bytes} bytes > cap ${err.maxBytes})`);
+        process.exit(0);
+      }
+      // Fallback: treat the file as a plain pre-formatted transcript. Safe to
+      // read raw here: the cap check above already passed (under-cap file).
       try {
         transcriptData = { transcript: fs.readFileSync(transcriptPath, 'utf-8') };
       } catch (e2) {
@@ -892,6 +902,7 @@ async function main() {
   let totalDiscovered = 0;
   let totalProcessed = 0;
   let totalSkipped = 0;
+  let totalOversize = 0; // N1: oversize-cap skips (subset of totalSkipped)
   let totalFailed = 0;
   let totalHeld = 0;
 
@@ -918,11 +929,23 @@ async function main() {
     for (const sessionRef of sessions) {
       log(`[runner]   Processing ${sessionRef.sessionId} (${sessionRef.bytes} bytes)...`);
 
-      // Read transcript
+      // Read transcript (N1: capped — base-adapter path enforces
+      // AUXILO_MAX_SESSION_BYTES before any byte is read)
       let transcriptData;
       try {
-        transcriptData = await source.readSession(sessionRef);
+        transcriptData = await source.readSessionCapped(sessionRef);
       } catch (err) {
+        if (err && err.code === 'SESSION_TOO_LARGE') {
+          // Counted skip, never a failure. stderr so constrained-sweeper logs
+          // surface it; ledger-marked (probe-refused idiom) so an immutable
+          // oversize file is not re-announced every sweep.
+          totalOversize++;
+          totalSkipped++;
+          console.error(`[runner]   SKIPPED oversize session ${sessionRef.sessionId} (${err.bytes} bytes > cap ${err.maxBytes}; oversize_skipped=${totalOversize})`);
+          log(`[runner]   Skipped oversize session ${sessionRef.sessionId} (${err.bytes} bytes > cap ${err.maxBytes})`);
+          ledgerMark(ledger, source.type, sessionRef.sessionId, 'oversize', sessionRef.mtime);
+          continue;
+        }
         log(`[runner]   Read failed: ${err.message}`);
         totalFailed++;
         continue;
@@ -1007,7 +1030,10 @@ async function main() {
   }
 
   saveLedger(ledger);
-  log(`[runner] Summary: ${totalDiscovered} discovered, ${totalProcessed} processed, ${totalSkipped} skipped, ${totalFailed} failed`);
+  log(`[runner] Summary: ${totalDiscovered} discovered, ${totalProcessed} processed, ${totalSkipped} skipped (${totalOversize} oversize), ${totalFailed} failed`);
+  if (totalOversize > 0) {
+    console.error(`[runner] oversize_skipped=${totalOversize} (sessions above AUXILO_MAX_SESSION_BYTES were skipped, not read)`);
+  }
   notifyHeld(totalHeld); // LW-18 layer 2: one notification per sweep, count-only
   process.exit(totalFailed > 0 ? 1 : 0);
 }
