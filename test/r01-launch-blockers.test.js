@@ -125,7 +125,11 @@ describe('2. isPlatformContributor predicate (lib/accounts.js)', () => {
 describe('2. refuse-at-unlock gate is wired BEFORE payment (server.js)', () => {
   let h;
   // CH-7: computed in before() — a failed slice exits 1, never fail-0/exit-0.
-  before(() => { h = sliceHandler("app.get('/knowledge/:id'", 4200); });
+  // DR-8 (2026-07-20): window 4200 → 9500 — the owner short-circuit (free
+  // self-unlock) now sits between the route head and the refuse gate; the gate
+  // and dualAuthDynamic ordering assertions below are unchanged (sanctioned
+  // window class, same as the 5A /learn slice bump).
+  before(() => { h = sliceHandler("app.get('/knowledge/:id'", 9500); });
 
   it('the CONTRIBUTOR_NOT_ONBOARDED 409 exists in the unlock handler', () => {
     assert.ok(h.includes("code: 'CONTRIBUTOR_NOT_ONBOARDED'"), 'must return the machine-readable refusal code');
@@ -142,7 +146,9 @@ describe('2. refuse-at-unlock gate is wired BEFORE payment (server.js)', () => {
 
   it('the gate runs BEFORE the x402 payment challenge (dualAuthDynamic)', () => {
     const refuseAt = h.indexOf('CONTRIBUTOR_NOT_ONBOARDED');
-    const payAt = h.indexOf('dualAuthDynamic');
+    // DR-8: pin the CALL SITE, not the bare word — the owner short-circuit's
+    // comments (which sit above the gate) legitimately name dualAuthDynamic.
+    const payAt = h.indexOf('await dualAuthDynamic(');
     assert.ok(refuseAt !== -1 && payAt !== -1);
     assert.ok(refuseAt < payAt,
       'the refusal must precede any 402-challenge / payment request/settle');
