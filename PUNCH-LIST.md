@@ -693,16 +693,17 @@ Art-direction seat (desktop + mobile, all 9 pages, judged against styles.css tok
 | DR-5 | Live catalog-count contradiction: `/health` `catalog_size:27` vs `/knowledge/stats` `learnings_count:102` (the figure actually injected into on-page ledgers); /status publicly shows 27 beside marketing ledgers showing 102. Reconcile field semantics + which is canonical for public surfaces. | P1 | CAT-1 + BUILD-2 | OPEN |
 | DR-6 | /status drift: footer "v0.9.1" vs openapi 0.9.4 / npm 0.9.3 (missed in the 0.9.4 sweep); /status also runs an independent `:root` token set (near-miss obsidian/ivory values, no Geist fallback). Fix version string; confirm token exception is intentional or fold into shared stylesheet. | P2 | GOV-1 + BUILD-3 | OPEN |
 | DR-7 | Art refinements (bundled): /for-agents discovery-band gold over-spend (demote `.discovery-cat` to slate; price = the sole gold column) · raised/ground tint too subtle (hairlines, not tone, carry the rhythm; homepage ends on double-ground) · /pricing six identical section skeletons (vary 1-2 beats) · unify ledger container form (strip vs cards) · codify centered-vs-left headline rule · thin chapter heroes on /pricing /earnings /how-it-works (add one-gold inline ledger where a stat exists). | P2 | BUILD-3 | OPEN |
+| DR-8 | **Self-unlock is CHARGED but advertised as $0** — caught by the copy-wave builder holding WP-1a on truth grounds, code-verified twice: `GET /knowledge/:id` charges via `dualAuthDynamic`→`deductCredit` BEFORE any owner check; the M-2 branch zeroes only *earnings* (wash-trade guard; its own comment: content returns "at the price of the unlock, with zero earnings"); no free owner-recall path exists. Meanwhile README.md:7,100,122 publicly claim "own learnings back free / your own learnings $0 / Self-unlocks are $0" (live on GitHub + riding npm 0.9.4), and the LOCKED memory-first positioning + STRAT-positioning-2026-07-18 treat the $0 self-unlock as the shipped, load-bearing single-player mechanic — it is not shipped. **Decision fork (Tyler + SPEC-1/CFO-1): (a) build the owner short-circuit so self-unlock is genuinely $0 (aligns product with position + README; recommended), or (b) retract the claims (README + WP-1a premise), which guts the single-player story.** Either way the false claim must not survive the next npm publish/promotion push. WP-1a held in the copy wave pending this. | **P0 — false public pricing claim + positioning load-bearing** | Tyler + SPEC-1 + CFO-1 + BUILD-2 | OPEN |
 
 ## Counts
 
 | Priority | Open | On Hold | Deferred | Done/Verified | Total |
 |----------|------|---------|----------|---------------|-------|
-| P0 (blocks launch) | **5** | 0 | 0 | **29** | 34 |
+| P0 (blocks launch) | **6** | 0 | 0 | **29** | 35 |
 | P1 (blocks real money / production) | **20** | 6 | 2 | 69 | 97 |
 | P2 (blocks scale) | **9** | 1 | 0 | 24 | 34 |
 | P3 (polish) | 0 | 0 | 0 | 4 | 4 |
-| **Total** | **34** | **7** | **2** | **126** | **169** |
+| **Total** | **35** | **7** | **2** | **126** | **170** |
 
 > **2026-06-10 Launch Wave**: LW-1–LW-10 added (§20, spec `specs/BUILD-SPEC-LAUNCH-WAVE.md`). 4 P0 + 6 P1 OPEN. P0 launch gate re-opened until LW-1–LW-4 land.
 
