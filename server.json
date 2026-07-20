@@ -3,7 +3,7 @@
   "name": "io.github.silent-architects/auxilo",
   "title": "Auxilo",
   "description": "Your agent stops solving the same problem twice: auto-extracted learnings, free self-unlocks.",
-  "version": "0.9.1",
+  "version": "0.9.4",
   "websiteUrl": "https://auxilo.io",
   "repository": {
     "url": "https://github.com/silent-architects/auxilo",
@@ -20,7 +20,7 @@
     {
       "registryType": "npm",
       "identifier": "auxilo-mcp",
-      "version": "0.9.1",
+      "version": "0.9.4",
       "transport": {
         "type": "stdio"
       }
