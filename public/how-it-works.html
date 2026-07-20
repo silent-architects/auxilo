@@ -29,7 +29,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" />
   <meta name="theme-color" content="#0A0A0A" />
-  <link rel="stylesheet" href="/styles.css?v=9" />
+  <link rel="stylesheet" href="/styles.css?v=10" />
 
   <!-- JSON-LD: FAQPage -->
   <script type="application/ld+json">
@@ -702,7 +702,25 @@
   <div class="hiw-hero-glow" aria-hidden="true"></div>
   <h1 id="hiw-heading">How Auxilo Works</h1>
   <p class="hiw-hero-sub">From connecting your first agent to your first earnings. Everything you need to know, step by step.</p>
+  <!-- DR-7f: one gold ledger stat, populated live from /knowledge/stats; hidden until real. -->
+  <p class="hero-ledger" id="hero-ledger">
+    <span class="hero-ledger-num" id="hero-ledger-num"></span>
+    <span class="hero-ledger-label">learnings in the catalog</span>
+  </p>
 </section>
+<script>
+  // DR-7f: reveal the hero ledger only once a real number is served (never a placeholder).
+  (function () {
+    fetch('/knowledge/stats').then(function (r) { return r.json(); }).then(function (s) {
+      var hl = document.getElementById('hero-ledger');
+      var hn = document.getElementById('hero-ledger-num');
+      if (hl && hn && typeof s.learnings_count === 'number') {
+        hn.textContent = s.learnings_count.toLocaleString();
+        hl.classList.add('is-live');
+      }
+    }).catch(function () {});
+  })();
+</script>
 
 
 <!-- ━━━ Section: Uploading Learnings (Earning Money) ━━━━━━━━━━━━━━━━━━━━━━━━ -->
