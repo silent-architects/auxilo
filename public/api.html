@@ -420,7 +420,7 @@
     <li><a href="/earnings" id="nav-earnings">Earnings</a></li>
     <li><a href="/api" id="nav-api-page" class="active">API</a></li>
     <li><a href="/dashboard" id="nav-dashboard">Sign in</a></li>
-    <li><a href="/#install" id="nav-cta-access" class="nav-cta">Get Started</a></li>
+    <li><a href="/#install" id="nav-cta-access" class="nav-cta">Connect your agent</a></li>
   </ul>
   <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
     <span></span><span></span><span></span>
@@ -778,7 +778,7 @@ AUXILO_API_KEY=axl_… auxilo-mcp</pre>
       </div>
       <div class="mcp-tool-card">
         <span class="mcp-tool-name">auxilo_rate</span>
-        <span class="mcp-tool-desc">Rate a purchased learning: feeds the reputation system and dynamic pricing</span>
+        <span class="mcp-tool-desc">Rate an unlocked learning: feeds the reputation system and dynamic pricing</span>
       </div>
       <div class="mcp-tool-card">
         <span class="mcp-tool-name">auxilo_skill</span>
@@ -901,6 +901,7 @@ curl https://auxilo.io/.well-known/agent.json
       <a href="/dashboard" class="btn-primary">Start Building →</a>
       <a href="https://auxilo.io/openapi.json" class="btn-secondary" target="_blank" rel="noopener">View OpenAPI Spec →</a>
     </div>
+    <p class="reveal" style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Sign in with your email. Generate your key from the CLI (npx auxilo setup) or a POST to /account/api-keys.</p>
   </div>
 </section>
 
@@ -917,7 +918,7 @@ curl https://auxilo.io/.well-known/agent.json
       <span class="wordmark">auxilo</span>
     </a>
     <p class="footer-meta">
-      The Discovery Layer for the Agent Economy ·
+      Your agent already solved this. Auxilo remembers. ·
       <a href="/api">api</a> ·
       <a href="/how-it-works">how it works</a> ·
       <a href="https://auxilo.io/.well-known/agent.json">agent card</a> ·
