@@ -29,18 +29,29 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" />
   <link rel="stylesheet" href="/styles.css?v=10" />
-  <!-- DR-4: reveal failsafe. Hide .reveal (via html.js-reveal) only when we can
-       animate it back; a backstop force-reveals if the observer never wires up, so
-       a section is never left permanently blank (no-JS, JS error, observer failure). -->
+  <!-- DR-4: reveal failsafe. Hide .reveal (via html.js-reveal) only when JS +
+       IntersectionObserver exist; a low-cost watchdog force-reveals any element
+       that sits unrevealed INSIDE the viewport for two consecutive ticks, i.e.
+       whenever the observer demonstrably missed it (no-JS, JS error, observer
+       constructed-but-silent -- the failure class seen once live). Forced
+       reveals still animate (the transition lives on .reveal itself). -->
   <script>
     (function () {
       if (!('IntersectionObserver' in window)) return;
       document.documentElement.className += ' js-reveal';
-      window.setTimeout(function () {
-        if (window.__auxRevealReady) return;
-        var els = document.querySelectorAll('.reveal');
-        for (var i = 0; i < els.length; i++) els[i].classList.add('visible');
-      }, 3000);
+      var pending = new WeakMap();
+      window.setInterval(function () {
+        var els = document.querySelectorAll('.reveal:not(.visible)');
+        for (var i = 0; i < els.length; i++) {
+          var el = els[i], r = el.getBoundingClientRect();
+          if (r.top < window.innerHeight && r.bottom > 0) {
+            if (pending.has(el)) el.classList.add('visible');
+            else pending.set(el, 1);
+          } else {
+            pending.delete(el);
+          }
+        }
+      }, 1400);
     })();
   </script>
   <meta name="theme-color" content="#0A0A0A" />
@@ -591,7 +602,6 @@
       { threshold: 0.12 }
     );
     els.forEach(el => io.observe(el));
-    window.__auxRevealReady = true; // DR-4: stand down the head-script backstop
   })();
 
 // ── Copy-to-clipboard ──────────────────────────────────────────────
