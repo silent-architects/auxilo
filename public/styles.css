@@ -92,10 +92,24 @@ section { padding: var(--section-pad); }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  border-bottom: 1px solid rgba(229, 229, 227, 0.08);
+}
+
+/* DR-1 fix: the glass background lives on a pseudo-element, not on #main-nav
+   itself. backdrop-filter on #main-nav would establish a containing block for
+   position:fixed descendants -- including .nav-links, the mobile menu overlay
+   -- collapsing its "fixed to viewport" box down to #main-nav's own ~84px bar.
+   A pseudo-element has no descendants, so it carries the same visual blur
+   without ever becoming a containing-block trap for .nav-links. */
+#main-nav::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
   background: rgba(10, 10, 10, 0.85);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(229, 229, 227, 0.08);
+  pointer-events: none;
 }
 
 .nav-logo {
