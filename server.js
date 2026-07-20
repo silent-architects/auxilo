@@ -98,6 +98,10 @@ const identityVault = require('./lib/identity-vault.js');
 const { sendOpsAlert } = require('./lib/ops-alert.js');
 // CP-4 (AML-PROGRAM §4.3 G-2): IP-geolocation embargo screen (pure decision engine).
 const geoEmbargo = require('./lib/geo-embargo.js');
+// CP-1 (AML-PROGRAM §G-1, cont'd): re-screen verified-but-unlinked wallets on
+// SDN refresh (pure decision engine; see file header for why this is separate
+// from rescreenLinkedWallets() below).
+const { rescreenVerifiedWallets } = require('./lib/ofac-rescreen.js');
 // Quiet phase: payout-notification waitlist (validation, dedupe, storage, and
 // the per-IP limiter live in lib; the routes below own transport only).
 const { addToWaitlist, waitlistCount, isWaitlistRateLimited } = require('./lib/waitlist.js');
@@ -2259,6 +2263,38 @@ async function refreshOFACList() {
       }
     } catch (sweepErr) {
       console.error(`[OFAC] [CP-1] Re-screen sweep failed (refresh unaffected): ${sweepErr.message}`);
+    }
+
+    // CP-1 (cont'd, AML-PROGRAM G-1): re-screen verified-but-unlinked wallets —
+    // see lib/ofac-rescreen.js header for why this is a separate sweep from
+    // rescreenLinkedWallets() above. Own try/catch: independently contained so
+    // neither sweep's failure can affect the other or the refresh cycle.
+    try {
+      const accountsForRescreen = loadAccounts();
+      const linkedWalletsLower = new Set(
+        Object.values(accountsForRescreen)
+          .map((a) => a && typeof a.wallet === 'string' && a.wallet.toLowerCase())
+          .filter(Boolean)
+      );
+      const verifiedSweep = rescreenVerifiedWallets({
+        verifiedWallets,
+        linkedWalletsLower,
+        platformWallets: PLATFORM_WALLETS,
+        checkOFAC,
+        logOFACBlock,
+        sendOpsAlert,
+      });
+      if (verifiedSweep.hits > 0) {
+        safeWrite(VERIFIED_WALLETS_FILE, verifiedWallets);
+        console.error(`[OFAC] [CP-1] Verified-wallet re-screen HIT: ${verifiedSweep.hits} wallet(s) newly frozen: ${verifiedSweep.newlyFrozen.join(', ')}`);
+      } else {
+        const stillNote = verifiedSweep.alreadyFrozen > 0
+          ? ` (${verifiedSweep.alreadyFrozen} previously-flagged sanctioned wallet(s) remain frozen)`
+          : '';
+        console.log(`[OFAC] [CP-1] Verified-wallet re-screen clean: ${verifiedSweep.screened} verified-but-unlinked wallet(s) checked against the fresh list${stillNote}.`);
+      }
+    } catch (verifiedSweepErr) {
+      console.error(`[OFAC] [CP-1] Verified-wallet re-screen failed (refresh unaffected): ${verifiedSweepErr.message}`);
     }
   } catch (err) {
     ofacState.consecutiveFailures++;
