@@ -29,7 +29,7 @@ const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'aud19-2-econ-'));
 process.env.AUXILO_CREDITS_FILE = path.join(TMP_DIR, 'credits.json');
 process.env.AUXILO_UNLOCK_ATTRIBUTION_FILE = path.join(TMP_DIR, 'unlock-attribution.json');
 
-const { describe, it, after } = require('node:test');
+const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const credits = require('../lib/credits.js');
@@ -231,7 +231,9 @@ function unlockHandlerSlice() {
 }
 
 describe('server.js: accrual basis = min(list, credit unit price), credit path only', () => {
-  const h = unlockHandlerSlice();
+  let h;
+  // CH-7: computed in before() — a failed slice exits 1, never fail-0/exit-0.
+  before(() => { h = unlockHandlerSlice(); });
 
   it('basis is min(UNLOCK_PRICE, creditUnit) on the credit path, UNLOCK_PRICE otherwise (x402/router unchanged)', () => {
     assert.ok(/const accrualBasis = \(fundingSource === 'credit_pack'\)\s*\n\s*\? Math\.min\(UNLOCK_PRICE,/.test(h),
@@ -263,7 +265,8 @@ describe('server.js: accrual basis = min(list, credit unit price), credit path o
 });
 
 describe('server.js: per-(buyer, learning) accrual cap wiring', () => {
-  const h = unlockHandlerSlice();
+  let h;
+  before(() => { h = unlockHandlerSlice(); });
 
   it('cap consulted only on the credit path with a known buyer', () => {
     assert.ok(/const accrualCapped = \(fundingSource === 'credit_pack'\) && !!buyerAccountId\s*\n\s*&& isAccrualCapped\(buyerAccountId, id\);/.test(h));
@@ -304,7 +307,8 @@ describe('server.js: per-(buyer, learning) accrual cap wiring', () => {
 });
 
 describe('server.js: M-2 wash guard uses the POST-auth buyer identity', () => {
-  const h = unlockHandlerSlice();
+  let h;
+  before(() => { h = unlockHandlerSlice(); });
 
   it('buyerAccountId is re-read after dualAuthDynamic (the pre-auth read is null on the credit path)', () => {
     const auth = h.indexOf('await dualAuthDynamic(');

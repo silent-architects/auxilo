@@ -67,7 +67,9 @@ function rateHandlerSlice() {
 // ════════════════════════════════════════════════════════════════════════════
 
 describe('AUD19-15: discovery-premium cache read uses the POST-auth identity', () => {
-  const h = unlockHandlerSlice();
+  let h;
+  // CH-7: computed in before() — a failed slice exits 1, never fail-0/exit-0.
+  before(() => { h = unlockHandlerSlice(); });
 
   it('the cache read sits AFTER dualAuthDynamic (no pre-auth read remains)', () => {
     const auth = h.indexOf('await dualAuthDynamic(');
@@ -190,7 +192,8 @@ describe('AUD19-10: abortWal guarantees no replay', () => {
 });
 
 describe('AUD19-10: unlock handler compensation wiring (source)', () => {
-  const h = unlockHandlerSlice();
+  let h;
+  before(() => { h = unlockHandlerSlice(); });
 
   it('the delivery section is wrapped and the catch compensates the credit path only', () => {
     assert.ok(h.includes('} catch (deliveryErr) {'), 'delivery try/catch exists');
@@ -275,7 +278,8 @@ describe('LW-7: purchase ledger is durable proof of delivered unlocks', () => {
 });
 
 describe('LW-7: rating endpoint requires auth + proof of prior unlock (source)', () => {
-  const r = rateHandlerSlice();
+  let r;
+  before(() => { r = rateHandlerSlice(); });
 
   it('route registers requireSessionOrApiKey and gates on hasPurchase', () => {
     assert.ok(SERVER_SRC.includes("app.post('/knowledge/:id/rate', requireSessionOrApiKey('read'), async (c) => {"),

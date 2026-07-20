@@ -25,7 +25,7 @@
 
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret-do-not-use-in-prod';
 
-const { describe, it } = require('node:test');
+const { describe, it, before } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
@@ -123,7 +123,9 @@ describe('2. isPlatformContributor predicate (lib/accounts.js)', () => {
 });
 
 describe('2. refuse-at-unlock gate is wired BEFORE payment (server.js)', () => {
-  const h = sliceHandler("app.get('/knowledge/:id'", 4200);
+  let h;
+  // CH-7: computed in before() — a failed slice exits 1, never fail-0/exit-0.
+  before(() => { h = sliceHandler("app.get('/knowledge/:id'", 4200); });
 
   it('the CONTRIBUTOR_NOT_ONBOARDED 409 exists in the unlock handler', () => {
     assert.ok(h.includes("code: 'CONTRIBUTOR_NOT_ONBOARDED'"), 'must return the machine-readable refusal code');
@@ -214,7 +216,8 @@ describe('4. GET /account/earnings splits held from owned', () => {
   // AUD19-8: window widened 3200 → 6500 — the handler grew (self-healing held
   // sweep + held_pending_assent field) and the populated-branch assertions sit
   // beyond the old window.
-  const h = sliceHandler("app.get('/account/earnings'", 6500);
+  let h;
+  before(() => { h = sliceHandler("app.get('/account/earnings'", 6500); });
 
   it('exposes unassented_pending as a distinct field in BOTH branches', () => {
     // two occurrences: the source==='new' zero state and the populated return
@@ -245,7 +248,8 @@ describe('4. GET /account/earnings splits held from owned', () => {
 // ─── 5. Withdraw ignores account suspension (SEC-2) ──────────────────────────────
 
 describe('5. wallet-signed POST /withdraw honors suspension', () => {
-  const h = sliceHandler("app.post('/withdraw'", 5000);
+  let h;
+  before(() => { h = sliceHandler("app.post('/withdraw'", 5000); });
 
   it('checks disabled_at on the resolved account and returns 403', () => {
     assert.ok(/withdrawAccount && withdrawAccount\.disabled_at/.test(h),
@@ -326,7 +330,8 @@ describe('8. FB-1: /dmca route is wired (Terms §5.9.4(b) links /dmca)', () => {
 
 describe('8. FB-2: earnings API is server-authoritative about the payout pause', () => {
   // AUD19-8: window widened 4500 → 6500 (see the held-sweep note above).
-  const h = sliceHandler("app.get('/account/earnings'", 6500);
+  let h;
+  before(() => { h = sliceHandler("app.get('/account/earnings'", 6500); });
   it('GET /account/earnings returns payouts_paused derived from the kill-switch', () => {
     assert.ok(h.includes('payouts_paused'), 'must surface a payouts_paused flag');
     assert.ok(h.includes("process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true'"),
@@ -339,7 +344,8 @@ describe('8. FB-2: earnings API is server-authoritative about the payout pause',
 });
 
 describe('8. FB-4: search quotes ONE price = the unlock charge', () => {
-  const h = sliceHandler('const resolvedPrice = r.pricing?.current_price', 2200);
+  let h;
+  before(() => { h = sliceHandler('const resolvedPrice = r.pricing?.current_price', 2200); });
   it('unlock_price_usd and current_price both use the single resolvedPrice', () => {
     assert.ok(h.includes('const resolvedPrice'), 'must resolve one canonical price');
     assert.ok(h.includes('unlock_price_usd: resolvedPrice'), 'unlock_price_usd must be the resolved charge');

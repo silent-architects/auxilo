@@ -36,8 +36,10 @@ const {
 const FIXTURES = path.join(__dirname, 'fixtures');
 
 describe('Sensitivity filter v0.4: version', () => {
-  it('SENSITIVITY_FILTER_VERSION is 0.4.0', () => {
-    assert.equal(SENSITIVITY_FILTER_VERSION, '0.4.0');
+  it('SENSITIVITY_FILTER_VERSION is 0.5.0 (bumped by task-#19 Drive-ID patterns, 2026-07-19)', () => {
+    // §7.6 convention: the version bumps whenever patterns are added. 0.4.0
+    // (P2.1a) → 0.5.0 (google_drive_url + google_drive_id, Wave-5B).
+    assert.equal(SENSITIVITY_FILTER_VERSION, '0.5.0');
   });
 });
 

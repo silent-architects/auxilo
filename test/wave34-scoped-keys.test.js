@@ -306,7 +306,9 @@ describe('T5 rotateKeyEntry', () => {
 // ─── T6. Creation paths: admin never issuable, v2 stamped ────────────────────
 
 describe('T6 POST /account/api-keys (source, lib/accounts.js)', () => {
-  const creation = slice("app.post('/account/api-keys'", "app.get('/account/dashboard'", ACCOUNTS_SRC);
+  let creation;
+  // CH-7: computed in before() — a failed slice exits 1, never fail-0/exit-0.
+  before(() => { creation = slice("app.post('/account/api-keys'", "app.get('/account/dashboard'", ACCOUNTS_SRC); });
   it('labeled path: admin refused explicitly, earnings-read accepted, default contribute', () => {
     assert.match(creation, /ADMIN_SCOPE_NOT_ISSUABLE/);
     assert.match(creation, /LABELED_SCOPES = \['read', 'earnings-read', 'contribute'\]/);
@@ -409,7 +411,8 @@ describe('T8 /account/earnings gated at earnings-read', () => {
 });
 
 describe('T9 dualAuthDynamic rank check (the unlock fix)', () => {
-  const dual = slice('async function dualAuthDynamic', 'AU-8: Per-API-Key Rate Limiter');
+  let dual;
+  before(() => { dual = slice('async function dualAuthDynamic', 'AU-8: Per-API-Key Rate Limiter'); });
   it('uses hasMinScope on effective_scope', () => {
     assert.match(dual, /hasMinScope\(result\.effective_scope \|\| result\.scope, requiredScope\)/);
   });
@@ -433,11 +436,16 @@ describe('T9 dualAuthDynamic rank check (the unlock fix)', () => {
 describe('T9b dualAuthDynamic behavioral (kills mutation M3)', () => {
   // Extract the function verbatim: from its declaration to the first
   // column-0 closing brace (the body is fully indented).
-  const start = SERVER_SRC.indexOf('async function dualAuthDynamic');
-  assert.ok(start !== -1, 'dualAuthDynamic not found in server.js');
-  const end = SERVER_SRC.indexOf('\n}', start);
-  assert.ok(end !== -1, 'dualAuthDynamic end brace not found');
-  const fnSrc = SERVER_SRC.slice(start, end + 2);
+  // CH-7: extraction + guards run in before() — a missing marker exits 1,
+  // never the silent fail-0/exit-0 of a describe-body assert.
+  let fnSrc;
+  before(() => {
+    const start = SERVER_SRC.indexOf('async function dualAuthDynamic');
+    assert.ok(start !== -1, 'dualAuthDynamic not found in server.js');
+    const end = SERVER_SRC.indexOf('\n}', start);
+    assert.ok(end !== -1, 'dualAuthDynamic end brace not found');
+    fnSrc = SERVER_SRC.slice(start, end + 2);
+  });
 
   function buildHarness({ creditsExhausted = false } = {}) {
     const lib = require('../lib/accounts.js');
@@ -563,9 +571,12 @@ describe('T11 key management routes', () => {
 });
 
 describe('T12 device flow scope selection (D2/NF-3)', () => {
-  const devicePost = slice("app.post('/auth/device'", "app.get('/auth/device/status'");
-  const authorize = slice("app.post('/auth/device/authorize'", "app.get('/account/credits'");
-  const status = slice("app.get('/auth/device/status'", "app.get('/auth/device/verify'");
+  let devicePost, authorize, status;
+  before(() => {
+    devicePost = slice("app.post('/auth/device'", "app.get('/auth/device/status'");
+    authorize = slice("app.post('/auth/device/authorize'", "app.get('/account/credits'");
+    status = slice("app.get('/auth/device/status'", "app.get('/auth/device/verify'");
+  });
   it('POST /auth/device validates scope, refuses admin, defaults contribute', () => {
     assert.match(devicePost, /ADMIN_SCOPE_NOT_ISSUABLE/);
     assert.match(devicePost, /\['read', 'earnings-read', 'contribute'\]/);
