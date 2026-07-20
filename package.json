@@ -25,7 +25,7 @@
   ],
   "scripts": {
     "start": "node mcp-server.js",
-    "test": "node --test --test-force-exit test/*.test.js && node tests/test-mobile-nav-overlay.js"
+    "test": "node --test test/*.test.js && node tests/test-mobile-nav-overlay.js"
   },
   "keywords": [
     "mcp",
