@@ -413,6 +413,15 @@ const VERIFIED_WALLETS_FILE = path.join(DATA_DIR, 'verified-wallets.json');
 // WALLET_CHALLENGES_FILE removed — nonces are now in-memory via lib/eip712.js (SPEC-A3)
 const SETTLEMENTS_FILE = path.join(DATA_DIR, 'settlements.jsonl');
 const SETTLEMENT_COMPACTION_THRESHOLD = 1000; // M-C: lines before compaction triggers
+// GTM-9 (Wave-4.4 groundwork): per-unlock event rows — timestamp, learning id,
+// accrual basis, funding source. Powers the /earnings trailing-30-day proof.
+// DELIBERATELY a separate file from settlements.jsonl: settlements are a
+// withdrawal-rail STATE MACHINE (folded to latest-status-per-id and compacted
+// at startup) — folding immutable point-in-time facts into it would let
+// compaction garbage-collect them. This file is append-only, never compacted.
+// NO buyer PII: no purchaser account/IP/UA — only what settlements/earnings
+// already store (contributor payee identity + amounts).
+const UNLOCK_EVENTS_FILE = path.join(DATA_DIR, 'unlock-events.jsonl');
 const RATE_LIMITS_FILE = path.join(DATA_DIR, 'rate-limits.json'); // M-A: persisted rate limit state
 const STAGED_KEY_FILE  = path.join(DATA_DIR, 'staged-key.json');  // M-F: pending key rotation
 
@@ -942,6 +951,27 @@ function appendSettlement(s) {
   }
 }
 
+// ─── GTM-9: per-unlock event log (Wave-4.4 groundwork) ───────────────────────
+// Written at the WAL-protected unlock commit point (step 'unlock_event_appended'
+// between update_earnings and commitWal); replayUnlock re-emits the row after a
+// crash. Event id == the unlock WAL id — the dedupe key for readers AND for the
+// replay-time duplicate scan below. `ts` is the unlocked_at stored in the WAL
+// payload, so a replayed row is byte-identical to the live one.
+function appendUnlockEvent(event) {
+  fs.appendFileSync(UNLOCK_EVENTS_FILE, JSON.stringify(event) + '\n');
+}
+
+// Replay-time guard: true when an event row with this id is already on disk
+// (crash landed between the append and the WAL step marker). Only called from
+// startup replay — never on the hot path.
+function hasUnlockEvent(eventId) {
+  if (!fs.existsSync(UNLOCK_EVENTS_FILE)) return false;
+  const lines = fs.readFileSync(UNLOCK_EVENTS_FILE, 'utf8').split('\n').filter(Boolean);
+  return lines.some(line => {
+    try { return JSON.parse(line).id === eventId; } catch { return false; }
+  });
+}
+
 /**
  * M-C: Compact settlements.jsonl — archive completed entries, keep only active.
  * Safe: writes archive first, verifies, then rewrites active file.
@@ -1109,7 +1139,7 @@ const requireSession = requireAuth; // alias used by /pipeline/* and /referral/*
 // aware) to hasMinScope.
 
 // ─── Write-Ahead Log (SPEC-A2 / C3) ────────────────────────────────────────
-const { createWalEntry, markStepComplete, commitWal, abortWal, getPendingWalEntries } = require('./lib/wal.js');
+const { createWalEntry, markStepComplete, updateWalPayload, commitWal, abortWal, getPendingWalEntries } = require('./lib/wal.js');
 
 // ─── WAL Crash Recovery (SPEC-A2 / C3) ─────────────────────────────────────
 const { acquireWalletLock, getActiveLockCount } = require('./lib/wallet-lock.js');
@@ -1229,7 +1259,32 @@ function replayUnlock(entry) {
     safeWrite(EARNINGS_FILE, earnings);
     console.log(`[wal-recovery] ${entry.id}: earnings replayed (+${contributor_earned.toFixed(6)} USDC to ${resolvedKey})`);
   }
-  // Both steps done — nothing to replay; commitWal will clean up.
+
+  // GTM-9: replay the unlock-event row when the crash beat the append. The
+  // duplicate scan covers the crash-between-append-and-step-marker window, so
+  // replay never writes the same event id twice. Payload fallbacks keep
+  // pre-GTM-9 WAL entries replayable (they simply predate the event log).
+  if (!steps.includes('unlock_event_appended')) {
+    try {
+      if (!hasUnlockEvent(entry.id)) {
+        appendUnlockEvent({
+          id: entry.id,
+          ts: entry.payload.unlocked_at || new Date(entry.created_at || Date.now()).toISOString(),
+          learning_id,
+          amount_paid_usd: grossAmount,
+          funding_source: entry.payload.funding_source || null,
+          contributor_account_id: contributor_account_id || null,
+          contributor_wallet: builder_wallet || null,
+          settled_onchain: !!settled_onchain,
+        });
+        console.log(`[wal-recovery] ${entry.id}: unlock-event row replayed.`);
+      }
+    } catch (evtErr) {
+      console.error(`[wal-recovery] ${entry.id}: unlock-event replay failed (analytics only):`,
+        evtErr && evtErr.message);
+    }
+  }
+  // All steps done — nothing to replay; commitWal will clean up.
 }
 
 /**
@@ -1325,10 +1380,48 @@ function markProcessedSettlement(entry, settlementId) {
   }
 }
 
-// ─── Legacy Settlement Recovery (SPEC-A0 startup path) ───────────────────────
-// Renamed from resolveStuckSettlements — handles processing/processing_timeout/
-// processing_unresolved statuses only. The new C4 daemon below handles pending/retry.
+// ─── Settlement Recovery (SPEC-A0 → AUD19-16) ────────────────────────────────
+// Handles processing/processing_timeout/processing_unresolved statuses only.
+// The C4 daemon below handles pending/retry — and (AUD19-16 liveness fix)
+// tail-calls THIS resolver on its hourly tick, so timed-out withdrawals resolve
+// during continuous uptime, not only at restart.
+//
+// AUD19-16 model inversion (2026-07-19): the /withdraw timeout branch now
+// DEBITS pending_balance at broadcast (like the confirmed path) and stamps the
+// settlement record `debited_at_broadcast: true`. Resolution is therefore
+// disposition-aware:
+//   debited  + success → append settled ONLY (the debit already happened);
+//   debited  + revert  → refund (pending += , total_withdrawn -= , count -= 1),
+//                        idempotency-guarded by a `<id>:refund` marker;
+//   legacy   + success → debit NOW with the correct shape (pending -= AND
+//                        total_withdrawn += — the old code bumped
+//                        total_withdrawn without debiting pending);
+//   legacy   + revert / never-broadcast → NO ledger change (the balance was
+//                        never debited; the old `pending +=` refund of a
+//                        never-debited balance minted phantom money).
+
+// AUD19-16: refund a broadcast-debited settlement exactly once.
+// Caller holds the wallet lock. Returns true when the refund was applied now.
+function refundDebitedSettlement(entry, s) {
+  const refundMarker = `${s.id}:refund`;
+  if (hasProcessedSettlement(entry, refundMarker)) {
+    console.log(`[SETTLEMENT] ${s.id}: refund already applied. Skipping.`);
+    return false;
+  }
+  entry.pending_balance = parseFloat(((entry.pending_balance || 0) + s.amount).toFixed(6));
+  entry.total_withdrawn = parseFloat(Math.max(0, (entry.total_withdrawn || 0) - s.amount).toFixed(6));
+  entry.withdrawal_count = Math.max(0, (entry.withdrawal_count || 0) - 1);
+  markProcessedSettlement(entry, refundMarker);
+  safeWrite(EARNINGS_FILE, earnings);
+  return true;
+}
+
+let processingResolverRunning = false; // AUD19-16: reentrancy guard (startup + hourly tail-call)
+
 async function resolveProcessingSettlements() {
+  if (processingResolverRunning) return;
+  processingResolverRunning = true;
+  try {
   if (!fs.existsSync(SETTLEMENTS_FILE)) return;
   const lines = fs.readFileSync(SETTLEMENTS_FILE, 'utf8').split('\n').filter(Boolean);
 
@@ -1357,10 +1450,7 @@ async function resolveProcessingSettlements() {
       const { entry, source } = resolveEarningsEntry(earnings, { wallet: s.wallet });
       if (source === 'new') { console.warn(`[SETTLEMENT] No earnings entry for ${s.wallet}`); continue; }
 
-      if (hasProcessedSettlement(entry, s.id)) {
-        console.log(`[SETTLEMENT] ${s.id} already applied to ledger. Skipping.`);
-        continue;
-      }
+      const debited = !!s.debited_at_broadcast;
 
       if (s.tx_hash) {
         const _pc = getPublicClient();
@@ -1368,31 +1458,56 @@ async function resolveProcessingSettlements() {
         try {
           const receipt = await _pc.getTransactionReceipt({ hash: s.tx_hash });
           if (receipt.status === 'success') {
-            entry.total_withdrawn += s.amount;
-            markProcessedSettlement(entry, s.id);
-            safeWrite(EARNINGS_FILE, earnings);
-            appendSettlement({ ...s, status: 'settled' });
+            if (debited) {
+              // Debit landed at broadcast — record + reservation only.
+              appendSettlement({ ...s, status: 'settled', settled_at: Date.now() });
+              commitReservation(s.id, walletKey);
+            } else {
+              if (hasProcessedSettlement(entry, s.id)) {
+                console.log(`[SETTLEMENT] ${s.id} already applied to ledger. Skipping.`);
+                continue;
+              }
+              // Legacy undebited record: debit now with the CORRECT shape
+              // (the pre-fix code bumped total_withdrawn without pending -=).
+              entry.total_withdrawn = parseFloat(((entry.total_withdrawn || 0) + s.amount).toFixed(6));
+              entry.pending_balance = parseFloat(Math.max(0, (entry.pending_balance || 0) - s.amount).toFixed(6));
+              markProcessedSettlement(entry, s.id);
+              safeWrite(EARNINGS_FILE, earnings);
+              appendSettlement({ ...s, status: 'settled', settled_at: Date.now() });
+              commitReservation(s.id, walletKey);
+            }
           } else {
-            entry.pending_balance += s.amount;
-            markProcessedSettlement(entry, s.id);
-            safeWrite(EARNINGS_FILE, earnings);
-            appendSettlement({ ...s, status: 'failed', error: 'Reverted on-chain' });
+            // Definitive on-chain revert.
+            if (debited) {
+              refundDebitedSettlement(entry, s);
+            }
+            // Legacy undebited: NO ledger change — the balance never left.
+            appendSettlement({ ...s, status: 'failed', error: 'Reverted on-chain', resolved_at: Date.now() });
+            releaseOrphanedReservation(s.wallet, s.amount, s.id);
           }
         } catch {
           // Pending Mempool Trap fix — receipt unavailable, leave unresolved
+          // (the debited_at_broadcast flag rides the spread into the new row).
           console.warn(`[SETTLEMENT] tx_hash ${s.tx_hash} has no receipt — may be pending. Leaving unresolved.`);
           appendSettlement({ ...s, status: 'processing_unresolved' });
         }
       } else {
-        // No tx_hash = never broadcast — safe to refund
-        entry.pending_balance += s.amount;
-        markProcessedSettlement(entry, s.id);
-        safeWrite(EARNINGS_FILE, earnings);
-        appendSettlement({ ...s, status: 'failed', error: 'Never broadcast' });
+        // No tx_hash = never broadcast — definitive local failure.
+        if (debited) {
+          // Defensive: debit-at-broadcast always carries a hash; refund if seen.
+          refundDebitedSettlement(entry, s);
+        }
+        // Legacy undebited: NO ledger change (old code refunded a never-debited
+        // balance here — phantom money).
+        appendSettlement({ ...s, status: 'failed', error: 'Never broadcast', resolved_at: Date.now() });
+        releaseOrphanedReservation(s.wallet, s.amount, s.id);
       }
     } finally {
       releaseLock();
     }
+  }
+  } finally {
+    processingResolverRunning = false;
   }
 }
 
@@ -1406,9 +1521,18 @@ const PROCESSING_UNRESOLVED_AGE_MS = 48 * 60 * 60 * 1000; // 48 hours
 
 /**
  * Release a reservation that is no longer backed by an active settlement.
- * Placeholder for SPEC-A1's reservation ledger.
+ * AUD19-16(4): reservations are settlement-id keyed — releasing THIS
+ * settlement's slot can never touch another in-flight withdrawal, so the
+ * has-other-pending guard applies only to the legacy wallet-keyed fallback.
  */
-function releaseOrphanedReservation(wallet, amount) {
+function releaseOrphanedReservation(wallet, amount, settlementId = null) {
+  const reservations = loadReservations();
+  if (settlementId && reservations[settlementId]) {
+    releaseReservation(settlementId, wallet);
+    console.log(`[settlement-daemon] Released reservation ${settlementId}: ${wallet} ${amount} USDC`);
+    return;
+  }
+
   if (fs.existsSync(SETTLEMENTS_FILE)) {
     const lines = fs.readFileSync(SETTLEMENTS_FILE, 'utf8').split('\n').filter(Boolean);
     const hasPending = lines.some(line => {
@@ -1545,7 +1669,7 @@ async function resolveStuckSettlements() {
           } finally {
             releaseLock2();
           }
-          releaseOrphanedReservation(s.wallet, s.amount);
+          releaseOrphanedReservation(s.wallet, s.amount, s.id);
           // IMPL-A2-03: append-only — never rewrite full JSONL
           appendSettlement({ ...s, status: 'refunded', refunded_at: Date.now() });
         } else {
@@ -1608,12 +1732,16 @@ async function resolveStuckSettlements() {
           try {
             const receipt = await _pc.getTransactionReceipt({ hash: s.tx_hash });
             if (receipt && receipt.status === 'success') {
-              // Transaction confirmed — mark settled, deduct from earnings
+              // Transaction confirmed — mark settled.
+              // AUD19-16: debited_at_broadcast settlements already debited at
+              // the /withdraw timeout branch — applying the debit again here
+              // would double-debit. Legacy undebited records debit now, guarded
+              // by the processed marker.
               console.log(`[settlement-daemon] ${s.id}: processing_unresolved tx confirmed on-chain. Marking settled.`);
               const releaseLockU1 = await acquireWalletLock(s.wallet.toLowerCase());
               try {
                 const { entry: entryU1, source: srcU1 } = resolveEarningsEntry(earnings, { wallet: s.wallet });
-                if (srcU1 !== 'new') {
+                if (srcU1 !== 'new' && !s.debited_at_broadcast && !hasProcessedSettlement(entryU1, s.id)) {
                   entryU1.total_withdrawn = (entryU1.total_withdrawn || 0) + s.amount;
                   entryU1.pending_balance = Math.max(0, (entryU1.pending_balance || 0) - s.amount);
                   markProcessedSettlement(entryU1, s.id);
@@ -1623,23 +1751,27 @@ async function resolveStuckSettlements() {
                 releaseLockU1();
               }
               appendSettlement({ ...s, status: 'settled', tx_hash: receipt.transactionHash, settled_at: Date.now() });
-              commitReservation(s.wallet.toLowerCase());
+              commitReservation(s.id, s.wallet.toLowerCase());
               console.log(`[settlement-daemon] ${s.id}: resolved processing_unresolved → settled.`);
               continue;
             } else if (receipt && receipt.status !== 'success') {
-              // Transaction failed on-chain — refund immediately
-              console.log(`[settlement-daemon] ${s.id}: processing_unresolved tx reverted on-chain. Marking failed + refunding.`);
+              // Transaction failed on-chain — definitive revert.
+              // AUD19-16: refund ONLY what was debited. Broadcast-debited
+              // settlements get the marker-guarded refund (pending += ,
+              // total_withdrawn -= , count -= 1); legacy undebited records get
+              // NO ledger change (the old unconditional `pending +=` refunded
+              // a balance that was never debited).
+              console.log(`[settlement-daemon] ${s.id}: processing_unresolved tx reverted on-chain. Marking failed.`);
               const releaseLockU2 = await acquireWalletLock(s.wallet.toLowerCase());
               try {
                 const { entry: entryU2, source: srcU2 } = resolveEarningsEntry(earnings, { wallet: s.wallet });
-                if (srcU2 !== 'new') {
-                  entryU2.pending_balance += s.amount;
-                  safeWrite(EARNINGS_FILE, earnings);
+                if (srcU2 !== 'new' && s.debited_at_broadcast) {
+                  refundDebitedSettlement(entryU2, s);
                 }
               } finally {
                 releaseLockU2();
               }
-              releaseOrphanedReservation(s.wallet, s.amount);
+              releaseOrphanedReservation(s.wallet, s.amount, s.id);
               appendSettlement({ ...s, status: 'failed', error: 'Reverted on-chain', resolved_at: Date.now() });
               console.log(`[settlement-daemon] ${s.id}: resolved processing_unresolved → failed (reverted).`);
               continue;
@@ -1654,19 +1786,21 @@ async function resolveStuckSettlements() {
 
       // No receipt (or no tx_hash) — check age
       if (age > PROCESSING_UNRESOLVED_AGE_MS) {
-        // 48h elapsed with no on-chain confirmation — force-fail and refund
-        console.log(`[settlement-daemon] ${s.id}: processing_unresolved for ${Math.round(age / 3600000)}h with no receipt. Forcing failed + refund.`);
+        // 48h elapsed with no on-chain confirmation — force-fail.
+        // AUD19-16: refund ONLY broadcast-debited settlements (marker-guarded);
+        // legacy undebited records were never debited, so there is nothing to
+        // put back (the old unconditional `pending +=` minted phantom balance).
+        console.log(`[settlement-daemon] ${s.id}: processing_unresolved for ${Math.round(age / 3600000)}h with no receipt. Forcing failed.`);
         const releaseLockU3 = await acquireWalletLock(s.wallet.toLowerCase());
         try {
           const { entry: entryU3, source: srcU3 } = resolveEarningsEntry(earnings, { wallet: s.wallet });
-          if (srcU3 !== 'new') {
-            entryU3.pending_balance += s.amount;
-            safeWrite(EARNINGS_FILE, earnings);
+          if (srcU3 !== 'new' && s.debited_at_broadcast) {
+            refundDebitedSettlement(entryU3, s);
           }
         } finally {
           releaseLockU3();
         }
-        releaseOrphanedReservation(s.wallet, s.amount);
+        releaseOrphanedReservation(s.wallet, s.amount, s.id);
         appendSettlement({ ...s, status: 'failed', error: 'No receipt after 48h', resolved_at: Date.now() });
         console.log(`[settlement-daemon] ${s.id}: resolved processing_unresolved → failed (timeout 48h).`);
       } else {
@@ -1674,6 +1808,14 @@ async function resolveStuckSettlements() {
         console.log(`[settlement-daemon] ${s.id}: processing_unresolved ${Math.round(age / 3600000)}h old — still within 48h window, checking next interval.`);
       }
     }
+
+    // AUD19-16 liveness fix (the startup-only gap): processing/processing_timeout
+    // settlements were resolved ONLY by the startup pass — during continuous
+    // uptime a timed-out withdrawal never advanced, and after the 1h rate limit
+    // the same balance was withdrawable again (the double-pay). Tail-call the
+    // processing resolver on every hourly tick. Reentrancy-guarded internally;
+    // per-wallet locks + processed/refund markers make any overlap idempotent.
+    await resolveProcessingSettlements();
   } finally {
     settlementDaemonRunning = false;
   }
@@ -1702,37 +1844,111 @@ for (const entry of pendingWalEntries) {
   if (entry.operation === 'withdraw') {
     const { wallet_address, amount, settlement_id, earnings_before } = entry.payload;
     const completed = entry.steps_completed || [];
+    // AUD19-16: the timeout branch records its disposition (+ tx_hash) in the
+    // WAL payload BEFORE the debit, so recovery replays the correct completion
+    // — a debited processing_timeout record, never a phantom 'settled' one.
+    const walDisposition = entry.payload.broadcast_disposition || null;
+    const walTxHash = entry.payload.tx_hash || null;
 
-    if (completed.includes('earnings_deducted') && !completed.includes('settlement_appended')) {
-      console.log(`[WAL Recovery] Completing settlement append for ${settlement_id}`);
-      appendSettlement({
-        id: settlement_id,
-        wallet: wallet_address,
-        amount,
-        status: 'settled',
-        note: 'Recovered from WAL — earnings already deducted',
-        retry_count: 0,
-        timestamp: new Date().toISOString()
-      });
-      markStepComplete(entry.id, 'settlement_appended');
-      commitWal(entry.id);
-      commitReservation(wallet_address);
-    } else if (completed.includes('settlement_appended') && !completed.includes('earnings_deducted')) {
-      console.log(`[WAL Recovery] Completing earnings deduction for ${settlement_id}`);
-      // SPEC-P0.5: resolve via wallet index
-      const { key: wKey, entry: wEntry, source: wSrc } = resolveEarningsEntry(earnings, { wallet: wallet_address });
-      if (wSrc !== 'new') {
-        wEntry.total_withdrawn = parseFloat((wEntry.total_withdrawn + amount).toFixed(6));
-        wEntry.withdrawal_count = (wEntry.withdrawal_count || 0) + 1;
-        safeWrite(EARNINGS_FILE, earnings);
+    // AUD19-16: replay the debit exactly once (marker-guarded) with the
+    // correct shape — pending -= AND total_withdrawn += together.
+    const replayWithdrawDebit = () => {
+      const { entry: wEntry, source: wSrc } = resolveEarningsEntry(earnings, { wallet: wallet_address });
+      if (wSrc === 'new' || !wEntry) {
+        console.warn(`[WAL Recovery] No earnings entry for ${wallet_address} — debit for ${settlement_id} skipped.`);
+        return;
       }
+      if (hasProcessedSettlement(wEntry, settlement_id)) {
+        console.log(`[WAL Recovery] ${settlement_id}: debit already applied. Skipping.`);
+        return;
+      }
+      wEntry.pending_balance = parseFloat(Math.max(0, (wEntry.pending_balance || 0) - amount).toFixed(6));
+      wEntry.total_withdrawn = parseFloat(((wEntry.total_withdrawn || 0) + amount).toFixed(6));
+      wEntry.withdrawal_count = (wEntry.withdrawal_count || 0) + 1;
+      markProcessedSettlement(wEntry, settlement_id);
+      safeWrite(EARNINGS_FILE, earnings);
+    };
+
+    if (completed.includes('earnings_deducted') && completed.includes('settlement_appended')) {
+      // AUD19-16: crash between the last step and commitWal — previously this
+      // combination fell through every branch and the WAL entry leaked forever.
+      console.log(`[WAL Recovery] ${settlement_id}: both steps complete — committing WAL.`);
+      commitWal(entry.id);
+      if (walDisposition !== 'timeout') {
+        commitReservation(settlement_id, wallet_address);
+      } // timeout: reservation stays 'reserved' — the settlement resolver owns it
+    } else if (completed.includes('earnings_deducted') && !completed.includes('settlement_appended')) {
+      console.log(`[WAL Recovery] Completing settlement append for ${settlement_id}`);
+      if (walDisposition === 'timeout') {
+        // AUD19-16: the debit landed but the timeout record didn't — append it
+        // so the resolver can settle/refund against the on-chain outcome.
+        appendSettlement({
+          id: settlement_id,
+          wallet: wallet_address,
+          amount,
+          tx_hash: walTxHash,
+          status: 'processing_timeout',
+          debited_at_broadcast: true,
+          note: 'Recovered from WAL — debit already applied at broadcast',
+          retry_count: 0,
+          created_at: entry.created_at || Date.now(),
+          timestamp: new Date().toISOString()
+        });
+        markStepComplete(entry.id, 'settlement_appended');
+        commitWal(entry.id);
+        // reservation stays 'reserved' — resolver owns it
+      } else {
+        appendSettlement({
+          id: settlement_id,
+          wallet: wallet_address,
+          amount,
+          status: 'settled',
+          note: 'Recovered from WAL — earnings already deducted',
+          retry_count: 0,
+          timestamp: new Date().toISOString()
+        });
+        markStepComplete(entry.id, 'settlement_appended');
+        commitWal(entry.id);
+        commitReservation(settlement_id, wallet_address);
+      }
+    } else if (completed.includes('settlement_appended') && !completed.includes('earnings_deducted')) {
+      // Legacy-only combination (both write orders now debit first). AUD19-16:
+      // the old recovery bumped total_withdrawn WITHOUT debiting pending — the
+      // same asymmetry class as the resolver. Replay the correct shape.
+      console.log(`[WAL Recovery] Completing earnings deduction for ${settlement_id}`);
+      replayWithdrawDebit();
       markStepComplete(entry.id, 'earnings_deducted');
       commitWal(entry.id);
-      commitReservation(wallet_address);
+      commitReservation(settlement_id, wallet_address);
     } else if (!completed.includes('earnings_deducted') && !completed.includes('settlement_appended')) {
-      console.log(`[WAL Recovery] Releasing reservation for incomplete withdrawal ${settlement_id}`);
-      releaseReservation(wallet_address);
-      commitWal(entry.id);
+      if (walDisposition === 'timeout') {
+        // AUD19-16: the tx WAS broadcast (disposition recorded pre-debit) but
+        // the crash hit before any ledger write. Replay the full timeout
+        // completion — debit (marker-guarded) + timeout record — instead of
+        // releasing the reservation and forgetting a live on-chain tx.
+        console.log(`[WAL Recovery] Replaying timeout completion for broadcast withdrawal ${settlement_id}`);
+        replayWithdrawDebit();
+        markStepComplete(entry.id, 'earnings_deducted');
+        appendSettlement({
+          id: settlement_id,
+          wallet: wallet_address,
+          amount,
+          tx_hash: walTxHash,
+          status: 'processing_timeout',
+          debited_at_broadcast: true,
+          note: 'Recovered from WAL — broadcast disposition replayed',
+          retry_count: 0,
+          created_at: entry.created_at || Date.now(),
+          timestamp: new Date().toISOString()
+        });
+        markStepComplete(entry.id, 'settlement_appended');
+        commitWal(entry.id);
+        // reservation stays 'reserved' — resolver owns it
+      } else {
+        console.log(`[WAL Recovery] Releasing reservation for incomplete withdrawal ${settlement_id}`);
+        releaseReservation(settlement_id, wallet_address);
+        commitWal(entry.id);
+      }
     }
   } else if (entry.operation === 'withdraw_stripe') {
     // M-3: Stripe withdrawal WAL recovery. The transfer is sent with the
@@ -5384,7 +5600,16 @@ app.post('/learn', async (c) => {
   }
 
   // E1: Auto-pricing via new calculateLearningPrice (V2 formula)
-  const syntheticForPricing = { body: content, outcome, category, tags, quality_self_assessment, quality: { score: 0 }, created_at: new Date().toISOString() };
+  // CH-4 merge flag closed (Wave-5A): the synthetic carries the submitter's
+  // identity so the F2 same-contributor neighbor exclusion binds AT SUBMISSION,
+  // not only from the first cron refresh — a contributor's own one-shared-tag
+  // fillers can never open the density gate for their next submission.
+  const syntheticForPricing = {
+    body: content, outcome, category, tags, quality_self_assessment,
+    quality: { score: 0 }, created_at: new Date().toISOString(),
+    contributor_account_id: contributor_account_id || null,
+    contributor_wallet: walletLower || null,
+  };
   const calculatedPrice = pricingEngine.calculateLearningPrice(syntheticForPricing, learnings);
   const resolvedPrice = unlock_price !== undefined ? Number(unlock_price) : calculatedPrice;
 
@@ -7777,11 +8002,17 @@ app.get('/knowledge/:id', async (c) => {
   // SPEC-A2 C3: WAL-protected dual write — crash-safe atomicity
   // IMPL-A2-02: payload stores contributor_earned + platform_earned separately (not gross amount)
   // SPEC-P0.5: include contributor_account_id in WAL payload for recovery
+  // GTM-9: canonical event timestamp — captured once, stored in the WAL
+  // payload, used by BOTH the live event append and crash replay so the two
+  // emit the identical row.
+  const unlockedAt = new Date().toISOString();
+
   walId = createWalEntry('unlock', {
     learning_id: id,
     builder_wallet: contribWallet,
     contributor_account_id: contribAccountId,
     unlock_price: UNLOCK_PRICE,
+    unlocked_at: unlockedAt,
     // AUD19-2: the accrual basis (amount actually paid) is decided exactly once,
     // HERE, and stored — replayUnlock replays it verbatim, never recomputes.
     amount_paid_usd: accrualBasis,
@@ -7808,6 +8039,28 @@ app.get('/knowledge/:id', async (c) => {
   safeWrite(EARNINGS_FILE, earnings);
   markStepComplete(walId, 'update_earnings');
 
+  // GTM-9: per-unlock event row at the WAL-protected commit point. Crash-safe
+  // via the WAL (replayUnlock re-emits when the step is missing); an IO failure
+  // here is best-effort — analytics must never hold the money path hostage
+  // (the accrual above is already durable, so we do NOT fall into the
+  // AUD19-10 refund arm for an events-file error).
+  try {
+    appendUnlockEvent({
+      id: walId,                       // == WAL id — reader/replay dedupe key
+      ts: unlockedAt,
+      learning_id: id,
+      amount_paid_usd: accrualBasis,   // the accrual basis, not the list price
+      funding_source: fundingSource,   // credit_pack | x402 | router
+      contributor_account_id: contribAccountId || null,
+      contributor_wallet: contribWallet || null,
+      settled_onchain: !!routerSettlement,
+    });
+  } catch (evtErr) {
+    console.error('[GTM-9] unlock-event append failed (analytics only, unlock unaffected):',
+      evtErr && evtErr.message);
+  }
+  markStepComplete(walId, 'unlock_event_appended');
+
   commitWal(walId);
 
   // LW-7: delivery succeeded — record proof of purchase for rating eligibility.
@@ -7823,9 +8076,15 @@ app.get('/knowledge/:id', async (c) => {
   }
 
 // Gate-A W2B-2: buyer-facing responses must not leak the ops-only raw counter.
+// CH-6: also strip the per-account rater map + frozen legacy buckets — the map
+// keys are rater account ids (who-rated-what must never reach buyers).
 function stripOpsCounters(quality) {
   if (!quality || typeof quality !== 'object') return quality;
-  const { unlocks_total: _ut, ...pub } = quality;
+  const {
+    unlocks_total: _ut,
+    rater_scores: _rs, legacy_ratings: _lr, legacy_helpfulness_sum: _lhs,
+    ...pub
+  } = quality;
   return pub;
 }
 
@@ -8056,38 +8315,74 @@ app.post('/knowledge/:id/rate', requireSessionOrApiKey('read'), async (c) => {
   // Wave 2b (RUNBOOK §9): catalog write lock around the mutation + persist.
   const releaseLearningsLock = await acquireLearningsLock();
   let learning;
+  let replacedScore = null;
   try {
     learning = learnings[idx];
     const q = learning.quality;
-    q.ratings = (q.ratings || 0) + 1;
-    // D-6 FIX: maintain a bounded running sum instead of pushing onto an unbounded
-    // helpfulness_scores array. Migrate any pre-fix array into the sum once, then
-    // drop it so the catalog file stops growing per-rating.
-    if (typeof q.helpfulness_sum !== 'number') {
-      q.helpfulness_sum = Array.isArray(q.helpfulness_scores)
-        ? q.helpfulness_scores.reduce((a, b) => a + b, 0)
-        : 0;
+
+    // CH-6 (2026-07-19): per-account REPLACE semantics. Rating events could
+    // previously re-increment q.ratings on every call — one account reached
+    // the >=3 activation gates alone (~2h on the 1h cooldown) and flipped
+    // both the rating multiplier and the 60%-weight community blend (which,
+    // post-CH-4, flows into base_price via the daily cron). Now each account
+    // holds ONE slot per learning in q.rater_scores; re-rating overwrites it.
+    //
+    // Lazy migration (same pattern as the D-6 helpfulness_sum migration):
+    // pre-CH-6 aggregates freeze into legacy_ratings/legacy_helpfulness_sum —
+    // they keep contributing to count/avg exactly as before, can never grow
+    // again, and contribute ZERO to the distinct-rater gates (lib/pricing.js
+    // distinctRaterCount).
+    if (!q.rater_scores || typeof q.rater_scores !== 'object') {
+      // D-6 compat: fold any surviving pre-fix array into the sum first.
+      if (typeof q.helpfulness_sum !== 'number') {
+        q.helpfulness_sum = Array.isArray(q.helpfulness_scores)
+          ? q.helpfulness_scores.reduce((a, b) => a + b, 0)
+          : 0;
+      }
+      if (Array.isArray(q.helpfulness_scores)) delete q.helpfulness_scores;
+      q.legacy_ratings = q.ratings || 0;
+      q.legacy_helpfulness_sum = q.helpfulness_sum || 0;
+      q.rater_scores = {};
     }
-    q.helpfulness_sum += helpfulness;
-    if (Array.isArray(q.helpfulness_scores)) delete q.helpfulness_scores;
-    q.avg_helpfulness = q.helpfulness_sum / q.ratings;
+
+    replacedScore = Object.prototype.hasOwnProperty.call(q.rater_scores, raterAccountId)
+      ? q.rater_scores[raterAccountId]
+      : null;
+    q.rater_scores[raterAccountId] = helpfulness;
+
+    // Recompute aggregates: frozen legacy bucket + current per-account slots.
+    const slotScores = Object.values(q.rater_scores);
+    const slotSum = slotScores.reduce((a, b) => a + b, 0);
+    q.distinct_raters = slotScores.length;
+    q.ratings = (q.legacy_ratings || 0) + slotScores.length;
+    q.helpfulness_sum = (q.legacy_helpfulness_sum || 0) + slotSum;
+    q.avg_helpfulness = q.ratings > 0 ? q.helpfulness_sum / q.ratings : 0;
     learning.updated_at = new Date().toISOString();
+
+    // CH-6: the append-only JSONL is the durable rating event log — written
+    // BEFORE the catalog snapshot so a crash between the two leaves the log
+    // authoritative (folding the log per (learning, account) last-write-wins
+    // reproduces rater_scores exactly). `replaced` is the additive field: the
+    // score this event overwrote, null for a first rating.
+    const ratingEntry = {
+      learning_id: id, helpfulness, notes: notes || null,
+      rater_account_id: raterAccountId, replaced: replacedScore,
+      timestamp: new Date().toISOString(),
+    };
+    fs.appendFileSync(RATINGS_FILE, JSON.stringify(ratingEntry) + '\n');
 
     safeWrite(LEARNINGS_FILE, learnings);
   } finally {
     releaseLearningsLock();
   }
 
-  // Append-only JSONL log (crash-safe, distinct from safeWrite)
-  // LW-7: rater_account_id recorded for future anomaly review (who rated what).
-  const ratingEntry = { learning_id: id, helpfulness, notes: notes || null, rater_account_id: raterAccountId, timestamp: new Date().toISOString() };
-  fs.appendFileSync(RATINGS_FILE, JSON.stringify(ratingEntry) + '\n');
-
   return c.json({
     recorded: true,
     learning_id: id,
+    replaced: replacedScore !== null, // CH-6: true when this re-rating overwrote a prior score
     new_avg_helpfulness: learning.quality.avg_helpfulness,
-    total_ratings: learning.quality.ratings
+    total_ratings: learning.quality.ratings,
+    distinct_raters: learning.quality.distinct_raters
   });
 });
 
@@ -8214,9 +8509,16 @@ function saveReservations(reservations) {
   fs.renameSync(tmp, RESERVATIONS_FILE);
 }
 
-function createReservation(walletAddress, amount) {
+// AUD19-16(4): reservations are keyed by SETTLEMENT ID, not one-slot-per-wallet.
+// The old wallet-keyed map under-counted in-flight amounts: a second withdrawal
+// for the same wallet silently overwrote the first reservation. Settlement ids
+// (`wd_<uuid>`) can never collide with legacy wallet keys (`0x…`), so both
+// shapes coexist in the same file; every helper takes (settlementId, wallet)
+// and falls back to the legacy wallet key for pre-fix entries.
+function createReservation(settlementId, walletAddress, amount) {
   const reservations = loadReservations();
-  reservations[walletAddress] = {
+  reservations[settlementId] = {
+    wallet: walletAddress,
     amount,
     created_at: Math.floor(Date.now() / 1000),
     status: 'reserved'
@@ -8224,20 +8526,24 @@ function createReservation(walletAddress, amount) {
   saveReservations(reservations);
 }
 
-function commitReservation(walletAddress) {
+function _setReservationStatus(settlementId, walletAddress, status) {
   const reservations = loadReservations();
-  if (reservations[walletAddress]) {
-    reservations[walletAddress].status = 'committed';
+  const key = (settlementId && reservations[settlementId]) ? settlementId
+    : ((walletAddress && reservations[walletAddress]) ? walletAddress : null);
+  if (key) {
+    reservations[key].status = status;
     saveReservations(reservations);
   }
 }
 
-function releaseReservation(walletAddress) {
-  const reservations = loadReservations();
-  if (reservations[walletAddress]) {
-    reservations[walletAddress].status = 'released';
-    saveReservations(reservations);
-  }
+function commitReservation(settlementId, walletAddress) {
+  // Back-compat: legacy call sites passed only the wallet as the first arg —
+  // the fallback lookup resolves either shape.
+  _setReservationStatus(settlementId, walletAddress, 'committed');
+}
+
+function releaseReservation(settlementId, walletAddress) {
+  _setReservationStatus(settlementId, walletAddress, 'released');
 }
 
 const lastWithdrawalAttempt = {};
@@ -8477,6 +8783,30 @@ const GAS_ESTIMATE_USD = (!isNaN(_rawGasEst) && _rawGasEst >= 0 && _rawGasEst <=
   ? _rawGasEst
   : (() => { console.warn('[withdraw] GAS_ESTIMATE_USD env var is invalid; falling back to $0.005'); return 0.005; })();
 
+// AUD19-16(3): in-flight withdrawal guard. While ANY settlement for this wallet
+// is unresolved (broadcast-but-unconfirmed, queued, or retrying), a new
+// withdrawal must 409 — under the old optimistic-timeout model the same
+// pending_balance was withdrawable again after the 1h rate limit, producing a
+// second on-chain payout for the same earned balance.
+const UNRESOLVED_SETTLEMENT_STATUSES = new Set([
+  'pending', 'retry', 'processing', 'processing_timeout', 'processing_unresolved',
+]);
+
+function findUnresolvedSettlement(walletLower) {
+  if (!fs.existsSync(SETTLEMENTS_FILE)) return null;
+  const latestState = {};
+  const lines = fs.readFileSync(SETTLEMENTS_FILE, 'utf8').split('\n').filter(Boolean);
+  for (const line of lines) {
+    try {
+      const s = JSON.parse(line);
+      latestState[s.id] = s;
+    } catch { /* malformed line — ignore */ }
+  }
+  return Object.values(latestState).find(s =>
+    s.wallet === walletLower && UNRESOLVED_SETTLEMENT_STATUSES.has(s.status)
+  ) || null;
+}
+
 // Request a withdrawal (FREE, Auth via EIP-712 Signature — SPEC-A3)
 app.post('/withdraw', async (c) => {
   // PAYMENTS_ENABLED (Wave 2b): global kill switch, layered ABOVE the
@@ -8562,6 +8892,20 @@ app.post('/withdraw', async (c) => {
   // Server-side computed payout amount (IMPL-05: never trust client-provided amount)
   const payout_amount = net_payout;
 
+  // AUD19-16(3): in-flight guard — checked BEFORE the nonce is consumed so a
+  // blocked caller doesn't burn their challenge; re-checked under the wallet
+  // lock below (TOCTOU).
+  const inflight = findUnresolvedSettlement(walletLower);
+  if (inflight) {
+    return c.json({
+      error: 'A withdrawal for this wallet is still being resolved. Wait for it to settle or fail before requesting another.',
+      code: 'WITHDRAWAL_IN_FLIGHT',
+      settlement_id: inflight.id,
+      settlement_status: inflight.status,
+      poll_url: `/contributor/${walletLower}/settlements`, // (the /settlement/:id route never existed)
+    }, 409);
+  }
+
   // C7 FIX: Consume withdrawal nonce BEFORE verification
   const nonceData = consumeNonce(wallet);
   if (!nonceData || nonceData.action !== 'withdrawal') {
@@ -8634,6 +8978,20 @@ app.post('/withdraw', async (c) => {
       return c.json({ error: 'Minimum withdrawal is $0.05 USDC' }, 400);
     }
 
+    // AUD19-16(3): re-check the in-flight guard under the exclusive wallet lock
+    // (TOCTOU — a concurrent request could have broadcast between the pre-lock
+    // check and lock acquisition).
+    const inflightLocked = findUnresolvedSettlement(walletLower);
+    if (inflightLocked) {
+      return c.json({
+        error: 'A withdrawal for this wallet is still being resolved. Wait for it to settle or fail before requesting another.',
+        code: 'WITHDRAWAL_IN_FLIGHT',
+        settlement_id: inflightLocked.id,
+        settlement_status: inflightLocked.status,
+        poll_url: `/contributor/${walletLower}/settlements`,
+      }, 409);
+    }
+
     // 4. Check platform balance via TxManager (A0)
     const { sufficient, balance: platformBalance } = await checkBalance(payout_amount);
     if (!sufficient) {
@@ -8643,18 +9001,23 @@ app.post('/withdraw', async (c) => {
       }, 503);
     }
 
-    // 5. Create reservation (balance NOT deducted yet — C8 fix)
-    createReservation(walletLower, payout_amount);
-
-    // 6. Create settlement record
+    // 5. Create settlement id + record template FIRST — AUD19-16(4): the
+    // reservation is keyed by settlement id (one slot per settlement, never
+    // one-per-wallet), so the id must exist before the reservation.
     // IR-H-006 FIX: Use crypto.randomUUID() instead of Math.random() for settlement IDs
     const settlementId = `wd_${crypto.randomUUID()}`;
     const settlementTemplate = {
       id: settlementId,
       wallet: walletLower, // Used walletLower
       amount: payout_amount,
+      // AUD19-16: age basis for the daemon's refund/force-fail windows
+      // (IMPL-A2-05 treats a missing created_at as brand-new forever).
+      created_at: Date.now(),
       timestamp: new Date().toISOString()
     };
+
+    // 6. Create reservation (balance NOT deducted yet — C8 fix), keyed by settlement id
+    createReservation(settlementId, walletLower, payout_amount);
 
     // 7. Create WAL entry for the dual-write (AUDIT-05)
     const walId = createWalEntry('withdraw', {
@@ -8670,7 +9033,7 @@ app.post('/withdraw', async (c) => {
       txResult = await sendUSDC(walletLower, payout_amount);
     } catch (err) {
       // Pre-broadcast failure — TxManager couldn't even attempt (AR-6 → 503)
-      releaseReservation(walletLower);
+      releaseReservation(settlementId, walletLower);
       commitWal(walId); // Nothing to recover
       appendSettlement({
         ...settlementTemplate,
@@ -8709,7 +9072,7 @@ app.post('/withdraw', async (c) => {
 
       // Commit WAL + reservation
       commitWal(walId);
-      commitReservation(walletLower);
+      commitReservation(settlementId, walletLower);
 
       return c.json({
         settlement_id: settlementId,
@@ -8720,28 +9083,53 @@ app.post('/withdraw', async (c) => {
       }, 200);
 
     } else if (txResult.status === 'timeout') {
-      // Post-broadcast timeout — tx was sent but not confirmed (AR-6 → 202)
-      // Reservation stays "reserved" — A2's daemon resolves after 24h
+      // AUD19-16(1): MODEL INVERSION — debit at broadcast, exactly like the
+      // confirmed path. The tx is on the wire: the old optimistic model
+      // (no debit until confirmation, resolution only at next restart) left
+      // pending_balance intact, so after the 1h rate limit the wallet could
+      // withdraw the SAME balance again — a second on-chain payout. Now the
+      // balance is debited immediately; the resolver refunds ONLY on a
+      // definitive on-chain failure (revert / never-mined force-fail).
+      //
+      // Order of writes (all under the wallet + earnings locks):
+      //   0. record the disposition in the WAL payload (recovery replays a
+      //      timeout completion, not a 'settled' one, from any crash point);
+      //   1. debit (earnings_deducted) — same shape as the confirmed path;
+      //   2. append the processing_timeout settlement stamped
+      //      debited_at_broadcast (settlement_appended);
+      //   3. commit the WAL — the dual-write is COMPLETE; on-chain resolution
+      //      is the daemon's job (hourly tail-call), not WAL recovery's.
+      updateWalPayload(walId, { broadcast_disposition: 'timeout', tx_hash: txResult.hash });
+
+      debitWithdrawableBalance(freshEntry, payout_amount);
+      markProcessedSettlement(freshEntry, settlementId);
+      safeWrite(EARNINGS_FILE, earnings);
+      markStepComplete(walId, 'earnings_deducted');
+
       appendSettlement({
         ...settlementTemplate,
         tx_hash: txResult.hash,
         status: 'processing_timeout',
+        debited_at_broadcast: true, // AUD19-16: resolver key — success = record only, revert = refund
         retry_count: 0
       });
-      // Do NOT commit WAL — recovery will complete the dual-write if tx confirms later
-      // Do NOT release reservation — daemon handles it
+      markStepComplete(walId, 'settlement_appended');
+
+      commitWal(walId);
+      // Reservation stays 'reserved' until on-chain resolution: the resolver
+      // commits it on success or releases it after a definitive-failure refund.
 
       return c.json({
         settlement_id: settlementId,
         status: 'pending',
         tx_hash: txResult.hash,
         message: 'Transaction broadcast. Polling for confirmation.',
-        poll_url: `/settlement/${settlementId}`
+        poll_url: `/contributor/${walletLower}/settlements` // AUD19-16: was /settlement/:id — a route that never existed
       }, 202);
 
     } else {
       // Failed — broadcast attempted but failed
-      releaseReservation(walletLower);
+      releaseReservation(settlementId, walletLower);
       commitWal(walId); // Nothing to recover
       appendSettlement({
         ...settlementTemplate,
