@@ -287,7 +287,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_unlock',
-      description: 'Unlock full learning content by ID. Price is set by the contributor (min $0.05 USDC). 70% of the amount you pay goes to the contributor who shared this knowledge. Check unlock_price_usd in search results to see the cost before unlocking.',
+      description: 'Unlock full learning content by ID. Price is set by the contributor (min $0.05 USDC). 70% of the amount you pay goes to the contributor who shared this knowledge. Check unlock_price_usd in search results to see the cost before unlocking. YOUR OWN learnings are $0: anything this account contributed (or that was contributed under a wallet linked to this account) comes back free, with no credit deducted and no earnings movement.',
       inputSchema: {
         type: 'object',
         properties: {

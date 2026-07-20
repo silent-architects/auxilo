@@ -5027,7 +5027,7 @@ app.get('/api/info', (c) => {
       '/skill/:id': { price: 'free', method: 'GET', description: 'Full skill details by ID' },
       '/learn': { price: 'free', method: 'POST', description: 'Submit operational knowledge. Body: { title, body, category, tags, task_context, outcome, contributor_wallet }' },
       '/knowledge': { price: 'free', method: 'POST', description: 'Search knowledge. Returns snippets. Body: { "query": "what you need" }' },
-      '/knowledge/:id': { price: '$0.05', method: 'GET', description: 'Unlock full learning. 70% goes to contributor.' },
+      '/knowledge/:id': { price: '$0.05', method: 'GET', description: 'Unlock full learning. 70% goes to contributor. Your own learnings are $0 (API key of the contributing account, or an account with the contributor wallet linked).' },
       '/knowledge/:id/rate': { price: 'free', method: 'POST', description: 'Rate a learning 1-5 after using it. Requires your API key and a prior unlock of the learning by your account (LW-7).', auth: 'session-or-api-key' },
       '/knowledge/stats': { price: 'free', method: 'GET', description: 'Knowledge marketplace statistics' },
       '/contributor/:wallet': { price: 'free', method: 'GET', description: 'Contributor earnings dashboard' },
@@ -7637,6 +7637,24 @@ app.post('/knowledge', optionalAuth(), apiKeyRateLimitMiddleware('/knowledge'), 
   });
 });
 
+// Gate-A W2B-2: buyer-facing responses must not leak the ops-only raw counter.
+// CH-6: also strip the per-account rater map + frozen legacy buckets — the map
+// keys are rater account ids (who-rated-what must never reach buyers).
+// (DR-8: hoisted to module scope, ABOVE the stats route — the owner
+// short-circuit returns before the block that used to declare this, and a
+// sloppy-mode block-level function is not initialized until its declaration
+// executes. Placed above /knowledge/stats so the CAT-1 stats-slice pin —
+// "stats surfaces never read unlocks_total" — keeps its clean window.)
+function stripOpsCounters(quality) {
+  if (!quality || typeof quality !== 'object') return quality;
+  const {
+    unlocks_total: _ut,
+    rater_scores: _rs, legacy_ratings: _lr, legacy_helpfulness_sum: _lhs,
+    ...pub
+  } = quality;
+  return pub;
+}
+
 // Knowledge marketplace stats (FREE) — must be registered BEFORE /knowledge/:id
 app.get('/knowledge/stats', (c) => {
   // SPEC-P0.5: filter __wallet_index and other metadata keys from earnings totals
@@ -7668,7 +7686,8 @@ app.get('/knowledge/stats', (c) => {
   });
 });
 
-// Unlock full learning (PAID — dynamic price set by contributor)
+// Unlock full learning (PAID for buyers — dynamic price set by contributor;
+// FREE for the learning's own contributor, DR-8 owner short-circuit below)
 app.get('/knowledge/:id', async (c) => {
   const id = c.req.param('id');
   const idx = learnings.findIndex(l => l.id === id);
@@ -7700,6 +7719,95 @@ app.get('/knowledge/:id', async (c) => {
   // router split bps) quote the STANDARD 70% share by construction: x402
   // payers are anonymous, never cached by recordSearchSource, and always
   // accrue at the standard share. Discovery premium is credit-path-only.
+
+  // DR-8: OWNER SHORT-CIRCUIT — a builder's own learnings come back FREE.
+  // (PUNCH-LIST §31 DR-8 option (a), Tyler 2026-07-20: the README/site "$0
+  // self-unlock" claim is now the shipped behavior, not just a wash-guard.)
+  //
+  // Provable ownership ONLY — never an unverified claim:
+  //   (a) the caller's VALID API key resolves to the learning's
+  //       contributor_account_id, or
+  //   (b) it resolves to an account whose LINKED wallet equals the learning's
+  //       contributor_wallet. account.wallet is set exclusively by the AUD19-3
+  //       EIP-712 account-bound link flow (linkWallet), so it is proof of
+  //       wallet control — unlike the X-Wallet-Address header, which is a bare
+  //       claim and is deliberately NOT consulted here. Header claimants and
+  //       anonymous x402 payers continue through the PAID path, where the M-2
+  //       wash guard below still zeroes any self-dealing accrual post-payment.
+  //
+  // Placement is load-bearing:
+  //   - BEFORE dualAuthDynamic: no credit burns, no 402 challenge, no charge.
+  //     (Also before the PAYMENTS_ENABLED 503 inside it — a free owner recall
+  //     moves no money, so the payments kill switch does not gate it, same as
+  //     search and every other free read.)
+  //   - BEFORE the CONTRIBUTOR_NOT_ONBOARDED refuse gate: that gate exists so
+  //     the platform never custodially RECEIVES a third-party share. An owner
+  //     recall receives nothing, so a not-yet-onboarded builder still gets
+  //     their own content back.
+  //
+  // The free path is a PURE READ. It bumps NO counter (not even the ops-only
+  //   unlocks_total), moves no demand window, no ranking counter, no earnings,
+  //   writes no WAL, emits no unlock event, and never touches the purchase
+  //   ledger (LW-7: self-unlocks must not mint rating rights). M-2's zeroing
+  //   semantics hold here by construction — an unlimited free path that moved
+  //   ANY persisted signal would be a free demand/ranking pump and a
+  //   disk-write amplifier (every counter bump costs a full-catalog safeWrite).
+  // An invalid key or insufficient scope falls through to dualAuthDynamic,
+  // which answers with the canonical 401/403 — one error surface, no drift.
+  let dr8OwnerAccountId = null;
+  {
+    let dr8Key = c.req.header('X-API-Key');
+    if (!dr8Key) {
+      const dr8AuthHeader = c.req.header('Authorization') || '';
+      if (dr8AuthHeader.startsWith('Bearer ')) dr8Key = dr8AuthHeader.slice(7);
+    }
+    if (dr8Key) {
+      const dr8KeyResult = validateApiKey(dr8Key);
+      if (dr8KeyResult.valid && hasMinScope(dr8KeyResult.effective_scope || dr8KeyResult.scope, 'read')) {
+        const dr8ContribAccountId = learning.contributor_account_id || null;
+        const dr8ContribWallet = learning.contributor_wallet
+          ? String(learning.contributor_wallet).toLowerCase() : null;
+        if (dr8ContribAccountId && dr8KeyResult.accountId === dr8ContribAccountId) {
+          dr8OwnerAccountId = dr8KeyResult.accountId;
+        } else if (dr8ContribWallet) {
+          // Authoritative account read (not the cache — a stale miss must not
+          // misprice an owner recall as a paid unlock, mirroring the CP-6 rule).
+          const dr8Account = loadAccounts()[dr8KeyResult.accountId] || null;
+          const dr8LinkedWallet = dr8Account && dr8Account.wallet
+            ? String(dr8Account.wallet).toLowerCase() : null;
+          if (dr8LinkedWallet && dr8LinkedWallet === dr8ContribWallet) {
+            dr8OwnerAccountId = dr8KeyResult.accountId;
+          }
+        }
+      }
+    }
+  }
+  if (dr8OwnerAccountId) {
+    const {
+      injection_flags: _ifo, possible_duplicate_of: _pdo,
+      possible_duplicate_similarity: _pso, moderation: _modo,
+      sensitivity_signals: _sso, sensitivity_source: _ssrco,
+      sensitivity_evidence: _seo, learning_type: _lto,
+      sanitized_from: _sfo, sanitized_to: _sto,
+      ...ownerLearning
+    } = learning;
+    return c.json({
+      ...ownerLearning,
+      quality: stripOpsCounters(ownerLearning.quality),
+      _revenue: {
+        unlock_price_usd: UNLOCK_PRICE,
+        amount_paid_usd: 0,
+        contributor_earned_usd: 0,
+        platform_earned_usd: 0,
+        self_unlock: true,
+        // DR-8: provable owner, served free before any charge. Distinguishes
+        // this from the M-2 paid-self-unlock shape (which has no
+        // owner_recall_free and DID cost the caller their payment).
+        owner_recall_free: true,
+      },
+      timestamp: new Date().toISOString()
+    });
+  }
 
   // R-01 router mode (rewire step 3): resolve + validate the contributor
   // wallet BEFORE settlement. A learning only rides the non-custodial rail if
@@ -7817,6 +7925,13 @@ app.get('/knowledge/:id', async (c) => {
   // entering the system. Detect self-unlock by matching the caller's account id
   // OR the caller's wallet against the contributor's, and return the content
   // WITHOUT crediting anything (no revenue counters, no earnings entry, no WAL).
+  // DR-8: PROVABLE owners (API-key account match / AUD19-3 linked-wallet match)
+  // never reach this branch — the owner short-circuit above served them free
+  // before any charge. What remains here is the post-payment backstop for the
+  // identity signals that cannot be proven pre-charge: the X-Wallet-Address
+  // header (a bare claim) and an anonymous x402 settlement from the
+  // contributor's own wallet. Those callers still PAY — and still accrue
+  // nothing, so self-dealing stays revenue-negative for the dealer.
   // (Wave 2b: computed BEFORE the counter bumps so the CAT-1 §5 gating below
   // can consult it — pure hoist, decision inputs unchanged.)
   const callerWallet = (c.get('walletAddress') || c.req.header('X-Wallet-Address') || '').toLowerCase();
@@ -8149,19 +8264,6 @@ app.get('/knowledge/:id', async (c) => {
       console.error('[LW-7] purchase-ledger write failed (unlock path):', e && e.message);
     });
   }
-
-// Gate-A W2B-2: buyer-facing responses must not leak the ops-only raw counter.
-// CH-6: also strip the per-account rater map + frozen legacy buckets — the map
-// keys are rater account ids (who-rated-what must never reach buyers).
-function stripOpsCounters(quality) {
-  if (!quality || typeof quality !== 'object') return quality;
-  const {
-    unlocks_total: _ut,
-    rater_scores: _rs, legacy_ratings: _lr, legacy_helpfulness_sum: _lhs,
-    ...pub
-  } = quality;
-  return pub;
-}
 
   // LW-13 / LW-16: strip moderation-internal fields from the buyer-facing unlock response
   const {

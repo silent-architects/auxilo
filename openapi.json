@@ -301,6 +301,11 @@
                 "type": "number",
                 "example": 0.05
               },
+              "amount_paid_usd": {
+                "type": "number",
+                "description": "What this caller actually paid (AUD19-2 accrual basis). 0 on a free owner self-unlock.",
+                "example": 0.05
+              },
               "contributor_earned_usd": {
                 "type": "number",
                 "example": 0.035
@@ -308,6 +313,18 @@
               "platform_earned_usd": {
                 "type": "number",
                 "example": 0.015
+              },
+              "self_unlock": {
+                "type": "boolean",
+                "description": "Present and true when the caller is (or claims via wallet to be) the learning's contributor. No earnings, demand, or ranking movement occurs."
+              },
+              "owner_recall_free": {
+                "type": "boolean",
+                "description": "Present and true only on the DR-8 free owner path: the caller PROVED ownership (API key of the contributing account, or an account whose EIP-712-linked wallet is the contributor wallet) and was served at $0 before any charge."
+              },
+              "accrual_capped": {
+                "type": "boolean",
+                "description": "Present and true on a repeat unlock inside the 30-day per-(buyer, learning) accrual window: content served, no new accrual."
               }
             }
           }
@@ -1303,7 +1320,7 @@
     "/knowledge/{id}": {
       "get": {
         "summary": "Unlock full learning (dynamic price)",
-        "description": "Read the full learning body. Dynamic price: floor $0.05, default $0.08, ceiling $50.00 USDC (contributor may override within the floor/ceiling). Contributor split: 70% on direct unlocks, 60% when the unlock was discovery-driven (surfaced by a recent POST /knowledge search from the same account). Auth is dual-path: an X-API-Key (deducts a purchased unlock credit) OR an x402 X-Payment header. With NEITHER header the endpoint returns 402 with the full x402 accepts[] challenge MERGED with an options envelope describing both auth paths (AUD19-5: 402-first \u2014 a standards-conforming x402 client can pay cold). Check unlock_price_usd in search results to see the cost before unlocking.",
+        "description": "Read the full learning body. Dynamic price: floor $0.05, default $0.08, ceiling $50.00 USDC (contributor may override within the floor/ceiling). Contributor split: 70% on direct unlocks, 60% when the unlock was discovery-driven (surfaced by a recent POST /knowledge search from the same account). Auth is dual-path: an X-API-Key (deducts a purchased unlock credit) OR an x402 X-Payment header. With NEITHER header the endpoint returns 402 with the full x402 accepts[] challenge MERGED with an options envelope describing both auth paths (AUD19-5: 402-first \u2014 a standards-conforming x402 client can pay cold). Check unlock_price_usd in search results to see the cost before unlocking. SELF-UNLOCK IS $0 (DR-8): when the presented API key resolves to the learning's own contributor account \u2014 or to an account whose EIP-712-linked wallet (POST /account/link-wallet) is the learning's contributor wallet \u2014 the content is served FREE before any charge: no credit deducted, no earnings accrual, no demand or ranking movement (_revenue.owner_recall_free: true, amount_paid_usd: 0). Ownership must be PROVEN; an X-Wallet-Address header alone is an unverified claim and still routes through the paid path (which zeroes any self-dealing accrual post-payment, M-2). The free owner path also bypasses the 409 contributor-onboarding gate, since it moves no money.",
         "operationId": "unlockLearning",
         "security": [
           {
@@ -1326,7 +1343,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Full learning with body and revenue breakdown",
+            "description": "Full learning with body and revenue breakdown. For the learning's own contributor (proven by account or linked wallet) this is the free owner path: _revenue carries amount_paid_usd 0, self_unlock true, owner_recall_free true.",
             "content": {
               "application/json": {
                 "schema": {
