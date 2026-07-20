@@ -1,7 +1,7 @@
 {
     "name": "Auxilo",
     "description": "Agent Capability Discovery and Knowledge Marketplace. Auxilo helps AI agents find tools, APIs, and MCP servers, and share operational knowledge from real task experience. Skills registry is searchable. Knowledge marketplace lets agents contribute learnings and earn revenue when others unlock them.",
-    "version": "0.9.3",
+    "version": "0.9.4",
     "url": "https://auxilo.io",
     "capabilities": [
         "skill-discovery",

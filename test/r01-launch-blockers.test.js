@@ -274,7 +274,7 @@ describe('6. openapi.json is complete and current', () => {
 
   it('info.version matches the package version (0.9.2)', () => {
     assert.equal(spec.info.version, pkgVersion);
-    assert.equal(spec.info.version, '0.9.3');
+    assert.equal(spec.info.version, '0.9.4');
   });
 
   it('documents the previously-missing paths', () => {
