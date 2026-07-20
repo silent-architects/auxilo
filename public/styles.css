@@ -351,8 +351,18 @@ section { padding: var(--section-pad); }
 #learning-example .section-label {
   text-align: center;
 }
+/* ── DR-7e HEADLINE ALIGNMENT RULE ──────────────────────────────────────────
+   A section headline aligns with its own section-label (the eyebrow directly
+   above it): centered label -> centered head, left label -> left head. The
+   decorative .section-divider hairline can sit left above a centered label; it
+   is chrome, not the alignment authority — the LABEL is. Drift = a head whose
+   alignment disagrees with its label. Audited across index + subpages: the
+   convention already holds everywhere (the homepage content sections pair a
+   centered label with a centered head; #how-it-works and the subpage sections
+   pair a left/default label with a left head), so there were no true outliers to
+   flip. Hero and closing-CTA heads are the standing centered "moments". */
 #learning-example h2 {
-  text-align: center;
+  text-align: center; /* DR-7e: matches its centered .section-label */
   font-size: 32px;
   margin-bottom: 40px;
 }
@@ -736,7 +746,7 @@ section { padding: var(--section-pad); }
   text-align: center;
 }
 #the-market h2 {
-  text-align: center;
+  text-align: center; /* DR-7e: matches its centered .section-label */
   font-size: clamp(28px, 3.5vw, 42px);
   font-weight: 500;
   letter-spacing: -0.02em;
@@ -770,7 +780,7 @@ section { padding: var(--section-pad); }
 }
 
 #why-auxilo h2 {
-  text-align: center;
+  text-align: center; /* DR-7e: matches its centered .section-label */
   font-size: clamp(28px, 3.5vw, 42px);
   font-weight: 500;
   letter-spacing: -0.02em;
@@ -1606,7 +1616,28 @@ h2.section-h2 {
 @media (max-width: 600px) {
   :root { --section-pad: 64px 16px; }
 
-  #hero h1 { font-size: 36px; }
+  /* ── DR-3: mobile type ramp — the one-large-headline law holds at 375px ──────
+     Every phone width (<=430px) sits inside this query. Display heads (page/hero
+     h1) stay ~40px; every section H2 steps down to ~25px, so the headline
+     dominates at ~1.6x on the narrowest phone (was ~1.1-1.3x). Desktop scale is
+     APPROVED and untouched — nothing here leaks above 600px. !important is
+     required to defeat the per-page inline hero/section-head sizes (none of which
+     carry a mobile override of their own). */
+  #hero h1,
+  .earnings-hero-inner h1,
+  .pricing-page-header h1,
+  .hiw-hero h1,
+  .page-hero h1,
+  #builders-hero h1,
+  .api-page-header h1 {
+    font-size: 40px !important;
+    line-height: 1.1 !important;
+  }
+  section h2,
+  #learning-example h2 {
+    font-size: 25px !important;
+  }
+
   .hero-ctas { flex-direction: column; }
   .btn-primary, .btn-secondary { width: 100%; justify-content: center; }
 
@@ -1637,9 +1668,15 @@ h2.section-h2 {
 .text-aurum { color: var(--aurum); }
 .text-slate { color: var(--slate); }
 
-/* Scroll-reveal (JS adds .visible) */
-.reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.55s ease, transform 0.55s ease; }
-.reveal.visible { opacity: 1; transform: none; }
+/* Scroll-reveal (JS adds .visible).
+   DR-4: the HIDDEN state is gated on html.js-reveal, which the per-page head
+   script adds ONLY when it can guarantee the reveal will run (IntersectionObserver
+   present) and backs with a timeout force-reveal. Absent that class — no JS, a JS
+   error, an unsupported observer — .reveal content stays fully visible. A section
+   can never be left permanently blank. */
+.reveal { transition: opacity 0.55s ease, transform 0.55s ease; }
+html.js-reveal .reveal { opacity: 0; transform: translateY(24px); }
+html.js-reveal .reveal.visible { opacity: 1; transform: none; }
 
 /* ── Accessibility ───────────────────────────────────────────────── */
 .skip-to-content {
@@ -1698,9 +1735,11 @@ abbr[title] {
 .explore-section,
 #for-builders,
 #pricing {
-  background: rgba(255,255,255,0.05);
-  border-top: 1px solid rgba(229,229,227,0.1);
-  border-bottom: 1px solid rgba(229,229,227,0.1);
+  /* DR-7b: modest tint + hairline bump so the raised/ground alternation reads;
+     the hairlines (not the tone) still carry the rhythm. */
+  background: rgba(255,255,255,0.065);
+  border-top: 1px solid rgba(229,229,227,0.13);
+  border-bottom: 1px solid rgba(229,229,227,0.13);
 }
 
 .section-ground,
@@ -1969,11 +2008,17 @@ abbr[title] {
   padding: 20px 12px;
 }
 
+/* DR-2: line-art SVG icons (24x24, currentColor + gold, monoline) replace the
+   emoji glyphs — matches the .moat-icon/.step-icon idiom, one gold event. */
 .compound-factor-icon {
-  font-size: 28px;
   display: block;
-  margin-bottom: 10px;
+  width: 24px;
+  height: 24px;
+  margin: 0 auto 12px;
+  color: var(--aurum);
+  opacity: 0.85;
 }
+.compound-factor-icon svg { width: 100%; height: 100%; display: block; }
 
 .compound-factor strong {
   display: block;
@@ -2246,6 +2291,39 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   border-bottom: 1px solid rgba(229,229,227,0.08);
 }
 
+/* ── DR-7d LEDGER CONTAINER FORM RULE ───────────────────────────────────────
+   Ledger stats use the STRIP form: a row of hairline-separated cells with no
+   per-cell card boxes (bg/border/radius). This matches the site's hairline-
+   divider discipline; boxed stat-cards are the drift. Reference: .ledger-strip
+   above and .builders-hero-stats. (earnings .math-stat was flattened from cards
+   to strip cells to conform — see earnings.html.) */
+
+/* ── DR-7f: single gold "ledger stat" for the thin chapter heroes (earnings,
+   pricing, how-it-works). Hidden until a real number arrives from /knowledge/stats
+   — never renders a fabricated or placeholder figure. One gold event per hero. */
+.hero-ledger {
+  display: none;
+  margin: 20px auto 0;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+}
+.hero-ledger.is-live { display: flex; } /* justify-content:center below centers it regardless of parent text-align */
+.hero-ledger .hero-ledger-num {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--aurum);
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+.hero-ledger .hero-ledger-label {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--slate);
+}
+
 /* ── Recent discoveries band (E3: real learnings, server-rendered) ────────── */
 .discovery-band {
   border-top: 1px solid rgba(229,229,227,0.08);
@@ -2263,10 +2341,12 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
 
 .discovery-row:last-child { border-bottom: none; }
 
+/* DR-7a: category demoted to slate so PRICE is the sole gold column in the
+   discovery band (one color event per section). */
 .discovery-cat {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--aurum);
+  color: var(--slate);
   letter-spacing: 0.04em;
   overflow: hidden;
   text-overflow: ellipsis;

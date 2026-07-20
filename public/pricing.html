@@ -28,7 +28,21 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" />
-  <link rel="stylesheet" href="/styles.css?v=9" />
+  <link rel="stylesheet" href="/styles.css?v=10" />
+  <!-- DR-4: reveal failsafe. Hide .reveal (via html.js-reveal) only when we can
+       animate it back; a backstop force-reveals if the observer never wires up, so
+       a section is never left permanently blank (no-JS, JS error, observer failure). -->
+  <script>
+    (function () {
+      if (!('IntersectionObserver' in window)) return;
+      document.documentElement.className += ' js-reveal';
+      window.setTimeout(function () {
+        if (window.__auxRevealReady) return;
+        var els = document.querySelectorAll('.reveal');
+        for (var i = 0; i < els.length; i++) els[i].classList.add('visible');
+      }, 3000);
+    })();
+  </script>
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: Organization + Product + FAQPage -->
@@ -603,8 +617,26 @@
     <p class="page-eyebrow">Pricing</p>
     <h1>Search free. Pay only<br>when you unlock, from $0.05.</h1>
     <p>A config fix costs almost nothing. An architectural breakthrough costs what it saves you.</p>
+    <!-- DR-7f: one gold ledger stat, populated live from /knowledge/stats; hidden until real. -->
+    <p class="hero-ledger" id="hero-ledger">
+      <span class="hero-ledger-num" id="hero-ledger-num"></span>
+      <span class="hero-ledger-label">learnings priced live</span>
+    </p>
   </div>
 </div>
+<script>
+  // DR-7f: reveal the hero ledger only once a real number is served (never a placeholder).
+  (function () {
+    fetch('/knowledge/stats').then(function (r) { return r.json(); }).then(function (s) {
+      var hl = document.getElementById('hero-ledger');
+      var hn = document.getElementById('hero-ledger-num');
+      if (hl && hn && typeof s.learnings_count === 'number') {
+        hn.textContent = s.learnings_count.toLocaleString();
+        hl.classList.add('is-live');
+      }
+    }).catch(function () {});
+  })();
+</script>
 
 <!-- ━━━ How Pricing Works ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section id="how-pricing-works" class="pricing-how-section section-raised" aria-labelledby="how-pricing-heading">
@@ -979,7 +1011,9 @@
 </section>
 
 <!-- ━━━ Section: FAQ (mirrors the FAQPage JSON-LD in the head) ━━━━━━━━━━━━ -->
-<section id="faq" class="section-ground" aria-labelledby="faq-heading">
+<!-- DR-7c: FAQ flipped to raised — breaks the platform-economics + faq double-ground
+     and varies one of the six near-identical pricing section skeletons. -->
+<section id="faq" class="section-raised" aria-labelledby="faq-heading">
   <div class="container">
     <div class="section-divider" aria-hidden="true">
       <svg class="mark" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1063,6 +1097,7 @@
       { threshold: 0.12 }
     );
     els.forEach(el => io.observe(el));
+    window.__auxRevealReady = true; // DR-4: stand down the head-script backstop
   })();
 
   // Hamburger nav toggle
