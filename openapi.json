@@ -1085,7 +1085,7 @@
                                         },
                                         "review_reason": {
                                             "type": "array",
-                                            "description": "LW-16: present only when status is 'pending_review'. Reasons the submission was held.",
+                                            "description": "LW-16: present only when status is 'pending_review'. Reasons the submission was held. CI-7: 'process_advice_screen' = the system-fact screen judged the content process/workflow advice rather than a system fact (or could not judge it) — held for the human, never bounced; approve it only if it is actually a misclassified system fact.",
                                             "items": {
                                                 "type": "string",
                                                 "enum": [
@@ -1093,7 +1093,8 @@
                                                     "injection",
                                                     "near_duplicate",
                                                     "forced_review",
-                                                    "awaiting_quality"
+                                                    "awaiting_quality",
+                                                    "process_advice_screen"
                                                 ]
                                             }
                                         },
@@ -3193,10 +3194,11 @@
                             "enum": [
                                 "injection",
                                 "content_sensitivity",
-                                "near_duplicate"
+                                "near_duplicate",
+                                "process_advice"
                             ]
                         },
-                        "description": "Only rows carrying this screen flag"
+                        "description": "Only rows carrying this screen flag. CI-7: 'process_advice' = held by the system-fact screen (content judged process/workflow advice, not a system fact)."
                     },
                     {
                         "name": "signal",
@@ -3204,7 +3206,7 @@
                         "schema": {
                             "type": "string"
                         },
-                        "description": "Only rows carrying this sensitivity signal name (or 'injection' / 'near_duplicate'); see counts.by_signal for available keys"
+                        "description": "Only rows carrying this sensitivity signal name (or 'injection' / 'near_duplicate' / 'process_advice'); see counts.by_signal for available keys"
                     },
                     {
                         "name": "category",
@@ -3297,7 +3299,7 @@
                                                 },
                                                 "by_signal": {
                                                     "type": "object",
-                                                    "description": "Histogram over sensitivity signal names + injection + near_duplicate"
+                                                    "description": "Histogram over sensitivity signal names + injection + near_duplicate + process_advice"
                                                 },
                                                 "by_lane": {
                                                     "type": "object"

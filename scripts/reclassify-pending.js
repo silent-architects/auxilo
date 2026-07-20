@@ -26,6 +26,15 @@ const LEARNINGS = path.join(APP, 'data/learnings.json');
 const APPLY = process.argv.includes('--apply');
 const CONCURRENCY = 5;
 
+// CI-5 (Gate-A F3): retired-label items can NEVER be approved by this script,
+// no matter what the sensitivity gate says — same publication guard as the
+// self/bulk/admin approve paths. try/require so the script still runs on a box
+// whose lib/ predates the module; the inline fallback list is the same pair.
+let RETIRED_CATS = ['communication', 'content-generation'];
+try {
+  ({ RETIRED_LEARNING_CATEGORIES: RETIRED_CATS } = require(path.join(APP, 'lib/category-scope-migration.js')));
+} catch { /* pre-CI-5 box — fallback list above */ }
+
 async function evaluate(l) {
   const tags = Array.isArray(l.tags) ? l.tags : [];
   const regex = classifySensitivity(l.title, l.body, tags);
@@ -47,6 +56,12 @@ async function evaluate(l) {
   async function worker() {
     while (idx < pending.length) {
       const l = pending[idx++];
+      // CI-5 (Gate-A F3): retired-label guard BEFORE the sensitivity gate —
+      // a clean sensitivity verdict must not approve an out-of-scope item.
+      if (RETIRED_CATS.includes(l.category)) {
+        hold.push({ l, r: { sensitive: true, sensitivity_signals: ['category_out_of_scope'] } });
+        continue;
+      }
       try {
         const r = await evaluate(l);
         (r.sensitive ? hold : approve).push({ l, r });

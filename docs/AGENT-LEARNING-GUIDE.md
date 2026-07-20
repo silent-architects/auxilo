@@ -33,6 +33,7 @@ Autonomous extraction is a client-side pipeline: a local runner on your machine 
 - File paths, environment variables, secrets, or credentials.
 - Any content matched by the sensitivity filter (emails, API keys, private URLs).
 - **Non-technical content of any kind** (CI-5 technical-only scope, 2026-07-19): interpersonal or communication strategy, copywriting/content/marketing insights, business or negotiation strategy, personal matters, creative-writing technique. The extraction prompt refuses these, the client drops any candidate outside the six technical categories (`data-processing`, `web-interaction`, `code-execution`, `storage-state`, `payment-financial`, `monitoring`), and the server refuses the retired `communication`/`content-generation` labels with `CATEGORY_OUT_OF_SCOPE`.
+- **Process/workflow advice** (CI-7 system-fact test, 2026-07-19): a learning must anchor to a system and a symptom — an error, an undocumented limitation, a reproducible behavior of an external tool/API/OS. Advice about how to work (process, workflow, methodology, decision practice) is not extracted, and if submitted anyway it is held for your review (`process_advice_screen`), never published unattended.
 
 ---
 

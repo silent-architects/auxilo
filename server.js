@@ -315,6 +315,19 @@ const MODERATION_AUTO_APPROVE = process.env.MODERATION_AUTO_APPROVE === 'true'; 
 // new leak class is discovered.
 const FORCE_ALL_REVIEW = process.env.FORCE_ALL_REVIEW === 'true';
 
+// CI-7 (PUNCH-LIST §30): the SYSTEM-FACT TEST screen. The LLM sensitivity call
+// (lib/content-sensitivity-llm.js) returns a SECOND verdict from the SAME call —
+// learning_type: 'system_fact' | 'process_advice' — so no extra API call or
+// latency is added. A regex-clean submission the LLM judges process_advice (or
+// fails to judge — fail-closed) is HELD pending_review with review_reason
+// 'process_advice_screen' and lands lane needs_your_eyes; never a 400 — an LLM
+// misclassification must not bounce a legit fact, the human is the appeal path.
+// Screen exists only where the LLM layer runs: when LLM_SENSITIVITY_ENABLED is
+// false the screen degrades with it (regex cannot judge content type), and when
+// the regex already flagged, the item holds via content_sensitivity anyway.
+// Default ON; kill-switchable (set 'false') without redeploy.
+const LEARNING_TYPE_SCREEN_ENABLED = process.env.LEARNING_TYPE_SCREEN_ENABLED !== 'false';
+
 // LW-16: LLM_SENSITIVITY_ENABLED — toggles the LLM semantic-sensitivity layer
 // (lib/content-sensitivity-llm.js). Default TRUE (prod). The regex classifier
 // alone only catches ~78% of the confidential class that leaked on 2026-06-10;
@@ -2962,7 +2975,7 @@ function matchLearnings(query, filters = {}) {
     // LW-13 / LW-16: injection_flags / possible_duplicate_of / moderation /
     // sensitivity_signals are moderation-internal — never serialized in
     // buyer-facing results.
-    .map(({ _score, _textScore, body, injection_flags, possible_duplicate_of, possible_duplicate_similarity, moderation, sensitivity_signals, sensitivity_source, ...rest }) => ({
+    .map(({ _score, _textScore, body, injection_flags, possible_duplicate_of, possible_duplicate_similarity, moderation, sensitivity_signals, sensitivity_source, learning_type, ...rest }) => ({
       ...rest,
       relevance: _score
       // NOTE: body is intentionally excluded — agents must unlock to read it
@@ -5553,17 +5566,29 @@ app.post('/learn', async (c) => {
   // likely mis-scored good content than spam, and a 400 would teach clients to
   // omit the assessment entirely, regressing to 'awaiting_quality').
   const qualityMeetsFloor = qualityPresent && meetsQualityFloor(quality_self_assessment);
+  // CI-7 system-fact screen: fires only where the LLM actually ran clean on
+  // sensitivity (short-circuited/errored calls hold via content_sensitivity;
+  // disabled LLM layer degrades the screen with it). learning_type !==
+  // 'system_fact' covers BOTH the explicit process_advice verdict AND a
+  // missing/unjudged verdict on a clean call (fail-closed, matching the
+  // sensitivity screen's error semantics — a hold, never a bounce).
+  const processAdviceHold = LEARNING_TYPE_SCREEN_ENABLED &&
+    LLM_SENSITIVITY_ENABLED &&
+    !contentSensitivity.sensitive &&
+    contentSensitivity.learning_type !== 'system_fact';
   const learnReviewReasons = [];
   if (FORCE_ALL_REVIEW) learnReviewReasons.push('forced_review');
   if (injectionScreen.flagged) learnReviewReasons.push('injection');
   if (nearDup.verdict !== 'clean') learnReviewReasons.push('near_duplicate');
   if (contentSensitivity.sensitive) learnReviewReasons.push('content_sensitivity');
+  if (processAdviceHold) learnReviewReasons.push('process_advice_screen');
   if (!qualityPresent) learnReviewReasons.push('awaiting_quality');
   if (qualityPresent && !qualityMeetsFloor) learnReviewReasons.push('below_quality_floor');
   const seamlessScreensAndScore = !FORCE_ALL_REVIEW &&
     !injectionScreen.flagged &&
     nearDup.verdict === 'clean' &&
     !contentSensitivity.sensitive &&
+    !processAdviceHold &&
     qualityPresent &&
     qualityMeetsFloor;
 
@@ -5697,6 +5722,10 @@ app.post('/learn', async (c) => {
       // stripped from buyer-facing projections alongside sensitivity_signals.
       sensitivity_source: contentSensitivity.sensitivity_source,
     }),
+    // CI-7: persisted only when the system-fact screen held the item — the flag
+    // lib/self-review.js screenFlags() maps to lane needs_your_eyes. Moderation-
+    // internal, stripped from buyer-facing projections like sensitivity_signals.
+    ...(processAdviceHold && { learning_type: 'process_advice' }),
     ...(nearDup.verdict === 'flag' && {
       possible_duplicate_of: nearDup.match.id,
       possible_duplicate_similarity: Number(nearDup.match.similarity.toFixed(3)),
@@ -6402,15 +6431,25 @@ app.post('/extract', async (c) => {
       // Quality is already enforced upstream — every candidate here passed the
       // server-side scoreLearning gate. Seamless ONLY when fully clean and the
       // kill switch is off.
+      // CI-7 parity with /learn: system-fact screen from the SAME sensitivity
+      // call — extraction is the least-vetted input class, so the screen that
+      // holds process advice applies here too. Fires only when the LLM ran
+      // clean on sensitivity (fail-closed semantics identical to /learn).
+      const extractProcessAdviceHold = LEARNING_TYPE_SCREEN_ENABLED &&
+        LLM_SENSITIVITY_ENABLED &&
+        !extractSensitive &&
+        extractContentSensitivity.learning_type !== 'system_fact';
       const extractReviewReasons = [];
       if (FORCE_ALL_REVIEW) extractReviewReasons.push('forced_review');
       if (extractInjection.flagged) extractReviewReasons.push('injection');
       if (extractNearDup.verdict !== 'clean') extractReviewReasons.push('near_duplicate');
       if (extractSensitive) extractReviewReasons.push('content_sensitivity');
+      if (extractProcessAdviceHold) extractReviewReasons.push('process_advice_screen');
       const extractSeamlessEligible = !FORCE_ALL_REVIEW &&
         !extractInjection.flagged &&
         extractNearDup.verdict === 'clean' &&
-        !extractSensitive;
+        !extractSensitive &&
+        !extractProcessAdviceHold;
 
       const learningId = generateId();
       candidate.id = learningId;
@@ -6444,6 +6483,9 @@ app.post('/extract', async (c) => {
         candidate.possible_duplicate_of = extractNearDup.match.id;
         candidate.possible_duplicate_similarity = Number(extractNearDup.match.similarity.toFixed(3));
       }
+      // CI-7: persisted only when the system-fact screen held the candidate —
+      // maps to lane needs_your_eyes via screenFlags (parity with /learn).
+      if (extractProcessAdviceHold) candidate.learning_type = 'process_advice';
       candidate.created_at = new Date().toISOString();
       candidate.updated_at = new Date().toISOString();
 
@@ -7573,6 +7615,7 @@ app.get('/knowledge/:id', async (c) => {
       injection_flags: _if, possible_duplicate_of: _pd,
       possible_duplicate_similarity: _ps, moderation: _mod,
       sensitivity_signals: _ss, sensitivity_source: _ssrc,
+      learning_type: _lt,
       ...selfLearning
     } = learning;
 
@@ -7616,6 +7659,7 @@ app.get('/knowledge/:id', async (c) => {
       injection_flags: _ifc, possible_duplicate_of: _pdc,
       possible_duplicate_similarity: _psc, moderation: _modc,
       sensitivity_signals: _ssc, sensitivity_source: _ssrcc,
+      learning_type: _ltc,
       ...cappedLearning
     } = learning;
     return c.json({
@@ -7790,6 +7834,7 @@ function stripOpsCounters(quality) {
     injection_flags: _if, possible_duplicate_of: _pd,
     possible_duplicate_similarity: _ps, moderation: _mod,
     sensitivity_signals: _ss, sensitivity_source: _ssrc,
+    learning_type: _lt,
     ...publicLearning
   } = learning;
 
@@ -9172,8 +9217,8 @@ app.get('/account/pending/summary', async (c) => {
   }
   if (q.has('flag')) {
     const flag = q.get('flag');
-    if (!['injection', 'content_sensitivity', 'near_duplicate'].includes(flag)) {
-      return c.json({ error: 'flag must be one of: injection, content_sensitivity, near_duplicate' }, 400);
+    if (!['injection', 'content_sensitivity', 'near_duplicate', 'process_advice'].includes(flag)) {
+      return c.json({ error: 'flag must be one of: injection, content_sensitivity, near_duplicate, process_advice' }, 400);
     }
     opts.flag = flag;
   }
@@ -9873,11 +9918,21 @@ app.post('/pipeline/upload', requireSession, async (c) => {
 
   try {
     // Step 1: LLM extraction pass
+    // CI-5 (Gate-A F1): this inline prompt previously said "one of the standard
+    // categories" with NO enumeration and NO scope rule — the chat pipeline was
+    // the one collection path outside the CI-5 net. It now carries the same
+    // hard-scope paragraph + enumerated 6-category taxonomy as the extractors,
+    // and the CI-7 system-fact litmus.
     const extractionPrompt = `Extract discrete, actionable operational learnings from this ${format} conversation.
+
+HARD SCOPE RULE — TECHNICAL LEARNINGS ONLY (the marketplace accepts nothing else): extract ONLY technical/operational learnings — APIs, developer tools, code, infrastructure, data pipelines, monitoring/observability, payment/crypto TECHNOLOGY, debugging. NEVER extract interpersonal or communication strategy, copywriting/content/marketing insights, business or negotiation strategy, personal matters, or creative-writing technique — DROP such candidates entirely, do not relabel them.
+
+SYSTEM-FACT TEST: Extract ONLY when a system and a symptom are at the core — an error, an undocumented limitation, a reproducible behavior of an external tool/API/OS. If the candidate is advice about how to work (process, workflow, methodology, decision practice), do NOT extract it.
+
 For each learning, provide:
 - title: concise, descriptive title
 - body: the full learning content (2-5 sentences)
-- category: one of the standard categories
+- category: exactly one of: ${VALID_CATEGORIES.join(', ')}
 - tags: array of relevant tags
 - quality_estimate: score 0-20 based on (specificity + actionability + novelty + completeness, each 0-5)
 
@@ -10032,6 +10087,7 @@ app.post('/pipeline/:id/approve', requireSession, async (c) => {
 
   const published = [];
   const rejected_for_sensitivity = [];
+  const rejected_out_of_scope = [];
 
   // Wave 2b + Gate-A W2B-1: acquire the catalog lock ABOVE the approval loop.
   // The loop is fully synchronous (scanLearning is sync), but the lock acquisition
@@ -10043,6 +10099,26 @@ app.post('/pipeline/:id/approve', requireSession, async (c) => {
   for (const idx of approved) {
     if (idx < 0 || idx >= pipeline.learnings.length) continue;
     const pl = pipeline.learnings[idx];
+
+    // CI-5 (Gate-A F1): category allowlist on the approve loop. This route
+    // births catalog entries directly (approved outright when moderation is
+    // off) and previously published the candidate's label unchecked, with a
+    // 'general' fallback — the one acceptance path outside the CI-5 net. A
+    // candidate outside the
+    // tech taxonomy is SKIPPED: distinct reason for the retired two labels
+    // (they signal non-tech content), generic for anything else invalid.
+    if (!VALID_CATEGORIES.includes(pl.category)) {
+      rejected_out_of_scope.push({
+        index: idx,
+        title: pl.title,
+        category: pl.category || null,
+        reason: RETIRED_LEARNING_CATEGORIES.includes(pl.category)
+          ? 'category_out_of_scope'
+          : 'category_invalid',
+        allowed_categories: VALID_CATEGORIES,
+      });
+      continue; // Skip this learning — do not publish
+    }
 
     // Fix 3: Sensitivity scan on each learning BEFORE publishing
     const approvalScan = scanLearning({
@@ -10069,7 +10145,9 @@ app.post('/pipeline/:id/approve', requireSession, async (c) => {
       title: pl.title,
       body: pl.body,
       snippet: (pl.body || '').substring(0, 150),
-      category: pl.category || 'general',
+      // CI-5 (Gate-A F1): guaranteed in VALID_CATEGORIES by the allowlist
+      // skip above — the 'general' fallback (never a valid category) is gone.
+      category: pl.category,
       tags: pl.tags || [],
       // AC-1: was `contributor_id` (read nowhere) + `account.walletAddress`
       // (always undefined; the field is `account.wallet`). The mismatch meant
@@ -10134,6 +10212,8 @@ app.post('/pipeline/:id/approve', requireSession, async (c) => {
     published_count: published.length,
     published,
     rejected_for_sensitivity,
+    // CI-5 (Gate-A F1): candidates skipped by the category allowlist.
+    rejected_out_of_scope,
     pipeline_status: 'complete',
   });
 });
