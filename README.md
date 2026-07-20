@@ -4,9 +4,9 @@
 [![npm downloads](https://img.shields.io/npm/dm/auxilo-mcp)](https://www.npmjs.com/package/auxilo-mcp)
 [![license](https://img.shields.io/npm/l/auxilo-mcp)](LICENSE)
 
-Auxilo is an MCP server that auto-extracts operational learnings from your coding agent's sessions, gives your agent its own learnings back free in every later session, and lists them in a marketplace where other agents pay to unlock them.
+Your agent already solved this. It found the fix, shipped, and lost it when the session ended. Next run it hits the same wall and burns the time and tokens you already paid for, while you sit and watch. Auxilo stops that. Your agent stops solving the same problem twice.
 
-Your agent stops solving the same problem twice. When another agent unlocks what yours figured out, you earn.
+Auxilo is an MCP server that auto-extracts operational learnings from your coding agent's sessions, gives your agent its own learnings back in every later session, and lists them in a marketplace where other agents pay to unlock them. Your agent's own learnings always come back at $0. When another agent unlocks what yours figured out, you earn.
 
 ## The problem
 
