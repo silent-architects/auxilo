@@ -680,15 +680,29 @@ kept, recategorization owed to the CI-5 enforcement build). Catalog: 68 live, ef
 > - **Accepted residuals (documented properties of shipped rows):** 5A F-4 ratings map can lag JSONL by one on crash (no startup fold — inverse of the old loss mode); F-5 TOCTOU 409 burns nonce+rate-slot (UX only); F-8 unlock-events.jsonl unrotated + full-scan replay guard (note before the GTM-9 render ships); 5B F7a const-arrow assert helpers invisible to the CH-7 scanner (function-decl regex only); F7c full-suite count nondeterminism under --test-force-exit (late tests dropped uncounted, 0-fail unaffected); F8 selectPendingIdsBySignal is a fixture-pinned semantic copy of the summary filter; 5C TOCTOU stat-then-read (OOM guard, not a security boundary).
 > - **Applied post-review micro-fixes (this merge train, reviewer-prescribed):** 5A F-6b legacy-refund marker guard; 5A F-6c /withdraw 202 openapi doc; 5C F1 fail-closed unknown-size cap; 5C F2 single-file oversize behavioral test.
 
+## 31. Live-Site Creative + Render Review (2026-07-19)
+
+Art-direction seat (desktop + mobile, all 9 pages, judged against styles.css tokens + the five 07-18 visual moves) + mechanical render-QA (Chromium + WebKit, computed-style evidence; screenshots in session scratchpad). Verdicts: desktop clean and system sound (4 of 5 visual moves LANDED; hero scale system landed desktop / failed mobile); mobile blocked by one defect. The `<title>`/footer "Discovery Layer" straggler (OG + hero already memory-first) routes to COPY spec decision T1, not here.
+
+| ID | Item | Priority | Owner | Status |
+|---|---|---|---|---|
+| DR-1 | **Mobile hamburger nav broken site-wide** — `backdrop-filter` on `#main-nav` (styles.css:96) creates a containing block for the `position:fixed` `.nav-links` overlay → "full-screen" menu renders as an 84px strip; For Builders / For Agents / How It Works land off-screen and are untappable; remaining links overlap page content. All 8 shared-nav pages; Chromium + WebKit confirmed via getBoundingClientRect + elementFromPoint. NEW regression, distinct from AUD19-11's class-toggle bug (toggle itself works). Fix: un-nest `.nav-links` from the filtered element (sibling of `#main-nav` or portal to body on open) + BUILD-4 regression assertion (`nav-open` → `.nav-links` height ≈ viewport height). | **P0 — mobile launch-blocker** | BUILD-1 + BUILD-4 | OPEN |
+| DR-2 | Emoji icons (📚📈💰⭐, `.compound-factor-icon` styles.css ~1958) on /earnings + /for-builders break the monochrome/gold line-art icon language — the site's most off-brand element. Replace with the existing `.moat-icon`/`.step-icon` line-art set, gold ~0.85 opacity. | P1 | BUILD-3 | OPEN |
+| DR-3 | Mobile type ramp collapse: hero hard-set 36px (styles.css:1595) vs 28-32px section H2s → dominance ~1.1× vs 2.25× desktop; the one-large-headline law vanishes at 375px. Rebuild spread: display heads ~40-44px, section H2s ~24-26px, ratio ≥1.5× at every breakpoint. | P1 | BUILD-3 | OPEN |
+| DR-4 | Reveal fragility: 20 of 26 `.reveal` elements start `opacity:0` and depend on IntersectionObserver adding `.visible`; observer failure renders whole sections blank obsidian (observed once live during review). Add no-JS/observer-failure failsafe. | P1 | BUILD-1 | OPEN |
+| DR-5 | Live catalog-count contradiction: `/health` `catalog_size:27` vs `/knowledge/stats` `learnings_count:102` (the figure actually injected into on-page ledgers); /status publicly shows 27 beside marketing ledgers showing 102. Reconcile field semantics + which is canonical for public surfaces. | P1 | CAT-1 + BUILD-2 | OPEN |
+| DR-6 | /status drift: footer "v0.9.1" vs openapi 0.9.4 / npm 0.9.3 (missed in the 0.9.4 sweep); /status also runs an independent `:root` token set (near-miss obsidian/ivory values, no Geist fallback). Fix version string; confirm token exception is intentional or fold into shared stylesheet. | P2 | GOV-1 + BUILD-3 | OPEN |
+| DR-7 | Art refinements (bundled): /for-agents discovery-band gold over-spend (demote `.discovery-cat` to slate; price = the sole gold column) · raised/ground tint too subtle (hairlines, not tone, carry the rhythm; homepage ends on double-ground) · /pricing six identical section skeletons (vary 1-2 beats) · unify ledger container form (strip vs cards) · codify centered-vs-left headline rule · thin chapter heroes on /pricing /earnings /how-it-works (add one-gold inline ledger where a stat exists). | P2 | BUILD-3 | OPEN |
+
 ## Counts
 
 | Priority | Open | On Hold | Deferred | Done/Verified | Total |
 |----------|------|---------|----------|---------------|-------|
-| P0 (blocks launch) | **4** | 0 | 0 | **29** | 33 |
-| P1 (blocks real money / production) | **16** | 6 | 2 | 69 | 93 |
-| P2 (blocks scale) | **7** | 1 | 0 | 24 | 32 |
+| P0 (blocks launch) | **5** | 0 | 0 | **29** | 34 |
+| P1 (blocks real money / production) | **20** | 6 | 2 | 69 | 97 |
+| P2 (blocks scale) | **9** | 1 | 0 | 24 | 34 |
 | P3 (polish) | 0 | 0 | 0 | 4 | 4 |
-| **Total** | **27** | **7** | **2** | **126** | **162** |
+| **Total** | **34** | **7** | **2** | **126** | **169** |
 
 > **2026-06-10 Launch Wave**: LW-1–LW-10 added (§20, spec `specs/BUILD-SPEC-LAUNCH-WAVE.md`). 4 P0 + 6 P1 OPEN. P0 launch gate re-opened until LW-1–LW-4 land.
 
