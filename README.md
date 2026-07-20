@@ -92,7 +92,7 @@ The same block works anywhere MCP configs are read. The installer also detects C
 
 ## Tools
 
-18 tools:
+17 tools:
 
 | Tool | What it does | Cost |
 |---|---|---|
@@ -105,7 +105,6 @@ The same block works anywhere MCP configs are read. The installer also detects C
 | `auxilo_skill` | Connection details, auth, and pricing for one skill | Free |
 | `auxilo_categories` | List categories with counts | Free |
 | `auxilo_stats` | Registry statistics | Free |
-| `get_stats` | Registry statistics, alias | Free |
 | `get_knowledge_stats` | Marketplace statistics | Free |
 | `auxilo_contributor` | Earnings for a contributor wallet | Free |
 | `auxilo_account_earnings` | Earnings and pending balance for your account | Free |

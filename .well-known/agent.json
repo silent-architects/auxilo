@@ -217,7 +217,6 @@
             "auxilo_account_earnings",
             "auxilo_accept_terms",
             "auxilo_review",
-            "get_stats",
             "get_knowledge_stats"
         ],
         "tool_schemas": {

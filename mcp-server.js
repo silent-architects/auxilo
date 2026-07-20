@@ -416,11 +416,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: 'get_stats',
-      description: 'Get Auxilo registry statistics — catalog size, skill types, and query volume. Free.',
-      inputSchema: { type: 'object', properties: {} },
-    },
-    {
       name: 'get_knowledge_stats',
       description: 'Get knowledge marketplace statistics — total learnings, unlocks, contributors, and top categories. Free.',
       inputSchema: { type: 'object', properties: {} },
@@ -758,11 +753,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         return text({ error: `Unknown action: ${args.action}. Use list, approve, reject, approve_clean, reject_by_signal, or sanitize.` });
-      }
-
-      case 'get_stats': {
-        const resp = await fetch(`${AUXILO_BASE}/stats`, { headers: baseHeaders() });
-        return text(await resp.json());
       }
 
       case 'get_knowledge_stats': {
