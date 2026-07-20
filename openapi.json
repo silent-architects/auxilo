@@ -124,6 +124,7 @@
             },
             "Category": {
                 "type": "string",
+                "description": "Capability/skill category (the skills registry taxonomy). Distinct from LearningCategory: 'communication' and 'content-generation' remain valid CAPABILITY domains (e.g. email-sending APIs) but are retired for learnings (CI-5 technical-only scope).",
                 "enum": [
                     "data-processing",
                     "web-interaction",
@@ -131,6 +132,18 @@
                     "communication",
                     "storage-state",
                     "content-generation",
+                    "payment-financial",
+                    "monitoring"
+                ]
+            },
+            "LearningCategory": {
+                "type": "string",
+                "description": "Learning category — TECHNICAL-ONLY taxonomy (CI-5, 2026-07-19). 'communication' and 'content-generation' are RETIRED: POST /learn refuses them with a machine-readable 400 (code CATEGORY_OUT_OF_SCOPE). Technical messaging/email/notification-API learnings belong under web-interaction or code-execution; content/data pipeline tech under data-processing.",
+                "enum": [
+                    "data-processing",
+                    "web-interaction",
+                    "code-execution",
+                    "storage-state",
                     "payment-financial",
                     "monitoring"
                 ]
@@ -179,7 +192,7 @@
                         "description": "First 120 characters of the body"
                     },
                     "category": {
-                        "$ref": "#/components/schemas/Category"
+                        "$ref": "#/components/schemas/LearningCategory"
                     },
                     "task_context": {
                         "type": "string"
@@ -997,7 +1010,7 @@
                                         "description": "Full learning content"
                                     },
                                     "category": {
-                                        "$ref": "#/components/schemas/Category"
+                                        "$ref": "#/components/schemas/LearningCategory"
                                     },
                                     "tags": {
                                         "type": "array",
@@ -1097,7 +1110,7 @@
                         }
                     },
                     "400": {
-                        "description": "Validation error",
+                        "description": "Validation error. CI-5: a retired category ('communication' or 'content-generation') returns a dedicated machine-readable body — code 'CATEGORY_OUT_OF_SCOPE' plus 'allowed_categories' listing the six-value technical taxonomy and a self-healing 'message' (technical messaging/email/notification-API learnings belong under web-interaction or code-execution; content/data pipeline tech under data-processing; non-technical content is out of scope and must not be resubmitted).",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -1164,7 +1177,7 @@
                                         "description": "What you need help with"
                                     },
                                     "category": {
-                                        "$ref": "#/components/schemas/Category"
+                                        "$ref": "#/components/schemas/LearningCategory"
                                     },
                                     "outcome": {
                                         "$ref": "#/components/schemas/Outcome"

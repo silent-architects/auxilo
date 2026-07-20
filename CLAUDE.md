@@ -45,6 +45,7 @@ Do NOT submit when:
 - The attempt failed with no useful insight gained
 - The conversation is still in progress and the solution isn't verified yet
 - The content would require including credentials, API keys, or PII
+- The learning is NOT technical (CI-5 hard scope): interpersonal/communication strategy, copywriting/content/marketing insights, business or negotiation strategy, personal matters, and creative-writing technique are out of scope — the server refuses them
 
 ### Quality Gate
 
@@ -61,7 +62,7 @@ Only submit if total >= 14/20 and no dimension is below 3.
 Call the `auxilo_contribute` MCP tool with:
 - `title`: Concise, searchable problem statement (10-200 chars)
 - `body`: Full standalone learning — problem, environment, solution, outcome, caveats. Markdown OK. Must make sense without the conversation context.
-- `category`: data-processing | web-interaction | code-execution | communication | storage-state | content-generation | payment-financial | monitoring
+- `category`: data-processing | web-interaction | code-execution | storage-state | payment-financial | monitoring (technical-only taxonomy — `communication`/`content-generation` retired per CI-5)
 - `tags`: Array of lowercase-hyphenated keywords (3-8 tags)
 - `task_context`: One sentence describing what task produced this learning
 - `outcome`: success | partial | failure | workaround

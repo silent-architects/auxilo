@@ -17,7 +17,14 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const CATEGORIES = ['data-processing', 'web-interaction', 'code-execution', 'communication', 'storage-state', 'content-generation', 'payment-financial', 'monitoring'];
+// CI-5 (PUNCH-LIST §30, 2026-07-19): Auxilo is TECHNICAL-ONLY. The learning
+// taxonomy is these six tech categories; `communication` and `content-generation`
+// are RETIRED — the server 400s them (CATEGORY_OUT_OF_SCOPE) and this extractor
+// must never emit them. This file ships standalone in the npm package, so the
+// lists are duplicated here from lib/category-scope-migration.js (server truth);
+// test/ci5-scope-enforcement.test.js pins the copies equal.
+const CATEGORIES = ['data-processing', 'web-interaction', 'code-execution', 'storage-state', 'payment-financial', 'monitoring'];
+const RETIRED_CATEGORIES = ['communication', 'content-generation'];
 
 /**
  * SPEC3 slice A1 gate — score-at-extraction, BUILT BUT DARK by default.
@@ -39,6 +46,8 @@ function scoreExtractionEnabled(env = process.env) {
 const EXTRACTION_PROMPT_BASE = `You are extracting reusable OPERATIONAL LEARNINGS from an AI agent's session transcript, to publish to a PUBLIC knowledge marketplace read by other AI agents.
 
 Extract 0 to 5 GENUINE learnings: non-obvious solutions, workarounds, API quirks, error root-causes, integration gotchas — the kind of thing that cost real debugging or combined multiple sources. SKIP trivial lookups, well-documented standard approaches, opinions, and conversation.
+
+HARD SCOPE RULE — TECHNICAL LEARNINGS ONLY (the marketplace accepts nothing else): extract ONLY technical/operational learnings — APIs, developer tools, code, infrastructure, data pipelines, monitoring/observability, payment/crypto TECHNOLOGY, debugging. NEVER extract interpersonal or communication strategy, copywriting/content/marketing insights, business or negotiation strategy, personal matters, or creative-writing technique — DROP such candidates entirely, do not relabel them. A technical learning about a messaging/email/notification API belongs under "web-interaction" or "code-execution"; content/data pipeline TECH belongs under "data-processing".
 
 MANDATORY SENSITIVITY SELF-SCREEN (the marketplace is PUBLIC): NEVER include secrets, credentials, API keys, tokens, private keys, or seed phrases; personal data (real people's names, emails, phone numbers, wallet addresses); private filesystem paths, internal hostnames, or infrastructure identifiers; proprietary, confidential, or client-specific business content. Rewrite specifics into generic placeholders (/Users/USER/..., API_KEY, "a client") or omit them. If a learning cannot be generalized without leaking private material, DROP it entirely.
 
@@ -166,11 +175,18 @@ function parseLearnings(raw, opts = {}) {
   if (!Array.isArray(arr)) return [];
   return arr
     .filter(l => l && typeof l.title === 'string' && typeof l.body === 'string' && l.title.length >= 10 && l.body.length >= 50)
+    // CI-5 post-parse scope validation (defense-in-depth against prompt drift):
+    // a candidate whose category is outside the tech set is DROPPED entirely.
+    // The old coerce-unknown-to-'code-execution' fallback is gone — coercion
+    // would launder a non-tech candidate (e.g. one the model labeled
+    // 'communication') into the catalog wearing a tech label. Category-based,
+    // so it applies identically in BOTH score-gate states.
+    .filter(l => CATEGORIES.includes(l.category))
     .map(l => {
       const out = {
         title: l.title,
         body: l.body,
-        category: CATEGORIES.includes(l.category) ? l.category : 'code-execution',
+        category: l.category,
         tags: Array.isArray(l.tags) ? l.tags.slice(0, 8).map(String) : [],
         task_context: typeof l.task_context === 'string' ? l.task_context : '',
         outcome: ['success', 'partial', 'failure', 'workaround'].includes(l.outcome) ? l.outcome : 'success',
@@ -198,7 +214,7 @@ async function extractLocally(transcript, sourceType) {
 }
 
 module.exports = {
-  extractLocally, parseLearnings, resolveClaudeBin, CATEGORIES,
+  extractLocally, parseLearnings, resolveClaudeBin, CATEGORIES, RETIRED_CATEGORIES,
   EXTRACTION_PROMPT, buildExtractionPrompt, scoreExtractionEnabled,
   validateQualityAssessment, QUALITY_DIMENSIONS,
 };

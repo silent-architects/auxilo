@@ -48,6 +48,13 @@ const {
   PUBLISHED_VIA_CLEAN_LANE,
 } = require('./lib/clean-lane.js');
 const { validateOfacRedirect } = require('./lib/ofac-redirect.js'); // S-6: OFAC redirect allowlist
+// CI-5 (PUNCH-LIST §30): TECHNICAL-ONLY learning scope — the 6-category tech
+// taxonomy, the retired-label set, and the idempotent boot migration.
+const {
+  TECH_LEARNING_CATEGORIES,
+  RETIRED_LEARNING_CATEGORIES,
+  migrateRetiredCategories,
+} = require('./lib/category-scope-migration.js');
 
 // ─── Phase 2.1a: Autonomous Extraction Pipeline ─────────────────────────────
 const { extractWithRetry } = require('./lib/providers/anthropic.js');
@@ -787,6 +794,28 @@ if (learnings.length === 0) {
   } catch (e) {
     console.error('Failed to load seed knowledge:', e.message);
   }
+}
+
+// CI-5: TECHNICAL-ONLY SCOPE migration (PUNCH-LIST §30, 2026-07-19). Repairs
+// stored items wearing the retired `communication`/`content-generation` labels:
+// known-technical items (lrn_resend01) are recategorized with provenance;
+// unexpected VISIBLE retired-label items are demoted to pending_review
+// (never published wearing a retired label); non-visible historical records
+// stay untouched. Runs AFTER seeding (a fresh seed store is migrated too) and
+// before WAL recovery — same slot discipline as AC-1/M-1. Idempotent: a second
+// boot reports changed === 0 and skips the write. Non-fatal on error.
+try {
+  const _ci5 = migrateRetiredCategories(learnings);
+  if (_ci5.changed > 0) {
+    safeWrite(LEARNINGS_FILE, learnings);
+    console.log(
+      `[migration] CI-5 category-scope: recategorized ${_ci5.recategorized.length} ` +
+      `(${_ci5.recategorized.join(', ') || 'none'}), demoted ${_ci5.demoted.length} ` +
+      `(${_ci5.demoted.join(', ') || 'none'}) retired-label learning(s).`
+    );
+  }
+} catch (e) {
+  console.warn('[migration] CI-5 category-scope migration failed:', e.message);
 }
 
 // IR-M-001 FIX: fsync before rename — ensures data hits disk before atomic swap
@@ -4911,10 +4940,12 @@ app.get('/skill/:id', optionalAuth(), apiKeyRateLimitMiddleware('/skill'), (c) =
 
 // ─── Knowledge Marketplace Endpoints ────────────────────────────────
 
-const VALID_CATEGORIES = [
-  'data-processing', 'web-interaction', 'code-execution', 'communication',
-  'storage-state', 'content-generation', 'payment-financial', 'monitoring'
-];
+// CI-5 (PUNCH-LIST §30, 2026-07-19): learnings are TECHNICAL-ONLY. The learning
+// taxonomy is the six tech categories; `communication` and `content-generation`
+// are RETIRED (never accepted — machine-readable CATEGORY_OUT_OF_SCOPE 400).
+// Source of truth: lib/category-scope-migration.js. The capability/skills
+// registry keeps its own 8-category taxonomy — this enum governs learnings only.
+const VALID_CATEGORIES = TECH_LEARNING_CATEGORIES;
 
 // D-11 FIX: explicit server-side maximums for /learn fields. Each is persisted
 // to learnings.json (and tags are iterated on every search), so a missing max is
@@ -5185,6 +5216,23 @@ app.post('/learn', async (c) => {
   // snippet, pricing, scans and the stored body, so dedup + snippet match what
   // is actually persisted. The raw value is never stored.
   let content = rawContent;
+
+  // CI-5 (PUNCH-LIST §30): retired-label submissions get a DEDICATED
+  // machine-readable 400 (not the generic validation error) so a stale client
+  // can self-heal in one round trip. Breaking change for exactly these two
+  // former enum values — accepted 2026-07-19 (zero real external users).
+  if (RETIRED_LEARNING_CATEGORIES.includes(category)) {
+    return c.json({
+      error: `Category '${category}' has been retired — Auxilo accepts technical learnings only`,
+      code: 'CATEGORY_OUT_OF_SCOPE',
+      allowed_categories: VALID_CATEGORIES,
+      message: 'Auxilo is a TECHNICAL-ONLY marketplace. If this is a technical learning about a ' +
+        'messaging/email/notification API or service, resubmit under web-interaction or code-execution; ' +
+        'content/data pipeline TECH belongs under data-processing. Non-technical content ' +
+        '(interpersonal or communication strategy, copywriting/content/marketing insights, business or ' +
+        'negotiation strategy, personal matters) is out of scope — do not resubmit it.',
+    }, 400);
+  }
 
   // Validation — collect all errors before returning
   const validationErrors = [];
@@ -6239,6 +6287,13 @@ app.post('/extract', async (c) => {
       continue;
     }
 
+    // CI-5: retired labels get a DISTINCT reject reason (observability — a
+    // retired-label candidate signals non-tech content the prompt should have
+    // dropped); other unknown labels keep the generic 'category' reason.
+    if (RETIRED_LEARNING_CATEGORIES.includes(candidate.category)) {
+      rejected.push({ reason: 'category_out_of_scope', title: candidate.title });
+      continue;
+    }
     // Category allowlist
     if (!EXTRACTOR_CATEGORIES.includes(candidate.category)) {
       rejected.push({ reason: 'category', title: candidate.title });
@@ -8877,6 +8932,16 @@ app.post('/admin/moderation/:id/approve', adminAuth('admin'), async (c) => {
     const learning = learnings[idx];
     if (learning.status === 'approved') {
       return c.json({ error: 'Learning is already approved', id }, 400);
+    }
+
+    // CI-5: a retired-label learning can never be (re-)published — recategorize
+    // (box-edit + CI5_RECATEGORIZE_MAP entry) or reject instead.
+    if (RETIRED_LEARNING_CATEGORIES.includes(learning.category)) {
+      return c.json({
+        error: `Category '${learning.category}' is retired — technical learnings only. Recategorize to one of: ${VALID_CATEGORIES.join(', ')}, or reject.`,
+        code: 'CATEGORY_OUT_OF_SCOPE',
+        id,
+      }, 409);
     }
 
     learning.status = 'approved';

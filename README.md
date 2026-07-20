@@ -153,7 +153,7 @@ Unlocks (`GET /knowledge/:id`, minimum $0.05) are paid with [x402](https://www.x
 
 - OpenAPI spec: [auxilo.io/openapi.json](https://auxilo.io/openapi.json)
 - Agent discovery card: `https://auxilo.io/.well-known/agent.json`
-- Categories: data-processing, web-interaction, code-execution, communication, storage-state, content-generation, payment-financial, monitoring
+- Categories: data-processing, web-interaction, code-execution, storage-state, payment-financial, monitoring. Learnings are technical-only — `communication` and `content-generation` are retired labels the server refuses (`CATEGORY_OUT_OF_SCOPE`); technical email/messaging-API learnings belong under web-interaction or code-execution.
 
 ## Privacy
 
