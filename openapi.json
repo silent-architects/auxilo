@@ -232,11 +232,12 @@
                             "verdict": {
                                 "type": "string",
                                 "enum": [
-                                    "recommended",
                                     "strong_buy",
-                                    "fair_price",
-                                    "overpriced"
-                                ]
+                                    "recommended",
+                                    "consider",
+                                    "expensive"
+                                ],
+                                "description": "CH-5 (2026-07-19): price compared to a value-adjusted benchmark (DIY cost x quality x freshness). 'expensive' = price > 1.5x the value benchmark."
                             }
                         }
                     }
@@ -1444,11 +1445,19 @@
                                         "learning_id": {
                                             "type": "string"
                                         },
+                                        "replaced": {
+                                            "type": "boolean",
+                                            "description": "CH-6: true when this re-rating overwrote your prior score for this learning (one rating slot per account; re-rating replaces, never re-increments)"
+                                        },
                                         "new_avg_helpfulness": {
                                             "type": "number"
                                         },
                                         "total_ratings": {
                                             "type": "integer"
+                                        },
+                                        "distinct_raters": {
+                                            "type": "integer",
+                                            "description": "CH-6: count of distinct accounts holding a rating slot — the >=3 community-signal gates key off this, not rating events"
                                         }
                                     }
                                 }
@@ -1706,6 +1715,34 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/TermsNotAccepted"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "AUD19-16: a withdrawal for this wallet is still being resolved (code: WITHDRAWAL_IN_FLIGHT). Poll the returned settlement before retrying.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "WITHDRAWAL_IN_FLIGHT"
+                                        },
+                                        "settlement_id": {
+                                            "type": "string"
+                                        },
+                                        "settlement_status": {
+                                            "type": "string"
+                                        },
+                                        "poll_url": {
+                                            "type": "string"
+                                        }
+                                    }
                                 }
                             }
                         }

@@ -376,20 +376,40 @@ test('fixture AFTER: cron convergence flips the shelf to majority-approvable (H4
   assert.ok(approvable >= 45, `shelf must be majority-approvable: ${JSON.stringify(t)}`);
   assert.ok((t.expensive || 0) / shelf.length < 0.30,
     `H4: expensive share must drop below 30%, got ${JSON.stringify(t)}`);
+  // CH-5 extension (BUILD-SPEC-WAVE5A §1.3): with the value-adjusted benchmark
+  // the converged shelf is FULLY approvable — the 6 QA'd residual-expensive
+  // items of the CH-4 frame now read consider (quality cancels out of the
+  // ratio; only uniqueness × demand remains = 1.5 × 0.8412 = 1.262).
+  assert.equal(t.expensive || 0, 0, `post-CH-5 converged shelf has zero expensive: ${JSON.stringify(t)}`);
+  assert.equal(t.consider, 52, `all 52 priced items land consider: ${JSON.stringify(t)}`);
   // The typical (no-QA moderate) item lands "consider": $1.15 / $0.80 DIY = 1.4375
   assert.equal(shelf[0].pricing.current_price, 1.15);
   assert.equal(shelfVerdict(shelf[0], shelf), 'consider');
 });
 
-test('residual pin (spec §2.5): a cold 18/20 self-scored item remains "expensive" at the 1.5 cap', () => {
-  // Deliberate property of the ratified 1.5 frame, pinned so it is visible:
-  // ratio = 1.5 × 1.41 × 0.8412 ≈ 1.78 > 1.5. Watch under CAT-1 H4 as triage drains.
+test('residual pin INVERTED (CH-5, was spec §2.5): a cold 18/20 self-scored item now lands "consider" at the 1.5 cap', () => {
+  // Pre-CH-5 this pinned the deliberate limitation: ratio = 1.5 × 1.41 ×
+  // 0.8412 ≈ 1.78 > 1.5 → every approvable fact born expensive. CH-5 moved
+  // quality (and freshness) into the verdict's value benchmark, so they cancel:
+  // ratio = 1.5 × 0.8412 = 1.262 → "consider". Spec: BUILD-SPEC-WAVE5A §1.
   const l = candidate({ quality_self_assessment: QA18 });
   delete l.pricing;
   delete l.unlock_price;
   const price = getCurrentPrice(l, fillerCatalog(58));
   const v = calculateVerdict({ ...l, pricing: { current_price: price } });
-  assert.equal(v, 'expensive');
+  assert.equal(v, 'consider');
+});
+
+test('CH-5 anti-whitewash pin: the ungated 3.0x stored price still reads "expensive"', () => {
+  // Uniqueness stays OUT of the value benchmark — the pre-CH-4 inflated shelf
+  // (base carrying the vacuous 3.0x premium) must keep flagging: ratio =
+  // 3.0 × 0.8412 ≈ 2.52 > 1.5 regardless of quality or freshness.
+  const l = candidate({
+    quality_self_assessment: QA18,
+    pricing: { base_price: 3.384, current_price: 2.85 }, // ungated shelf echo
+    unlock_price: 2.85,
+  });
+  assert.equal(calculateVerdict(l), 'expensive');
 });
 
 // ─── 18-19. Convergence math (requirement 3) ─────────────────────────────────
