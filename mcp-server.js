@@ -394,16 +394,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_review',
-      description: 'Review YOUR OWN pending-review learnings (from background extraction) so they can be approved to the public marketplace or rejected to stay private. Account-scoped: only the authenticated account\'s own pending items are ever visible or affected. ACTIONS: "list" returns the triage summary (counts + compact rows with quality score and platform screen verdicts: injection, content sensitivity, near-duplicate). "approve" / "reject" apply explicit decisions to the ids you pass (the operator must have named or confirmed these items). "approve_clean" selects every item that passed ALL platform screens AND has quality >= min_quality (default 14/20); it is DRY-RUN BY DEFAULT and returns exactly what WOULD be approved. CONSENT CONTRACT: nothing goes public without the contributor\'s explicit approval. So before executing approve_clean you MUST show the operator the dry-run list and count and get their confirmation, then call again with dry_run:false, confirm:true, and expected_count set to the dry-run count. The server also enforces a counted-confirmation gate on every bulk call. Requires your configured API key (or session_token).',
+      description: 'Review YOUR OWN pending-review learnings (from background extraction) so they can be approved to the public marketplace or rejected to stay private. Account-scoped: only the authenticated account\'s own pending items are ever visible or affected. ACTIONS: "list" returns the triage summary (counts incl. by_signal + compact rows with quality score, lane, a one-sentence why for flagged items, and platform screen verdicts: injection, content sensitivity, near-duplicate). "approve" / "reject" apply explicit decisions to the ids you pass (the operator must have named or confirmed these items). "approve_clean" selects every item that passed ALL platform screens AND has quality >= min_quality (default 14/20); it is DRY-RUN BY DEFAULT and returns exactly what WOULD be approved. "reject_by_signal" bulk-rejects every pending item carrying one flag signal (e.g. social_handle) — REJECT ONLY (items stay private; there is deliberately no bulk approve by class): the operator must confirm the signal AND its by_signal count from "list", and you pass that count as expected_count — the server refuses if the live selection differs. "sanitize" resubmits ONE operator-corrected item through EVERY screen with lineage (the original is retired to private, reason sanitize-resubmit; the replacement is ALWAYS held for the operator\'s explicit approval — never auto-published): only call it with a correction the operator reviewed. CONSENT CONTRACT: nothing goes public without the contributor\'s explicit approval. So before executing approve_clean you MUST show the operator the dry-run list and count and get their confirmation, then call again with dry_run:false, confirm:true, and expected_count set to the dry-run count. The server also enforces a counted-confirmation gate on every bulk call. Requires your configured API key (or session_token).',
       inputSchema: {
         type: 'object',
         properties: {
-          action: { type: 'string', enum: ['list', 'approve', 'reject', 'approve_clean'], description: 'What to do. Start with "list".' },
+          action: { type: 'string', enum: ['list', 'approve', 'reject', 'approve_clean', 'reject_by_signal', 'sanitize'], description: 'What to do. Start with "list".' },
           ids: { type: 'array', items: { type: 'string' }, description: 'Learning ids for action approve/reject. These must be items the operator explicitly chose.' },
-          reason: { type: 'string', description: 'Optional rejection reason (action reject; max 500 chars).' },
+          reason: { type: 'string', description: 'Optional rejection reason (actions reject / reject_by_signal; max 500 chars).' },
+          signal: { type: 'string', description: 'reject_by_signal only. The flag signal to reject by (a name from counts.by_signal, e.g. social_handle, person_name, injection).' },
+          id: { type: 'string', description: 'sanitize only. The pending/rejected learning being corrected (operator-chosen).' },
+          title: { type: 'string', description: 'sanitize only. Corrected title (omit to keep the original).' },
+          body: { type: 'string', description: 'sanitize only. Corrected body (omit to keep the original). At least one of title/body is required.' },
+          tags: { type: 'array', items: { type: 'string' }, description: 'sanitize only. Corrected tags (omit to keep the original).' },
           dry_run: { type: 'boolean', description: 'approve_clean only. Default TRUE: report what would be approved without changing anything. Set false only together with confirm:true and expected_count after the operator confirmed the dry-run list.' },
           confirm: { type: 'boolean', description: 'approve_clean only. Must be exactly true to execute. Never set this without the operator\'s explicit go-ahead on the dry-run output.' },
-          expected_count: { type: 'number', description: 'approve_clean execute only. The count from the dry run, echoed back. If the live selection differs (queue changed), nothing is approved and a fresh dry run is returned.' },
+          expected_count: { type: 'number', description: 'approve_clean execute + reject_by_signal. The count the operator confirmed (dry-run count / by_signal count), echoed back. If the live selection differs (queue changed), nothing is mutated.' },
           min_quality: { type: 'number', description: 'approve_clean quality threshold 0-20 (default 14). 0 includes unscored items.' },
           session_token: { type: 'string', description: 'Optional JWT session token from /auth/verify. If omitted, your configured API key authenticates the account.' },
         },
@@ -707,7 +712,52 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           });
         }
 
-        return text({ error: `Unknown action: ${args.action}. Use list, approve, reject, or approve_clean.` });
+        if (args.action === 'reject_by_signal') {
+          // SPEC3 B2 (§5.2): server-side counted bulk reject by flag class.
+          // The operator confirms signal + by_signal count from {action:"list"};
+          // the server refuses (409, nothing mutated) if the live selection
+          // differs. Reject-only — the safe direction (items stay private).
+          if (typeof args.signal !== 'string' || !args.signal) {
+            return text({ error: 'reject_by_signal requires "signal" (a name from counts.by_signal — run {action:"list"} first).' });
+          }
+          if (!Number.isInteger(args.expected_count)) {
+            return text({ error: 'reject_by_signal requires expected_count: the by_signal count the operator confirmed. This is the counted-confirmation gate.' });
+          }
+          const resp = await fetch(`${AUXILO_BASE}/account/pending/reject-by-signal`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              signal: args.signal,
+              expected_count: args.expected_count,
+              ...(args.reason && { reason: args.reason }),
+            }),
+          });
+          return text(await resp.json());
+        }
+
+        if (args.action === 'sanitize') {
+          // SPEC3 B3 (§5.3): operator-corrected resubmission through EVERY
+          // screen, with lineage. The replacement is ALWAYS held for the
+          // operator's explicit approve — this action can never publish.
+          if (typeof args.id !== 'string' || !args.id) {
+            return text({ error: 'sanitize requires "id" (the pending/rejected learning the operator chose to correct).' });
+          }
+          if (args.title === undefined && args.body === undefined) {
+            return text({ error: 'sanitize requires at least one of "title" / "body" (the operator-reviewed correction).' });
+          }
+          const resp = await fetch(`${AUXILO_BASE}/account/pending/${encodeURIComponent(args.id)}/sanitize`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              ...(args.title !== undefined && { title: args.title }),
+              ...(args.body !== undefined && { body: args.body }),
+              ...(args.tags !== undefined && { tags: args.tags }),
+            }),
+          });
+          return text(await resp.json());
+        }
+
+        return text({ error: `Unknown action: ${args.action}. Use list, approve, reject, approve_clean, reject_by_signal, or sanitize.` });
       }
 
       case 'get_stats': {

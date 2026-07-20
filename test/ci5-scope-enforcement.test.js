@@ -566,8 +566,11 @@ describe('CI-7: server screen wiring (structural pins)', () => {
   });
 
   it('learning_type is stripped from every buyer-facing projection (4 sites)', () => {
+    // Wave-5B (SPEC3-B2/B3): the search-map destructure grew
+    // sensitivity_evidence + sanitized_from/to alongside learning_type —
+    // the strip is intact and STRONGER; the pin tracks the new shape.
     const strips = (SERVER_SRC.match(/learning_type: _lt/g) || []).length +
-      (SERVER_SRC.match(/sensitivity_source, learning_type, \.\.\.rest/g) || []).length;
+      (SERVER_SRC.match(/sensitivity_evidence, learning_type, sanitized_from, sanitized_to, \.\.\.rest/g) || []).length;
     assert.equal(strips, 4, 'search-map + self-unlock + capped + paid-unlock projections must all strip it');
   });
 

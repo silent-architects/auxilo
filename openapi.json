@@ -1085,7 +1085,7 @@
                                         },
                                         "review_reason": {
                                             "type": "array",
-                                            "description": "LW-16: present only when status is 'pending_review'. Reasons the submission was held. CI-7: 'process_advice_screen' = the system-fact screen judged the content process/workflow advice rather than a system fact (or could not judge it) — held for the human, never bounced; approve it only if it is actually a misclassified system fact.",
+                                            "description": "LW-16: present only when status is 'pending_review'. Reasons the submission was held. CI-7: 'process_advice_screen' = the system-fact screen judged the content process/workflow advice rather than a system fact (or could not judge it) — held for the human, never bounced; approve it only if it is actually a misclassified system fact. AUD19-6: 'below_quality_floor' = the quality self-assessment is present but under the server floor (total >= 14, dims >= 3) - quarantined for review, never bounced. SPEC3-B1: 'standing_consent_off' = a clean, floor-passing extraction-channel submission held because the account's clean-lane standing consent is not active (lane ready_to_publish - one counted approve away); 'below_auto_publish_threshold' = consent active but the score is under the account's auto-publish threshold. SPEC3-B3: 'sanitized_resubmission' = the item is a sanitize-and-resubmit replacement - ALWAYS held for the contributor's explicit approve, regardless of screens or channel.",
                                             "items": {
                                                 "type": "string",
                                                 "enum": [
@@ -1094,7 +1094,11 @@
                                                     "near_duplicate",
                                                     "forced_review",
                                                     "awaiting_quality",
-                                                    "process_advice_screen"
+                                                    "process_advice_screen",
+                                                    "below_quality_floor",
+                                                    "standing_consent_off",
+                                                    "below_auto_publish_threshold",
+                                                    "sanitized_resubmission"
                                                 ]
                                             }
                                         },
@@ -4585,6 +4589,328 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/account/pending/{id}/sanitize": {
+            "post": {
+                "summary": "Sanitize-and-resubmit your own pending/rejected learning (lineage, zero screen bypass)",
+                "description": "SPEC3-B3: the missing verb between republish-as-is (re-leak) and reject (value lost). The authenticated contributor supplies a corrected title/body/tags for ONE of THEIR OWN pending_review or rejected learnings; the server ATOMICALLY retires the original (status rejected, reason 'sanitize-resubmit', sanitized_to stamped) and resubmits the correction through the FULL /learn screen pipeline - body sanitizer, exact+near duplicate (the retiring predecessor excluded from the candidate set), credentials/PII filter, prompt-injection screen, two-layer content-sensitivity (evidence persisted), system-fact screen, quality floor. ZERO bypass. The replacement carries sanitized_from and is ALWAYS held (review_reason includes 'sanitized_resubmission') for the contributor's explicit approve - this route can never publish. Guards: ownership (403 before status), 409 ALREADY_SANITIZED, 409 SANITIZE_DEPTH_EXCEEDED (2 prior sanitize hops - rewrite fresh or reject), 409 CATEGORY_OUT_OF_SCOPE (retired label cannot re-enter). Contribute scope.",
+                "operationId": "sanitizeAccountPending",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "apiKeyAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "The pending/rejected learning being corrected"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "description": "At least one of title/body is required; omitted fields keep the original's values.",
+                                "properties": {
+                                    "title": {
+                                        "type": "string",
+                                        "description": "Corrected title (10-200 chars)"
+                                    },
+                                    "body": {
+                                        "type": "string",
+                                        "description": "Corrected body (50-50000 chars)"
+                                    },
+                                    "tags": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        },
+                                        "description": "Corrected tags"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Replacement created and held; original retired with lineage",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "string",
+                                            "description": "The replacement learning's id"
+                                        },
+                                        "sanitized_from": {
+                                            "type": "string",
+                                            "description": "The retired original's id (lineage, forward direction; the original carries sanitized_to)"
+                                        },
+                                        "original_disposition": {
+                                            "type": "string",
+                                            "enum": [
+                                                "rejected",
+                                                "already_rejected"
+                                            ]
+                                        },
+                                        "status": {
+                                            "type": "string",
+                                            "example": "pending_review"
+                                        },
+                                        "review_reason": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            },
+                                            "description": "Always includes 'sanitized_resubmission'; any screen that still fires adds its reason (fresh evidence attached) - that is the loop working, not failing."
+                                        },
+                                        "message": {
+                                            "type": "string"
+                                        },
+                                        "how_to_review": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Validation failed / body sanitizer rejected / no correction supplied",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid X-API-Key",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Not the owner (checked before status - never leaks another account's state)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Wrong source status / ALREADY_SANITIZED / SANITIZE_DEPTH_EXCEEDED / CATEGORY_OUT_OF_SCOPE / duplicate of a different learning",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "code": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "The corrected content still contains credential/PII patterns (redaction hints attached)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "matches": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/account/pending/reject-by-signal": {
+            "post": {
+                "summary": "Counted bulk reject of your own pending items by flag signal (reject-only)",
+                "description": "SPEC3-B2 (5.2): server-side selection over the caller's OWN pending set by one flag signal (same semantics as the summary signal filter: sensitivity signal names like social_handle/person_name/private_path, plus injection / near_duplicate / process_advice), gated by the counted-confirmation discipline: expected_count must equal the LIVE selection size or the call is refused with 409 SIGNAL_COUNT_MISMATCH (echoing current_count) and NOTHING mutates. Get the count from GET /account/pending/summary counts.by_signal and confirm it with the operator first. REJECT ONLY - rejection is the safe direction (items stay private); bulk approve by class deliberately does not exist. Contribute scope.",
+                "operationId": "rejectAccountPendingBySignal",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "apiKeyAuth": []
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "signal",
+                                    "expected_count"
+                                ],
+                                "properties": {
+                                    "signal": {
+                                        "type": "string",
+                                        "description": "A signal name from counts.by_signal (max 64 chars)"
+                                    },
+                                    "expected_count": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "description": "The by_signal count the operator confirmed - the counted-confirmation gate"
+                                    },
+                                    "reason": {
+                                        "type": "string",
+                                        "maxLength": 500,
+                                        "description": "Optional rejection reason recorded per item (default 'flagged: <signal>')"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Batch applied (per-item results; idempotent per id)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "signal": {
+                                            "type": "string"
+                                        },
+                                        "expected_count": {
+                                            "type": "integer"
+                                        },
+                                        "processed": {
+                                            "type": "integer"
+                                        },
+                                        "rejected": {
+                                            "type": "integer"
+                                        },
+                                        "idempotent": {
+                                            "type": "integer"
+                                        },
+                                        "failed": {
+                                            "type": "integer"
+                                        },
+                                        "results": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Missing/invalid signal, expected_count, or reason",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid X-API-Key",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "SIGNAL_COUNT_MISMATCH - live selection differs from expected_count; nothing was rejected",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "SIGNAL_COUNT_MISMATCH"
+                                        },
+                                        "signal": {
+                                            "type": "string"
+                                        },
+                                        "current_count": {
+                                            "type": "integer"
+                                        }
+                                    }
                                 }
                             }
                         }

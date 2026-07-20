@@ -25,7 +25,7 @@ const {
   isLlmSensitivityEnabled,
 } = require('./lib/content-sensitivity-llm.js'); // LW-16 content-sensitivity gate (LLM semantic layer)
 const { findNearDuplicate } = require('./lib/similarity.js'); // LW-14
-const { listOwnPending, applySelfDecision, summarizeOwnPending, applyBulkDecisions, BULK_MAX: SELF_REVIEW_BULK_MAX, meetsQualityFloor, QUALITY_FLOOR_TOTAL, QUALITY_FLOOR_DIMENSION, adoptWalletOrphans, LANES: SELF_REVIEW_LANES } = require('./lib/self-review.js'); // LW-15 + review-seamless + AUD19-3/-6 + SPEC3-B1 lanes
+const { listOwnPending, applySelfDecision, summarizeOwnPending, applyBulkDecisions, selectPendingIdsBySignal, BULK_MAX: SELF_REVIEW_BULK_MAX, meetsQualityFloor, QUALITY_FLOOR_TOTAL, QUALITY_FLOOR_DIMENSION, adoptWalletOrphans, LANES: SELF_REVIEW_LANES } = require('./lib/self-review.js'); // LW-15 + review-seamless + AUD19-3/-6 + SPEC3-B1 lanes + SPEC3-B2 by-signal
 // SPEC3 B1/C1: extraction channel-hold + clean-lane standing consent (FLAG-DARK:
 // EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED, default OFF). The channel marker is a
 // BRAKE, never a gas pedal — see lib/clean-lane.js header for the trust analysis.
@@ -1079,6 +1079,7 @@ const {
   hasMinScope,
   rotateKeyEntry,
   removeFromKeyIndex,
+  rebuildKeyIndex,
   linkWallet,
   getClientIp,
   setStripeConnectId,
@@ -2975,7 +2976,7 @@ function matchLearnings(query, filters = {}) {
     // LW-13 / LW-16: injection_flags / possible_duplicate_of / moderation /
     // sensitivity_signals are moderation-internal — never serialized in
     // buyer-facing results.
-    .map(({ _score, _textScore, body, injection_flags, possible_duplicate_of, possible_duplicate_similarity, moderation, sensitivity_signals, sensitivity_source, learning_type, ...rest }) => ({
+    .map(({ _score, _textScore, body, injection_flags, possible_duplicate_of, possible_duplicate_similarity, moderation, sensitivity_signals, sensitivity_source, sensitivity_evidence, learning_type, sanitized_from, sanitized_to, ...rest }) => ({
       ...rest,
       relevance: _score
       // NOTE: body is intentionally excluded — agents must unlock to read it
@@ -3325,6 +3326,19 @@ app.delete('/account/api-keys/:label', async (c) => {
   }
 });
 
+// ── D2-F2: per-account rotate rate limit (isLearnRateLimited idiom) ──────────
+const ROTATE_RATE_LIMIT = { window_ms: 3600_000, max_per_account: 10 };
+const rotateRateStore = {};
+
+function isRotateRateLimited(accountId) {
+  const now = Date.now();
+  if (!rotateRateStore[accountId]) rotateRateStore[accountId] = [];
+  rotateRateStore[accountId] = rotateRateStore[accountId].filter(ts => now - ts < ROTATE_RATE_LIMIT.window_ms);
+  if (rotateRateStore[accountId].length >= ROTATE_RATE_LIMIT.max_per_account) return true;
+  rotateRateStore[accountId].push(now);
+  return false;
+}
+
 // ── POST /account/api-keys/rotate — rotate a key (D2, Wave 3.4) ──────────────
 // Session callers rotate any key by body {label}; a KEY caller rotates ONLY
 // itself (no label needed; a label naming another key is refused). The
@@ -3337,6 +3351,20 @@ app.post('/account/api-keys/rotate', async (c) => {
   const auth = await resolveAccountAndKeyFromRequest(c, 'read');
   if (auth.error) return c.json({ error: auth.error }, auth.status);
   const accountId = auth.accountId;
+
+  // D2-F2: per-account rotate rate limit. A stolen key looping rotate was a
+  // DoS amplifier (unbounded accounts.json growth, parsed every request);
+  // compaction bounds the growth and this bounds the write churn. In-memory
+  // sliding window on the isLearnRateLimited idiom — deliberately NOT in the
+  // M-A persisted payload (restart-reset is acceptable for this limiter; the
+  // growth cap is the durable control).
+  if (isRotateRateLimited(accountId)) {
+    c.header('Retry-After', '3600');
+    return c.json({
+      error: `Rate limit exceeded. Max ${ROTATE_RATE_LIMIT.max_per_account} key rotations per hour per account.`,
+      retry_after: 3600,
+    }, 429);
+  }
 
   let body;
   try { body = await c.req.json(); } catch { body = {}; }
@@ -3364,11 +3392,15 @@ app.post('/account/api-keys/rotate', async (c) => {
     }
     if (!target) return c.json({ error: 'Key not found' }, 404);
 
-    const { rawKey, entry, oldHash } = rotateKeyEntry(account, target);
+    const { rawKey, entry, oldHash, compacted } = rotateKeyEntry(account, target);
     saveAccounts(accts);
     removeFromKeyIndex(oldHash);
     addToKeyIndex(entry.hash, accountId, entry.scope, entry.id, account.api_keys.length - 1, entry.label);
-    console.log(`[accounts] Rotated API key for account ${accountId}: ${entry.label} (${target.id || 'legacy'} -> ${entry.id}, scope: ${entry.scope})`);
+    // D2-F2: compaction shifts api_keys array positions, and the in-memory
+    // index stores key_index for last_used_at writes — a stale index would
+    // stamp the wrong entry. Full rebuild from the just-persisted state.
+    if (compacted > 0) rebuildKeyIndex();
+    console.log(`[accounts] Rotated API key for account ${accountId}: ${entry.label} (${target.id || 'legacy'} -> ${entry.id}, scope: ${entry.scope})${compacted > 0 ? ` [compacted ${compacted} rotated-out entr${compacted === 1 ? 'y' : 'ies'}]` : ''}`);
 
     return c.json({
       api_key: rawKey,
@@ -5545,6 +5577,12 @@ app.post('/learn', async (c) => {
       sensitivity_source: 'regex',
       llm_reason: null,
       llm_confidence: null,
+      // SPEC3 B2: even the fail-closed hold says why (reviewer-facing only).
+      sensitivity_evidence: [{
+        signal: 'classifier_error',
+        excerpt: null,
+        hint: 'The sensitivity classifier errored; held for safety (fail-closed).',
+      }],
     };
   }
 
@@ -5721,6 +5759,14 @@ app.post('/learn', async (c) => {
       // LW-16: which layer flagged — 'regex' | 'llm' | 'both'. Moderation-internal,
       // stripped from buyer-facing projections alongside sensitivity_signals.
       sensitivity_source: contentSensitivity.sensitivity_source,
+      // SPEC3 B2 (§5.1): the evidence rows — matched span + context + one
+      // neutral sentence per signal, incl. the LLM layer's reason (previously
+      // discarded). CONTRIBUTOR/REVIEWER-ONLY: stripped from every buyer
+      // projection alongside sensitivity_signals (count-pinned test).
+      ...(Array.isArray(contentSensitivity.sensitivity_evidence) &&
+          contentSensitivity.sensitivity_evidence.length > 0 && {
+        sensitivity_evidence: contentSensitivity.sensitivity_evidence,
+      }),
     }),
     // CI-7: persisted only when the system-fact screen held the item — the flag
     // lib/self-review.js screenFlags() maps to lane needs_your_eyes. Moderation-
@@ -6418,6 +6464,12 @@ app.post('/extract', async (c) => {
           sensitivity_source: 'regex',
           llm_reason: null,
           llm_confidence: null,
+          // SPEC3 B2: fail-closed hold carries its why (reviewer-facing only).
+          sensitivity_evidence: [{
+            signal: 'classifier_error',
+            excerpt: null,
+            hint: 'The sensitivity classifier errored; held for safety (fail-closed).',
+          }],
         };
       }
       // Honor an extractor-provided sensitivity verdict as a UNION, never an
@@ -6478,6 +6530,12 @@ app.post('/extract', async (c) => {
         candidate.sensitivity_source = extractContentSensitivity.sensitive
           ? extractContentSensitivity.sensitivity_source
           : 'extractor';
+        // SPEC3 B2: evidence parity with /learn (same classifier call; same
+        // reviewer-only persistence discipline).
+        if (Array.isArray(extractContentSensitivity.sensitivity_evidence) &&
+            extractContentSensitivity.sensitivity_evidence.length > 0) {
+          candidate.sensitivity_evidence = extractContentSensitivity.sensitivity_evidence;
+        }
       }
       if (extractNearDup.verdict === 'flag') {
         candidate.possible_duplicate_of = extractNearDup.match.id;
@@ -7615,7 +7673,8 @@ app.get('/knowledge/:id', async (c) => {
       injection_flags: _if, possible_duplicate_of: _pd,
       possible_duplicate_similarity: _ps, moderation: _mod,
       sensitivity_signals: _ss, sensitivity_source: _ssrc,
-      learning_type: _lt,
+      sensitivity_evidence: _se, learning_type: _lt,
+      sanitized_from: _sf, sanitized_to: _st,
       ...selfLearning
     } = learning;
 
@@ -7659,7 +7718,8 @@ app.get('/knowledge/:id', async (c) => {
       injection_flags: _ifc, possible_duplicate_of: _pdc,
       possible_duplicate_similarity: _psc, moderation: _modc,
       sensitivity_signals: _ssc, sensitivity_source: _ssrcc,
-      learning_type: _ltc,
+      sensitivity_evidence: _sec, learning_type: _ltc,
+      sanitized_from: _sfc, sanitized_to: _stc,
       ...cappedLearning
     } = learning;
     return c.json({
@@ -7834,7 +7894,8 @@ function stripOpsCounters(quality) {
     injection_flags: _if, possible_duplicate_of: _pd,
     possible_duplicate_similarity: _ps, moderation: _mod,
     sensitivity_signals: _ss, sensitivity_source: _ssrc,
-    learning_type: _lt,
+    sensitivity_evidence: _se, learning_type: _lt,
+    sanitized_from: _sf, sanitized_to: _st,
     ...publicLearning
   } = learning;
 
@@ -8950,6 +9011,9 @@ app.get('/admin/moderation/queue', adminAuth('read'), (c) => {
       ...(l.injection_flags && { injection_flags: l.injection_flags }),
       ...(l.sensitivity_signals && { sensitivity_signals: l.sensitivity_signals }),
       ...(l.sensitivity_source && { sensitivity_source: l.sensitivity_source }),
+      // SPEC3 B2: evidence rows for the moderator (reviewer surface — the
+      // same disclosure class as sensitivity_signals here).
+      ...(l.sensitivity_evidence && { sensitivity_evidence: l.sensitivity_evidence }),
       ...(l.possible_duplicate_of && {
         possible_duplicate_of: l.possible_duplicate_of,
         possible_duplicate_similarity: l.possible_duplicate_similarity,
@@ -9287,6 +9351,378 @@ app.post('/account/pending/bulk', async (c) => {
     ...outcome.counts,
     results: outcome.results,
   });
+});
+
+// ─── SPEC3 B2 (§5.2): counted bulk reject-by-signal ─────────────────────────
+//
+// POST /account/pending/reject-by-signal { signal, expected_count, reason? }
+// Server-side selection over the caller's OWN pending set (same signal
+// semantics as the summary `signal` filter), gated by the SAME counted-
+// confirmation discipline as ids-mode bulk: the operator states the count
+// they saw in `by_signal`; if the live selection differs, NOTHING mutates
+// (409 SIGNAL_COUNT_MISMATCH echoes the current count for a fresh confirm).
+// REJECT ONLY — rejection is the safe direction (items stay private); bulk
+// approve of flagged items deliberately does not exist here (SPEC3 §5.2
+// asymmetric rule; ack_flags is its own future item).
+app.post('/account/pending/reject-by-signal', async (c) => {
+  const auth = await resolveSelfReviewAccount(c, 'contribute');
+  if (!auth.accountId) return c.json({ error: auth.error }, auth.status);
+  const accountId = auth.accountId;
+
+  let body;
+  try { body = await c.req.json(); } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+  const signal = body && typeof body.signal === 'string' ? body.signal.trim() : '';
+  if (!signal || signal.length > 64) {
+    return c.json({ error: 'signal is required (a signal name from counts.by_signal, max 64 chars)' }, 400);
+  }
+  const expectedCount = body ? body.expected_count : undefined;
+  if (!Number.isInteger(expectedCount) || expectedCount < 1) {
+    return c.json({
+      error: 'expected_count is required (a positive integer): state the by_signal count you confirmed with the operator. This is the counted-confirmation gate for bulk reject-by-signal.',
+    }, 400);
+  }
+  let reason = `flagged: ${signal}`;
+  if (body && body.reason !== undefined) {
+    if (typeof body.reason !== 'string' || body.reason.length > 500) {
+      return c.json({ error: 'reason must be a string of at most 500 characters' }, 400);
+    }
+    if (body.reason) reason = body.reason;
+  }
+
+  let totals;
+  const releaseLearningsLock = await acquireLearningsLock();
+  try {
+    const ids = selectPendingIdsBySignal(learnings, accountId, signal);
+    // Counted gate: live selection must equal what the operator confirmed.
+    if (ids.length !== expectedCount) {
+      return c.json({
+        error: `Selection changed (expected ${expectedCount}, currently ${ids.length}). Nothing was rejected. Re-run the summary and re-confirm the count.`,
+        code: 'SIGNAL_COUNT_MISMATCH',
+        signal,
+        current_count: ids.length,
+      }, 409);
+    }
+
+    // Apply in <=BULK_MAX chunks through the SAME per-item semantics as the
+    // counted bulk endpoint (ownership, idempotency, per-entry failure).
+    totals = { processed: 0, rejected: 0, idempotent: 0, failed: 0, results: [] };
+    for (let i = 0; i < ids.length; i += SELF_REVIEW_BULK_MAX) {
+      const chunk = ids.slice(i, i + SELF_REVIEW_BULK_MAX)
+        .map((id) => ({ id, decision: 'reject', reason }));
+      const outcome = applyBulkDecisions(learnings, accountId, chunk, { confirmCount: chunk.length });
+      if (!outcome.ok) {
+        // Shape errors cannot happen for a server-built chunk; fail loud if so.
+        return c.json({ error: outcome.error, code: outcome.code }, outcome.status);
+      }
+      totals.processed += outcome.counts.processed;
+      totals.rejected += outcome.counts.rejected;
+      totals.idempotent += outcome.counts.idempotent;
+      totals.failed += outcome.counts.failed;
+      totals.results.push(...outcome.results);
+    }
+    if (totals.rejected > 0) safeWrite(LEARNINGS_FILE, learnings);
+  } finally {
+    releaseLearningsLock();
+  }
+  console.log(`[REVIEW-BULK] [AUDIT] reject_by_signal account=${accountId} signal=${signal} rejected=${totals.rejected} idempotent=${totals.idempotent} failed=${totals.failed}`);
+
+  return c.json({
+    signal,
+    expected_count: expectedCount,
+    ...totals,
+  });
+});
+
+// ─── SPEC3 B3 (§5.3): sanitize-and-resubmit — the missing verb ──────────────
+//
+// POST /account/pending/:id/sanitize { title?, body?, tags? }
+// A valuable-but-leaky item no longer forces republish-as-is (re-leak) or
+// reject (value lost): the operator supplies a corrected body/title and the
+// server ATOMICALLY (one learnings lock, one safeWrite — no lost-item window)
+// retires the original (reason 'sanitize-resubmit', lineage both directions)
+// and resubmits the correction through the FULL /learn screen pipeline —
+// body sanitizer, exact+near dup (predecessor excluded: the replacement must
+// not flag against the item it retires), credentials filter, injection
+// screen, two-layer content sensitivity (evidence persisted), system-fact
+// screen, quality floor. ZERO bypass. The replacement is ALWAYS held
+// (reason 'sanitized_resubmission') — never seamless, never clean-lane,
+// regardless of channel: one explicit approve is cheap and keeps the
+// clean-lane definition pure ("untouched by anyone, passed everything").
+app.post('/account/pending/:id/sanitize', async (c) => {
+  const auth = await resolveSelfReviewAccount(c, 'contribute');
+  if (!auth.accountId) return c.json({ error: auth.error }, auth.status);
+  const accountId = auth.accountId;
+  const id = c.req.param('id');
+
+  let body;
+  try { body = await c.req.json(); } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+  const newTitle = body && typeof body.title === 'string' ? body.title : undefined;
+  const newBody = body && typeof body.body === 'string' ? body.body : undefined;
+  const newTags = body && Array.isArray(body.tags) ? body.tags : undefined;
+  if (newTitle === undefined && newBody === undefined) {
+    return c.json({ error: 'At least one of title or body is required (the corrected content)' }, 400);
+  }
+
+  // Submission-class rate limit (a sanitize creates a new learning).
+  if (isLearnRateLimited('account', accountId)) {
+    return c.json({ error: 'Rate limit exceeded. Max 5 submissions per minute per account.' }, 429);
+  }
+
+  const releaseLearningsLock = await acquireLearningsLock();
+  try {
+    const original = learnings.find((l) => l && l.id === id);
+    if (!original) return c.json({ error: 'Learning not found', id }, 404);
+    // Ownership BEFORE status (M-6): a non-owned id never leaks state.
+    if (original.contributor_account_id !== accountId) {
+      return c.json({ error: 'Not authorized to sanitize this learning', id }, 403);
+    }
+    if (original.status !== 'pending_review' && original.status !== 'rejected') {
+      return c.json({ error: `Only pending or rejected learnings can be sanitized (status: ${original.status})`, id }, 409);
+    }
+    if (original.sanitized_to) {
+      return c.json({
+        error: 'This learning was already sanitized', code: 'ALREADY_SANITIZED',
+        id, sanitized_to: original.sanitized_to,
+      }, 409);
+    }
+    // Depth guard (3 strikes): an item whose chain already has 2 sanitize hops
+    // wants a human rewrite or a rejection, not a third mechanical pass.
+    {
+      let hops = 0;
+      let cur = original;
+      while (cur && cur.sanitized_from && hops < 3) {
+        hops += 1;
+        cur = learnings.find((l) => l && l.id === cur.sanitized_from);
+      }
+      if (hops >= 2) {
+        return c.json({
+          error: 'Sanitize chain limit reached (2 prior sanitizations). Rewrite the content as a fresh submission or reject it.',
+          code: 'SANITIZE_DEPTH_EXCEEDED', id,
+        }, 409);
+      }
+    }
+    // CI-5: a retired-label item cannot re-enter the catalog via sanitize.
+    if (RETIRED_LEARNING_CATEGORIES.includes(original.category)) {
+      return c.json({
+        error: `Category '${original.category}' is retired — Auxilo publishes technical learnings only. Reject this item; resubmit the content fresh under one of: ${TECH_LEARNING_CATEGORIES.join(', ')}.`,
+        code: 'CATEGORY_OUT_OF_SCOPE', id,
+      }, 409);
+    }
+
+    // ── Compose the corrected candidate (identity + metadata inherited) ────
+    const title = newTitle !== undefined ? newTitle : original.title;
+    let content = newBody !== undefined ? newBody : original.body;
+    const tags = newTags !== undefined ? newTags : (original.tags || []);
+    const sanErrors = [];
+    if (!title || title.length < 10) sanErrors.push('Title must be at least 10 characters');
+    if (title && title.length > LEARN_TITLE_MAX) sanErrors.push(`Title exceeds ${LEARN_TITLE_MAX} characters`);
+    if (!content || content.length < 50) sanErrors.push('Body must be at least 50 characters');
+    if (content && content.length > 50000) sanErrors.push('Body exceeds 50KB limit');
+    if (!Array.isArray(tags) || tags.length === 0) {
+      sanErrors.push('At least one tag required');
+    } else {
+      if (tags.length > LEARN_TAGS_MAX) sanErrors.push(`Too many tags (max ${LEARN_TAGS_MAX})`);
+      if (!tags.every((t) => typeof t === 'string' && t.length >= 1 && t.length <= LEARN_TAG_LEN_MAX)) {
+        sanErrors.push(`Each tag must be a string of 1-${LEARN_TAG_LEN_MAX} characters`);
+      }
+    }
+    if (sanErrors.length > 0) return c.json({ error: 'Validation failed', errors: sanErrors }, 400);
+
+    // ── FULL screen pipeline (zero bypass — SPEC3 §5.3 hard rule) ──────────
+    // 1. LW-3(a) body sanitizer.
+    const sani = sanitizeLearningBody(content);
+    if (!sani.clean) return c.json({ error: 'Learning body rejected: ' + sani.reason }, 400);
+    content = sani.sanitized;
+
+    // 2. Exact-dup — PREDECESSOR EXCLUDED (it is being retired by this call).
+    const dedupSet = learnings.filter((l) => l && l.id !== original.id);
+    const normalizedBody = content.toLowerCase().replace(/\s+/g, ' ').trim();
+    const bodyHash = crypto.createHash('sha256').update(normalizedBody).digest('hex');
+    const normalizedTitle = title.toLowerCase().replace(/\s+/g, ' ').trim();
+    const dupOfOther = dedupSet.find((existing) => {
+      const existingHash = existing.body_hash ||
+        crypto.createHash('sha256').update(existing.body.toLowerCase().replace(/\s+/g, ' ').trim()).digest('hex');
+      if (existingHash === bodyHash) return true;
+      const existingTitleNorm = existing.title.toLowerCase().replace(/\s+/g, ' ').trim();
+      return existingTitleNorm === normalizedTitle && existing.category === original.category;
+    });
+    if (dupOfOther) {
+      return c.json({
+        error: 'Duplicate learning detected',
+        message: 'The sanitized content matches a different existing learning. Reject the original instead, or rewrite further.',
+      }, 409);
+    }
+
+    // 3. Near-dup — same predecessor exclusion.
+    const nearDup = findNearDuplicate({ title, body: content, category: original.category }, dedupSet);
+    if (nearDup.verdict === 'reject') {
+      return c.json({
+        error: 'Near-duplicate learning detected',
+        message: 'The sanitized content is highly similar to a different catalog entry.',
+        existing_id: nearDup.match.id,
+        similarity: Number(nearDup.match.similarity.toFixed(3)),
+      }, 409);
+    }
+
+    // 4. Credentials/PII filter (fail CLOSED like /learn).
+    let scanResult;
+    try {
+      scanResult = scanLearning({ title, body: content, task_context: original.task_context, tags });
+    } catch (filterError) {
+      console.error('[SENSITIVITY-FILTER] Filter threw on sanitize — blocking:', filterError.message);
+      return c.json({ error: 'Sensitivity filter error — learning blocked for safety' }, 500);
+    }
+    if (!scanResult.clean) {
+      return c.json({
+        error: 'Sensitive data detected in learning',
+        message: 'The corrected content still contains credential/PII patterns. Redact the flagged values and retry.',
+        matches: scanResult.matches.map((m) => ({
+          field: m.field, pattern: m.pattern, matched: m.match,
+          suggestion: getRedactionHint(m.pattern), description: m.description,
+        })),
+      }, 422);
+    }
+
+    // 5. Injection screen (flag, don't block — fail-closed inside).
+    const injectionScreen = screenLearningSafe({ title, body: content, task_context: original.task_context });
+
+    // 6. Two-layer content sensitivity (fail CLOSED; evidence persisted — B2).
+    let contentSensitivity;
+    try {
+      contentSensitivity = await evaluateContentSensitivity(title, content, tags);
+    } catch (csErr) {
+      console.error('[CONTENT-SENSITIVITY] Classifier threw on sanitize — treating as sensitive:', csErr.message);
+      contentSensitivity = {
+        sensitive: true,
+        sensitivity_signals: ['classifier_error'],
+        sensitivity_source: 'regex',
+        llm_reason: null,
+        llm_confidence: null,
+        sensitivity_evidence: [{
+          signal: 'classifier_error', excerpt: null,
+          hint: 'The sensitivity classifier errored; held for safety (fail-closed).',
+        }],
+      };
+    }
+
+    // 7. System-fact screen (CI-7) + quality floor (AUD19-6) — carried score.
+    const carriedQA = original.quality_self_assessment;
+    const processAdviceHold = LEARNING_TYPE_SCREEN_ENABLED &&
+      LLM_SENSITIVITY_ENABLED &&
+      !contentSensitivity.sensitive &&
+      contentSensitivity.learning_type !== 'system_fact';
+    const reviewReasons = [];
+    if (FORCE_ALL_REVIEW) reviewReasons.push('forced_review');
+    if (injectionScreen.flagged) reviewReasons.push('injection');
+    if (nearDup.verdict !== 'clean') reviewReasons.push('near_duplicate');
+    if (contentSensitivity.sensitive) reviewReasons.push('content_sensitivity');
+    if (processAdviceHold) reviewReasons.push('process_advice_screen');
+    if (!carriedQA) reviewReasons.push('awaiting_quality');
+    if (carriedQA && !meetsQualityFloor(carriedQA)) reviewReasons.push('below_quality_floor');
+    // ALWAYS held: the operator authored the correction with eyes on — one
+    // explicit approve closes the loop; no publish path exists on this route.
+    reviewReasons.push('sanitized_resubmission');
+
+    // ── Pricing (auto; a builder override on the original carries over) ────
+    const syntheticForPricing = {
+      body: content, outcome: original.outcome, category: original.category,
+      tags, quality_self_assessment: carriedQA, quality: { score: 0 },
+      created_at: new Date().toISOString(),
+    };
+    const calculatedPrice = pricingEngine.calculateLearningPrice(syntheticForPricing, learnings);
+    const override = original.pricing && original.pricing.builder_override_price != null
+      ? original.pricing.builder_override_price
+      : null;
+    const now = new Date().toISOString();
+
+    const replacement = {
+      id: generateId(),
+      title,
+      snippet: content.substring(0, 120) + (content.length > 120 ? '...' : ''),
+      body: content,
+      body_hash: bodyHash,
+      category: original.category,
+      tags,
+      task_context: original.task_context,
+      outcome: original.outcome,
+      unlock_price: override != null ? override : calculatedPrice,
+      pricing: {
+        base_price: calculatedPrice,
+        current_price: override != null ? override : calculatedPrice,
+        builder_override_price: override,
+        complexity: pricingEngine.classifyComplexity(syntheticForPricing),
+        last_repriced_at: now,
+      },
+      demand: { search_impressions_7d: 0, search_impressions_30d: 0, unlocks_7d: 0, unlocks_30d: 0 },
+      contributor_wallet: original.contributor_wallet || null,
+      contributor_account_id: accountId,
+      contributor_key_label: original.contributor_key_label || null,
+      contributor_agent: original.contributor_agent || 'unknown',
+      related_skills: original.related_skills || [],
+      submission_channel: normalizeSubmissionChannel(original.submission_channel),
+      ...(carriedQA && { quality_self_assessment: carriedQA }),
+      // SPEC3 B3: lineage, forward direction.
+      sanitized_from: original.id,
+      status: 'pending_review',
+      ...(injectionScreen.flagged && { injection_flags: injectionScreen.matches }),
+      ...(contentSensitivity.sensitive && {
+        sensitivity_signals: contentSensitivity.sensitivity_signals,
+        sensitivity_source: contentSensitivity.sensitivity_source,
+        ...(Array.isArray(contentSensitivity.sensitivity_evidence) &&
+            contentSensitivity.sensitivity_evidence.length > 0 && {
+          sensitivity_evidence: contentSensitivity.sensitivity_evidence,
+        }),
+      }),
+      ...(processAdviceHold && { learning_type: 'process_advice' }),
+      ...(nearDup.verdict === 'flag' && {
+        possible_duplicate_of: nearDup.match.id,
+        possible_duplicate_similarity: Number(nearDup.match.similarity.toFixed(3)),
+      }),
+      quality: { unlocks: 0, ratings: 0, avg_helpfulness: 0, helpfulness_scores: [], score: 0 },
+      earnings: { gross_usd: 0, contributor_share_usd: 0, platform_share_usd: 0 },
+      created_at: now,
+      updated_at: now,
+    };
+
+    // ── Retire the original + append the replacement, ONE write (atomic) ───
+    let originalDisposition;
+    if (original.status === 'pending_review') {
+      const rejected = applySelfDecision(learnings, accountId, original.id, 'reject', {
+        reason: 'sanitize-resubmit', now,
+      });
+      if (!rejected.ok) {
+        // Cannot happen after the guards above; fail loud without mutating.
+        return c.json({ error: rejected.error, id: original.id }, rejected.status);
+      }
+      originalDisposition = 'rejected';
+    } else {
+      originalDisposition = 'already_rejected';
+      original.updated_at = now;
+    }
+    // Lineage, reverse direction.
+    original.sanitized_to = replacement.id;
+    learnings.push(replacement);
+    safeWrite(LEARNINGS_FILE, learnings);
+
+    console.log(`[SANITIZE] [AUDIT] sanitize_resubmit account=${accountId} original=${original.id} replacement=${replacement.id} reasons=${reviewReasons.join(',')}`);
+    notePendingReviewEntries(1, { source: '/account/pending/:id/sanitize', id: replacement.id, orphaned: false });
+
+    return c.json({
+      id: replacement.id,
+      sanitized_from: original.id,
+      original_disposition: originalDisposition,
+      status: 'pending_review',
+      review_reason: reviewReasons,
+      message: 'Sanitized replacement resubmitted through every screen and held for your explicit approval. The original stays private.',
+      how_to_review: 'Approve or reject it yourself: run `auxilo review` (CLI), open your dashboard review queue, or GET /account/pending with your API key.',
+    });
+  } finally {
+    releaseLearningsLock();
+  }
 });
 
 // ─── S21-3: Content Reporting Endpoint ──────────────────────────────────────

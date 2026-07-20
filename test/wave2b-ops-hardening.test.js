@@ -23,7 +23,7 @@
  * Runner: node --test test/wave2b-ops-hardening.test.js
  */
 
-const { describe, it, after } = require('node:test');
+const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
@@ -73,8 +73,12 @@ function retractionSlice() {
 // ════════════════════════════════════════════════════════════════════════════
 
 describe('H-3: OFAC list-refresh failures page via ops-alert', () => {
-  const refresh = slice('async function refreshOFACList()', 'function checkOFAC(');
-  const catchBlock = refresh.slice(refresh.indexOf('} catch (err) {'));
+  let refresh, catchBlock;
+  // CH-7: computed in before() — a failed slice exits 1, never fail-0/exit-0.
+  before(() => {
+    refresh = slice('async function refreshOFACList()', 'function checkOFAC(');
+    catchBlock = refresh.slice(refresh.indexOf('} catch (err) {'));
+  });
 
   it('the failure catch fires sendOpsAlert in the ofac category, never-throws', () => {
     assert.ok(catchBlock.includes('sendOpsAlert('), 'refresh failures must page');
@@ -431,7 +435,8 @@ describe('CP-2: encrypted-at-rest store', () => {
 });
 
 describe('CP-2: link-wallet wiring (source) — dark by default, fail closed when on', () => {
-  const h = linkWalletSlice();
+  let h;
+  before(() => { h = linkWalletSlice(); });
 
   it('flag-off purity: every capture reference is gated on captureEnabled()', () => {
     assert.ok(h.includes('identityVault.captureEnabled()'), 'single flag gate');
@@ -546,8 +551,11 @@ describe('CAT-1 (b): unlock counters credited only for real unlocks', () => {
 // ════════════════════════════════════════════════════════════════════════════
 
 describe('Wave-1 carry-ins in the unlock compensation path', () => {
-  const h = unlockHandlerSlice();
-  const catchBlock = h.slice(h.indexOf('} catch (deliveryErr) {'));
+  let h, catchBlock;
+  before(() => {
+    h = unlockHandlerSlice();
+    catchBlock = h.slice(h.indexOf('} catch (deliveryErr) {'));
+  });
 
   it('F1: refunded delivery failure restores the discovery-cache entry at its ORIGINAL timestamp', () => {
     assert.ok(catchBlock.includes('if (isFromSearch) searchSourceCache.set(discoveryCacheKey, cachedAt);'),

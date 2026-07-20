@@ -23,7 +23,7 @@
  * Runner: node --test test/aud19-payment-contract.test.js
  */
 
-const { describe, it } = require('node:test');
+const { describe, it, before } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
@@ -238,7 +238,9 @@ describe('AUD19-5: unlockPaymentRequired handles both challenge generations', ()
 });
 
 describe('AUD19-5: MCP unlock handler wiring', () => {
-  const unlockCase = slice(MCP_SRC, "case 'auxilo_unlock': {", "case 'auxilo_rate': {");
+  let unlockCase;
+  // CH-7: computed in before() — a failed slice exits 1, never fail-0/exit-0.
+  before(() => { unlockCase = slice(MCP_SRC, "case 'auxilo_unlock': {", "case 'auxilo_rate': {"); });
   it('routes both statuses through unlockPaymentRequired then falls through to the fence', () => {
     assert.ok(unlockCase.includes('unlockPaymentRequired(resp.status, data'),
       'handler must delegate challenge detection to the pure formatter');
@@ -281,7 +283,8 @@ describe('AUD19-7: shapeWithdrawStatus (pure)', () => {
 });
 
 describe('AUD19-7: auxilo_withdraw never attempts a custodial withdrawal', () => {
-  const withdrawCase = slice(MCP_SRC, "case 'auxilo_withdraw': {", "case 'auxilo_settlements': {");
+  let withdrawCase;
+  before(() => { withdrawCase = slice(MCP_SRC, "case 'auxilo_withdraw': {", "case 'auxilo_settlements': {"); });
 
   it('handler reads GET /account/earnings only', () => {
     assert.ok(withdrawCase.includes('/account/earnings`'),

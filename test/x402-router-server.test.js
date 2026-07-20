@@ -15,7 +15,7 @@
 
 'use strict';
 
-const { describe, it } = require('node:test');
+const { describe, it, before } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
@@ -32,7 +32,9 @@ function slice(startMarker, endMarker) {
 }
 
 describe('RT-3: router-settled self-unlock is booked', () => {
-  const selfUnlockBlock = slice('if (isSelfUnlock) {', 'learning.earnings.gross_usd');
+  let selfUnlockBlock;
+  // CH-7: computed in before() — a failed slice exits 1, never fail-0/exit-0.
+  before(() => { selfUnlockBlock = slice('if (isSelfUnlock) {', 'learning.earnings.gross_usd'); });
 
   it('self-unlock branch books onchain_settlements when routerSettlement is present', () => {
     assert.ok(selfUnlockBlock.includes('if (routerSettlement) {'),
