@@ -698,7 +698,7 @@ describe('#19: Drive-ID patterns (sensitivity-filter 0.5.0)', () => {
 
 describe('F6: /learn two-layer sensitivity screen wiring (loud pins)', () => {
   let h;
-  before(() => { h = sliceAt(SERVER_SRC, "app.post('/learn'", 30000); });
+  before(() => { h = sliceAt(SERVER_SRC, "app.post('/learn'", 42000); }); // widened 30000→42000: 5A merge grew the handler (sanctioned window class)
 
   it('the classifier is invoked with the submitted content and fails closed', () => {
     assert.ok(h.includes('contentSensitivity = await evaluateContentSensitivity(title, content, tags)'),
