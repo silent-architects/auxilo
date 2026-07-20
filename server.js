@@ -8975,6 +8975,16 @@ async function runDailyPricingCron() {
     console.log(`[pricing-cron] Repriced ${repriced} learnings`);
   } catch (err) {
     console.error('[pricing-cron] Error:', err.message);
+    // LW-5 remainder: a silently dead pricing cron leaves the whole shelf
+    // frozen at stale prices (density-gate convergence stops too). Alert on
+    // every failed run — cadence is 24h, so one failure already means a
+    // >24h-stale shelf. sendOpsAlert never throws and rate-limits per
+    // category, mirroring the H-3 OFAC-refresh alert pattern.
+    sendOpsAlert(
+      '[pricing-cron] daily reprice FAILED',
+      `The daily pricing cron threw and the shelf was NOT repriced this cycle.\n\nError: ${err.message}\n\nEffect: prices and demand-window decay are frozen until the next successful run (24h cadence; a restart also retries 30s after boot).`,
+      { category: 'pricing-cron' }
+    );
   } finally {
     releaseLearningsLock();
   }
