@@ -346,7 +346,7 @@ describe('B2: POST /account/pending/reject-by-signal (structural)', () => {
 
 describe('B3: POST /account/pending/:id/sanitize (structural)', () => {
   let h;
-  before(() => { h = sliceAt(SERVER_SRC, "app.post('/account/pending/:id/sanitize'", 14000); });
+  before(() => { h = sliceAt(SERVER_SRC, "app.post('/account/pending/:id/sanitize'", 17000); });
 
   it('contribute scope; ownership checked BEFORE status (M-6); pending|rejected source only', () => {
     assert.ok(h.includes("resolveSelfReviewAccount(c, 'contribute')"));
@@ -355,11 +355,49 @@ describe('B3: POST /account/pending/:id/sanitize (structural)', () => {
     assert.ok(own !== -1 && status !== -1 && own < status, 'ownership gate sits above the status gate');
   });
 
+  it('F1: ADMIN_REJECTED_FINAL — admin-rejected items are contributor-irreversible (guarded in BOTH phases)', () => {
+    assert.ok(h.includes("code: 'ADMIN_REJECTED_FINAL'"), 'the phase-1 guard names its code');
+    // The moderation_action check must appear twice: the phase-1 early 409
+    // AND the phase-2 under-lock re-validation (TOCTOU: an admin could
+    // reject while the LLM screen runs outside the lock).
+    const checks = (h.match(/moderation_action(?:\s*&&\s*\w+\.moderation_action)?\.action === 'rejected'/g) || []).length;
+    assert.equal(checks, 2, 'admin-finality checked in phase 1 and re-checked under the lock');
+  });
+
   it('guards: ALREADY_SANITIZED, SANITIZE_DEPTH_EXCEEDED (2 hops), retired-category refusal', () => {
     assert.ok(h.includes("code: 'ALREADY_SANITIZED'"));
     assert.ok(h.includes("code: 'SANITIZE_DEPTH_EXCEEDED'"));
     assert.ok(/hops >= 2/.test(h));
     assert.ok(h.includes("code: 'CATEGORY_OUT_OF_SCOPE'"));
+  });
+
+  it('F2: screens run OUTSIDE the lock; the locked region is fully synchronous (no-await walker)', () => {
+    const acquire = 'const releaseLearningsLock = await acquireLearningsLock()';
+    const lockAt = h.indexOf(acquire);
+    assert.ok(lockAt !== -1, 'lock acquisition present');
+    // Every screen call sits BEFORE the lock (the 6s LLM timeout must never
+    // queue the global catalog writers).
+    for (const screen of ['sanitizeLearningBody(content)', 'findNearDuplicate(', 'scanLearning({ title', 'screenLearningSafe({ title', 'evaluateContentSensitivity(title, content, tags)']) {
+      const at = h.indexOf(screen);
+      assert.ok(at !== -1 && at < lockAt, `${screen} must run before the lock`);
+    }
+    // No await inside the locked region.
+    const start = lockAt + acquire.length;
+    const release = h.indexOf('releaseLearningsLock();', start);
+    assert.ok(release !== -1, 'release present');
+    const locked = h.slice(start, release);
+    assert.ok(!/\bawait\b/.test(locked),
+      'the locked region must be synchronous — screens outside, mutation-pair + one write inside');
+  });
+
+  it('F2: under-lock re-validation — SANITIZE_CONFLICT covers status/lineage/admin drift + sync dup re-check', () => {
+    assert.ok(h.includes("code: 'SANITIZE_CONFLICT'"), 'phase-2 conflict code present');
+    const lockAt = h.indexOf('const releaseLearningsLock = await acquireLearningsLock()');
+    const conflictAt = h.indexOf("code: 'SANITIZE_CONFLICT'");
+    assert.ok(conflictAt > lockAt, 're-validation happens under the lock');
+    // The cheap sync exact-dup re-check runs under the lock too.
+    const dupNowAt = h.indexOf('const dupNow = learnings.find');
+    assert.ok(dupNowAt > lockAt, 'sync dedup re-check under the lock');
   });
 
   it('FULL screen pipeline — every /learn screen invoked, zero bypass', () => {
@@ -379,16 +417,23 @@ describe('B3: POST /account/pending/:id/sanitize (structural)', () => {
     assert.ok(h.includes('dedupSet.find'), 'exact-dup runs over the exclusion set');
   });
 
-  it('ALWAYS held: sanitized_resubmission appended unconditionally; status pending_review; no publish path', () => {
+  it('ALWAYS held: sanitized_resubmission appended unconditionally; no publish path', () => {
     assert.ok(h.includes("reviewReasons.push('sanitized_resubmission')"));
-    assert.ok(h.includes("status: 'pending_review'"));
     assert.ok(!h.includes('seamlessEligible'), 'no seamless predicate on this route');
     assert.ok(!h.includes('cleanLanePublish'), 'no clean-lane path on this route');
   });
 
+  it('F4: the PERSISTED record is held — sanitized_from/status adjacency pinned inside the replacement literal', () => {
+    // The response literal also says status: 'pending_review', so a bare
+    // includes() would survive flipping the STORED status to 'approved'
+    // (mutation-verified). Pin the adjacency inside the replacement object.
+    assert.match(h, /sanitized_from: original\.id,\s*\n\s*status: 'pending_review',/,
+      "the stored replacement must carry status 'pending_review' adjacent to its lineage stamp");
+  });
+
   it('lineage both directions + original retired with reason sanitize-resubmit, atomically (one lock, one write)', () => {
     assert.ok(h.includes('sanitized_from: original.id'));
-    assert.ok(h.includes('original.sanitized_to = replacement.id'));
+    assert.ok(h.includes('current.sanitized_to = replacement.id'));
     assert.ok(h.includes("'reject', {") && h.includes("reason: 'sanitize-resubmit'"));
     assert.equal((h.match(/safeWrite\(LEARNINGS_FILE, learnings\)/g) || []).length, 1,
       'exactly ONE persist — both mutations land in the same write (no lost-item window)');
@@ -513,6 +558,54 @@ describe('D2-F2: caps and route hardening (structural)', () => {
   });
 });
 
+describe('F5: create/revoke debris — global inactive ceiling (pure + structural)', () => {
+  const { capInactiveDebris, INACTIVE_DEBRIS_KEEP } = require('../lib/accounts.js');
+
+  it('caps total inactive entries at the ceiling regardless of label churn', () => {
+    // The attack per the reviewer: create→revoke with a FRESH label each
+    // cycle — per-label ceilings bound nothing when labels are caller-chosen.
+    const account = { api_keys: [] };
+    for (let i = 0; i < 30; i++) {
+      account.api_keys.push(keyEntry(i, {
+        active: false, label: `churn-${i}`,
+        revoked_at: `2026-07-${String(1 + (i % 28)).padStart(2, '0')}T00:00:00.000Z`,
+      }));
+    }
+    account.api_keys.push(keyEntry(90));
+    const { removed } = capInactiveDebris(account);
+    assert.equal(removed, 30 - INACTIVE_DEBRIS_KEEP);
+    assert.equal(account.api_keys.filter((k) => k.active === false).length, INACTIVE_DEBRIS_KEEP);
+    assert.ok(account.api_keys.some((k) => k.id === 'key_90'), 'active entries never touched');
+  });
+
+  it('keeps the NEWEST dead entries (rotated_at/revoked_at/created_at stamp) and is a no-op under the ceiling', () => {
+    const account = { api_keys: [] };
+    for (let i = 0; i < 20; i++) {
+      account.api_keys.push(keyEntry(i, { active: false, label: `l${i}`, revoked_at: `2026-06-${String(i + 1).padStart(2, '0')}T00:00:00.000Z` }));
+    }
+    capInactiveDebris(account);
+    const survivors = account.api_keys.map((k) => k.id);
+    assert.ok(!survivors.includes('key_0') && !survivors.includes('key_4'), 'oldest dropped');
+    assert.ok(survivors.includes('key_19'), 'newest kept');
+    const small = { api_keys: [keyEntry(0, { active: false, revoked_at: '2026-07-01T00:00:00.000Z' })] };
+    assert.equal(capInactiveDebris(small).removed, 0);
+  });
+
+  it('revoke route stamps revoked_at, caps debris, and rebuilds the index when positions shift (structural)', () => {
+    const h = sliceAt(SERVER_SRC, "app.delete('/account/api-keys/:label'", 2600);
+    assert.ok(h.includes('key.revoked_at = new Date().toISOString()'), 'end-of-life stamp for debris ordering');
+    assert.ok(h.includes('capInactiveDebris(account)'));
+    assert.ok(h.includes('if (debrisRemoved > 0) rebuildKeyIndex()'), 'stale key_index would stamp the wrong entry');
+  });
+
+  it('rotation path also applies the global ceiling (rotateKeyEntry calls both compactions)', () => {
+    const src = fs.readFileSync(path.join(REPO, 'lib', 'accounts.js'), 'utf8');
+    const fn = sliceAt(src, 'function rotateKeyEntry', 1600);
+    assert.ok(fn.includes('compactRotatedKeys(account)'));
+    assert.ok(fn.includes('capInactiveDebris(account)'));
+  });
+});
+
 // ═════════════════════════════════════════════════════════════════════════════
 // F. #19 — Google Drive file-ID scrubber
 // ═════════════════════════════════════════════════════════════════════════════
@@ -570,12 +663,61 @@ describe('#19: Drive-ID patterns (sensitivity-filter 0.5.0)', () => {
     }
   });
 
+  it('F3: the six reviewer-probed FP classes all pass (mixed-case + digit guard)', () => {
+    for (const t of [
+      'checkout branch 1234-fix-the-thing-in-marketplace-search before rebasing',   // issue-numbered branch name
+      'the slug 10-ways-to-improve-your-api-performance ranks first',               // numeric-leading URL slug
+      'request id 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d in the trace',              // digit-1-leading UUID (~6% of v4s)
+      'the constant 1_000_000_000_000_000_000_000_000 overflows Number',            // numeric-separator literal
+      'the report covers 19-07-2026-to-25-07-2026-inclusive-final range',           // kebab date-range
+      'commit 1F4E5D6C7B8A9F0E1D2C3B4A5F6E7D8C9B0A1F2E was tagged',                // UPPERCASE 40-hex SHA
+    ]) {
+      assert.ok(!driveHit(learn(t)), `must NOT flag: ${t}`);
+    }
+    // Guard shape pinned: mixed case AND a digit beyond the prefix char.
+    const bare = PATTERNS.find((p) => p.name === 'google_drive_id');
+    assert.ok(!bare.validate('1234-fix-the-thing-in-marketplace'), 'no uppercase → refused');
+    assert.ok(!bare.validate('1F4E5D6C7B8A9F0E1D2C3B4A5F6E7D8C9B0A1F2E'), 'no lowercase → refused');
+    assert.ok(bare.validate('1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms'), 'real 44-char ID passes');
+    assert.ok(bare.validate('1A2b3C4d5E6f7G8h9I0j1K2l3M4n5O6p7'), 'real 33-char ID passes');
+  });
+
   it('scanText parity + redaction hints', () => {
     const t = scanText('grab https://docs.google.com/document/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit now');
     assert.equal(t.clean, false);
     assert.ok(t.redacted.includes('{DRIVE_FILE_ID}'), 'redacted text substitutes the hint');
     assert.ok(getRedactionHint('google_drive_url').includes('{DRIVE_FILE_ID}'));
     assert.equal(getRedactionHint('google_drive_id'), '{DRIVE_FILE_ID}');
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// F6 — /learn sensitivity-screen wiring (loud pins; reviewer stubbed the
+// classifier and the suite stayed green — this closes that gap)
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('F6: /learn two-layer sensitivity screen wiring (loud pins)', () => {
+  let h;
+  before(() => { h = sliceAt(SERVER_SRC, "app.post('/learn'", 30000); });
+
+  it('the classifier is invoked with the submitted content and fails closed', () => {
+    assert.ok(h.includes('contentSensitivity = await evaluateContentSensitivity(title, content, tags)'),
+      'the two-layer classifier must run on every /learn submission');
+    assert.ok(h.includes("sensitivity_signals: ['classifier_error']"),
+      'a classifier throw must resolve to a fail-closed hold, never a pass');
+  });
+
+  it('its verdict gates BOTH the hold reason and the seamless predicate', () => {
+    assert.ok(h.includes("if (contentSensitivity.sensitive) learnReviewReasons.push('content_sensitivity')"),
+      'sensitive verdict must add the hold reason');
+    assert.ok(h.includes('!contentSensitivity.sensitive &&'),
+      'the seamless predicate must require a clean sensitivity verdict');
+  });
+
+  it('the flagged verdict is persisted on the record (signals + source + evidence)', () => {
+    assert.ok(h.includes('sensitivity_signals: contentSensitivity.sensitivity_signals'));
+    assert.ok(h.includes('sensitivity_source: contentSensitivity.sensitivity_source'));
+    assert.ok(h.includes('sensitivity_evidence: contentSensitivity.sensitivity_evidence'));
   });
 });
 

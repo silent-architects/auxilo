@@ -1080,6 +1080,7 @@ const {
   rotateKeyEntry,
   removeFromKeyIndex,
   rebuildKeyIndex,
+  capInactiveDebris,
   linkWallet,
   getClientIp,
   setStripeConnectId,
@@ -3317,8 +3318,17 @@ app.delete('/account/api-keys/:label', async (c) => {
     }
 
     key.active = false;
+    // Gate-A F5: stamp end-of-life for debris ordering, then cap total
+    // inactive entries — labels are caller-chosen, so a create→revoke loop
+    // with fresh labels grew accounts.json one permanent dead entry per
+    // cycle. Global newest-15 ceiling (lib/accounts.js capInactiveDebris).
+    key.revoked_at = new Date().toISOString();
+    const { removed: debrisRemoved } = capInactiveDebris(account);
     removeFromKeyIndex(key.hash);
     saveAccounts(accts);
+    // Compaction shifts api_keys positions; the in-memory index stores
+    // key_index for last_used_at writes — rebuild from persisted state.
+    if (debrisRemoved > 0) rebuildKeyIndex();
 
     return c.json({ message: 'Key revoked', label });
   } finally {
@@ -9472,257 +9482,312 @@ app.post('/account/pending/:id/sanitize', async (c) => {
     return c.json({ error: 'Rate limit exceeded. Max 5 submissions per minute per account.' }, 429);
   }
 
+  // ── Phase 1 (Gate-A F2): guards + screens on a snapshot, WITHOUT the lock ──
+  // The async LLM sensitivity call (6s timeout) must never sit inside the
+  // global learnings mutex — a handful of sanitizes per minute would queue
+  // every catalog writer into a write outage. Same posture as /learn, whose
+  // screens also run pre-lock. Phase 2 re-acquires, re-validates the mutable
+  // guards synchronously, and mutates + persists in one write.
+  const original = learnings.find((l) => l && l.id === id);
+  if (!original) return c.json({ error: 'Learning not found', id }, 404);
+  // Ownership BEFORE status (M-6): a non-owned id never leaks state.
+  if (original.contributor_account_id !== accountId) {
+    return c.json({ error: 'Not authorized to sanitize this learning', id }, 403);
+  }
+  if (original.status !== 'pending_review' && original.status !== 'rejected') {
+    return c.json({ error: `Only pending or rejected learnings can be sanitized (status: ${original.status})`, id }, 409);
+  }
+  // Gate-A F1: ADMIN finality is contributor-irreversible. An admin reject
+  // stamps moderation_action.action='rejected'; without this guard the
+  // predecessor exclusion below would disable both dup screens for a
+  // near-verbatim resubmit and the contributor could self-approve
+  // admin-rejected content in two calls. Sanitize stays available for
+  // SELF-review rejections (self_review_action) — those are the
+  // contributor's own decisions to revisit. A later admin approve
+  // overwrites the stamp, lifting the guard.
+  if (original.moderation_action && original.moderation_action.action === 'rejected') {
+    return c.json({
+      error: 'This learning was rejected by marketplace moderation and cannot be sanitized. Moderation decisions are final — submit substantially new content as a fresh learning instead.',
+      code: 'ADMIN_REJECTED_FINAL', id,
+    }, 409);
+  }
+  if (original.sanitized_to) {
+    return c.json({
+      error: 'This learning was already sanitized', code: 'ALREADY_SANITIZED',
+      id, sanitized_to: original.sanitized_to,
+    }, 409);
+  }
+  // Depth guard (3 strikes): an item whose chain already has 2 sanitize hops
+  // wants a human rewrite or a rejection, not a third mechanical pass.
+  {
+    let hops = 0;
+    let cur = original;
+    while (cur && cur.sanitized_from && hops < 3) {
+      hops += 1;
+      cur = learnings.find((l) => l && l.id === cur.sanitized_from);
+    }
+    if (hops >= 2) {
+      return c.json({
+        error: 'Sanitize chain limit reached (2 prior sanitizations). Rewrite the content as a fresh submission or reject it.',
+        code: 'SANITIZE_DEPTH_EXCEEDED', id,
+      }, 409);
+    }
+  }
+  // CI-5: a retired-label item cannot re-enter the catalog via sanitize.
+  if (RETIRED_LEARNING_CATEGORIES.includes(original.category)) {
+    return c.json({
+      error: `Category '${original.category}' is retired — Auxilo publishes technical learnings only. Reject this item; resubmit the content fresh under one of: ${TECH_LEARNING_CATEGORIES.join(', ')}.`,
+      code: 'CATEGORY_OUT_OF_SCOPE', id,
+    }, 409);
+  }
+
+  // ── Compose the corrected candidate (identity + metadata inherited) ────
+  const title = newTitle !== undefined ? newTitle : original.title;
+  let content = newBody !== undefined ? newBody : original.body;
+  const tags = newTags !== undefined ? newTags : (original.tags || []);
+  const sanErrors = [];
+  if (!title || title.length < 10) sanErrors.push('Title must be at least 10 characters');
+  if (title && title.length > LEARN_TITLE_MAX) sanErrors.push(`Title exceeds ${LEARN_TITLE_MAX} characters`);
+  if (!content || content.length < 50) sanErrors.push('Body must be at least 50 characters');
+  if (content && content.length > 50000) sanErrors.push('Body exceeds 50KB limit');
+  if (!Array.isArray(tags) || tags.length === 0) {
+    sanErrors.push('At least one tag required');
+  } else {
+    if (tags.length > LEARN_TAGS_MAX) sanErrors.push(`Too many tags (max ${LEARN_TAGS_MAX})`);
+    if (!tags.every((t) => typeof t === 'string' && t.length >= 1 && t.length <= LEARN_TAG_LEN_MAX)) {
+      sanErrors.push(`Each tag must be a string of 1-${LEARN_TAG_LEN_MAX} characters`);
+    }
+  }
+  if (sanErrors.length > 0) return c.json({ error: 'Validation failed', errors: sanErrors }, 400);
+
+  // ── FULL screen pipeline (zero bypass — SPEC3 §5.3 hard rule) ──────────
+  // 1. LW-3(a) body sanitizer.
+  const sani = sanitizeLearningBody(content);
+  if (!sani.clean) return c.json({ error: 'Learning body rejected: ' + sani.reason }, 400);
+  content = sani.sanitized;
+
+  // 2. Exact-dup — PREDECESSOR EXCLUDED (it is being retired by this call).
+  const dedupSet = learnings.filter((l) => l && l.id !== original.id);
+  const normalizedBody = content.toLowerCase().replace(/\s+/g, ' ').trim();
+  const bodyHash = crypto.createHash('sha256').update(normalizedBody).digest('hex');
+  const normalizedTitle = title.toLowerCase().replace(/\s+/g, ' ').trim();
+  const dupOfOther = dedupSet.find((existing) => {
+    const existingHash = existing.body_hash ||
+      crypto.createHash('sha256').update(existing.body.toLowerCase().replace(/\s+/g, ' ').trim()).digest('hex');
+    if (existingHash === bodyHash) return true;
+    const existingTitleNorm = existing.title.toLowerCase().replace(/\s+/g, ' ').trim();
+    return existingTitleNorm === normalizedTitle && existing.category === original.category;
+  });
+  if (dupOfOther) {
+    return c.json({
+      error: 'Duplicate learning detected',
+      message: 'The sanitized content matches a different existing learning. Reject the original instead, or rewrite further.',
+    }, 409);
+  }
+
+  // 3. Near-dup — same predecessor exclusion.
+  const nearDup = findNearDuplicate({ title, body: content, category: original.category }, dedupSet);
+  if (nearDup.verdict === 'reject') {
+    return c.json({
+      error: 'Near-duplicate learning detected',
+      message: 'The sanitized content is highly similar to a different catalog entry.',
+      existing_id: nearDup.match.id,
+      similarity: Number(nearDup.match.similarity.toFixed(3)),
+    }, 409);
+  }
+
+  // 4. Credentials/PII filter (fail CLOSED like /learn).
+  let scanResult;
+  try {
+    scanResult = scanLearning({ title, body: content, task_context: original.task_context, tags });
+  } catch (filterError) {
+    console.error('[SENSITIVITY-FILTER] Filter threw on sanitize — blocking:', filterError.message);
+    return c.json({ error: 'Sensitivity filter error — learning blocked for safety' }, 500);
+  }
+  if (!scanResult.clean) {
+    return c.json({
+      error: 'Sensitive data detected in learning',
+      message: 'The corrected content still contains credential/PII patterns. Redact the flagged values and retry.',
+      matches: scanResult.matches.map((m) => ({
+        field: m.field, pattern: m.pattern, matched: m.match,
+        suggestion: getRedactionHint(m.pattern), description: m.description,
+      })),
+    }, 422);
+  }
+
+  // 5. Injection screen (flag, don't block — fail-closed inside).
+  const injectionScreen = screenLearningSafe({ title, body: content, task_context: original.task_context });
+
+  // 6. Two-layer content sensitivity (fail CLOSED; evidence persisted — B2).
+  let contentSensitivity;
+  try {
+    contentSensitivity = await evaluateContentSensitivity(title, content, tags);
+  } catch (csErr) {
+    console.error('[CONTENT-SENSITIVITY] Classifier threw on sanitize — treating as sensitive:', csErr.message);
+    contentSensitivity = {
+      sensitive: true,
+      sensitivity_signals: ['classifier_error'],
+      sensitivity_source: 'regex',
+      llm_reason: null,
+      llm_confidence: null,
+      sensitivity_evidence: [{
+        signal: 'classifier_error', excerpt: null,
+        hint: 'The sensitivity classifier errored; held for safety (fail-closed).',
+      }],
+    };
+  }
+
+  // 7. System-fact screen (CI-7) + quality floor (AUD19-6) — carried score.
+  const carriedQA = original.quality_self_assessment;
+  const processAdviceHold = LEARNING_TYPE_SCREEN_ENABLED &&
+    LLM_SENSITIVITY_ENABLED &&
+    !contentSensitivity.sensitive &&
+    contentSensitivity.learning_type !== 'system_fact';
+  const reviewReasons = [];
+  if (FORCE_ALL_REVIEW) reviewReasons.push('forced_review');
+  if (injectionScreen.flagged) reviewReasons.push('injection');
+  if (nearDup.verdict !== 'clean') reviewReasons.push('near_duplicate');
+  if (contentSensitivity.sensitive) reviewReasons.push('content_sensitivity');
+  if (processAdviceHold) reviewReasons.push('process_advice_screen');
+  if (!carriedQA) reviewReasons.push('awaiting_quality');
+  if (carriedQA && !meetsQualityFloor(carriedQA)) reviewReasons.push('below_quality_floor');
+  // ALWAYS held: the operator authored the correction with eyes on — one
+  // explicit approve closes the loop; no publish path exists on this route.
+  reviewReasons.push('sanitized_resubmission');
+
+  // ── Pricing (auto; a builder override on the original carries over) ────
+  const syntheticForPricing = {
+    body: content, outcome: original.outcome, category: original.category,
+    tags, quality_self_assessment: carriedQA, quality: { score: 0 },
+    created_at: new Date().toISOString(),
+  };
+  const calculatedPrice = pricingEngine.calculateLearningPrice(syntheticForPricing, learnings);
+  const override = original.pricing && original.pricing.builder_override_price != null
+    ? original.pricing.builder_override_price
+    : null;
+  const now = new Date().toISOString();
+
+  const replacement = {
+    id: generateId(),
+    title,
+    snippet: content.substring(0, 120) + (content.length > 120 ? '...' : ''),
+    body: content,
+    body_hash: bodyHash,
+    category: original.category,
+    tags,
+    task_context: original.task_context,
+    outcome: original.outcome,
+    unlock_price: override != null ? override : calculatedPrice,
+    pricing: {
+      base_price: calculatedPrice,
+      current_price: override != null ? override : calculatedPrice,
+      builder_override_price: override,
+      complexity: pricingEngine.classifyComplexity(syntheticForPricing),
+      last_repriced_at: now,
+    },
+    demand: { search_impressions_7d: 0, search_impressions_30d: 0, unlocks_7d: 0, unlocks_30d: 0 },
+    contributor_wallet: original.contributor_wallet || null,
+    contributor_account_id: accountId,
+    contributor_key_label: original.contributor_key_label || null,
+    contributor_agent: original.contributor_agent || 'unknown',
+    related_skills: original.related_skills || [],
+    submission_channel: normalizeSubmissionChannel(original.submission_channel),
+    ...(carriedQA && { quality_self_assessment: carriedQA }),
+    // SPEC3 B3: lineage, forward direction.
+    sanitized_from: original.id,
+    status: 'pending_review',
+    ...(injectionScreen.flagged && { injection_flags: injectionScreen.matches }),
+    ...(contentSensitivity.sensitive && {
+      sensitivity_signals: contentSensitivity.sensitivity_signals,
+      sensitivity_source: contentSensitivity.sensitivity_source,
+      ...(Array.isArray(contentSensitivity.sensitivity_evidence) &&
+          contentSensitivity.sensitivity_evidence.length > 0 && {
+        sensitivity_evidence: contentSensitivity.sensitivity_evidence,
+      }),
+    }),
+    ...(processAdviceHold && { learning_type: 'process_advice' }),
+    ...(nearDup.verdict === 'flag' && {
+      possible_duplicate_of: nearDup.match.id,
+      possible_duplicate_similarity: Number(nearDup.match.similarity.toFixed(3)),
+    }),
+    quality: { unlocks: 0, ratings: 0, avg_helpfulness: 0, helpfulness_scores: [], score: 0 },
+    earnings: { gross_usd: 0, contributor_share_usd: 0, platform_share_usd: 0 },
+    created_at: now,
+    updated_at: now,
+  };
+
+  // ── Phase 2 (Gate-A F2): mutate under the lock — SYNCHRONOUS ONLY ─────────
+  // No await may sit between acquire and release (test-pinned): the screens
+  // above ran on a snapshot, so the mutable guards are re-validated here
+  // before the mutation pair lands in ONE write. Depth needs no re-check —
+  // it derives from sanitized_from links, which are immutable once written;
+  // a concurrent sanitize of THIS item is caught by the sanitized_to check.
+  let originalDisposition;
+  let replacementId;
   const releaseLearningsLock = await acquireLearningsLock();
   try {
-    const original = learnings.find((l) => l && l.id === id);
-    if (!original) return c.json({ error: 'Learning not found', id }, 404);
-    // Ownership BEFORE status (M-6): a non-owned id never leaks state.
-    if (original.contributor_account_id !== accountId) {
-      return c.json({ error: 'Not authorized to sanitize this learning', id }, 403);
-    }
-    if (original.status !== 'pending_review' && original.status !== 'rejected') {
-      return c.json({ error: `Only pending or rejected learnings can be sanitized (status: ${original.status})`, id }, 409);
-    }
-    if (original.sanitized_to) {
+    const current = learnings.find((l) => l && l.id === id);
+    if (!current || current.contributor_account_id !== accountId ||
+        (current.status !== 'pending_review' && current.status !== 'rejected') ||
+        current.sanitized_to ||
+        (current.moderation_action && current.moderation_action.action === 'rejected')) {
       return c.json({
-        error: 'This learning was already sanitized', code: 'ALREADY_SANITIZED',
-        id, sanitized_to: original.sanitized_to,
+        error: 'The learning changed while screening (approved, sanitized, or moderated concurrently). Re-read it and retry.',
+        code: 'SANITIZE_CONFLICT', id,
       }, 409);
     }
-    // Depth guard (3 strikes): an item whose chain already has 2 sanitize hops
-    // wants a human rewrite or a rejection, not a third mechanical pass.
-    {
-      let hops = 0;
-      let cur = original;
-      while (cur && cur.sanitized_from && hops < 3) {
-        hops += 1;
-        cur = learnings.find((l) => l && l.id === cur.sanitized_from);
-      }
-      if (hops >= 2) {
-        return c.json({
-          error: 'Sanitize chain limit reached (2 prior sanitizations). Rewrite the content as a fresh submission or reject it.',
-          code: 'SANITIZE_DEPTH_EXCEEDED', id,
-        }, 409);
-      }
-    }
-    // CI-5: a retired-label item cannot re-enter the catalog via sanitize.
-    if (RETIRED_LEARNING_CATEGORIES.includes(original.category)) {
-      return c.json({
-        error: `Category '${original.category}' is retired — Auxilo publishes technical learnings only. Reject this item; resubmit the content fresh under one of: ${TECH_LEARNING_CATEGORIES.join(', ')}.`,
-        code: 'CATEGORY_OUT_OF_SCOPE', id,
-      }, 409);
-    }
-
-    // ── Compose the corrected candidate (identity + metadata inherited) ────
-    const title = newTitle !== undefined ? newTitle : original.title;
-    let content = newBody !== undefined ? newBody : original.body;
-    const tags = newTags !== undefined ? newTags : (original.tags || []);
-    const sanErrors = [];
-    if (!title || title.length < 10) sanErrors.push('Title must be at least 10 characters');
-    if (title && title.length > LEARN_TITLE_MAX) sanErrors.push(`Title exceeds ${LEARN_TITLE_MAX} characters`);
-    if (!content || content.length < 50) sanErrors.push('Body must be at least 50 characters');
-    if (content && content.length > 50000) sanErrors.push('Body exceeds 50KB limit');
-    if (!Array.isArray(tags) || tags.length === 0) {
-      sanErrors.push('At least one tag required');
-    } else {
-      if (tags.length > LEARN_TAGS_MAX) sanErrors.push(`Too many tags (max ${LEARN_TAGS_MAX})`);
-      if (!tags.every((t) => typeof t === 'string' && t.length >= 1 && t.length <= LEARN_TAG_LEN_MAX)) {
-        sanErrors.push(`Each tag must be a string of 1-${LEARN_TAG_LEN_MAX} characters`);
-      }
-    }
-    if (sanErrors.length > 0) return c.json({ error: 'Validation failed', errors: sanErrors }, 400);
-
-    // ── FULL screen pipeline (zero bypass — SPEC3 §5.3 hard rule) ──────────
-    // 1. LW-3(a) body sanitizer.
-    const sani = sanitizeLearningBody(content);
-    if (!sani.clean) return c.json({ error: 'Learning body rejected: ' + sani.reason }, 400);
-    content = sani.sanitized;
-
-    // 2. Exact-dup — PREDECESSOR EXCLUDED (it is being retired by this call).
-    const dedupSet = learnings.filter((l) => l && l.id !== original.id);
-    const normalizedBody = content.toLowerCase().replace(/\s+/g, ' ').trim();
-    const bodyHash = crypto.createHash('sha256').update(normalizedBody).digest('hex');
-    const normalizedTitle = title.toLowerCase().replace(/\s+/g, ' ').trim();
-    const dupOfOther = dedupSet.find((existing) => {
-      const existingHash = existing.body_hash ||
-        crypto.createHash('sha256').update(existing.body.toLowerCase().replace(/\s+/g, ' ').trim()).digest('hex');
-      if (existingHash === bodyHash) return true;
-      const existingTitleNorm = existing.title.toLowerCase().replace(/\s+/g, ' ').trim();
-      return existingTitleNorm === normalizedTitle && existing.category === original.category;
+    // Cheap sync dedup re-check: an exact duplicate could have landed while
+    // the LLM screen ran. Hash/title compares only — the near-dup screen's
+    // phase-1 snapshot verdict stands (same racing exposure /learn accepts).
+    const dupNow = learnings.find((l) => {
+      if (!l || l.id === current.id) return false;
+      const lHash = l.body_hash ||
+        crypto.createHash('sha256').update(l.body.toLowerCase().replace(/\s+/g, ' ').trim()).digest('hex');
+      if (lHash === bodyHash) return true;
+      return l.title.toLowerCase().replace(/\s+/g, ' ').trim() === normalizedTitle && l.category === current.category;
     });
-    if (dupOfOther) {
+    if (dupNow) {
       return c.json({
         error: 'Duplicate learning detected',
         message: 'The sanitized content matches a different existing learning. Reject the original instead, or rewrite further.',
       }, 409);
     }
 
-    // 3. Near-dup — same predecessor exclusion.
-    const nearDup = findNearDuplicate({ title, body: content, category: original.category }, dedupSet);
-    if (nearDup.verdict === 'reject') {
-      return c.json({
-        error: 'Near-duplicate learning detected',
-        message: 'The sanitized content is highly similar to a different catalog entry.',
-        existing_id: nearDup.match.id,
-        similarity: Number(nearDup.match.similarity.toFixed(3)),
-      }, 409);
-    }
-
-    // 4. Credentials/PII filter (fail CLOSED like /learn).
-    let scanResult;
-    try {
-      scanResult = scanLearning({ title, body: content, task_context: original.task_context, tags });
-    } catch (filterError) {
-      console.error('[SENSITIVITY-FILTER] Filter threw on sanitize — blocking:', filterError.message);
-      return c.json({ error: 'Sensitivity filter error — learning blocked for safety' }, 500);
-    }
-    if (!scanResult.clean) {
-      return c.json({
-        error: 'Sensitive data detected in learning',
-        message: 'The corrected content still contains credential/PII patterns. Redact the flagged values and retry.',
-        matches: scanResult.matches.map((m) => ({
-          field: m.field, pattern: m.pattern, matched: m.match,
-          suggestion: getRedactionHint(m.pattern), description: m.description,
-        })),
-      }, 422);
-    }
-
-    // 5. Injection screen (flag, don't block — fail-closed inside).
-    const injectionScreen = screenLearningSafe({ title, body: content, task_context: original.task_context });
-
-    // 6. Two-layer content sensitivity (fail CLOSED; evidence persisted — B2).
-    let contentSensitivity;
-    try {
-      contentSensitivity = await evaluateContentSensitivity(title, content, tags);
-    } catch (csErr) {
-      console.error('[CONTENT-SENSITIVITY] Classifier threw on sanitize — treating as sensitive:', csErr.message);
-      contentSensitivity = {
-        sensitive: true,
-        sensitivity_signals: ['classifier_error'],
-        sensitivity_source: 'regex',
-        llm_reason: null,
-        llm_confidence: null,
-        sensitivity_evidence: [{
-          signal: 'classifier_error', excerpt: null,
-          hint: 'The sensitivity classifier errored; held for safety (fail-closed).',
-        }],
-      };
-    }
-
-    // 7. System-fact screen (CI-7) + quality floor (AUD19-6) — carried score.
-    const carriedQA = original.quality_self_assessment;
-    const processAdviceHold = LEARNING_TYPE_SCREEN_ENABLED &&
-      LLM_SENSITIVITY_ENABLED &&
-      !contentSensitivity.sensitive &&
-      contentSensitivity.learning_type !== 'system_fact';
-    const reviewReasons = [];
-    if (FORCE_ALL_REVIEW) reviewReasons.push('forced_review');
-    if (injectionScreen.flagged) reviewReasons.push('injection');
-    if (nearDup.verdict !== 'clean') reviewReasons.push('near_duplicate');
-    if (contentSensitivity.sensitive) reviewReasons.push('content_sensitivity');
-    if (processAdviceHold) reviewReasons.push('process_advice_screen');
-    if (!carriedQA) reviewReasons.push('awaiting_quality');
-    if (carriedQA && !meetsQualityFloor(carriedQA)) reviewReasons.push('below_quality_floor');
-    // ALWAYS held: the operator authored the correction with eyes on — one
-    // explicit approve closes the loop; no publish path exists on this route.
-    reviewReasons.push('sanitized_resubmission');
-
-    // ── Pricing (auto; a builder override on the original carries over) ────
-    const syntheticForPricing = {
-      body: content, outcome: original.outcome, category: original.category,
-      tags, quality_self_assessment: carriedQA, quality: { score: 0 },
-      created_at: new Date().toISOString(),
-    };
-    const calculatedPrice = pricingEngine.calculateLearningPrice(syntheticForPricing, learnings);
-    const override = original.pricing && original.pricing.builder_override_price != null
-      ? original.pricing.builder_override_price
-      : null;
-    const now = new Date().toISOString();
-
-    const replacement = {
-      id: generateId(),
-      title,
-      snippet: content.substring(0, 120) + (content.length > 120 ? '...' : ''),
-      body: content,
-      body_hash: bodyHash,
-      category: original.category,
-      tags,
-      task_context: original.task_context,
-      outcome: original.outcome,
-      unlock_price: override != null ? override : calculatedPrice,
-      pricing: {
-        base_price: calculatedPrice,
-        current_price: override != null ? override : calculatedPrice,
-        builder_override_price: override,
-        complexity: pricingEngine.classifyComplexity(syntheticForPricing),
-        last_repriced_at: now,
-      },
-      demand: { search_impressions_7d: 0, search_impressions_30d: 0, unlocks_7d: 0, unlocks_30d: 0 },
-      contributor_wallet: original.contributor_wallet || null,
-      contributor_account_id: accountId,
-      contributor_key_label: original.contributor_key_label || null,
-      contributor_agent: original.contributor_agent || 'unknown',
-      related_skills: original.related_skills || [],
-      submission_channel: normalizeSubmissionChannel(original.submission_channel),
-      ...(carriedQA && { quality_self_assessment: carriedQA }),
-      // SPEC3 B3: lineage, forward direction.
-      sanitized_from: original.id,
-      status: 'pending_review',
-      ...(injectionScreen.flagged && { injection_flags: injectionScreen.matches }),
-      ...(contentSensitivity.sensitive && {
-        sensitivity_signals: contentSensitivity.sensitivity_signals,
-        sensitivity_source: contentSensitivity.sensitivity_source,
-        ...(Array.isArray(contentSensitivity.sensitivity_evidence) &&
-            contentSensitivity.sensitivity_evidence.length > 0 && {
-          sensitivity_evidence: contentSensitivity.sensitivity_evidence,
-        }),
-      }),
-      ...(processAdviceHold && { learning_type: 'process_advice' }),
-      ...(nearDup.verdict === 'flag' && {
-        possible_duplicate_of: nearDup.match.id,
-        possible_duplicate_similarity: Number(nearDup.match.similarity.toFixed(3)),
-      }),
-      quality: { unlocks: 0, ratings: 0, avg_helpfulness: 0, helpfulness_scores: [], score: 0 },
-      earnings: { gross_usd: 0, contributor_share_usd: 0, platform_share_usd: 0 },
-      created_at: now,
-      updated_at: now,
-    };
-
     // ── Retire the original + append the replacement, ONE write (atomic) ───
-    let originalDisposition;
-    if (original.status === 'pending_review') {
-      const rejected = applySelfDecision(learnings, accountId, original.id, 'reject', {
+    if (current.status === 'pending_review') {
+      const rejected = applySelfDecision(learnings, accountId, current.id, 'reject', {
         reason: 'sanitize-resubmit', now,
       });
       if (!rejected.ok) {
         // Cannot happen after the guards above; fail loud without mutating.
-        return c.json({ error: rejected.error, id: original.id }, rejected.status);
+        return c.json({ error: rejected.error, id: current.id }, rejected.status);
       }
       originalDisposition = 'rejected';
     } else {
       originalDisposition = 'already_rejected';
-      original.updated_at = now;
+      current.updated_at = now;
     }
     // Lineage, reverse direction.
-    original.sanitized_to = replacement.id;
+    current.sanitized_to = replacement.id;
     learnings.push(replacement);
+    replacementId = replacement.id;
     safeWrite(LEARNINGS_FILE, learnings);
-
-    console.log(`[SANITIZE] [AUDIT] sanitize_resubmit account=${accountId} original=${original.id} replacement=${replacement.id} reasons=${reviewReasons.join(',')}`);
-    notePendingReviewEntries(1, { source: '/account/pending/:id/sanitize', id: replacement.id, orphaned: false });
-
-    return c.json({
-      id: replacement.id,
-      sanitized_from: original.id,
-      original_disposition: originalDisposition,
-      status: 'pending_review',
-      review_reason: reviewReasons,
-      message: 'Sanitized replacement resubmitted through every screen and held for your explicit approval. The original stays private.',
-      how_to_review: 'Approve or reject it yourself: run `auxilo review` (CLI), open your dashboard review queue, or GET /account/pending with your API key.',
-    });
   } finally {
     releaseLearningsLock();
   }
+
+  console.log(`[SANITIZE] [AUDIT] sanitize_resubmit account=${accountId} original=${id} replacement=${replacementId} reasons=${reviewReasons.join(',')}`);
+  notePendingReviewEntries(1, { source: '/account/pending/:id/sanitize', id: replacementId, orphaned: false });
+
+  return c.json({
+    id: replacementId,
+    sanitized_from: id,
+    original_disposition: originalDisposition,
+    status: 'pending_review',
+    review_reason: reviewReasons,
+    message: 'Sanitized replacement resubmitted through every screen and held for your explicit approval. The original stays private.',
+    how_to_review: 'Approve or reject it yourself: run `auxilo review` (CLI), open your dashboard review queue, or GET /account/pending with your API key.',
+  });
 });
 
 // ─── S21-3: Content Reporting Endpoint ──────────────────────────────────────

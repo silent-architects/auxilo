@@ -4599,7 +4599,7 @@
         "/account/pending/{id}/sanitize": {
             "post": {
                 "summary": "Sanitize-and-resubmit your own pending/rejected learning (lineage, zero screen bypass)",
-                "description": "SPEC3-B3: the missing verb between republish-as-is (re-leak) and reject (value lost). The authenticated contributor supplies a corrected title/body/tags for ONE of THEIR OWN pending_review or rejected learnings; the server ATOMICALLY retires the original (status rejected, reason 'sanitize-resubmit', sanitized_to stamped) and resubmits the correction through the FULL /learn screen pipeline - body sanitizer, exact+near duplicate (the retiring predecessor excluded from the candidate set), credentials/PII filter, prompt-injection screen, two-layer content-sensitivity (evidence persisted), system-fact screen, quality floor. ZERO bypass. The replacement carries sanitized_from and is ALWAYS held (review_reason includes 'sanitized_resubmission') for the contributor's explicit approve - this route can never publish. Guards: ownership (403 before status), 409 ALREADY_SANITIZED, 409 SANITIZE_DEPTH_EXCEEDED (2 prior sanitize hops - rewrite fresh or reject), 409 CATEGORY_OUT_OF_SCOPE (retired label cannot re-enter). Contribute scope.",
+                "description": "SPEC3-B3: the missing verb between republish-as-is (re-leak) and reject (value lost). The authenticated contributor supplies a corrected title/body/tags for ONE of THEIR OWN pending_review or rejected learnings; the server ATOMICALLY retires the original (status rejected, reason 'sanitize-resubmit', sanitized_to stamped) and resubmits the correction through the FULL /learn screen pipeline - body sanitizer, exact+near duplicate (the retiring predecessor excluded from the candidate set), credentials/PII filter, prompt-injection screen, two-layer content-sensitivity (evidence persisted), system-fact screen, quality floor. ZERO bypass. The replacement carries sanitized_from and is ALWAYS held (review_reason includes 'sanitized_resubmission') for the contributor's explicit approve - this route can never publish. Guards: ownership (403 before status), 409 ALREADY_SANITIZED, 409 SANITIZE_DEPTH_EXCEEDED (2 prior sanitize hops - rewrite fresh or reject), 409 CATEGORY_OUT_OF_SCOPE (retired label cannot re-enter). Contribute scope. Gate-A hardening: 409 ADMIN_REJECTED_FINAL (an admin-rejected item cannot be resurrected via sanitize); screens run outside the store lock, with the mutable guards re-validated under it — a concurrent change returns 409 SANITIZE_CONFLICT with nothing mutated.",
                 "operationId": "sanitizeAccountPending",
                 "tags": [
                     "Account"
@@ -4739,7 +4739,7 @@
                         }
                     },
                     "409": {
-                        "description": "Wrong source status / ALREADY_SANITIZED / SANITIZE_DEPTH_EXCEEDED / CATEGORY_OUT_OF_SCOPE / duplicate of a different learning",
+                        "description": "Wrong source status / ALREADY_SANITIZED / SANITIZE_DEPTH_EXCEEDED / CATEGORY_OUT_OF_SCOPE / ADMIN_REJECTED_FINAL (admin moderation rejections are contributor-irreversible — sanitize serves self-review rejections only) / SANITIZE_CONFLICT (the item changed while screens ran; re-read and retry) / duplicate of a different learning",
                         "content": {
                             "application/json": {
                                 "schema": {
