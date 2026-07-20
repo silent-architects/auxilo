@@ -33,6 +33,11 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    # Generous headroom over the ~10-20s actual runtime — if the runner ever
+    # genuinely hangs (see the check-test-count.sh header for why that's not
+    # expected here), fail loudly on a timeout instead of stalling the job
+    # for hours on GitHub's default.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -45,8 +50,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run tests
-        run: npm test
+      # BLOCKING: runs the full node:test suite (test/*.test.js) and fails
+      # the build if the discovered/executed test total drifts from the
+      # pinned count — catches both silent under-counting (F7c: tests that
+      # register/run but never get reported) and an unpinned change in
+      # either direction. See scripts/check-test-count.sh for the full
+      # root-cause account and the one place to bump the pin.
+      - name: Run tests + enforce test-count drift guard
+        run: bash scripts/check-test-count.sh
 
   audit:
     name: Security Audit
