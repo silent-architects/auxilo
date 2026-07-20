@@ -34,6 +34,16 @@ reconciliation (main was rebuilt from the deployed Fly image). The BASE_URL /
 version-assertion fixes they needed are therefore moot; MCP regression coverage
 lives in `test/mcp-auth-fix.test.js` and the aud19 suites.
 
+## Live-coverage pointers (Wave 5C, 2026-07-19)
+
+Client installer/runner coverage that would once have landed here lives in
+`test/wave5c-client-closures.test.js` (CI-wired via `npm test`):
+consent-gate integration (cmdSetup subprocess, mutation-verified — PUNCH-LIST
+§18b N3), the adapter read-size cap (base-path `readSessionCapped`, 64MB
+default / `AUXILO_MAX_SESSION_BYTES` — N1), and the Google Drive/Docs ID
+client-scrub parity test (SKIPS LOUDLY until the Wave-5B sensitivity-filter
+pattern merges, then enforces automatically).
+
 ## Running (manual only)
 
 ```
