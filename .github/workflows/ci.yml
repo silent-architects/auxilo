@@ -45,8 +45,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # tests/test-mobile-nav-overlay.js Tier-2 (DR-1 regression, PUNCH-LIST
+      # §31) needs a real Chromium to drive -- installed here, not committed.
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium --with-deps
+
       - name: Run tests
         run: npm test
+        env:
+          # CI_REQUIRE_TIER2=1 makes tests/test-mobile-nav-overlay.js fail
+          # the build if playwright is unexpectedly unresolvable here,
+          # instead of silently downgrading to Tier-1-only coverage.
+          CI_REQUIRE_TIER2: '1'
 
   audit:
     name: Security Audit

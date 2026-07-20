@@ -1,13 +1,23 @@
 # tests/ — legacy A-series harnesses (pre-`node --test`)
 
-**Status: LEGACY.** Nothing in this directory is wired into CI or `npm test`
-(`npm test` runs `node --test test/*.test.js` — the singular `test/` directory).
-New tests go in `test/*.test.js`, never here.
+**Status: LEGACY, with one live exception.** `test-mobile-nav-overlay.js` is
+the DR-1 regression test (PUNCH-LIST §31) and IS wired into `npm test` — by
+explicit direct invocation (`node tests/test-mobile-nav-overlay.js`) appended
+after the `node --test test/*.test.js` run, never via a `tests/*.js` glob.
+Its Tier-1 (static CSS/DOM) checks always run; Tier-2 (Playwright-driven)
+runs whenever `playwright` is resolvable (a devDependency), which is every
+CI run (`.github/workflows/ci.yml` installs Chromium + sets
+`CI_REQUIRE_TIER2=1`, which fails the build if Tier-2 would silently skip)
+and optionally on a local machine that has installed the dep. Everything
+else in this directory follows the LEGACY rule below.
 
-These files are the original SPEC-A0…A4 verification harnesses (custom
-runTest/runAsyncTest pattern, direct `node tests/<file>` invocation). They are
-kept as historical verification records per the never-delete doc rule; several
-have drifted from the code they grep.
+**Everything else: nothing else in this directory is wired into CI or
+`npm test`.** New tests go in `test/*.test.js`, never here.
+
+These other files are the original SPEC-A0…A4 verification harnesses
+(custom runTest/runAsyncTest pattern, direct `node tests/<file>` invocation).
+They are kept as historical verification records per the never-delete doc
+rule; several have drifted from the code they grep.
 
 ## Inventory (verified 2026-07-19, LW-10 cleanup)
 
@@ -23,6 +33,7 @@ have drifted from the code they grep.
 | `test-a3-sec.js` | needs live server | Same class as a3-integration. |
 | `test-a4-unit.js` | stale | 25/26 pass; T-A4-INT-003 greps a log string the x402 fallback no longer emits. |
 | `test-sensitivity-filter.js` | passes | 2026-07-19: exit 0. Superseded by `test/sensitivity-filter.test.js` + `test/p2-1a-sensitivity-filter-v04.test.js` for CI purposes. |
+| `test-mobile-nav-overlay.js` | **CI-WIRED (live exception)** | DR-1 regression (PUNCH-LIST §31). Tier-1 always runs; Tier-2 runs when `playwright` resolves (devDependency, installed every CI run). See the exception note above -- not part of the LEGACY rule. |
 | `helpers/` | support | mock-chain.js / test-wallet.js used by the A-series harnesses only. |
 
 ## Historical note (stale PUNCH-LIST references)
@@ -44,11 +55,16 @@ default / `AUXILO_MAX_SESSION_BYTES` — N1), and the Google Drive/Docs ID
 client-scrub parity test (SKIPS LOUDLY until the Wave-5B sensitivity-filter
 pattern merges, then enforces automatically).
 
-## Running (manual only)
+## Running (manual only, except test-mobile-nav-overlay.js)
 
 ```
 node tests/<file>.js        # direct; each prints its own pass/fail summary
 ```
 
-Do NOT add these to `package.json` test globs: a0 hangs, and the two
-integration files require a live server.
+`test-mobile-nav-overlay.js` also runs automatically via `npm test` (see the
+exception note above); every other file in this directory is manual-only.
+
+Do NOT add the legacy A-series files to `package.json` test globs: a0 hangs,
+and the two integration files require a live server. `test-mobile-nav-
+overlay.js` is wired in by explicit direct invocation instead of a glob, so
+it doesn't carry that risk.

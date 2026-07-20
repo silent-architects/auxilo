@@ -25,7 +25,7 @@
   ],
   "scripts": {
     "start": "node mcp-server.js",
-    "test": "node --test --test-force-exit test/*.test.js"
+    "test": "node --test --test-force-exit test/*.test.js && node tests/test-mobile-nav-overlay.js"
   },
   "keywords": [
     "mcp",
@@ -57,6 +57,7 @@
     "viem": "^2.46.3"
   },
   "devDependencies": {
+    "playwright": "1.61.1",
     "proxyquire": "^2.1.3"
   }
 }
