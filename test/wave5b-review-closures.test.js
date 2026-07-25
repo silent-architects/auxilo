@@ -28,6 +28,7 @@ const REPO = path.join(__dirname, '..');
 const SERVER_SRC = fs.readFileSync(path.join(REPO, 'server.js'), 'utf8');
 const ACCOUNTS_SRC = fs.readFileSync(path.join(REPO, 'lib', 'accounts.js'), 'utf8');
 const MCP_SRC = fs.readFileSync(path.join(REPO, 'mcp-server.js'), 'utf8');
+const SELF_REVIEW_SRC = fs.readFileSync(path.join(REPO, 'lib', 'self-review.js'), 'utf8');
 
 const {
   classifySensitivity,
@@ -246,7 +247,9 @@ describe('B2: contributor projections carry evidence; triage rows carry why', ()
 });
 
 describe('B2: buyer projections NEVER carry evidence or lineage (count-pinned strips)', () => {
-  it('sensitivity_evidence stripped at exactly 4 buyer sites', () => {
+  it('sensitivity_evidence, including account_vocab, is stripped at exactly 4 buyer sites', () => {
+    assert.match(SELF_REVIEW_SRC, /row\.sensitivity_evidence = vocabEvidence/,
+      'account_vocab uses the contributor-only sensitivity_evidence field');
     const named = (SERVER_SRC.match(/sensitivity_evidence: _se\b/g) || []).length; // self-unlock + paid unlock
     const capped = (SERVER_SRC.match(/sensitivity_evidence: _sec\b/g) || []).length; // capped repeat
     const searchMap = (SERVER_SRC.match(/moderation, sensitivity_signals, sensitivity_source, sensitivity_evidence, learning_type/g) || []).length;

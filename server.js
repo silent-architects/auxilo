@@ -25,7 +25,11 @@ const {
   isLlmSensitivityEnabled,
 } = require('./lib/content-sensitivity-llm.js'); // LW-16 content-sensitivity gate (LLM semantic layer)
 const { findNearDuplicate } = require('./lib/similarity.js'); // LW-14
-const { listOwnPending, applySelfDecision, summarizeOwnPending, applyBulkDecisions, selectPendingIdsBySignal, BULK_MAX: SELF_REVIEW_BULK_MAX, meetsQualityFloor, QUALITY_FLOOR_TOTAL, QUALITY_FLOOR_DIMENSION, adoptWalletOrphans, LANES: SELF_REVIEW_LANES } = require('./lib/self-review.js'); // LW-15 + review-seamless + AUD19-3/-6 + SPEC3-B1 lanes + SPEC3-B2 by-signal
+const { listOwnPending, applySelfDecision, summarizeOwnPending, applyBulkDecisions, selectPendingIdsBySignal, BULK_MAX: SELF_REVIEW_BULK_MAX, meetsQualityFloor, QUALITY_FLOOR_TOTAL, QUALITY_FLOOR_DIMENSION, adoptWalletOrphans, LANES: SELF_REVIEW_LANES, parseCommonDevTerms: parseAccountVocabCommonTerms } = require('./lib/self-review.js'); // LW-15 + review-seamless + AUD19-3/-6 + SPEC3-B1 lanes + SPEC3-B2 by-signal + SPEC3-E1 review-time vocabulary
+const ACCOUNT_VOCAB_CONFIG = require('./config/account-vocab.json');
+const ACCOUNT_VOCAB_COMMON_DEV_TERMS = parseAccountVocabCommonTerms(
+  fs.readFileSync(path.join(__dirname, 'data', 'common-dev-terms.txt'), 'utf8')
+);
 // SPEC3 B1/C1: extraction channel-hold + clean-lane standing consent (FLAG-DARK:
 // EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED, default OFF). The channel marker is a
 // BRAKE, never a gas pedal — see lib/clean-lane.js header for the trust analysis.
@@ -9864,8 +9868,8 @@ app.get('/account/pending/summary', async (c) => {
   }
   if (q.has('flag')) {
     const flag = q.get('flag');
-    if (!['injection', 'content_sensitivity', 'near_duplicate', 'process_advice'].includes(flag)) {
-      return c.json({ error: 'flag must be one of: injection, content_sensitivity, near_duplicate, process_advice' }, 400);
+    if (!['injection', 'content_sensitivity', 'near_duplicate', 'process_advice', 'account_vocab'].includes(flag)) {
+      return c.json({ error: 'flag must be one of: injection, content_sensitivity, near_duplicate, process_advice, account_vocab' }, 400);
     }
     opts.flag = flag;
   }
@@ -9885,6 +9889,12 @@ app.get('/account/pending/summary', async (c) => {
     opts.offset = offset;
   }
   if (q.get('full') === '1' || q.get('full') === 'true') opts.full = true;
+  // SPEC3-E1: full-corpus, read-only recount at review time. The pure detector
+  // receives both corpus and static terms as arguments; nothing is persisted.
+  opts.accountVocab = {
+    config: ACCOUNT_VOCAB_CONFIG,
+    commonDevTerms: ACCOUNT_VOCAB_COMMON_DEV_TERMS,
+  };
 
   const summary = summarizeOwnPending(learnings, accountId, opts);
   return c.json({ account_id: accountId, ...summary });

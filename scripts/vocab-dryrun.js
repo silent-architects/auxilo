@@ -19,18 +19,23 @@
  */
 
 const fs = require('node:fs');
-const path = require('node:path');
 const {
-  classifySensitivity,
-  TECH_ALLOWLIST,
-  COMMON_CAPS,
-} = require(path.join(__dirname, '..', 'lib', 'content-sensitivity.js'));
+  DEFAULT_CONFIG,
+  SHAPE_CLASSES,
+  SHAPE_LABELS,
+  ACRONYM_ALLOWLIST,
+  parseCommonDevTerms,
+  extractUnknownProperTerms,
+  extractCandidateTerms,
+  isApproved,
+  buildAccountVocabulary,
+} = require('../lib/account-vocab.js');
 const {
   screenFlags,
-} = require(path.join(__dirname, '..', 'lib', 'self-review.js'));
+} = require('../lib/self-review.js');
 
-const DEFAULT_RECURRENCE_MIN = 2;
-const DEFAULT_PUBLIC_DF = 3;
+const DEFAULT_RECURRENCE_MIN = DEFAULT_CONFIG.VOCAB_RECURRENCE_MIN;
+const DEFAULT_PUBLIC_DF = DEFAULT_CONFIG.VOCAB_PUBLIC_DF;
 const HOLD_RATE_MAX = 0.10;
 const FIXTURE_RECALL_MIN = 7;
 const RUN3_FIXTURES = Object.freeze({
@@ -50,38 +55,13 @@ const RUN3_FIXTURES = Object.freeze({
     'lrn_63248f8e-edf5-4569-a153-e1f05b59a6b1',
   ]),
 });
-const SHAPE_CLASSES = Object.freeze(['S1', 'S2', 'S3', 'S4', 'S5', 'S6']);
-const SHAPE_LABELS = Object.freeze({
-  S1: 'kebab-case',
-  S2: 'snake_case',
-  S3: 'camel/Pascal',
-  S4: 'ALL-CAPS',
-  S5: 'filename',
-  S6: 'title-case proper noun',
-});
-const ACRONYM_ALLOWLIST = new Set([
-  'HTTP', 'HTTPS', 'JSON', 'API', 'URL', 'URI', 'CI', 'CLI', 'SDK', 'PDF',
-  'HTML', 'CSS', 'SQL', 'AWS', 'GCP', 'DNS', 'TLS', 'SSL', 'SSH', 'JWT',
-  'UUID', 'XML', 'YAML', 'CSV', 'TSV', 'TCP', 'UDP', 'REST', 'RPC', 'GRPC',
-  'CPU', 'GPU', 'RAM', 'DOM', 'UI', 'UX', 'LLM', 'AI', 'OS', 'IP', 'IO',
-  'UTF', 'RGB', 'SVG', 'PNG', 'JPG', 'JPEG', 'GIF', 'NPM', 'YARN', 'PNPM',
-  'PR',
-]);
-const COMMON_DEV_TERMS_PATH = path.join(__dirname, '..', 'data', 'common-dev-terms.txt');
+const COMMON_DEV_TERMS_PATH = require('node:path').join(__dirname, '..', 'data', 'common-dev-terms.txt');
 
 function loadCommonDevTerms(file = COMMON_DEV_TERMS_PATH) {
-  return new Set(fs.readFileSync(file, 'utf8')
-    .split(/\r?\n/)
-    .map((line) => line.trim().toLowerCase())
-    .filter((line) => line && !line.startsWith('#')));
+  return parseCommonDevTerms(fs.readFileSync(file, 'utf8'));
 }
 
 const COMMON_DEV_TERMS = loadCommonDevTerms();
-const STATIC_EXCLUSION_TERMS = new Set([
-  ...[...TECH_ALLOWLIST].map((term) => String(term).toLowerCase()),
-  ...[...COMMON_CAPS].map((term) => String(term).toLowerCase()),
-  ...COMMON_DEV_TERMS,
-]);
 
 /**
  * Extract the first complete JSON value from a string. Besides plain JSON,
@@ -161,97 +141,6 @@ function mergeCorpora(primary, ...archives) {
   return [...byId.values()];
 }
 
-function replaceToken(value, token) {
-  if (typeof value !== 'string' || !value) return value;
-  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return value.replace(new RegExp(`\\b${escaped}\\b`, 'g'), token.toLowerCase());
-}
-
-/**
- * Enumerate the existing unknown-proper-noun evidence for REV 2.1 class S6.
- * Masking each exposed token lets the classifier reveal the next token without
- * duplicating its title-case tokenizer.
- */
-function extractUnknownProperTerms(learning) {
-  const working = {
-    title: typeof learning.title === 'string' ? learning.title : '',
-    body: typeof learning.body === 'string' ? learning.body : '',
-    tags: Array.isArray(learning.tags) ? learning.tags.map(String) : [],
-  };
-  const terms = new Map();
-
-  for (let guard = 0; guard < 200; guard++) {
-    const result = classifySensitivity(working.title, working.body, working.tags);
-    const evidence = Array.isArray(result.evidence)
-      ? result.evidence.find((row) => row && row.signal === 'unknown_proper_noun')
-      : null;
-    const token = evidence && typeof evidence.excerpt === 'string'
-      ? evidence.excerpt.trim()
-      : '';
-    if (!token) break;
-
-    const key = token.toLowerCase();
-    if (terms.has(key)) break;
-    terms.set(key, token);
-    working.title = replaceToken(working.title, token);
-    working.body = replaceToken(working.body, token);
-    working.tags = working.tags.map((tag) => replaceToken(tag, token));
-  }
-
-  return [...terms.entries()].map(([key, display]) => ({ key, display }));
-}
-
-function learningText(learning) {
-  return [
-    typeof learning.title === 'string' ? learning.title : '',
-    typeof learning.body === 'string' ? learning.body : '',
-    Array.isArray(learning.tags) ? learning.tags.join(' ') : '',
-  ].join('\n');
-}
-
-function addCandidate(candidates, display, shape) {
-  const normalizedDisplay = String(display || '').trim();
-  if (!normalizedDisplay) return;
-  const key = normalizedDisplay.toLowerCase();
-  if (!candidates.has(key)) {
-    candidates.set(key, { key, display: normalizedDisplay, classes: new Set() });
-  }
-  candidates.get(key).classes.add(shape);
-}
-
-/**
- * REV 2.1 zero-inference candidate extraction.
- *
- * A surface form may belong to more than one class. That overlap is preserved
- * so the report can attribute recall and hold-rate contribution to every class.
- */
-function extractCandidateTerms(learning) {
-  const text = learningText(learning);
-  const candidates = new Map();
-  const collect = (regex, shape, predicate = () => true) => {
-    for (const match of text.matchAll(regex)) {
-      if (predicate(match[0])) addCandidate(candidates, match[0], shape);
-    }
-  };
-
-  collect(/(?<![A-Za-z0-9_])[a-z0-9]+(?:-[a-z0-9]+)+(?![A-Za-z0-9_])/g, 'S1');
-  collect(/(?<![A-Za-z0-9])[a-z0-9]+(?:_[a-z0-9]+)+(?![A-Za-z0-9])/g, 'S2');
-  collect(/\b[A-Za-z][A-Za-z0-9]*[a-z][A-Z][A-Za-z0-9]*\b/g, 'S3');
-  collect(/\b[A-Z][A-Z0-9]{1,5}\b/g, 'S4', (token) => !ACRONYM_ALLOWLIST.has(token));
-  collect(/(?<![\w-])[\w-]+\.(?:py|js|sh|ts|mjs|cjs|json|yaml|yml)\b/gi, 'S5');
-  for (const term of extractUnknownProperTerms(learning)) {
-    addCandidate(candidates, term.display, 'S6');
-  }
-
-  return [...candidates.values()]
-    .map((term) => ({ ...term, classes: [...term.classes].sort() }))
-    .sort((a, b) => a.key.localeCompare(b.key));
-}
-
-function isApproved(learning) {
-  return !learning.status || learning.status === 'approved';
-}
-
 function rate(numerator, denominator) {
   return denominator > 0 ? numerator / denominator : 0;
 }
@@ -276,119 +165,46 @@ function analyzeCorpus(corpus, options = {}) {
   if (publicDf < 1) throw new Error('publicDf must be at least 1');
 
   const rows = mergeCorpora(Array.isArray(corpus) ? corpus : []);
-  const accountLearningCounts = new Map();
-  const itemCandidates = new Map();
-  const termLearningIdsByAccount = new Map();
-  const displayByAccountTerm = new Map();
-  const classesByAccountTerm = new Map();
-  const approvedLearningIdsByTerm = new Map();
-  const approvedAccountsByTerm = new Map();
-  let rowsWithoutAccount = 0;
-
-  for (const learning of rows) {
-    const accountId = learning && typeof learning.contributor_account_id === 'string'
-      ? learning.contributor_account_id
-      : '';
-    const candidates = extractCandidateTerms(learning || {});
-    if (learning && learning.id) itemCandidates.set(learning.id, candidates);
-
-    if (isApproved(learning || {})) {
-      for (const term of candidates) {
-        if (!approvedLearningIdsByTerm.has(term.key)) {
-          approvedLearningIdsByTerm.set(term.key, new Set());
-          approvedAccountsByTerm.set(term.key, new Set());
-        }
-        if (learning.id) approvedLearningIdsByTerm.get(term.key).add(learning.id);
-        approvedAccountsByTerm.get(term.key).add(accountId);
-      }
-    }
-
-    if (!accountId) {
-      rowsWithoutAccount += 1;
-      continue;
-    }
-    accountLearningCounts.set(accountId, (accountLearningCounts.get(accountId) || 0) + 1);
-    if (!termLearningIdsByAccount.has(accountId)) termLearningIdsByAccount.set(accountId, new Map());
-    const byTerm = termLearningIdsByAccount.get(accountId);
-    for (const term of candidates) {
-      if (!byTerm.has(term.key)) byTerm.set(term.key, new Set());
-      byTerm.get(term.key).add(learning.id);
-      const compoundKey = `${accountId}\0${term.key}`;
-      if (!displayByAccountTerm.has(compoundKey)) {
-        displayByAccountTerm.set(compoundKey, term.display);
-      }
-      if (!classesByAccountTerm.has(compoundKey)) {
-        classesByAccountTerm.set(compoundKey, new Set());
-      }
-      for (const shape of term.classes) classesByAccountTerm.get(compoundKey).add(shape);
-    }
+  const shapesEnabled = Array.isArray(options.shapesEnabled)
+    ? options.shapesEnabled
+    : DEFAULT_CONFIG.VOCAB_SHAPES_ENABLED;
+  const config = {
+    ...DEFAULT_CONFIG,
+    VOCAB_RECURRENCE_MIN: recurrenceMin,
+    VOCAB_PUBLIC_DF: publicDf,
+    VOCAB_SHAPES_ENABLED: shapesEnabled,
+  };
+  const vocabulary = buildAccountVocabulary(rows, {
+    config,
+    commonDevTerms: COMMON_DEV_TERMS,
+  });
+  const accountTerms = vocabulary.account_terms;
+  const excludedAccountTerms = vocabulary.excluded_account_terms;
+  const itemCandidates = new Map(rows
+    .filter((learning) => learning && learning.id)
+    .map((learning) => [learning.id, extractCandidateTerms(learning, config)]));
+  const recurringByAccount = new Map();
+  for (const accountId of new Set([
+    ...Object.keys(accountTerms),
+    ...Object.keys(excludedAccountTerms),
+  ])) {
+    recurringByAccount.set(accountId, new Map([
+      ...(accountTerms[accountId] || []).map((term) => [term.normalized, term]),
+      ...(excludedAccountTerms[accountId] || []).map((term) => [term.normalized, term]),
+    ]));
   }
-
-  function exclusionReasons(accountId, term) {
-    const reasons = [];
-    if (STATIC_EXCLUSION_TERMS.has(term)) reasons.push('static_common_dev');
-    const approvedAccounts = approvedAccountsByTerm.get(term) || new Set();
-    if ([...approvedAccounts].some((approvedAccount) => approvedAccount !== accountId)) {
-      reasons.push('approved_other_account');
-    }
-    const approvedDf = (approvedLearningIdsByTerm.get(term) || new Set()).size;
-    if (approvedDf >= publicDf) reasons.push(`approved_df_${approvedDf}`);
-    return reasons;
-  }
-
-  const accountTerms = {};
-  const excludedAccountTerms = {};
-  for (const accountId of [...termLearningIdsByAccount.keys()].sort()) {
-    const terms = [];
-    const excluded = [];
-    for (const [term, ids] of termLearningIdsByAccount.get(accountId)) {
-      if (ids.size < recurrenceMin) continue;
-      const compoundKey = `${accountId}\0${term}`;
-      const row = {
-        term: displayByAccountTerm.get(compoundKey) || term,
-        normalized: term,
-        classes: [...(classesByAccountTerm.get(compoundKey) || [])].sort(),
-        learning_count: ids.size,
-        learning_ids: [...ids].sort(),
-      };
-      const reasons = exclusionReasons(accountId, term);
-      if (reasons.length > 0) excluded.push({ ...row, exclusion_reasons: reasons });
-      else terms.push(row);
-    }
-    const sorter = (a, b) =>
-      b.learning_count - a.learning_count ||
-      a.normalized.localeCompare(b.normalized);
-    terms.sort(sorter);
-    excluded.sort(sorter);
-    accountTerms[accountId] = terms;
-    excludedAccountTerms[accountId] = excluded;
-  }
-
-  const flaggedItems = [];
-  for (const learning of rows) {
-    const accountId = learning && learning.contributor_account_id;
-    if (!accountId || !learning.id) continue;
-    const recurring = new Map((accountTerms[accountId] || [])
-      .map((row) => [row.normalized, row]));
-    const details = (itemCandidates.get(learning.id) || [])
-      .filter((term) => recurring.has(term.key))
-      .map((term) => ({
-        term: term.display,
-        normalized: term.key,
-        classes: recurring.get(term.key).classes,
-      }))
-      .sort((a, b) => a.normalized.localeCompare(b.normalized));
-    if (details.length > 0) {
-      flaggedItems.push({
-        id: learning.id,
-        account_id: accountId,
-        status: learning.status || '(live)',
+  const flaggedItems = Object.entries(vocabulary.matches_by_learning_id)
+    .map(([id, details]) => {
+      const learning = rows.find((row) => row && row.id === id);
+      return {
+        id,
+        account_id: learning && learning.contributor_account_id,
+        status: (learning && learning.status) || '(live)',
         terms: details.map((term) => term.term),
         term_details: details,
         classes: [...new Set(details.flatMap((term) => term.classes))].sort(),
-      });
-    }
-  }
+      };
+    });
   flaggedItems.sort((a, b) => a.id.localeCompare(b.id));
   const flaggedById = new Map(flaggedItems.map((row) => [row.id, row]));
 
@@ -411,15 +227,16 @@ function analyzeCorpus(corpus, options = {}) {
       missReason = matches.length > 1 ? `ambiguous prefix (${matches.length} matches)` : 'fixture not found';
     } else if (!flagged) {
       const candidates = itemCandidates.get(matched.id) || [];
-      const byTerm = termLearningIdsByAccount.get(matched.contributor_account_id) || new Map();
+      const byTerm = recurringByAccount.get(matched.contributor_account_id) || new Map();
       for (const term of candidates) {
-        const occurrenceCount = (byTerm.get(term.key) || new Set()).size;
+        const recurring = byTerm.get(term.key);
+        const occurrenceCount = recurring ? recurring.learning_count : 0;
         diagnostics.push({
           term: term.display,
           classes: term.classes,
           same_account_learning_count: occurrenceCount,
-          exclusion_reasons: occurrenceCount >= recurrenceMin
-            ? exclusionReasons(matched.contributor_account_id, term.key)
+          exclusion_reasons: recurring && Array.isArray(recurring.exclusion_reasons)
+            ? recurring.exclusion_reasons
             : [],
         });
       }
@@ -517,13 +334,18 @@ function analyzeCorpus(corpus, options = {}) {
   const recallRequired = Math.min(FIXTURE_RECALL_MIN, knownIdPrefixes.length);
   return {
     corpus_count: rows.length,
-    account_count: accountLearningCounts.size,
-    rows_without_account: rowsWithoutAccount,
+    vocabulary_corpus_count: vocabulary.corpus_count,
+    account_count: Object.keys(vocabulary.account_learning_counts).length,
+    rows_without_account: rows.filter((learning) =>
+      !learning || typeof learning.contributor_account_id !== 'string' ||
+      !learning.contributor_account_id).length,
     recurrence_min: recurrenceMin,
     public_df: publicDf,
+    shapes_enabled: vocabulary.config.shapesEnabled,
+    contrast_active: vocabulary.contrast_active,
+    contrast_eligible_accounts: vocabulary.contrast_eligible_accounts,
     common_dev_term_count: COMMON_DEV_TERMS.size,
-    account_learning_counts: Object.fromEntries(
-      [...accountLearningCounts.entries()].sort((a, b) => a[0].localeCompare(b[0]))),
+    account_learning_counts: vocabulary.account_learning_counts,
     account_terms: accountTerms,
     excluded_account_terms: excludedAccountTerms,
     flagged_items: flaggedItems,
@@ -554,8 +376,13 @@ function printReport(result, sources) {
   console.log('=================================');
   console.log(`Sources: ${sources.join(', ')}`);
   console.log(`Unique learnings: ${result.corpus_count}`);
+  console.log(`Vocabulary corpus (pending+approved+rejected): ${result.vocabulary_corpus_count}`);
   console.log(`Accounts: ${result.account_count}; rows without account: ${result.rows_without_account}`);
   console.log(`Recurrence minimum: ${result.recurrence_min}; approved public DF: ${result.public_df}`);
+  console.log(`Shapes enabled: ${result.shapes_enabled.join(',')}`);
+  console.log(
+    `Cross-account contrast: ${result.contrast_active ? 'ACTIVE' : 'DARK'} ` +
+    `(${result.contrast_eligible_accounts.length}/${DEFAULT_CONFIG.VOCAB_CONTRAST_MIN_ACCOUNTS} eligible accounts)`);
   console.log(`Static common-dev baseline: ${result.common_dev_term_count} terms`);
   console.log(`Surviving account-vocabulary terms: ${
     Object.values(result.account_terms).reduce((sum, terms) => sum + terms.length, 0)}`);
@@ -630,7 +457,7 @@ function printReport(result, sources) {
       `\nACCEPTANCE: hold-rate ${result.acceptance.hold_rate_pass ? 'PASS' : 'FAIL'} ` +
       `(required <=${pct(result.acceptance.hold_rate_max)}); recall not evaluated`);
   }
-  console.log('PHASE 1: BLOCKED pending human review of this report.');
+  console.log('READ-ONLY: report complete; no corpus data changed.');
 }
 
 function parseArgs(argv) {
@@ -726,6 +553,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  DEFAULT_CONFIG,
   DEFAULT_RECURRENCE_MIN,
   DEFAULT_PUBLIC_DF,
   HOLD_RATE_MAX,
@@ -735,7 +563,6 @@ module.exports = {
   SHAPE_LABELS,
   ACRONYM_ALLOWLIST,
   COMMON_DEV_TERMS,
-  STATIC_EXCLUSION_TERMS,
   extractFirstJsonValue,
   rowsFromValue,
   loadCorpusFile,

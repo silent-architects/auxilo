@@ -17,6 +17,7 @@ const { spawnSync } = require('node:child_process');
 
 const SCRIPT = path.join(__dirname, '..', 'scripts', 'vocab-dryrun.js');
 const {
+  DEFAULT_CONFIG,
   COMMON_DEV_TERMS,
   RUN3_FIXTURES,
   analyzeCorpus,
@@ -24,6 +25,11 @@ const {
   mergeCorpora,
   parseArgs,
 } = require(SCRIPT);
+
+const ALL_SHAPES_CONFIG = {
+  ...DEFAULT_CONFIG,
+  VOCAB_SHAPES_ENABLED: ['S1', 'S2', 'S3', 'S4', 'S5', 'S6'],
+};
 
 function learning(id, accountId, body, overrides = {}) {
   return {
@@ -43,7 +49,7 @@ describe('SPEC3-E1 Phase 0 REV 2.1 account-vocabulary analyzer', () => {
       'a1',
       'acc_a',
       'Use ops-consumer with private_queue, AgentWork, WPR, enqueue-agent-work.py, and the Vandelay adapter.',
-    ));
+    ), ALL_SHAPES_CONFIG);
     const byKey = new Map(terms.map((term) => [term.key, term.classes]));
 
     assert.deepEqual(byKey.get('ops-consumer'), ['S1']);
@@ -61,7 +67,11 @@ describe('SPEC3-E1 Phase 0 REV 2.1 account-vocabulary analyzer', () => {
       learning('a3', 'acc_a', 'Use isolated-widget only once.'),
     ];
 
-    const result = analyzeCorpus(rows, { recurrenceMin: 2, publicDf: 3 });
+    const result = analyzeCorpus(rows, {
+      recurrenceMin: 2,
+      publicDf: 3,
+      shapesEnabled: ALL_SHAPES_CONFIG.VOCAB_SHAPES_ENABLED,
+    });
 
     assert.deepEqual(result.flagged_items.map((row) => row.id), ['a1', 'a2']);
     assert.deepEqual(result.flagged_items[0].classes, ['S1', 'S2', 'S3', 'S4', 'S5', 'S6']);
@@ -154,7 +164,7 @@ describe('SPEC3-E1 Phase 0 REV 2.1 account-vocabulary analyzer', () => {
       row.exclusion_reasons.includes('approved_other_account')));
   });
 
-  it('counts same-account approvals toward the configurable approved public DF', () => {
+  it('excludes a same-account approved occurrence regardless of the public DF', () => {
     const rows = [
       learning('a1', 'acc_a', 'Use private-widget here.', { status: 'approved' }),
       learning('a2', 'acc_a', 'Retry private-widget here.', { status: 'approved' }),
@@ -162,12 +172,13 @@ describe('SPEC3-E1 Phase 0 REV 2.1 account-vocabulary analyzer', () => {
     ];
 
     const excluded = analyzeCorpus(rows, { recurrenceMin: 2, publicDf: 3 });
-    const survives = analyzeCorpus(rows, { recurrenceMin: 2, publicDf: 4 });
+    const stillExcluded = analyzeCorpus(rows, { recurrenceMin: 2, publicDf: 4 });
 
     assert.equal(excluded.flagged_items.length, 0);
-    assert.equal(survives.flagged_items.length, 3);
+    assert.equal(stillExcluded.flagged_items.length, 0);
     assert.ok(excluded.excluded_account_terms.acc_a.some((row) =>
       row.normalized === 'private-widget' &&
+      row.exclusion_reasons.includes('approved_same_account') &&
       row.exclusion_reasons.includes('approved_df_3')));
   });
 
@@ -188,6 +199,7 @@ describe('SPEC3-E1 Phase 0 REV 2.1 account-vocabulary analyzer', () => {
     const result = analyzeCorpus(rows, {
       recurrenceMin: 2,
       publicDf: 3,
+      shapesEnabled: ALL_SHAPES_CONFIG.VOCAB_SHAPES_ENABLED,
       knownIdPrefixes: shapes.map(([id]) => `${id}-1`),
     });
 
@@ -212,15 +224,9 @@ describe('SPEC3-E1 Phase 0 REV 2.1 account-vocabulary analyzer', () => {
       knownIdPrefixes: ['known-1', 'known-2'],
     });
 
-    assert.deepEqual(result.recall, { expected: 2, found: 2, flagged: 2, rate: 1 });
-    assert.deepEqual(result.hold_rate, { eligible: 20, flagged: 2, rate: 0.1 });
-    assert.deepEqual(result.top_false_positive_terms[0], {
-      term: 'private-widget',
-      normalized: 'private-widget',
-      classes: ['S1'],
-      clean_learning_count: 2,
-      learning_ids: ['known-1', 'known-2'],
-    });
+    assert.deepEqual(result.recall, { expected: 2, found: 2, flagged: 0, rate: 0 });
+    assert.deepEqual(result.hold_rate, { eligible: 20, flagged: 0, rate: 0 });
+    assert.deepEqual(result.top_false_positive_terms, []);
   });
 
   it('explains a fixture miss caused by recurrence and baseline exclusion', () => {

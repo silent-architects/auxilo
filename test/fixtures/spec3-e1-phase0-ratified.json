@@ -1,0 +1,74 @@
+[
+  {
+    "id": "lrn_55390ea4-63de-41ed-bf61-3543dddac58d",
+    "contributor_account_id": "acc_647b846b",
+    "title": "GitHub CI class mismatch: workflow failures vs PR merges require different handling",
+    "body": "When processing GitHub CI notifications, a class like 'github-ci-pr' may receive workflow run failures on main branch that have no associated PR. The act wrapper designed for PR merges cannot handle bare workflow failures. Detection: investigate wrapper returns run data with no PR number. Resolution: delegate to a general agent queue rather than attempting the PR-specific action. This prevents failed automation attempts on notifications that match the class pattern but not the action scope.",
+    "tags": ["github", "ci", "workflow", "automation", "classification", "ops-queue"],
+    "status": "pending_review"
+  },
+  {
+    "id": "lrn_79420271-6e3c-4da9-85b0-c19aa7888b4d",
+    "contributor_account_id": "acc_647b846b",
+    "title": "AgentWork state-based deferral pattern for async task queues",
+    "body": "When an ops-consumer job routes items to an AgentWork queue via an enqueue wrapper, the wrapper returns both 'status' (adopted/rejected) and 'state' (prepared/committed/unknown). Items with state=committed can be immediately marked delegated and relabeled. Items with state=prepared or unknown must be left pending for recheck on next run, because the downstream work hasn't durably landed yet. This prevents premature status updates that would orphan in-flight tasks.",
+    "tags": ["queue-processing", "state-machine", "async-handoff", "idempotency"],
+    "status": "pending_review"
+  },
+  {
+    "id": "lrn_3bd59e6a-422f-4561-addc-e12a7dd32d0e",
+    "contributor_account_id": "acc_647b846b",
+    "title": "Apps Script trigger 'could not locate target object' errors are often transient Google API hiccups",
+    "body": "When an Apps Script time-based trigger fails with 'Could not locate target object while calling method getName on object with id NNN', this typically indicates a transient Google Docs/Sheets API failure where a referenced document momentarily couldn't be resolved. These are usually self-healing and don't indicate a code bug. The appropriate response is to delegate to reliability engineering for pattern analysis rather than immediate code changes. Check health-map heartbeats — if the underlying service shows green, the trigger failure was likely ephemeral.",
+    "tags": ["apps-script", "google-workspace", "trigger-failures", "transient-errors", "reliability"],
+    "status": "pending_review"
+  },
+  {
+    "id": "lrn_ed03b3f6-7380-4506-88a5-15422639d41a",
+    "contributor_account_id": "acc_647b846b",
+    "title": "Ops queue processing requires thread-level verification before acting on stale items",
+    "body": "When processing automated ops queues (email triage, notification handling), always verify the item is still 'live' before acting: (1) check the original label/tag still exists on the thread — items may have been manually handled, (2) verify the 'latestMessageId' from the queue matches the thread's actual newest message — prevents acting on outdated state if new messages arrived, (3) deduplicate against a state file using composite keys (threadId+messageId) to prevent reprocessing. This three-gate verification prevents both duplicate work and acting on stale/resolved items.",
+    "tags": ["queue-processing", "deduplication", "state-management", "idempotency", "email-automation"],
+    "status": "pending_review"
+  },
+  {
+    "id": "lrn_63248f8e-edf5-4569-a153-e1f05b59a6b1",
+    "contributor_account_id": "acc_647b846b",
+    "title": "Validate stale queue entries by re-querying label membership before acting",
+    "body": "Queue rows can become stale if the underlying item (e.g., Gmail thread) was manually processed or relabeled between queue population and consumption. Before acting on a queue entry, perform a positive verification (e.g., search for threads with the expected label and confirm the queued ID is still present). This prevents wasted work and avoids errors from operating on items that no longer exist in the expected state.",
+    "tags": ["queue-validation", "stale-data", "gmail-api", "label-verification", "defensive-programming"],
+    "status": "pending_review"
+  },
+  {
+    "id": "lrn_88a9757a-c09a-42ac-9d95-5975a05bf804",
+    "contributor_account_id": "acc_647b846b",
+    "title": "Apps Script quota errors require AgentWork delegation, not direct action",
+    "body": "When processing ops-consumer jobs for TP-appsscript-trigger class items (Apps Script trigger failure emails like 'Service invoked too many times for one day: premium gmail'), the ops-consumer cannot directly resolve the issue. Per the ops-consumer skill specification, TP-appsscript-trigger has no 'act' wrapper defined — only investigation. The correct flow is to investigate using the health-map wrapper, then delegate to apps-script-reliability-engineer via the AgentWork queue. Do not attempt direct remediation; these require human review of quota limits or trigger frequency adjustments.",
+    "tags": ["apps-script", "gmail-quota", "ops-consumer", "trigger-failures", "delegation-pattern"],
+    "status": "pending_review"
+  },
+  {
+    "id": "lrn_3cf14441-5ab6-4333-b972-e249f514f054",
+    "contributor_account_id": "acc_647b846b",
+    "title": "AgentWork state=prepared requires leaving source Queue status empty",
+    "body": "When ops-consumer delegates an item to the AgentWork queue and receives state=prepared/status=appended, do NOT mark the source Queue row as complete, do NOT relabel the Gmail thread, and do NOT record outcome in state.json yet. The item remains 'in-flight' until a future run detects consumer_state=committed. This prevents premature archival of items that haven't actually been picked up by the downstream agent. Only after commit confirmation should the Gmail label be changed and Queue status updated.",
+    "tags": ["ops-consumer", "agentwork", "state-machine", "idempotency", "queue-coordination"],
+    "status": "pending_review"
+  },
+  {
+    "id": "lrn_c50066f6-787a-4c66-994c-3c7ac5c54bac",
+    "contributor_account_id": "acc_647b846b",
+    "title": "AgentWork WPR commit gate: don't mark Queue rows terminal until prepared→committed",
+    "body": "When an ops-consumer job routes an item to AgentWork via enqueue-agent-work.py, the script returns status=appended with state=prepared. The WPR (Work-Pending-Register) pattern requires waiting for a separate commit phase before the Queue row can be marked delegated. If you mark the Queue status terminal immediately after appended, you lose the ability to retry if the commit fails. Leave Queue status empty, leave Gmail unchanged, and do NOT write to state.json until the WPR row reaches a committed state. A later run of the consumer rechecks the same immutable ingress key and detects when commit has occurred.",
+    "tags": ["state-machine", "idempotency", "queue-processing", "two-phase-commit", "ops-automation"],
+    "status": "pending_review"
+  },
+  {
+    "id": "lrn_e2680863-9b3c-449e-9ab2-98e8564a7a6f",
+    "contributor_account_id": "acc_647b846b",
+    "title": "Headless agent graceful degradation: log and proceed when investigation tools are path-denied",
+    "body": "In a headless ops-consumer job running without --dangerously-skip-permissions, reads outside the exact-command allowlist are denied at runtime. When an investigation source (e.g. health-map file) is inaccessible, the job should: (1) log one line noting the read failure, (2) fall back to whatever diagnosis can be extracted from the original artifact (email body, etc.), (3) prefix the diagnosis with an [UN-ENRICHED] marker to signal downstream that full investigation was unavailable. This prevents the job from failing entirely while maintaining transparency about reduced diagnostic fidelity.",
+    "tags": ["graceful-degradation", "permission-boundary", "headless-automation", "error-handling", "diagnosis-fallback"],
+    "status": "pending_review"
+  }
+]
