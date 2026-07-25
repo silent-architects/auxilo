@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Phase 0 tests for SPEC3-E1's read-only REV 2 vocabulary dry run.
+ * Phase 0 tests for SPEC3-E1's read-only REV 2.1 vocabulary dry run.
  *
  * The production signal does not land in this phase. These tests pin the
  * offline analyzer that Tyler must accept before runtime changes.
@@ -18,6 +18,7 @@ const { spawnSync } = require('node:child_process');
 const SCRIPT = path.join(__dirname, '..', 'scripts', 'vocab-dryrun.js');
 const {
   COMMON_DEV_TERMS,
+  RUN3_FIXTURES,
   analyzeCorpus,
   extractCandidateTerms,
   mergeCorpora,
@@ -36,7 +37,7 @@ function learning(id, accountId, body, overrides = {}) {
   };
 }
 
-describe('SPEC3-E1 Phase 0 REV 2 account-vocabulary analyzer', () => {
+describe('SPEC3-E1 Phase 0 REV 2.1 account-vocabulary analyzer', () => {
   it('extracts S1–S6 candidates and preserves overlapping shape attribution', () => {
     const terms = extractCandidateTerms(learning(
       'a1',
@@ -69,8 +70,8 @@ describe('SPEC3-E1 Phase 0 REV 2 account-vocabulary analyzer', () => {
 
   it('excludes the S4 acronym allowlist and existing TECH_ALLOWLIST terms', () => {
     const rows = [
-      learning('a1', 'acc_a', 'HTTP JSON API AWS and Anthropic are standard.'),
-      learning('a2', 'acc_a', 'HTTP JSON API AWS and Anthropic recur.'),
+      learning('a1', 'acc_a', 'HTTP JSON API AWS PR and Anthropic are standard.'),
+      learning('a2', 'acc_a', 'HTTP JSON API AWS PR and Anthropic recur.'),
     ];
 
     const result = analyzeCorpus(rows, { recurrenceMin: 2, publicDf: 3 });
@@ -95,6 +96,34 @@ describe('SPEC3-E1 Phase 0 REV 2 account-vocabulary analyzer', () => {
     assert.ok(COMMON_DEV_TERMS.has('webpack-cli'));
     assert.ok(COMMON_DEV_TERMS.has('github_token'));
     assert.ok(COMMON_DEV_TERMS.has('docker-compose'));
+    assert.ok(COMMON_DEV_TERMS.has('graceful-degradation'));
+    assert.ok(COMMON_DEV_TERMS.has('dangerously-skip-permissions'));
+  });
+
+  it('applies REV 2.1 must-flag, known-miss, and reclassified-out ground truth separately', () => {
+    assert.equal(RUN3_FIXTURES.must_flag.length, 7);
+    assert.equal(RUN3_FIXTURES.known_miss.length, 1);
+    assert.equal(RUN3_FIXTURES.reclassified_out.length, 1);
+
+    const rows = [
+      learning('must-flag-1', 'acc_a', 'Use AgentWork here.'),
+      learning('must-flag-2', 'acc_a', 'Retry AgentWork here.'),
+      learning('known-miss', 'acc_a', 'A github-ci-pr notification may have no PR.'),
+      learning('pr-helper', 'acc_a', 'Another PR is public vocabulary.'),
+      learning('reclassified-out', 'acc_a', 'Validate the public gmail-api label.'),
+    ];
+    const result = analyzeCorpus(rows, {
+      recurrenceMin: 2,
+      publicDf: 3,
+      knownIdPrefixes: ['must-flag-1'],
+      knownMissIdPrefixes: ['known-miss'],
+      reclassifiedOutIdPrefixes: ['reclassified-out'],
+    });
+
+    assert.deepEqual(result.recall, { expected: 1, found: 1, flagged: 1, rate: 1 });
+    assert.equal(result.known_miss_items[0].flagged, false);
+    assert.equal(result.reclassified_out_items[0].flagged, false);
+    assert.equal(result.acceptance.recall_pass, true);
   });
 
   it('excludes recurring candidates found in the static common-dev baseline', () => {
@@ -240,15 +269,31 @@ describe('SPEC3-E1 Phase 0 REV 2 account-vocabulary analyzer', () => {
     const after = crypto.createHash('sha256').update(fs.readFileSync(snapshot)).digest('hex');
 
     assert.equal(run.status, 0, run.stderr);
-    assert.match(run.stdout, /VOCAB DRY RUN REV 2 \(read-only\)/);
+    assert.match(run.stdout, /VOCAB DRY RUN REV 2\.1 \(read-only\)/);
     assert.match(run.stdout, /approved public DF: 4/);
     assert.equal(after, before);
   });
 
-  it('parses both REV 2 thresholds and is deterministic for the same inputs', () => {
-    const args = parseArgs(['node', SCRIPT, 'snapshot.json', '--recurrence-min', '3', '--public-df', '5']);
+  it('parses both REV 2.1 thresholds and is deterministic for the same inputs', () => {
+    const args = parseArgs([
+      'node',
+      SCRIPT,
+      'snapshot.json',
+      '--recurrence-min',
+      '3',
+      '--public-df',
+      '5',
+      '--run3-fixtures',
+      '--known-miss-id',
+      'known-miss',
+      '--reclassified-out-id',
+      'generic',
+    ]);
     assert.equal(args.recurrenceMin, 3);
     assert.equal(args.publicDf, 5);
+    assert.equal(args.run3Fixtures, true);
+    assert.deepEqual(args.knownMissIds, ['known-miss']);
+    assert.deepEqual(args.reclassifiedOutIds, ['generic']);
 
     const rows = [
       learning('a1', 'acc_a', 'Use private-widget here.'),

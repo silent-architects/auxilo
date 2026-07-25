@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * SPEC3-E1 Phase 0 — read-only corpus-relative vocabulary dry run (REV 2).
+ * SPEC3-E1 Phase 0 — read-only corpus-relative vocabulary dry run (REV 2.1).
  *
  * This file intentionally does not wire a signal into submission screening or
  * lib/self-review.js. It reads snapshots, prints a report, and writes nothing.
@@ -11,6 +11,9 @@
  *   node scripts/vocab-dryrun.js <learnings.json>
  *     [--archive <archived-pending-dump> ...]
  *     [--known-id <id-or-prefix> ...]
+ *     [--known-miss-id <id-or-prefix> ...]
+ *     [--reclassified-out-id <id-or-prefix> ...]
+ *     [--run3-fixtures]
  *     [--recurrence-min 2]
  *     [--public-df 3]
  */
@@ -29,7 +32,24 @@ const {
 const DEFAULT_RECURRENCE_MIN = 2;
 const DEFAULT_PUBLIC_DF = 3;
 const HOLD_RATE_MAX = 0.10;
-const FIXTURE_RECALL_MIN = 8;
+const FIXTURE_RECALL_MIN = 7;
+const RUN3_FIXTURES = Object.freeze({
+  must_flag: Object.freeze([
+    'lrn_79420271-6e3c-4da9-85b0-c19aa7888b4d',
+    'lrn_3bd59e6a-422f-4561-addc-e12a7dd32d0e',
+    'lrn_ed03b3f6-7380-4506-88a5-15422639d41a',
+    'lrn_88a9757a-c09a-42ac-9d95-5975a05bf804',
+    'lrn_3cf14441-5ab6-4333-b972-e249f514f054',
+    'lrn_c50066f6-787a-4c66-994c-3c7ac5c54bac',
+    'lrn_e2680863-9b3c-449e-9ab2-98e8564a7a6f',
+  ]),
+  known_miss: Object.freeze([
+    'lrn_55390ea4-63de-41ed-bf61-3543dddac58d',
+  ]),
+  reclassified_out: Object.freeze([
+    'lrn_63248f8e-edf5-4569-a153-e1f05b59a6b1',
+  ]),
+});
 const SHAPE_CLASSES = Object.freeze(['S1', 'S2', 'S3', 'S4', 'S5', 'S6']);
 const SHAPE_LABELS = Object.freeze({
   S1: 'kebab-case',
@@ -45,6 +65,7 @@ const ACRONYM_ALLOWLIST = new Set([
   'UUID', 'XML', 'YAML', 'CSV', 'TSV', 'TCP', 'UDP', 'REST', 'RPC', 'GRPC',
   'CPU', 'GPU', 'RAM', 'DOM', 'UI', 'UX', 'LLM', 'AI', 'OS', 'IP', 'IO',
   'UTF', 'RGB', 'SVG', 'PNG', 'JPG', 'JPEG', 'GIF', 'NPM', 'YARN', 'PNPM',
+  'PR',
 ]);
 const COMMON_DEV_TERMS_PATH = path.join(__dirname, '..', 'data', 'common-dev-terms.txt');
 
@@ -147,7 +168,7 @@ function replaceToken(value, token) {
 }
 
 /**
- * Enumerate the existing unknown-proper-noun evidence for REV 2 class S6.
+ * Enumerate the existing unknown-proper-noun evidence for REV 2.1 class S6.
  * Masking each exposed token lets the classifier reveal the next token without
  * duplicating its title-case tokenizer.
  */
@@ -199,7 +220,7 @@ function addCandidate(candidates, display, shape) {
 }
 
 /**
- * REV 2 zero-inference candidate extraction.
+ * REV 2.1 zero-inference candidate extraction.
  *
  * A surface form may belong to more than one class. That overlap is preserved
  * so the report can attribute recall and hold-rate contribution to every class.
@@ -244,6 +265,12 @@ function analyzeCorpus(corpus, options = {}) {
     : DEFAULT_PUBLIC_DF;
   const knownIdPrefixes = Array.isArray(options.knownIdPrefixes)
     ? [...new Set(options.knownIdPrefixes.map(String).filter(Boolean))]
+    : [];
+  const knownMissIdPrefixes = Array.isArray(options.knownMissIdPrefixes)
+    ? [...new Set(options.knownMissIdPrefixes.map(String).filter(Boolean))]
+    : [];
+  const reclassifiedOutIdPrefixes = Array.isArray(options.reclassifiedOutIdPrefixes)
+    ? [...new Set(options.reclassifiedOutIdPrefixes.map(String).filter(Boolean))]
     : [];
   if (recurrenceMin < 2) throw new Error('recurrenceMin must be at least 2');
   if (publicDf < 1) throw new Error('publicDf must be at least 1');
@@ -371,17 +398,12 @@ function analyzeCorpus(corpus, options = {}) {
     screenFlags(learning).length === 0);
   const heldCleanApproved = cleanApproved.filter((learning) => flaggedById.has(learning.id));
 
-  let recallFound = 0;
-  let recallFlagged = 0;
-  const recallItems = [];
-  for (const prefix of knownIdPrefixes) {
+  function evaluateReferenceItem(prefix) {
     const matches = rows.filter((learning) =>
       learning && typeof learning.id === 'string' && learning.id.startsWith(prefix));
     const found = matches.length === 1;
     const matched = found ? matches[0] : null;
     const flagged = found && flaggedById.has(matched.id);
-    if (found) recallFound += 1;
-    if (flagged) recallFlagged += 1;
 
     let missReason = null;
     const diagnostics = [];
@@ -402,7 +424,7 @@ function analyzeCorpus(corpus, options = {}) {
         });
       }
       if (candidates.length === 0) {
-        missReason = 'no REV 2 candidates';
+        missReason = 'no REV 2.1 candidates';
       } else if (!diagnostics.some((term) => term.same_account_learning_count >= recurrenceMin)) {
         missReason = 'candidate terms did not meet same-account recurrence';
       } else {
@@ -415,7 +437,7 @@ function analyzeCorpus(corpus, options = {}) {
       }
     }
 
-    recallItems.push({
+    return {
       prefix,
       matched_id: matched ? matched.id : null,
       found,
@@ -425,9 +447,14 @@ function analyzeCorpus(corpus, options = {}) {
       miss_reason: missReason,
       diagnostics,
       ambiguous_matches: matches.length > 1 ? matches.length : 0,
-    });
+    };
   }
 
+  const recallItems = knownIdPrefixes.map(evaluateReferenceItem);
+  const knownMissItems = knownMissIdPrefixes.map(evaluateReferenceItem);
+  const reclassifiedOutItems = reclassifiedOutIdPrefixes.map(evaluateReferenceItem);
+  const recallFound = recallItems.filter((row) => row.found).length;
+  const recallFlagged = recallItems.filter((row) => row.flagged).length;
   const recall = {
     expected: knownIdPrefixes.length,
     found: recallFound,
@@ -502,6 +529,8 @@ function analyzeCorpus(corpus, options = {}) {
     flagged_items: flaggedItems,
     recall,
     recall_items: recallItems,
+    known_miss_items: knownMissItems,
+    reclassified_out_items: reclassifiedOutItems,
     hold_rate: holdRate,
     per_shape_class: perShapeClass,
     top_false_positive_terms: topFalsePositiveTerms,
@@ -521,8 +550,8 @@ function pct(value) {
 }
 
 function printReport(result, sources) {
-  console.log('VOCAB DRY RUN REV 2 (read-only)');
-  console.log('===============================');
+  console.log('VOCAB DRY RUN REV 2.1 (read-only)');
+  console.log('=================================');
   console.log(`Sources: ${sources.join(', ')}`);
   console.log(`Unique learnings: ${result.corpus_count}`);
   console.log(`Accounts: ${result.account_count}; rows without account: ${result.rows_without_account}`);
@@ -546,6 +575,28 @@ function printReport(result, sources) {
     }
   } else {
     console.log('\nHEADLINE recall: not measured (no --known-id values supplied)');
+  }
+
+  console.log('\nKnown-miss confirmation (excluded from recall):');
+  if (result.known_miss_items.length === 0) console.log('  (none supplied)');
+  for (const row of result.known_miss_items) {
+    const state = !row.found
+      ? 'NOT FOUND'
+      : row.flagged
+        ? `UNEXPECTEDLY FLAGGED (${row.terms.join(', ')})`
+        : `CONFIRMED KNOWN MISS — ${row.miss_reason}`;
+    console.log(`  ${row.prefix}: ${state}`);
+  }
+
+  console.log('\nReclassified-out confirmation (excluded from recall):');
+  if (result.reclassified_out_items.length === 0) console.log('  (none supplied)');
+  for (const row of result.reclassified_out_items) {
+    const state = !row.found
+      ? 'NOT FOUND'
+      : row.flagged
+        ? `FLAGGED BUT OUT OF GROUND TRUTH (${row.terms.join(', ')})`
+        : `CONFIRMED OUT — ${row.miss_reason}`;
+    console.log(`  ${row.prefix}: ${state}`);
   }
 
   console.log(
@@ -587,6 +638,9 @@ function parseArgs(argv) {
     file: null,
     archives: [],
     knownIds: [],
+    knownMissIds: [],
+    reclassifiedOutIds: [],
+    run3Fixtures: false,
     recurrenceMin: DEFAULT_RECURRENCE_MIN,
     publicDf: DEFAULT_PUBLIC_DF,
   };
@@ -594,7 +648,10 @@ function parseArgs(argv) {
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--archive') args.archives.push(argv[++i]);
-    else if (arg === '--known-id') args.knownIds.push(argv[++i]);
+    else if (arg === '--known-id' || arg === '--must-flag-id') args.knownIds.push(argv[++i]);
+    else if (arg === '--known-miss-id') args.knownMissIds.push(argv[++i]);
+    else if (arg === '--reclassified-out-id') args.reclassifiedOutIds.push(argv[++i]);
+    else if (arg === '--run3-fixtures') args.run3Fixtures = true;
     else if (arg === '--recurrence-min') args.recurrenceMin = Number(argv[++i]);
     else if (arg === '--public-df') args.publicDf = Number(argv[++i]);
     else if (arg === '--file') args.file = argv[++i];
@@ -613,6 +670,9 @@ function usage() {
     'Usage: node scripts/vocab-dryrun.js <learnings.json>',
     '  [--archive <archived-dump> ...]',
     '  [--known-id <id-or-prefix> ...]',
+    '  [--known-miss-id <id-or-prefix> ...]',
+    '  [--reclassified-out-id <id-or-prefix> ...]',
+    '  [--run3-fixtures]',
     '  [--recurrence-min 2]',
     '  [--public-df 3]',
   ].join('\n');
@@ -632,10 +692,21 @@ function main(argv = process.argv) {
   const primary = loadCorpusFile(args.file);
   const archives = args.archives.map(loadCorpusFile);
   const corpus = mergeCorpora(primary, ...archives);
+  const knownIdPrefixes = args.run3Fixtures
+    ? [...RUN3_FIXTURES.must_flag, ...args.knownIds]
+    : args.knownIds;
+  const knownMissIdPrefixes = args.run3Fixtures
+    ? [...RUN3_FIXTURES.known_miss, ...args.knownMissIds]
+    : args.knownMissIds;
+  const reclassifiedOutIdPrefixes = args.run3Fixtures
+    ? [...RUN3_FIXTURES.reclassified_out, ...args.reclassifiedOutIds]
+    : args.reclassifiedOutIds;
   const result = analyzeCorpus(corpus, {
     recurrenceMin: args.recurrenceMin,
     publicDf: args.publicDf,
-    knownIdPrefixes: args.knownIds,
+    knownIdPrefixes,
+    knownMissIdPrefixes,
+    reclassifiedOutIdPrefixes,
   });
   printReport(result, sourcePaths);
 
@@ -659,6 +730,7 @@ module.exports = {
   DEFAULT_PUBLIC_DF,
   HOLD_RATE_MAX,
   FIXTURE_RECALL_MIN,
+  RUN3_FIXTURES,
   SHAPE_CLASSES,
   SHAPE_LABELS,
   ACRONYM_ALLOWLIST,

@@ -720,3 +720,5 @@ track-level
 transfer
 wordpress
 youtube-music
+dangerously-skip-permissions
+graceful-degradation
