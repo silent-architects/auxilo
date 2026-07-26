@@ -143,6 +143,23 @@ Set your mode via `PATCH /account/settings`:
 
 ---
 
+## Held-for-review reasons
+
+The contributor review summary can place a pending item in
+`needs_your_eyes` when a safety or publication-readiness signal needs a human
+decision. One such signal is `account_vocab`: an identifier-shaped term recurs
+across at least two of your own learnings but does not appear in the approved
+public corpus or the common-development baseline. The summary explains the
+matched term and recommends the `sanitize` flow so you can replace internal
+system vocabulary with generic wording before approval.
+
+This signal is review-time guidance, not a submission block. It never rejects
+or refuses `/learn` or `/extract`, and it does not replace the sensitivity
+screen. Its deliberate limitation is recurrence: recurring internal terms are
+caught; a term used once may not be.
+
+---
+
 ## Pricing Bounds
 
 Unlock prices are bounded server-side (`lib/pricing.js`): **minimum $0.05, maximum $50.00 USD per unlock**. Submissions outside these bounds are rejected with HTTP 400. The default starting price for a new learning is $0.08; dynamic pricing adjusts within the bounds based on quality, demand, and freshness. See `docs/MARKETPLACE.md` (source of truth) for the full pricing policy.

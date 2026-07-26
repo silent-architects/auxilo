@@ -3273,7 +3273,7 @@
     "/account/pending/summary": {
       "get": {
         "summary": "Pending-review triage summary (lanes, counts, compact rows)",
-        "description": "Compact triage view of YOUR OWN pending_review learnings: full-set counts plus compact rows (no bodies by default). SPEC3-B1: every row carries a `lane` \u2014 'ready_to_publish' (passed all screens, quality >= 14), 'needs_score' (passed screens, unscored/below floor), 'needs_your_eyes' (flagged) \u2014 and the summary carries `approvable_count`, the exact count the bulk approve-clean gate will select at the default threshold. Counts are ALWAYS computed over the full own-pending set; filters and limit/offset narrow rows only. `full=1` attaches bodies, bounded to explicit ids or a page of at most 25 rows.",
+        "description": "Compact triage view of YOUR OWN pending_review learnings: full-set counts plus compact rows (no bodies by default). SPEC3-B1: every row carries a `lane` \u2014 'ready_to_publish' (passed all screens, quality >= 14), 'needs_score' (passed screens, unscored/below floor), 'needs_your_eyes' (flagged) \u2014 and the summary carries `approvable_count`, the exact count the bulk approve-clean gate will select at the default threshold. SPEC3-E1: review-time `account_vocab` detects recurring account-private identifier vocabulary, re-lanes matching items to needs_your_eyes, and emits contributor-only evidence with a sanitize hint; it never blocks submission. Counts are ALWAYS computed over the full own-pending set; filters and limit/offset narrow rows only. `full=1` attaches bodies, bounded to explicit ids or a page of at most 25 rows.",
         "operationId": "accountPendingSummary",
         "tags": [
           "Account"
@@ -3306,10 +3306,11 @@
                 "injection",
                 "content_sensitivity",
                 "near_duplicate",
-                "process_advice"
+                "process_advice",
+                "account_vocab"
               ]
             },
-            "description": "Only rows carrying this screen flag. CI-7: 'process_advice' = held by the system-fact screen (content judged process/workflow advice, not a system fact)."
+            "description": "Only rows carrying this screen flag. CI-7: 'process_advice' = held by the system-fact screen (content judged process/workflow advice, not a system fact). SPEC3-E1: 'account_vocab' = recurring identifier vocabulary appears only in the contributor's own learnings; review and genericize via sanitize."
           },
           {
             "name": "signal",
@@ -3317,7 +3318,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Only rows carrying this sensitivity signal name (or 'injection' / 'near_duplicate' / 'process_advice'); see counts.by_signal for available keys"
+            "description": "Only rows carrying this sensitivity signal name (or 'injection' / 'near_duplicate' / 'process_advice' / 'account_vocab'); see counts.by_signal for available keys"
           },
           {
             "name": "category",
@@ -3410,7 +3411,16 @@
                         },
                         "by_signal": {
                           "type": "object",
-                          "description": "Histogram over sensitivity signal names + injection + near_duplicate + process_advice"
+                          "description": "Histogram over sensitivity signal names + injection + near_duplicate + process_advice + account_vocab",
+                          "properties": {
+                            "account_vocab": {
+                              "type": "integer",
+                              "description": "Pending items re-laned at review time because they contain recurring account-private vocabulary"
+                            }
+                          },
+                          "additionalProperties": {
+                            "type": "integer"
+                          }
                         },
                         "by_lane": {
                           "type": "object"
@@ -3467,6 +3477,33 @@
                               "type": "string"
                             },
                             "description": "Signal names only (present when flagged)"
+                          },
+                          "sensitivity_evidence": {
+                            "type": "array",
+                            "description": "Contributor-only evidence rows. SPEC3-E1 account_vocab rows name the recurring term and recommend sanitize; all buyer projections strip this field.",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "signal",
+                                "excerpt",
+                                "hint"
+                              ],
+                              "properties": {
+                                "signal": {
+                                  "type": "string",
+                                  "enum": [
+                                    "account_vocab"
+                                  ]
+                                },
+                                "excerpt": {
+                                  "type": "string",
+                                  "maxLength": 60
+                                },
+                                "hint": {
+                                  "type": "string"
+                                }
+                              }
+                            }
                           },
                           "created_at": {
                             "type": "string"

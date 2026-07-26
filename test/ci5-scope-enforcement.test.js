@@ -577,7 +577,9 @@ describe('CI-7: server screen wiring (structural pins)', () => {
   });
 
   it('the summary flag filter accepts process_advice', () => {
-    assert.ok(SERVER_SRC.includes("['injection', 'content_sensitivity', 'near_duplicate', 'process_advice'].includes(flag)"));
+    assert.ok(SERVER_SRC.includes(
+      "['injection', 'content_sensitivity', 'near_duplicate', 'process_advice', 'account_vocab'].includes(flag)"
+    ));
   });
 });
 
@@ -761,12 +763,16 @@ describe('behavioral: boot enforces the 400 and runs the migration', () => {
         "const WALLET = '0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A';");
       assert.notEqual(patched, staged, 'expected exactly one WALLET const line to patch for the boot gate');
       fs.writeFileSync(path.join(tmpDir, 'server.js'), patched);
-      for (const d of ['lib', 'public', 'prompts']) {
+      for (const d of ['lib', 'public', 'prompts', 'config']) {
         const src = path.join(REPO_ROOT, d);
         if (fs.existsSync(src)) fs.symlinkSync(src, path.join(tmpDir, d));
       }
       fs.symlinkSync(nodeModulesDir, path.join(tmpDir, 'node_modules'));
       fs.mkdirSync(path.join(tmpDir, 'data'));
+      fs.copyFileSync(
+        path.join(REPO_ROOT, 'data', 'common-dev-terms.txt'),
+        path.join(tmpDir, 'data', 'common-dev-terms.txt')
+      );
       fs.writeFileSync(path.join(tmpDir, 'data', 'learnings.json'), JSON.stringify(fixtureCatalog(), null, 2));
 
       // Gate-A F1 behavioral leg: stage a session account + an awaiting_review
