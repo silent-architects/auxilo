@@ -782,10 +782,6 @@ describe('behavioral: clean-lane guardrail + channel-hold end to end', () => {
       }
       fs.symlinkSync(nodeModulesDir, path.join(tmpDir, 'node_modules'));
       fs.mkdirSync(path.join(tmpDir, 'data'));
-      fs.copyFileSync(
-        path.join(REPO_ROOT, 'data', 'common-dev-terms.txt'),
-        path.join(tmpDir, 'data', 'common-dev-terms.txt')
-      );
       fs.writeFileSync(path.join(tmpDir, 'data', 'learnings.json'), JSON.stringify(bootFixtureCatalog(), null, 2));
       fs.writeFileSync(path.join(tmpDir, 'data', 'accounts.json'), JSON.stringify(bootFixtureAccounts(), null, 2));
 

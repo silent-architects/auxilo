@@ -103,10 +103,6 @@ describe('CS-1 behavioral: fresh install seeds the catalog', () => {
         if (fs.existsSync(src)) fs.symlinkSync(src, path.join(tmpDir, d));
       }
       fs.mkdirSync(path.join(tmpDir, 'data'));
-      fs.copyFileSync(
-        path.join(REPO_ROOT, 'data', 'common-dev-terms.txt'),
-        path.join(tmpDir, 'data', 'common-dev-terms.txt')
-      );
       fs.symlinkSync(nodeModulesDir, path.join(tmpDir, 'node_modules'));
 
       const output = await new Promise((resolve, reject) => {

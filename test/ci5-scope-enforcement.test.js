@@ -769,10 +769,6 @@ describe('behavioral: boot enforces the 400 and runs the migration', () => {
       }
       fs.symlinkSync(nodeModulesDir, path.join(tmpDir, 'node_modules'));
       fs.mkdirSync(path.join(tmpDir, 'data'));
-      fs.copyFileSync(
-        path.join(REPO_ROOT, 'data', 'common-dev-terms.txt'),
-        path.join(tmpDir, 'data', 'common-dev-terms.txt')
-      );
       fs.writeFileSync(path.join(tmpDir, 'data', 'learnings.json'), JSON.stringify(fixtureCatalog(), null, 2));
 
       // Gate-A F1 behavioral leg: stage a session account + an awaiting_review

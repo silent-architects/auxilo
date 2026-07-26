@@ -27,9 +27,21 @@ const {
 const { findNearDuplicate } = require('./lib/similarity.js'); // LW-14
 const { listOwnPending, applySelfDecision, summarizeOwnPending, applyBulkDecisions, selectPendingIdsBySignal, BULK_MAX: SELF_REVIEW_BULK_MAX, meetsQualityFloor, QUALITY_FLOOR_TOTAL, QUALITY_FLOOR_DIMENSION, adoptWalletOrphans, LANES: SELF_REVIEW_LANES, parseCommonDevTerms: parseAccountVocabCommonTerms } = require('./lib/self-review.js'); // LW-15 + review-seamless + AUD19-3/-6 + SPEC3-B1 lanes + SPEC3-B2 by-signal + SPEC3-E1 review-time vocabulary
 const ACCOUNT_VOCAB_CONFIG = require('./config/account-vocab.json');
-const ACCOUNT_VOCAB_COMMON_DEV_TERMS = parseAccountVocabCommonTerms(
-  fs.readFileSync(path.join(__dirname, 'data', 'common-dev-terms.txt'), 'utf8')
-);
+// INCIDENT 2026-07-26 (SPEC3-E1 deploy): the wordlist MUST live in config/, not
+// data/ — in prod /app/data is the mounted volume, which SHADOWS the image's
+// data/ directory (ENOENT → boot crash-loop, ~6min outage, rolled back to v55).
+// Load is fail-OPEN with a loud log: an empty wordlist means MORE review-lane
+// flags, never fewer — this file must never be able to take the server down.
+const ACCOUNT_VOCAB_COMMON_DEV_TERMS = (() => {
+  try {
+    return parseAccountVocabCommonTerms(
+      fs.readFileSync(path.join(__dirname, 'config', 'common-dev-terms.txt'), 'utf8')
+    );
+  } catch (err) {
+    console.error(`[SPEC3-E1] [BOOT] common-dev-terms.txt unreadable (${err.code || err.message}) — account_vocab runs with an EMPTY wordlist (over-flags, fails open)`);
+    return new Set();
+  }
+})();
 // SPEC3 B1/C1: extraction channel-hold + clean-lane standing consent (FLAG-DARK:
 // EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED, default OFF). The channel marker is a
 // BRAKE, never a gas pedal — see lib/clean-lane.js header for the trust analysis.

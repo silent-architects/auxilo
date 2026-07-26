@@ -55,7 +55,7 @@ const RUN3_FIXTURES = Object.freeze({
     'lrn_63248f8e-edf5-4569-a153-e1f05b59a6b1',
   ]),
 });
-const COMMON_DEV_TERMS_PATH = require('node:path').join(__dirname, '..', 'data', 'common-dev-terms.txt');
+const COMMON_DEV_TERMS_PATH = require('node:path').join(__dirname, '..', 'config', 'common-dev-terms.txt');
 
 function loadCommonDevTerms(file = COMMON_DEV_TERMS_PATH) {
   return parseCommonDevTerms(fs.readFileSync(file, 'utf8'));

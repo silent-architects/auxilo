@@ -17,7 +17,7 @@ const REPO = path.join(__dirname, '..');
 const CONFIG = require('../config/account-vocab.json');
 const RATIFIED = require('./fixtures/spec3-e1-phase0-ratified.json');
 const COMMON_DEV_TERMS = fs.readFileSync(
-  path.join(REPO, 'data', 'common-dev-terms.txt'),
+  path.join(REPO, 'config', 'common-dev-terms.txt'),
   'utf8'
 );
 const {
@@ -253,5 +253,33 @@ describe('SPEC3-E1 Phase 1 account_vocab runtime', () => {
     assert.deepEqual(CONFIG.VOCAB_SHAPES_ENABLED, ['S1', 'S2', 'S3', 'S4', 'S5']);
     assert.equal(CONFIG.VOCAB_CONTRAST_MIN_ACCOUNTS, 10);
     assert.equal(CONFIG.VOCAB_CONTRAST_MIN_LEARNINGS, 5);
+  });
+});
+
+// INCIDENT 2026-07-26: the wordlist shipped in data/, which prod's volume mount
+// shadows — boot ENOENT'd into a crash-loop (~6min outage, v56 rolled back).
+// These pins keep the two halves of the fix from regressing independently.
+describe('SPEC3-E1 incident regression: wordlist location + fail-open boot', () => {
+  it('loads the wordlist from config/ (image), never data/ (volume-shadowed in prod)', () => {
+    assert.ok(SERVER_SRC.includes("path.join(__dirname, 'config', 'common-dev-terms.txt')"));
+    assert.equal(SERVER_SRC.includes("path.join(__dirname, 'data', 'common-dev-terms.txt')"), false);
+    assert.ok(fs.existsSync(path.join(REPO, 'config', 'common-dev-terms.txt')));
+  });
+
+  it('fail-open guard actually fires: unreadable wordlist yields an empty Set, not a throw', () => {
+    // Execute the loader IIFE from server.js source against a missing file,
+    // with the same parse fn the server uses — watching the guard fire beats
+    // asserting its source shape (a guard never watched firing is unverified).
+    const start = SERVER_SRC.indexOf('const ACCOUNT_VOCAB_COMMON_DEV_TERMS = (() => {');
+    assert.ok(start > 0, 'loader IIFE present');
+    const end = SERVER_SRC.indexOf('})();', start);
+    const iife = SERVER_SRC.slice(start + 'const ACCOUNT_VOCAB_COMMON_DEV_TERMS = '.length, end + '})();'.length)
+      .replace("path.join(__dirname, 'config', 'common-dev-terms.txt')", "path.join(__dirname, 'config', 'DOES-NOT-EXIST.txt')");
+    const result = new Function(
+      'fs', 'path', '__dirname', 'parseAccountVocabCommonTerms', 'console',
+      `return ${iife}`
+    )(fs, path, REPO, parseCommonDevTerms, { error: () => {} });
+    assert.ok(result instanceof Set);
+    assert.equal(result.size, 0);
   });
 });
