@@ -16,6 +16,12 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const {
+  loadIndexForExtraction,
+  readExtractionIndex,
+  buildPromptMemory,
+  filterIndexedNearDuplicates,
+} = require('../lib/extraction-index.js');
 
 // CI-5 (PUNCH-LIST §30, 2026-07-19): Auxilo is TECHNICAL-ONLY. The learning
 // taxonomy is these six tech categories; `communication` and `content-generation`
@@ -86,7 +92,13 @@ function buildExtractionPrompt(opts = {}) {
   const withScore = opts.scoreExtraction !== undefined
     ? Boolean(opts.scoreExtraction)
     : scoreExtractionEnabled();
-  return EXTRACTION_PROMPT_BASE + (withScore ? QUALITY_RUBRIC_ADDENDUM : '') + PROMPT_SUFFIX;
+  const memory = typeof opts.previousLessonsSection === 'string'
+    ? opts.previousLessonsSection
+    : '';
+  return EXTRACTION_PROMPT_BASE +
+    (withScore ? QUALITY_RUBRIC_ADDENDUM : '') +
+    (memory ? `\n\n${memory}` : '') +
+    PROMPT_SUFFIX;
 }
 
 /** Back-compat export: the default (gate-evaluated-at-call) prompt. */
@@ -116,9 +128,15 @@ function resolveClaudeBin() {
  * SessionEnd hook degrades gracefully (the proactive auxilo_contribute path is the
  * reliable primary; this deterministic hook is best-effort).
  */
-function extractWithClaudeCode(transcript) {
+function extractWithClaudeCode(transcript, opts = {}) {
   const bin = resolveClaudeBin();
-  const input = buildExtractionPrompt() + String(transcript).slice(0, 200000);
+  const prompt = typeof opts.prompt === 'string'
+    ? opts.prompt
+    : buildExtractionPrompt({
+      previousLessonsSection: opts.previousLessonsSection,
+      ...(opts.scoreExtraction !== undefined && { scoreExtraction: opts.scoreExtraction }),
+    });
+  const input = prompt + String(transcript).slice(0, 200000);
   // Do NOT pass ANTHROPIC_API_KEY through — we want the user's logged-in Claude
   // subscription (OAuth), not an API key (which would bill someone). Delete it.
   const childEnv = { ...process.env, AUXILO_EXTRACTING: '1' };
@@ -214,13 +232,67 @@ function parseLearnings(raw, opts = {}) {
  * Only claude-code has a local extractor today; other clients rely on the agent's
  * proactive auxilo_contribute (MCP) call.
  */
-async function extractLocally(transcript, sourceType) {
+async function extractLocally(transcript, sourceType, opts = {}) {
   if (sourceType && sourceType !== 'claude-code') {
     return { learnings: [], skipped: `local extraction not implemented for "${sourceType}" — agent contributes via auxilo_contribute` };
   }
-  const { ok, out, reason } = extractWithClaudeCode(transcript);
+
+  const indexOpts = {
+    ...(opts.indexPath && { indexPath: opts.indexPath }),
+    ...(opts.fsImpl && { fsImpl: opts.fsImpl }),
+    ...(opts.fetchImpl && { fetchImpl: opts.fetchImpl }),
+    ...(opts.baseUrl && { baseUrl: opts.baseUrl }),
+    ...(opts.apiKey && { apiKey: opts.apiKey }),
+    log: opts.log || console.error,
+  };
+  const indexState = await loadIndexForExtraction(indexOpts);
+  const promptMemory = indexState.usable
+    ? buildPromptMemory(indexState.rows, {
+      transcript,
+      ...(opts.promptMemoryMaxTokens !== undefined && {
+        maxTokens: opts.promptMemoryMaxTokens,
+      }),
+      ...(opts.promptMemoryMaxRows !== undefined && {
+        maxRows: opts.promptMemoryMaxRows,
+      }),
+    })
+    : { section: '', estimated_tokens: 0, included_count: 0 };
+  const prompt = buildExtractionPrompt({
+    previousLessonsSection: promptMemory.section,
+    ...(opts.scoreExtraction !== undefined && { scoreExtraction: opts.scoreExtraction }),
+  });
+  const invokeModel = typeof opts.invokeModel === 'function'
+    ? opts.invokeModel
+    : (text, invokeOpts) => extractWithClaudeCode(text, invokeOpts);
+  const { ok, out, reason } = await invokeModel(transcript, { prompt });
   if (!ok) return { learnings: [], skipped: reason };
-  return { learnings: parseLearnings(out) };
+  const parsed = parseLearnings(out, opts);
+
+  // Re-read immediately before the lexical filter. If the index is deleted,
+  // becomes unreadable, or is corrupted while the model runs, the filter is
+  // disabled and every candidate continues to submission.
+  const filterState = readExtractionIndex(indexOpts);
+  if (indexState.usable && !filterState.usable) {
+    try {
+      (opts.log || console.error)(
+        `[extract-local] extraction index became ${filterState.state} during extraction; lexical dedup disabled for this run`
+      );
+    } catch { /* logging cannot block extraction */ }
+  }
+  const filtered = filterIndexedNearDuplicates(parsed, filterState, indexOpts);
+  if (filtered.dropped.length > 0) {
+    try {
+      (opts.log || console.error)(
+        `[extract-local] dropped ${filtered.dropped.length} candidate(s) matching the local extraction index`
+      );
+    } catch { /* logging cannot block extraction */ }
+  }
+  return {
+    learnings: filtered.kept,
+    dedup_dropped: filtered.dropped.length,
+    prompt_memory_tokens: promptMemory.estimated_tokens,
+    prompt_memory_rows: promptMemory.included_count,
+  };
 }
 
 module.exports = {

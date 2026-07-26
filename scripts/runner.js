@@ -38,6 +38,7 @@ const os = require('os');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { scanText, SENSITIVITY_FILTER_VERSION } = require('../lib/sensitivity-filter.js');
+const { appendSubmittedLearning } = require('../lib/extraction-index.js');
 const { TranscriptSource } = require('./sources/source.interface.js');
 const { GenericJsonlSource } = require('./sources/generic-jsonl.js');
 
@@ -278,7 +279,8 @@ function listPendingFiles() {
  *
  * @param {Array<object>} learnings
  * @param {string} sourceType
- * @param {object} [opts]  { fetchImpl, baseUrl, apiKey } — injectable for tests
+ * @param {object} [opts]  { fetchImpl, baseUrl, apiKey, indexPath, now } —
+ *   injectable for tests
  * @returns {Promise<{published:number, held:number, rejected:number}>}
  */
 async function submitLearnings(learnings, sourceType, opts = {}) {
@@ -313,6 +315,12 @@ async function submitLearnings(learnings, sourceType, opts = {}) {
       if (!res.ok) { rejected += 1; continue; }
       let body = {};
       try { body = await res.json(); } catch { /* tolerate non-JSON 2xx */ }
+      appendSubmittedLearning(l, body, {
+        ...(opts.indexPath && { indexPath: opts.indexPath }),
+        ...(opts.fsImpl && { fsImpl: opts.fsImpl }),
+        ...(opts.now && { now: opts.now }),
+        log: opts.log || console.error,
+      });
       if (body && body.status === 'pending_review') held += 1;
       else published += 1;
     } catch (_) {
@@ -329,8 +337,21 @@ async function postExtract(transcript, sessionId, sourceType, _scrubReport) {
   const { extractLocally } = require('./extract-local.js');
   let learnings;
   let skipped;
+  let dedupDropped = 0;
+  let promptMemoryTokens = 0;
+  let promptMemoryRows = 0;
   try {
-    ({ learnings, skipped } = await extractLocally(transcript, sourceType));
+    ({
+      learnings,
+      skipped,
+      dedup_dropped: dedupDropped = 0,
+      prompt_memory_tokens: promptMemoryTokens = 0,
+      prompt_memory_rows: promptMemoryRows = 0,
+    } = await extractLocally(transcript, sourceType, {
+      baseUrl: BASE_URL,
+      apiKey: API_KEY,
+      log,
+    }));
   } catch (err) {
     throw new Error(`Local extraction failed: ${err.message}`);
   }
@@ -344,7 +365,11 @@ async function postExtract(transcript, sessionId, sourceType, _scrubReport) {
   // tokens live ONLY on the per-run caller log lines. This line previously
   // carried `published=` too and the digest double-counted every extraction
   // (its dedup only drops byte-identical lines). P1-13b.
-  log(`[runner] client-side extraction: ${learnings.length} candidate(s) → ${published} live, ${held} held for review, ${rejected} rejected`);
+  log(
+    `[runner] client-side extraction: ${learnings.length} candidate(s), ` +
+    `${dedupDropped} local duplicate(s) dropped, memory=${promptMemoryRows} row(s)/~${promptMemoryTokens} token(s) ` +
+    `→ ${published} live, ${held} held for review, ${rejected} rejected`
+  );
   return { learnings_published: published, learnings_held: held, learnings_rejected: rejected, extraction_id: `client-${sessionId}` };
 }
 
@@ -471,6 +496,9 @@ function sweeperManifest(repoRoot = path.resolve(__dirname, '..')) {
     ['scripts/runner.js', 'scripts/runner.js', 0o755],
     ...sourceRows,
     ['lib/sensitivity-filter.js', 'lib/sensitivity-filter.js', 0o644],
+    ['lib/extraction-index.js', 'lib/extraction-index.js', 0o644],
+    ['lib/similarity.js', 'lib/similarity.js', 0o644],
+    ['config/near-duplicate.json', 'config/near-duplicate.json', 0o644],
     // Client-side extraction (2026-07-02) — required by the sweep path since /extract went 410.
     // Missing from this manifest until 2026-07-19: installed sweepers crashed with
     // "Cannot find module './extract-local.js'" while queue files were retained.

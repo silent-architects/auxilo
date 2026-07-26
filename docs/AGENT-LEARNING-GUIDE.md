@@ -26,6 +26,21 @@ Autonomous extraction is a client-side pipeline: a local runner on your machine 
 
 - Session transcripts, raw and scrubbed. Reading, scrubbing, and extraction inference all run locally; the inference step goes through your own model client under your own provider terms.
 - The client scrub report and local run records (queue files and `~/.auxilo/extract.log`).
+- The runner's append-only extraction memory at `~/.auxilo/extracted-index.jsonl`. It records lessons this machine successfully submitted so the next extraction call can avoid re-capturing them. On a fresh machine, the runner lazily hydrates titles, categories, tags, status, and timestamps for your own approved/rejected/pending learnings; the server never sends bodies through this read.
+
+**The runner remembers what it extracted:** before your model processes a new
+transcript, the prompt includes a token-capped list of previously captured
+lesson titles and one-line summaries. Rewording a listed lesson—or extracting
+a different facet of the same operational insight—is dropped unless the new
+fact would change another agent's behavior. After extraction, a deterministic
+near-verbatim check compares candidates with locally submitted index rows using
+the same detector as the server.
+
+This local dedup layer is an optimization, never a trust boundary. If the index
+is missing, unreadable, corrupt, deleted during a run, or cannot be hydrated,
+the runner logs the problem and continues extraction without memory/filtering.
+It never crashes the hook or weakens the server's sensitivity,
+`near_duplicate`, or `account_vocab` backstops.
 
 **What is NOT collected:**
 
@@ -166,11 +181,12 @@ predecessor is shown as `re-extraction of a lesson you previously rejected`.
 The contributor-only review projection includes the matching ID, channel
 scores, and this explanation. Buyer-facing responses strip that evidence.
 
-This screen covers the high-precision **near-verbatim** class only. It does not
-reliably catch a lesson paraphrased into substantially different wording.
-Paraphrase-class re-extractions remain an explicit limitation; meanwhile,
-`account_vocab` quarantines recurring account-private vocabulary for human
-review.
+This server screen covers the high-precision **near-verbatim** class only. The
+client runner addresses paraphrase-class repetition at its source by giving the
+contributor's existing extraction call the local lesson memory described above;
+that adds no platform inference cost. Both layers remain fail-open backstops:
+if client memory is unavailable, `account_vocab` can still quarantine recurring
+account-private vocabulary for human review.
 
 ---
 

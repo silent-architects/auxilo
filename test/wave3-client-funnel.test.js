@@ -100,10 +100,18 @@ describe('A1 — score-at-extraction gate (AUXILO_SCORE_EXTRACTION)', () => {
 // ─── A1+A2: runner submission channel + truthful classification ─────────────
 
 describe('A1/A2 — submitLearnings (channel stamp + truthful /learn classification)', () => {
+  let indexDir;
   const LEARNING = {
     title: 'A learning title long enough', body: 'B'.repeat(60),
     category: 'code-execution', tags: ['x'], task_context: 'ctx', outcome: 'success',
   };
+
+  beforeEach(() => { indexDir = tmpdir('auxilo-submit-index-'); });
+  afterEach(() => { rmrf(indexDir); });
+
+  function withIndex(opts) {
+    return { ...opts, indexPath: path.join(indexDir, 'extracted-index.jsonl') };
+  }
 
   function fetchReturning(bodies) {
     const calls = [];
@@ -123,7 +131,7 @@ describe('A1/A2 — submitLearnings (channel stamp + truthful /learn classificat
   it('every submission carries submission_channel:"extraction" (the brake ships dark)', async () => {
     const { impl, calls } = fetchReturning([{ json: { status: 'pending_review' } }]);
     await runner.submitLearnings([LEARNING], 'claude-code',
-      { fetchImpl: impl, baseUrl: 'http://x', apiKey: 'k' });
+      withIndex({ fetchImpl: impl, baseUrl: 'http://x', apiKey: 'k' }));
     assert.strictEqual(calls.length, 1);
     assert.strictEqual(calls[0].body.submission_channel, 'extraction');
     assert.strictEqual(calls[0].body.quality_self_assessment, undefined);
@@ -133,7 +141,7 @@ describe('A1/A2 — submitLearnings (channel stamp + truthful /learn classificat
     const qa = { specificity: 4, actionability: 4, novelty: 3, completeness: 3, total: 14 };
     const { impl, calls } = fetchReturning([{ json: { status: 'pending_review' } }]);
     await runner.submitLearnings([{ ...LEARNING, quality_self_assessment: qa }], 'claude-code',
-      { fetchImpl: impl, baseUrl: 'http://x', apiKey: 'k' });
+      withIndex({ fetchImpl: impl, baseUrl: 'http://x', apiKey: 'k' }));
     assert.deepStrictEqual(calls[0].body.quality_self_assessment, qa);
   });
 
@@ -146,14 +154,14 @@ describe('A1/A2 — submitLearnings (channel stamp + truthful /learn classificat
     ]);
     const totals = await runner.submitLearnings(
       [LEARNING, LEARNING, LEARNING, LEARNING], 'claude-code',
-      { fetchImpl: impl, baseUrl: 'http://x', apiKey: 'k' });
+      withIndex({ fetchImpl: impl, baseUrl: 'http://x', apiKey: 'k' }));
     assert.deepStrictEqual(totals, { published: 1, held: 1, rejected: 2 });
   });
 
   it('a 2xx without a parseable body counts as published (server contract: only pending_review holds)', async () => {
     const impl = async () => ({ ok: true, json: async () => { throw new Error('empty'); } });
     const totals = await runner.submitLearnings([LEARNING], 'claude-code',
-      { fetchImpl: impl, baseUrl: 'http://x', apiKey: 'k' });
+      withIndex({ fetchImpl: impl, baseUrl: 'http://x', apiKey: 'k' }));
     assert.deepStrictEqual(totals, { published: 1, held: 0, rejected: 0 });
   });
 });

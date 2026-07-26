@@ -1,0 +1,37 @@
+{
+  "spec": "SPEC3-F2 client-side extraction dedup",
+  "source_fixture": "test/fixtures/spec3-f1-phase0-ground-truth.json",
+  "replay_runs_min": 3,
+  "must_drop": [
+    {
+      "cluster_id": "prepared_state_two_phase_handoff",
+      "index_id": "lrn_79420271-6e3c-4da9-85b0-c19aa7888b4d",
+      "replay_id": "lrn_256e521d-b74a-426b-9ca2-b0874d2f5b95"
+    },
+    {
+      "cluster_id": "ci_workflow_vs_pr_notification",
+      "index_id": "lrn_55390ea4-63de-41ed-bf61-3543dddac58d",
+      "replay_id": "lrn_ebf3c867-6970-4227-b84e-2edfaac01ca9"
+    },
+    {
+      "cluster_id": "blessed_repository_authorization_gate",
+      "index_id": "lrn_be31a9b2-be14-4dc6-ac06-017b71297ae4",
+      "replay_id": "lrn_a8779d19-b644-4223-abbe-63259483cb4d"
+    },
+    {
+      "cluster_id": "gmail_batch_denial_fallback",
+      "index_id": "lrn_38ed884e-3368-4cde-b517-33d57423fe1d",
+      "replay_id": "lrn_7a145966-3fe4-4475-a623-03cdd919c0cb"
+    },
+    {
+      "cluster_id": "published_ci_require_tier2_duplicate",
+      "index_id": "lrn_2a2370e0-bf7b-45a8-9e80-81e18598e8ab",
+      "replay_id": "lrn_e3f59c88-8e98-4bfa-8643-669e14ff2c98"
+    }
+  ],
+  "must_keep_ids": [
+    "lrn_3968560a-c2aa-4bdc-87bf-9de7dc2f2296",
+    "lrn_33fbf0c6-66db-4260-bbda-0cca4a930231",
+    "lrn_a89e1e46-1623-4421-a6b2-a392915c6ece"
+  ]
+}
