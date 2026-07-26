@@ -1,0 +1,367 @@
+{
+  "spec": "SPEC3-F1 Phase 0 historically-clean negatives",
+  "source_snapshot_sha256": "4560f664d988f60af28215d652c02cfbe274253831e53b341a24b48730b477a7",
+  "selection": "isApproved(learning) && screenFlags(learning).length === 0",
+  "clean_approved": [
+    {
+      "id": "lrn_033818ad-714c-423e-8872-a6386a20d551",
+      "title": "Favicon flicker root cause: competing icon files plus browser cache selection",
+      "body": "When a favicon appears inconsistent across a website, the root cause often involves competing icon files being served simultaneously rather than per-page HTML inconsistency. In this case, three separate icon assets were present: (1) a legacy `/favicon.svg` containing the Astro default logo (749 bytes, project-start dated), (2) a `/favicon.ico` file (32×32 PNG of different design), and (3) a declared `/brand/site-mark.svg` (the intended brand mark). All pages declared the same three icons in the HTML head, but browsers would select different assets based on cache state and render timing, causing the visual flicker. The solution approach: (1) identify all competing icon files in the root and brand directories, (2) compare their actual artwork/design, (3) verify what's declared in the HTML head across multiple page types, (4) unify by removing legacy/unused assets and ensuring a single source of truth. The key insight is that favicon inconsistency often manifests as a browser-side selection problem rather than a content delivery problem.",
+      "category": "web-interaction",
+      "status": "approved",
+      "created_at": "2026-07-20T02:29:36.630Z",
+      "updated_at": "2026-07-20T02:29:36.630Z"
+    },
+    {
+      "id": "lrn_071f8f72-98fe-4867-9408-6de1376f46fa",
+      "title": "Image-optimization fallback when no WebP encoder: downscale to display resolution",
+      "body": "When optimizing images for web delivery, don't fail or ship oversized assets just because the environment lacks a WebP encoder. Use a tiered fallback:\n1. Attempt WebP conversion for the next-gen format benefit.\n2. If no WebP encoder is available, downscale oversized JPEG/PNG assets to their actual on-page display dimensions — this is where most of the wasted bytes are (e.g. a 3.8 MB hero shipped at full sensor resolution drops to ~990 KB just by resizing to display size).\n3. Flag PNGs that remain heavy without WebP as a follow-up item for when an encoder is available, rather than blocking.\n\nThis preserves visual quality, respects environmental constraints, and leaves a clear path to further gains. The biggest single win is almost always serving images at their rendered size, independent of format.",
+      "category": "data-processing",
+      "status": "approved",
+      "created_at": "2026-06-11T03:58:27.837Z",
+      "updated_at": "2026-06-11T03:58:27.837Z"
+    },
+    {
+      "id": "lrn_07da331f-5408-49cb-96bb-58cbccb3f244",
+      "title": "Cloudflare Email Routing bounces with 550 while status shows Syncing",
+      "body": "## Problem\nAfter enabling Cloudflare Email Routing on a newly added domain, the routing status shows 'Syncing' in the dashboard. During this period, emails sent to the domain bounce with:\n\n```\n550 5.1.1 Address does not exist\n```\n\nThis happens even though:\n- MX records are correctly propagated (route1/2/3.mx.cloudflare.net)\n- SPF TXT record is in place\n- DNS propagation is confirmed via `dig MX domain.com +short`\n- The DNS records badge shows 'Email DNS records configured' (green)\n\n## Environment\n- Cloudflare Free plan\n- Newly added domain with catch-all forwarding rule\n- Destination email verified\n\n## Root Cause\nCloudflare's MX servers accept connections but their internal email routing backend hasn't finished syncing the forwarding rules for the domain. The DNS is ready but the routing layer is not.\n\n## Solution\nWait. There is no way to force the sync. In our case it took approximately 5-10 minutes after DNS records were confirmed propagated. The status eventually changes from 'Syncing' (orange badge) to 'Active' (green badge).\n\n## Caveats\n- Do NOT send important test emails during the Syncing period — they will hard-bounce (550), not queue\n- The bounce is a permanent failure, so the sending server won't retry\n- If Syncing persists beyond 15-20 minutes, try disabling and re-enabling Email Routing",
+      "category": "web-interaction",
+      "status": "approved",
+      "created_at": "2026-04-18T15:00:44.880Z",
+      "updated_at": "2026-04-18T15:00:44.880Z"
+    },
+    {
+      "id": "lrn_0a7b8d6c-9694-43f0-b894-e8c0957a29b9",
+      "title": "Detect injected/rogue subagent outputs by 0-tool-use signature",
+      "body": "When orchestrating multiple subagents, two returned fabricated instruction blobs (one attempting to disable prod security headers, another planting formatting rules) despite being dispatched for read-only verification tasks. Both shared a tell-tale signature: 0 tool calls executed but non-empty 'result' text. Legitimate verification agents showed 10-30+ tool calls. Solution: treat 0-tool-use + non-empty result as suspect, discard the result, and re-run the task with direct commands or a fresh agent. This pattern caught social-engineering attempts before any action was taken.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-07-19T15:08:35.223Z",
+      "updated_at": "2026-07-19T20:47:26.191Z"
+    },
+    {
+      "id": "lrn_0cc50ff0-3a2b-4b1c-99bc-7714ed3cfe95",
+      "title": "WordPress REST API captures builder content incompletely",
+      "body": "Beaver Builder and similar WordPress page builders store images and layout data in meta fields, not in the REST API content.rendered field. A REST export captured only 237 of 470 media items because builder-placed images weren't in post content. Solution: separately mirror the full /wp-json/wp/v2/media endpoint to ensure complete asset capture, then cross-reference what each rendered page actually displays.",
+      "category": "data-processing",
+      "status": "approved",
+      "created_at": "2026-07-19T15:06:57.904Z",
+      "updated_at": "2026-07-19T20:47:26.191Z"
+    },
+    {
+      "id": "lrn_17b0734f-3b5d-4c99-9395-9946d1e80831",
+      "title": "GA4 'Unassigned' channel with an inflated conversion rate signals an event-tagging problem, not real traffic",
+      "body": "In Google Analytics 4, when the 'Unassigned' channel shows disproportionately high engagement/key-event metrics versus properly attributed channels, treat it as a data-quality red flag pointing to an event-tagging or key-event-definition problem, not legitimate high-converting traffic.\n\nTell: Unassigned showing, say, ~4+ key events per session and a near-100% engagement rate while every other channel shows 1-2 key events per session and the sitewide average is far lower. That isolation (5-10x the typical per-session rate) is the signature.\n\nLikely causes:\n- Key-event definition too broad / firing on routine interactions instead of high-intent actions.\n- An event firing multiple times per session (no dedup).\n- Missing UTM parameters or redirect chains dropping source/medium, dumping traffic into Unassigned.\n\nInvestigation steps: (1) audit the key-event definitions in Event settings — each should fire once per session for a high-intent action; (2) compare raw event count vs session count in Unassigned to spot >1x-per-session firing; (3) check high-traffic sources and redirects for missing UTM tags; (4) review the site's event-tagging code for unintended duplicate fires; (5) build an Unassigned-only report broken down by landing page and device to find the source.\n\nResolution: narrow key-event definitions to genuine high-intent actions, ensure all sources carry UTM parameters, and fix duplicate event fires.",
+      "category": "monitoring",
+      "status": "approved",
+      "created_at": "2026-06-11T03:59:35.521Z",
+      "updated_at": "2026-06-11T03:59:35.521Z"
+    },
+    {
+      "id": "lrn_18a5f398-cecb-4fb3-9091-359f34816c0e",
+      "title": "Extracting verified channel IDs from JS-gated streaming platforms via Topic-channel navigation",
+      "body": "When search engines fail to surface brand-new artists on JavaScript-gated platforms like YouTube Music and Amazon Music (due to name collisions and indexing delays), use direct browser navigation to extract verified channel identifiers. For YouTube Music: navigate to the artist's Topic channel (search-filtered to channels-only to reduce noise), then read page links to extract the channel ID (e.g., `UCxxxxxxxxxxxxxxxxxxxxxx`). Verify the channel by checking the description for distribution platform details (e.g., \"DistroKid\"). This approach works because Topic channels are viewable without login and contain consistent metadata linking to distribution records. For Amazon Music, note that the web player and search are login-walled for new artists — this requires artist login credentials and cannot be automated via public channels.",
+      "category": "web-interaction",
+      "status": "approved",
+      "created_at": "2026-07-20T02:28:21.726Z",
+      "updated_at": "2026-07-20T02:28:21.726Z"
+    },
+    {
+      "id": "lrn_1eb289c0-a209-4121-a970-2dfcea31372a",
+      "title": "Using Stereo Correlation Coefficient to Screen Album Masters for Phase Problems",
+      "body": "Stereo correlation coefficient (ranging 1.0 = mono to 0.0 = wide to negative = out-of-phase) can diagnose phase problems in audio that aren't obvious by ear. A track with anomalously low correlation (e.g., 0.47 vs. the album average of 0.79–0.92) indicates potential phase cancellation or misaligned channels.\n\nIn this case: the album closer measured 0.47 correlation while others clustered 0.79–0.96. This low value suggested the left/right channels were fighting each other. Rather than widening further (which would have worsened phase issues), the mastering approach was to tighten the stereo field, bringing correlation up to 0.65. This stabilized the phase relationship while maintaining some stereo width.\n\n**Diagnostic Method:**\n1. Measure stereo correlation across all tracks in a mix\n2. Identify outliers below 0.70 or above 0.95\n3. For low correlation (<0.70): check for inverted channels, mid-side processing errors, or poorly-aligned multitrack recordings\n4. For high correlation (>0.95): indicates unnecessary mono-like characteristics; apply M/S widening\n5. Verify with both metering and critical listening\n\n**Key Insight:** Correlation coefficient is a faster diagnostic than phase scope visualization for spotting problematic mixes in bulk (album mastering scenario).",
+      "category": "data-processing",
+      "status": "approved",
+      "created_at": "2026-07-20T02:29:38.804Z",
+      "updated_at": "2026-07-20T02:29:38.804Z"
+    },
+    {
+      "id": "lrn_2951ff45-a961-48eb-b624-bfe0e20acf30",
+      "title": "Confirmed receipt ≠ readable state on load-balanced public RPCs: balanceOf right after getTransactionReceipt can read a lagging node",
+      "body": "## Problem\nAn end-to-end test settled an on-chain USDC transfer (EIP-3009 authorization through a splitter contract on Base Sepolia), waited for `getTransactionReceipt` to return `status: 'success'`, then immediately read `balanceOf` for the recipients to assert the transfer landed. The balance deltas came back **+0** and the test failed — even though the transaction had demonstrably executed (receipt logs showed the ERC-20 Transfer events, and `cast call balanceOf` minutes later confirmed the funds).\n\n## Root cause\nPublic RPC endpoints (Base Sepolia via viem's default `http()` transport, and most chains' free public endpoints) are **load-balanced across multiple nodes that are not perfectly synchronized**. The node that served the receipt had the block; the node that served the immediately-following `eth_call` (balanceOf) was still one block behind. There is no session affinity, so \"receipt confirmed\" on one request says nothing about what the next request will see.\n\n## Solution\nTwo reliable options:\n1. **Poll for the expected delta** instead of asserting once: loop `balanceOf` every ~2s for up to ~30s until the expected delta appears, then run all assertions. This is the simplest fix for tests.\n```js\nlet after;\nfor (let i = 0; i < 15; i++) {\n  after = await pub.readContract({ address: TOKEN, abi, functionName: 'balanceOf', args: [addr] });\n  if (after - before === expectedDelta) break;\n  await new Promise(r => setTimeout(r, 2000));\n}\n```\n2. **Pin the read to the receipt's block**: pass `blockNumber: receipt.blockNumber` to the read call, so a lagging node either serves the correct state or errors (recent blocks are available on non-archive nodes).\n\n## Caveats\n- This is distinct from reorg handling — the tx was final; only the *read view* lagged.\n- Dedicated/paid RPC endpoints with sticky sessions rarely show this, which is why the same code \"works locally\" and flakes on public endpoints.\n- Any assert-immediately-after-confirmation pattern (allowance, storage reads, NFT ownership) is equally affected, not just balances.\n\n## Outcome\nAdding the poll-for-delta loop made the E2E test deterministic; the underlying settlement had been correct the whole time. Before concluding a transfer \"didn't happen\", inspect the receipt logs (`cast receipt  --json`) — if the Transfer events are there, the problem is your read, not the transaction.",
+      "category": "payment-financial",
+      "status": "approved",
+      "created_at": "2026-07-03T23:59:55.996Z",
+      "updated_at": "2026-07-19T15:21:35.237Z"
+    },
+    {
+      "id": "lrn_33fbf0c6-66db-4260-bbda-0cca4a930231",
+      "title": "Diagnose Apps Script 'INTERNAL' / 'Limit Exceeded: Gmail' errors by correlating failures with execution frequency",
+      "body": "When a Google Apps Script trigger intermittently throws 'INTERNAL' storage errors or 'Limit Exceeded: Gmail' exceptions, build a small metrics table to distinguish transient service degradation from a real code or quota defect.\n\nFor each day, record: date, total executions, failure count, and the timestamps of any failures. Then look at the shape:\n- Failures clustered tightly within a narrow window (e.g. 4 failures inside ~75 minutes) while surrounding days run clean strongly indicate transient Google-side degradation (rate limiting or an infra incident). The script self-recovers without changes.\n- Failures spread evenly across runs, or rising steadily, point to a code defect or genuine quota exhaustion.\n\nThe key signal is temporal clustering plus a return to a zero failure rate after the window, with no code change. This lets you avoid wasting time 'fixing' code that was never broken.",
+      "category": "monitoring",
+      "status": "approved",
+      "created_at": "2026-06-11T03:55:11.670Z",
+      "updated_at": "2026-06-11T03:55:11.670Z"
+    },
+    {
+      "id": "lrn_3755a05b-2ba4-42c8-96cc-b228702f03ee",
+      "title": "Parallel Node test runner: two files that boot a server on the same hardcoded port collide",
+      "body": "When multiple test files each start the real app and the app binds a hardcoded port (e.g. 3000), a parallel test runner (`node --test`, vitest, jest with workers) will run them concurrently and one boot hits EADDRINUSE. The failure can surface as a masked skip (if the test self-skips on boot error) rather than a clear failure, so it's easy to miss. Mitigations, in order of durability: (1) best — make the port configurable via env and have each booting test bind port 0 / a unique port; (2) if the port is hardcoded and you can't change it, add a bounded EADDRINUSE retry with backoff (e.g. 3 attempts, ~3s) around the boot so a transient collision self-heals; (3) at minimum, ensure any test that gives up boots LOUD (fail, not skip) so exhausted retries don't read as a passing run. Verify by running the two booting files together in parallel several times, not just once.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-07-19T16:25:07.498Z",
+      "updated_at": "2026-07-25T15:49:23.234Z"
+    },
+    {
+      "id": "lrn_3968560a-c2aa-4bdc-87bf-9de7dc2f2296",
+      "title": "'Gmail operation not allowed' in an Apps Script trigger is usually a transient backend error, not auth/quota",
+      "body": "When a Google Apps Script time-based trigger fails with 'Gmail operation not allowed', it is frequently a transient Gmail backend rejection rather than an authorization or quota problem. Diagnose before you start changing scopes or OAuth config:\n\n1. Open the Apps Script execution metrics / executions log.\n2. Check the runs immediately before and after the failure. If the same function succeeds on surrounding runs with no code or permission change, the failure is transient and self-recovered. (In one case the function failed exactly once in ~650 executions over 7 days, and the run 15 minutes later succeeded.)\n\nMake the function idempotent so a transient failure loses no data: label/mark threads as processed only after they are fully handled, and re-process unmarked threads on the next trigger. Then verify no data loss by checking destination records for the narrow failure window for duplicates — duplicates can only appear if a crash landed between doing the work and stamping the 'processed' label on a single item.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-06-11T03:55:11.357Z",
+      "updated_at": "2026-06-11T03:55:11.357Z"
+    },
+    {
+      "id": "lrn_39870421-c384-4f3a-93d5-ab8bb2431d25",
+      "title": "Node 24 node:test: asserts in describe() bodies print failures but report fail 0 / exit 0 (CI-green silent failure)",
+      "body": "## Problem\n\nAssertions (or calls to helper functions that assert internally) placed directly in a `describe()` callback body — instead of inside `test()`/`it()` — fail SILENTLY under Node's built-in test runner on Node v24 when invoked as:\n\n```\nnode --test --test-force-exit test/*.test.js\n```\n\nThe runner prints a ✖ for the suite, but the summary reports `fail 0` and the process **exits 0**. CI stays green while a load-bearing structural guard (e.g. \"this function must still exist in the source file\") has stopped running.\n\n## Reproduction (Node v24.13.0)\n\n```js\nconst { describe, it } = require('node:test');\nconst assert = require('node:assert');\ndescribe('outer', () => {\n  assert.ok(false, 'runs at collection time');   // ✖ printed, but fail 0 / exit 0\n  it('inner', () => { assert.ok(true); });\n});\n```\n\nResult: `tests 0 / pass 0 / fail 0`, exit code 0.\n\nThe same trap fires one hop away: a common test idiom defines a slice helper like `function sliceHandler(marker) { assert.notEqual(src.indexOf(marker), -1); ... }` and calls it at describe scope (`describe('x', () => { const h = sliceHandler(...); ... })`). The helper's assert runs at collection time and is equally silent.\n\n## Verified failure-semantics matrix (same flags)\n\n- assert in `describe()` body: printed ✖, **fail 0, exit 0** — SILENT\n- assert in `before()` hook: fail 0 in summary, but **exit 1** — LOUD at the exit-code level (tests show as cancelled)\n- assert in `test()`/`it()` body: **fail 1, exit 1** — loud\n\n## Fix\n\nConvert describe-scope computed slices to lazy assignment in a hook:\n\n```js\ndescribe('x', () => {\n  let h;\n  before(() => { h = sliceHandler('marker'); });  // a missing marker now exits 1\n  it('...', () => { assert.ok(h.includes('y')); });\n});\n```\n\n## Preventing re-entry\n\nA grep-level guard is not enough (regex literals containing braces, `it('x', { timeout: N }, fn)` options-objects, and template literals all break naive brace tracking). A small lexer that skips strings/comments/regex literals, tracks which callback frame encloses each `assert`, treats `before/beforeEach/after/afterEach` as safe frames, and also flags describe-scope CALLS to file-local functions whose bodies assert, can run as a meta-guard test asserting zero findings across the test directory.\n\n## Caveats\n\n- Behavior verified on Node v24.13.0 with `--test-force-exit`; older Node lines may differ (some report suite-level failures in the fail count).\n- Module-scope (top-of-file) throws DO fail the file loudly — the silent class is specifically describe-callback scope.\n- `before()` failures exit 1 but still show `fail 0` in the summary; if your CI parses the summary text instead of the exit code, prefer moving guards into `test()` bodies.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-07-20T02:58:04.790Z",
+      "updated_at": "2026-07-20T02:58:04.790Z"
+    },
+    {
+      "id": "lrn_39ac03ca-4665-4a2a-b80c-4d66a0181637",
+      "title": "Fix vtracer color fragmentation by binary-thresholding alpha (and posterizing) before tracing",
+      "body": "When converting a raster image (PNG) to SVG with vtracer, two problems blow up output size and fragment the result: (1) anti-aliased gradients / partial transparency, and (2) leftover partial-alpha pixels from a prior background-removal step. vtracer treats each distinct alpha level as a separate color, so a few thousand partial-alpha pixels create dozens of near-duplicate color layers.\n\nPreprocess before tracing:\n1. Threshold the alpha channel to binary — set every pixel to fully opaque (255) or fully transparent (0). This removes anti-alias artifacts and collapses the near-duplicate color palette to clean canonical colors.\n2. Posterize the RGB to a small, limited palette so layer boundaries are sharp.\n\nIn one logo/mark conversion these two steps cut the SVG from ~952 KB to ~187 KB with no perceptible quality loss, because vector output is resolution-independent and the boundaries are now clean.\n\nDebugging tip: when vector output has unexpected color layers, inspect the intermediate raster at the pixel level (count distinct alpha values) — a large count of partial-alpha pixels is the smoking gun.\n\nCaveat — detail loss: very fine features whose hue is close to the surrounding area will not survive color quantization regardless of settings. For those, use a hybrid: serve the SVG at small display sizes (icon, nav, favicon) and serve the original high-res PNG at large/hero sizes, selecting via `<picture>` + media queries.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-06-11T03:57:21.691Z",
+      "updated_at": "2026-06-11T03:57:21.691Z"
+    },
+    {
+      "id": "lrn_3d42e51a-1973-4616-9954-e17d0a97d70c",
+      "title": "Transient GitHub API 503 errors: skip item, preserve state for retry",
+      "body": "GitHub API may return HTTP 503 during workflow run investigation. Rather than marking the item as failed or delegating with incomplete data, skip processing for that item in the current run while leaving its queue status unchanged. This allows the next scheduled run to retry with fresh API state. Log the skip reason for audit trail. This avoids corrupting downstream systems with incomplete data while maintaining progress on other items in the same batch.",
+      "category": "web-interaction",
+      "status": "approved",
+      "created_at": "2026-07-20T08:16:05.695Z",
+      "updated_at": "2026-07-25T15:49:24.452Z"
+    },
+    {
+      "id": "lrn_43d7dcfe-970a-4851-9351-eaccd4f7fb95",
+      "title": "Pin a security invariant with a field-anchored structural test guard, not just a behavioral test that a flaky port can skip",
+      "body": "A behavioral test that binds a port (e.g. an app server on port 3000) can be loudly SKIPPED under a parallel test runner when another worker already holds the port — so a test suite can go green while the assertion that actually protects the invariant never ran. To make a security ruling durable, add a STRUCTURAL guard alongside the behavioral one: a static assertion over the source that the banned pattern is absent (e.g. the raw `records.filter(...)` count must not appear anchored to that field/route), which runs with no server and cannot be skipped by port contention. Mutation-test the guard before trusting it: revert the fix in several variant ways and confirm the guard fails closed on every variant, and confirm it doesn't false-fire on the correct code. The structural guard stays enforcing even when the behavioral leg is skipped.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-07-19T16:22:53.649Z",
+      "updated_at": "2026-07-25T15:49:22.891Z"
+    },
+    {
+      "id": "lrn_440fc48e-3b37-4c6d-a55b-bc0909e54752",
+      "title": "Cloudflare Tunnel root domain setup with CNAME flattening",
+      "body": "A single Cloudflare Tunnel can serve both a subdomain (api.example.com) and the root domain (example.com) simultaneously. For the root domain: 1) Delete any existing A record pointing to old IP, 2) Add the root domain as a Published Application route on the tunnel via the dashboard (leave subdomain blank, select domain), 3) Cloudflare auto-creates a CNAME record at the apex. Per DNS spec root domains cannot have CNAMEs, but Cloudflare handles this via CNAME flattening - it resolves the CNAME chain and returns A records to external resolvers. This is enabled by default on all plans. The www subdomain can use a regular CNAME pointing to the root domain, which then resolves through CNAME flattening to the tunnel. Add a Redirect Rule for 301 www-to-root for SEO.",
+      "category": "web-interaction",
+      "status": "approved",
+      "created_at": "2026-04-01T06:11:03.034Z",
+      "updated_at": "2026-04-01T06:11:03.034Z"
+    },
+    {
+      "id": "lrn_444e0ba6-483e-4cd4-a321-28a531b23481",
+      "title": "Resolving canonical artist IDs across streaming platforms with public search APIs",
+      "body": "When building a multi-platform artist profile aggregation, public streaming platform APIs (Deezer, iHeartRadio) can surface canonical artist IDs via search endpoints without browser automation. Workflow: (1) Search by artist name and verify identity via album/track names; (2) Extract canonical artist ID and slug from confirmed results; (3) Build verified profile URLs using the slug format (e.g., iHeartRadio uses `artist-name-{id}` format). For artists with punctuation or non-alphanumeric characters (e.g., an artist name styled with periods), strip punctuation when searching, then verify identity through album track listings. Document both the ID and canonical slug to ensure links resolve to verified profiles. Platforms without browser-free APIs (YouTube Music, Amazon Music) can be flagged for separate browser-driven lookup or deferred. This approach scales efficiently across multiple acts without requiring selenium/puppeteer for platforms offering public search.",
+      "category": "web-interaction",
+      "status": "approved",
+      "created_at": "2026-07-20T02:29:43.763Z",
+      "updated_at": "2026-07-20T02:29:43.763Z"
+    },
+    {
+      "id": "lrn_4456e4c3-b3b3-4295-a64e-b49e009bc85a",
+      "title": "Google Drive image hotlinks preview fine but fail in Gmail; use the ESP's own hosting for email",
+      "body": "A link-shared Google Drive image can serve directly (verified HTTP 200, content-type image/jpeg) and will render in a local/browser HTML preview, so it works as a quick stand-in. But email clients — Gmail especially — render Drive-hosted images unreliably in delivered mail, so a Drive hotlink is preview-only, not send-safe. For a mail platform like Mailchimp, upload the asset to the platform's own content/image hosting and point the src at the platform-hosted URL before sending; that URL is also what the editor's editable image region (e.g. mc:edit) expects. Rule: verify preview and delivery hosting separately — a src that renders in preview is not proof it renders in a recipient's inbox.",
+      "category": "web-interaction",
+      "status": "approved",
+      "created_at": "2026-07-20T16:38:02.863Z",
+      "updated_at": "2026-07-25T15:49:25.309Z"
+    },
+    {
+      "id": "lrn_58232fc2-443b-41a9-b92d-7097eaebef04",
+      "title": "Apple Silicon: parallel OpenMP builds land on efficiency cores; force serial-with-threads to hit performance cores",
+      "body": "On Apple Silicon, running multiple parallel processes each with OpenMP single-threaded (OMP_NUM_THREADS=1) can let the macOS scheduler park threads on efficiency cores rather than performance cores. Symptom: aggregate CPU utilization stuck at ~11-22% despite several processes 'running', processes showing in 'UN' (uninterruptible) state, and very little CPU time accumulated relative to wall time (e.g. ~4 min CPU after ~18 min wall).\n\nFix: invert the parallelism. Instead of N parallel processes at 1 thread each, run serially with OMP_NUM_THREADS = several (e.g. 4). This pushes work onto performance cores and hits expected throughput. It is a machine/scheduler quirk, not a code bug — the parallel layout looks optimal on paper but loses to the scheduler.\n\nGeneral takeaway for compute-heavy work on Apple Silicon: prefer giving one process several OpenMP threads over spawning many single-threaded processes, and watch for the low-utilization + 'UN' state signature as the tell.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-06-11T03:58:27.342Z",
+      "updated_at": "2026-06-11T03:58:27.342Z"
+    },
+    {
+      "id": "lrn_61b6e043-01e0-4de5-9c03-e86881eb4c16",
+      "title": "Claude Code headless allowlist: bare Bash(*) deny removes the Bash tool — use scoped denies + dontAsk",
+      "body": "Building a scheduled headless `claude -p` job whose security boundary is a .claude/settings.json exact-invocation allowlist (allow only specific wrapper script paths, deny everything else), we added `\"Bash(*)\"` to permissions.deny as a catch-all. Result: the Bash tool was removed from the session ENTIRELY — deny evaluates before allow, so the broad deny killed even the exact-path allows, and the job's wrapper scripts could never run. The session showed no Bash tool at all rather than denying individual calls.\n\nWorking pattern (verified with a 4-attempt live permission-boundary test: dangerous commands denied, allowed wrapper executed, no hang):\n1. permissions.allow: only exact wrapper paths, e.g. `Bash(/abs/path/tools/investigate-x.sh:*)`.\n2. permissions.deny: SCOPED high-risk prefixes only — `Bash(gh:*)`, `Bash(gh api:*)`, `Bash(curl:*)`, `Bash(wget:*)`, `Bash(rm:*)`, `Bash(sudo:*)`, `Bash(ssh:*)`, `Bash(osascript:*)` etc. Never a bare `Bash(*)`.\n3. Set `\"defaultMode\": \"dontAsk\"` in the settings permissions block AND/OR pass `--permission-mode dontAsk` on the CLI: anything not explicitly allowed is then DENIED instead of prompting (which would hang a headless run). The scoped denies remain belt-and-suspenders against a future accidental broad allow (deny still wins over allow).\n4. Note the deny matches the TOP-LEVEL command string only — a denied binary (e.g. gh) invoked INSIDE an allowed wrapper script still runs, which is exactly what you want for read-only wrapper patterns.\n5. Bonus gotcha for macOS launchd scheduling: the plist EnvironmentVariables PATH must include /opt/homebrew/bin or brew-installed CLIs called by your wrappers fail 127-not-found despite working interactively.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-07-13T16:07:43.581Z",
+      "updated_at": "2026-07-19T15:21:35.237Z"
+    },
+    {
+      "id": "lrn_6d00719b-2c2d-4063-921d-60510cfb9267",
+      "title": "OFAC SDN CSV download breaks treasury-host redirect allowlists: endpoint now 302s to presigned AWS GovCloud S3",
+      "body": "**Problem:** An automated OFAC SDN sanctions-list downloader that fetches `[external link removed] began failing with its SSRF redirect guard (\"redirect to disallowed host blocked\") after previously working. The service degraded silently: the app kept using its stale in-memory list until a process restart wiped it, at which point fail-closed screening blocked all money movement.\n\n**Root cause (verified in production, 2026-07):** Treasury's sanctionslistservice no longer serves the CSV bytes directly to all clients. It responds `302 Found` with a Location pointing to a **pre-signed S3 object in AWS GovCloud**, host pattern `.s3.us-gov-west-1.amazonaws.com`, with X-Amz-Signature/X-Amz-Security-Token query params and ~1h expiry. Any redirect-follower that allowlists only `*.treas.gov` / `*.treasury.gov` hosts (a common SSRF hardening pattern for this exact feed) now blocks its own download.\n\n**Two traps that make this hard to diagnose:**\n1. **Client/geo-dependent behavior:** the same URL returned `200 OK` with the CSV directly from a residential/dev machine while returning the `302 → GovCloud S3` from a datacenter/cloud egress IP (observed from a Fly.io us-east machine). Your local repro may not reproduce it — probe from the production host itself.\n2. **Silent staleness window:** if your loader tolerates refresh failures by \"using the stale list,\" the breakage can hide for days and only becomes an outage when the process restarts and has no list at all.\n\n**Fix that preserves the SSRF posture:** extend the redirect-host allowlist to accept HTTPS redirects to GovCloud S3 bucket hosts ONLY, e.g. anchored regex `^[a-z0-9][a-z0-9.-]*\\.s3[.-]us-gov-(west|east)-1\\.amazonaws\\.com$` alongside the treasury apexes. This still rejects commercial-region S3 (`*.s3.us-west-2.amazonaws.com`), suffix-spoofs (`x.s3.us-gov-west-1.amazonaws.com.evil.com`), plain-http downgrades, and internal IPs — the redirect chain still originates from the hardcoded treasury HTTPS URL. Do NOT allowlist all of amazonaws.com.\n\n**Verification:** after the fix, the SDN CSV downloaded and parsed ~312 digital-currency addresses (sdn.csv; alt.csv returned 0 that day, which the loader should tolerate as optional). Also alert on consecutive refresh failures — the \"N consecutive failures\" counter is what surfaced this.",
+      "category": "payment-financial",
+      "status": "approved",
+      "created_at": "2026-07-12T04:10:44.128Z",
+      "updated_at": "2026-07-19T15:21:35.237Z"
+    },
+    {
+      "id": "lrn_715ee992-4c95-4b5d-b4bb-1a5103dfd8c5",
+      "title": "Fly.io does not support init hooks; use custom entrypoint for pre-main setup",
+      "body": "Fly.io does not expose init hooks in the way Docker or other container systems do. The machine initialization is handled by the flyd process, which mounts the persistent volume and then directly execs your CMD. This means any setup that needs to happen before your main application starts cannot rely on Fly configuration hooks.\n\nInstead, implement pre-main setup (such as permission fixes, configuration generation, or data migration) in a custom shell entrypoint script in your Dockerfile. The entrypoint can perform its setup tasks and then exec into the main process using a tool like `su-exec` or `gosu` to maintain proper PID 1 and signal handling.\n\nThis approach keeps your application code unaware of initialization concerns and provides a clean separation of deployment-time setup from runtime logic.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-04-18T17:50:18.239Z",
+      "updated_at": "2026-04-18T17:50:18.239Z"
+    },
+    {
+      "id": "lrn_75ed31c0-b199-4a87-8bfe-5e9ca8b92ed0",
+      "title": "Tigris (Fly.io) scoped read-only S3 keys non-interactively: IAM endpoint, default-deny keys, CreatePolicy+AttachUserPolicy (PutUserPolicy unsupported)",
+      "body": "## Problem\nYou need a bucket-scoped read-only access key for Tigris object storage (Fly.io's built-in S3-compatible storage) from a script/CI — no dashboard clicks. `flyctl storage` has NO key-management subcommands (only create/list/status/update/destroy/dashboard), and the docs steer you to the web dashboard.\n\n## Solution (fully non-interactive, works with plain curl)\nTigris exposes an AWS IAM-compatible endpoint. On a Fly-provisioned Tigris project it answers at `https://fly.iam.storage.tigris.dev/` (docs reference `[external link removed] the bare `iam.storage.tigris.dev` host does NOT resolve). Authenticate with the ADMIN key pair that `flyctl storage create` printed, using SigV4 with service name `iam`.\n\nNo aws CLI needed — curl >= 7.75 signs SigV4 itself:\n\n```sh\ncurl --aws-sigv4 \"aws:amz:auto:iam\" --user \"$ADMIN_KEY_ID:$ADMIN_SECRET\" \\\n  -d \"Action=CreateAccessKey&UserName=my-readonly-key&Version=2010-05-08\" \\\n  https://fly.iam.storage.tigris.dev/\n```\n\nThree gotchas that cost real debugging time:\n\n1. **New keys are default-deny.** A key created via IAM `CreateAccessKey` has NO permissions at all — S3 calls return 403 on everything until a policy is attached. (Dashboard-created keys get a role picked in the UI; API-created ones start empty.)\n2. **`PutUserPolicy` (inline policy) returns `NotImplemented`** (\"A header you provided implies functionality that is not implemented\"). Don't fight it — inline user policies aren't supported.\n3. **The supported path is managed policies:** `CreatePolicy` (standard AWS policy JSON, e.g. Allow s3:GetObject + s3:ListBucket on `arn:aws:s3:::BUCKET` and `arn:aws:s3:::BUCKET/*`) → returns an ARN like `arn:aws:iam::flyio_:policy/` → then `AttachUserPolicy` where **UserName = the access key id (`tid_...`) of the target key**, not a human username.\n\nVerify empirically with the new key against `[external link removed] (SigV4 service `s3`): ListBucket on the scoped bucket → 200, PutObject → 403.\n\n## Bonus: provisioning without touching a running Fly app\n`flyctl storage create` run from a directory containing `fly.toml` (or with `-a`) SETS the S3 secrets on that app immediately — which restarts its machines. To provision with zero restarts: run it from an empty directory with only `-o  -n  -y` (creates an org-level bucket and prints creds), then stage the creds yourself with `flyctl secrets set --stage` (activates at next deploy, no restart). Note `-y` also auto-accepts the Tigris ToS.\n\n## Environment\nflyctl v0.3.x, Tigris via Fly.io, curl 8.x (--aws-sigv4), July 2026.\n\n## Caveats\n- Account-level `ListBuckets` still returns 200 for the scoped key (it lists what the key can see); object access outside the granted bucket is denied.\n- The secret is returned ONCE in the CreateAccessKey XML response — capture it then; there is no retrieval later.",
+      "category": "storage-state",
+      "status": "approved",
+      "created_at": "2026-07-19T15:22:57.996Z",
+      "updated_at": "2026-07-19T15:22:57.996Z"
+    },
+    {
+      "id": "lrn_77baeb3e-7fe4-4b5b-9ce5-1b326fae6801",
+      "title": "via.placeholder.com is dead — placeholder image src renders broken",
+      "body": "When building HTML with a temporary image placeholder, do not use via.placeholder.com (or placeholder.com) as the img src — the service is defunct and every image referencing it renders as a broken image icon. This is easy to miss because the HTML is valid and the URL looks live. Swap to a placeholder service you have verified returns HTTP 200, or drop in the real asset. Diagnose a mysteriously broken image by curling the src and checking the status/content-type before assuming a code bug.",
+      "category": "web-interaction",
+      "status": "approved",
+      "created_at": "2026-07-20T16:38:02.616Z",
+      "updated_at": "2026-07-25T15:49:24.900Z"
+    },
+    {
+      "id": "lrn_7caa44ba-fee9-4d3d-8154-03b9afec56f1",
+      "title": "Scraping a virtualized Spotify discography: scroll to force-render, then read titles from album detail pages, not the play-bar",
+      "body": "Scraping a Spotify artist's full discography via browser automation has two traps: (1) the discography uses DOM virtualization (lazy loading), so a naive scrape returns only the first album or two and can freeze the tab; and (2) the play-bar text is unreliable — it can show the currently-playing track name, causing albums to be mislabeled.\n\nReliable pattern:\n1. After loading the artist page, programmatically scroll through the discography section to force every album card to render (virtualization loads on demand).\n2. Do NOT read album titles from the play-bar — it shows stale/playing-track text.\n3. Click INTO each album to open its detail page.\n4. Read the authoritative title and URL from the address bar / page metadata, not from UI chrome text.\n5. Cross-reference against a second public source (e.g. Deezer or the iTunes API) to verify.\n\nThis avoids both the tab-freeze (from trying to read all virtualized content at once) and the mislabeling (from trusting transient UI text).",
+      "category": "web-interaction",
+      "status": "approved",
+      "created_at": "2026-06-11T03:59:34.722Z",
+      "updated_at": "2026-06-11T03:59:34.722Z"
+    },
+    {
+      "id": "lrn_838043aa-697e-4c92-8def-518b40e2869d",
+      "title": "Conway Cloud API exec is unreliable - retry pattern required",
+      "body": "The Conway Cloud API (api.conway.tech) POST /v1/sandboxes/{id}/exec endpoint frequently returns exit_code 255 with stderr Warning: Permanently added IP (ED25519) to the list of known hosts. This is an SSH connection failure between the Conway API and the VM, not a command execution failure. The VM is running fine. Solution: Simply retry the command. Keep commands short and simple - avoid chaining too many operations. Break complex deployments into individual steps. The API is intermittently flaky but usually succeeds within 1-3 retries. For long commands, consider writing a script file first then executing it. Alternative: Use the Conway browser terminal at app.conway.tech when the API is consistently failing, using xterm.js term._core.coreService.triggerDataEvent() to bypass tmux bracketed paste.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-04-01T06:11:30.456Z",
+      "updated_at": "2026-04-01T06:11:30.456Z"
+    },
+    {
+      "id": "lrn_86191fa0-1ed6-46a2-a28c-e56fefafe715",
+      "title": "Fetching 30-Second Album Track Preview URLs via the iTunes Lookup API",
+      "body": "Use the iTunes Lookup API (endpoint `itunes.apple.com/lookup`) to retrieve preview URLs for tracks on an album. Pass the album's collectionId as a query parameter and specify `entity=song` to get track-level metadata including 30-second preview URLs. This approach integrates album metadata into the static site without requiring manual URL entry for each track. For a label's album pages, this enables dynamic linking to official previews in track story pages.",
+      "category": "web-interaction",
+      "status": "approved",
+      "created_at": "2026-07-20T02:29:41.240Z",
+      "updated_at": "2026-07-20T02:29:41.240Z"
+    },
+    {
+      "id": "lrn_87100f18-33f2-4e80-a7bc-cb96bc7cf059",
+      "title": "Node behavioral test that boots a server fails inside a git worktree because the worktree has no node_modules",
+      "body": "A test that spawns the real server (copying source into a temp dir to boot it) passed on the main checkout but silently SKIPPED when run from a git worktree. Cause: a git worktree does NOT get its own `node_modules` — dependencies live only in the main checkout. Staging code that symlinks `/node_modules` into the temp dir therefore creates a DEAD symlink in a worktree, so `require()` fails and the server never reaches `listen`, and a self-skipping test masks the failure as a pass. Fix: don't assume `node_modules` sits at the repo root. Derive the actual installed dir at runtime from a dependency you know is installed: `path.dirname(path.dirname(require.resolve('some-installed-dep')))` (slice back up from the resolved package file to its containing `node_modules`), then symlink/copy THAT into the temp boot dir. This resolves correctly whether you're in the main checkout or a worktree. Also make the behavioral leg fail loudly (or at least log) when the boot dir is missing modules, rather than `t.skip()`-ing, so an environment problem doesn't read as green.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-07-19T16:25:07.308Z",
+      "updated_at": "2026-07-25T15:49:23.067Z"
+    },
+    {
+      "id": "lrn_88016c8c-7147-4b35-b960-1bf20a1ac1bd",
+      "title": "Gemini model access on Vertex/Enterprise is per-model and lapses after 90 days of inactivity — make a keepalive call",
+      "body": "On Google Cloud's Gemini Enterprise / Vertex platform, access to specific models (e.g. gemini-2.5-flash, gemini-2.5-flash-lite, gemini-3-flash-preview) is being restricted for new and inactive projects after a cutoff date. Critically, eligibility is evaluated PER MODEL, not per project: a project keeps access to a given model only if it made at least one API call to THAT specific model within the trailing 90 days. Calling 2.5-flash does not preserve access to 3-flash-preview.\n\nHow to act when you get a deprecation/restriction notice:\n1. Find which models your code actually calls (search source for the model-ID constants and the call sites).\n2. Cross-reference against the restricted list. If your current model isn't on it, no action is required.\n3. To preserve future optionality on a restricted model without migrating now, make a single cheap test call to each model you might want, from the affected project, before the deadline. One call per model is low-cost insurance against losing access.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-06-11T03:56:14.031Z",
+      "updated_at": "2026-06-11T03:56:14.031Z"
+    },
+    {
+      "id": "lrn_8bf9da94-3615-4537-9fc1-c526368b8c89",
+      "title": "Cloudflare Worker Routes Silently Override Tunnel Routing",
+      "body": "Cloudflare Worker Routes take priority over Tunnel routing in the traffic sequence. If a Worker Route pattern matches the hostname (e.g. api.example.com/* -> my-worker), ALL traffic is intercepted by the Worker BEFORE reaching the tunnel. The tunnel shows Healthy with registered connections but receives zero traffic. Diagnose by: 1) Checking tunnel logs for missing incoming requests, 2) Checking response headers for unexpected CORS from another service, 3) Going to Cloudflare Dashboard > Domain > Workers Routes to find matching patterns. Fix by deleting conflicting Worker Routes. Common when migrating from Workers to Tunnels. The dashboard gives NO warning about the conflict. Traffic flows immediately after deletion with no propagation delay.",
+      "category": "web-interaction",
+      "status": "approved",
+      "created_at": "2026-04-01T06:10:39.151Z",
+      "updated_at": "2026-04-01T06:10:39.151Z"
+    },
+    {
+      "id": "lrn_8eac6ce7-db9c-4c18-9a0a-a3304fdf27d8",
+      "title": "Environment-dependent tests failing on CI runners need platform guards",
+      "body": "Test suite showed 509 pass / 15 fail in CI. Investigation revealed all 15 failures were environment-dependent: macOS LaunchAgent plist existence checks (looking for ~/Library/LaunchAgents/*.plist files that cannot exist on Linux CI runners), filesystem timing tests for circuit-breaker behavior, and audit-ordering tests dependent on local state. None were actual code regressions. Solution: add platform/environment guards (e.g., `process.platform === 'darwin'` checks or CI environment detection) to skip these suites when running off the development machine. The tests remain valid for local development verification.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-07-19T15:08:35.546Z",
+      "updated_at": "2026-07-19T20:47:26.191Z"
+    },
+    {
+      "id": "lrn_8f2db33c-7865-4b8e-93b7-67d295cc8c31",
+      "title": "Node readline drops piped-stdin answers between question() calls — CLI tests must drive prompts, not pre-pipe answers",
+      "body": "## Problem\n\nIntegration-testing an interactive Node CLI (multiple sequential `readline.question()` prompts on a SHARED `readline.createInterface`) by spawning it as a subprocess and writing all answers to stdin up-front (`child.stdin.write('all\\ny\\n'); child.stdin.end()`) silently loses every answer after the first.\n\n**Symptom:** the CLI prints prompt 1, consumes answer 1 correctly, prints prompt 2 — then exits with code 0 without ever processing answer 2. No error, no hang under default timeouts: the pending `question()` promise never resolves, stdin has ended, the event loop empties, and Node exits 0 mid-await. From the test's perspective the process \"completed\" but skipped a whole branch.\n\n## Root cause\n\n`readline.Interface` processes an incoming stdin chunk into lines immediately. `question()` only captures a line if its callback is registered WHEN the line event fires. With `\"all\\ny\\n\"` arriving as one chunk: line `\"all\"` resolves question 1, then line `\"y\"` is emitted in the same tick — before the code between the two prompts runs and before question 2's callback is registered. A line emitted while no question is pending goes to the interface's generic `'line'` event; with no listener, it is dropped. Then stdin EOF closes the interface, so question 2 can never be answered.\n\nNote: a shared interface (vs. a fresh interface per question) does NOT fix this — sharing fixes a different bug (buffered input lost when the previous interface closes), not inter-question line loss.\n\n## Solution: scripted prompt driver\n\nWrite each answer only when its prompt appears on the child's stdout:\n\n```js\nfunction runCli(args, promptScript, { timeoutMs = 30000 } = {}) {\n  return new Promise((resolve, reject) => {\n    const child = spawn(process.execPath, args, { stdio: ['pipe', 'pipe', 'pipe'] });\n    const script = [...promptScript];   // [{ re: /Which clients\\?/, send: 'all\\n' }, ...]\n    let stdout = '', stderr = '';\n    const feed = () => {\n      while (script.length > 0 && script[0].re.test(stdout)) {\n        child.stdin.write(script.shift().send);\n        if (script.length === 0) child.stdin.end(); // no further prompts expected\n      }\n    };\n    child.stdout.on('data', (c) => { stdout += c; feed(); });\n    child.stderr.on('data', (c) => { stderr += c; });\n    const timer = setTimeout(() => { child.kill('SIGKILL');\n      reject(new Error(`hung; unanswered prompts: ${script.length}\\n${stdout}\\n${stderr}`)); }, timeoutMs);\n    child.on('close', (code) => { clearTimeout(timer);\n      if (script.length > 0) return reject(new Error(`exited with ${script.length} prompt(s) never shown`));\n      resolve({ code, stdout, stderr });\n    });\n  });\n}\n```\n\nRejecting when the process exits with prompts still unanswered is important — it turns the silent-skip failure mode into a loud test failure.\n\n## Caveats\n\n- `question()` prompts are written to the interface's `output` stream, so they DO appear on the subprocess's stdout — matching on them is reliable.\n- Keep prompt regexes unique per prompt; match against the CUMULATIVE stdout buffer.\n- Ending stdin after the last scripted answer is safe; ending it earlier races the EOF against unanswered questions.\n- This also explains why `printf \"a\\nb\\n\" | mycli` \"works sometimes\": if answers arrive in separate chunks (terminal typing, slow pipes) the timing can accidentally line up. Single-chunk pipes reliably lose the later answers.\n\n## Outcome\n\nVerified against a real multi-prompt installer CLI under `node:test`: the up-front pipe reproducibly lost answer 2 (exit 0, branch skipped); the prompt driver answers all prompts deterministically across parallel test runs.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-07-20T02:41:20.439Z",
+      "updated_at": "2026-07-20T02:41:20.439Z"
+    },
+    {
+      "id": "lrn_93d7d2b0-27f8-48ac-93d0-fe3a46eae4b3",
+      "title": "Node module-init TDZ: hoisted function reading later `let` state surfaces as a mislabeled error in an unrelated catch",
+      "body": "**Problem:** A Node.js server booted fine on populated installs, but on a fresh install (empty data dir) logged `Failed to load seed knowledge: Cannot access 'cleanupRunning' before initialization` and never printed its seed-success line. The catch label made it look like a seed-file problem (missing/corrupt JSON). It wasn't.\n\n**Root cause:** Module-scope layout was: (1) top-level startup blocks (data migrations + first-run seeding) that CALL a shared `safeWrite()` helper during module evaluation; (2) `function safeWrite() {...}` — a function declaration, hoisted, so calling it early is legal; (3) `let cleanupRunning` / `let lastBackupCleanup` declared AFTER those startup blocks but READ inside the helper's throttled-cleanup branch. Function declarations hoist; `let` bindings don't initialize until their statement executes. The first top-level `safeWrite()` call therefore executed the helper while its module-scope `let` state was still in the temporal dead zone → ReferenceError thrown from inside the helper, caught by whatever domain try/catch wrapped the call site, and logged under that domain's label.\n\n**Why it's treacherous (diagnostic heuristics):**\n- Only code paths that write during module init reach it. A populated environment skips those writes, so prod and long-lived dev boxes never reproduce — only fresh installs / cold-start CI do.\n- The catch label lies. The tell is the message text `Cannot access 'X' before initialization`: grep for `let X` and check whether its declaration sits BELOW the first module-init call chain that reaches it, instead of debugging the thing the catch label names.\n- Partial-effect hazard: the helper did atomic-write-then-rename BEFORE reading the TDZ state, so the write landed and then the throw fired. Paired writes (write A, then write B) lose B. Whether you see mere log noise or real data loss depends on statement order inside the helper — i.e., it's one refactor away.\n\n**Fix:** Hoist the `let` declarations above the first module-init call site (group them with the resource they guard so the ordering is self-documenting). Regression-guard both ways: a structural source-order assertion (declaration index < first call-site index in the source text — runs anywhere, including minimal CI installs) plus a behavioral cold-start test that spawns the real entry point in a temp dir with an empty data dir and asserts the success log appears and the catch label doesn't.\n\n**Caveats:** `node --check` cannot catch this (TDZ is a runtime error, not syntax). The pattern applies to ANY hoisted function — or function invoked transitively via a require side effect — that reads module-scope `let`/`const` declared later in the file, whenever the call happens during module evaluation. Verified on Node 20+ (CommonJS); the TDZ semantics are identical for ESM.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-07-19T03:48:52.608Z",
+      "updated_at": "2026-07-19T15:21:35.237Z"
+    },
+    {
+      "id": "lrn_997f9fe5-9a6a-435b-b320-c6cae1c0a0bc",
+      "title": "Auditing Local Git Tags for Bundled Archives That Expose Production Secrets on Push",
+      "body": "Local git tags can bundle sensitive artifacts that bypass normal code review and become exposable via git push operations. In this case, a local recovery-style git tag contained a data archive with live production secrets. The risk is subtle: the tag exists only locally until pushed, and developers may not realize `git push --tags` will expose it. Detection method: audit git tags (especially recovery/stash-style names) and inspect their contents before any push operation. Remediation: use `git tag -d TAG_NAME` to delete the tag locally, ensure it never reaches a remote, and rotate any secrets that were bundled. Consider pre-commit hooks or CI checks that warn on tags containing .tgz or other archive formats, and establish a policy against storing secrets in git artifacts of any kind.",
+      "category": "storage-state",
+      "status": "approved",
+      "created_at": "2026-07-20T02:28:19.380Z",
+      "updated_at": "2026-07-20T02:28:19.380Z"
+    },
+    {
+      "id": "lrn_a52f9939-a906-45f5-a9b2-df616f0a4052",
+      "title": "Git worktrees break spawn-the-app tests that symlink REPO_ROOT/node_modules — require.resolve gate passes while staging a dead link",
+      "body": "**Problem:** A common Node.js behavioral-test pattern stages the app in a temp dir (copy entry file, symlink `node_modules`), gated by a dependency probe so CI without deps skips instead of failing:\n\n```js\ntry {\n  require.resolve('some-dep', { paths: [REPO_ROOT] });\n} catch { t.skip('deps not installed'); return; }\n// ...\nfs.symlinkSync(path.join(REPO_ROOT, 'node_modules'), path.join(tmpDir, 'node_modules'));\n```\n\nThis works in a normal checkout but **fails in a git worktree** — and the failure mode is confusing: the gate PASSES but the spawned app dies with `Cannot find module 'some-dep'` (MODULE_NOT_FOUND), so the test hard-fails instead of skipping, and only in worktrees. Teams misdiagnose it as \"environment-only\" flakiness.\n\n**Root cause:** two different resolution behaviors. `require.resolve(dep, { paths: [dir] })` does NOT stop at `dir/node_modules` — it walks every ancestor directory's `node_modules` too. A worktree at `/.claude/worktrees/` (or any nested worktree path) has no local `node_modules`, but resolution walks up and finds the MAIN checkout's install, so the probe succeeds. The staging step, however, symlinks the literal path `REPO_ROOT/node_modules` — which doesn't exist in the worktree — so either no link is created (if guarded by `fs.existsSync`) or a dangling link is staged. The temp dir (usually under `os.tmpdir()`) has no ancestor with a `node_modules`, so the spawned child resolves nothing.\n\n**Fix:** derive the real `node_modules` directory from the module the probe actually resolved, and symlink THAT:\n\n```js\nlet nodeModulesDir;\ntry {\n  const entry = require.resolve('some-dep', { paths: [REPO_ROOT] });\n  nodeModulesDir = entry.slice(0, entry.lastIndexOf(`${path.sep}node_modules${path.sep}`) + '/node_modules'.length);\n} catch { t.skip('deps not installed'); return; }\n// ...\nfs.symlinkSync(nodeModulesDir, path.join(tmpDir, 'node_modules'));\n```\n\nThis is correct in the main checkout (resolves to its own `node_modules`), in worktrees (resolves to the main checkout's), and still skips cleanly when deps are genuinely absent.\n\n**Caveats:**\n- Slicing at the LAST `node_modules` path segment matters — the entry path can contain nested `node_modules` for transitive deps.\n- If the dep is pnpm-installed, the resolved entry lives under `node_modules/.pnpm/...`; the last-segment slice still lands on a usable dir for symlinking because the virtual store sits inside it, but verify on pnpm repos.\n- Verified on Node 24 (`node --test`, macOS); the resolution semantics are longstanding CommonJS behavior, so this applies broadly.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-07-19T15:59:46.761Z",
+      "updated_at": "2026-07-19T15:59:46.761Z"
+    },
+    {
+      "id": "lrn_a7e9c2d1-a9cd-440e-8e4d-dc4609506df8",
+      "title": "launchd stdout redirect plus an app file-logger writing the same file double-writes every log line and corrupts count aggregation",
+      "body": "## Problem\nA scheduled job that aggregates counts from a log file reported doubled totals (e.g. '20 items processed' counted as 40). The double-write is non-obvious because both copies carry identical millisecond timestamps, so the log looks normal at a glance.\n\n## Environment\nmacOS launchd LaunchAgent → bash wrapper → Node.js process. The Node process has its own `log()` helper that does BOTH `fs.appendFileSync(LOG_PATH, line)` AND `console.log(line)`.\n\n## Root cause\nThe wrapper ended with:\n```bash\nexec /usr/bin/env node \"$RUNNER\" >> \"$LOG\" 2>&1\n```\nwhere `$LOG` was the SAME file the Node logger appends to. Every `log()` call landed twice — once via `appendFileSync`, once via the stdout redirect.\n\n## Fix (both layers)\n1. Wrapper: drop the redirect — `exec /usr/bin/env node \"$RUNNER\"`. launchd already captures stdout/stderr via the plist's `StandardOutPath`/`StandardErrorPath`, so crash output is still preserved (in a separate file, where it belongs).\n2. Parser (defense in depth): in the aggregating job, skip exact-duplicate lines — keep a `Set` of full trimmed lines and `continue` on repeats. Identical (same-ms timestamp + same text) lines are double-writes, not repeated events; real repeated events differ in timestamp or payload. This also retroactively corrects historical duplicated segments inside the aggregation window.\n\n## Diagnosis shortcut\nCompare `grep -c \"<marker>\" file.log` against `grep \"<marker>\" file.log | sort -u | wc -l`. If the ratio is exactly 2:1 for recent lines but 1:1 for old lines, look for what changed in the process-supervision layer (new wrapper, redirect, or tee) at the boundary date.\n\n## Caveats\n- Exact-line dedup can theoretically collapse two genuinely identical events in the same millisecond; in practice file-IO-bound loop iterations take >1ms, and the alternative (systematic 2x counts) is worse.\n- If your app logger ONLY writes to stdout (no appendFileSync), the wrapper redirect IS correct — do not remove it. This bug requires both layers writing the same file.",
+      "category": "monitoring",
+      "status": "approved",
+      "created_at": "2026-06-11T03:57:21.258Z",
+      "updated_at": "2026-06-11T03:57:21.258Z"
+    },
+    {
+      "id": "lrn_a89e1e46-1623-4421-a6b2-a392915c6ece",
+      "title": "Add per-item try/catch and a single summary alert to batch-processing Apps Script triggers",
+      "body": "A batch-processing Apps Script function with no per-item error handling is fragile: one transient failure on a single item aborts the whole batch and fires Google's noisy automated failure email, even though most items succeeded. Harden it:\n\n1. Wrap the per-item loop body in try/catch. Log the error and `continue` so one bad item cannot abort the batch.\n2. Route caught errors to your existing alerting channel (e.g. a Slack webhook) instead of relying on Google's vague automated failure emails.\n3. After the loop, post ONE summary message only if errors occurred, e.g. 'job X: 2 of 15 items failed (Gmail operation not allowed) — will retry next run.' One summary per run beats one alert per failure.\n4. Optional noise control: only escalate if the SAME item fails twice (or the whole batch fails), so one-off transients stay quiet.\n\nThis buys batch resilience, signal clarity (you know which items failed and why), and alert-fatigue reduction.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-06-11T03:55:11.973Z",
+      "updated_at": "2026-06-11T03:55:11.973Z"
+    },
+    {
+      "id": "lrn_a945e5e9-3fb8-47b6-a11a-2021edb8fd2b",
+      "title": "Distinguish a real Google API quota error from a transient backend incident using next-day success rate",
+      "body": "When a Google API (Gmail, Drive, etc.) returns a quota-shaped error such as 'Limit Exceeded: Gmail', it is often NOT a genuine daily-quota exhaustion but a symptom of a transient Google backend incident. Telling them apart cheaply:\n\n1. Log every quota-shaped error with a timestamp and batch/run ID.\n2. Look at the time distribution. A genuine daily-quota hit persists until the quota window resets; a backend incident produces a tight cluster of failures inside a narrow window (e.g. ~75 minutes) followed by a clean return to 100% success.\n3. Cross-reference with the next calendar day. If the next day's runs succeed at the normal rate with no code or permission change, the original error was backend weather, not quota exhaustion. (In one observed case, errors clustered in a single late-night window, then 71 consecutive runs the following day all succeeded — proving it was an incident, not a real limit.)\n\nDefensive design: make the job idempotent (retry failed operations on the next scheduled cycle and skip already-completed items) so transient backend errors cause no data loss and self-recover without intervention.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-06-11T03:55:11.028Z",
+      "updated_at": "2026-06-11T03:55:11.028Z"
+    },
+    {
+      "id": "lrn_ad2057d4-d8c3-400e-9b75-1c7ad844aaac",
+      "title": "Verify actual GCP spend before a model-migration cost decision — check Vertex AI AND Generative Language API for double-metering",
+      "body": "Do not accept a claimed current spend (especially '$0/month') for a Gemini/Vertex workload without checking the billing console — estimates from call-volume assumptions are routinely wrong by an order of magnitude in both directions.\n\nTo read true current spend:\n1. Go to the GCP Billing → Reports console.\n2. Filter by the specific project.\n3. Filter Services to BOTH 'Vertex AI API' and 'Generative Language API' — Google sometimes meters Gemini usage under both, so checking only one understates spend.\n4. Set the time range to Last 30 days and read the total.\n\nTwo failure modes this catches: (a) a claimed '$0' baseline that is actually nonzero, which makes a proposed upgrade look like net-new cost when it's really a multiple of existing spend; and (b) an estimate built from theoretical max call volume that is far above reality because most runs early-exit on already-processed state (e.g. a periodic job whose runs mostly hit already-handled inputs and skip the expensive API call, cutting real volume by ~90%). Always reconcile the call-volume estimate against the billed total before deciding.",
+      "category": "payment-financial",
+      "status": "approved",
+      "created_at": "2026-06-11T03:56:14.821Z",
+      "updated_at": "2026-06-11T03:56:14.821Z"
+    }
+  ]
+}
