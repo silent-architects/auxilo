@@ -42,6 +42,13 @@ const ACCOUNT_VOCAB_COMMON_DEV_TERMS = (() => {
     return new Set();
   }
 })();
+// Shared review-time options keep the summary count and reject-by-signal
+// selector on the same account_vocab derivation. Pure inputs only: the config
+// tree is image-owned and the wordlist load above already fails open loudly.
+const ACCOUNT_VOCAB_REVIEW_OPTS = Object.freeze({
+  config: ACCOUNT_VOCAB_CONFIG,
+  commonDevTerms: ACCOUNT_VOCAB_COMMON_DEV_TERMS,
+});
 // SPEC3 B1/C1: extraction channel-hold + clean-lane standing consent (FLAG-DARK:
 // EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED, default OFF). The channel marker is a
 // BRAKE, never a gas pedal — see lib/clean-lane.js header for the trust analysis.
@@ -3250,7 +3257,7 @@ function matchLearnings(query, filters = {}) {
     // LW-13 / LW-16: injection_flags / possible_duplicate_of / moderation /
     // sensitivity_signals are moderation-internal — never serialized in
     // buyer-facing results.
-    .map(({ _score, _textScore, body, injection_flags, possible_duplicate_of, possible_duplicate_similarity, moderation, sensitivity_signals, sensitivity_source, sensitivity_evidence, learning_type, sanitized_from, sanitized_to, ...rest }) => ({
+    .map(({ _score, _textScore, body, injection_flags, possible_duplicate_of, possible_duplicate_similarity, near_duplicate_evidence, near_duplicate_why, moderation, sensitivity_signals, sensitivity_source, sensitivity_evidence, learning_type, sanitized_from, sanitized_to, ...rest }) => ({
       ...rest,
       relevance: _score
       // NOTE: body is intentionally excluded — agents must unlock to read it
@@ -5510,6 +5517,32 @@ function isSearchUnauthRateLimited(ip) {
   return false;
 }
 
+// SPEC3-F1: Freeze near-duplicate evidence at screening time. A predecessor can
+// later move between pending/approved/rejected, so review-time code must not
+// infer the original hold reason from mutable catalog state.
+function nearDuplicateHold(result) {
+  if (!result || result.verdict === 'clean' || !result.match) return null;
+  const match = result.match;
+  let why = `Possible duplicate of ${match.id}.`;
+  if (match.status === 'approved') {
+    why = `re-extraction of your published learning ${match.id}`;
+  } else if (match.status === 'rejected') {
+    why = 're-extraction of a lesson you previously rejected';
+  }
+  return {
+    possible_duplicate_of: match.id,
+    possible_duplicate_similarity: Number(match.similarity.toFixed(3)),
+    near_duplicate_evidence: {
+      predecessor_id: match.id,
+      predecessor_status: match.status || null,
+      predecessor_category: match.category || null,
+      channel: match.channel || null,
+      channels: match.channels || null,
+    },
+    near_duplicate_why: why,
+  };
+}
+
 // Submit a learning (FREE — encourages contributions)
 // AU-8: rate limiting applied inside handler after API key validation (if present)
 app.post('/learn', async (c) => {
@@ -5831,19 +5864,11 @@ app.post('/learn', async (c) => {
     }, 409);
   }
 
-  // LW-14: Near-duplicate detection (shingle Jaccard vs same-category catalog).
-  // >=0.85 → reject 409 with existing_id (spec'd exception to M-6: a submitter
-  // at this similarity already possesses the content; title NOT disclosed).
-  // 0.60–0.85 → accept but flag for moderation (possible_duplicate_of below).
+  // LW-14 / SPEC3-F1: Near-duplicate detection across the full catalog.
+  // Similarity is a HOLD signal only — never a rejection. Exact duplicates
+  // remain governed by the separate 409 gate above.
   const nearDup = findNearDuplicate({ title, body: content, category }, learnings);
-  if (nearDup.verdict === 'reject') {
-    return c.json({
-      error: 'Near-duplicate learning detected',
-      message: 'This learning is highly similar to an existing catalog entry. If it adds new information, rewrite it to focus on what is new and resubmit.',
-      existing_id: nearDup.match.id,
-      similarity: Number(nearDup.match.similarity.toFixed(3)),
-    }, 409);
-  }
+  const nearDupHold = nearDuplicateHold(nearDup);
   // --- End duplicate detection ---
 
   // --- Sensitivity filter ---
@@ -5941,14 +5966,14 @@ app.post('/learn', async (c) => {
   const learnReviewReasons = [];
   if (FORCE_ALL_REVIEW) learnReviewReasons.push('forced_review');
   if (injectionScreen.flagged) learnReviewReasons.push('injection');
-  if (nearDup.verdict !== 'clean') learnReviewReasons.push('near_duplicate');
+  if (nearDupHold) learnReviewReasons.push('near_duplicate');
   if (contentSensitivity.sensitive) learnReviewReasons.push('content_sensitivity');
   if (processAdviceHold) learnReviewReasons.push('process_advice_screen');
   if (!qualityPresent) learnReviewReasons.push('awaiting_quality');
   if (qualityPresent && !qualityMeetsFloor) learnReviewReasons.push('below_quality_floor');
   const seamlessScreensAndScore = !FORCE_ALL_REVIEW &&
     !injectionScreen.flagged &&
-    nearDup.verdict === 'clean' &&
+    !nearDupHold &&
     !contentSensitivity.sensitive &&
     !processAdviceHold &&
     qualityPresent &&
@@ -6096,10 +6121,7 @@ app.post('/learn', async (c) => {
     // lib/self-review.js screenFlags() maps to lane needs_your_eyes. Moderation-
     // internal, stripped from buyer-facing projections like sensitivity_signals.
     ...(processAdviceHold && { learning_type: 'process_advice' }),
-    ...(nearDup.verdict === 'flag' && {
-      possible_duplicate_of: nearDup.match.id,
-      possible_duplicate_similarity: Number(nearDup.match.similarity.toFixed(3)),
-    }),
+    ...(nearDupHold || {}),
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
@@ -6159,6 +6181,10 @@ app.post('/learn', async (c) => {
     status: learning.status,
     // LW-16: when held, tell the contributor WHY (seamless otherwise).
     ...(learning.status === 'pending_review' && { review_reason: learnReviewReasons }),
+    ...(nearDupHold && {
+      near_duplicate_why: nearDupHold.near_duplicate_why,
+      near_duplicate_evidence: nearDupHold.near_duplicate_evidence,
+    }),
     ...(howToReview && { how_to_review: howToReview }),
     // SPEC3 C1 (§4.3): per-publish notice for standing-consent publishes — the
     // human must reliably learn about every unattended publish while the
@@ -6757,13 +6783,17 @@ app.post('/extract', async (c) => {
           crypto.createHash('sha256').update((existing.body || '').toLowerCase().replace(/\s+/g, ' ').trim()).digest('hex');
         return existingHash === bodyHash;
       });
-      const extractNearDup = exactDup
-        ? { verdict: 'reject', match: { id: exactDup.id, similarity: 1 } }
-        : findNearDuplicate({ title: candidate.title, body: candidate.body, category: candidate.category }, dedupPool);
-      if (extractNearDup.verdict === 'reject') {
-        rejected.push({ reason: 'duplicate', title: candidate.title, detail: `near-duplicate of ${extractNearDup.match.id}` });
+      // Preserve the separate exact-duplicate rejection. Near-duplicate
+      // similarity itself is never blocking under SPEC3-F1.
+      if (exactDup) {
+        rejected.push({ reason: 'duplicate', title: candidate.title, detail: `duplicate of ${exactDup.id}` });
         continue;
       }
+      const extractNearDup = findNearDuplicate(
+        { title: candidate.title, body: candidate.body, category: candidate.category },
+        dedupPool,
+      );
+      const extractNearDupHold = nearDuplicateHold(extractNearDup);
 
       // LW-13: Injection screening + moderation parity. The previous behavior
       // (candidate.status = 'approved' unconditionally) let LLM-extracted
@@ -6818,12 +6848,12 @@ app.post('/extract', async (c) => {
       const extractReviewReasons = [];
       if (FORCE_ALL_REVIEW) extractReviewReasons.push('forced_review');
       if (extractInjection.flagged) extractReviewReasons.push('injection');
-      if (extractNearDup.verdict !== 'clean') extractReviewReasons.push('near_duplicate');
+      if (extractNearDupHold) extractReviewReasons.push('near_duplicate');
       if (extractSensitive) extractReviewReasons.push('content_sensitivity');
       if (extractProcessAdviceHold) extractReviewReasons.push('process_advice_screen');
       const extractSeamlessEligible = !FORCE_ALL_REVIEW &&
         !extractInjection.flagged &&
-        extractNearDup.verdict === 'clean' &&
+        !extractNearDupHold &&
         !extractSensitive &&
         !extractProcessAdviceHold;
 
@@ -6861,10 +6891,7 @@ app.post('/extract', async (c) => {
           candidate.sensitivity_evidence = extractContentSensitivity.sensitivity_evidence;
         }
       }
-      if (extractNearDup.verdict === 'flag') {
-        candidate.possible_duplicate_of = extractNearDup.match.id;
-        candidate.possible_duplicate_similarity = Number(extractNearDup.match.similarity.toFixed(3));
-      }
+      if (extractNearDupHold) Object.assign(candidate, extractNearDupHold);
       // CI-7: persisted only when the system-fact screen held the candidate —
       // maps to lane needs_your_eyes via screenFlags (parity with /learn).
       if (extractProcessAdviceHold) candidate.learning_type = 'process_advice';
@@ -6879,6 +6906,10 @@ app.post('/extract', async (c) => {
         status: candidate.status,
         // LW-16: per-item review reason when held (seamless items omit it).
         ...(candidate.status === 'pending_review' && { review_reason: extractReviewReasons }),
+        ...(extractNearDupHold && {
+          near_duplicate_why: extractNearDupHold.near_duplicate_why,
+          near_duplicate_evidence: extractNearDupHold.near_duplicate_evidence,
+        }),
       });
     } else {
       // Scheduled or Manual — park for review
@@ -7870,6 +7901,7 @@ app.get('/knowledge/:id', async (c) => {
     const {
       injection_flags: _ifo, possible_duplicate_of: _pdo,
       possible_duplicate_similarity: _pso, moderation: _modo,
+      near_duplicate_evidence: _ndeo, near_duplicate_why: _ndwo,
       sensitivity_signals: _sso, sensitivity_source: _ssrco,
       sensitivity_evidence: _seo, learning_type: _lto,
       sanitized_from: _sfo, sanitized_to: _sto,
@@ -8111,6 +8143,7 @@ app.get('/knowledge/:id', async (c) => {
     const {
       injection_flags: _if, possible_duplicate_of: _pd,
       possible_duplicate_similarity: _ps, moderation: _mod,
+      near_duplicate_evidence: _nde, near_duplicate_why: _ndw,
       sensitivity_signals: _ss, sensitivity_source: _ssrc,
       sensitivity_evidence: _se, learning_type: _lt,
       sanitized_from: _sf, sanitized_to: _st,
@@ -8156,6 +8189,7 @@ app.get('/knowledge/:id', async (c) => {
     const {
       injection_flags: _ifc, possible_duplicate_of: _pdc,
       possible_duplicate_similarity: _psc, moderation: _modc,
+      near_duplicate_evidence: _ndec, near_duplicate_why: _ndwc,
       sensitivity_signals: _ssc, sensitivity_source: _ssrcc,
       sensitivity_evidence: _sec, learning_type: _ltc,
       sanitized_from: _sfc, sanitized_to: _stc,
@@ -8353,6 +8387,7 @@ app.get('/knowledge/:id', async (c) => {
   const {
     injection_flags: _if, possible_duplicate_of: _pd,
     possible_duplicate_similarity: _ps, moderation: _mod,
+    near_duplicate_evidence: _nde, near_duplicate_why: _ndw,
     sensitivity_signals: _ss, sensitivity_source: _ssrc,
     sensitivity_evidence: _se, learning_type: _lt,
     sanitized_from: _sf, sanitized_to: _st,
@@ -9616,6 +9651,12 @@ app.get('/admin/moderation/queue', adminAuth('read'), (c) => {
       ...(l.possible_duplicate_of && {
         possible_duplicate_of: l.possible_duplicate_of,
         possible_duplicate_similarity: l.possible_duplicate_similarity,
+        ...(l.near_duplicate_evidence && {
+          near_duplicate_evidence: l.near_duplicate_evidence,
+        }),
+        ...(l.near_duplicate_why && {
+          near_duplicate_why: l.near_duplicate_why,
+        }),
       }),
     }));
 
@@ -9903,10 +9944,7 @@ app.get('/account/pending/summary', async (c) => {
   if (q.get('full') === '1' || q.get('full') === 'true') opts.full = true;
   // SPEC3-E1: full-corpus, read-only recount at review time. The pure detector
   // receives both corpus and static terms as arguments; nothing is persisted.
-  opts.accountVocab = {
-    config: ACCOUNT_VOCAB_CONFIG,
-    commonDevTerms: ACCOUNT_VOCAB_COMMON_DEV_TERMS,
-  };
+  opts.accountVocab = ACCOUNT_VOCAB_REVIEW_OPTS;
 
   const summary = summarizeOwnPending(learnings, accountId, opts);
   return c.json({ account_id: accountId, ...summary });
@@ -9999,7 +10037,9 @@ app.post('/account/pending/reject-by-signal', async (c) => {
   let totals;
   const releaseLearningsLock = await acquireLearningsLock();
   try {
-    const ids = selectPendingIdsBySignal(learnings, accountId, signal);
+    const ids = selectPendingIdsBySignal(learnings, accountId, signal, {
+      accountVocab: ACCOUNT_VOCAB_REVIEW_OPTS,
+    });
     // Counted gate: live selection must equal what the operator confirmed.
     if (ids.length !== expectedCount) {
       return c.json({
@@ -10182,14 +10222,7 @@ app.post('/account/pending/:id/sanitize', async (c) => {
 
   // 3. Near-dup — same predecessor exclusion.
   const nearDup = findNearDuplicate({ title, body: content, category: original.category }, dedupSet);
-  if (nearDup.verdict === 'reject') {
-    return c.json({
-      error: 'Near-duplicate learning detected',
-      message: 'The sanitized content is highly similar to a different catalog entry.',
-      existing_id: nearDup.match.id,
-      similarity: Number(nearDup.match.similarity.toFixed(3)),
-    }, 409);
-  }
+  const nearDupHold = nearDuplicateHold(nearDup);
 
   // 4. Credentials/PII filter (fail CLOSED like /learn).
   let scanResult;
@@ -10241,7 +10274,7 @@ app.post('/account/pending/:id/sanitize', async (c) => {
   const reviewReasons = [];
   if (FORCE_ALL_REVIEW) reviewReasons.push('forced_review');
   if (injectionScreen.flagged) reviewReasons.push('injection');
-  if (nearDup.verdict !== 'clean') reviewReasons.push('near_duplicate');
+  if (nearDupHold) reviewReasons.push('near_duplicate');
   if (contentSensitivity.sensitive) reviewReasons.push('content_sensitivity');
   if (processAdviceHold) reviewReasons.push('process_advice_screen');
   if (!carriedQA) reviewReasons.push('awaiting_quality');
@@ -10301,10 +10334,7 @@ app.post('/account/pending/:id/sanitize', async (c) => {
       }),
     }),
     ...(processAdviceHold && { learning_type: 'process_advice' }),
-    ...(nearDup.verdict === 'flag' && {
-      possible_duplicate_of: nearDup.match.id,
-      possible_duplicate_similarity: Number(nearDup.match.similarity.toFixed(3)),
-    }),
+    ...(nearDupHold || {}),
     quality: { unlocks: 0, ratings: 0, avg_helpfulness: 0, helpfulness_scores: [], score: 0 },
     earnings: { gross_usd: 0, contributor_share_usd: 0, platform_share_usd: 0 },
     created_at: now,
@@ -10380,6 +10410,10 @@ app.post('/account/pending/:id/sanitize', async (c) => {
     original_disposition: originalDisposition,
     status: 'pending_review',
     review_reason: reviewReasons,
+    ...(nearDupHold && {
+      near_duplicate_why: nearDupHold.near_duplicate_why,
+      near_duplicate_evidence: nearDupHold.near_duplicate_evidence,
+    }),
     message: 'Sanitized replacement resubmitted through every screen and held for your explicit approval. The original stays private.',
     how_to_review: 'Approve or reject it yourself: run `auxilo review` (CLI), open your dashboard review queue, or GET /account/pending with your API key.',
   });

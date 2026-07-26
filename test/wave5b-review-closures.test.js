@@ -232,6 +232,27 @@ describe('B2: contributor projections carry evidence; triage rows carry why', ()
     assert.equal(deriveWhy(pendingLearning('lrn_c'), []), null, 'unflagged rows have no why');
   });
 
+  it('near-duplicate evidence and event-time why stay contributor-only', () => {
+    const duplicate = pendingLearning('lrn_near', {
+      possible_duplicate_of: 'lrn_published',
+      possible_duplicate_similarity: 0.787,
+      near_duplicate_why: 're-extraction of your published learning lrn_published',
+      near_duplicate_evidence: {
+        predecessor_status: 'approved',
+        channel: 'near_verbatim',
+        scores: { d1: 0.088, d3: 0.881, composite: 0.787 },
+      },
+    });
+    const full = projectPending(duplicate);
+    const row = projectTriageRow(duplicate);
+
+    assert.equal(full.near_duplicate_why, duplicate.near_duplicate_why);
+    assert.deepEqual(full.near_duplicate_evidence, duplicate.near_duplicate_evidence);
+    assert.equal(row.why, duplicate.near_duplicate_why);
+    assert.equal(row.near_duplicate_why, duplicate.near_duplicate_why);
+    assert.deepEqual(row.near_duplicate_evidence, duplicate.near_duplicate_evidence);
+  });
+
   it('lane derivation is unchanged by evidence presence (B2 rule: lanes untouched)', () => {
     const base = pendingLearning('lrn_l1', {
       sensitivity_signals: ['email'],
@@ -256,6 +277,15 @@ describe('B2: buyer projections NEVER carry evidence or lineage (count-pinned st
     assert.equal(named, 2, 'self-unlock + paid-unlock destructures must strip sensitivity_evidence');
     assert.equal(capped, 1, 'capped-repeat destructure must strip sensitivity_evidence');
     assert.equal(searchMap, 1, 'search-map destructure must strip sensitivity_evidence');
+
+    const nearNamed = (SERVER_SRC.match(/near_duplicate_evidence: _nde\b/g) || []).length;
+    const nearCapped = (SERVER_SRC.match(/near_duplicate_evidence: _ndec\b/g) || []).length;
+    const nearSearch = (SERVER_SRC.match(
+      /possible_duplicate_similarity, near_duplicate_evidence, near_duplicate_why,/g,
+    ) || []).length;
+    assert.equal(nearNamed, 2, 'self-unlock + paid-unlock strip duplicate evidence');
+    assert.equal(nearCapped, 1, 'capped-repeat strips duplicate evidence');
+    assert.equal(nearSearch, 1, 'search-map strips duplicate evidence');
   });
 
   it('sanitize lineage stripped at the same 4 buyer sites', () => {
@@ -331,7 +361,8 @@ describe('B2: POST /account/pending/reject-by-signal (structural)', () => {
   });
 
   it('selection is the shared pure selector; decisions flow through applyBulkDecisions under the learnings lock', () => {
-    assert.ok(h.includes('selectPendingIdsBySignal(learnings, accountId, signal)'));
+    assert.ok(h.includes('selectPendingIdsBySignal(learnings, accountId, signal, {'));
+    assert.ok(h.includes('accountVocab: ACCOUNT_VOCAB_REVIEW_OPTS'));
     assert.ok(h.includes('applyBulkDecisions(learnings, accountId, chunk'));
     assert.ok(h.includes('acquireLearningsLock()'));
     assert.ok(h.includes('safeWrite(LEARNINGS_FILE, learnings)'));

@@ -1109,7 +1109,7 @@
         },
         "responses": {
           "201": {
-            "description": "Learning submitted. LW-16: publishing is seamless by default \u2014 a fully-clean submission is `status: 'approved'` and immediately discoverable. It is held (`status: 'pending_review'`) only when a screen flags it (credentials/PII, prompt-injection, near-duplicate, or the two-layer content-sensitivity classifier \u2014 a regex first pass UNION an LLM semantic layer, `regex.sensitive || llm.sensitive`) or the `FORCE_ALL_REVIEW` kill switch is on; in that case `review_reason` lists why. The `sensitivity_signals` / `sensitivity_source` fields are moderation-internal and never returned to buyers.",
+            "description": "Learning submitted. LW-16: publishing is seamless by default \u2014 a fully-clean submission is `status: 'approved'` and immediately discoverable. It is held (`status: 'pending_review'`) only when a screen flags it (credentials/PII, prompt-injection, near-duplicate, or the two-layer content-sensitivity classifier \u2014 a regex first pass UNION an LLM semantic layer, `regex.sensitive || llm.sensitive`) or the `FORCE_ALL_REVIEW` kill switch is on; in that case `review_reason` lists why. SPEC3-F1: near-verbatim similarity is hold-only across pending, published, and rejected predecessors in every category; it never rejects a submission. Duplicate evidence is contributor/reviewer-only and never returned to buyers.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1148,6 +1148,14 @@
                         ]
                       }
                     },
+                    "near_duplicate_why": {
+                      "type": "string",
+                      "description": "Contributor-only event-time explanation, present when near_duplicate held the submission."
+                    },
+                    "near_duplicate_evidence": {
+                      "type": "object",
+                      "description": "Contributor-only predecessor status, winning channel, and deterministic channel scores; stripped from every buyer projection."
+                    },
                     "contributor_wallet": {
                       "type": "string"
                     },
@@ -1171,7 +1179,7 @@
             }
           },
           "409": {
-            "description": "Duplicate or near-duplicate learning detected (LW-14). Exact duplicates return error 'Duplicate learning detected' without identifying the existing entry. Near-duplicates (>=0.85 shingle-Jaccard similarity within the same category) return existing_id and similarity; mid-band matches (0.60-0.85) are accepted but held for moderation with possible_duplicate_of.",
+            "description": "Exact duplicate learning detected (LW-14). Exact normalized body matches or exact title+category matches return error 'Duplicate learning detected' without identifying the existing entry. Near-verbatim similarity never returns 409; it is accepted and held for contributor review.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1180,20 +1188,11 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "Duplicate learning detected",
-                        "Near-duplicate learning detected"
+                        "Duplicate learning detected"
                       ]
                     },
                     "message": {
                       "type": "string"
-                    },
-                    "existing_id": {
-                      "type": "string",
-                      "description": "ID of the existing near-duplicate learning (near-dup responses only)"
-                    },
-                    "similarity": {
-                      "type": "number",
-                      "description": "Shingle-Jaccard similarity score 0-1 (near-dup responses only)"
                     }
                   }
                 }
@@ -2618,6 +2617,14 @@
                                 "forced_review"
                               ]
                             }
+                          },
+                          "near_duplicate_why": {
+                            "type": "string",
+                            "description": "Contributor-only event-time explanation for a near-verbatim hold."
+                          },
+                          "near_duplicate_evidence": {
+                            "type": "object",
+                            "description": "Contributor-only predecessor status, winning channel, and deterministic channel scores."
                           }
                         }
                       }
@@ -3248,6 +3255,14 @@
                           },
                           "possible_duplicate_similarity": {
                             "type": "number"
+                          },
+                          "near_duplicate_why": {
+                            "type": "string",
+                            "description": "Contributor-only event-time explanation. Published and rejected predecessors use distinct re-extraction wording."
+                          },
+                          "near_duplicate_evidence": {
+                            "type": "object",
+                            "description": "Contributor-only predecessor status, winning channel, and deterministic channel scores. All buyer projections strip this field."
                           }
                         }
                       }
@@ -3504,6 +3519,14 @@
                                 }
                               }
                             }
+                          },
+                          "near_duplicate_why": {
+                            "type": "string",
+                            "description": "Contributor-only event-time explanation for a near-verbatim hold."
+                          },
+                          "near_duplicate_evidence": {
+                            "type": "object",
+                            "description": "Contributor-only predecessor status, winning channel, and deterministic channel scores."
                           },
                           "created_at": {
                             "type": "string"
@@ -4927,7 +4950,7 @@
     "/account/pending/reject-by-signal": {
       "post": {
         "summary": "Counted bulk reject of your own pending items by flag signal (reject-only)",
-        "description": "SPEC3-B2 (5.2): server-side selection over the caller's OWN pending set by one flag signal (same semantics as the summary signal filter: sensitivity signal names like social_handle/person_name/private_path, plus injection / near_duplicate / process_advice), gated by the counted-confirmation discipline: expected_count must equal the LIVE selection size or the call is refused with 409 SIGNAL_COUNT_MISMATCH (echoing current_count) and NOTHING mutates. Get the count from GET /account/pending/summary counts.by_signal and confirm it with the operator first. REJECT ONLY - rejection is the safe direction (items stay private); bulk approve by class deliberately does not exist. Contribute scope.",
+        "description": "SPEC3-B2 (5.2): server-side selection over the caller's OWN pending set by one flag signal (same semantics as the summary signal filter: sensitivity signal names like social_handle/person_name/private_path, plus injection / near_duplicate / process_advice / account_vocab), gated by the counted-confirmation discipline: expected_count must equal the LIVE selection size or the call is refused with 409 SIGNAL_COUNT_MISMATCH (echoing current_count) and NOTHING mutates. SPEC3-F1 rider: account_vocab is re-derived from the same full-corpus review options used by the summary, so the selector and confirmed count cannot drift. Get the count from GET /account/pending/summary counts.by_signal and confirm it with the operator first. REJECT ONLY - rejection is the safe direction (items stay private); bulk approve by class deliberately does not exist. Contribute scope.",
         "operationId": "rejectAccountPendingBySignal",
         "tags": [
           "Account"

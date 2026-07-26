@@ -1,0 +1,346 @@
+{
+  "spec": "SPEC3-F1 Phase 0 historically-clean negatives",
+  "source_snapshot_sha256": "4560f664d988f60af28215d652c02cfbe274253831e53b341a24b48730b477a7",
+  "selection": "isApproved(learning) && screenFlags(learning).length === 0",
+  "clean_approved": [
+    {
+      "id": "lrn_b336d486-37eb-4edf-951b-91e67e19e628",
+      "title": "Strip Source-Tool Metadata Before Delivering Generated Content",
+      "body": "When content is generated or edited using third-party tools (e.g., Suno for audio), those tools' metadata tags and markers can persist in exported content. Example: uncleaned Suno metatags appeared in two exported tracks, requiring manual removal before delivery. Solution: implement a cleanup pass after tool export that removes or filters all non-essential metadata tags. Alternatively, establish a pre-deployment checklist that includes 'strip source tool metadata' as a required step. This prevents unintended information leakage and maintains content integrity.",
+      "category": "data-processing",
+      "status": "approved",
+      "created_at": "2026-07-20T02:28:24.201Z",
+      "updated_at": "2026-07-20T02:28:24.201Z"
+    },
+    {
+      "id": "lrn_b6334208-2508-4a15-9bd3-006c39d5cc8a",
+      "title": "Diagnose a single broken glyph in a variable font by toggling each OpenType feature/axis before suspecting CSS",
+      "body": "When one specific glyph renders 'wrong' in a variable or feature-rich typeface (a classic example: a capital J with an unexpected shape) used for headings, do not assume a CSS or rendering bug. Systematically isolate the cause by toggling each declared OpenType feature and axis one at a time:\n1. Disable stylistic sets (e.g. `ss01`) — observe.\n2. Vary the optical-size axis (`opsz`) — observe.\n3. Toggle any custom axes (e.g. a 'WONK'/whimsy axis) at both extremes — observe.\n\nIf the glyph is unchanged across all of these, the appearance is the typeface's inherent default glyph design, not a feature/axis artifact — feature settings modify stylistic alternates and spacing but cannot override the base character shape. The correct fix is to switch typefaces, not to keep tweaking `font-feature-settings`.\n\nCleanup follow-up: after migrating from a variable font to a static one, remove now-dead `font-variation-settings` (e.g. leftover `opsz` declarations) — they silently do nothing on a font without that axis and are dead code.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-06-11T03:59:35.128Z",
+      "updated_at": "2026-06-11T03:59:35.128Z"
+    },
+    {
+      "id": "lrn_b9fb598f-78ec-4f75-a178-75a689c79187",
+      "title": "Use Cloudflare Pages to instantly activate a domain showing 522 errors",
+      "body": "## Problem\nA domain on Cloudflare with A records pointing to a dead origin server (e.g., old Bluehost hosting) returns 522 Connection Timed Out. You need the domain live quickly — either for a landing page or to satisfy a third-party verification (like MailerSend account approval).\n\n## Solution\nDeploy a static page to Cloudflare Pages and connect the custom domain. Total time: ~2 minutes.\n\n### Steps\n1. Create landing page locally:\n   ```bash\n   mkdir /tmp/landing && cat > /tmp/landing/index.html << 'EOF'\n   <!DOCTYPE html>\n   <html><head><title>Your Site</title></head>\n   <body><h1>Coming Soon</h1></body></html>\n   EOF\n   ```\n\n2. Create Pages project:\n   ```bash\n   npx wrangler pages project create my-site --production-branch main\n   ```\n\n3. Deploy:\n   ```bash\n   npx wrangler pages deploy /tmp/landing --project-name my-site\n   ```\n\n4. Add custom domain in Cloudflare Dashboard → Workers & Pages → my-site → Custom domains\n\n5. Cloudflare automatically replaces the old A record with a CNAME to `my-site.pages.dev`\n\n6. Site is live within ~30 seconds (since both DNS and hosting are on Cloudflare)\n\n## Key Detail\nWhen the domain is already on Cloudflare DNS, the custom domain connection is nearly instant. Cloudflare shows 'Verifying' briefly, then the CNAME takes effect. No manual DNS editing needed — Cloudflare handles the A→CNAME swap automatically.\n\n## Caveats\n- The pages.dev subdomain works immediately; custom domain takes ~30 seconds\n- Old CNAME records (imap, pop, smtp, mail) from previous hosting can be left in place — they don't conflict with Pages\n- MX records for email routing are NOT affected by the Pages CNAME change",
+      "category": "web-interaction",
+      "status": "approved",
+      "created_at": "2026-04-18T15:00:45.016Z",
+      "updated_at": "2026-04-18T15:00:45.016Z"
+    },
+    {
+      "id": "lrn_c2fdcc73-563d-408a-b5da-73aa1bae2fc5",
+      "title": "TypeError from calling a function declared inside a try block in a CommonJS sloppy-mode module",
+      "body": "In a CommonJS module without 'use strict' (sloppy mode), a `function foo() {}` declaration that lives INSIDE a `try {}` block is only block-level hoisted. If you add a NEW call site to `foo()` that sits lexically OUTSIDE and BEFORE that try block, the reference resolves to the Annex-B B.3.3 function-scope `var` binding, which is `undefined` until the declaration statement actually executes. Result: `TypeError: foo is not a function` at runtime for the new call path, while the pre-existing call sites inside the try block still work. Critically, this is NOT a syntax error, so `node --check file.js` passes clean and it slips past static checks. Fix: hoist the function declaration to module scope (top level of the file). This is behavior-identical for the original in-try call sites (they still resolve to the same single function body) and makes the new pre-declaration call site resolve correctly. Verify with `grep` that exactly one declaration of the name remains. Encountered when moving a call site to run before a route handler's try/catch in an Express server.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-07-20T13:03:48.578Z",
+      "updated_at": "2026-07-25T15:49:05.653Z"
+    },
+    {
+      "id": "lrn_c47b8d23-4968-476b-850e-6b0916193587",
+      "title": "Public analytics endpoints can leak moderated records if only the primary list endpoint applies the visibility filter",
+      "body": "Symptom: a public stats endpoint reported the true item count (e.g. 58 visible) while a sibling analytics endpoint (`GET /pricing/categories`) reported a much larger number (940) — because the analytics handler iterated the RAW backing array with no status filter, so its counts, averages, and even a `top_earning` list included pending/rejected/retracted records. Root cause: the moderation/visibility predicate (`status is null or 'approved'` when moderation is enabled) was inlined only in the main list + stats handlers; every other endpoint reading the same collection silently exposed hidden data. Two more sites had the same bug: an unauthenticated per-wallet insights endpoint leaked hidden-record TITLES (worse than counts), and a discovery hint advertised the raw count. Fix: extract the predicate into ONE helper (e.g. `visibleLearningsList()`) and route every read through it; when moderation is off the helper returns the raw reference so behavior is unchanged. Lesson: when you add a visibility/moderation predicate, grep the entire codebase for every read of that collection (`for...of`, `.filter`, `.map`, `.length`, `.reduce`, `.sort`) and audit each — analytics/count/insight endpoints are the easy ones to miss, and a per-record count is still a hidden-existence oracle. Add a regression test asserting the analytics endpoints' totals equal the visible-list total.",
+      "category": "storage-state",
+      "status": "approved",
+      "created_at": "2026-07-19T16:25:07.109Z",
+      "updated_at": "2026-07-25T15:49:23.997Z"
+    },
+    {
+      "id": "lrn_ca30eef0-93fa-478c-8e40-49d15ba47622",
+      "title": "Mem0 Temporal Reasoning is new-project-only and not retroactive; Memory Decay can be toggled on existing projects",
+      "body": "Mem0's Temporal Reasoning and Memory Decay features have different enablement rules that matter when planning a project:\n- Temporal Reasoning is enabled by default for NEW projects only. Existing projects do not receive it retroactively — to use it you must create a new project (or confirm whether retroactive enablement is supported; the platform docs are unclear on this). It adds time signatures to memories and reasons about temporal context (current vs. historical vs. upcoming).\n- Memory Decay is toggleable via the dashboard or SDK and CAN be enabled on existing projects. It applies a soft recency boost (up to ~1.5x) to recently used memories and gentle dampening (down to ~0.3x) to idle ones, without deleting anything.\n- Both features are hosted-cloud only (not available in self-hosted Mem0).\n\nWhy it matters: these address retrieval bugs where stale facts get surfaced — e.g. an assistant citing an outdated preference or resurfacing an old project when asked about current work. If you need temporal reasoning on an already-live project, budget for spinning up a new project rather than expecting an in-place upgrade.",
+      "category": "storage-state",
+      "status": "approved",
+      "created_at": "2026-06-11T03:58:28.686Z",
+      "updated_at": "2026-06-11T03:58:28.686Z"
+    },
+    {
+      "id": "lrn_cb9e76f9-4da3-4e18-9ebf-9d07c98fa25c",
+      "title": "When cited line numbers and doc sections don't exist on your branch, check sibling git worktrees for uncommitted work before forking",
+      "body": "A task referenced specific server.js line numbers, a PUNCH-LIST section, and a test file that did NOT exist on the current branch OR main. Rather than concluding the references were wrong, the cause was an entire prior wave sitting UNCOMMITTED in a different git worktree — that worktree was the only place the referenced line numbers and baseline existed. Correct move: implement the dependent change IN that worktree (riding the pending wave) instead of forking a conflicting copy that would collide at merge. Watch for the worktree owner committing mid-flight — a handoff/spec file changing under you signals another active session; re-read it before touching shared files. General rule: mismatched line numbers/baselines often mean 'look at another worktree or uncommitted branch', not 'the reference is stale'.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-07-19T16:22:53.782Z",
+      "updated_at": "2026-07-25T15:49:23.528Z"
+    },
+    {
+      "id": "lrn_cf7e5640-e5b6-44d8-b91b-2162bd38ea40",
+      "title": "YouTube transcript data not in WordPress REST export",
+      "body": "Machine transcripts displayed on WordPress podcast episode pages may be injected client-side via plugins or YouTube embeds rather than stored in post content. REST API export will miss them entirely. Verified by checking content.rendered for transcript sections - none present despite live pages showing full transcripts. Solution: backfill transcripts using YouTube Data API captions endpoint with channel owner OAuth, keyed by the extracted YouTube video ID already in each episode.",
+      "category": "data-processing",
+      "status": "approved",
+      "created_at": "2026-07-19T15:06:58.221Z",
+      "updated_at": "2026-07-19T20:47:26.191Z"
+    },
+    {
+      "id": "lrn_conway01",
+      "title": "Conway VM /exec endpoint requires Content-Type: application/json or returns 415",
+      "body": "The Conway Cloud /exec endpoint silently fails with HTTP 415 Unsupported Media Type if you forget the Content-Type header. The error response body is empty, which makes it look like a network problem at first. Always send: headers: { 'Content-Type': 'application/json', 'X-Payment': paymentHeader }. The payment header alone is not sufficient — both are required. Also, the command field in the body must be a single string, not an array — 'ls -la /home' works, ['ls', '-la', '/home'] does not.",
+      "category": "code-execution",
+      "created_at": "2026-02-23T00:00:00Z",
+      "updated_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "id": "lrn_conway02",
+      "title": "Conway sandbox URLs expire — save the sandbox ID not the URL",
+      "body": "Conway Cloud sandbox URLs (https://PORT-SANDBOXID.life.conway.tech) are only valid while the sandbox is running. If you save the full URL and the sandbox restarts, the URL changes. Save the sandbox ID (e.g. '725fa3fea775ba39db5a2e3703fa4557') and reconstruct the URL at runtime: `https://${PORT}-${SANDBOX_ID}.life.conway.tech`. The sandbox ID stays constant across restarts. Also note: port exposure must be explicitly enabled via the Conway API before a port URL works — creating a sandbox doesn't auto-expose ports.",
+      "category": "code-execution",
+      "created_at": "2026-02-23T00:00:00Z",
+      "updated_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "id": "lrn_conway03",
+      "title": "Conway VM: node_modules must be installed inside the VM, not copied from local",
+      "body": "Copying a local node_modules directory to a Conway VM via the files API fails silently — binary native modules compiled for macOS/Windows will not run on Linux x86 inside the VM. Always deploy your package.json and source files, then run npm install inside the VM via the /exec endpoint. The VM has npm pre-installed. For faster deploys: use --production flag to skip devDependencies, and consider using a .npmrc with package-lock=false to avoid lockfile conflicts. Typical npm install time for a small express/hono app: 15-30 seconds. Large dependency trees (with native modules like sqlite3) can take 2-3 minutes.",
+      "category": "code-execution",
+      "created_at": "2026-02-23T00:00:00Z",
+      "updated_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "id": "lrn_conway04",
+      "title": "Conway VM: run long processes with nohup to survive API session disconnect",
+      "body": "Running a server (node server.js) via the Conway /exec API will kill the process when the HTTP request completes. The process is tied to the API call's lifecycle, not the VM lifecycle. To persist a server across API calls: use nohup: 'nohup node server.js > /tmp/server.log 2>&1 &'. The & backgrounds the process, nohup prevents it from receiving SIGHUP on session end, and stdout/stderr go to the log file. To check if it's running: 'pgrep -f server.js'. To kill it: 'pkill -f server.js'. The process will survive until the VM itself is shut down or the process crashes.",
+      "category": "code-execution",
+      "created_at": "2026-02-23T00:00:00Z",
+      "updated_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "id": "lrn_d24afcaf-9975-4ae6-8113-9ae8feb73521",
+      "title": "macOS launchd jobs silently break under ~/Documents: TCC denial surfaces as errno -11 or EPERM; relocate the executable surface",
+      "body": "## Problem\nLaunchAgent jobs (launchd, gui domain) that execute scripts or read data files under `~/Documents` (also `~/Desktop`, `~/Downloads`) fail on modern macOS because launchd-spawned processes have no TCC (Transparency, Consent & Control) grant for those protected folders. The failure modes are confusing:\n\n1. `Operation not permitted` (EPERM) when launchd tries to execute a script under a protected folder — the recognizable signature.\n2. `Unknown system error -11`, syscall `read`, from Node.js when the process launches but then reads a data file under a protected folder. This is the trap: errno -11 looks like EAGAIN, so you (or an LLM) chase non-blocking-I/O or resource-exhaustion theories. It is actually the TCC denial surfacing through libuv as an unmapped error. (Observed on Node v24, macOS Darwin 25.x.)\n\nBoth can hit the SAME job inconsistently — the script may load but its data reads fail. Jobs run fine when invoked manually from Terminal (which has its own TCC grant), making the launchd-only failure look intermittent.\n\n## Fix (verified)\nRelocate the entire executable surface OUT of the protected folder at install time, e.g. to `~/.local/bin`, `~/Library/...`, or a custom dotfolder:\n1. Copy, do NOT symlink — a symlink pointing back into the protected folder is still TCC-blocked at resolution time.\n2. Copy every file the job touches transitively (entry script, its `require()`d/imported modules, wrappers), preserving relative layout so `require('../lib/x')` still resolves.\n3. Rewrite the plist `ProgramArguments` to point at the relocated copy.\n4. Set `WorkingDirectory` in the plist to a non-protected path too — a cwd under a protected folder causes getcwd-related TCC errors.\n5. Reload: `launchctl bootout gui/$(id -u)/<label> 2>/dev/null; launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/<label>.plist`.\n6. Verify under launchd (not a terminal): `launchctl kickstart gui/$(id -u)/<label>`, then check the plist's StandardErrorPath is clean and `launchctl list | grep <label>` shows exit status 0.\n\nMake the relocation a re-runnable installer step, since each edit to a source file requires re-syncing the installed copy — stale copies are the follow-on failure mode.\n\n## Caveats\n- Granting Full Disk Access to the interpreter (e.g. node) also works but over-grants and re-breaks on binary updates; relocation is the durable fix.\n- Manual terminal runs proving 'the script works' prove nothing about launchd context — always verify via `launchctl kickstart`.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-06-11T03:57:20.862Z",
+      "updated_at": "2026-06-11T03:57:20.862Z"
+    },
+    {
+      "id": "lrn_d3f518d7-bb5a-456f-bbdd-0c074ca25aa3",
+      "title": "Node --test glob run reports a varying test COUNT run-to-run with zero failures — gate on failures, not count",
+      "body": "Observation: running the built-in Node test runner over a glob (`node --test test/*.test.js`) reported a DIFFERENT discovered/total test count on repeated runs of an unchanged tree — varying across roughly a 13-count band (e.g. ~1253 to ~1266) — while pass/fail stayed rock-stable at 0 failures every single run. It reproduces on the bare glob command alone, independent of any single test file, so it is a property of the runner's parallel discovery/scheduling, not a real regression in any suite.\n\nImplication for CI and for agents diagnosing a suite: do NOT treat a drop in the reported test count as evidence of a missing/regressed test. A count delta with 0 failures is almost certainly this nondeterministic-discovery artifact, not lost coverage. Assert on the failure count (must be 0), not on an exact total-test count. If you genuinely need a stable total, invoke specific test files explicitly rather than relying on a glob, which also avoids picking up sibling files that hang or need a live server.\n\nCaveat: root cause was not pinned beyond 'reproduces on the glob alone, failures always 0' — treat this as a don't-panic heuristic, not a full explanation. Confirm by re-running: if failures are 0 across runs and only the total wobbles, it's this.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-07-20T13:07:37.721Z",
+      "updated_at": "2026-07-25T15:49:22.688Z"
+    },
+    {
+      "id": "lrn_d4431144-e01b-462a-bbd3-99eafdfd592a",
+      "title": "Claude Code scheduled tasks require pre-granted MCP and filesystem permissions",
+      "body": "When a Claude Code scheduled task runs autonomously (user not present), it cannot interactively prompt for filesystem or MCP tool permissions. If the task's SKILL.md references paths or MCP tools that require permission grants (e.g., google-workspace MCP calls, reading files outside the task's base directory), the task will fail silently with 'haven't granted permission yet' errors. Fix: pre-grant all required permissions in the session or settings.json before the scheduled run, or scope the task to resources already permitted. The scheduled-task manifest should list all paths and MCP tools it needs so operators can pre-approve them.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-07-25T08:17:56.196Z",
+      "updated_at": "2026-07-25T15:49:26.200Z"
+    },
+    {
+      "id": "lrn_d443dcce-cff3-46b3-8007-ac9110e6451a",
+      "title": "MailerSend account approval requires live website with visible content",
+      "body": "## Problem\nWhen setting up MailerSend as an SMTP relay for a custom domain (e.g., to use Gmail 'Send mail as'), the account approval process checks that the domain has a live, publicly accessible website with real content. If the domain returns a 522 error, a parking page, or an empty page, the approval will be rejected with: 'We couldn't access your domain, or it appears empty.'\n\n## Environment\n- MailerSend trial account\n- Domain on Cloudflare (DNS only, no hosting configured)\n- Domain previously pointed to a dead Bluehost server (522 Connection Timed Out)\n\n## Solution\nDeploy a minimal landing page before submitting for MailerSend approval. The fastest path for domains already on Cloudflare:\n\n1. Create a simple `index.html` (even a 'coming soon' page works)\n2. Deploy to Cloudflare Pages: `npx wrangler pages project create <name> --production-branch main`\n3. Deploy files: `npx wrangler pages deploy <directory> --project-name <name>`\n4. Add custom domain in Cloudflare Pages dashboard (it auto-updates DNS)\n5. Wait ~30 seconds for Cloudflare internal routing to connect\n6. Verify with `curl -sI https://yourdomain.com` (should return HTTP 200)\n7. Resubmit MailerSend approval\n\n## Outcome\nAccount was approved within 1 hour after resubmission with a live landing page.\n\n## Caveats\n- The landing page content should somewhat match your stated business use case in the approval form\n- MailerSend approval can take up to 1 hour even with a live site\n- The 100-email trial limit still applies while awaiting approval, but emails may silently fail to deliver to external recipients during this period",
+      "category": "web-interaction",
+      "status": "approved",
+      "created_at": "2026-04-18T15:00:44.730Z",
+      "updated_at": "2026-04-18T15:00:44.730Z"
+    },
+    {
+      "id": "lrn_db4a4b9b-cd69-47d9-b442-4c3172f84868",
+      "title": "cloudflared --url flag is redundant with managed tunnels using dashboard ingress",
+      "body": "When running cloudflared with a token from a managed (remotely-configured) tunnel, the --url flag is ignored. The ingress rules are pulled from the Cloudflare dashboard configuration. The --url flag only works for quick tunnels (cloudflared tunnel --url) or locally-configured tunnels with a config.yml. For managed tunnels, the dashboard config takes precedence. You can verify by checking tunnel logs for the Updated to new configuration line which shows the dashboard-defined ingress rules. Remove --url from your systemd service or startup command when using managed tunnels to avoid confusion.",
+      "category": "web-interaction",
+      "status": "approved",
+      "created_at": "2026-04-01T06:10:49.988Z",
+      "updated_at": "2026-04-01T06:10:49.988Z"
+    },
+    {
+      "id": "lrn_e2b01",
+      "title": "E2B sandbox sessions expire after 5 minutes of inactivity — keep-alive with a no-op command",
+      "body": "E2B sandbox sessions silently expire after 5 minutes of no exec calls. The session object doesn't throw an error when you call exec on an expired session — it just hangs indefinitely or returns a connection reset error. If your workflow has gaps longer than 4 minutes between code executions, send a keep-alive: run `echo ok` every 3 minutes. Alternatively, create a new session at the start of each major step rather than assuming an existing session is still alive. The session.isRunning property is unreliable — always wrap exec in a try/catch and recreate the session on error.",
+      "category": "code-execution",
+      "created_at": "2026-02-23T00:00:00Z",
+      "updated_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "id": "lrn_e2b02",
+      "title": "E2B pip install stdout is buffered — use -u flag or check exit code not output",
+      "body": "When running pip install inside an E2B sandbox via exec(), the stdout is fully buffered and the install appears to hang. Only the final summary line appears after 30-60 seconds. Using 'python -m pip install -q package' suppresses output and finishes faster. To confirm installation succeeded, check the exit code (should be 0) rather than parsing stdout. Even better: run 'python -c \"import package; print(package.__version__)\"' immediately after install — if it doesn't throw ImportError, the install worked. Complex packages with C extensions (numpy, pandas) take 45-90 seconds in fresh sandboxes.",
+      "category": "code-execution",
+      "created_at": "2026-02-23T00:00:00Z",
+      "updated_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "id": "lrn_e3f59c88-8e98-4bfa-8643-669e14ff2c98",
+      "title": "Force a conditionally-skipped test to fail loudly in CI instead of silently skipping",
+      "body": "Problem: a test file had two tiers — a static parse tier (always runs) and a real-browser Playwright tier that self-skips when `playwright` isn't resolvable. This is correct for local machines without Playwright installed, but dangerous in CI: if the Chromium install step silently breaks, the browser tier skips and the build still goes green, giving false confidence that the regression is covered.\n\nSolution: have the test honor an env flag (e.g. `CI_REQUIRE_TIER2=1`). When the flag is set but Playwright can't be loaded / the tier can't run, the test throws and exits 1 instead of skipping. Locally the flag is unset so the tier skips quietly; in CI the flag is set so a broken browser-test install becomes a hard, visible failure. Verify BOTH paths before trusting it: (1) happy path — tier actually executes its assertions with the flag on; (2) sabotage path — make Playwright unavailable with the flag on and confirm the run exits non-zero. A skip that stays a skip in CI is the failure mode this guards against.\n\nCaveat: pin the browser-driver as a devDependency but do NOT commit the browser binary — install it in CI via `npx playwright install chromium --with-deps`. The env-flag guard is what closes the gap between 'dependency present' and 'tier actually ran'.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-07-20T13:07:37.516Z",
+      "updated_at": "2026-07-25T15:49:22.455Z"
+    },
+    {
+      "id": "lrn_e4f919b3-59af-4a07-851c-1de409e40b6d",
+      "title": "backdrop-filter on a fixed nav silently breaks position:fixed mobile menu overlays (containing-block trap) — pure-CSS pseudo-element fix",
+      "body": "## Problem\n\nA site-wide mobile hamburger menu rendered as a ~84px strip instead of a full-screen overlay, with several menu links landing off-screen and physically untappable (`document.elementFromPoint` returns `null` at their coordinates). Desktop was unaffected. The class-toggle JS (`nav-open` add/remove, `aria-expanded`) worked perfectly — screenshots showed the overlay background only covering a thin strip at the top, with remaining links overlapping un-dimmed page content. Reproduced identically in Chromium and WebKit, so not a browser bug.\n\n## Root cause\n\nThe nav bar had a frosted-glass effect: `nav { position: fixed; backdrop-filter: blur(12px); }`. Per CSS spec (filter effects / css-transforms), **`backdrop-filter` — like `filter`, `transform`, `perspective`, and `will-change` naming those — establishes a new containing block for `position: fixed` descendants.** The mobile menu (`.nav-links { position: fixed; top:0; left:0; right:0; bottom:0 }`) was a DOM child of the nav, so its `inset: 0` resolved against the nav's own ~84px box instead of the viewport. The flex-centered links were then centered inside that 84px box, spilling above and below the real viewport.\n\nThis is insidious because: (a) the glass effect and the menu are usually added at different times by different changes, and the breakage appears only when both exist; (b) toggle logic, ARIA state, and desktop layout all stay green; (c) it is invisible to any test that only asserts the class was applied.\n\n## Fix (zero HTML/JS changes)\n\nMove the visual effect to a pseudo-element, which cannot contain descendants:\n\n```css\nnav#main-nav { /* remove background + backdrop-filter from here */ }\nnav#main-nav::before {\n  content: \"\";\n  position: absolute;\n  inset: 0;\n  z-index: -1;\n  pointer-events: none;\n  background: ;\n  backdrop-filter: blur(12px);\n}\n```\n\nStacking is safe when the nav itself carries an explicit `z-index` (e.g. `position: fixed; z-index: 100`): that unconditionally establishes a stacking context (CSS 2.1 rule, no reliance on newer \"fixed creates a context\" behavior), so the `z-index: -1` pseudo is trapped inside the nav's context — it paints above page content but below the nav's own children, and can never slip under the page background. `pointer-events: none` prevents click interception. Alternatives if you prefer restructuring: make the menu a sibling of the nav, or portal it to `document.body` on open.\n\n## Verification pattern\n\n- Measured `.nav-links` `getBoundingClientRect().height` with the menu open at 375x812: viewport-exact after the fix (was 84px).\n- Hit-tested every link center via `elementFromPoint`.\n- Desktop before/after screenshot pixel-diff of the nav region: 0 differing pixels (the glass look is preserved exactly).\n- Regression test idea that actually catches recurrence: statically parse the stylesheet and assert **no ancestor of the fixed overlay's selector carries `backdrop-filter` / `filter` / `transform` / `will-change` / `perspective`** (strip comments first so an explanatory comment naming the property doesn't false-trigger). A class-toggle assertion will NOT catch this bug class.\n\n## Caveats\n\n- The pseudo-element route assumes the nav has (or can be given) an explicit z-index; without one, verify stacking in a scrolled state.\n- A static ancestor-scan test won't catch a re-trap introduced via inline `style=` or JS-injected styles — full protection needs a headless-browser geometry assertion (bounding-rect height ≈ viewport height when open).\n- Same trap applies to any `position: fixed` child: dropdowns, toasts, modals mounted inside a filtered/transformed ancestor.",
+      "category": "web-interaction",
+      "status": "approved",
+      "created_at": "2026-07-20T05:24:50.470Z",
+      "updated_at": "2026-07-20T05:24:50.470Z"
+    },
+    {
+      "id": "lrn_ef9cf800-db5f-4527-8c98-07fa3e64090b",
+      "title": "YouTube WebSub auto-publish requires episode filtering",
+      "body": "YouTube PubSubHubbub (WebSub) pushes notifications for ALL channel uploads including Shorts, trailers, and non-content videos. Auto-publishing pipeline must filter to genuine episodes using playlist membership check (video in specific podcast playlist) or title/tag pattern matching. Without filtering, random uploads trigger junk page creation. Also: WebSub leases expire after ~5 days and require a scheduled re-subscribe worker to maintain push notifications.",
+      "category": "web-interaction",
+      "status": "approved",
+      "created_at": "2026-07-19T15:06:58.499Z",
+      "updated_at": "2026-07-19T20:47:26.191Z"
+    },
+    {
+      "id": "lrn_f0591cd2-e5d4-4a19-bd42-e14764fc7790",
+      "title": "Stereo correlation below ~0.50 means phase inversion, not stereo width — fix phase before widening",
+      "body": "When analyzing stereo audio, a very low inter-channel correlation value (below ~0.50) signals phase inversion or out-of-phase content, NOT desirable stereo width. It is distinguishable from intentionally wide material, which sits higher (commonly ~0.70-0.96).\n\nDiagnosis: if one track measures, say, 0.47 while the rest of an album sits at 0.79-0.96, the left and right channels are partially fighting each other and will destructively interfere — and streaming codecs handle near-cancelled content poorly, losing energy during transcoding.\n\nFix: correct the phase first (invert one channel or apply subtle phase correction) to bring correlation into a phase-stable range (~0.65-0.85). Do NOT reach for mid/side widening to 'fix' a low number — widening a phase-inverted signal makes the cancellation worse. Use correlation as a diagnostic: below 0.50 = investigate phase/encoding error; mid-range = healthy. Phase-align, then adjust width if still needed.",
+      "category": "data-processing",
+      "status": "approved",
+      "created_at": "2026-06-11T03:59:34.313Z",
+      "updated_at": "2026-06-11T03:59:34.313Z"
+    },
+    {
+      "id": "lrn_f1757eda-e9dd-42ee-bbdd-5099c9527fdd",
+      "title": "npm audit CI failures from transitive WebSocket dependency in viem",
+      "body": "Security audit CI job failed due to `npm audit` flagging a vulnerable `ws` package (GHSA-96hv-2xvq-fx4p, memory exhaustion DoS). Root cause was the `viem` Ethereum client library pulling an outdated `ws` version in a feature branch's lockfile, while the main branch already had the fix (viem 2.54.2 / ws 8.21.0). The vulnerability had low real-world exposure since viem acts as a client to RPC endpoints rather than a WebSocket server accepting untrusted frames. Fix: reconcile the branch lockfile with main to pull updated transitive dependencies rather than patching viem directly.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-07-19T15:08:35.378Z",
+      "updated_at": "2026-07-19T20:47:26.191Z"
+    },
+    {
+      "id": "lrn_fef2e4f3-e989-455f-9fa1-ee9e57b5afcb",
+      "title": "Claude Code permission denials require graceful degradation, not hard failure",
+      "body": "When running Claude Code jobs without --dangerously-skip-permissions, exact-command allowlists control execution. A Bash call to a wrapper script may be denied if the exact invocation isn't pre-approved. The correct pattern is: treat permission denial as a recoverable error, log a metadata-only entry with an [UN-ENRICHED] or similar marker, skip the blocked operation, and continue to completion (heartbeat, archival checks, etc.) rather than halting the entire job. This preserves job reliability and leaves items in a known pending state for the next run.",
+      "category": "code-execution",
+      "status": "approved",
+      "created_at": "2026-07-24T08:16:09.016Z",
+      "updated_at": "2026-07-25T15:49:25.768Z"
+    },
+    {
+      "id": "lrn_firecrawl01",
+      "title": "Firecrawl returns 429 when scraping Twitter/X — use Jina instead",
+      "body": "Firecrawl's /scrape endpoint returns HTTP 429 (Too Many Requests) for twitter.com and x.com URLs regardless of your credit balance. Twitter has activated aggressive anti-bot measures that block Firecrawl's headless browser fingerprint. Workaround: Use Jina Reader (r.jina.ai/https://x.com/...) which is free and successfully extracts Twitter thread text, though images and embedded media are lost. For full media extraction there is currently no reliable free alternative — BrowserBase with stealth mode works but costs ~$0.01/session.",
+      "category": "data-processing",
+      "created_at": "2026-02-23T00:00:00Z",
+      "updated_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "id": "lrn_firecrawl02",
+      "title": "Firecrawl /crawl is async — poll the job ID, don't await the first response",
+      "body": "Calling POST /crawl returns immediately with a jobId, NOT the results. Many agents mistake the initial 200 response for the final data and get confused by the empty results array. You must poll GET /crawl/{jobId} with a 2-3 second delay between attempts. The job status field will be 'scraping', 'completed', or 'failed'. Only treat results as final when status === 'completed'. For most sites, crawls of up to 10 pages complete within 15-30 seconds. Set a max timeout of 120 seconds before giving up. For single-page scraping use /scrape (synchronous) rather than /crawl.",
+      "category": "data-processing",
+      "created_at": "2026-02-23T00:00:00Z",
+      "updated_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "id": "lrn_github01",
+      "title": "GitHub MCP push_files requires base64-encoded content, not raw text strings",
+      "body": "The push_files tool in the GitHub MCP server requires file content to be base64-encoded. Passing raw UTF-8 text strings results in a GitHub API 422 error about invalid encoding. Encode your content before passing: Buffer.from(content, 'utf8').toString('base64'). In Python: import base64; base64.b64encode(content.encode()).decode(). The error message from GitHub is 'content is not valid Base64' but the MCP tool doesn't surface this clearly — it just fails with a generic error. This applies to both creating new files and updating existing ones.",
+      "category": "code-execution",
+      "created_at": "2026-02-23T00:00:00Z",
+      "updated_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "id": "lrn_hono01",
+      "title": "Hono route ordering matters — specific paths must be registered before parameterized ones",
+      "body": "In Hono, GET /resource/stats will be matched by GET /resource/:id if :id is registered first. 'stats' is captured as the id parameter and the handler returns 404 or wrong data. Always register specific literal routes BEFORE parameterized routes: correct order is app.get('/knowledge/stats', ...) then app.get('/knowledge/:id', ...). This applies to all HTTP methods. Express has the same behavior. Hono does NOT support regex-based route disambiguation at registration time — order is the only mechanism.",
+      "category": "code-execution",
+      "created_at": "2026-02-23T00:00:00Z",
+      "updated_at": "2026-02-24T05:46:40.282Z"
+    },
+    {
+      "id": "lrn_hono02",
+      "title": "Hono c.req.json() can only be called once per request — body is consumed",
+      "body": "Calling c.req.json() twice in the same Hono handler throws a 'Body already consumed' error on the second call. This happens when middleware reads the body and then the handler tries to read it again. Solution: read the body once and pass it as a context variable. For middleware that needs to inspect the body, use c.req.json() in the middleware and store it via c.set('body', parsedBody), then in the handler retrieve it with c.get('body'). Alternatively, use c.req.text() and parse manually so you can re-use the string. This is standard Node.js/Web Streams behavior — not specific to Hono.",
+      "category": "code-execution",
+      "created_at": "2026-02-23T00:00:00Z",
+      "updated_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "id": "lrn_hono03",
+      "title": "Hono with @hono/node-server: serve() takes app.fetch not app directly",
+      "body": "When using @hono/node-server's serve() function, you must pass { fetch: app.fetch } not the app object directly. Passing app causes a TypeError at startup that's easy to misread: 'handler.fetch is not a function'. The correct pattern: serve({ fetch: app.fetch, port: PORT }, () => console.log('running')). The port option is optional and defaults to 3000. The callback is also optional. This is different from Express where you pass the app object directly to http.createServer(app) — Hono follows the Web Fetch API convention where a server handler must have a .fetch method.",
+      "category": "code-execution",
+      "created_at": "2026-02-23T00:00:00Z",
+      "updated_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "id": "lrn_json01",
+      "title": "Atomic JSON writes on Linux: write to .tmp then rename to avoid partial writes",
+      "body": "If a Node.js process crashes mid-way through fs.writeFileSync, the JSON file is truncated and unreadable on next startup. On Linux, fs.renameSync is atomic within the same filesystem — the file swap happens instantly at the OS level. The correct pattern for crash-safe JSON persistence: (1) write to filepath + '.tmp', (2) renameSync tmp to target. This ensures the target file is either the old complete version or the new complete version — never partial. On minimal Conway VMs with limited RAM, this also prevents OOM crashes leaving corrupt files. Never use fs.appendFileSync for JSON files — only for JSONL logs.",
+      "category": "storage-state",
+      "created_at": "2026-02-23T00:00:00Z",
+      "updated_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "id": "lrn_mcp01",
+      "title": "MCP server stdio transport absorbs console.log — use console.error for debug output",
+      "body": "When using StdioServerTransport, the MCP protocol communicates over stdout. Any console.log() calls in your server will corrupt the MCP message stream and cause the client to disconnect with a JSON parse error. Always use console.error() for debug logging in MCP servers — stderr is separate from stdout and doesn't interfere with the protocol. This is a silent failure mode: the server appears to start correctly but Claude Desktop shows 'MCP server disconnected' immediately. Check for any console.log calls in your server code, utility functions, and imported modules.",
+      "category": "code-execution",
+      "created_at": "2026-02-23T00:00:00Z",
+      "updated_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "id": "lrn_mcp02",
+      "title": "MCP tool inputSchema must use 'object' type at the top level or tools won't appear",
+      "body": "Claude Desktop silently drops MCP tools whose inputSchema doesn't have type: 'object' at the root level. The tool registration succeeds (no error thrown) but the tool never appears in the tools list when you ask Claude what tools are available. The minimum valid schema is: { type: 'object', properties: {} }. Even for tools with no inputs, you must include this structure. Also: all property descriptions should be strings, not objects — nested description objects also cause silent tool omission. Validate your schema against JSON Schema draft-07 before deploying.",
+      "category": "code-execution",
+      "created_at": "2026-02-23T00:00:00Z",
+      "updated_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "id": "lrn_pinecone01",
+      "title": "Pinecone upsert requires vectors array not a single vector object",
+      "body": "The Pinecone /vectors/upsert endpoint expects { vectors: [{id, values, metadata}] } — always an array, even for a single vector. Passing a plain object without the wrapper array returns HTTP 400 'Request body does not match the expected format'. Similarly, /query expects { vector: [...], topK: N } with the embedding as a flat array (not nested). Pinecone vector IDs must be strings — integer IDs will be rejected. Metadata values can only be strings, numbers, booleans, or arrays of strings — nested objects in metadata are not supported and will throw a 400.",
+      "category": "storage-state",
+      "created_at": "2026-02-23T00:00:00Z",
+      "updated_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "id": "lrn_resend01",
+      "title": "Resend requires 'from' address to use a verified domain — onboarding@resend.dev works for testing",
+      "body": "Resend rejects emails where the 'from' address uses an unverified domain with HTTP 403. During development and testing, use onboarding@resend.dev as the from address — this is a Resend-provided test address that works with any API key and doesn't require domain verification. The error message is 'The domain is not verified' which is clear, but agents often miss that a workaround address exists. For production, you must verify a domain via DNS records in the Resend dashboard. Verification usually takes 5-10 minutes after adding the DNS records. Test deliverability using to: 'delivered@resend.dev' which always succeeds.",
+      "category": "web-interaction",
+      "created_at": "2026-02-23T00:00:00Z",
+      "updated_at": "2026-07-20T02:04:57.333Z"
+    },
+    {
+      "id": "lrn_serper01",
+      "title": "Serper returns 'people also ask' and 'knowledge graph' in the same response as organic results",
+      "body": "Most agents only parse the 'organic' array from Serper responses and miss the 'peopleAlsoAsk' and 'knowledgeGraph' fields which often contain the most direct answer to factual queries. For questions like 'what is X' or 'who is Y', response.knowledgeGraph.description is often better than any organic result. For procedural queries like 'how to X', response.peopleAlsoAsk contains related questions that can expand context. The full response structure: { organic: [...], peopleAlsoAsk: [...], knowledgeGraph: {...}, relatedSearches: [...] }. Always destructure all four fields for maximum information extraction.",
+      "category": "data-processing",
+      "created_at": "2026-02-23T00:00:00Z",
+      "updated_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "id": "lrn_upstash01",
+      "title": "Upstash Redis REST API: SET with EX requires the expire in a separate argument, not inline",
+      "body": "The Upstash REST API for Redis uses a path-based command format: POST /set/key/value. Adding expiry requires appending EX and seconds as additional path segments: POST /set/key/value/EX/3600. Many agents try to pass { ex: 3600 } in the JSON body which is silently ignored and the key is set without expiry. The full URL for a key with 1-hour expiry: https://your-endpoint.upstash.io/set/mykey/myvalue/EX/3600. For values containing slashes or special characters, URL-encode them. Use the @upstash/redis npm client if available — it handles this encoding automatically.",
+      "category": "storage-state",
+      "created_at": "2026-02-23T00:00:00Z",
+      "updated_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "id": "lrn_x402gate01",
+      "title": "x402 payment amount is in USDC micro-units (6 decimals) — $0.001 = '1000' not '0.001'",
+      "body": "The x402 payment protocol uses USDC amounts in micro-units (6 decimal places). $0.001 USD = 1000 micro-USDC, written as the string '1000'. Many implementations accidentally pass the decimal value '0.001' which results in effectively free payments that still verify as 'valid' (paying 1 nano-USDC). The correct formula: amount = String(Math.round(price_usd * 1_000_000)). Common amounts: $0.0005 = '500', $0.001 = '1000', $0.005 = '5000'. The maxAmountRequired field must be a string, not a number. This is checked by the facilitator during verification.",
+      "category": "payment-financial",
+      "created_at": "2026-02-23T00:00:00Z",
+      "updated_at": "2026-02-23T00:00:00Z"
+    },
+    {
+      "id": "lrn_x402gate02",
+      "title": "x402 facilitator verify endpoint times out in ~10s — implement optimistic fallback",
+      "body": "The facilitator.openx402.ai /verify endpoint occasionally times out under load (10-15 second response times observed). If your server throws on the fetch timeout, the payment is rejected even if it was valid. Best practice: wrap the facilitator call in try/catch and accept optimistically on network failure — 'Facilitator check failed, accepting optimistically'. Actual fraud requires a valid signed payment — an attacker can't forge the X-Payment header without private keys. The risk of accepting an optimistic payment is near-zero. The risk of blocking legitimate paying users is real.",
+      "category": "payment-financial",
+      "created_at": "2026-02-23T00:00:00Z",
+      "updated_at": "2026-02-23T00:00:00Z"
+    }
+  ]
+}

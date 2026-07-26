@@ -1,0 +1,578 @@
+{
+  "spec": "SPEC3-F1 Phase 0",
+  "curated_at": "2026-07-26",
+  "source_snapshots": {
+    "flood": {
+      "path_argument_expected_sha256": "1bfc719bec521f405e60c5cd7e55f76f5139da25a03e844f38333523da330743",
+      "row_count": 1039
+    },
+    "historical_clean": {
+      "sha256": "4560f664d988f60af28215d652c02cfbe274253831e53b341a24b48730b477a7",
+      "row_count": 978,
+      "selection": "isApproved(learning) && screenFlags(learning).length === 0"
+    }
+  },
+  "duplicate_clusters": [
+    {
+      "id": "prepared_state_two_phase_handoff",
+      "label": "Prepared-state / two-phase handoff",
+      "invariant": "A downstream prepared/nonterminal state is not durable acceptance. Leave upstream queue, Gmail labels, and terminal state untouched; retry or poll idempotently until committed.",
+      "members": [
+        {
+          "id": "lrn_79420271-6e3c-4da9-85b0-c19aa7888b4d",
+          "title": "AgentWork state-based deferral pattern for async task queues",
+          "body": "When an ops-consumer job routes items to an AgentWork queue via an enqueue wrapper, the wrapper returns both 'status' (adopted/rejected) and 'state' (prepared/committed/unknown). Items with state=committed can be immediately marked delegated and relabeled. Items with state=prepared or unknown must be left pending for recheck on next run, because the downstream work hasn't durably landed yet. This prevents premature status updates that would orphan in-flight tasks.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-20T08:16:29.228Z",
+          "updated_at": "2026-07-26T16:40:38.482Z"
+        },
+        {
+          "id": "lrn_3cf14441-5ab6-4333-b972-e249f514f054",
+          "title": "AgentWork state=prepared requires leaving source Queue status empty",
+          "body": "When ops-consumer delegates an item to the AgentWork queue and receives state=prepared/status=appended, do NOT mark the source Queue row as complete, do NOT relabel the Gmail thread, and do NOT record outcome in state.json yet. The item remains 'in-flight' until a future run detects consumer_state=committed. This prevents premature archival of items that haven't actually been picked up by the downstream agent. Only after commit confirmation should the Gmail label be changed and Queue status updated.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-24T08:16:34.409Z",
+          "updated_at": "2026-07-26T16:40:18.676Z"
+        },
+        {
+          "id": "lrn_c50066f6-787a-4c66-994c-3c7ac5c54bac",
+          "title": "AgentWork WPR commit gate: don't mark Queue rows terminal until prepared→committed",
+          "body": "When an ops-consumer job routes an item to AgentWork via enqueue-agent-work.py, the script returns status=appended with state=prepared. The WPR (Work-Pending-Register) pattern requires waiting for a separate commit phase before the Queue row can be marked delegated. If you mark the Queue status terminal immediately after appended, you lose the ability to retry if the commit fails. Leave Queue status empty, leave Gmail unchanged, and do NOT write to state.json until the WPR row reaches a committed state. A later run of the consumer rechecks the same immutable ingress key and detects when commit has occurred.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-24T08:17:48.735Z",
+          "updated_at": "2026-07-26T16:40:19.130Z"
+        },
+        {
+          "id": "lrn_63f1980f-5719-4be2-ae16-2dd0b14df709",
+          "title": "AgentWork adoption with state=prepared requires idempotent re-check pattern",
+          "body": "When enqueueing items to an AgentWork queue and receiving status=adopted with state=prepared, the item is not yet complete — it awaits an external commit (e.g., WPR commit). The correct pattern: leave the source queue status empty, leave Gmail labels unchanged, and let a later run re-check the same immutable ingress. Do NOT mark as delegated prematurely. This ensures idempotent processing without losing track of items that are in-flight but not yet resolved.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:15:42.873Z",
+          "updated_at": "2026-07-26T16:40:39.808Z"
+        },
+        {
+          "id": "lrn_fa694bf4-3e80-4e47-9e13-5e7180e223a6",
+          "title": "AgentWork delegation uses 'prepared' state to defer Queue/Gmail changes until commit",
+          "body": "When delegating items to an AgentWork pipeline that has a two-phase state machine (prepared → committed), the ops-consumer correctly leaves Queue status empty and Gmail labels unchanged while state=prepared. A subsequent run must recheck after the Work-Product-Reviewer (WPR) commits. This prevents premature archive of items that might fail WPR review and need retry. Implementation: record delegation in local state.json with prepared status, skip Gmail label removal, let next heartbeat cycle verify commit.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:16:10.628Z",
+          "updated_at": "2026-07-26T16:40:28.282Z"
+        },
+        {
+          "id": "lrn_73c106cb-725a-442a-b530-fce11ed6d189",
+          "title": "AgentWork WPR delegation requires commit-state polling before Gmail/queue updates",
+          "body": "When delegating ops items to an AgentWork pipeline using a WPR (Write-Prepare-Retry) pattern, the consumer must NOT update Gmail labels or mark queue status as 'delegated' until the delegated row's consumer_state transitions from 'prepared' to 'committed'. Calling the wrapper returns an 'adopted' status in 'prepared' state, meaning the item was queued but not yet committed by the background runtime. Prematurely marking items as handled would orphan them if the WPR commit fails. The correct pattern is: leave source queue/labels untouched, record the adoption, and have subsequent runs poll the consumer_state column until 'committed' before finalizing. This prevents data loss in distributed async handoffs.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:17:24.340Z",
+          "updated_at": "2026-07-26T16:40:19.998Z"
+        },
+        {
+          "id": "lrn_bdded776-312c-4610-9f95-942ebbc0686d",
+          "title": "Ops queue idempotency with prepared vs committed agent-work state",
+          "body": "When an ops item is delegated to agent-work and returns status=adopted with state=prepared, this means the work record exists but WPR (work-pending-review) has not yet committed it. In this transitional state, do NOT mark the queue item as processed or modify Gmail labels. Leave status empty so the next ops-consumer run re-checks the same immutable ingress. Only when state=committed should the queue row be marked and Gmail updated. This prevents race conditions where delegated work could be lost if the WPR commit fails.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:17:48.237Z",
+          "updated_at": "2026-07-26T16:40:17.684Z"
+        },
+        {
+          "id": "lrn_1e2505ee-6559-492e-86ab-5ac56393318a",
+          "title": "AgentWork delegation produces 'prepared' state requiring deferred status updates",
+          "body": "When delegating ops items to an AgentWork queue via an enqueue wrapper, the wrapper may return 'prepared' state (not 'committed') indicating the item is staged but awaiting a separate WPR (write-phase-reconcile) commit step. In this state, do NOT update the source queue status or Gmail labels—the item should remain pending in the ingress queue. Only after the AgentWork row reaches 'committed' state should the ingress row be marked complete. This prevents losing items if the WPR phase fails. Check wrapper return status carefully: 'adopted' existing rows in prepared/creating/unknown/failed_retryable states all mean 'leave pending'.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:19:00.004Z",
+          "updated_at": "2026-07-26T16:40:17.877Z"
+        },
+        {
+          "id": "lrn_e2f3884c-869c-404d-a890-ed94f152af16",
+          "title": "AgentWork queue state machine prevents duplicate processing",
+          "body": "When delegating items to an async work queue (like AgentWork), tracking item state through phases (prepared→committed) allows safe idempotent retries. If an item is in 'prepared' state but not yet 'committed', leave the original queue item unchanged and skip state.json updates — the next run will recheck. Only mark items as processed when the downstream consumer confirms commitment. This prevents losing work if the consumer crashes between prepare and commit.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:19:25.981Z",
+          "updated_at": "2026-07-26T16:40:42.178Z"
+        },
+        {
+          "id": "lrn_98986bb1-265c-4f09-a191-25bdb5424cf9",
+          "title": "AgentWork prepared state requires leaving ingress pending",
+          "body": "When delegating items to an AgentWork queue and receiving state=prepared (not committed), the correct behavior is to leave the original ingress queue status empty and not update state.json. This allows a future job run to re-check the same immutable ingress row and verify when a Workflow Process Runner (WPR) actually commits the work. Writing state.json prematurely would cause the item to be skipped on future runs before the downstream system has actually committed to handling it. The pattern is: adopt to AgentWork -> check returned state -> only if state=committed do you mark source as delegated and write to state.json.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:20:01.997Z",
+          "updated_at": "2026-07-26T16:40:20.496Z"
+        },
+        {
+          "id": "lrn_5cc982bc-0d5a-4941-b4e1-f14b80569131",
+          "title": "Queue items adopted into AgentWork prepared state should remain pending for re-check",
+          "body": "When ops items are delegated to an AgentWork queue in prepared state (awaiting external workflow commit before creation), the source Queue row status should remain empty and Gmail labels unchanged. The item is not yet fully delegated — a subsequent job run will re-check it after the work product is committed. This prevents premature status marking that would cause items to be skipped before actual delegation completes. The idempotency key (threadId+messageId) prevents dup-processing while allowing re-examination.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:20:28.509Z",
+          "updated_at": "2026-07-26T16:40:47.209Z"
+        },
+        {
+          "id": "lrn_0bc592a9-431a-44b2-bd6f-340e5a5308d8",
+          "title": "Idempotent queue processing with external work-item adoption",
+          "body": "When a queue processor adopts items into an external work system (e.g., AgentWork in 'prepared' state), the queue row should NOT be marked as processed until the external system confirms commitment. The pattern: (1) read queue, (2) adopt/enqueue to external system, (3) check adoption state - if 'prepared' or 'creating', leave queue row status empty for re-check on next run; (4) only mark queue row 'delegated' when external state is 'committed'. This prevents data loss if the external system fails after adoption but before processing.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:22:02.059Z",
+          "updated_at": "2026-07-26T16:40:20.986Z"
+        },
+        {
+          "id": "lrn_8a8ba22e-73e4-4c14-aa87-75def60240bb",
+          "title": "WPR adopted state requires deferred Gmail relabeling",
+          "body": "When enqueueing work to an agent workflow (WPR pattern), items enter 'adopted/prepared' state before 'committed'. Gmail labels and queue status must NOT be updated until consumer_state=committed. Premature relabeling causes items to be marked done before the downstream agent actually processes them. Leave Gmail unchanged and queue status empty; a later run rechecks the same immutable ingress row.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:22:49.457Z",
+          "updated_at": "2026-07-26T16:40:21.400Z"
+        },
+        {
+          "id": "lrn_56fd01e1-e271-4f04-a2d6-ca35bc492dfb",
+          "title": "AgentWork delegation state machine: prepared vs committed determines upstream status",
+          "body": "When an ops-consumer pipeline delegates items to an AgentWork queue (via an enqueue script), items start in 'prepared' state before a separate WPR (Work-in-Progress Router) commits them. The critical insight: do NOT mark upstream queue items as 'delegated' until the downstream item reaches 'committed' state. Premature status marking causes items to disappear from upstream tracking while downstream has not actually accepted responsibility. The correct pattern is to leave upstream status empty for prepared|creating|unknown|failed_retryable states, allowing the next pipeline run to recheck immutable ingress and only update once downstream confirms commitment.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:24:07.067Z",
+          "updated_at": "2026-07-26T16:40:18.095Z"
+        },
+        {
+          "id": "lrn_256e521d-b74a-426b-9ca2-b0874d2f5b95",
+          "title": "Ops queue items in prepared state should not update queue status until commit",
+          "body": "When delegating ops queue items to an AgentWork system that has intermediate states (prepared -> committed), do not mark the source queue item as delegated/done until the destination reaches a terminal committed state. Leave source queue status empty and Gmail labels unchanged so a subsequent run can verify the handoff completed. This prevents items from falling into a gap where the queue thinks they're done but the destination never processed them.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:24:31.068Z",
+          "updated_at": "2026-07-26T16:40:21.893Z"
+        },
+        {
+          "id": "lrn_19ab12e7-9330-4faa-b55c-f9886b0eeb22",
+          "title": "Gmail ops queue idempotency via WPR state machine",
+          "body": "When an ops-consumer delegates items to an AgentWork queue (via a Work-in-Progress Row system), the consumer must NOT mark Queue items as terminal or relabel Gmail until the WPR reaches 'committed' state. A 'prepared' state means the handoff is staged but not confirmed. On subsequent runs, the consumer should re-adopt the existing WPR row and leave Queue/Gmail unchanged until commit. This prevents race conditions where Gmail labels are stripped before downstream actually commits to handling the item.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:25:28.330Z",
+          "updated_at": "2026-07-26T16:40:32.152Z"
+        },
+        {
+          "id": "lrn_126cbf78-2a02-49e4-ab94-749f678529ee",
+          "title": "WPR prepared state requires deferred state tracking, not immediate finalization",
+          "body": "When an ops-consumer enqueues work to a downstream work-product registry (WPR) and receives status=appended with state=prepared, do NOT write terminal state tracking yet. The WPR's prepared state means the transaction hasn't committed. Write terminal state (delegated/handled/filed) only after the WPR returns committed. Leave upstream queues unchanged until commit confirmation. The WPR handles idempotency via ingress_id — calling again with the same ingress will return the existing row rather than duplicating.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:25:52.814Z",
+          "updated_at": "2026-07-26T16:40:32.965Z"
+        },
+        {
+          "id": "lrn_223f2204-51e1-465c-8f04-dfbdf945f2e9",
+          "title": "Queue item state management: leave pending until downstream commit confirmed",
+          "body": "In a two-phase queue system where items are first 'enqueued' to a downstream worker (AgentWork) then later 'committed' by that worker: do NOT mark the upstream Queue status as 'delegated' when the downstream returns state='prepared' or 'adopted'. These intermediate states indicate the item was received but not yet processed. Only mark 'delegated' when downstream returns consumer_state='committed'. Premature delegation causes items to be lost if the downstream worker fails before committing. The correct pattern: enqueue returns adoption confirmation → leave Queue row empty → later run re-queries downstream state → only mark delegated once committed. This prevents race conditions and ensures exactly-once processing semantics.",
+          "category": "data-processing",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:26:17.120Z",
+          "updated_at": "2026-07-26T16:40:33.337Z"
+        },
+        {
+          "id": "lrn_10638268-ca4e-4e87-af63-182426c383b9",
+          "title": "AgentWork delegation with two-phase commit pattern",
+          "body": "When an ops-consumer encounters work items outside its blessing scope (e.g., repo not in allowed list), it delegates to an AgentWork queue in a 'prepared' state rather than fully committing. The consumer writes items via a wrapper script that sets status=adopted but state=prepared. The items remain in Queue pending until a separate 'WPR' (Work Preparation Review) process commits them. Critical: when status=adopted but state=prepared, do NOT update source queue status or Gmail labels — leave them unchanged for the next consumer run. This two-phase pattern prevents orphaned work items when the delegation target hasn't confirmed receipt.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:26:39.085Z",
+          "updated_at": "2026-07-26T16:40:33.805Z"
+        },
+        {
+          "id": "lrn_d993cb42-425e-4efb-89c0-d2e0050b08d8",
+          "title": "AgentWork enqueue state machine requires consumer patience",
+          "body": "When enqueuing items to an AgentWork system that uses a two-phase commit (prepared → committed via external WPR/commit process), the consumer must NOT finalize queue status, relabel Gmail, or log completion when state=prepared. Instead, leave all states pending and let subsequent runs recheck until the external commit occurs. Premature finalization breaks idempotency and causes ghost items. The enqueue call itself is idempotent — re-adopting the same row is safe.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:27:23.256Z",
+          "updated_at": "2026-07-26T16:40:34.317Z"
+        },
+        {
+          "id": "lrn_598bae2c-23e2-4df5-a770-c2e7900e048d",
+          "title": "WPR prepared state requires leaving ingress untouched for retry",
+          "body": "When an ops-consumer job enqueues work to a Work-in-Progress Registry (WPR) and the wrapper returns status=adopted with state=prepared, the correct behavior is to leave the source queue item status empty and Gmail labels unchanged. This allows a subsequent job run to re-check the same immutable ingress once the WPR row transitions to committed. Marking the queue item as 'handled' prematurely would break idempotency and cause the work to be lost if the WPR commit fails.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:28:00.438Z",
+          "updated_at": "2026-07-26T16:40:22.352Z"
+        },
+        {
+          "id": "lrn_d424aa50-e028-4cfa-bc7b-865097fa3684",
+          "title": "WPR state machine requires polling pattern for delegated work items",
+          "body": "When an ops-consumer job enqueues items to a Work Progress Registry (WPR) via an enqueue wrapper, the wrapper returns a state (e.g., 'prepared', 'committed'). Items in transitional states like 'prepared' cannot be marked complete immediately — they must be left pending in the source queue and re-polled on subsequent job runs until the WPR confirms 'committed' state. Attempting to finalize items in non-terminal states causes premature completion. The correct pattern: (1) call enqueue wrapper, (2) check returned state, (3) if not 'committed', leave source queue status empty and Gmail labels unchanged, (4) on next run, the same immutable ingress re-triggers the check, and only when WPR returns 'committed' do you finalize (relabel, update queue status, persist to state.json). This polling pattern prevents race conditions between the consumer job and the WPR runtime.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:29:03.392Z",
+          "updated_at": "2026-07-26T16:40:34.787Z"
+        },
+        {
+          "id": "lrn_e526db6b-f8fb-43c9-b66f-f8c520d1aff4",
+          "title": "Two-phase queue processing: leave items pending until downstream commit",
+          "body": "When a queue processor enqueues work to a downstream system (like an agent work registry), the downstream may have multi-stage states (prepared → committed). If the downstream row is in a non-terminal state like 'prepared', do NOT mark the upstream queue item as handled. Leave it pending so a subsequent run can recheck. Only mark as delegated/handled once downstream confirms commitment. This prevents items from being lost if the downstream fails between preparation and commitment, since the idempotent retry will pick up the same item again.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:30:31.163Z",
+          "updated_at": "2026-07-26T16:40:23.680Z"
+        },
+        {
+          "id": "lrn_9e79c845-64ba-4fb2-83a8-2d759c183851",
+          "title": "State machine transitions in queue processing: prepared vs committed",
+          "body": "Multi-stage queue processors should distinguish 'adopted' items between 'prepared' (investigation done, delegation recorded) and 'committed' (downstream system confirmed receipt). Only on 'committed' state should the ingress be marked processed and source labels changed. Leaving items in 'prepared' state allows re-processing on next run if downstream adoption failed. Implementation: when state=prepared, leave queue row status empty and source (e.g., Gmail label) unchanged; only when state=committed do you mark 'delegated' and relabel. This prevents race conditions and ensures exactly-once processing even across job failures.",
+          "category": "data-processing",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:32:17.414Z",
+          "updated_at": "2026-07-26T16:40:35.703Z"
+        },
+        {
+          "id": "lrn_036bb0e5-bb88-4b6d-bb5f-3a728c4449be",
+          "title": "Multi-workbook delegation patterns require state-aware adoption logic",
+          "body": "When building queue systems that delegate work items to separate workbooks (e.g., main ops queue delegates to an AgentWork obligations sheet), the delegation wrapper must return adoption status distinguishing new appends from existing rows. Critical states: 'adopted' with 'prepared' state means the item exists but isn't committed — leave source queue status empty and don't relabel Gmail, allowing recheck on next run. Only 'adopted' with 'committed' state should trigger source queue status update to 'delegated' and Gmail relabeling. This prevents race conditions where items are marked delegated before the target system actually commits to handling them.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:32:46.414Z",
+          "updated_at": "2026-07-26T16:40:24.610Z"
+        },
+        {
+          "id": "lrn_b0f9adcc-2836-4029-aeda-668af27ec26e",
+          "title": "AgentWork adoption states require deferred processing",
+          "body": "When an ops-consumer pipeline delegates items to an AgentWork queue (via WPR - Work Package Registry pattern), items enter a 'prepared' state awaiting commit by a separate reconciliation process. The consumer must NOT mark these as complete or modify the source queue status until the item reaches 'committed' state. Checking for 'prepared|creating|unknown|failed_retryable' states and leaving source records unchanged allows the next run to recheck. Premature status updates cause data loss when the downstream commit fails.",
+          "category": "data-processing",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:33:25.497Z",
+          "updated_at": "2026-07-26T16:40:25.114Z"
+        },
+        {
+          "id": "lrn_f700cf87-0b31-4cf7-8428-b7d85cccae49",
+          "title": "Two-phase commit for queue processing prevents premature state updates",
+          "body": "When an ops-consumer delegates items to an agent work queue that uses a two-phase commit pattern ('prepared' then 'committed'), the consumer must NOT mark items as 'handled' or update dedup state until the downstream queue confirms commit. If items are marked handled while still in 'prepared' state, a crash or error leaves orphaned queue entries — the original system thinks they're done, but the downstream system never committed. The correct pattern: (1) enqueue to downstream, (2) check downstream state, (3) only update original queue/state when downstream reaches 'committed'. Items in 'prepared' should be left pending in the original queue; a subsequent run will recheck and advance them once committed.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:34:07.565Z",
+          "updated_at": "2026-07-26T16:40:25.573Z"
+        },
+        {
+          "id": "lrn_02ff1607-a1bd-4f19-aaa5-fb964a38a326",
+          "title": "AgentWork adoption flow maintains idempotent Queue processing via prepared state",
+          "body": "When ops-consumer identifies items for delegation to AgentWork and the enqueue script returns 'adopted' status with consumer_state='prepared', this signals the ingress exists but hasn't been committed by the downstream runtime (WPR). The correct protocol: leave Queue row status empty and Gmail labels unchanged. A later ops-consumer run will re-check the same immutable ingress row. Only when consumer_state reaches 'committed' should the Queue row be marked complete. This prevents premature status updates that could orphan items if the downstream runtime fails before committing.",
+          "category": "storage-state",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:34:45.311Z",
+          "updated_at": "2026-07-26T16:40:37.502Z"
+        }
+      ]
+    },
+    {
+      "id": "ci_workflow_vs_pr_notification",
+      "label": "CI workflow run versus PR notification",
+      "invariant": "The shared CI/PR classification is insufficient. Resolve the underlying entity; branch workflow runs have no PR and require investigation or delegation rather than PR-merge automation.",
+      "members": [
+        {
+          "id": "lrn_55390ea4-63de-41ed-bf61-3543dddac58d",
+          "title": "GitHub CI class mismatch: workflow failures vs PR merges require different handling",
+          "body": "When processing GitHub CI notifications, a class like 'github-ci-pr' may receive workflow run failures on main branch that have no associated PR. The act wrapper designed for PR merges cannot handle bare workflow failures. Detection: investigate wrapper returns run data with no PR number. Resolution: delegate to a general agent queue rather than attempting the PR-specific action. This prevents failed automation attempts on notifications that match the class pattern but not the action scope.",
+          "category": "code-execution",
+          "status": "rejected",
+          "created_at": "2026-07-20T08:16:05.466Z",
+          "updated_at": "2026-07-26T16:40:26.026Z"
+        },
+        {
+          "id": "lrn_a751c7cc-d088-41c2-b2c9-88613da54224",
+          "title": "Distinguish CI run failures from PR merge candidates in GitHub notification triage",
+          "body": "GitHub CI notifications for the same opsClass (e.g., O1-github-ci-pr) can represent two distinct types: (1) PR notifications eligible for auto-merge, and (2) CI run failure notifications requiring investigation/fixes. The run failure path has no automated act wrapper — only the PR merge path does. Key differentiator: parse the notification for 'View results' run URLs (run failures) vs PR URLs (mergeable PRs). Run failures should be delegated to a work queue for human/agent investigation, not attempted through the merge path.",
+          "category": "code-execution",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:15:42.681Z",
+          "updated_at": "2026-07-26T16:40:19.540Z"
+        },
+        {
+          "id": "lrn_aa3ebf51-84f4-4d20-988a-2bcffa45b31f",
+          "title": "CI workflow failure notifications require distinct handler from PR notifications",
+          "body": "GitHub Actions CI failure emails (workflow run failures) are structurally different from PR notifications. The investigation wrapper expected either 'pr  ' or 'run  ' subcommands. When the classifier tagged them as 'O1-github-ci-pr', they reached the PR handler path which couldn't process run IDs. Solution: add explicit run-failure handling or update the classifier to distinguish workflow runs from PRs so they route to appropriate wrappers.",
+          "category": "monitoring",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:16:10.513Z",
+          "updated_at": "2026-07-26T16:40:40.261Z"
+        },
+        {
+          "id": "lrn_adf01e36-6ca4-4be9-9c3f-01777f0d8f76",
+          "title": "GitHub CI notifications vs PR events require different handling paths",
+          "body": "When processing GitHub notification emails classified as 'CI/PR' ops, distinguish between actual PR events and workflow run failure notifications on main branch. PR events contain mergeable state and approval data; CI run failures on main branch are informational alerts about broken builds. The CI run notifications link to /actions/runs/{run_id} URLs while PR notifications link to /pull/{pr_number}. Extract the correct entity type from URL patterns before invoking wrappers (run vs pr subcommand). This distinction affects whether act-automation is even applicable.",
+          "category": "data-processing",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:18:59.882Z",
+          "updated_at": "2026-07-26T16:40:28.793Z"
+        },
+        {
+          "id": "lrn_4e33e3da-4976-4471-b9a4-cfe24edf4d05",
+          "title": "GitHub CI run failures (not PRs) require delegation, not act-merge-pr",
+          "body": "When processing opsClass O1-github-ci-pr items, distinguish between actual PR CI notifications and standalone workflow run failures on a branch. The act-merge-pr wrapper only applies to PRs. For run failures (visible by URL pattern /actions/runs/ without /pull/), there is no PR to merge — these must be delegated to an agent work queue with a diagnosis attached rather than attempting the act path. Extracting run IDs from GitHub action run URLs and using investigate-github.sh run   for first-party data is the correct investigation approach.",
+          "category": "code-execution",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:20:28.394Z",
+          "updated_at": "2026-07-26T16:40:42.642Z"
+        },
+        {
+          "id": "lrn_9471cd58-d054-40d1-ab7e-90589519e556",
+          "title": "CI notification routing requires workflow-type discrimination",
+          "body": "GitHub CI failure notifications may be classified generically (e.g., 'github-ci-pr') but actually represent different workflow types - PR workflows vs main-branch workflows. When an ops classifier routes a CI failure notification, the automation must check the actual workflow context (branch, event type) before applying an action wrapper. A 'merge PR' action wrapper is invalid for main-branch CI failures since no PR exists. Detection: parse the email subject for 'main (commit)' vs 'PR #N' patterns, or extract and query the run via GitHub API to get the triggering event.",
+          "category": "monitoring",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:22:01.940Z",
+          "updated_at": "2026-07-26T16:40:30.172Z"
+        },
+        {
+          "id": "lrn_ebf3c867-6970-4227-b84e-2edfaac01ca9",
+          "title": "GitHub CI run failures vs PR-triggered CI: different act pathways",
+          "body": "When processing GitHub CI notifications, branch-push CI run failures (runs on 'main' not associated with a PR) cannot use the same merge-PR action wrapper as PR-triggered CI. The opsClass may be identical (e.g. 'O1-github-ci-pr'), but the investigation step must extract either a PR number or a run-id. For run failures without a PR, the 'run  ' investigation path applies, and since no PR exists to merge, the item must be delegated to an agent work queue rather than auto-actioned. Key lesson: opsClass alone doesn't determine the action — the underlying entity type (PR vs run) does.",
+          "category": "code-execution",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:23:27.605Z",
+          "updated_at": "2026-07-26T16:40:31.031Z"
+        },
+        {
+          "id": "lrn_036e5b42-a4a2-465f-bb1d-c3fbb2dd74b5",
+          "title": "GitHub Actions run notifications vs PR notifications require different handling paths",
+          "body": "GitHub notification emails about CI run failures on main branch (triggered by direct pushes) do not contain PR numbers and cannot be processed by PR-merge automation even if the opsClass is github-ci-pr. The email subject contains commit SHA patterns for direct push runs vs PR# patterns for PR runs. Investigation must distinguish these cases before attempting act wrappers that assume a PR exists.",
+          "category": "code-execution",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:24:30.948Z",
+          "updated_at": "2026-07-26T16:40:43.974Z"
+        },
+        {
+          "id": "lrn_fe28449a-3d2a-4146-978d-4022dad0751d",
+          "title": "CI run failures on main branch are NOT PR-mergeable and require different handling",
+          "body": "When processing GitHub CI notifications classified as PR-related (e.g., O1-github-ci-pr class), distinguish between actual PR failures and main-branch workflow run failures. A failed CI run on main has no PR to merge — auto-merge scripts cannot help. Route these to a manual review queue or investigation path instead of attempting PR automation. The notification email may look similar but the actionable paths diverge completely.",
+          "category": "code-execution",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:25:53.327Z",
+          "updated_at": "2026-07-26T16:40:44.444Z"
+        },
+        {
+          "id": "lrn_11c90091-9f73-4c0e-a8ba-da196cd31a3f",
+          "title": "GitHub CI run failures vs PR merge handlers require separate opsClass routing",
+          "body": "A GitHub Action workflow failure notification on the main branch should not be routed to a PR-merge handler even if the classifier assigns opsClass=O1-github-ci-pr. The PR merge act wrapper only handles pull request merge operations, not arbitrary CI run failures. When the opsClass suggests automation but the actual content is out-of-scope for available act wrappers, the correct disposition is to delegate to an AgentWork queue for human or advanced-agent review rather than attempting to invoke the wrong automation.",
+          "category": "monitoring",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:28:00.559Z",
+          "updated_at": "2026-07-26T16:40:45.881Z"
+        },
+        {
+          "id": "lrn_a0f3946d-41f2-45fe-a094-2171bb651360",
+          "title": "CI failure emails vs PR check emails require different handling paths",
+          "body": "GitHub CI notifications can be either PR check results or main-branch workflow failures — they use the same opsClass but require different action paths. PR check failures are actionable via 'merge PR when checks pass' workflows, but main-branch CI failures have no PR to merge and must be routed to investigation/fix workflows instead. The differentiation: extract the workflow run details, check the 'head_branch' field — if it's 'main' (or your default branch) with event='push', it's a branch CI failure requiring investigation, not a PR workflow. If it's a feature branch with event='pull_request', it's a PR check. Misclassifying these leads to action wrappers failing with 'no PR found' errors. Route main-branch failures to delegate/investigation queues rather than attempting PR actions.",
+          "category": "code-execution",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:29:03.556Z",
+          "updated_at": "2026-07-26T16:40:35.247Z"
+        },
+        {
+          "id": "lrn_03d478f5-1269-4ac6-8e34-746b07f7bf7a",
+          "title": "GitHub CI failure emails on main branch have no PR to act upon — delegate pattern",
+          "body": "GitHub Actions sends CI failure emails for both PR checks AND main-branch workflow runs. The email subject format 'Run failed: CI - main' indicates a main-branch failure (not a PR check). These lack an associated PR, so merge/approve actions are impossible. The correct disposition is to delegate to a human or agent work queue for code-level investigation rather than attempting PR-based automation. Always verify whether a CI failure email is PR-related (has an associated PR number) or main-branch-related before routing to PR action workflows.",
+          "category": "monitoring",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:30:31.029Z",
+          "updated_at": "2026-07-26T16:40:23.223Z"
+        },
+        {
+          "id": "lrn_a013c5ce-d972-4a8e-9882-02e5cfa2d234",
+          "title": "CI run failures vs PR failures: opsClass routing distinction",
+          "body": "When GitHub Actions sends CI failure notifications, distinguish between PR-triggered CI failures and main-branch CI failures. An opsClass like 'github-ci-pr' with an act wrapper for merging PRs cannot handle main-branch CI failures — there's no PR to merge. The investigation script confirmed these were 'run' failures on main, not PR failures. Correct routing: if CI failure lacks an associated PR, delegate to a general investigation queue (AgentWork) rather than forcing through a PR-merge action path. The diagnostic command pattern: `investigate-github.sh run  ` vs `investigate-github.sh pr  `.",
+          "category": "monitoring",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:32:17.282Z",
+          "updated_at": "2026-07-26T16:40:24.142Z"
+        },
+        {
+          "id": "lrn_987b2fb0-bb1c-4637-8050-1ff4a9bda0ac",
+          "title": "CI notification opsClass must distinguish PR vs branch runs",
+          "body": "GitHub CI failure notifications for main branch workflow runs were incorrectly classified as 'O1-github-ci-pr' (PR CI class). The investigation wrapper correctly identified these as workflow runs with no associated PR, but the classifier upstream should distinguish between PR-triggered CI and branch-triggered CI. For PR CI, action scripts can merge/close PRs; for branch CI, there's no PR to act on. The investigation output (showing 'conclusion: failure' but no PR number) was the signal to delegate rather than act. Always verify investigation tool output for PR identity rather than trusting the opsClass label blindly.",
+          "category": "data-processing",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:33:25.628Z",
+          "updated_at": "2026-07-26T16:40:36.582Z"
+        },
+        {
+          "id": "lrn_3aa28292-5ee9-450e-86db-655e7daab810",
+          "title": "GitHub workflow failures use same ops class as PR checks but require different handling",
+          "body": "O1-github-ci-pr ops class captures both PR check failures AND workflow run failures on branches (like main). Investigation step is critical to distinguish them: workflow failures have run URLs (github.com/owner/repo/actions/runs/ID) vs PR URLs. For workflow failures there's no merge action available - only options are investigate the failure or delegate. The blessed-repos allowlist gates automation, so workflows from repos outside the list must delegate rather than attempt automation that would fail. Check email body structure: workflow failures reference 'Workflow run' and branch name, PRs reference 'pull request' with PR number.",
+          "category": "code-execution",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:34:45.473Z",
+          "updated_at": "2026-07-26T16:40:46.802Z"
+        }
+      ]
+    },
+    {
+      "id": "blessed_repository_authorization_gate",
+      "label": "Blessed-repository authorization gate",
+      "invariant": "Class, policy, and mode eligibility do not authorize action on an unlisted repository; the independent allowlist gate blocks autonomous action and routes the item to delegation.",
+      "members": [
+        {
+          "id": "lrn_be31a9b2-be14-4dc6-ac06-017b71297ae4",
+          "title": "Blessed repo allowlist gates automated actions even when opsClass and policy allow",
+          "body": "In an ops automation system with mode=full and policy=auto, having a blessed opsClass (like 'O1-github-ci-pr') is necessary but not sufficient for automated action. The target repo must ALSO appear in a blessed repos allowlist (e.g., OPS_BLESSED_REPOS env var). If repo is not blessed, the item falls through to delegation even if all other criteria pass. This creates a two-gate security model: opsClass determines WHAT can be automated, blessed repos determine WHERE. Items matching opsClass but failing repo check should be delegated with full diagnosis attached rather than silently dropped. This prevents accidental automation on repos not yet vetted for autonomous action.",
+          "category": "code-execution",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:17:24.465Z",
+          "updated_at": "2026-07-26T16:40:40.735Z"
+        },
+        {
+          "id": "lrn_a1cf881f-789d-43ac-ab26-eedd4ea717db",
+          "title": "Repo-scoped blessed lists prevent unintended auto-handling of CI notifications",
+          "body": "When auto-processing CI failure notifications (GitHub Actions, etc.), use a blessed repository allowlist to scope which repos can be auto-handled vs delegated. This prevents an ops-consumer from taking autonomous action on repos outside its authority. Pattern: check if notification repo is in BLESSED_REPOS env var; if not, route to delegation queue even when policy=auto. This provides a safe default where new repos require explicit opt-in rather than implicit auto-handling.",
+          "category": "monitoring",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:20:02.182Z",
+          "updated_at": "2026-07-26T16:40:29.716Z"
+        },
+        {
+          "id": "lrn_6c1a1e89-635f-46cf-9e14-0dfa16662660",
+          "title": "Blessed-repo allowlist gates automated CI actions",
+          "body": "Even with mode=full and policy=auto, automated CI failure handling requires the repository to be in an explicit OPS_BLESSED_REPOS allowlist. Public repos may be intentionally excluded from automated action. When a CI notification arrives for an unblessed repo, the correct disposition is delegation to AgentWork (human-in-loop) rather than automated investigation/remediation.",
+          "category": "code-execution",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:22:49.656Z",
+          "updated_at": "2026-07-26T16:40:43.107Z"
+        },
+        {
+          "id": "lrn_459263fb-2e4b-4eb3-8cfe-1192b6a1d27f",
+          "title": "Blessed-repo allowlist as ops automation safety boundary",
+          "body": "For CI/PR notification automation that can take action (merge, approve, dismiss), maintain an explicit allowlist of blessed repositories. Items from non-blessed repos should NOT be auto-actioned even if policy=auto and mode=full. Instead, delegate to a human review path with full diagnosis attached. This prevents automation from acting on repos where the operator hasn't explicitly opted in, avoiding accidental actions on forks, personal repos, or third-party dependencies.",
+          "category": "code-execution",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:25:28.521Z",
+          "updated_at": "2026-07-26T16:40:32.501Z"
+        },
+        {
+          "id": "lrn_e497b2a5-759d-4830-be94-37576d0da8b5",
+          "title": "Blessing scope as enforcement boundary for auto-policy ops",
+          "body": "In automated ops pipelines with policy=auto, a 'blessed list' (e.g., OPS_BLESSED_REPOS) serves as the enforcement boundary for which items can be acted upon vs. delegated. Even when opsClass and policy indicate auto-processing is allowed, the item must also pass the blessing check. In this case, GitHub CI notifications for a repo explicitly removed from the blessed list ('pruned to private-only' in config comments) were correctly identified as out-of-scope despite having valid policy=auto classification. The blessing list is loaded from .env and checked before any act wrapper execution. Items failing this check delegate to AgentWork rather than being processed in-place.",
+          "category": "code-execution",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:26:39.259Z",
+          "updated_at": "2026-07-26T16:40:44.914Z"
+        },
+        {
+          "id": "lrn_7567f75c-162c-4f0c-bdc6-5dae9660697c",
+          "title": "Blessed-repo allowlist gates action even when mode=full and policy=auto",
+          "body": "In ops processing systems with multiple permission layers, a repository not in the BLESSED_REPOS allowlist should be delegated rather than acted upon, even when the global mode is 'full' and the item's policy is 'auto'. The blessed list is a security boundary that operates independently of the general mode setting. Delegation path (e.g., to AgentWork queue) is the correct handling for valid but out-of-scope items.",
+          "category": "code-execution",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:27:23.390Z",
+          "updated_at": "2026-07-26T16:40:45.408Z"
+        },
+        {
+          "id": "lrn_dfee5f99-a947-4266-8d81-963d360381f6",
+          "title": "Blessed-repo allowlists must be checked before auto-act wrappers execute",
+          "body": "In automated ops pipelines with act/delegate bifurcation, repository allowlists (e.g., OPS_BLESSED_REPOS) must be checked BEFORE invoking act wrappers, not inside them. Even if an opsClass like 'github-ci-pr' has an act wrapper available, items for repos outside the blessed list must route to delegation. The investigate wrapper can still run to gather diagnostic info, but the act wrapper that would merge/approve must be blocked. This separation prevents accidental automation on repos that haven't been explicitly authorized for auto-actions.",
+          "category": "code-execution",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:32:46.543Z",
+          "updated_at": "2026-07-26T16:40:36.116Z"
+        },
+        {
+          "id": "lrn_a8779d19-b644-4223-abbe-63259483cb4d",
+          "title": "Blessed repo allowlist prevents unintended automation on sensitive repos",
+          "body": "Even when an ops item passes all validation (correct opsClass, auto policy, full mode), a blessed-repos allowlist provides a final gate. In this case, CI failures on 'auxilo' repo were correctly identified but not auto-actioned because only 'slamclients,thinveilrecords-site' were in the blessed list. This pattern prevents automation from touching infrastructure repos, personal projects, or repos still under development. The delegation to AgentWork with a diagnosis allowed human review while maintaining the processing pipeline. Design: check policy/mode first, then filter by repo allowlist, then delegate non-matching repos.",
+          "category": "data-processing",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:33:25.775Z",
+          "updated_at": "2026-07-26T16:40:46.242Z"
+        }
+      ]
+    },
+    {
+      "id": "gmail_batch_denial_fallback",
+      "label": "Gmail batch denial fallback",
+      "invariant": "When batch thread retrieval is policy or permission denied but single-thread retrieval remains allowed, fall back to individual reads without changing downstream semantics.",
+      "members": [
+        {
+          "id": "lrn_38ed884e-3368-4cde-b517-33d57423fe1d",
+          "title": "Gmail batch API not in allowlists requires sequential thread reads",
+          "body": "When running headless automation with restricted command/API allowlists, batch Gmail operations (get_gmail_threads_content_batch) may be blocked while individual thread reads (get_gmail_thread_content) are permitted. Fall back to sequential reads when batch fails with permission errors. This is slower but functionally equivalent. Design automation to attempt batch first, catch the permission rejection, then iterate sequentially—keeps code working across both permissive and restrictive environments.",
+          "category": "web-interaction",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:19:00.160Z",
+          "updated_at": "2026-07-26T16:40:29.254Z"
+        },
+        {
+          "id": "lrn_74f2caf0-0382-4cef-b5b3-38be24d3963e",
+          "title": "Gmail thread batch fetch requires specific handling",
+          "body": "Attempted to batch-fetch multiple Gmail threads via get_gmail_threads_content_batch but the tool was denied (likely auth scope or rate limiting). Workaround: fall back to individual get_gmail_thread_content calls for each thread ID. Single-thread fetches succeeded while batch was blocked.",
+          "category": "web-interaction",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:22:49.305Z",
+          "updated_at": "2026-07-26T16:40:30.575Z"
+        },
+        {
+          "id": "lrn_7a145966-3fe4-4475-a623-03cdd919c0cb",
+          "title": "Gmail batch thread fetch blocked — use single-thread calls as fallback",
+          "body": "When a Gmail batch thread content fetch is denied (e.g. tool policy blocks 'get_gmail_threads_content_batch'), fall back to single-thread calls ('get_gmail_thread_content') in parallel for each threadId. Both return the same structure per thread, so downstream logic remains unchanged. This pattern applies broadly: batch endpoints may have stricter permissions; single-item endpoints are often allowed where batch is not.",
+          "category": "web-interaction",
+          "status": "rejected",
+          "created_at": "2026-07-26T08:23:27.780Z",
+          "updated_at": "2026-07-26T16:40:31.499Z"
+        }
+      ]
+    },
+    {
+      "id": "published_ci_require_tier2_duplicate",
+      "label": "Published CI_REQUIRE_TIER2 duplicate",
+      "invariant": "A CI-only required flag converts a missing conditionally-run browser tier from silent skip to hard failure while preserving local skip behavior.",
+      "current_algorithm_orientation": {
+        "candidate_id": "lrn_2a2370e0-bf7b-45a8-9e80-81e18598e8ab",
+        "existing_id": "lrn_e3f59c88-8e98-4bfa-8643-669e14ff2c98"
+      },
+      "members": [
+        {
+          "id": "lrn_2a2370e0-bf7b-45a8-9e80-81e18598e8ab",
+          "title": "Conditionally-skipped test tiers pass silently in CI — gate them with a required-flag guard",
+          "body": "Problem: A test file had a two-tier design where the heavier tier (real-browser Playwright/Chromium checks) auto-skips when `playwright` isn't resolvable. This is correct for local dev machines without the browser installed, but it creates a silent-false-green failure mode in CI: if the Chromium install step is broken or misconfigured, the tier skips quietly and the build still reports success — the exact protection you added never runs.\n\nSolution: Add an env flag (e.g. `CI_REQUIRE_TIER2=1`) that the test honors. When the flag is set but the heavy tier's dependency is unavailable, the test must exit non-zero LOUDLY instead of skipping. Set the flag only in the CI workflow, never locally. Result: local `npm test` keeps skipping quietly on machines without the browser, while CI fails hard the moment the tier would silently skip.\n\nVerification that matters: don't just assert the happy path (tier runs, all green). Also simulate the broken-install case (dependency absent + flag set) and confirm the guard actually exits 1. A guard you never watched fire is not verified.\n\nCaveat: the loud-failure check must run BEFORE the skip branch — order the detection so the flag is honored even when the dependency-resolution check would otherwise short-circuit to a skip.",
+          "category": "code-execution",
+          "status": "rejected",
+          "created_at": "2026-07-20T12:55:57.411Z",
+          "updated_at": "2026-07-26T16:39:46.517Z"
+        },
+        {
+          "id": "lrn_e3f59c88-8e98-4bfa-8643-669e14ff2c98",
+          "title": "Force a conditionally-skipped test to fail loudly in CI instead of silently skipping",
+          "body": "Problem: a test file had two tiers — a static parse tier (always runs) and a real-browser Playwright tier that self-skips when `playwright` isn't resolvable. This is correct for local machines without Playwright installed, but dangerous in CI: if the Chromium install step silently breaks, the browser tier skips and the build still goes green, giving false confidence that the regression is covered.\n\nSolution: have the test honor an env flag (e.g. `CI_REQUIRE_TIER2=1`). When the flag is set but Playwright can't be loaded / the tier can't run, the test throws and exits 1 instead of skipping. Locally the flag is unset so the tier skips quietly; in CI the flag is set so a broken browser-test install becomes a hard, visible failure. Verify BOTH paths before trusting it: (1) happy path — tier actually executes its assertions with the flag on; (2) sabotage path — make Playwright unavailable with the flag on and confirm the run exits non-zero. A skip that stays a skip in CI is the failure mode this guards against.\n\nCaveat: pin the browser-driver as a devDependency but do NOT commit the browser binary — install it in CI via `npx playwright install chromium --with-deps`. The env-flag guard is what closes the gap between 'dependency present' and 'tier actually ran'.",
+          "category": "code-execution",
+          "status": "approved",
+          "created_at": "2026-07-20T13:07:37.516Z",
+          "updated_at": "2026-07-25T15:49:22.455Z"
+        }
+      ]
+    }
+  ],
+  "clean_approved_files": [
+    "spec3-f1-phase0-clean-negatives-a.json",
+    "spec3-f1-phase0-clean-negatives-b.json"
+  ],
+  "same_domain_different_lesson_pairs": [
+    [
+      "lrn_3968560a-c2aa-4bdc-87bf-9de7dc2f2296",
+      "lrn_33fbf0c6-66db-4260-bbda-0cca4a930231"
+    ],
+    [
+      "lrn_3968560a-c2aa-4bdc-87bf-9de7dc2f2296",
+      "lrn_a89e1e46-1623-4421-a6b2-a392915c6ece"
+    ],
+    [
+      "lrn_33fbf0c6-66db-4260-bbda-0cca4a930231",
+      "lrn_a89e1e46-1623-4421-a6b2-a392915c6ece"
+    ]
+  ]
+}
