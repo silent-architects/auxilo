@@ -158,6 +158,20 @@ or refuses `/learn` or `/extract`, and it does not replace the sensitivity
 screen. Its deliberate limitation is recurrence: recurring internal terms are
 caught; a term used once may not be.
 
+`near_duplicate` is also a hold, never an automatic rejection. The deterministic
+screen compares a submission with pending, published, and previously rejected
+learnings across categories. A re-extraction of a published learning is shown
+as `re-extraction of your published learning <id>`; a match to a rejected
+predecessor is shown as `re-extraction of a lesson you previously rejected`.
+The contributor-only review projection includes the matching ID, channel
+scores, and this explanation. Buyer-facing responses strip that evidence.
+
+This screen covers the high-precision **near-verbatim** class only. It does not
+reliably catch a lesson paraphrased into substantially different wording.
+Paraphrase-class re-extractions remain an explicit limitation; meanwhile,
+`account_vocab` quarantines recurring account-private vocabulary for human
+review.
+
 ---
 
 ## Pricing Bounds

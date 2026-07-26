@@ -14,7 +14,15 @@ const path = require('path');
 const {
   similarityScore,
   findNearDuplicate,
-  tokenize,
+  tokenSet,
+  setJaccard,
+  unigramJaccard,
+  termFrequency,
+  tfCosine,
+  titleJaccard,
+  calibrateCosine,
+  scoreChannels,
+  NEAR_DUPLICATE_CONFIG,
   REJECT_THRESHOLD,
   FLAG_THRESHOLD,
 } = require('../lib/similarity');
@@ -24,76 +32,12 @@ const DEFAULT_FIXTURE = path.resolve(
   '../test/fixtures/spec3-f1-phase0-ground-truth.json',
 );
 const D1_THRESHOLD = FLAG_THRESHOLD;
-const D2_THRESHOLD = 0.60;
-const D3_THRESHOLD = 0.75;
-const D4_THRESHOLD = 0.60;
-const COMPOSITE_THRESHOLD = 0.60;
+const D2_THRESHOLD = NEAR_DUPLICATE_CONFIG.UNIGRAM_FLAG_THRESHOLD;
+const D3_THRESHOLD = NEAR_DUPLICATE_CONFIG.TF_COSINE_FLAG_THRESHOLD;
+const D4_THRESHOLD = NEAR_DUPLICATE_CONFIG.TITLE_FLAG_THRESHOLD;
+const COMPOSITE_THRESHOLD = NEAR_DUPLICATE_CONFIG.COMPOSITE_FLAG_THRESHOLD;
 const RECALL_MIN = 0.90;
 const FALSE_PAIR_RATE_MAX = 0.02;
-
-function tokenSet(text) {
-  return new Set(tokenize(text));
-}
-
-function setJaccard(a, b) {
-  if (a.size === 0 && b.size === 0) return 0;
-  let intersection = 0;
-  const [small, large] = a.size <= b.size ? [a, b] : [b, a];
-  for (const value of small) {
-    if (large.has(value)) intersection++;
-  }
-  return intersection / (a.size + b.size - intersection);
-}
-
-function combinedText(learning) {
-  return `${learning.title || ''} ${learning.body || ''}`;
-}
-
-function unigramJaccard(a, b) {
-  return setJaccard(tokenSet(combinedText(a)), tokenSet(combinedText(b)));
-}
-
-function termFrequency(tokens) {
-  const counts = new Map();
-  for (const token of tokens) counts.set(token, (counts.get(token) || 0) + 1);
-  return counts;
-}
-
-function tfCosine(a, b) {
-  const aTf = termFrequency(tokenize(combinedText(a)));
-  const bTf = termFrequency(tokenize(combinedText(b)));
-  if (aTf.size === 0 || bTf.size === 0) return 0;
-
-  let aNorm = 0;
-  let bNorm = 0;
-  for (const value of aTf.values()) aNorm += value * value;
-  for (const value of bTf.values()) bNorm += value * value;
-
-  let dot = 0;
-  const [small, large] = aTf.size <= bTf.size ? [aTf, bTf] : [bTf, aTf];
-  for (const [token, value] of small) dot += value * (large.get(token) || 0);
-  return dot / Math.sqrt(aNorm * bNorm);
-}
-
-function titleJaccard(a, b) {
-  return setJaccard(tokenSet(a.title || ''), tokenSet(b.title || ''));
-}
-
-function calibrateCosine(cosine) {
-  if (cosine <= 0) return 0;
-  if (cosine >= 1) return 1;
-  return cosine / (2 - cosine);
-}
-
-function scoreChannels(a, b) {
-  const d1 = similarityScore(a, b);
-  const d2 = unigramJaccard(a, b);
-  const d3 = tfCosine(a, b);
-  const d4 = titleJaccard(a, b);
-  const content = Math.max(d1, d2, calibrateCosine(d3));
-  const composite = Math.max(content, (0.75 * content) + (0.25 * d4));
-  return { d1, d2, d3, d4, content, composite };
-}
 
 function pairKey(aId, bId) {
   return [String(aId), String(bId)].sort().join('\u0000');
@@ -911,8 +855,8 @@ function printReport(result, context, emit = console.log) {
   );
   emit(
     result.acceptance.pass
-      ? 'GATE VERDICT: PASS. Phase 1 remains blocked for PM review.'
-      : 'GATE VERDICT: FAIL — STOP. Phase 1 remains blocked for human/PM review.',
+      ? 'GATE VERDICT: PASS. Phase 0 lexical gate passed.'
+      : 'GATE VERDICT: FAIL — STOP. Paraphrase-class work remains escalated; this result does not block the revised Phase 1 near-verbatim subset.',
   );
   emit('READ-ONLY: report complete; no corpus data changed.');
 }

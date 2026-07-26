@@ -157,6 +157,7 @@ describe('DR-8 free path moves no signals', () => {
   it('free response strips ops counters and moderation-internal fields like every buyer-facing projection', () => {
     assert.ok(owner.includes('stripOpsCounters(ownerLearning.quality)'));
     for (const f of ['injection_flags', 'possible_duplicate_of', 'moderation',
+      'near_duplicate_evidence', 'near_duplicate_why',
       'sensitivity_signals', 'sensitivity_evidence', 'learning_type', 'sanitized_from']) {
       assert.ok(owner.includes(f), `strips ${f}`);
     }

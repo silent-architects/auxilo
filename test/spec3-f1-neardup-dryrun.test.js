@@ -7,7 +7,13 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const { similarityScore } = require('../lib/similarity');
+const {
+  similarityScore,
+  findNearDuplicate,
+  NEAR_DUPLICATE_CONFIG,
+  DISABLED_NEAR_VERBATIM_CONFIG,
+  loadNearDuplicateConfig,
+} = require('../lib/similarity');
 const {
   DEFAULT_FIXTURE,
   D1_THRESHOLD,
@@ -33,6 +39,10 @@ const {
 } = require('../scripts/neardup-dryrun');
 
 const SCRIPT = path.resolve(__dirname, '../scripts/neardup-dryrun.js');
+const SIMILARITY_SOURCE = fs.readFileSync(
+  path.resolve(__dirname, '../lib/similarity.js'),
+  'utf8',
+);
 
 function learning(id, title, body, overrides = {}) {
   return {
@@ -130,6 +140,79 @@ describe('SPEC3-F1 Phase 0 lexical detector primitives', () => {
     assert.ok(scores.composite > scores.content, 'title should corroborate content');
     assert.ok(scores.composite < COMPOSITE_THRESHOLD, 'title alone must not flag');
   });
+
+  it('runtime detector uses the exact frozen Phase-0 thresholds from config', () => {
+    assert.equal(NEAR_DUPLICATE_CONFIG.SHINGLE_FLAG_THRESHOLD, D1_THRESHOLD);
+    assert.equal(NEAR_DUPLICATE_CONFIG.TF_COSINE_FLAG_THRESHOLD, 0.75);
+    assert.equal(
+      NEAR_DUPLICATE_CONFIG.COMPOSITE_FLAG_THRESHOLD,
+      COMPOSITE_THRESHOLD,
+    );
+    assert.equal(NEAR_DUPLICATE_CONFIG.CONTENT_WEIGHT, 0.75);
+    assert.equal(NEAR_DUPLICATE_CONFIG.TITLE_WEIGHT, 0.25);
+  });
+
+  it('config load failure is loud and fail-open for the new channel', () => {
+    const logs = [];
+    const config = loadNearDuplicateConfig(
+      () => {
+        throw new Error('fixture read failed');
+      },
+      (line) => logs.push(line),
+    );
+
+    assert.equal(config, DISABLED_NEAR_VERBATIM_CONFIG);
+    assert.equal(config.SHINGLE_FLAG_THRESHOLD, 0.60);
+    assert.equal(config.TF_COSINE_FLAG_THRESHOLD, Number.POSITIVE_INFINITY);
+    assert.equal(config.COMPOSITE_FLAG_THRESHOLD, Number.POSITIVE_INFINITY);
+    assert.deepEqual(logs, [
+      '[BOOT] near-duplicate config unavailable; TF/composite channel disabled: fixture read failed',
+    ]);
+    assert.match(
+      SIMILARITY_SOURCE,
+      /require\('\.\.\/config\/near-duplicate\.json'\)/,
+      'the only new runtime data load stays inside config/',
+    );
+    assert.doesNotMatch(SIMILARITY_SOURCE, /Date\.now|Math\.random|fetch\(/);
+  });
+
+  it('runtime catches the pinned published CI_REQUIRE_TIER2 pair as a hold', () => {
+    const { prepared } = actualPreparedFixture();
+    const first = prepared.records.find(
+      (row) => row.id === 'lrn_2a2370e0-bf7b-45a8-9e80-81e18598e8ab',
+    );
+    const published = prepared.records.find(
+      (row) => row.id === 'lrn_e3f59c88-8e98-4bfa-8643-669e14ff2c98',
+    );
+    const result = findNearDuplicate(first, [published]);
+
+    assert.equal(result.verdict, 'flag');
+    assert.equal(result.match.id, published.id);
+    assert.equal(result.match.status, 'approved');
+    assert.ok(result.match.channels.d3 >= 0.75);
+    assert.ok(result.match.channels.composite >= COMPOSITE_THRESHOLD);
+  });
+
+  it('runtime produces zero flags across 3,160 clean and 3 same-domain negative pairs', () => {
+    const { prepared } = actualPreparedFixture();
+    const falsePairs = prepared.negativePairs.filter(
+      ({ a, b }) => findNearDuplicate(a, [b]).verdict !== 'clean',
+    );
+
+    assert.equal(
+      prepared.negativePairs.filter(
+        (pair) => pair.classes.includes('historically_clean'),
+      ).length,
+      3160,
+    );
+    assert.equal(
+      prepared.negativePairs.filter(
+        (pair) => pair.classes.includes('same_domain_different_lesson'),
+      ).length,
+      3,
+    );
+    assert.deepEqual(falsePairs.map((pair) => pair.key), []);
+  });
 });
 
 describe('SPEC3-F1 Phase 0 fixture construction and clustering', () => {
@@ -184,7 +267,7 @@ describe('SPEC3-F1 Phase 0 fixture construction and clustering', () => {
     );
   });
 
-  it('diagnoses rejected-status and cross-category scope skips through the imported algorithm', () => {
+  it('confirms the imported runtime now compares rejected and cross-category predecessors', () => {
     const olderRejected = learning(
       'rejected',
       'same lesson',
@@ -229,13 +312,24 @@ describe('SPEC3-F1 Phase 0 fixture construction and clustering', () => {
     ]);
 
     assert.equal(diagnosis.scope.total_pairs, 2);
-    assert.equal(diagnosis.scope.current_compared, 0);
+    assert.equal(diagnosis.scope.current_compared, 2);
     assert.equal(diagnosis.scope.rejected_existing, 1);
     assert.equal(diagnosis.scope.category_mismatch, 1);
-    assert.equal(diagnosis.scope.h1_recovered_comparisons, 1);
-    assert.equal(diagnosis.scope.h2_recovered_comparisons, 1);
+    assert.equal(diagnosis.scope.h1_recovered_comparisons, 0);
+    assert.equal(diagnosis.scope.h2_recovered_comparisons, 0);
     assert.equal(diagnosis.scope.full_scope_fix_compared, 2);
     assert.equal(diagnosis.scope.full_scope_fix_detected, 2);
+    assert.equal(diagnosis.scope.current_detected, 2);
+
+    const tieCandidate = learning(
+      'candidate',
+      'deterministic tie',
+      'alpha beta gamma delta epsilon zeta eta theta iota',
+    );
+    const tieA = { ...tieCandidate, id: 'a', status: 'rejected' };
+    const tieB = { ...tieCandidate, id: 'b', category: 'monitoring' };
+    assert.equal(findNearDuplicate(tieCandidate, [tieB, tieA]).match.id, 'a');
+    assert.equal(findNearDuplicate(tieCandidate, [tieA, tieB]).match.id, 'a');
   });
 
   it('loads both split clean-negative fixture files and pins exactly 80 records', () => {
