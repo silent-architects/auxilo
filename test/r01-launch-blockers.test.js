@@ -278,9 +278,10 @@ describe('6. openapi.json is complete and current', () => {
   const spec = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'openapi.json'), 'utf-8'));
   const pkgVersion = require('../package.json').version;
 
-  it('info.version matches the package version (0.9.5)', () => {
+  it('info.version matches the package version', () => {
+    // Consistency, not a hardcoded pin: the 0.9.6 bump (d9cb31b) broke the
+    // old hardcode and CI stayed red undetected — drift is the failure class.
     assert.equal(spec.info.version, pkgVersion);
-    assert.equal(spec.info.version, '0.9.5');
   });
 
   it('documents the previously-missing paths', () => {

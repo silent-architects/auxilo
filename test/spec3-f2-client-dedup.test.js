@@ -556,10 +556,13 @@ describe('SPEC3-F2 submission and packaging invariants', () => {
     }
   });
 
-  it('packages every installed-runtime dependency and bumps the npm rider to 0.9.5', () => {
+  it('packages every installed-runtime dependency and keeps version metadata consistent', () => {
     const pkg = require('../package.json');
+    const lock = require('../package-lock.json');
     const manifest = new Set(runner.sweeperManifest(path.join(__dirname, '..')).map(([src]) => src));
-    assert.equal(pkg.version, '0.9.5');
+    // Lock must track package.json — a partial bump (the d9cb31b class) fails here.
+    assert.equal(lock.version, pkg.version);
+    assert.equal(lock.packages[''].version, pkg.version);
     for (const file of [
       'lib/extraction-index.js',
       'lib/similarity.js',
