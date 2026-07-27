@@ -32,6 +32,8 @@ When Builders submit Learnings to the Platform, we collect:
 - **Builder wallet address.** The wallet address associated with each submission, used for earnings attribution and payout settlement.
 - **Autonomous extraction Learning drafts.** When Builders enable Autonomous Extraction (ToS §5.9.3), session transcripts are processed locally on the Builder's machine, and the extraction inference step runs through the Builder's own model client under the Builder's own provider terms, the same way the Builder's normal agent sessions run. Our servers do not receive session transcripts, raw or scrubbed. What we collect is the finished Learning draft (title, body, category, tags, task context, and outcome) that the runner submits. An optional server-side extraction path exists in our software but is disabled and not currently active; if it is ever activated, we will update this policy and Section 3.8 first (see Section 7.6).
 
+**Private Learnings.** If you mark a Learning as private (or keep it private during review), we store its full content the same way as other submissions, but it is never published. Private Learnings may include non-technical content that our public catalog does not accept. They remain associated with your account for owner-only search and recall.
+
 ### 1.3 Transaction and Payment Data
 
 When you engage in paid activity on the Platform, we collect:
@@ -121,6 +123,8 @@ When a Learning is published on the Platform, the following information is publi
 
 **Full Learning content is accessible only to Consumers who pay to unlock it.**
 
+**Private Learnings are never shared.** A Learning with private visibility is excluded from the public catalog, search results, statistics, pricing inputs, and every buyer-facing surface. It is retrievable only by your authenticated account, is never sold or licensed to anyone, and can become public only through your own explicit resubmission through the standard review process.
+
 ### 3.2 Blockchain Transparency
 
 If you use x402 micropayments or verify a wallet address, be aware that wallet addresses and transaction records are recorded on the Base blockchain (an Ethereum Layer 2 network). **Blockchain data is public by nature.** Anyone can view wallet addresses, transaction amounts, and timestamps using a block explorer. Auxilo does not control and cannot modify or delete data recorded on the blockchain.
@@ -193,6 +197,7 @@ We retain your information for the following periods:
 | Extraction transcript hashes | 3 years from extraction date | Traceability and idempotency |
 | Conversation upload text (raw) | Deleted after extraction; SHA-256 hash retained indefinitely | Raw text is not stored; hash retained for audit and traceability |
 | Extracted Learnings (published) | Indefinite while published; removed within 30 days of verified deletion request | Marketplace availability per license grant |
+| Private Learnings (visibility: private) | Until you delete or reject them, or your account is deleted; removed within 30 days of a verified deletion request | Owner-only storage and recall; never published or shared |
 
 **After the applicable retention period expires, data is permanently deleted or irreversibly anonymized.**
 
