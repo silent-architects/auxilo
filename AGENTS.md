@@ -47,8 +47,15 @@ conflict, STOP and return the question — do not pick one.
 
 ## Repo hygiene — hard rules
 
-- `docs/*` is deliberately untracked (see `.gitignore`). Never `git add` anything under
-  it; never weaken that ignore rule. Read those docs freely; commit them never.
+- `docs/` is a MIX (corrected 2026-07-27; rulings UC6-R1 + G1-P2): most of it is
+  deliberately untracked internal material (see `.gitignore`) — **never `git add` an
+  UNTRACKED file under `docs/`, never weaken that ignore rule.** A small set of
+  served/public docs IS tracked (`git ls-files docs/` is the authority; e.g.
+  PRIVACY-POLICY, TERMS-OF-SERVICE, SUPPORTED-CLIENTS, AGENT-LEARNING-GUIDE) — those
+  may be modified and staged when a BUILD-SPEC names them. If unsure whether a file is
+  tracked, `git ls-files -- <path>`; empty output means untracked means never add.
+- Guide canon note: `docs/AGENT-LEARNING-GUIDE.md` is the source of truth; the root
+  `AGENT-LEARNING-GUIDE.md` is SUPERSEDED (its banner says so) — never edit the root copy.
 - **Never run `git stash -u`** (or `--include-untracked`) in this repo. Untracked files
   here include material that must never enter git objects.
 - CI pins the discovered-test count via `scripts/check-test-count.sh`. Any commit that
