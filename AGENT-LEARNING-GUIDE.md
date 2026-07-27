@@ -271,6 +271,20 @@ Examples:
    - In Autonomous Mode: POST directly (unless filter trips)
 3. Batch POST all approved learnings
 
+### Review the Pending Queue
+
+The review summary consumes the server's three-lane verdict directly:
+
+```bash
+npx auxilo review --list           # Ready to publish / Needs a score / Needs your eyes
+npx auxilo review --approve-ready  # exactly the server's ready_to_publish rows
+npx auxilo review --min-quality 16 --approve-ready  # narrow within that lane
+```
+
+`Needs your eyes` rows show the server's `why` explanation. Every bulk approve
+path prints the exact IDs and requires typing the exact count. A threshold below
+14 reaches into `needs_score` and prints an explicit beyond-verdict warning.
+
 ### Before Starting a New Task
 1. If the task involves unfamiliar tooling/environment, search Auxilo first
 2. `POST /knowledge` with a natural language query describing what you need

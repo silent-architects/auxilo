@@ -388,6 +388,13 @@
 
     .triage-title-btn:hover { text-decoration-color: var(--aurum); }
 
+    .triage-why {
+      margin-top: 4px;
+      color: var(--slate);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
     .triage-group-row td {
       padding-top: 14px;
       font-size: 11px;
@@ -648,7 +655,7 @@
     <div class="dash-card">
       <div class="dash-card-title">Pending Review Queue <span id="pending-count-badge" class="count-badge" style="display:none">0</span></div>
       <p style="font-size:13px;color:var(--slate);margin-bottom:16px;line-height:1.6">
-        Learnings extracted by your agents land here before going public. Nothing is published until you approve it. Items that passed every platform screen are grouped first so you can approve them together; flagged items deserve an individual look.
+        Learnings extracted by your agents land here before going public. Nothing is published until you approve it. The server sorts them into Ready to publish, Needs a score, and Needs your eyes so the safe bulk action and the exceptions stay distinct.
       </p>
       <button class="btn btn-ghost btn-sm" onclick="loadPendingQueue()" style="margin-bottom:16px">Load queue</button>
       <div id="pending-alert" class="alert" style="display:none;margin-bottom:12px"></div>
@@ -672,6 +679,7 @@
   </div>
 </div>
 
+<script src="/dashboard-review.js?v=1"></script>
 <script>
 (function () {
   'use strict';
@@ -1383,34 +1391,48 @@
       return;
     }
 
-    var clean = rows.filter(function (r) { return r.screens_passed; });
-    var flagged = rows.filter(function (r) { return !r.screens_passed; });
+    var laneView = AuxiloReviewLanes.groupRows(summary);
+    var ready = laneView.groups.ready_to_publish;
+    var needsScore = laneView.groups.needs_score;
+    var needsEyes = laneView.groups.needs_your_eyes;
+    var laneCounts = laneView.counts;
 
     var countLine = document.createElement('p');
     countLine.style.fontSize = '13px';
     countLine.style.color = 'var(--slate)';
     countLine.style.marginBottom = '12px';
     countLine.textContent = rows.length + ' item' + (rows.length !== 1 ? 's' : '') + ' waiting for your review: '
-      + clean.length + ' passed every platform screen, ' + flagged.length + ' flagged for an individual look.';
+      + laneCounts.ready_to_publish + ' ready to publish, '
+      + laneCounts.needs_score + ' need a score, '
+      + laneCounts.needs_your_eyes + ' need your eyes.';
     el.appendChild(countLine);
+
+    if (laneView.versionSkew) {
+      var skew = document.createElement('div');
+      skew.className = 'alert warning';
+      skew.style.display = 'block';
+      skew.style.marginBottom = '12px';
+      skew.textContent = 'Version skew: this server did not return lane on every row. Showing the legacy screens-and-quality fallback.';
+      el.appendChild(skew);
+    }
 
     // Bulk bar
     var bar = document.createElement('div');
     bar.className = 'bulk-bar';
 
-    var selCleanBtn = document.createElement('button');
-    selCleanBtn.className = 'btn btn-ghost btn-sm';
-    selCleanBtn.textContent = 'Select clean (' + clean.length + ')';
-    selCleanBtn.onclick = function () {
+    var selReadyBtn = document.createElement('button');
+    selReadyBtn.className = 'btn btn-ghost btn-sm';
+    selReadyBtn.textContent = 'Select ready to publish (' + laneCounts.ready_to_publish + ')';
+    selReadyBtn.onclick = function () {
       _triageSelected = {};
-      clean.forEach(function (r) { _triageSelected[r.id] = true; });
+      AuxiloReviewLanes.selectReadyRows(summary).forEach(function (r) { _triageSelected[r.id] = true; });
       rows.forEach(function (r) {
         var box = document.getElementById('triage-check-' + r.id);
         if (box) box.checked = !!_triageSelected[r.id];
       });
       updateBulkBar();
     };
-    bar.appendChild(selCleanBtn);
+    bar.appendChild(selReadyBtn);
 
     var selAllBtn = document.createElement('button');
     selAllBtn.className = 'btn btn-ghost btn-sm';
@@ -1454,7 +1476,7 @@
 
     var thead = document.createElement('thead');
     var headRow = document.createElement('tr');
-    ['', 'Quality', 'Category', 'Screens', 'Title', 'Submitted'].forEach(function (label) {
+    ['', 'Quality', 'Category', 'Lane / signals', 'Title', 'Submitted'].forEach(function (label) {
       var th = document.createElement('th');
       th.textContent = label;
       headRow.appendChild(th);
@@ -1472,13 +1494,17 @@
       tr.appendChild(td);
       tbody.appendChild(tr);
     }
-    if (clean.length) {
-      addGroupRow('Passed every screen (' + clean.length + ')');
-      clean.forEach(function (r) { tbody.appendChild(buildTriageRow(r)); });
+    if (ready.length) {
+      addGroupRow('Ready to publish (' + laneCounts.ready_to_publish + ')');
+      ready.forEach(function (r) { tbody.appendChild(buildTriageRow(r)); });
     }
-    if (flagged.length) {
-      addGroupRow('Flagged by a screen (' + flagged.length + ')');
-      flagged.forEach(function (r) { tbody.appendChild(buildTriageRow(r)); });
+    if (needsScore.length) {
+      addGroupRow('Needs a score (' + laneCounts.needs_score + ')');
+      needsScore.forEach(function (r) { tbody.appendChild(buildTriageRow(r)); });
+    }
+    if (needsEyes.length) {
+      addGroupRow('Needs your eyes (' + laneCounts.needs_your_eyes + ')');
+      needsEyes.forEach(function (r) { tbody.appendChild(buildTriageRow(r)); });
     }
     table.appendChild(tbody);
     wrap.appendChild(table);
@@ -1497,11 +1523,19 @@
 
   function verdictTags(row) {
     var holder = document.createElement('span');
-    if (row.screens_passed) {
+    var lane = AuxiloReviewLanes.laneForRow(row).lane;
+    if (lane === AuxiloReviewLanes.READY) {
       var ok = document.createElement('span');
       ok.className = 'tag tag-clean';
-      ok.textContent = 'clean';
+      ok.textContent = 'ready';
       holder.appendChild(ok);
+      return holder;
+    }
+    if (lane === AuxiloReviewLanes.NEEDS_SCORE) {
+      var score = document.createElement('span');
+      score.className = 'tag tag-warn';
+      score.textContent = 'needs score';
+      holder.appendChild(score);
       return holder;
     }
     (row.flags || []).forEach(function (f) {
@@ -1510,9 +1544,17 @@
       t.style.marginRight = '4px';
       t.textContent = f === 'content_sensitivity' ? 'sensitive'
         : f === 'near_duplicate' ? 'duplicate'
+        : f === 'process_advice' ? 'process advice'
+        : f === 'account_vocab' ? 'account vocabulary'
         : f; // textContent -- safe
       holder.appendChild(t);
     });
+    if (!(row.flags || []).length) {
+      var eyes = document.createElement('span');
+      eyes.className = 'tag tag-warn';
+      eyes.textContent = 'needs eyes';
+      holder.appendChild(eyes);
+    }
     return holder;
   }
 
@@ -1544,7 +1586,7 @@
     }
     tr.appendChild(tdCat);
 
-    // Screen verdicts
+    // Lane / signals
     var tdV = document.createElement('td');
     tdV.appendChild(verdictTags(row));
     tr.appendChild(tdV);
@@ -1556,6 +1598,12 @@
     titleBtn.textContent = row.title || '(no title)'; // textContent -- safe
     titleBtn.onclick = function () { toggleTriageDetail(row, tr); };
     tdTitle.appendChild(titleBtn);
+    if (AuxiloReviewLanes.laneForRow(row).lane === AuxiloReviewLanes.NEEDS_EYES && row.why) {
+      var why = document.createElement('div');
+      why.className = 'triage-why';
+      why.textContent = row.why; // textContent -- safe
+      tdTitle.appendChild(why);
+    }
     tr.appendChild(tdTitle);
 
     // Submitted

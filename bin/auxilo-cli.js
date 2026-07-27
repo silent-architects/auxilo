@@ -32,19 +32,45 @@ const HOME = os.homedir();
 // question N+1 arrives with question N's buffer and the next prompt hangs
 // on EOF (the 0.8.1 consent step silently never completed).
 let sharedRl = null;
+let bufferedLines = [];
+let lineWaiters = [];
+let readlineEnded = false;
 function getRl() {
   if (!sharedRl) {
-    sharedRl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    readlineEnded = false;
+    sharedRl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      terminal: !!process.stdin.isTTY,
+    });
+    sharedRl.on('line', (line) => {
+      const answer = line.trim();
+      const waiter = lineWaiters.shift();
+      if (waiter) waiter(answer);
+      else bufferedLines.push(answer);
+    });
+    sharedRl.on('close', () => {
+      readlineEnded = true;
+      while (lineWaiters.length) lineWaiters.shift()('');
+    });
   }
   return sharedRl;
 }
 function closeRl() {
-  if (sharedRl) { sharedRl.close(); sharedRl = null; }
+  if (sharedRl) sharedRl.close();
+  sharedRl = null;
+  bufferedLines = [];
+  lineWaiters = [];
+  readlineEnded = false;
 }
 
 function ask(question) {
+  getRl();
+  process.stdout.write(question);
+  if (bufferedLines.length > 0) return Promise.resolve(bufferedLines.shift());
+  if (readlineEnded) return Promise.resolve('');
   return new Promise((resolve) => {
-    getRl().question(question, (answer) => resolve(answer.trim()));
+    lineWaiters.push(resolve);
   });
 }
 
@@ -509,7 +535,7 @@ async function cmdDisable(flags) {
 // Operates ONLY on the caller's own pending learnings (account-scoped API key).
 //
 // Review-seamless (2026-07-18): the default view is now a triage summary table
-// (quality desc, clean before flagged), with bulk modes that batch through
+// (quality-desc rows grouped into the server's three lanes), with bulk modes that batch through
 // POST /account/pending/bulk. HARD RULE for every bulk APPROVE path: print the
 // exact list and count first, then require the operator to TYPE THE COUNT.
 // There is no --yes bypass on any approve path; publishing always costs one
@@ -522,10 +548,18 @@ function fit(s, width) {
   return str.padEnd(width);
 }
 
-/** Short flag codes for a summary row: 'clean' or e.g. 'inj+sens'. */
+/** Short lane/flag codes for a summary row, e.g. 'ready' or 'inj+sens'. */
 function shortFlags(row) {
-  if (row.screens_passed) return 'clean';
-  const map = { injection: 'inj', content_sensitivity: 'sens', near_duplicate: 'dup' };
+  const resolved = review.reviewLane(row);
+  if (resolved.lane === 'ready_to_publish') return 'ready';
+  if (resolved.lane === 'needs_score') return 'score';
+  const map = {
+    injection: 'inj',
+    content_sensitivity: 'sens',
+    near_duplicate: 'dup',
+    process_advice: 'advice',
+    account_vocab: 'vocab',
+  };
   return (row.flags || []).map((f) => map[f] || f).join('+') || 'flagged';
 }
 
@@ -535,13 +569,41 @@ function triageLine(row, n, total) {
   return `  ${String(n).padStart(String(total).length)}. q=${q}  ${fit(shortFlags(row), 9)} ${fit(row.category || '', 20)} ${fit(row.title || '(no title)', 52)}`;
 }
 
-/** Print the triage summary: counts, then clean rows, then flagged rows. */
-function printSummaryTable(summary) {
-  const items = summary.items || [];
-  const clean = items.filter((r) => r.screens_passed);
-  const flagged = items.filter((r) => !r.screens_passed);
+function groupSummaryRows(summary) {
+  const groups = {
+    ready_to_publish: [],
+    needs_score: [],
+    needs_your_eyes: [],
+  };
+  let versionSkew = false;
+  for (const row of summary.items || []) {
+    const resolved = review.reviewLane(row);
+    versionSkew = versionSkew || resolved.version_skew;
+    groups[resolved.lane].push(row);
+  }
+  const serverCounts = summary.counts && summary.counts.by_lane;
+  const counts = !versionSkew && serverCounts
+    ? {
+        ready_to_publish: serverCounts.ready_to_publish || 0,
+        needs_score: serverCounts.needs_score || 0,
+        needs_your_eyes: serverCounts.needs_your_eyes || 0,
+      }
+    : {
+        ready_to_publish: groups.ready_to_publish.length,
+        needs_score: groups.needs_score.length,
+        needs_your_eyes: groups.needs_your_eyes.length,
+      };
+  return { groups, counts, versionSkew };
+}
 
-  console.log(`\n${summary.pending_count} learning(s) pending your review: ${clean.length} passed every platform screen, ${flagged.length} flagged.`);
+/** Print the triage summary in the server's three-lane order. */
+function printSummaryTable(summary) {
+  const { groups, counts, versionSkew } = groupSummaryRows(summary);
+
+  console.log(`\n${summary.pending_count} learning(s) pending your review: ${counts.ready_to_publish} ready to publish, ${counts.needs_score} need a score, ${counts.needs_your_eyes} need your eyes.`);
+  if (versionSkew) {
+    console.log('VERSION SKEW: this server did not return lane on every row; using the legacy screens-and-quality fallback.');
+  }
   const bands = summary.counts && summary.counts.by_quality_band;
   if (bands) {
     console.log(`Quality bands: 18-20: ${bands['18-20'] || 0} · 14-17: ${bands['14-17'] || 0} · 10-13: ${bands['10-13'] || 0} · below 10: ${bands.below_10 || 0} · unscored: ${bands.unscored || 0}`);
@@ -550,13 +612,20 @@ function printSummaryTable(summary) {
     console.log(`Near-duplicate clusters among your pending items: ${summary.near_dup_clusters.length} (review these together)`);
   }
 
-  if (clean.length > 0) {
-    console.log(`\nCLEAN (passed every screen) - sorted by quality:`);
-    clean.forEach((r, i) => console.log(triageLine(r, i + 1, clean.length)));
+  if (groups.ready_to_publish.length > 0) {
+    console.log(`\nREADY TO PUBLISH (${counts.ready_to_publish}) - sorted by quality:`);
+    groups.ready_to_publish.forEach((r, i) => console.log(triageLine(r, i + 1, groups.ready_to_publish.length)));
   }
-  if (flagged.length > 0) {
-    console.log(`\nFLAGGED (a platform screen raised a signal) - review individually:`);
-    flagged.forEach((r, i) => console.log(triageLine(r, i + 1, flagged.length)));
+  if (groups.needs_score.length > 0) {
+    console.log(`\nNEEDS A SCORE (${counts.needs_score}) - score or review individually:`);
+    groups.needs_score.forEach((r, i) => console.log(triageLine(r, i + 1, groups.needs_score.length)));
+  }
+  if (groups.needs_your_eyes.length > 0) {
+    console.log(`\nNEEDS YOUR EYES (${counts.needs_your_eyes}) - review individually:`);
+    groups.needs_your_eyes.forEach((r, i) => {
+      console.log(triageLine(r, i + 1, groups.needs_your_eyes.length));
+      if (r.why) console.log(`     why: ${r.why}`);
+    });
   }
   console.log('');
 }
@@ -640,32 +709,43 @@ async function cmdReview(flags) {
   // ── --list: summary only, no mutations ────────────────────────────────────
   if (flags.list) return;
 
-  // ── --approve-clean: bulk-approve items that passed EVERY platform screen
-  //    AND clear the quality threshold. Typed-count confirmation, no bypass. ──
-  if (flags['approve-clean']) {
+  // ── --approve-ready: consume the server's ready_to_publish verdict.
+  //    --approve-clean remains a hidden compatibility alias. A stricter
+  //    threshold narrows the ready lane; a lower one explicitly reaches into
+  //    needs_score. Typed-count confirmation, no bypass. ─────────────────────
+  if (flags['approve-ready'] || flags['approve-clean']) {
+    if (flags['approve-clean']) {
+      console.log('Note: --approve-clean was renamed to --approve-ready; the old flag remains a compatibility alias.');
+    }
     const minQuality = parseMinQuality(flags);
-    const sel = review.selectForBulkApprove(rows, { mode: 'clean', minQuality });
-    console.log(`approve-clean selection: ${sel.selected.length} of ${rows.length} pending (threshold: quality >= ${minQuality}).`);
-    if (sel.excluded_flagged.length) console.log(`  excluded ${sel.excluded_flagged.length} screen-flagged item(s) (review those individually).`);
+    const sel = review.selectForBulkApprove(rows, { mode: 'ready', minQuality });
+    console.log(`approve-ready selection: ${sel.selected.length} of ${rows.length} pending (threshold: quality >= ${minQuality}).`);
+    if (minQuality < review.DEFAULT_QUALITY_THRESHOLD) {
+      const approvableCount = Number.isFinite(summary.approvable_count)
+        ? summary.approvable_count
+        : review.selectForBulkApprove(rows, { mode: 'ready' }).selected.length;
+      console.log(`WARNING: selection goes beyond the server's approvable verdict (approvable_count=${approvableCount}); including ${sel.included_beyond_verdict.length} items from needs_score.`);
+    }
+    if (sel.excluded_flagged.length) console.log(`  excluded ${sel.excluded_flagged.length} needs_your_eyes item(s) (review those individually).`);
     if (sel.excluded_low_quality.length) console.log(`  excluded ${sel.excluded_low_quality.length} below the quality threshold.`);
     if (sel.excluded_unscored.length) console.log(`  excluded ${sel.excluded_unscored.length} with no quality score (pass --min-quality 0 to include).`);
     if (sel.selected.length === 0) { console.log('Nothing qualifies. No changes made.'); return; }
 
     if (!await confirmByTypedCount(sel.selected, 'APPROVE and PUBLISH')) return;
     const totals = await runBulk({ apiKey, baseUrl, rows: sel.selected, decision: 'approve' });
-    console.log(`\nDone. Approved ${totals.approved} (already approved earlier: ${totals.idempotent}, failed: ${totals.failed}). Flagged and below-threshold items stay pending.`);
+    console.log(`\nDone. Approved ${totals.approved} (already approved earlier: ${totals.idempotent}, failed: ${totals.failed}). Items outside the selection stay pending.`);
     return;
   }
 
-  // ── --all: bulk-approve everything EXCEPT screen-flagged items unless
+  // ── --all: bulk-approve everything EXCEPT needs_your_eyes items unless
   //    --include-flagged. Typed-count confirmation, no bypass. ───────────────
   if (flags.all) {
     const includeFlagged = flags['include-flagged'] === true;
     const sel = review.selectForBulkApprove(rows, { mode: 'all', includeFlagged });
-    if (includeFlagged && sel.selected.some((r) => !r.screens_passed)) {
-      console.log('WARNING: --include-flagged is set. This selection INCLUDES items a platform screen flagged (possible injection, sensitive content, or near-duplicates). Approving publishes them publicly.');
+    if (includeFlagged && sel.selected.some((r) => review.reviewLane(r).lane === 'needs_your_eyes')) {
+      console.log('WARNING: --include-flagged is set. This selection INCLUDES needs_your_eyes items (possible injection, sensitive content, process advice, account vocabulary, or near-duplicates). Approving publishes them publicly.');
     } else if (sel.excluded_flagged.length) {
-      console.log(`Excluding ${sel.excluded_flagged.length} screen-flagged item(s) (pass --include-flagged to include them; safer to review those individually).`);
+      console.log(`Excluding ${sel.excluded_flagged.length} needs_your_eyes item(s) (pass --include-flagged to include them; safer to review those individually).`);
     }
     if (sel.selected.length === 0) { console.log('Nothing qualifies. No changes made.'); return; }
 
@@ -707,13 +787,14 @@ async function cmdReview(flags) {
   console.log('Rapid review. Per item: [y] approve (goes live) · [n] reject (stays private) · [v] view full body · [s] skip · [q] quit\n');
 
   let approved = 0, rejected = 0, skipped = 0;
-  const ordered = rows; // clean-first, quality desc (server order preserved by printSummaryTable groups)
+  const ordered = rows; // quality-desc server order; the summary above groups lanes
   for (let i = 0; i < ordered.length; i++) {
     const row = ordered[i];
     console.log(triageLine(row, i + 1, ordered.length));
     let choice = '';
     for (;;) {
       choice = (await ask('    [y/n/v/s/q]? ')).toLowerCase().slice(0, 1);
+      if (!choice && readlineEnded) choice = 'q';
       if (choice === 'v') {
         const full = bodies.get(row.id);
         console.log('    ------------------------------------------------------------');
@@ -747,7 +828,46 @@ async function cmdReview(flags) {
 
 // ─── Entry point ────────────────────────────────────────────────────────────
 
-function usage() {
+function usage(command) {
+  const blocks = {
+    setup: `Usage: auxilo setup [--re-auth] [--base-url <url>]
+
+Interactively detect clients, register Auxilo, sign in, install the optional
+extraction runner and SessionEnd hook, and record the extraction choice.`,
+    init: `Usage: auxilo init [--scope <read|earnings-read|contribute>] [--label <name>]
+                   [--env-file <path>] [--save] [--json] [--no-browser]
+                   [--base-url <url>]
+
+Mint a scoped API key for CI or a second machine without running full setup.`,
+    status: `Usage: auxilo status
+
+Show detected clients, auth, extraction mode, kill switch, SessionEnd hook,
+last sweep, and pending queue depth.`,
+    review: `Usage: auxilo review [flags]
+
+Render YOUR pending-review learnings in three server-defined lanes:
+Ready to publish, Needs a score, and Needs your eyes.
+
+Flags:
+  --list            show the three-lane summary only; make no changes
+  --approve-ready   select the server's ready_to_publish lane (default quality
+                    floor 14; a higher --min-quality narrows it, while a lower
+                    value explicitly reaches into needs_score)
+  --min-quality N   quality threshold for --approve-ready (0-20)
+  --all             approve everything except needs_your_eyes items
+  --include-flagged include needs_your_eyes with --all
+  --all-reject      reject the whole batch [--yes for scripted incident use]
+  --base-url <url>
+
+Every approval path prints the exact list and requires typing its count.`,
+    disable: `Usage: auxilo disable [--base-url <url>]
+
+Disable background extraction locally and optionally revoke server consent.`,
+  };
+  if (command && blocks[command]) {
+    console.log(`\n${blocks[command]}\n`);
+    return;
+  }
   console.log(`
 Usage: auxilo <command>
 
@@ -771,18 +891,17 @@ Commands:
   status    Show install/auth/extraction status.
   review    Review YOUR pending-review learnings (from background extraction)
             and approve/reject before anything goes public. Default: triage
-            summary table first (quality desc, clean vs flagged), then rapid
-            y/n/s review.
+            summary first in the server's Ready to publish / Needs a score /
+            Needs your eyes lanes, then rapid y/n/s review.
             Flags:
               --list            summary table only, no changes
-              --approve-clean   bulk-approve items that passed EVERY platform
-                                screen AND quality >= threshold (default 14;
-                                tune with --min-quality N). Prints the exact
-                                list, then requires typing the count.
-              --all             bulk-approve everything EXCEPT screen-flagged
-                                items (add --include-flagged to include them).
+              --approve-ready   select the server's ready_to_publish lane
+                                (default floor 14; tune with --min-quality N).
+                                Prints the exact list, then requires its count.
+              --all             bulk-approve everything EXCEPT needs_your_eyes
+                                (add --include-flagged to include that lane).
                                 Same typed-count confirmation.
-              --min-quality N   quality threshold for --approve-clean (0-20)
+              --min-quality N   quality threshold for --approve-ready (0-20)
               --all-reject      reject the whole batch [--yes for scripted
                                 incident response; rejects stay private]
               --base-url <url>
@@ -797,6 +916,10 @@ Docs: https://auxilo.io · API: ${installer.DEFAULT_BASE_URL}
 
 async function main() {
   const cmd = process.argv[2];
+  const subcommandHelp = ['help', '--help', '-h'].includes(process.argv[3]);
+  if (['setup', 'init', 'status', 'review', 'disable'].includes(cmd) && subcommandHelp) {
+    return usage(cmd);
+  }
   const flags = parseFlags(process.argv);
   switch (cmd) {
     case 'setup': return cmdSetup(flags);
@@ -829,4 +952,12 @@ if (require.main === module) {
   run();
 }
 
-module.exports = { parseFlags, resolveBaseUrl, run };
+module.exports = {
+  parseFlags,
+  resolveBaseUrl,
+  shortFlags,
+  groupSummaryRows,
+  printSummaryTable,
+  usage,
+  run,
+};
