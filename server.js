@@ -7503,6 +7503,58 @@ app.post('/account/clean-lane/revoke', async (c) => {
   }
 });
 
+// ── GET /account/learnings — own-learning metadata for client dedup hydration ─
+// SPEC3-F2: this is the ONE new server surface authorized for client-side
+// extraction memory. Read-only, zero-inference, and deliberately metadata-only:
+// a leaked read-scope key must not become a bulk learning-body exfiltration path.
+// Ownership matches self-review exactly: contributor_account_id must equal the
+// authenticated caller's accountId.
+app.get('/account/learnings', requireSessionOrApiKey('read'), (c) => {
+  const accountId = c.get('accountId');
+  const allowedStatuses = new Set(['approved', 'rejected', 'pending_review']);
+  const url = new URL(c.req.url, 'http://localhost');
+  const rawStatus = url.searchParams.get('status');
+  const statuses = rawStatus === null
+    ? [...allowedStatuses]
+    : [...new Set(rawStatus.split(',').map((value) => value.trim()).filter(Boolean))];
+
+  if (statuses.length === 0 || statuses.some((status) => !allowedStatuses.has(status))) {
+    return c.json({
+      error: 'status must be a comma-list containing only approved,rejected,pending_review',
+    }, 400);
+  }
+
+  let limit = parseInt(url.searchParams.get('limit') || '200', 10);
+  let offset = parseInt(url.searchParams.get('offset') || '0', 10);
+  if (!Number.isFinite(limit) || limit < 1) limit = 200;
+  if (limit > 500) limit = 500;
+  if (!Number.isFinite(offset) || offset < 0) offset = 0;
+
+  const statusSet = new Set(statuses);
+  const own = learnings
+    .filter((learning) => {
+      if (!learning || learning.contributor_account_id !== accountId) return false;
+      const status = learning.status || 'approved';
+      return statusSet.has(status);
+    })
+    .map((learning) => ({
+      id: learning.id,
+      title: learning.title,
+      category: learning.category,
+      tags: Array.isArray(learning.tags) ? learning.tags.slice() : [],
+      status: learning.status || 'approved',
+      created_at: learning.created_at || null,
+    }));
+
+  return c.json({
+    account_id: accountId,
+    total: own.length,
+    limit,
+    offset,
+    learnings: own.slice(offset, offset + limit),
+  }, 200);
+});
+
 app.get('/account/settings', requireSessionOrApiKey('read'), (c) => {
   const account = loadAccounts()[c.get('accountId')];
   if (!account) return c.json({ error: 'Account not found' }, 404);
