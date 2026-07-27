@@ -28,7 +28,7 @@ derived in-script from the deployer address (overridable, see env below).
 ## 2. Env setup
 
 ```sh
-cd /Users/iamtylerkelley/dev/auxilo/contracts
+cd ~/dev/auxilo/contracts
 export DEPLOYER_PK=0x<raw 32-byte private key of the funded address>
 ```
 

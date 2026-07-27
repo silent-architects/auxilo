@@ -722,7 +722,7 @@ RCA of the SPEC3-A3 stale-base incident (builder reported clean worktree at `feb
 | CBX-3 | Machine-side pre-push guard installed in the canonical checkout's local hooks: direct pushes of `main` are PM-only (GitHub cannot distinguish PM from builder — both use the single owner token — so the discriminator lives on the machine). Un-versioned by design; builders hand off on `codex/*` branches. | P1 | GOV-3 | ✅ 2026-07-26 |
 | CBX-4 | Re-point the builder app at `~/dev/auxilo` (open project + Trust) so its worktree isolation inherits canonical `.git` and every build starts on the right base by construction. | P1 | Tyler | ⏳ one click at next build |
 | CBX-5 | Retire `~/Documents/Custom/auxilo` (rename/archive) + its builder-app worktree children. **GATED on SPEC3-A3 merge** — the in-flight A3 worktree is a child of that clone's `.git`; deleting early destroys the build. A3 handoff needs no push from the dead clone: PM fetches `codex/spec3-a3` directly from the worktree path. | P1 | PM (on Tyler's word post-merge) | ⏳ gated on A3 |
-| CBX-6 | Credential hygiene: dead `tjkelley314` keyring token removed ✅; token scope trim (drop `delete_repo`) pending Tyler: `gh auth refresh --remove-scopes delete_repo`. | P2 | Tyler | ⏳ partial |
+| CBX-6 | Credential hygiene: dead personal-account keyring token removed ✅ (named in the private record only — this file is public; the username published here 2026-07-26 was scrubbed at tip same night, remains in commit `dc4e646` history); token scope trim (drop `delete_repo`) pending Tyler: `gh auth refresh --remove-scopes delete_repo`. | P2 | Tyler | ⏳ partial |
 
 ## Counts
 
