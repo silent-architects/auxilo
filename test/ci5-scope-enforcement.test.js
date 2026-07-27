@@ -99,17 +99,19 @@ describe('CI-5 taxonomy: single truth, no drift across copies', () => {
 
   it('openapi: LearningCategory is the 6-value tech enum; Category (skills) keeps 8', () => {
     assert.deepEqual(OPENAPI.components.schemas.LearningCategory.enum, TECH);
+    assert.deepEqual(OPENAPI.components.schemas.StoredLearningCategory.enum,
+      [...TECH, 'non-technical']);
     assert.deepEqual(OPENAPI.components.schemas.Category.enum, SKILL_CATEGORIES_8);
   });
 
-  it('openapi: learning surfaces reference LearningCategory; skill surfaces keep Category', () => {
+  it('openapi: stored learning surfaces include the private catch-all; skill surfaces keep Category', () => {
     const ref = (o) => o && o.$ref;
     assert.equal(ref(OPENAPI.components.schemas.LearningSnippet.properties.category),
-      '#/components/schemas/LearningCategory');
+      '#/components/schemas/StoredLearningCategory');
     assert.equal(ref(OPENAPI.paths['/learn'].post.requestBody.content['application/json'].schema.properties.category),
-      '#/components/schemas/LearningCategory');
+      '#/components/schemas/StoredLearningCategory');
     assert.equal(ref(OPENAPI.paths['/knowledge'].post.requestBody.content['application/json'].schema.properties.category),
-      '#/components/schemas/LearningCategory');
+      '#/components/schemas/StoredLearningCategory');
     // Capability registry unchanged — 'communication' is a legitimate SKILL domain.
     assert.equal(ref(OPENAPI.components.schemas.Skill.properties.category),
       '#/components/schemas/Category');
@@ -366,7 +368,7 @@ describe('approve-path guard: retired-label items cannot be (re-)approved', () =
 
   it('admin moderation approve carries the same guard (structural pin)', () => {
     const block = sliceAt(SERVER_SRC, "app.post('/admin/moderation/:id/approve'", 2000);
-    assert.ok(block.includes('RETIRED_LEARNING_CATEGORIES.includes(learning.category)'));
+    assert.ok(block.includes('!TECH_LEARNING_CATEGORIES.includes(learning.category)'));
     assert.ok(block.includes("code: 'CATEGORY_OUT_OF_SCOPE'"));
   });
 });
@@ -573,7 +575,7 @@ describe('CI-7: server screen wiring (structural pins)', () => {
     // strips the same internals (`learning_type: _lto` matches the prefix).
     const strips = (SERVER_SRC.match(/learning_type: _lt/g) || []).length +
       (SERVER_SRC.match(/sensitivity_evidence, learning_type, sanitized_from, sanitized_to, \.\.\.rest/g) || []).length;
-    assert.equal(strips, 5, 'search-map + owner-recall + self-unlock + capped + paid-unlock projections must all strip it');
+    assert.equal(strips, 6, 'private recall + search-map + owner-recall + self-unlock + capped + paid-unlock projections must all strip it');
   });
 
   it('the summary flag filter accepts process_advice', () => {

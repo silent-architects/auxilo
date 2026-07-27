@@ -417,7 +417,8 @@ describe('server.js: summary + bulk routes (structural)', () => {
     // gained the opts argument — window widened, callsite pin updated.
     const h = sliceAt(SERVER_SRC, "app.get('/account/pending/summary'", 3600);
     assert.ok(h.includes("resolveSelfReviewAccount(c, 'read')"), 'summary must use read scope');
-    assert.ok(h.includes('summarizeOwnPending(learnings, accountId, opts)'), 'summary must use the pure ownership-scoped helper');
+    assert.ok(h.includes('summarizeOwnPending(comparisonCatalog(learnings, accountId), accountId, opts)'),
+      'summary must use the pure ownership-scoped helper over a caller-safe corpus');
   });
 
   it('bulk route: contribute scope, counted confirm passthrough, applyBulkDecisions', () => {

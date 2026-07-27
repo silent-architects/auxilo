@@ -361,7 +361,7 @@ describe('B2: POST /account/pending/reject-by-signal (structural)', () => {
   });
 
   it('selection is the shared pure selector; decisions flow through applyBulkDecisions under the learnings lock', () => {
-    assert.ok(h.includes('selectPendingIdsBySignal(learnings, accountId, signal, {'));
+    assert.ok(h.includes('selectPendingIdsBySignal(comparisonCatalog(learnings, accountId), accountId, signal, {'));
     assert.ok(h.includes('accountVocab: ACCOUNT_VOCAB_REVIEW_OPTS'));
     assert.ok(h.includes('applyBulkDecisions(learnings, accountId, chunk'));
     assert.ok(h.includes('acquireLearningsLock()'));
@@ -430,13 +430,14 @@ describe('B3: POST /account/pending/:id/sanitize (structural)', () => {
     const conflictAt = h.indexOf("code: 'SANITIZE_CONFLICT'");
     assert.ok(conflictAt > lockAt, 're-validation happens under the lock');
     // The cheap sync exact-dup re-check runs under the lock too.
-    const dupNowAt = h.indexOf('const dupNow = learnings.find');
+    const dupNowAt = h.indexOf('const dupNow = comparisonCatalog(learnings, accountId).find');
     assert.ok(dupNowAt > lockAt, 'sync dedup re-check under the lock');
   });
 
   it('FULL screen pipeline — every /learn screen invoked, zero bypass', () => {
     assert.ok(h.includes('sanitizeLearningBody(content)'), 'LW-3(a) body sanitizer');
-    assert.ok(h.includes('findNearDuplicate({ title, body: content, category: original.category }, dedupSet)'), 'near-dup screen');
+    assert.match(h, /findNearDuplicate\(\s*\{ title, body: content, category: replacementCategory \},\s*dedupSet,\s*\{ contributorAccountId: accountId \}/,
+      'near-dup screen');
     assert.ok(h.includes('scanLearning({ title, body: content'), 'credentials/PII filter');
     assert.ok(h.includes('screenLearningSafe({ title, body: content'), 'injection screen');
     assert.ok(h.includes('evaluateContentSensitivity(title, content, tags)'), 'two-layer content sensitivity');

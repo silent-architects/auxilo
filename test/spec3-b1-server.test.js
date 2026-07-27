@@ -459,7 +459,7 @@ describe('retraction-rate auto-freeze guardrail (SPEC3 §7)', () => {
 
 describe('server.js /learn wiring: channel + assessor + hold (structural)', () => {
   it('destructures and normalizes submission_channel; persists it on the learning', () => {
-    assert.match(SERVER_SRC, /quality_self_assessment, extraction_context, submission_channel \} = body/);
+    assert.match(SERVER_SRC, /quality_self_assessment, extraction_context, submission_channel, visibility \} = body/);
     assert.match(SERVER_SRC, /const submissionChannel = normalizeSubmissionChannel\(submission_channel\)/);
     assert.match(SERVER_SRC, /submission_channel: submissionChannel,/);
   });
@@ -577,7 +577,7 @@ describe('server.js summary route: params + back-compat (structural)', () => {
     for (const param of ["'lane'", "'flag'", "'signal'", "'category'", "'ids'", "'limit'", "'offset'", "'full'"]) {
       assert.ok(slice.includes(`q.has(${param})`) || slice.includes(`q.get(${param})`), `summary route must read ${param}`);
     }
-    assert.match(slice, /summarizeOwnPending\(learnings, accountId, opts\)/);
+    assert.match(slice, /summarizeOwnPending\(comparisonCatalog\(learnings, accountId\), accountId, opts\)/);
     assert.match(slice, /SELF_REVIEW_LANES\.includes\(lane\)/, '400 on unknown lane');
   });
 });

@@ -274,6 +274,7 @@ describe('SPEC3-F1 Phase 0 fixture construction and clustering', () => {
       'alpha beta gamma delta epsilon zeta eta theta iota',
       {
         status: 'rejected',
+        contributor_account_id: 'acc_same',
         created_at: '2026-01-01T00:00:00.000Z',
       },
     );
@@ -281,7 +282,7 @@ describe('SPEC3-F1 Phase 0 fixture construction and clustering', () => {
       'newer',
       'same lesson',
       'alpha beta gamma delta epsilon zeta eta theta iota',
-      { created_at: '2026-01-02T00:00:00.000Z' },
+      { contributor_account_id: 'acc_same', created_at: '2026-01-02T00:00:00.000Z' },
     );
     const olderOtherCategory = learning(
       'other-category',
@@ -312,21 +313,27 @@ describe('SPEC3-F1 Phase 0 fixture construction and clustering', () => {
     ]);
 
     assert.equal(diagnosis.scope.total_pairs, 2);
-    assert.equal(diagnosis.scope.current_compared, 2);
+    assert.equal(diagnosis.scope.current_compared, 1);
     assert.equal(diagnosis.scope.rejected_existing, 1);
     assert.equal(diagnosis.scope.category_mismatch, 1);
-    assert.equal(diagnosis.scope.h1_recovered_comparisons, 0);
+    assert.equal(diagnosis.scope.h1_recovered_comparisons, 1);
     assert.equal(diagnosis.scope.h2_recovered_comparisons, 0);
     assert.equal(diagnosis.scope.full_scope_fix_compared, 2);
     assert.equal(diagnosis.scope.full_scope_fix_detected, 2);
-    assert.equal(diagnosis.scope.current_detected, 2);
+    assert.equal(diagnosis.scope.current_detected, 1);
+    assert.equal(findNearDuplicate(newerSameCategory, [olderRejected], {
+      contributorAccountId: 'acc_same',
+    }).verdict, 'flag', 'same-account rejected predecessor still compares');
+    assert.equal(findNearDuplicate(newerSameCategory, [olderRejected], {
+      contributorAccountId: 'acc_other',
+    }).verdict, 'clean', 'cross-account rejected predecessor is excluded');
 
     const tieCandidate = learning(
       'candidate',
       'deterministic tie',
       'alpha beta gamma delta epsilon zeta eta theta iota',
     );
-    const tieA = { ...tieCandidate, id: 'a', status: 'rejected' };
+    const tieA = { ...tieCandidate, id: 'a', status: 'approved' };
     const tieB = { ...tieCandidate, id: 'b', category: 'monitoring' };
     assert.equal(findNearDuplicate(tieCandidate, [tieB, tieA]).match.id, 'a');
     assert.equal(findNearDuplicate(tieCandidate, [tieA, tieB]).match.id, 'a');

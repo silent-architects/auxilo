@@ -359,7 +359,7 @@ describe('8. FB-4: search quotes ONE price = the unlock charge', () => {
     assert.ok(h.includes('current_price: resolvedPrice'), 'current_price must equal unlock_price_usd');
   });
   it('resolvedPrice mirrors the unlock route chain (no 10x understatement)', () => {
-    assert.ok(h.includes('pricingEngine.getCurrentPrice?.(r, learnings)'),
+    assert.ok(h.includes('pricingEngine.getCurrentPrice?.(r, visibleCatalog())'),
       'must resolve via the same engine call the unlock route charges with');
   });
   it('the verdict is computed against the resolved (charged) price', () => {
