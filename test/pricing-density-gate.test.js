@@ -461,8 +461,8 @@ test('structural: daily cron still feeds getCurrentPrice the catalog, caps at 15
 
 test('structural: submission path prices through calculateLearningPrice (gate active at submission)', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-  assert.ok(src.includes('pricingEngine.calculateLearningPrice(syntheticForPricing, learnings)'),
-    'new submissions must flow through the density-gated formula');
+  assert.ok(src.includes('pricingEngine.calculateLearningPrice(syntheticForPricing, visibleCatalog())'),
+    'public submissions must flow through the density-gated formula with private rows excluded');
 });
 
 // ─── F1 (Gate-A): loud request-path pins ─────────────────────────────────────
@@ -481,14 +481,14 @@ function normalizedServerSource() {
 test('request-path pin: SEARCH resolves stored current_price BEFORE the engine (no engine-first reorder)', () => {
   const src = normalizedServerSource();
   assert.ok(src.includes(
-    'const resolvedPrice = r.pricing?.current_price || pricingEngine.getCurrentPrice?.(r, learnings) || r.unlock_price || DEFAULT_UNLOCK_PRICE;'),
+    'const resolvedPrice = r.pricing?.current_price || pricingEngine.getCurrentPrice?.(r, visibleCatalog()) || r.unlock_price || DEFAULT_UNLOCK_PRICE;'),
     'search result chain must be pricing?.current_price -> engine -> unlock_price -> default, in that order');
 });
 
 test('request-path pin: UNLOCK resolves stored current_price BEFORE the engine (no engine-first reorder)', () => {
   const src = normalizedServerSource();
   assert.ok(src.includes(
-    'UNLOCK_PRICE = learning.pricing?.current_price || pricingEngine.getCurrentPrice?.(learning, learnings) || learning.unlock_price || DEFAULT_UNLOCK_PRICE;'),
+    'UNLOCK_PRICE = learning.pricing?.current_price || pricingEngine.getCurrentPrice?.(learning, visibleCatalog()) || learning.unlock_price || DEFAULT_UNLOCK_PRICE;'),
     'unlock charge chain must be pricing?.current_price -> engine -> unlock_price -> default, in that order');
 });
 
@@ -496,7 +496,7 @@ test('request-path pin: HOMEPAGE displayPrice resolves stored current_price BEFO
   const src = normalizedServerSource();
   assert.ok(src.includes('function displayPrice(l)'), 'displayPrice helper must exist');
   assert.ok(src.includes(
-    'p = l.pricing?.current_price || pricingEngine.getCurrentPrice?.(l, learnings) || l.unlock_price || DEFAULT_UNLOCK_PRICE;'),
+    'p = l.pricing?.current_price || pricingEngine.getCurrentPrice?.(l, visibleCatalog()) || l.unlock_price || DEFAULT_UNLOCK_PRICE;'),
     'homepage display chain must be pricing?.current_price -> engine -> unlock_price -> default, in that order');
 });
 

@@ -104,6 +104,7 @@ describe('applySelfDecision keeps human authority over below-floor items (AUD19-
       id: 'lrn_lowq',
       title: 'Low-scored but human-vetted',
       status: 'pending_review',
+      category: 'code-execution',
       contributor_account_id: 'acc_h',
       quality_self_assessment: { specificity: 3, actionability: 3, novelty: 3, completeness: 3, total: 12 },
     }];

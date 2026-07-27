@@ -284,11 +284,11 @@ describe('SPEC3-F1 Phase 1 near-duplicate runtime', () => {
     assert.doesNotMatch(route, /extractNearDup\.verdict === 'reject'/);
   });
 
-  it('strips event-time duplicate evidence from all five buyer projections', () => {
+  it('strips event-time duplicate evidence from all six buyer projections', () => {
     assert.equal(
       (SERVER_SOURCE.match(/near_duplicate_evidence: _nde/g) || []).length +
         (SERVER_SOURCE.match(/possible_duplicate_similarity, near_duplicate_evidence,/g) || []).length,
-      5,
+      6,
     );
     assert.match(SERVER_SOURCE, /near_duplicate_evidence: l\.near_duplicate_evidence/,
       'admin reviewer projection retains evidence');

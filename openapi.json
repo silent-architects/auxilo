@@ -148,6 +148,28 @@
           "monitoring"
         ]
       },
+      "StoredLearningCategory": {
+        "type": "string",
+        "description": "Stored-learning taxonomy. The six technical values are eligible for public marketplace visibility. 'non-technical' is accepted only with visibility 'private' and must be recategorized into the technical taxonomy before promotion.",
+        "enum": [
+          "data-processing",
+          "web-interaction",
+          "code-execution",
+          "storage-state",
+          "payment-financial",
+          "monitoring",
+          "non-technical"
+        ]
+      },
+      "LearningVisibility": {
+        "type": "string",
+        "description": "Storage visibility. Missing values on legacy records mean public.",
+        "enum": [
+          "public",
+          "private"
+        ],
+        "default": "public"
+      },
       "Outcome": {
         "type": "string",
         "enum": [
@@ -178,7 +200,7 @@
       },
       "LearningSnippet": {
         "type": "object",
-        "description": "Learning result without the full body (body requires unlock payment)",
+        "description": "Learning search result without the full body. Public bodies require unlock payment; authenticated owners recall their own private body free.",
         "properties": {
           "id": {
             "type": "string",
@@ -192,7 +214,7 @@
             "description": "First 120 characters of the body"
           },
           "category": {
-            "$ref": "#/components/schemas/LearningCategory"
+            "$ref": "#/components/schemas/StoredLearningCategory"
           },
           "task_context": {
             "type": "string"
@@ -211,6 +233,10 @@
           },
           "relevance": {
             "type": "number"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/LearningVisibility",
+            "description": "Present as private on authenticated owner-only results."
           },
           "unlock_price_usd": {
             "type": "number",
@@ -1028,7 +1054,7 @@
     "/learn": {
       "post": {
         "summary": "Submit a learning (free)",
-        "description": "Contribute operational knowledge to the marketplace. Free to submit. You earn 70% of revenue when others unlock your content. Requires at least one identity: a verified `contributor_wallet` in the body, an `X-API-Key` header, or a JWT session. Attribution is two independent fields: the wallet is payout attribution (who earns); the account is ownership (who can self-review via GET /account/pending). A submission authenticated with an API key is always owned by the key's account, even when a contributor_wallet is also provided.",
+        "description": "Contribute operational knowledge. Public is the default marketplace destination. Authenticated contributors may instead set visibility private for owner-only, price-free storage; private accepts the six technical categories plus non-technical, always runs the safety screens, and always lands pending_review until keep_private. Public submissions earn 70% when others unlock them. Requires at least one identity; private specifically requires an authenticated contributor account.",
         "operationId": "submitLearning",
         "requestBody": {
           "required": true,
@@ -1056,7 +1082,8 @@
                     "description": "Full learning content"
                   },
                   "category": {
-                    "$ref": "#/components/schemas/LearningCategory"
+                    "$ref": "#/components/schemas/StoredLearningCategory",
+                    "description": "'non-technical' is valid only when visibility is private (CI-5)."
                   },
                   "tags": {
                     "type": "array",
@@ -1093,6 +1120,10 @@
                     "default": 0.05,
                     "description": "Price in USD to unlock this learning (min $0.05, max $50.00). Set higher for deep, high-value knowledge. Contributors earn 70% of the unlock price."
                   },
+                  "visibility": {
+                    "$ref": "#/components/schemas/LearningVisibility",
+                    "description": "Default public. Private requires authenticated account ownership, has no price/economics, and cannot auto-publish."
+                  },
                   "submission_channel": {
                     "type": "string",
                     "enum": [
@@ -1109,7 +1140,7 @@
         },
         "responses": {
           "201": {
-            "description": "Learning submitted. LW-16: publishing is seamless by default \u2014 a fully-clean submission is `status: 'approved'` and immediately discoverable. It is held (`status: 'pending_review'`) only when a screen flags it (credentials/PII, prompt-injection, near-duplicate, or the two-layer content-sensitivity classifier \u2014 a regex first pass UNION an LLM semantic layer, `regex.sensitive || llm.sensitive`) or the `FORCE_ALL_REVIEW` kill switch is on; in that case `review_reason` lists why. SPEC3-F1: near-verbatim similarity is hold-only across pending, published, and rejected predecessors in every category; it never rejects a submission. Duplicate evidence is contributor/reviewer-only and never returned to buyers.",
+            "description": "Learning submitted. A public-destined fully-clean submission may publish seamlessly; a private-destined submission always lands pending_review with review_reason private_destination and can only become approved-private through keep_private. Every destination runs the full safety chain. Duplicate comparison sees public predecessors for everyone and non-public predecessors only for the same account.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1129,6 +1160,9 @@
                       ],
                       "description": "LW-16: 'approved' = published seamlessly; 'pending_review' = held for review."
                     },
+                    "visibility": {
+                      "$ref": "#/components/schemas/LearningVisibility"
+                    },
                     "review_reason": {
                       "type": "array",
                       "description": "LW-16: present only when status is 'pending_review'. Reasons the submission was held. CI-7: 'process_advice_screen' = the system-fact screen judged the content process/workflow advice rather than a system fact (or could not judge it) \u2014 held for the human, never bounced; approve it only if it is actually a misclassified system fact. AUD19-6: 'below_quality_floor' = the quality self-assessment is present but under the server floor (total >= 14, dims >= 3) - quarantined for review, never bounced. SPEC3-B1: 'standing_consent_off' = a clean, floor-passing extraction-channel submission held because the account's clean-lane standing consent is not active (lane ready_to_publish - one counted approve away); 'below_auto_publish_threshold' = consent active but the score is under the account's auto-publish threshold. SPEC3-B3: 'sanitized_resubmission' = the item is a sanitize-and-resubmit replacement - ALWAYS held for the contributor's explicit approve, regardless of screens or channel.",
@@ -1144,7 +1178,8 @@
                           "below_quality_floor",
                           "standing_consent_off",
                           "below_auto_publish_threshold",
-                          "sanitized_resubmission"
+                          "sanitized_resubmission",
+                          "private_destination"
                         ]
                       }
                     },
@@ -1205,7 +1240,7 @@
     "/knowledge": {
       "post": {
         "summary": "Search knowledge base (free)",
-        "description": "Search operational learnings. Returns ranked snippets \u2014 no full body. Free \u2014 no cost. Unlock full content at GET /knowledge/:id.",
+        "description": "Search public operational learnings. When authenticated, the caller's own approved-private learnings are added and marked visibility private; other accounts and anonymous callers never see them. Private results are owner-recall-free and omit all price/value fields.",
         "operationId": "searchKnowledge",
         "security": [
           {
@@ -1227,7 +1262,7 @@
                     "description": "What you need help with"
                   },
                   "category": {
-                    "$ref": "#/components/schemas/LearningCategory"
+                    "$ref": "#/components/schemas/StoredLearningCategory"
                   },
                   "outcome": {
                     "$ref": "#/components/schemas/Outcome"
@@ -2827,6 +2862,14 @@
             "description": "Comma-list containing only approved, rejected, and/or pending_review."
           },
           {
+            "name": "visibility",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/LearningVisibility"
+            },
+            "description": "Optional exact visibility filter. Missing legacy visibility is public."
+          },
+          {
             "name": "limit",
             "in": "query",
             "schema": {
@@ -2885,6 +2928,7 @@
                           "category",
                           "tags",
                           "status",
+                          "visibility",
                           "created_at"
                         ],
                         "properties": {
@@ -2910,6 +2954,9 @@
                               "rejected",
                               "pending_review"
                             ]
+                          },
+                          "visibility": {
+                            "$ref": "#/components/schemas/LearningVisibility"
                           },
                           "created_at": {
                             "type": "string",
@@ -3799,6 +3846,81 @@
         }
       }
     },
+    "/account/pending/{id}/keep-private": {
+      "post": {
+        "summary": "Keep your own pending learning private",
+        "description": "Sets an owned pending_review learning to status approved and visibility private. The stored learning remains owner-searchable and recoverable, has no marketplace price/earnings/demand fields, and never enters public search. Ownership and contribute-scope gates are identical to approve/reject.",
+        "operationId": "keepPrivateAccountPending",
+        "tags": [
+          "Account"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Learning retained privately",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "kept_private",
+                    "id",
+                    "status",
+                    "visibility"
+                  ],
+                  "properties": {
+                    "kept_private": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "approved"
+                    },
+                    "visibility": {
+                      "type": "string",
+                      "example": "private"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "description": "Not authorized to review this learning"
+          },
+          "404": {
+            "description": "Learning not found"
+          },
+          "409": {
+            "description": "Learning is not pending review"
+          }
+        }
+      }
+    },
     "/account/pending/{id}/reject": {
       "post": {
         "summary": "Reject your own pending learning (stays private)",
@@ -3902,6 +4024,81 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/account/pending/bulk": {
+      "post": {
+        "summary": "Apply counted decisions to owned pending learnings",
+        "description": "Applies up to 100 approve, reject, or keep_private decisions. confirm_count must exactly equal decisions.length before any mutation. Per-id ownership gates and visibility-aware idempotency are enforced; approve targets approved-public while keep_private targets approved-private.",
+        "operationId": "bulkDecideAccountPending",
+        "tags": [
+          "Account"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "decisions",
+                  "confirm_count"
+                ],
+                "properties": {
+                  "confirm_count": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "decisions": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "decision"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "decision": {
+                          "type": "string",
+                          "enum": [
+                            "approve",
+                            "reject",
+                            "keep_private"
+                          ]
+                        },
+                        "reason": {
+                          "type": "string",
+                          "maxLength": 500
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Per-id outcomes and processed/approved/kept_private/rejected/failed/idempotent/changed counts"
+          },
+          "400": {
+            "description": "Invalid decisions or confirm_count mismatch"
+          },
+          "401": {
+            "description": "Missing or invalid credentials"
           }
         }
       }
@@ -4902,8 +5099,8 @@
     },
     "/account/pending/{id}/sanitize": {
       "post": {
-        "summary": "Sanitize-and-resubmit your own pending/rejected learning (lineage, zero screen bypass)",
-        "description": "SPEC3-B3: the missing verb between republish-as-is (re-leak) and reject (value lost). The authenticated contributor supplies a corrected title/body/tags for ONE of THEIR OWN pending_review or rejected learnings; the server ATOMICALLY retires the original (status rejected, reason 'sanitize-resubmit', sanitized_to stamped) and resubmits the correction through the FULL /learn screen pipeline - body sanitizer, exact+near duplicate (the retiring predecessor excluded from the candidate set), credentials/PII filter, prompt-injection screen, two-layer content-sensitivity (evidence persisted), system-fact screen, quality floor. ZERO bypass. The replacement carries sanitized_from and is ALWAYS held (review_reason includes 'sanitized_resubmission') for the contributor's explicit approve - this route can never publish. Guards: ownership (403 before status), 409 ALREADY_SANITIZED, 409 SANITIZE_DEPTH_EXCEEDED (2 prior sanitize hops - rewrite fresh or reject), 409 CATEGORY_OUT_OF_SCOPE (retired label cannot re-enter). Contribute scope. Gate-A hardening: 409 ADMIN_REJECTED_FINAL (an admin-rejected item cannot be resurrected via sanitize); screens run outside the store lock, with the mutable guards re-validated under it \u2014 a concurrent change returns 409 SANITIZE_CONFLICT with nothing mutated.",
+        "summary": "Sanitize-and-resubmit an owned learning for public review",
+        "description": "Accepts an owned pending_review, rejected, or approved-private source. The corrected replacement runs the complete /learn safety and duplicate chain with ZERO bypass and is always public-destined pending_review for explicit approval. For an approved-private source only, category may be replaced and must be one of the six technical CI-5 categories; omission inherits the source category, so an inherited non-technical category fails CATEGORY_OUT_OF_SCOPE. Approved-private originals remain approved-private and recoverable with sanitized_to lineage; pending sources retain the existing atomic rejection behavior. Ownership is checked before status; depth and admin-finality guards are unchanged.",
         "operationId": "sanitizeAccountPending",
         "tags": [
           "Account"
@@ -4921,7 +5118,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "The pending/rejected learning being corrected"
+            "description": "The pending, rejected, or approved-private learning being corrected"
           }
         ],
         "requestBody": {
@@ -4946,6 +5143,10 @@
                       "type": "string"
                     },
                     "description": "Corrected tags"
+                  },
+                  "category": {
+                    "$ref": "#/components/schemas/LearningCategory",
+                    "description": "Accepted only for an approved-private source. The replacement is public-destined, so only the technical taxonomy is valid."
                   }
                 }
               }
@@ -4972,7 +5173,8 @@
                       "type": "string",
                       "enum": [
                         "rejected",
-                        "already_rejected"
+                        "already_rejected",
+                        "kept_private"
                       ]
                     },
                     "status": {

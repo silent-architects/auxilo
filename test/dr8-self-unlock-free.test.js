@@ -45,33 +45,42 @@ function unlockHandler() {
   return SERVER_SRC.slice(start, end);
 }
 
-// The owner short-circuit block: predicate + free return, ending where the
-// router-mode block begins.
+function ownerProof() {
+  const start = SERVER_SRC.indexOf('function resolveProvableOwnerAccountId');
+  assert.ok(start !== -1, 'owner-proof helper present');
+  const end = SERVER_SRC.indexOf("app.get('/knowledge/:id'", start);
+  assert.ok(end !== -1, 'unlock route follows owner-proof helper');
+  return SERVER_SRC.slice(start, end);
+}
+
+// The public-owner short-circuit block, ending where the router-mode block begins.
 function ownerBlock(h) {
-  const start = h.indexOf('let dr8OwnerAccountId = null;');
+  const privateAt = h.indexOf("if (learning.visibility === 'private')");
+  const start = h.indexOf('if (dr8OwnerAccountId) {', privateAt);
   assert.ok(start !== -1, 'DR-8 owner short-circuit present');
   const end = h.indexOf('// R-01 router mode', start);
   assert.ok(end !== -1, 'router-mode block follows the owner short-circuit');
   return h.slice(start, end);
 }
 
-let h, owner;
+let h, proof, owner;
 before(() => {
   h = unlockHandler();
+  proof = ownerProof();
   owner = ownerBlock(h);
 });
 
 // ─── 1. Ordering: the free path runs BEFORE any charge or refuse gate ───────────
 describe('DR-8 placement (free before any charge)', () => {
   it('owner short-circuit sits BEFORE dualAuthDynamic (no credit burn, no 402, no charge)', () => {
-    const ownerAt = h.indexOf('let dr8OwnerAccountId = null;');
+    const ownerAt = h.indexOf('const dr8OwnerAccountId = resolveProvableOwnerAccountId(c, learning);');
     const chargeAt = h.indexOf('await dualAuthDynamic(');
     assert.ok(chargeAt !== -1, 'paid path intact');
     assert.ok(ownerAt < chargeAt, 'ownership must be decided before the charge');
   });
 
   it('owner short-circuit sits BEFORE the CONTRIBUTOR_NOT_ONBOARDED refuse gate (an owner recall moves no money)', () => {
-    const ownerAt = h.indexOf('let dr8OwnerAccountId = null;');
+    const ownerAt = h.indexOf('const dr8OwnerAccountId = resolveProvableOwnerAccountId(c, learning);');
     const refuseAt = h.indexOf("code: 'CONTRIBUTOR_NOT_ONBOARDED'");
     assert.ok(refuseAt !== -1, 'refuse gate intact for buyers');
     assert.ok(ownerAt < refuseAt, 'a not-yet-onboarded builder still gets their own content back');
@@ -79,7 +88,7 @@ describe('DR-8 placement (free before any charge)', () => {
 
   it('owner short-circuit sits AFTER the S21-2 moderation gate (non-approved items stay 404 on this route)', () => {
     const modAt = h.indexOf('CONTENT_MODERATION_ENABLED && learning.status');
-    const ownerAt = h.indexOf('let dr8OwnerAccountId = null;');
+    const ownerAt = h.indexOf('const dr8OwnerAccountId = resolveProvableOwnerAccountId(c, learning);');
     assert.ok(modAt !== -1 && modAt < ownerAt,
       'owner recall applies to servable learnings; held items go through /account/pending');
   });
@@ -93,22 +102,22 @@ describe('DR-8 placement (free before any charge)', () => {
 // ─── 2. Ownership must be PROVEN (never an unverified claim) ────────────────────
 describe('DR-8 ownership predicate', () => {
   it('account arm: valid API key resolved to the contributor account', () => {
-    assert.ok(owner.includes('validateApiKey(dr8Key)'), 'identity from key validation');
-    assert.ok(owner.includes("hasMinScope(dr8KeyResult.effective_scope || dr8KeyResult.scope, 'read')"),
+    assert.ok(proof.includes('validateApiKey(key)'), 'identity from key validation');
+    assert.ok(proof.includes("hasMinScope(keyResult.effective_scope || keyResult.scope, 'read')"),
       'same minimum scope as the paid API-key path (D2 rank check)');
-    assert.ok(owner.includes('dr8KeyResult.accountId === dr8ContribAccountId'), 'account match arm');
+    assert.ok(proof.includes('keyResult.accountId === contributorAccountId'), 'account match arm');
   });
 
   it('wallet arm: the ACCOUNT-LINKED wallet (AUD19-3), read authoritatively', () => {
-    assert.ok(owner.includes('loadAccounts()[dr8KeyResult.accountId]'),
+    assert.ok(proof.includes('loadAccounts()[keyResult.accountId]'),
       'authoritative account read (not the cache)');
-    assert.ok(owner.includes('dr8Account.wallet'),
+    assert.ok(proof.includes('account.wallet'),
       'account.wallet — set only by the EIP-712 account-bound linkWallet flow');
-    assert.ok(owner.includes('dr8LinkedWallet === dr8ContribWallet'), 'linked-wallet match arm');
+    assert.ok(proof.includes('linkedWallet === contributorWallet'), 'linked-wallet match arm');
   });
 
   it('the X-Wallet-Address header is NEVER consulted by the free path (unverified claim)', () => {
-    assert.ok(!owner.includes('X-Wallet-Address'),
+    assert.ok(!proof.includes('X-Wallet-Address'),
       'a header claim must not unlock free content — it still routes through the paid path');
     // The header IS still read by the M-2 wash guard, which runs post-payment.
     const m2At = h.indexOf("c.req.header('X-Wallet-Address')");
@@ -118,7 +127,7 @@ describe('DR-8 ownership predicate', () => {
   });
 
   it('API-key precedence mirrors dualAuthDynamic (X-API-Key, then Bearer)', () => {
-    assert.ok(owner.indexOf("c.req.header('X-API-Key')") < owner.indexOf("startsWith('Bearer ')"),
+    assert.ok(proof.indexOf("c.req.header('X-API-Key')") < proof.indexOf("startsWith('Bearer ')"),
       'same header precedence as the paid path — one identity, two spellings');
   });
 });

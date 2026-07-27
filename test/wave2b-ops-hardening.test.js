@@ -496,13 +496,18 @@ describe('CAT-1 (a): public analytics count only servable learnings', () => {
     assert.ok(insights.includes('visibleCatalog().filter('),
       'pricing-insights no longer leaks pending/rejected titles');
     const match = slice('function matchLearnings(', 'let results = visibleLearnings');
-    assert.ok(match.includes('const visibleLearnings = visibleCatalog();'),
-      'search visibility rides the same helper');
+    assert.ok(match.includes('filters.accountId') &&
+      match.includes('comparisonCatalog(learnings, filters.accountId)'),
+      'search visibility includes the authenticated owner private comparison set');
+    assert.ok(match.includes(".filter((l) => !l.status || l.status === 'approved')"),
+      'search still excludes held and rejected rows');
   });
 
   it('no inline visibility predicate remains outside the helper (SSR helper delegates too)', () => {
-    assert.equal(SERVER_SRC.split("learnings.filter(l => !l.status || l.status === 'approved')").length - 1, 1,
+    assert.equal(SERVER_SRC.split("publicCatalog.filter(l => !l.status || l.status === 'approved')").length - 1, 1,
       'the predicate exists exactly once — inside visibleCatalog()');
+    assert.equal(SERVER_SRC.split("learnings.filter((l) => l && l.visibility !== 'private')").length - 1, 1,
+      'private exclusion exists exactly once — inside visibleCatalog()');
     const ssr = slice('function visibleLearningsList()', 'function displayPrice(');
     assert.ok(ssr.includes('return visibleCatalog();'), 'the pre-existing SSR helper delegates');
   });

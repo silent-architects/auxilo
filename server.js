@@ -24,7 +24,11 @@ const {
   combineSensitivity,
   isLlmSensitivityEnabled,
 } = require('./lib/content-sensitivity-llm.js'); // LW-16 content-sensitivity gate (LLM semantic layer)
-const { findNearDuplicate } = require('./lib/similarity.js'); // LW-14
+const {
+  findNearDuplicate,
+  isComparisonEligible,
+  comparisonCatalog,
+} = require('./lib/similarity.js'); // LW-14 + SPEC3-G1 comparison scoping
 const { listOwnPending, applySelfDecision, summarizeOwnPending, applyBulkDecisions, selectPendingIdsBySignal, BULK_MAX: SELF_REVIEW_BULK_MAX, meetsQualityFloor, QUALITY_FLOOR_TOTAL, QUALITY_FLOOR_DIMENSION, adoptWalletOrphans, LANES: SELF_REVIEW_LANES, parseCommonDevTerms: parseAccountVocabCommonTerms } = require('./lib/self-review.js'); // LW-15 + review-seamless + AUD19-3/-6 + SPEC3-B1 lanes + SPEC3-B2 by-signal + SPEC3-E1 review-time vocabulary
 const ACCOUNT_VOCAB_CONFIG = require('./config/account-vocab.json');
 // INCIDENT 2026-07-26 (SPEC3-E1 deploy): the wordlist MUST live in config/, not
@@ -78,6 +82,7 @@ const {
   RETIRED_LEARNING_CATEGORIES,
   migrateRetiredCategories,
 } = require('./lib/category-scope-migration.js');
+const PRIVATE_LEARNING_CATEGORY = 'non-technical';
 
 // ─── Phase 2.1a: Autonomous Extraction Pipeline ─────────────────────────────
 const { extractWithRetry } = require('./lib/providers/anthropic.js');
@@ -727,6 +732,7 @@ migrateEarningsToAccountKeyed(earnings, accounts, DATA_DIR);
 // owner was written as `contributor_id` (read nowhere) / `account.walletAddress`
 // (always undefined), and re-attributes the orphaned earnings["null"] bucket to
 // the correct contributors. Idempotent — a no-op once everything is repaired.
+// G1_RAW_READ_ALLOW:1 — startup migration must preserve the full store.
 try {
   const { migratePipelineOwners } = require('./lib/pipeline-owner-migration.js');
   const _pmResult = migratePipelineOwners(learnings, earnings, accounts);
@@ -772,6 +778,7 @@ try {
 // learnings catalog to detect any phantom earnings from deleted learnings.
 // Migration-only: runs once at startup, logs discrepancies, uses validated
 // (lower) amount.  Non-fatal — never blocks startup.
+// G1_RAW_READ_ALLOW:2 — startup reconciliation needs full-store existence.
 {
   let corrected = 0;
   const learningPriceMap = {};
@@ -832,6 +839,7 @@ try {
 }
 
 // On first startup, seed from seed-knowledge.json if learnings is empty
+// G1_RAW_READ_ALLOW:3 — startup seed decision is an internal store check.
 if (learnings.length === 0) {
   try {
     const seedFile = path.join(__dirname, 'seed-knowledge.json');
@@ -853,6 +861,7 @@ if (learnings.length === 0) {
 // stay untouched. Runs AFTER seeding (a fresh seed store is migrated too) and
 // before WAL recovery — same slot discipline as AC-1/M-1. Idempotent: a second
 // boot reports changed === 0 and skips the write. Non-fatal on error.
+// G1_RAW_READ_ALLOW:4 — migration must inspect historical private records.
 try {
   const _ci5 = migrateRetiredCategories(learnings);
   if (_ci5.changed > 0) {
@@ -3209,9 +3218,10 @@ const KNOWLEDGE_QUERY_MAX_TOKENS = 64;
 // 2026-06-12 inflated-stats class ("922 vs dozens") cannot re-enter through a
 // new endpoint forgetting the filter.
 function visibleCatalog() {
+  const publicCatalog = learnings.filter((l) => l && l.visibility !== 'private');
   return CONTENT_MODERATION_ENABLED
-    ? learnings.filter(l => !l.status || l.status === 'approved')
-    : learnings;
+    ? publicCatalog.filter(l => !l.status || l.status === 'approved')
+    : publicCatalog;
 }
 
 function matchLearnings(query, filters = {}) {
@@ -3220,7 +3230,10 @@ function matchLearnings(query, filters = {}) {
   const q = String(query || '').slice(0, KNOWLEDGE_QUERY_MAX_CHARS).toLowerCase().trim();
   const tokens = q.split(/\s+/).filter(t => t.length > 1).slice(0, KNOWLEDGE_QUERY_MAX_TOKENS);
 
-  const visibleLearnings = visibleCatalog();
+  const visibleLearnings = filters.accountId
+    ? comparisonCatalog(learnings, filters.accountId)
+      .filter((l) => !l.status || l.status === 'approved')
+    : visibleCatalog();
 
   let results = visibleLearnings.map(learning => {
     let textScore = 0;
@@ -3241,7 +3254,8 @@ function matchLearnings(query, filters = {}) {
       if (learning.task_context.toLowerCase().includes(token)) textScore += SCORING.CONTEXT_TOKEN_WEIGHT;
     }
 
-    const qualityScore = computeScore(learning);
+    // Private owner search is lexical recall, not marketplace ranking.
+    const qualityScore = learning.visibility === 'private' ? 0 : computeScore(learning);
     return { ...learning, _score: (textScore * SCORING.TEXT_SCORE_MULTIPLIER) + qualityScore, _textScore: textScore };
   });
 
@@ -4307,6 +4321,7 @@ function notePendingReviewEntries(count, context = {}) {
   _pendingAlertLastSentAt = now;
   _pendingAlertNewCount = 0;
 
+  // G1_RAW_READ_ALLOW:5 — operator workload includes private-destined pending.
   let totalPending = 0;
   let orphanPending = 0;
   for (const l of learnings) {
@@ -4825,6 +4840,7 @@ app.post('/account/link-wallet', requireSessionOrApiKey(), async (c) => {
       // acquisition site. No earnings lock is touched while it is held.
       const releaseLearningsLock = await acquireLearningsLock();
       try {
+        // G1_RAW_READ_ALLOW:6 — verified wallet adoption is account-scoped.
         adoptedIds = adoptWalletOrphans(learnings, accountId, result.wallet);
         if (adoptedIds.length > 0) {
           safeWrite(LEARNINGS_FILE, learnings);
@@ -5524,7 +5540,9 @@ function nearDuplicateHold(result) {
   if (!result || result.verdict === 'clean' || !result.match) return null;
   const match = result.match;
   let why = `Possible duplicate of ${match.id}.`;
-  if (match.status === 'approved') {
+  if (match.status === 'approved' && match.visibility === 'private') {
+    why = `re-extraction of your private learning ${match.id}`;
+  } else if (match.status === 'approved') {
     why = `re-extraction of your published learning ${match.id}`;
   } else if (match.status === 'rejected') {
     why = 're-extraction of a lesson you previously rejected';
@@ -5535,6 +5553,7 @@ function nearDuplicateHold(result) {
     near_duplicate_evidence: {
       predecessor_id: match.id,
       predecessor_status: match.status || null,
+      predecessor_visibility: match.visibility || 'public',
       predecessor_category: match.category || null,
       channel: match.channel || null,
       channels: match.channels || null,
@@ -5590,7 +5609,8 @@ app.post('/learn', async (c) => {
 
   const { title, body: rawContent, category, tags, task_context, outcome,
     contributor_wallet, contributor_agent, related_skills, unlock_price,
-    quality_self_assessment, extraction_context, submission_channel } = body;
+    quality_self_assessment, extraction_context, submission_channel, visibility } = body;
+  const destinationVisibility = visibility === undefined ? 'public' : visibility;
 
   // SPEC3 B1: client-asserted submission channel — enum direct|extraction,
   // default AND unknown → 'direct' (today's path; a typo'd client must degrade
@@ -5609,6 +5629,20 @@ app.post('/learn', async (c) => {
   // snippet, pricing, scans and the stored body, so dedup + snippet match what
   // is actually persisted. The raw value is never stored.
   let content = rawContent;
+
+  if (destinationVisibility !== 'public' && destinationVisibility !== 'private') {
+    return c.json({ error: 'visibility must be one of: public, private' }, 400);
+  }
+  if (destinationVisibility === 'private' && unlock_price !== undefined) {
+    return c.json({ error: 'Private learnings do not have an unlock price' }, 400);
+  }
+  if (category === PRIVATE_LEARNING_CATEGORY && destinationVisibility !== 'private') {
+    return c.json({
+      error: `Category '${PRIVATE_LEARNING_CATEGORY}' is private-only under CI-5`,
+      code: 'CATEGORY_OUT_OF_SCOPE',
+      message: 'CI-5 permits only technical categories in the public marketplace. Submit this category with visibility private, or rewrite it into the technical taxonomy.',
+    }, 400);
+  }
 
   // CI-5 (PUNCH-LIST §30): retired-label submissions get a DEDICATED
   // machine-readable 400 (not the generic validation error) so a stale client
@@ -5637,8 +5671,13 @@ app.post('/learn', async (c) => {
   if (content && content.length > 50000) validationErrors.push('Body exceeds 50KB limit');
   if (!category) {
     validationErrors.push('Category is required');
-  } else if (!VALID_CATEGORIES.includes(category)) {
-    validationErrors.push(`category must be one of: ${VALID_CATEGORIES.join(', ')}`);
+  } else {
+    const allowedCategories = destinationVisibility === 'private'
+      ? [...VALID_CATEGORIES, PRIVATE_LEARNING_CATEGORY]
+      : VALID_CATEGORIES;
+    if (!allowedCategories.includes(category)) {
+      validationErrors.push(`category must be one of: ${allowedCategories.join(', ')}`);
+    }
   }
   if (!tags || !Array.isArray(tags) || tags.length === 0) {
     validationErrors.push('At least one tag required');
@@ -5745,6 +5784,9 @@ app.post('/learn', async (c) => {
   if (!walletLower && !contributor_account_id) {
     return c.json({ error: 'An identity is required: contributor_wallet, a valid API key (X-API-Key), or a session (JWT)' }, 400);
   }
+  if (destinationVisibility === 'private' && !contributor_account_id) {
+    return c.json({ error: 'Private learnings require an authenticated contributor account' }, 401);
+  }
 
   // Account-based rate limit when no wallet provided
   if (!walletLower && contributor_account_id) {
@@ -5774,8 +5816,12 @@ app.post('/learn', async (c) => {
     contributor_account_id: contributor_account_id || null,
     contributor_wallet: walletLower || null,
   };
-  const calculatedPrice = pricingEngine.calculateLearningPrice(syntheticForPricing, learnings);
-  const resolvedPrice = unlock_price !== undefined ? Number(unlock_price) : calculatedPrice;
+  const calculatedPrice = destinationVisibility === 'public'
+    ? pricingEngine.calculateLearningPrice(syntheticForPricing, visibleCatalog())
+    : null;
+  const resolvedPrice = destinationVisibility === 'public'
+    ? (unlock_price !== undefined ? Number(unlock_price) : calculatedPrice)
+    : null;
 
   // ── quality_self_assessment validation (SPEC-P1.1) ──────────────────────────
   if (quality_self_assessment) {
@@ -5845,7 +5891,8 @@ app.post('/learn', async (c) => {
   const bodyHash = crypto.createHash('sha256').update(normalizedBody).digest('hex');
   const normalizedTitle = title.toLowerCase().replace(/\s+/g, ' ').trim();
 
-  const duplicate = learnings.find(existing => {
+  // G1_RAW_READ_ALLOW:8 — shared helper scopes non-public exact predecessors.
+  const duplicate = comparisonCatalog(learnings, contributor_account_id).find(existing => {
     // Exact body match (normalized): use stored hash if available, else compute on-the-fly
     const existingHash = existing.body_hash ||
       crypto.createHash('sha256').update(existing.body.toLowerCase().replace(/\s+/g, ' ').trim()).digest('hex');
@@ -5867,7 +5914,12 @@ app.post('/learn', async (c) => {
   // LW-14 / SPEC3-F1: Near-duplicate detection across the full catalog.
   // Similarity is a HOLD signal only — never a rejection. Exact duplicates
   // remain governed by the separate 409 gate above.
-  const nearDup = findNearDuplicate({ title, body: content, category }, learnings);
+  // G1_RAW_READ_ALLOW:9 — similarity helper enforces the same account scope.
+  const nearDup = findNearDuplicate(
+    { title, body: content, category },
+    learnings,
+    { contributorAccountId: contributor_account_id },
+  );
   const nearDupHold = nearDuplicateHold(nearDup);
   // --- End duplicate detection ---
 
@@ -5971,7 +6023,9 @@ app.post('/learn', async (c) => {
   if (processAdviceHold) learnReviewReasons.push('process_advice_screen');
   if (!qualityPresent) learnReviewReasons.push('awaiting_quality');
   if (qualityPresent && !qualityMeetsFloor) learnReviewReasons.push('below_quality_floor');
-  const seamlessScreensAndScore = !FORCE_ALL_REVIEW &&
+  if (destinationVisibility === 'private') learnReviewReasons.push('private_destination');
+  const seamlessScreensAndScore = destinationVisibility === 'public' &&
+    !FORCE_ALL_REVIEW &&
     !injectionScreen.flagged &&
     !nearDupHold &&
     !contentSensitivity.sensitive &&
@@ -6010,6 +6064,7 @@ app.post('/learn', async (c) => {
       // Retraction-rate auto-freeze guardrail (SPEC3 §7): checked BEFORE every
       // unattended publish. Breach ⇒ freeze the lane (explicit human re-grant
       // required to reactivate), alert ops, and hold THIS item too.
+      // G1_RAW_READ_ALLOW:10 — helper filters by account and clean-lane stamp.
       const laneStats = computeCleanLaneRetractionStats(learnings, contributor_account_id);
       if (shouldFreezeCleanLane(laneStats)) {
         try {
@@ -6038,13 +6093,18 @@ app.post('/learn', async (c) => {
       learnReviewReasons.push(laneVerdict.reason); // standing_consent_off | below_auto_publish_threshold
     }
   }
+  if (destinationVisibility === 'private') seamlessEligible = false;
 
   // JWT extraction already done above (moved before identity gate for Change 1)
 
   // E1: Build pricing metadata block
-  const complexity = pricingEngine.classifyComplexity(syntheticForPricing);
+  const complexity = destinationVisibility === 'public'
+    ? pricingEngine.classifyComplexity(syntheticForPricing)
+    : null;
   let pricingMeta;
-  if (unlock_price !== undefined) {
+  if (destinationVisibility === 'private') {
+    pricingMeta = null;
+  } else if (unlock_price !== undefined) {
     pricingMeta = {
       base_price: calculatedPrice,
       current_price: Number(unlock_price),
@@ -6072,9 +6132,12 @@ app.post('/learn', async (c) => {
     tags,
     task_context,
     outcome,
-    unlock_price: resolvedPrice,
-    pricing: pricingMeta,
-    demand: { search_impressions_7d: 0, search_impressions_30d: 0, unlocks_7d: 0, unlocks_30d: 0 },
+    visibility: destinationVisibility,
+    ...(destinationVisibility === 'public' && {
+      unlock_price: resolvedPrice,
+      pricing: pricingMeta,
+      demand: { search_impressions_7d: 0, search_impressions_30d: 0, unlocks_7d: 0, unlocks_30d: 0 },
+    }),
     contributor_wallet: walletLower || null,
     contributor_account_id,  // SPEC-P0.5 / LW-15: acc_... from API key (or JWT session); null only for bare wallet submissions
     contributor_key_label: c.get('keyLabel') || null,  // D2: which key environment contributed
@@ -6092,7 +6155,9 @@ app.post('/learn', async (c) => {
       retractable_until: new Date(Date.now() + EXTRACT_RETRACTION_DAYS * 86400000).toISOString(),
     }),
     quality: { unlocks: 0, ratings: 0, avg_helpfulness: 0, helpfulness_scores: [], score: 0 },
-    earnings: { gross_usd: 0, contributor_share_usd: 0, platform_share_usd: 0 },
+    ...(destinationVisibility === 'public' && {
+      earnings: { gross_usd: 0, contributor_share_usd: 0, platform_share_usd: 0 },
+    }),
     // S21-2 / LW-16: Content moderation status.
     // When CONTENT_MODERATION_ENABLED=true, publishing is SEAMLESS by default —
     // a fully-clean submission is 'approved' immediately. It lands
@@ -6170,15 +6235,20 @@ app.post('/learn', async (c) => {
   const howToReview = learning.status !== 'pending_review'
     ? undefined
     : (learning.contributor_account_id
-      ? 'This submission is held for YOUR review — approve or reject it yourself: run `auxilo review` (CLI), open your dashboard review queue at ' + ((process.env.BASE_URL || 'https://auxilo.io') + '/dashboard') + ', or GET /account/pending with your API key.'
+      ? (destinationVisibility === 'private'
+        ? 'This private-destined submission is held for YOUR review. Keep it private with POST /account/pending/:id/keep-private, reject it, or sanitize it before any public promotion.'
+        : 'This submission is held for YOUR review — approve or reject it yourself: run `auxilo review` (CLI), open your dashboard review queue at ' + ((process.env.BASE_URL || 'https://auxilo.io') + '/dashboard') + ', or GET /account/pending with your API key.')
       : 'This submission is held and bound to your wallet, but no account is attached, so it cannot be reviewed yet. Run `npx auxilo setup` to create an account and API key, then verify and link this SAME wallet (auxilo_verify_wallet + auxilo_link_wallet) — your held submissions are adopted into your review queue automatically (`auxilo review`, dashboard, or GET /account/pending).');
 
   return c.json({
     id: learning.id,
-    message: learning.status === 'pending_review'
+    message: destinationVisibility === 'private'
+      ? 'Private learning submitted for owner review.'
+      : learning.status === 'pending_review'
       ? 'Learning submitted for review. It will be visible after approval.'
       : 'Learning submitted successfully',
     status: learning.status,
+    visibility: destinationVisibility,
     // LW-16: when held, tell the contributor WHY (seamless otherwise).
     ...(learning.status === 'pending_review' && { review_reason: learnReviewReasons }),
     ...(nearDupHold && {
@@ -6268,7 +6338,7 @@ function getAccountTier(account) {
   if (account.extraction_tier === 'verified') return { ...tiers.verified, tier: 'verified' };
   // Default to unverified tier
   const hasBoundWallet = !!(account.wallets && account.wallets.length > 0);
-  const hasPublishedLearning = learnings.some(l => l.contributor_account_id === account.id);
+  const hasPublishedLearning = visibleCatalog().some(l => l.contributor_account_id === account.id);
   if (hasBoundWallet && hasPublishedLearning) return { ...tiers.verified, tier: 'verified' };
   return { ...tiers.unverified, tier: 'unverified' };
 }
@@ -6777,8 +6847,10 @@ app.post('/extract', async (c) => {
       // previously computed here but never compared). Checks exact normalized
       // body hash, then shingle-Jaccard near-dup, including entries already
       // accepted earlier in this same batch (intra-batch dups).
+      // G1_RAW_READ_ALLOW:12 — feature-gated extraction comparison is scoped below.
       const dedupPool = learnings.concat(pendingCatalogEntries);
-      const exactDup = dedupPool.find(existing => {
+      const scopedDedupPool = comparisonCatalog(dedupPool, accountId);
+      const exactDup = scopedDedupPool.find(existing => {
         const existingHash = existing.body_hash ||
           crypto.createHash('sha256').update((existing.body || '').toLowerCase().replace(/\s+/g, ' ').trim()).digest('hex');
         return existingHash === bodyHash;
@@ -6792,6 +6864,7 @@ app.post('/extract', async (c) => {
       const extractNearDup = findNearDuplicate(
         { title: candidate.title, body: candidate.body, category: candidate.category },
         dedupPool,
+        { contributorAccountId: accountId },
       );
       const extractNearDupHold = nearDuplicateHold(extractNearDup);
 
@@ -7063,12 +7136,36 @@ app.delete('/learn/:id', async (c) => {
   try {
 
   // Find the learning
+  // G1_RAW_READ_ALLOW:13 — authenticated owner mutation; ownership follows lookup.
   const learning = learnings.find(l => l.id === learningId);
   if (!learning) return c.json({ error: 'Learning not found' }, 404);
 
   // Verify ownership
   if (learning.contributor_account_id !== accountId) {
     return c.json({ error: 'Not authorized to retract this learning' }, 403);
+  }
+
+  // SPEC3-G1: an owner can move an approved-private item to recoverable trash.
+  // It was never published, so the public retraction window/audit does not
+  // apply and no clean-lane statistic is touched.
+  if (reason === 'retract' && learning.status === 'approved' && learning.visibility === 'private') {
+    const now = new Date().toISOString();
+    learning.status = 'rejected';
+    learning.self_review_action = {
+      action: 'self_reject',
+      reason: 'private-retract',
+      by: accountId,
+      at: now,
+    };
+    learning.updated_at = now;
+    safeWrite(LEARNINGS_FILE, learnings);
+    return c.json({
+      retracted: true,
+      id: learningId,
+      status: 'rejected',
+      visibility: 'private',
+      recoverable: true,
+    });
   }
 
   if (reason === 'retract') {
@@ -7514,6 +7611,7 @@ app.get('/account/learnings', requireSessionOrApiKey('read'), (c) => {
   const allowedStatuses = new Set(['approved', 'rejected', 'pending_review']);
   const url = new URL(c.req.url, 'http://localhost');
   const rawStatus = url.searchParams.get('status');
+  const rawVisibility = url.searchParams.get('visibility');
   const statuses = rawStatus === null
     ? [...allowedStatuses]
     : [...new Set(rawStatus.split(',').map((value) => value.trim()).filter(Boolean))];
@@ -7523,6 +7621,9 @@ app.get('/account/learnings', requireSessionOrApiKey('read'), (c) => {
       error: 'status must be a comma-list containing only approved,rejected,pending_review',
     }, 400);
   }
+  if (rawVisibility !== null && rawVisibility !== 'public' && rawVisibility !== 'private') {
+    return c.json({ error: 'visibility must be one of: public,private' }, 400);
+  }
 
   let limit = parseInt(url.searchParams.get('limit') || '200', 10);
   let offset = parseInt(url.searchParams.get('offset') || '0', 10);
@@ -7531,11 +7632,14 @@ app.get('/account/learnings', requireSessionOrApiKey('read'), (c) => {
   if (!Number.isFinite(offset) || offset < 0) offset = 0;
 
   const statusSet = new Set(statuses);
+  // G1_RAW_READ_ALLOW:14 — authenticated listing filters account ownership first.
   const own = learnings
     .filter((learning) => {
       if (!learning || learning.contributor_account_id !== accountId) return false;
       const status = learning.status || 'approved';
-      return statusSet.has(status);
+      const learningVisibility = learning.visibility === 'private' ? 'private' : 'public';
+      return statusSet.has(status) &&
+        (rawVisibility === null || learningVisibility === rawVisibility);
     })
     .map((learning) => ({
       id: learning.id,
@@ -7543,6 +7647,7 @@ app.get('/account/learnings', requireSessionOrApiKey('read'), (c) => {
       category: learning.category,
       tags: Array.isArray(learning.tags) ? learning.tags.slice() : [],
       status: learning.status || 'approved',
+      visibility: learning.visibility === 'private' ? 'private' : 'public',
       created_at: learning.created_at || null,
     }));
 
@@ -7733,7 +7838,10 @@ app.post('/knowledge', optionalAuth(), apiKeyRateLimitMiddleware('/knowledge'), 
     return c.json({ error: `query has too many terms (max ${KNOWLEDGE_QUERY_MAX_TOKENS})` }, 400);
   }
 
-  const results = matchLearnings(query, { category, outcome, related_skill })
+  const callerAccountId = c.get('accountId') || null;
+  const results = matchLearnings(query, {
+    category, outcome, related_skill, accountId: callerAccountId,
+  })
     .slice(0, Math.min(limit, 15));
 
   // FIX 2B: Record server-side search attribution for each result shown.
@@ -7742,13 +7850,14 @@ app.post('/knowledge', optionalAuth(), apiKeyRateLimitMiddleware('/knowledge'), 
   // AUD19-15: this is the WRITE side of the discovery-premium cache — the key
   // is the AUTHENTICATED account id, so the unlock-side read must use the
   // POST-auth identity (buyerAccountId) or nothing ever matches.
-  const callerAccountId = c.get('accountId') || null;
   for (const r of results) {
-    recordSearchSource(callerAccountId, r.id);
+    if (r.visibility !== 'private') recordSearchSource(callerAccountId, r.id);
   }
 
   // E2: Search impression tracking — increment counters on source learnings
   for (const r of results) {
+    if (r.visibility === 'private') continue;
+    // G1_RAW_READ_ALLOW:15 — result already passed public/owner-private projection scope.
     const srcLearning = learnings.find(l => l.id === r.id);
     if (srcLearning) {
       if (!srcLearning.demand) srcLearning.demand = { search_impressions_7d: 0, search_impressions_30d: 0, unlocks_7d: 0, unlocks_30d: 0 };
@@ -7762,6 +7871,27 @@ app.post('/knowledge', optionalAuth(), apiKeyRateLimitMiddleware('/knowledge'), 
     query,
     results_count: results.length,
     results: results.map(r => {
+      if (r.visibility === 'private') {
+        return {
+          id: r.id,
+          title: r.title,
+          snippet: r.snippet,
+          category: r.category,
+          task_context: r.task_context,
+          outcome: r.outcome,
+          tags: r.tags,
+          visibility: 'private',
+          quality: stripOpsCounters(r.quality),
+          relevance: r.relevance,
+          _revenue: {
+            amount_paid_usd: 0,
+            contributor_earned_usd: 0,
+            platform_earned_usd: 0,
+            self_unlock: true,
+            owner_recall_free: true,
+          },
+        };
+      }
       // FB-4: quote the ONE price the unlock route will actually CHARGE. Resolve it with
       // the exact same chain as the unlock handler (pricing.current_price -> engine
       // getCurrentPrice -> unlock_price) so unlock_price_usd, current_price, and the verdict
@@ -7769,7 +7899,7 @@ app.post('/knowledge', optionalAuth(), apiKeyRateLimitMiddleware('/knowledge'), 
       // unlock_price_usd but computeCurrentPrice ($0.05 clamped) for current_price — a 10x
       // understatement of the charge and two contradictory prices in one result.
       const resolvedPrice = r.pricing?.current_price
-        || pricingEngine.getCurrentPrice?.(r, learnings)
+        || pricingEngine.getCurrentPrice?.(r, visibleCatalog())
         || r.unlock_price
         || DEFAULT_UNLOCK_PRICE;
       // Feed the resolved price into the verdict (calculateVerdict keys off
@@ -7855,8 +7985,36 @@ app.get('/knowledge/stats', (c) => {
 
 // Unlock full learning (PAID for buyers — dynamic price set by contributor;
 // FREE for the learning's own contributor, DR-8 owner short-circuit below)
+function resolveProvableOwnerAccountId(c, learning) {
+  let key = c.req.header('X-API-Key');
+  if (!key) {
+    const authHeader = c.req.header('Authorization') || '';
+    if (authHeader.startsWith('Bearer ')) key = authHeader.slice(7);
+  }
+  if (!key) return null;
+  const keyResult = validateApiKey(key);
+  if (!keyResult.valid ||
+      !hasMinScope(keyResult.effective_scope || keyResult.scope, 'read')) {
+    return null;
+  }
+  const contributorAccountId = learning.contributor_account_id || null;
+  const contributorWallet = learning.contributor_wallet
+    ? String(learning.contributor_wallet).toLowerCase() : null;
+  if (contributorAccountId && keyResult.accountId === contributorAccountId) {
+    return keyResult.accountId;
+  }
+  if (!contributorWallet) return null;
+  const account = loadAccounts()[keyResult.accountId] || null;
+  const linkedWallet = account && account.wallet
+    ? String(account.wallet).toLowerCase() : null;
+  return linkedWallet && linkedWallet === contributorWallet
+    ? keyResult.accountId
+    : null;
+}
+
 app.get('/knowledge/:id', async (c) => {
   const id = c.req.param('id');
+  // G1_RAW_READ_ALLOW:16 — raw lookup is followed by private existence hiding.
   const idx = learnings.findIndex(l => l.id === id);
 
   if (idx === -1) return c.json({ error: 'Learning not found', id }, 404);
@@ -7868,11 +8026,45 @@ app.get('/knowledge/:id', async (c) => {
     return c.json({ error: 'Learning not found', id }, 404);
   }
 
+  const dr8OwnerAccountId = resolveProvableOwnerAccountId(c, learning);
+
+  // SPEC3-G1: private recall is existence-hidden and branches before every
+  // price/payment/counter path. The response deliberately omits every economic
+  // field while retaining DR-8's truthful free-owner envelope.
+  if (learning.visibility === 'private' && !dr8OwnerAccountId) {
+    return c.json({ error: 'Learning not found', id }, 404);
+  }
+  if (learning.visibility === 'private') {
+    const {
+      injection_flags: _ifo, possible_duplicate_of: _pdo,
+      possible_duplicate_similarity: _pso, moderation: _modo,
+      near_duplicate_evidence: _ndeo, near_duplicate_why: _ndwo,
+      sensitivity_signals: _sso, sensitivity_source: _ssrco,
+      sensitivity_evidence: _seo, learning_type: _lto,
+      sanitized_from: _sfo, sanitized_to: _sto,
+      unlock_price: _upo, pricing: _pro, demand: _do, earnings: _eo,
+      ...privateLearning
+    } = learning;
+    return c.json({
+      ...privateLearning,
+      visibility: 'private',
+      quality: stripOpsCounters(privateLearning.quality),
+      _revenue: {
+        amount_paid_usd: 0,
+        contributor_earned_usd: 0,
+        platform_earned_usd: 0,
+        self_unlock: true,
+        owner_recall_free: true,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   // E1: Dynamic pricing — prefer new pricing.current_price, then fall through to engine
   let UNLOCK_PRICE = getLockedPrice(learning.id);
   if (UNLOCK_PRICE === null) {
     UNLOCK_PRICE = learning.pricing?.current_price
-      || pricingEngine.getCurrentPrice?.(learning, learnings)
+      || pricingEngine.getCurrentPrice?.(learning, visibleCatalog())
       || learning.unlock_price
       || DEFAULT_UNLOCK_PRICE;
     lockPrice(learning.id, UNLOCK_PRICE);
@@ -7921,34 +8113,6 @@ app.get('/knowledge/:id', async (c) => {
   //   disk-write amplifier (every counter bump costs a full-catalog safeWrite).
   // An invalid key or insufficient scope falls through to dualAuthDynamic,
   // which answers with the canonical 401/403 — one error surface, no drift.
-  let dr8OwnerAccountId = null;
-  {
-    let dr8Key = c.req.header('X-API-Key');
-    if (!dr8Key) {
-      const dr8AuthHeader = c.req.header('Authorization') || '';
-      if (dr8AuthHeader.startsWith('Bearer ')) dr8Key = dr8AuthHeader.slice(7);
-    }
-    if (dr8Key) {
-      const dr8KeyResult = validateApiKey(dr8Key);
-      if (dr8KeyResult.valid && hasMinScope(dr8KeyResult.effective_scope || dr8KeyResult.scope, 'read')) {
-        const dr8ContribAccountId = learning.contributor_account_id || null;
-        const dr8ContribWallet = learning.contributor_wallet
-          ? String(learning.contributor_wallet).toLowerCase() : null;
-        if (dr8ContribAccountId && dr8KeyResult.accountId === dr8ContribAccountId) {
-          dr8OwnerAccountId = dr8KeyResult.accountId;
-        } else if (dr8ContribWallet) {
-          // Authoritative account read (not the cache — a stale miss must not
-          // misprice an owner recall as a paid unlock, mirroring the CP-6 rule).
-          const dr8Account = loadAccounts()[dr8KeyResult.accountId] || null;
-          const dr8LinkedWallet = dr8Account && dr8Account.wallet
-            ? String(dr8Account.wallet).toLowerCase() : null;
-          if (dr8LinkedWallet && dr8LinkedWallet === dr8ContribWallet) {
-            dr8OwnerAccountId = dr8KeyResult.accountId;
-          }
-        }
-      }
-    }
-  }
   if (dr8OwnerAccountId) {
     const {
       injection_flags: _ifo, possible_duplicate_of: _pdo,
@@ -8611,7 +8775,7 @@ const RATING_NOTES_MAX = 1000; // D-6: max chars stored per rating note
 
 app.post('/knowledge/:id/rate', requireSessionOrApiKey('read'), async (c) => {
   const id = c.req.param('id');
-  const idx = learnings.findIndex(l => l.id === id);
+  const idx = visibleCatalog().findIndex(l => l.id === id);
 
   if (idx === -1) return c.json({ error: 'Learning not found', id }, 404);
 
@@ -8666,7 +8830,8 @@ app.post('/knowledge/:id/rate', requireSessionOrApiKey('read'), async (c) => {
   let learning;
   let replacedScore = null;
   try {
-    learning = learnings[idx];
+    learning = visibleCatalog().find((l) => l.id === id);
+    if (!learning) return c.json({ error: 'Learning not found', id }, 404);
     const q = learning.quality;
 
     // CH-6 (2026-07-19): per-account REPLACE semantics. Rating events could
@@ -9081,7 +9246,7 @@ rateLimitCleanupInterval.unref(); // Don't prevent process exit
 async function runDailyPricingCron() {
   const releaseLearningsLock = await acquireLearningsLock();
   try {
-    const catalog = learnings.slice(); // snapshot to avoid mutation during iteration
+    const catalog = visibleCatalog().slice(); // public-only snapshot; private has no economics
     let repriced = 0;
 
     for (const learning of catalog) {
@@ -9682,6 +9847,7 @@ app.post('/admin/stage-key', adminAuth('admin'), async (c) => {
 
 // GET /admin/moderation/queue — returns learnings with status 'pending_review'
 app.get('/admin/moderation/queue', adminAuth('read'), (c) => {
+  // G1_RAW_READ_ALLOW:19 — privileged operator queue intentionally sees pending.
   const pending = learnings
     .filter(l => l.status === 'pending_review')
     .map(l => ({
@@ -9726,6 +9892,7 @@ app.post('/admin/moderation/:id/approve', adminAuth('admin'), async (c) => {
   // Wave 2b (RUNBOOK §9): catalog write lock around decision + mutation.
   const releaseLearningsLock = await acquireLearningsLock();
   try {
+    // G1_RAW_READ_ALLOW:20 — privileged admin decision needs the full store.
     const idx = learnings.findIndex(l => l.id === id);
 
     if (idx === -1) return c.json({ error: 'Learning not found', id }, 404);
@@ -9734,10 +9901,17 @@ app.post('/admin/moderation/:id/approve', adminAuth('admin'), async (c) => {
     if (learning.status === 'approved') {
       return c.json({ error: 'Learning is already approved', id }, 400);
     }
+    if (learning.visibility === 'private') {
+      return c.json({
+        error: 'A private-destined learning cannot be published by approval. Keep it private, or promote it through sanitize.',
+        code: 'PRIVATE_REQUIRES_SANITIZE',
+        id,
+      }, 409);
+    }
 
     // CI-5: a retired-label learning can never be (re-)published — recategorize
     // (box-edit + CI5_RECATEGORIZE_MAP entry) or reject instead.
-    if (RETIRED_LEARNING_CATEGORIES.includes(learning.category)) {
+    if (!TECH_LEARNING_CATEGORIES.includes(learning.category)) {
       return c.json({
         error: `Category '${learning.category}' is retired — technical learnings only. Recategorize to one of: ${VALID_CATEGORIES.join(', ')}, or reject.`,
         code: 'CATEGORY_OUT_OF_SCOPE',
@@ -9746,6 +9920,7 @@ app.post('/admin/moderation/:id/approve', adminAuth('admin'), async (c) => {
     }
 
     learning.status = 'approved';
+    learning.visibility = 'public';
     learning.moderation = 'manual'; // LW-13: audit trail — human-approved
     learning.moderation_action = {
       action: 'approved',
@@ -9764,6 +9939,7 @@ app.post('/admin/moderation/:id/approve', adminAuth('admin'), async (c) => {
 // POST /admin/moderation/:id/reject — reject a pending learning with a reason
 app.post('/admin/moderation/:id/reject', adminAuth('admin'), async (c) => {
   const id = c.req.param('id');
+  // G1_RAW_READ_ALLOW:21 — privileged admin rejection needs the full store.
   const idx = learnings.findIndex(l => l.id === id);
 
   if (idx === -1) return c.json({ error: 'Learning not found', id }, 404);
@@ -9842,6 +10018,7 @@ async function adoptOrphansForAccount(accountId) {
   // Wave 2b (RUNBOOK §9): catalog write lock — adoption mutates learnings.
   const releaseLearningsLock = await acquireLearningsLock();
   try {
+    // G1_RAW_READ_ALLOW:22 — verified linked-wallet adoption is account-scoped.
     const adoptedIds = adoptWalletOrphans(learnings, accountId, walletLower);
     if (adoptedIds.length > 0) {
       safeWrite(LEARNINGS_FILE, learnings);
@@ -9870,6 +10047,7 @@ app.get('/account/pending', async (c) => {
   if (limit > 200) limit = 200;
   if (!Number.isFinite(offset) || offset < 0) offset = 0;
 
+  // G1_RAW_READ_ALLOW:23 — pure helper enforces contributor ownership.
   const own = listOwnPending(learnings, accountId);
   const page = own.slice(offset, offset + limit);
 
@@ -9893,12 +10071,39 @@ app.post('/account/pending/:id/approve', async (c) => {
   // Wave 2b (RUNBOOK §9): catalog write lock around decision + persist.
   const releaseLearningsLock = await acquireLearningsLock();
   try {
+    // G1_RAW_READ_ALLOW:24 — decision core checks ownership before status.
     const result = applySelfDecision(learnings, accountId, id, 'approve');
     if (!result.ok) return c.json({ error: result.error, id }, result.status);
 
     safeWrite(LEARNINGS_FILE, learnings);
     console.log(`[LW-15] [AUDIT] self_approve account=${accountId} learning=${id}`);
     return c.json({ approved: true, id, title: result.learning.title, status: result.learning.status });
+  } finally {
+    releaseLearningsLock();
+  }
+});
+
+// POST /account/pending/:id/keep-private — caller keeps their OWN pending
+// learning recoverably, without publishing or retaining marketplace economics.
+app.post('/account/pending/:id/keep-private', async (c) => {
+  const auth = await resolveSelfReviewAccount(c, 'contribute');
+  if (!auth.accountId) return c.json({ error: auth.error }, auth.status);
+  const accountId = auth.accountId;
+  const id = c.req.param('id');
+
+  const releaseLearningsLock = await acquireLearningsLock();
+  try {
+    const result = applySelfDecision(learnings, accountId, id, 'keep_private');
+    if (!result.ok) return c.json({ error: result.error, id }, result.status);
+    safeWrite(LEARNINGS_FILE, learnings);
+    console.log(`[LW-15] [AUDIT] self_keep_private account=${accountId} learning=${id}`);
+    return c.json({
+      kept_private: true,
+      id,
+      title: result.learning.title,
+      status: result.learning.status,
+      visibility: result.learning.visibility,
+    });
   } finally {
     releaseLearningsLock();
   }
@@ -9922,6 +10127,7 @@ app.post('/account/pending/:id/reject', async (c) => {
   // Wave 2b (RUNBOOK §9): catalog write lock around decision + persist.
   const releaseLearningsLock = await acquireLearningsLock();
   try {
+    // G1_RAW_READ_ALLOW:25 — decision core checks ownership before status.
     const result = applySelfDecision(learnings, accountId, id, 'reject', { reason });
     if (!result.ok) return c.json({ error: result.error, id }, result.status);
 
@@ -9998,11 +10204,12 @@ app.get('/account/pending/summary', async (c) => {
   // receives both corpus and static terms as arguments; nothing is persisted.
   opts.accountVocab = ACCOUNT_VOCAB_REVIEW_OPTS;
 
-  const summary = summarizeOwnPending(learnings, accountId, opts);
+  // G1_RAW_READ_ALLOW:26 — comparison corpus is public plus caller non-public.
+  const summary = summarizeOwnPending(comparisonCatalog(learnings, accountId), accountId, opts);
   return c.json({ account_id: accountId, ...summary });
 });
 
-// POST /account/pending/bulk: apply up to SELF_REVIEW_BULK_MAX approve/reject
+// POST /account/pending/bulk: apply approve/reject/keep_private decisions
 // decisions in one call. Body: { decisions: [{id, decision, reason?}],
 // confirm_count: <decisions.length> }. Contribute scope (mutation), idempotent
 // per id, per-id results; ONE safeWrite after the batch. Validation and
@@ -10023,6 +10230,7 @@ app.post('/account/pending/bulk', async (c) => {
   let outcome;
   const releaseLearningsLock = await acquireLearningsLock();
   try {
+    // G1_RAW_READ_ALLOW:27 — bulk core owns the per-item ownership gate.
     outcome = applyBulkDecisions(learnings, accountId, decisions, { confirmCount });
     if (!outcome.ok) {
       return c.json({ error: outcome.error, code: outcome.code }, outcome.status);
@@ -10039,7 +10247,7 @@ app.post('/account/pending/bulk', async (c) => {
   } finally {
     releaseLearningsLock();
   }
-  console.log(`[REVIEW-BULK] [AUDIT] bulk_summary account=${accountId} submitted=${outcome.counts.processed} approved=${outcome.counts.approved} rejected=${outcome.counts.rejected} idempotent=${outcome.counts.idempotent} failed=${outcome.counts.failed}`);
+  console.log(`[REVIEW-BULK] [AUDIT] bulk_summary account=${accountId} submitted=${outcome.counts.processed} approved=${outcome.counts.approved} kept_private=${outcome.counts.kept_private} rejected=${outcome.counts.rejected} idempotent=${outcome.counts.idempotent} failed=${outcome.counts.failed}`);
 
   return c.json({
     bulk_max: SELF_REVIEW_BULK_MAX,
@@ -10089,7 +10297,8 @@ app.post('/account/pending/reject-by-signal', async (c) => {
   let totals;
   const releaseLearningsLock = await acquireLearningsLock();
   try {
-    const ids = selectPendingIdsBySignal(learnings, accountId, signal, {
+    // G1_RAW_READ_ALLOW:28 — selector corpus excludes other-account non-public.
+    const ids = selectPendingIdsBySignal(comparisonCatalog(learnings, accountId), accountId, signal, {
       accountVocab: ACCOUNT_VOCAB_REVIEW_OPTS,
     });
     // Counted gate: live selection must equal what the operator confirmed.
@@ -10160,6 +10369,7 @@ app.post('/account/pending/:id/sanitize', async (c) => {
   const newTitle = body && typeof body.title === 'string' ? body.title : undefined;
   const newBody = body && typeof body.body === 'string' ? body.body : undefined;
   const newTags = body && Array.isArray(body.tags) ? body.tags : undefined;
+  const requestedCategory = body && typeof body.category === 'string' ? body.category : undefined;
   if (newTitle === undefined && newBody === undefined) {
     return c.json({ error: 'At least one of title or body is required (the corrected content)' }, 400);
   }
@@ -10175,14 +10385,19 @@ app.post('/account/pending/:id/sanitize', async (c) => {
   // every catalog writer into a write outage. Same posture as /learn, whose
   // screens also run pre-lock. Phase 2 re-acquires, re-validates the mutable
   // guards synchronously, and mutates + persists in one write.
+  // G1_RAW_READ_ALLOW:29 — sanitize checks ownership before source status.
   const original = learnings.find((l) => l && l.id === id);
   if (!original) return c.json({ error: 'Learning not found', id }, 404);
   // Ownership BEFORE status (M-6): a non-owned id never leaks state.
   if (original.contributor_account_id !== accountId) {
     return c.json({ error: 'Not authorized to sanitize this learning', id }, 403);
   }
-  if (original.status !== 'pending_review' && original.status !== 'rejected') {
-    return c.json({ error: `Only pending or rejected learnings can be sanitized (status: ${original.status})`, id }, 409);
+  const privateSource = original.status === 'approved' && original.visibility === 'private';
+  if (original.status !== 'pending_review' && original.status !== 'rejected' && !privateSource) {
+    return c.json({ error: `Only pending, rejected, or approved-private learnings can be sanitized (status: ${original.status})`, id }, 409);
+  }
+  if (!privateSource && requestedCategory !== undefined) {
+    return c.json({ error: 'category may be replaced only when promoting an approved-private learning' }, 400);
   }
   // Gate-A F1: ADMIN finality is contributor-irreversible. An admin reject
   // stamps moderation_action.action='rejected'; without this guard the
@@ -10220,10 +10435,13 @@ app.post('/account/pending/:id/sanitize', async (c) => {
       }, 409);
     }
   }
-  // CI-5: a retired-label item cannot re-enter the catalog via sanitize.
-  if (RETIRED_LEARNING_CATEGORIES.includes(original.category)) {
+  const replacementCategory = privateSource && requestedCategory !== undefined
+    ? requestedCategory
+    : original.category;
+  // CI-5: sanitize always creates a public-destined replacement.
+  if (!TECH_LEARNING_CATEGORIES.includes(replacementCategory)) {
     return c.json({
-      error: `Category '${original.category}' is retired — Auxilo publishes technical learnings only. Reject this item; resubmit the content fresh under one of: ${TECH_LEARNING_CATEGORIES.join(', ')}.`,
+      error: `Category '${replacementCategory}' is outside CI-5 — Auxilo publishes technical learnings only. Supply one of: ${TECH_LEARNING_CATEGORIES.join(', ')}.`,
       code: 'CATEGORY_OUT_OF_SCOPE', id,
     }, 409);
   }
@@ -10254,7 +10472,10 @@ app.post('/account/pending/:id/sanitize', async (c) => {
   content = sani.sanitized;
 
   // 2. Exact-dup — PREDECESSOR EXCLUDED (it is being retired by this call).
-  const dedupSet = learnings.filter((l) => l && l.id !== original.id);
+  const dedupSet = comparisonCatalog(
+    learnings.filter((l) => l && l.id !== original.id),
+    accountId,
+  );
   const normalizedBody = content.toLowerCase().replace(/\s+/g, ' ').trim();
   const bodyHash = crypto.createHash('sha256').update(normalizedBody).digest('hex');
   const normalizedTitle = title.toLowerCase().replace(/\s+/g, ' ').trim();
@@ -10263,7 +10484,7 @@ app.post('/account/pending/:id/sanitize', async (c) => {
       crypto.createHash('sha256').update(existing.body.toLowerCase().replace(/\s+/g, ' ').trim()).digest('hex');
     if (existingHash === bodyHash) return true;
     const existingTitleNorm = existing.title.toLowerCase().replace(/\s+/g, ' ').trim();
-    return existingTitleNorm === normalizedTitle && existing.category === original.category;
+    return existingTitleNorm === normalizedTitle && existing.category === replacementCategory;
   });
   if (dupOfOther) {
     return c.json({
@@ -10273,7 +10494,11 @@ app.post('/account/pending/:id/sanitize', async (c) => {
   }
 
   // 3. Near-dup — same predecessor exclusion.
-  const nearDup = findNearDuplicate({ title, body: content, category: original.category }, dedupSet);
+  const nearDup = findNearDuplicate(
+    { title, body: content, category: replacementCategory },
+    dedupSet,
+    { contributorAccountId: accountId },
+  );
   const nearDupHold = nearDuplicateHold(nearDup);
 
   // 4. Credentials/PII filter (fail CLOSED like /learn).
@@ -10337,11 +10562,11 @@ app.post('/account/pending/:id/sanitize', async (c) => {
 
   // ── Pricing (auto; a builder override on the original carries over) ────
   const syntheticForPricing = {
-    body: content, outcome: original.outcome, category: original.category,
+    body: content, outcome: original.outcome, category: replacementCategory,
     tags, quality_self_assessment: carriedQA, quality: { score: 0 },
     created_at: new Date().toISOString(),
   };
-  const calculatedPrice = pricingEngine.calculateLearningPrice(syntheticForPricing, learnings);
+  const calculatedPrice = pricingEngine.calculateLearningPrice(syntheticForPricing, visibleCatalog());
   const override = original.pricing && original.pricing.builder_override_price != null
     ? original.pricing.builder_override_price
     : null;
@@ -10353,7 +10578,7 @@ app.post('/account/pending/:id/sanitize', async (c) => {
     snippet: content.substring(0, 120) + (content.length > 120 ? '...' : ''),
     body: content,
     body_hash: bodyHash,
-    category: original.category,
+    category: replacementCategory,
     tags,
     task_context: original.task_context,
     outcome: original.outcome,
@@ -10376,6 +10601,7 @@ app.post('/account/pending/:id/sanitize', async (c) => {
     // SPEC3 B3: lineage, forward direction.
     sanitized_from: original.id,
     status: 'pending_review',
+    visibility: 'public',
     ...(injectionScreen.flagged && { injection_flags: injectionScreen.matches }),
     ...(contentSensitivity.sensitive && {
       sensitivity_signals: contentSensitivity.sensitivity_signals,
@@ -10404,8 +10630,10 @@ app.post('/account/pending/:id/sanitize', async (c) => {
   const releaseLearningsLock = await acquireLearningsLock();
   try {
     const current = learnings.find((l) => l && l.id === id);
+    const currentIsPrivateSource =
+      current && current.status === 'approved' && current.visibility === 'private';
     if (!current || current.contributor_account_id !== accountId ||
-        (current.status !== 'pending_review' && current.status !== 'rejected') ||
+        (current.status !== 'pending_review' && current.status !== 'rejected' && !currentIsPrivateSource) ||
         current.sanitized_to ||
         (current.moderation_action && current.moderation_action.action === 'rejected')) {
       return c.json({
@@ -10416,12 +10644,12 @@ app.post('/account/pending/:id/sanitize', async (c) => {
     // Cheap sync dedup re-check: an exact duplicate could have landed while
     // the LLM screen ran. Hash/title compares only — the near-dup screen's
     // phase-1 snapshot verdict stands (same racing exposure /learn accepts).
-    const dupNow = learnings.find((l) => {
+    const dupNow = comparisonCatalog(learnings, accountId).find((l) => {
       if (!l || l.id === current.id) return false;
       const lHash = l.body_hash ||
         crypto.createHash('sha256').update(l.body.toLowerCase().replace(/\s+/g, ' ').trim()).digest('hex');
       if (lHash === bodyHash) return true;
-      return l.title.toLowerCase().replace(/\s+/g, ' ').trim() === normalizedTitle && l.category === current.category;
+      return l.title.toLowerCase().replace(/\s+/g, ' ').trim() === normalizedTitle && l.category === replacementCategory;
     });
     if (dupNow) {
       return c.json({
@@ -10431,7 +10659,10 @@ app.post('/account/pending/:id/sanitize', async (c) => {
     }
 
     // ── Retire the original + append the replacement, ONE write (atomic) ───
-    if (current.status === 'pending_review') {
+    if (currentIsPrivateSource) {
+      originalDisposition = 'kept_private';
+      current.updated_at = now;
+    } else if (current.status === 'pending_review') {
       const rejected = applySelfDecision(learnings, accountId, current.id, 'reject', {
         reason: 'sanitize-resubmit', now,
       });
@@ -10466,7 +10697,7 @@ app.post('/account/pending/:id/sanitize', async (c) => {
       near_duplicate_why: nearDupHold.near_duplicate_why,
       near_duplicate_evidence: nearDupHold.near_duplicate_evidence,
     }),
-    message: 'Sanitized replacement resubmitted through every screen and held for your explicit approval. The original stays private.',
+    message: 'Sanitized replacement resubmitted through every screen and held for your explicit approval. The original remains recoverable.',
     how_to_review: 'Approve or reject it yourself: run `auxilo review` (CLI), open your dashboard review queue, or GET /account/pending with your API key.',
   });
 });
@@ -10494,7 +10725,7 @@ app.post('/report', async (c) => {
   }
 
   // Validate learning_id exists
-  const idx = learnings.findIndex(l => l.id === learning_id);
+  const idx = visibleCatalog().findIndex(l => l.id === learning_id);
   if (idx === -1) {
     return c.json({ error: 'Learning not found', learning_id }, 404);
   }
@@ -10715,7 +10946,7 @@ function displayPrice(l) {
   let p = getLockedPrice(l.id);
   if (p === null || p === undefined) {
     p = l.pricing?.current_price
-      || pricingEngine.getCurrentPrice?.(l, learnings)
+      || pricingEngine.getCurrentPrice?.(l, visibleCatalog())
       || l.unlock_price
       || DEFAULT_UNLOCK_PRICE;
   }
@@ -11171,7 +11402,9 @@ ${conversation.substring(0, 100000)}`;
     // Step 3: Deduplication against existing catalog
     const deduplicated = qualityPassed.filter(candidate => {
       const candidateTitle = (candidate.title || '').toLowerCase();
+      // G1_RAW_READ_ALLOW:32 — feature-gated pipeline applies shared scope.
       return !learnings.some(existing => {
+        if (!isComparisonEligible(existing, accountId)) return false;
         const existingTitle = (existing.title || '').toLowerCase();
         // Simple title similarity check
         const words1 = candidateTitle.split(/\s+/);
