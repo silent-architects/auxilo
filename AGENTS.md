@@ -1,63 +1,109 @@
 # Auxilo — Agent Rules
 
-## Active build: P2.1a Autonomous Learning Extraction
+Standing rules for any coding agent working in this repo (Codex, Claude Code, or other).
+Per-build instructions arrive as a BUILD-SPEC from the PM; this file holds only the
+standing rules that never change between builds. Where a BUILD-SPEC and this file
+conflict, STOP and return the question — do not pick one.
 
-Your primary task in this workspace is implementing **BUILD-SPEC-P2.1a**. Before doing anything else, read these three files in order and treat them as authoritative:
+## Environment — canonical base, verified every session
 
-1. `specs/ANTIGRAVITY-HANDOFF-P2.1a.md` — your mission, scope boundaries, acceptance criteria, and escalation rules. **Read this first.**
-2. `specs/BUILD-SPEC-P2.1a-AUTONOMOUS-EXTRACTION.md` — the full build spec. Do not deviate from it. If the spec is ambiguous on a point, **STOP and return the question**; do not improvise.
-3. `specs/TEST-P2.1a.md` — 114 test cases. Every one must pass. **T-109 is the gating Tyler-pilot acceptance test.**
+- The canonical repo is `https://github.com/silent-architects/auxilo`; the canonical
+  base for all work is `origin/main`. No other clone, mirror, or local lineage is
+  authoritative.
+- Repo history was reconciled on 2026-07-01. Commits that exist only in checkouts made
+  before that date are NOT canonical, even if the worktree looks clean. A clean
+  `git status` proves nothing about lineage.
+- **Session-start ritual (mandatory, before any edit).** Run all of these and paste the
+  output into the build thread:
 
-## Hard rules — do not violate
+      git fetch origin
+      git log --oneline -1 origin/main
+      git branch -r --contains HEAD    # fresh build: must list origin/main
+      git status
+      npm test
+      bash scripts/check-test-count.sh
 
-- **Never modify `lib/earnings.js`** or the instant-credit line at `server.js:725`. The earnings flow is locked.
-- **Never add a new subprocessor** beyond Anthropic. No Bedrock, Vertex, OpenAI, Gemini, or any other model provider.
-- **Never invent product promises.** Consult `docs/PROMISE-VERIFICATION-REGISTER.md` — every user-facing promise must already exist in canonical sources. If the spec references a promise that isn't in the register, stop and return the question.
-- **Never skip the test suite.** All 114 cases in `specs/TEST-P2.1a.md` must pass. T-109 (Tyler pilot E2E) is the gating acceptance test.
-- **Do not decide architecture.** The spec decides. If a decision is not in the spec, return the question — do not improvise.
-- **Do not modify existing `/learn` validation or OFAC screening** in `server.js`.
+- Fresh build: if `git branch -r --contains HEAD` does not list `origin/main`, your
+  base does not exist on the canonical remote. **STOP.** Do not build, do not push, do
+  not "fix" it by merging or rebasing. Report the exact sha and wait for PM
+  authorization to reset to `origin/main`.
+- Resumed build: `git merge-base HEAD origin/main` must print a sha (shared history),
+  and `git log --oneline origin/main..HEAD` must show only your own build commits. If
+  either fails, STOP and report.
+
+## Branch and push rules
+
+- Branch naming: `codex/<spec-id>` (e.g. `codex/spec3-a3`), created from the freshly
+  fetched base: `git switch -c codex/<spec-id> origin/main`.
+- Never commit to `main`. Never push `main`. Never force-push anything. Direct pushes
+  of `main` are additionally blocked machine-side and repo-side; do not attempt to
+  work around either block.
+- Hand off by pushing ONLY your current `codex/<spec-id>` branch (draft PR to `main`
+  when instructed), and only after the ritual above has proven its base canonical.
+  This repo is PUBLIC — a pushed ref is published. Never push a ref whose lineage you
+  have not verified against `origin/main`.
+- Do not add, remove, or re-point git remotes.
+- The PM merges after Gate-A review. Agents never merge to `main`.
+
+## Repo hygiene — hard rules
+
+- `docs/*` is deliberately untracked (see `.gitignore`). Never `git add` anything under
+  it; never weaken that ignore rule. Read those docs freely; commit them never.
+- **Never run `git stash -u`** (or `--include-untracked`) in this repo. Untracked files
+  here include material that must never enter git objects.
+- CI pins the discovered-test count via `scripts/check-test-count.sh`. Any commit that
+  adds or removes tests must bump the pin **in the same commit**.
+- One build in flight at a time. If you find evidence of another in-flight build (an
+  unexpected branch, a dirty worktree you didn't create), STOP and report.
+
+## Standing product locks
+
+- **Never modify `lib/earnings.js`** or the instant-credit flow unless the BUILD-SPEC
+  names them explicitly. The earnings flow is locked.
+- **No platform-side per-item inference.** Semantic work routes to the client's own
+  LLM; the sole platform-side exception is the safety screen. Never add a new model
+  subprocessor.
+- **Never invent product promises.** Every user-facing promise must already exist in
+  canonical sources (public site copy, ToS/Privacy, README); if you cannot find it,
+  stop and return the question.
+
+## Build discipline
+
+- The BUILD-SPEC decides architecture. If a decision is not in the spec, return the
+  question — do not improvise.
+- If a test cannot pass because of a spec defect (not a code defect), flag it — do not
+  delete or weaken the test.
+- Scope is the spec. No opportunistic refactors, dependency bumps, or drive-by fixes.
 
 ## Source discipline — MANDATORY
 
-Every technical assertion in your plan, commit messages, and delivery report must be backed by a code read. No plausible-sounding inference. No "I implemented X" without a file:line you can point at.
+Every technical assertion in your plan, commit messages, and delivery report must be
+backed by a code read. No plausible-sounding inference.
 
-**Concretely:**
-- Before you claim a test passes, run it by exact filename (`node --test test/p2-1a-<name>.test.js`) and cite the file path and the pass count from that run. Do **not** run `node --test test/*.test.js` and match the aggregate count to the spec — that coincidence is how the last build falsely claimed "114/114 pass" when zero P2.1a test files existed.
-- Before you claim a field is stamped, open the file and cite the line that stamps it.
-- Before you claim an interface conforms to spec §X.Y, re-read spec §X.Y and the interface side-by-side and paste both in the report.
-- Before you claim a route is wired, `grep` for the route string and cite the match.
-- If a claim is uncertain, say so explicitly ("I have not verified this") instead of hedging and moving on.
-
-"I think it works like X" is not allowed as a load-bearing claim. Violating this rule wastes reviewer cycles and breaks trust with the human on the other end.
+- Before claiming a test passes, run it by exact filename and cite the file path and
+  pass count from that run — never match an aggregate count to a spec number.
+- Before claiming a field/route/behavior exists, open the file and cite the line, or
+  grep and cite the match.
+- If a claim is unverified, say "I have not verified this" — do not hedge and move on.
 
 ## Delivery report contract
 
-When you finish, your delivery report MUST be structured as a table with one row per spec item or rework item. Each row has four columns:
+One row per spec item:
 
-| Spec/Rework item | File:line that implements it | Verification step you ran | Result |
+| Spec/Rework item | File:line that implements it | Verification command you ran | Result |
 
-**Rules:**
-- Every row must cite a real file:line. "Implemented in multiple files" is not acceptable — pick the canonical line.
-- Every row's verification step must be a concrete command: `node --test test/p2-1a-foo.test.js`, `grep -n "pattern" file.js`, `curl -X POST /extract ...`, or `read file.js:100-120`. Not "reviewed manually."
-- If a verification step you ran surfaced a failure you then fixed, cite both the failing run and the passing run. Do not silently retry until green.
-- If an item is not implemented, mark it ❌ with a one-sentence reason — do not omit rows to make the report look complete.
-- Test claims must name the exact test file(s), not a glob. "`test/*.test.js`: 114 pass" is rejected. "`test/p2-1a-extract-handler.test.js`: 14 pass" is accepted.
-
-The reviewer that reads your delivery report will spot-check rows at random by opening the cited file:line and re-running the cited verification step. If any spot-check fails, the entire delivery is rejected and a rework round is fired.
-
-## Default model for extraction
-
-The spec (§6.3) defaults to `claude-haiku-4-5` with `claude-sonnet-4-5` as fallback. These are configuration values in `config/model_config.json` — not code constants. Do not hardcode model names.
-
-## Project governance
-
-- Full project rules live in `CLAUDE.md` (project root) and `docs/INDEX.md` (doc map).
-- **Source discipline:** every technical assertion you make must be backed by a code read (Read/Grep) or a doc cite with file:line. No plausible-sounding inference.
-- **Documentation governance:** every new feature must update its domain's source-of-truth doc. The build is not done until the docs are updated. The spec's §11 ("Legal Prose") contains pre-written prose for ToS, Privacy Policy, and RUNBOOK amendments — apply them to the live files as part of your delivery.
-- **Review gates:** after you deliver, the code will go through a four-gate concurrent review (BUILD-1, BUILD-4, GOV-3, GOV-1, plus GOV-2, SPEC-2, SPEC-3 for compliance and UX). Do not wait for those reviews — deliver cleanly and let them run.
+- Every row cites a real file:line and a concrete command (`node --test
+  test/<file>.test.js`, `grep -n "…" file.js`, `curl …`, `read file.js:100-120`).
+  "Reviewed manually" is rejected.
+- If a verification first failed and then passed, cite both runs — do not silently
+  retry until green.
+- Unimplemented items are marked ❌ with a one-sentence reason — never omitted.
+- The reviewer spot-checks rows by re-running them; any failed spot-check rejects the
+  entire delivery.
 
 ## Escalation
 
-- If you hit a **blocking ambiguity**, return a question. Do not improvise.
-- If you hit a **decision the spec didn't anticipate**, return the decision for Tyler to make. Do not make it yourself.
-- If a test in TEST-P2.1a.md cannot pass because of a spec defect (not a code defect), flag it — do not delete or weaken the test.
+- Blocking ambiguity → return the question. A decision the spec didn't anticipate →
+  return it to Tyler. Never improvise on either.
+- Anything touching payments, wallets, keys, published packages, or deployment requires
+  explicit spec instruction; absent that, STOP.
