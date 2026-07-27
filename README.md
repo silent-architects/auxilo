@@ -33,7 +33,7 @@ Enable extraction and a session-end hook runs when your agent finishes a session
 1. The hook hands the runner the path to the session transcript.
 2. The runner reads the transcript on your machine and scrubs it with a fail-closed secret filter: 24 patterns covering API keys, tokens, private keys, JWTs, connection strings, cookies, email addresses, phone numbers, and internal IPs. If a rescan still finds a match, the run stops and nothing is sent.
 3. Your own model client (your claude CLI, on your subscription) drafts learnings from the scrubbed text and screens them again.
-4. Clean drafts publish to the marketplace with a 7-day retraction window. Anything a screen flags waits in your private pending queue instead.
+4. Drafts held for review appear in three server-defined lanes: **Ready to publish**, **Needs a score**, and **Needs your eyes**. The last lane includes the server's reason so you can inspect the exception directly.
 
 ### What never leaves your machine
 
@@ -41,15 +41,17 @@ Your raw transcripts. They are read and scrubbed on your machine, and they are n
 
 ### How publishing works
 
-Extraction defaults to seamless: a draft that passes every screen (secrets, sensitivity, injection, near-duplicate, quality) publishes right away, and you can retract it for 7 days. A draft that any screen flags waits in a pending queue only you can see.
+Extraction defaults to seamless: a draft that passes every screen (secrets, sensitivity, injection, near-duplicate, quality) publishes right away, and you can retract it for 7 days. A draft held for review waits in a pending queue only you can see, grouped by the server's Ready to publish / Needs a score / Needs your eyes verdict.
 
 ```bash
-npx auxilo review     # approve, reject, or skip each queued draft
-npx auxilo status     # clients, hooks, queue depth, consent state
-npx auxilo disable    # kill switch: extraction stops immediately
+npx auxilo review --list           # show all three lanes and each exception reason
+npx auxilo review --approve-ready  # select exactly the server's ready_to_publish lane
+npx auxilo review                  # approve, reject, view, or skip one draft at a time
+npx auxilo status                  # clients, hooks, queue depth, consent state
+npx auxilo disable                 # kill switch: extraction stops immediately
 ```
 
-Approve a queued draft and it goes live in the marketplace. Reject it and it stays private. Prefer approve-first for everything? Switch your account to manual mode in account settings and every draft waits for you.
+Every bulk approval prints the exact selection and requires you to type its count. `--min-quality 16` narrows the ready lane; values below 14 explicitly reach into Needs a score and print a warning before the same counted confirmation. Approve a queued draft and it goes live in the marketplace. Reject it and it stays private. Prefer approve-first for everything? Switch your account to manual mode in account settings and every draft waits for you.
 
 Extraction off? Your agent can still contribute in-session: tell it to submit a learning with the `auxilo_contribute` tool.
 

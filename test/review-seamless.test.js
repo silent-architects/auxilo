@@ -320,32 +320,32 @@ function rowsFromFixture() {
   return selfReview.summarizeOwnPending(fixtureCatalog(), ME).items;
 }
 
-describe('selectForBulkApprove: approve-clean selection', () => {
-  it('clean mode selects only screens-passed items at or above the threshold', () => {
-    const sel = reviewLib.selectForBulkApprove(rowsFromFixture(), { mode: 'clean', minQuality: 14 });
+describe('selectForBulkApprove: approve-ready selection', () => {
+  it('ready mode selects only server-ready items at or above the threshold', () => {
+    const sel = reviewLib.selectForBulkApprove(rowsFromFixture(), { mode: 'ready', minQuality: 14 });
     const ids = sel.selected.map((r) => r.id).sort();
     assert.deepEqual(ids, ['lrn_clean_hi', 'lrn_legacy']);
   });
 
-  it('NEVER selects screen-flagged items in clean mode, regardless of quality', () => {
-    const sel = reviewLib.selectForBulkApprove(rowsFromFixture(), { mode: 'clean', minQuality: 0 });
+  it('NEVER selects screen-flagged items in ready mode, regardless of quality', () => {
+    const sel = reviewLib.selectForBulkApprove(rowsFromFixture(), { mode: 'ready', minQuality: 0 });
     assert.ok(!sel.selected.some((r) => !r.screens_passed), 'flagged items must be excluded');
     assert.ok(sel.excluded_flagged.some((r) => r.id === 'lrn_inj'), 'the q=20 injection-flagged item stays excluded');
   });
 
   it('threshold edges: exact threshold passes, below fails, unscored excluded unless threshold 0', () => {
     const rows = rowsFromFixture();
-    const at15 = reviewLib.selectForBulkApprove(rows, { mode: 'clean', minQuality: 19 });
+    const at15 = reviewLib.selectForBulkApprove(rows, { mode: 'ready', minQuality: 19 });
     assert.deepEqual(at15.selected.map((r) => r.id), ['lrn_clean_hi'], 'quality 19 passes threshold 19');
 
-    const strict = reviewLib.selectForBulkApprove(rows, { mode: 'clean', minQuality: 20 });
+    const strict = reviewLib.selectForBulkApprove(rows, { mode: 'ready', minQuality: 20 });
     assert.equal(strict.selected.length, 0);
 
-    const dflt = reviewLib.selectForBulkApprove(rows, { mode: 'clean' });
+    const dflt = reviewLib.selectForBulkApprove(rows, { mode: 'ready' });
     assert.equal(dflt.min_quality, reviewLib.DEFAULT_QUALITY_THRESHOLD);
     assert.ok(dflt.excluded_unscored.some((r) => r.id === 'lrn_unscored'));
 
-    const zero = reviewLib.selectForBulkApprove(rows, { mode: 'clean', minQuality: 0 });
+    const zero = reviewLib.selectForBulkApprove(rows, { mode: 'ready', minQuality: 0 });
     assert.ok(zero.selected.some((r) => r.id === 'lrn_unscored'), 'threshold 0 explicitly includes unscored');
   });
 
@@ -360,9 +360,9 @@ describe('selectForBulkApprove: approve-clean selection', () => {
     assert.equal(inclusive.excluded_flagged.length, 0);
   });
 
-  it('includeFlagged has NO effect in clean mode', () => {
-    const sel = reviewLib.selectForBulkApprove(rowsFromFixture(), { mode: 'clean', minQuality: 0, includeFlagged: true });
-    assert.ok(!sel.selected.some((r) => !r.screens_passed), 'approve-clean must ignore includeFlagged');
+  it('includeFlagged has NO effect in ready mode', () => {
+    const sel = reviewLib.selectForBulkApprove(rowsFromFixture(), { mode: 'ready', minQuality: 0, includeFlagged: true });
+    assert.ok(!sel.selected.some((r) => !r.screens_passed), 'approve-ready must ignore includeFlagged');
   });
 });
 
@@ -456,9 +456,9 @@ describe('server.js: summary + bulk routes (structural)', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('CLI: counted-confirmation rails (structural)', () => {
-  it('approve-clean and --all both require the typed-count confirmation', () => {
-    const approveClean = sliceAt(CLI_SRC, "if (flags['approve-clean'])", 1600);
-    assert.ok(approveClean.includes('confirmByTypedCount'), '--approve-clean must confirm by typed count');
+  it('approve-ready and --all both require the typed-count confirmation', () => {
+    const approveReady = sliceAt(CLI_SRC, "if (flags['approve-ready'] || flags['approve-clean'])", 2200);
+    assert.ok(approveReady.includes('confirmByTypedCount'), '--approve-ready must confirm by typed count');
     const all = sliceAt(CLI_SRC, 'if (flags.all)', 1400);
     assert.ok(all.includes('confirmByTypedCount'), '--all must confirm by typed count');
   });
@@ -478,7 +478,7 @@ describe('CLI: counted-confirmation rails (structural)', () => {
   it('review shows the summary first: fetchPendingSummary precedes every decision path', () => {
     const fnAt = CLI_SRC.indexOf('async function cmdReview');
     const summaryAt = CLI_SRC.indexOf('fetchPendingSummary', fnAt);
-    const firstMode = CLI_SRC.indexOf("flags['approve-clean']", fnAt);
+    const firstMode = CLI_SRC.indexOf("flags['approve-ready']", fnAt);
     assert.ok(summaryAt > fnAt && summaryAt < firstMode, 'summary fetch must come before mode handling');
     assert.ok(CLI_SRC.indexOf('printSummaryTable(summary)', fnAt) < firstMode, 'summary table must render before mode handling');
   });

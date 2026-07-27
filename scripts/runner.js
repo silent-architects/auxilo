@@ -39,6 +39,7 @@ const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { scanText, SENSITIVITY_FILTER_VERSION } = require('../lib/sensitivity-filter.js');
 const { appendSubmittedLearning } = require('../lib/extraction-index.js');
+const { hasAuxiloSessionEndHook } = require('../lib/hook-status.js');
 const { TranscriptSource } = require('./sources/source.interface.js');
 const { GenericJsonlSource } = require('./sources/generic-jsonl.js');
 
@@ -516,6 +517,7 @@ function sweeperManifest(repoRoot = path.resolve(__dirname, '..')) {
     ['lib/sensitivity-filter.js', 'lib/sensitivity-filter.js', 0o644],
     ['lib/extraction-index.js', 'lib/extraction-index.js', 0o644],
     ['lib/similarity.js', 'lib/similarity.js', 0o644],
+    ['lib/hook-status.js', 'lib/hook-status.js', 0o644],
     ['config/near-duplicate.json', 'config/near-duplicate.json', 0o644],
     // Client-side extraction (2026-07-02) — required by the sweep path since /extract went 410.
     // Missing from this manifest until 2026-07-19: installed sweepers crashed with
@@ -711,10 +713,10 @@ async function printStatus() {
   let hookInstalled = false;
   try {
     const settings = JSON.parse(fs.readFileSync(claudeSettingsPath, 'utf-8'));
-    hookInstalled = Array.isArray(settings.hooks?.SessionEnd) &&
-      settings.hooks.SessionEnd.some(h => h.includes('auxilo-extract'));
+    hookInstalled = hasAuxiloSessionEndHook(settings.hooks?.SessionEnd);
   } catch { /* no settings file */ }
   console.log(`Hook installed: ${hookInstalled ? 'yes' : 'no'}`);
+  console.log(`Settings inspected: ${claudeSettingsPath}`);
 
   // 5. Last sweep ran at
   console.log(`Last sweep: ${ledger.lastSweep || 'never'}`);
