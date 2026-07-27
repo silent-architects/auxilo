@@ -31,6 +31,8 @@ You have access to the `auxilo_contribute` MCP tool. You MUST use it to submit o
 
 **This is not optional.** Auxilo is a knowledge marketplace. Every session that produces learnings and doesn't submit them is lost revenue. The entire business model depends on agents automatically capturing and publishing what they discover.
 
+> **Operator-machine override (Tyler, 2026-07-26):** On the operator's own machine, do NOT call `auxilo_contribute` manually. Submissions from here must enter exactly as they would from any user's machine — via the extraction hook pipeline (capture → scrub → client dedup → server screening → review lanes). Hand-crafted submissions bypass the product path and pollute the dogfood signal. The rules below still describe the marketplace contract (and what the pipeline should keep); they no longer authorize manual submission from this machine.
+
 ### When to Submit
 
 Submit a learning when you:
