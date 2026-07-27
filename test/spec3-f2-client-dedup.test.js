@@ -223,10 +223,11 @@ describe('SPEC3-F2 prompt memory', () => {
       section: '',
       estimated_tokens: 0,
       included_count: 0,
+      included_rows: [],
       category_hints: [],
     });
     const prompt = extractLocal.buildExtractionPrompt({ previousLessonsSection: '' });
-    assert.doesNotMatch(prompt, /PREVIOUSLY CAPTURED LESSONS/);
+    assert.doesNotMatch(prompt, /The following lessons were already submitted/);
   });
 });
 
@@ -339,11 +340,183 @@ describe('SPEC3-F2 shared-detector post-filter and fail-open extraction', () => 
         },
       });
       assert.deepEqual(result.learnings, []);
-      assert.doesNotMatch(capturedPrompt, /PREVIOUSLY CAPTURED LESSONS/);
+      assert.doesNotMatch(capturedPrompt, /The following lessons were already submitted/);
       assert.ok(logs.some((line) => line.includes('extracting without memory')));
     } finally {
       tmp.cleanup();
     }
+  });
+});
+
+describe('SPEC3-F2 candidate-anchored judge and local drop audit', () => {
+  function priorRows() {
+    return Array.from({ length: 12 }, (_, index) => ({
+      title: index === 11
+        ? 'Node streamed fetch retries need a new request body'
+        : `Unrelated prior operational lesson ${index}`,
+      body: index === 11
+        ? 'A streamed request body is consumed after the first attempt, so every retry must construct a fresh body before sending again.'
+        : `Operational fixture ${index} describes a distinct database or monitoring behavior that does not concern HTTP request retries.`,
+      category: index === 11 ? 'web-interaction' : 'monitoring',
+      tags: ['fixture'],
+      learning_id: `lrn_rank_${index}`,
+      submitted_at: `2026-07-${String(index + 1).padStart(2, '0')}T00:00:00.000Z`,
+    }));
+  }
+
+  it('ranks a candidate against every index row with shared F1 scores and returns deterministic top-10', () => {
+    const rows = priorRows();
+    const first = indexLib.rankIndexRowsForCandidate(learning(), rows);
+    const second = indexLib.rankIndexRowsForCandidate(learning(), rows);
+    assert.equal(first.length, 10);
+    assert.equal(first[0].id, 'lrn_rank_11');
+    assert.ok(first[0].similarity > first[1].similarity);
+    assert.deepEqual(second, first);
+    assert.ok(first.every((row) => Number.isFinite(row.similarity)));
+  });
+
+  it('uses one batched judge call, drops only yes decisions, records the matched local row, and reports usage', async () => {
+    const candidates = [
+      learning(),
+      learning({
+        title: 'SQLite write locks require bounded busy retries',
+        body: 'When concurrent SQLite writers collide, set a bounded busy timeout and retry the transaction instead of immediately surfacing the lock error.',
+        category: 'storage-state',
+      }),
+    ];
+    const rows = priorRows();
+    const logs = [];
+    let calls = 0;
+    const result = await extractLocal.runAnchoredJudge(
+      candidates,
+      { usable: true, rows },
+      {
+        log: (line) => logs.push(line),
+        invokeJudge: async (_prompt, context) => {
+          calls += 1;
+          return {
+            ok: true,
+            out: JSON.stringify({
+              decisions: [
+                {
+                  candidate_index: 0,
+                  duplicate: true,
+                  matched_index_id: context.rankings[0][0].id,
+                },
+                { candidate_index: 1, duplicate: false },
+              ],
+            }),
+            usage: { input_tokens: 321, output_tokens: 17 },
+          };
+        },
+      }
+    );
+    assert.equal(calls, 1);
+    assert.deepEqual(result.kept, [candidates[1]]);
+    assert.equal(result.dropped.length, 1);
+    assert.equal(result.dropped[0].audit.drop_stage, 'anchored_judge');
+    assert.equal(result.dropped[0].audit.matched_index_id, 'lrn_rank_11');
+    assert.equal(result.prompt_tokens, 321);
+    assert.equal(result.completion_tokens, 17);
+    assert.ok(logs.some((line) =>
+      line.includes('[dedup-drop]') &&
+      line.includes('"drop_stage":"anchored_judge"') &&
+      line.includes('"matched_index_id":"lrn_rank_11"')
+    ));
+  });
+
+  it('fails open and logs loudly when the judge errors or returns malformed decisions', async () => {
+    const candidate = learning();
+    const indexState = { usable: true, rows: priorRows() };
+    for (const invokeJudge of [
+      async () => { throw new Error('offline'); },
+      async () => ({ ok: false, reason: 'unavailable' }),
+      async () => ({ ok: true, out: '{"decisions":[]}', usage: {} }),
+    ]) {
+      const logs = [];
+      const result = await extractLocal.runAnchoredJudge([candidate], indexState, {
+        invokeJudge,
+        log: (line) => logs.push(line),
+      });
+      assert.deepEqual(result.kept, [candidate]);
+      assert.equal(result.dropped.length, 0);
+      assert.ok(logs.some((line) => /anchored judge (unavailable|malformed)/.test(line)));
+    }
+  });
+
+  it('logs prompt-memory and lexical drops before removing them', async () => {
+    const tmp = tempIndex();
+    const logs = [];
+    const candidate = learning();
+    try {
+      indexLib.appendSubmittedLearning(
+        candidate,
+        { id: 'lrn_prompt_match', status: 'approved' },
+        { indexPath: tmp.file, now: '2026-07-26T10:00:00.000Z' }
+      );
+      const promptDrop = await extractLocal.extractLocally(
+        'A Node fetch retry consumed a streamed request body.',
+        'claude-code',
+        {
+          indexPath: tmp.file,
+          log: (line) => logs.push(line),
+          invokeModel: async (_transcript, { prompt }) => {
+            assert.match(prompt, /\[id:lrn_prompt_match /);
+            return modelJson({
+              learnings: [],
+              dedup_drops: [{
+                candidate,
+                matched_index_id: 'lrn_prompt_match',
+                matched_title: candidate.title,
+              }],
+            });
+          },
+        }
+      );
+      assert.equal(promptDrop.learnings.length, 0);
+      assert.equal(promptDrop.drop_audit[0].drop_stage, 'prompt_memory');
+
+      const lexicalDrop = await extractLocal.extractLocally(
+        'A second retry transcript.',
+        'claude-code',
+        {
+          indexPath: tmp.file,
+          log: (line) => logs.push(line),
+          invokeModel: async () => modelJson([candidate]),
+        }
+      );
+      assert.equal(lexicalDrop.learnings.length, 0);
+      assert.equal(lexicalDrop.drop_audit[0].drop_stage, 'lexical_filter');
+      assert.ok(logs.some((line) => line.includes('"drop_stage":"prompt_memory"')));
+      assert.ok(logs.some((line) => line.includes('"drop_stage":"lexical_filter"')));
+    } finally {
+      tmp.cleanup();
+    }
+  });
+
+  it('keeps a judge-marked duplicate when its required local audit write fails', async () => {
+    const candidate = learning();
+    const result = await extractLocal.runAnchoredJudge(
+      [candidate],
+      { usable: true, rows: priorRows() },
+      {
+        auditLog: () => { throw new Error('disk full'); },
+        log: () => {},
+        invokeJudge: async (_prompt, context) => ({
+          ok: true,
+          out: JSON.stringify({
+            decisions: [{
+              candidate_index: 0,
+              duplicate: true,
+              matched_index_id: context.rankings[0][0].id,
+            }],
+          }),
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+      }
+    );
+    assert.deepEqual(result.kept, [candidate]);
+    assert.equal(result.dropped.length, 0);
   });
 });
 
@@ -404,7 +577,11 @@ describe('SPEC3-F2 submission and packaging invariants', () => {
     const killSwitch = runnerSource.indexOf('fs.existsSync(KILL_SWITCH_PATH)', mainStart);
     const extraction = runnerSource.indexOf('postExtract(', mainStart);
     assert.ok(killSwitch > mainStart && killSwitch < extraction);
+    assert.match(runnerSource, /auditLog:\s*auditDropLog/);
+    assert.match(runnerSource, /function auditDropLog[\s\S]*?fs\.appendFileSync\(LOG_PATH/);
     assert.match(installerSource, /function detectClients/);
-    assert.doesNotMatch(installerSource, /extraction-index/);
+    const detectStart = installerSource.indexOf('function detectClients');
+    const detectEnd = installerSource.indexOf('\nfunction ', detectStart + 1);
+    assert.doesNotMatch(installerSource.slice(detectStart, detectEnd), /extraction-index/);
   });
 });

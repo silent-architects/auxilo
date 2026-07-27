@@ -35,52 +35,83 @@ describe('SPEC3-F2 offline extraction replay harness', () => {
 
   it('runs without any server call and measures prompt plus post-filter outcomes', async () => {
     const resolved = resolvedFixture();
-    const extractImpl = async (transcript) => {
+    const extractImpl = async (transcript, _sourceType, opts) => {
       if (transcript.includes('must-drop replay')) {
+        const drop_audit = resolved.mustDrop.map((item) => ({
+          title: item.replay.title,
+          drop_stage: 'anchored_judge',
+          matched_index_title: item.index.title,
+          matched_index_id: item.index.id,
+        }));
+        for (const entry of drop_audit) {
+          opts.log(`[dedup-drop] ${JSON.stringify(entry)}`);
+        }
         return {
           learnings: [],
-          dedup_dropped: 2,
+          dedup_dropped: 5,
+          drop_audit,
           prompt_memory_tokens: 600,
           prompt_memory_rows: 5,
+          judge_calls: 1,
+          judge_prompt_tokens: 700,
+          judge_completion_tokens: 30,
         };
       }
       return {
         learnings: resolved.mustKeep,
         dedup_dropped: 0,
+        drop_audit: [],
         prompt_memory_tokens: 600,
         prompt_memory_rows: 5,
+        judge_calls: 1,
+        judge_prompt_tokens: 300,
+        judge_completion_tokens: 20,
       };
     };
     const result = await dryrun.runReplay(resolved, 1, { extractImpl });
     assert.equal(result.must_drop_dropped, 5);
     assert.equal(result.must_drop_rate, 1);
-    assert.equal(result.post_filter_dropped, 2);
+    assert.equal(result.drops_by_stage.anchored_judge, 5);
+    assert.equal(result.post_filter_dropped, 0);
     assert.equal(result.must_keep_retained, 3);
     assert.equal(result.must_keep_dropped, 0);
+    assert.equal(result.drop_log_complete, true);
+    assert.deepEqual(result.must_drop_unaccounted_ids, []);
+    assert.equal(result.judge_calls, 2);
+    assert.equal(result.judge_prompt_tokens, 1000);
+    assert.equal(result.judge_completion_tokens, 50);
   });
 
   it('evaluates the acceptance gate against the worst of all replay runs', () => {
     const pass = dryrun.gateVerdict([
-      { must_drop_rate: 1, must_keep_dropped: 0 },
-      { must_drop_rate: 0.9, must_keep_dropped: 0 },
-      { must_drop_rate: 1, must_keep_dropped: 0 },
+      { must_drop_rate: 1, must_keep_dropped: 0, drop_log_complete: true, must_drop_unaccounted_ids: [] },
+      { must_drop_rate: 0.9, must_keep_dropped: 0, drop_log_complete: true, must_drop_unaccounted_ids: [] },
+      { must_drop_rate: 1, must_keep_dropped: 0, drop_log_complete: true, must_drop_unaccounted_ids: [] },
     ]);
     assert.equal(pass.pass, true);
     assert.equal(pass.worst_must_drop_rate, 0.9);
 
     const dropFailure = dryrun.gateVerdict([
-      { must_drop_rate: 1, must_keep_dropped: 0 },
-      { must_drop_rate: 0.8, must_keep_dropped: 0 },
-      { must_drop_rate: 1, must_keep_dropped: 0 },
+      { must_drop_rate: 1, must_keep_dropped: 0, drop_log_complete: true, must_drop_unaccounted_ids: [] },
+      { must_drop_rate: 0.8, must_keep_dropped: 0, drop_log_complete: true, must_drop_unaccounted_ids: [] },
+      { must_drop_rate: 1, must_keep_dropped: 0, drop_log_complete: true, must_drop_unaccounted_ids: [] },
     ]);
     assert.equal(dropFailure.pass, false);
 
     const keepFailure = dryrun.gateVerdict([
-      { must_drop_rate: 1, must_keep_dropped: 0 },
-      { must_drop_rate: 1, must_keep_dropped: 1 },
-      { must_drop_rate: 1, must_keep_dropped: 0 },
+      { must_drop_rate: 1, must_keep_dropped: 0, drop_log_complete: true, must_drop_unaccounted_ids: [] },
+      { must_drop_rate: 1, must_keep_dropped: 1, drop_log_complete: true, must_drop_unaccounted_ids: [] },
+      { must_drop_rate: 1, must_keep_dropped: 0, drop_log_complete: true, must_drop_unaccounted_ids: [] },
     ]);
     assert.equal(keepFailure.pass, false);
+
+    const auditFailure = dryrun.gateVerdict([
+      { must_drop_rate: 1, must_keep_dropped: 0, drop_log_complete: true, must_drop_unaccounted_ids: [] },
+      { must_drop_rate: 1, must_keep_dropped: 0, drop_log_complete: false, must_drop_unaccounted_ids: ['lrn_missing'] },
+      { must_drop_rate: 1, must_keep_dropped: 0, drop_log_complete: true, must_drop_unaccounted_ids: [] },
+    ]);
+    assert.equal(auditFailure.pass, false);
+    assert.equal(auditFailure.drop_log_complete, false);
   });
 
   it('reports capped token estimates for index sizes 10, 100, and 1000', () => {

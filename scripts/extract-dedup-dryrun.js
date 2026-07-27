@@ -16,6 +16,7 @@ const {
   appendSubmittedLearning,
   buildPromptMemory,
   PROMPT_MEMORY_MAX_TOKENS,
+  rankIndexRowsForCandidate,
 } = require('../lib/extraction-index.js');
 const { findNearDuplicate } = require('../lib/similarity.js');
 const { extractLocally } = require('./extract-local.js');
@@ -89,6 +90,76 @@ function expectedKeepsFound(expected, emitted) {
   return matched;
 }
 
+function parsedDropLogEntries(logs) {
+  const entries = [];
+  for (const raw of Array.isArray(logs) ? logs : []) {
+    const line = String(raw);
+    const marker = line.indexOf('[dedup-drop] ');
+    if (marker < 0) continue;
+    try {
+      entries.push(JSON.parse(line.slice(marker + '[dedup-drop] '.length)));
+    } catch {
+      // A malformed audit line is deliberately excluded and fails the harness assertion.
+    }
+  }
+  return entries;
+}
+
+function auditOutcomes(resolved, duplicateResult, logs) {
+  const expectedIds = new Set(resolved.mustDrop.map((item) => item.index.id));
+  const structured = Array.isArray(duplicateResult.drop_audit)
+    ? duplicateResult.drop_audit
+    : [];
+  const logged = parsedDropLogEntries(logs);
+  const loggedKeys = new Set(logged.map((entry) => [
+    entry.title,
+    entry.drop_stage,
+    entry.matched_index_title,
+    entry.matched_index_id,
+  ].join('\u0000')));
+  const completeAudit = structured.filter((entry) =>
+    entry &&
+    entry.title &&
+    entry.drop_stage &&
+    entry.matched_index_title &&
+    expectedIds.has(entry.matched_index_id) &&
+    loggedKeys.has([
+      entry.title,
+      entry.drop_stage,
+      entry.matched_index_title,
+      entry.matched_index_id,
+    ].join('\u0000'))
+  );
+  const droppedIds = new Set(completeAudit.map((entry) => entry.matched_index_id));
+  const indexRows = resolved.mustDrop.map((item) => item.index);
+  const leaks = (duplicateResult.learnings || []).map((candidate) => {
+    const match = rankIndexRowsForCandidate(candidate, indexRows, { topK: 1 })[0];
+    return {
+      title: candidate.title,
+      matched_index_id: match ? match.id : null,
+    };
+  });
+  const leakedIds = new Set(
+    leaks.map((entry) => entry.matched_index_id).filter((id) => expectedIds.has(id))
+  );
+  const unaccountedIds = [...expectedIds].filter(
+    (id) => !droppedIds.has(id) && !leakedIds.has(id)
+  );
+  const perStage = {};
+  for (const entry of completeAudit) {
+    perStage[entry.drop_stage] = (perStage[entry.drop_stage] || 0) + 1;
+  }
+  return {
+    dropped_ids: [...droppedIds],
+    dropped_count: droppedIds.size,
+    leaks,
+    unaccounted_ids: unaccountedIds,
+    per_stage: perStage,
+    drop_log_complete: unaccountedIds.length === 0 &&
+      completeAudit.length === structured.length,
+  };
+}
+
 function tokenCostTable(resolved) {
   const seeds = [
     ...resolved.mustDrop.map((item) => item.index),
@@ -124,7 +195,10 @@ async function runReplay(resolved, runNumber, opts = {}) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), `auxilo-spec3-f2-replay-${runNumber}-`));
   const indexPath = path.join(tmpDir, 'extracted-index.jsonl');
   const logs = [];
-  const log = opts.log || ((line) => logs.push(line));
+  const log = (line) => {
+    logs.push(String(line));
+    if (typeof opts.log === 'function') opts.log(line);
+  };
   const extractImpl = opts.extractImpl || extractLocally;
   try {
     for (let index = 0; index < resolved.mustDrop.length; index += 1) {
@@ -145,6 +219,7 @@ async function runReplay(resolved, runNumber, opts = {}) {
       indexPath,
       log,
       ...(opts.invokeModel && { invokeModel: opts.invokeModel }),
+      ...(opts.invokeJudge && { invokeJudge: opts.invokeJudge }),
     };
     const duplicateResult = await extractImpl(
       buildReplayTranscript(resolved.mustDrop.map((item) => item.replay), 'must-drop'),
@@ -163,16 +238,19 @@ async function runReplay(resolved, runNumber, opts = {}) {
       throw new Error(`must-keep extraction skipped: ${keepResult.skipped}`);
     }
 
-    const duplicateLeaks = (duplicateResult.learnings || []).slice(0, resolved.mustDrop.length);
-    const mustDropDropped = Math.max(0, resolved.mustDrop.length - duplicateLeaks.length);
+    const outcomes = auditOutcomes(resolved, duplicateResult, logs);
     const keepMatchedIds = expectedKeepsFound(resolved.mustKeep, keepResult.learnings || []);
     return {
       run: runNumber,
       must_drop_total: resolved.mustDrop.length,
-      must_drop_dropped: mustDropDropped,
-      must_drop_rate: mustDropDropped / resolved.mustDrop.length,
-      must_drop_leaks: duplicateLeaks.map((row) => row.title),
-      post_filter_dropped: duplicateResult.dedup_dropped || 0,
+      must_drop_dropped: outcomes.dropped_count,
+      must_drop_rate: outcomes.dropped_count / resolved.mustDrop.length,
+      must_drop_leaks: outcomes.leaks.map((row) => row.title),
+      must_drop_leak_matches: outcomes.leaks,
+      must_drop_unaccounted_ids: outcomes.unaccounted_ids,
+      drop_log_complete: outcomes.drop_log_complete,
+      drops_by_stage: outcomes.per_stage,
+      post_filter_dropped: outcomes.per_stage.lexical_filter || 0,
       must_keep_total: resolved.mustKeep.length,
       must_keep_retained: keepMatchedIds.length,
       must_keep_dropped: resolved.mustKeep.length - keepMatchedIds.length,
@@ -180,6 +258,13 @@ async function runReplay(resolved, runNumber, opts = {}) {
       must_keep_emitted_titles: (keepResult.learnings || []).map((row) => row.title),
       prompt_memory_tokens: duplicateResult.prompt_memory_tokens || 0,
       prompt_memory_rows: duplicateResult.prompt_memory_rows || 0,
+      judge_calls: (duplicateResult.judge_calls || 0) + (keepResult.judge_calls || 0),
+      judge_prompt_tokens:
+        (duplicateResult.judge_prompt_tokens || 0) +
+        (keepResult.judge_prompt_tokens || 0),
+      judge_completion_tokens:
+        (duplicateResult.judge_completion_tokens || 0) +
+        (keepResult.judge_completion_tokens || 0),
       logs,
     };
   } finally {
@@ -190,11 +275,18 @@ async function runReplay(resolved, runNumber, opts = {}) {
 function gateVerdict(runs) {
   const worstDropRate = Math.min(...runs.map((run) => run.must_drop_rate));
   const worstKeepDropped = Math.max(...runs.map((run) => run.must_keep_dropped));
+  const auditComplete = runs.every((run) =>
+    run.drop_log_complete === true &&
+    Array.isArray(run.must_drop_unaccounted_ids) &&
+    run.must_drop_unaccounted_ids.length === 0
+  );
   return {
     pass: worstDropRate >= GATE_MUST_DROP_RATE &&
-      worstKeepDropped === GATE_MUST_KEEP_DROPPED,
+      worstKeepDropped === GATE_MUST_KEEP_DROPPED &&
+      auditComplete,
     worst_must_drop_rate: worstDropRate,
     worst_must_keep_dropped: worstKeepDropped,
+    drop_log_complete: auditComplete,
     thresholds: {
       must_drop_rate_min: GATE_MUST_DROP_RATE,
       must_keep_dropped_max: GATE_MUST_KEEP_DROPPED,
@@ -229,7 +321,9 @@ function printHuman(report) {
       `run ${run.run}: must-drop ${run.must_drop_dropped}/${run.must_drop_total} ` +
       `(${(run.must_drop_rate * 100).toFixed(2)}%), ` +
       `must-keep dropped ${run.must_keep_dropped}/${run.must_keep_total}, ` +
-      `post-filter drops ${run.post_filter_dropped}`
+      `drops by stage ${JSON.stringify(run.drops_by_stage)}, ` +
+      `judge ${run.judge_calls} call(s) / ${run.judge_prompt_tokens}+` +
+      `${run.judge_completion_tokens} tokens, audit=${run.drop_log_complete}`
     );
     if (run.must_drop_leaks.length) {
       console.log(`  leaks: ${run.must_drop_leaks.join(' | ')}`);
@@ -245,7 +339,8 @@ function printHuman(report) {
   console.log(
     `gate: ${report.gate.pass ? 'PASS' : 'FAIL'}; worst must-drop ` +
     `${(report.gate.worst_must_drop_rate * 100).toFixed(2)}%; ` +
-    `worst must-keep dropped ${report.gate.worst_must_keep_dropped}`
+    `worst must-keep dropped ${report.gate.worst_must_keep_dropped}; ` +
+    `drop audit complete=${report.gate.drop_log_complete}`
   );
 }
 
@@ -281,6 +376,8 @@ module.exports = {
   resolveReplayFixture,
   buildReplayTranscript,
   expectedKeepsFound,
+  parsedDropLogEntries,
+  auditOutcomes,
   tokenCostTable,
   runReplay,
   gateVerdict,

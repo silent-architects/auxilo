@@ -21,6 +21,8 @@ const {
   readExtractionIndex,
   buildPromptMemory,
   filterIndexedNearDuplicates,
+  rankIndexRowsForCandidate,
+  estimatePromptTokens,
 } = require('../lib/extraction-index.js');
 
 // CI-5 (PUNCH-LIST §30, 2026-07-19): Auxilo is TECHNICAL-ONLY. The learning
@@ -59,13 +61,20 @@ SYSTEM-FACT TEST (CI-7): Extract ONLY when a system and a symptom are at the cor
 
 MANDATORY SENSITIVITY SELF-SCREEN (the marketplace is PUBLIC): NEVER include secrets, credentials, API keys, tokens, private keys, or seed phrases; personal data (real people's names, emails, phone numbers, wallet addresses); private filesystem paths, internal hostnames, or infrastructure identifiers; proprietary, confidential, or client-specific business content. Rewrite specifics into generic placeholders (/Users/USER/..., API_KEY, "a client") or omit them. If a learning cannot be generalized without leaking private material, DROP it entirely.
 
-Output STRICT JSON ONLY — an array (possibly empty []) of objects with these keys:
+Output STRICT JSON ONLY — an object with:
+  "learnings": an array (possibly empty []) of objects with these keys:
   "title": concise, >= 10 chars
   "body": >= 50 chars — what was tried, what worked, what failed
   "category": one of ${JSON.stringify(CATEGORIES)}
   "tags": array of lowercase keyword strings
   "task_context": one sentence describing the task
-  "outcome": one of "success","partial","failure","workaround"`;
+  "outcome": one of "success","partial","failure","workaround"
+  "dedup_drops": an array (possibly empty []) used ONLY for candidates dropped
+  because they match PREVIOUSLY CAPTURED LESSONS. Each entry must be:
+    {"candidate": <the complete learning object above>,
+     "matched_index_id": "<exact id from the memory list>",
+     "matched_title": "<exact matched title>"}
+  Scope/quality/sensitivity skips are not dedup_drops.`;
 
 /** A1: rubric addendum — appended ONLY when scoreExtractionEnabled(). */
 const QUALITY_RUBRIC_ADDENDUM = `
@@ -78,11 +87,12 @@ const QUALITY_RUBRIC_ADDENDUM = `
   High scores REQUIRE a system+symptom anchor — a named external system and a
   concrete error/limitation/behavior; process or workflow advice cannot score
   high no matter how polished (CI-7 system-fact test).
-  If a learning honestly scores below that bar, DROP it from the array rather
+  If a learning honestly scores below that bar, DROP it from learnings rather
   than inflating the numbers.`;
 
 const PROMPT_SUFFIX = `
-No prose, no explanation, no markdown code fences — just the raw JSON array.
+No prose, no explanation, no markdown code fences — just the raw JSON object
+{"learnings":[...],"dedup_drops":[...]}.
 
 TRANSCRIPT:
 `;
@@ -175,26 +185,38 @@ function validateQualityAssessment(qa) {
   return out;
 }
 
-/**
- * Defensively parse a JSON array of learnings out of model output.
- * A1: `quality_self_assessment` is attached ONLY when (a) the score gate is on
- * (opts.scoreExtraction, default = env AUXILO_SCORE_EXTRACTION) AND (b) the
- * assessment validates. Gate OFF strips the field even if the model emits one,
- * so a dark 0.9.3 client can never arm seamless publish (see the sequencing
- * constraint at scoreExtractionEnabled).
- */
-function parseLearnings(raw, opts = {}) {
-  const withScore = opts.scoreExtraction !== undefined
-    ? Boolean(opts.scoreExtraction)
-    : scoreExtractionEnabled();
+function extractJsonValue(raw) {
   let s = String(raw || '').trim();
   const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fence) s = fence[1].trim();
-  const start = s.indexOf('[');
-  const end = s.lastIndexOf(']');
-  if (start === -1 || end === -1 || end < start) return [];
-  let arr;
-  try { arr = JSON.parse(s.slice(start, end + 1)); } catch (_) { return []; }
+  try {
+    return JSON.parse(s);
+  } catch {
+    const objectStart = s.indexOf('{');
+    const arrayStart = s.indexOf('[');
+    const starts = [objectStart, arrayStart].filter((value) => value >= 0);
+    if (!starts.length) return null;
+    const start = Math.min(...starts);
+    const opener = s[start];
+    const end = opener === '{' ? s.lastIndexOf('}') : s.lastIndexOf(']');
+    if (end < start) return null;
+    try {
+      return JSON.parse(s.slice(start, end + 1));
+    } catch {
+      return null;
+    }
+  }
+}
+
+/**
+ * Normalize model-emitted learning objects.
+ * A1: `quality_self_assessment` is attached ONLY when (a) the score gate is on
+ * and (b) the assessment validates. Gate OFF strips the field even if emitted.
+ */
+function normalizeLearningArray(arr, opts = {}) {
+  const withScore = opts.scoreExtraction !== undefined
+    ? Boolean(opts.scoreExtraction)
+    : scoreExtractionEnabled();
   if (!Array.isArray(arr)) return [];
   const shaped = arr
     .filter(l => l && typeof l.title === 'string' && typeof l.body === 'string' && l.title.length >= 10 && l.body.length >= 50);
@@ -228,6 +250,290 @@ function parseLearnings(raw, opts = {}) {
 }
 
 /**
+ * Rev 3 output envelope. Arrays remain accepted for backward compatibility;
+ * they simply carry no prompt-memory drop audit rows.
+ */
+function parseExtractionOutput(raw, opts = {}) {
+  const value = extractJsonValue(raw);
+  if (Array.isArray(value)) {
+    return { learnings: normalizeLearningArray(value, opts), prompt_drops: [] };
+  }
+  if (!value || typeof value !== 'object' || !Array.isArray(value.learnings)) {
+    return { learnings: [], prompt_drops: [] };
+  }
+  return {
+    learnings: normalizeLearningArray(value.learnings, opts),
+    prompt_drops: Array.isArray(value.dedup_drops) ? value.dedup_drops : [],
+  };
+}
+
+function parseLearnings(raw, opts = {}) {
+  return parseExtractionOutput(raw, opts).learnings;
+}
+
+const DEFAULT_EXTRACT_LOG_PATH = path.join(os.homedir(), '.auxilo', 'extract.log');
+const JUDGE_TOP_K = 10;
+
+function loudLocal(opts, message) {
+  try {
+    (opts.log || console.error)(`[extract-local] ${message}`);
+  } catch {
+    // Logging failure must not turn dedup into a submission block.
+  }
+}
+
+function auditText(value, max = 500) {
+  return String(value || '').replace(/[\r\n]+/g, ' ').trim().slice(0, max);
+}
+
+/**
+ * Write the local-only audit row BEFORE honoring a drop. If the audit cannot be
+ * written, the caller keeps the candidate (fail-open and nothing vanishes
+ * silently). The runner injects its `log` function, which appends this line to
+ * ~/.auxilo/extract.log; direct callers fall back to that path here.
+ */
+function recordDropAudit(candidate, stage, match, opts = {}) {
+  const entry = {
+    title: auditText(candidate && candidate.title),
+    drop_stage: stage,
+    matched_index_title: auditText(match && match.title),
+    matched_index_id: auditText(match && (match.id || match.matched_index_id)),
+  };
+  if (!entry.title || !entry.matched_index_title || !entry.matched_index_id) {
+    loudLocal(opts, `dedup audit row incomplete at stage=${stage}; keeping candidate`);
+    return { ok: false, entry };
+  }
+  const line = `[dedup-drop] ${JSON.stringify(entry)}`;
+  try {
+    const sink = opts.auditLog || opts.log;
+    if (typeof sink === 'function') {
+      sink(line);
+    } else {
+      fs.mkdirSync(path.dirname(DEFAULT_EXTRACT_LOG_PATH), { recursive: true, mode: 0o700 });
+      fs.appendFileSync(
+        DEFAULT_EXTRACT_LOG_PATH,
+        `[${new Date().toISOString()}] ${line}\n`,
+        { encoding: 'utf8', mode: 0o600 }
+      );
+    }
+    return { ok: true, entry };
+  } catch (error) {
+    loudLocal(opts, `dedup audit write failed at stage=${stage}; keeping candidate: ${error.message}`);
+    return { ok: false, entry };
+  }
+}
+
+function applyPromptMemoryDrops(promptDrops, promptMemory, opts = {}) {
+  const byId = new Map(
+    (promptMemory.included_rows || []).map((row) => [String(row.id), row])
+  );
+  const restored = [];
+  const dropped = [];
+  for (const raw of Array.isArray(promptDrops) ? promptDrops : []) {
+    const candidate = normalizeLearningArray([raw && raw.candidate], opts)[0];
+    if (!candidate) {
+      loudLocal(opts, 'malformed prompt-memory drop audit; no valid candidate payload was available');
+      continue;
+    }
+    const matched = byId.get(String(raw.matched_index_id || ''));
+    if (!matched) {
+      loudLocal(opts, `prompt-memory drop named an unknown index id; keeping "${candidate.title}"`);
+      restored.push(candidate);
+      continue;
+    }
+    const audit = recordDropAudit(candidate, 'prompt_memory', matched, opts);
+    if (audit.ok) dropped.push({ candidate, match: matched, audit: audit.entry });
+    else restored.push(candidate);
+  }
+  return { restored, dropped };
+}
+
+function buildAnchoredJudgePrompt(candidates, indexRows, opts = {}) {
+  const topK = Number.isFinite(opts.topK) ? opts.topK : JUDGE_TOP_K;
+  const rankings = candidates.map((candidate) =>
+    rankIndexRowsForCandidate(candidate, indexRows, { topK })
+  );
+  const payload = candidates.map((candidate, index) => ({
+    candidate_index: index,
+    candidate: {
+      title: candidate.title,
+      body: candidate.body,
+      category: candidate.category,
+    },
+    previously_captured_top_k: rankings[index].map((row) => ({
+      id: row.id,
+      title: row.title,
+    })),
+  }));
+  const prompt = `You are a binary deduplication judge for operational learnings.
+For each candidate, decide whether it is a re-statement of ANY listed previously
+captured lesson. The same operational insight in different words is YES.
+A genuinely new fact is NO only when it would change what another agent does.
+
+Return STRICT JSON ONLY:
+{"decisions":[{"candidate_index":0,"duplicate":true,"matched_index_id":"..."}]}
+Return exactly one decision for every candidate_index. When duplicate=false,
+omit matched_index_id. When duplicate=true, matched_index_id MUST be one of that
+candidate's listed ids. No prose and no markdown.
+
+${JSON.stringify(payload)}`;
+  return { prompt, rankings };
+}
+
+function judgeUsage(usage, prompt, completion) {
+  const numeric = usage && typeof usage === 'object' ? usage : {};
+  const directInput = Number(numeric.input_tokens) || 0;
+  const cacheCreation = Number(numeric.cache_creation_input_tokens) || 0;
+  const cacheRead = Number(numeric.cache_read_input_tokens) || 0;
+  const output = Number(numeric.output_tokens) || 0;
+  return {
+    prompt_tokens: directInput + cacheCreation + cacheRead ||
+      estimatePromptTokens(prompt),
+    completion_tokens: output || estimatePromptTokens(completion),
+  };
+}
+
+function invokeJudgeWithClaudeCode(prompt) {
+  const bin = resolveClaudeBin();
+  const childEnv = { ...process.env, AUXILO_EXTRACTING: '1' };
+  delete childEnv.ANTHROPIC_API_KEY;
+  const res = spawnSync(
+    bin,
+    ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', ''],
+    {
+      input: prompt,
+      encoding: 'utf8',
+      env: childEnv,
+      timeout: 120000,
+      maxBuffer: 20 * 1024 * 1024,
+    }
+  );
+  const stdout = String(res.stdout || '');
+  if (res.error) {
+    return { ok: false, out: '', reason: `judge spawn failed (${bin}): ${res.error.message}` };
+  }
+  if (/Please run \/login|authentication_error|401/i.test(stdout) ||
+      /Please run \/login|authentication_error/i.test(String(res.stderr || ''))) {
+    return { ok: false, out: '', reason: 'local judge model is not authenticated' };
+  }
+  if (res.status !== 0) {
+    return {
+      ok: false,
+      out: '',
+      reason: `local judge exited ${res.status}: ${(stdout || String(res.stderr || '')).slice(0, 160)}`,
+    };
+  }
+  let wrapper;
+  try {
+    wrapper = JSON.parse(stdout);
+  } catch {
+    return { ok: false, out: '', reason: 'local judge returned malformed JSON wrapper' };
+  }
+  if (!wrapper || typeof wrapper.result !== 'string' || wrapper.is_error === true) {
+    return { ok: false, out: '', reason: 'local judge returned no successful result' };
+  }
+  return { ok: true, out: wrapper.result, usage: wrapper.usage || null, reason: null };
+}
+
+function parseJudgeDecisions(raw, candidates, rankings) {
+  const value = extractJsonValue(raw);
+  if (!value || typeof value !== 'object' || !Array.isArray(value.decisions) ||
+      value.decisions.length !== candidates.length) {
+    return { ok: false, reason: 'judge response must contain one decision per candidate' };
+  }
+  const byIndex = new Map();
+  for (const decision of value.decisions) {
+    if (!decision || !Number.isInteger(decision.candidate_index) ||
+        decision.candidate_index < 0 ||
+        decision.candidate_index >= candidates.length ||
+        typeof decision.duplicate !== 'boolean' ||
+        byIndex.has(decision.candidate_index)) {
+      return { ok: false, reason: 'judge response contains an invalid/duplicate candidate_index' };
+    }
+    if (decision.duplicate) {
+      const allowed = rankings[decision.candidate_index];
+      const matched = allowed.find(
+        (row) => row.id === String(decision.matched_index_id || '')
+      );
+      if (!matched) {
+        return { ok: false, reason: 'judge duplicate decision names an id outside its top-K list' };
+      }
+      byIndex.set(decision.candidate_index, { duplicate: true, matched });
+    } else {
+      byIndex.set(decision.candidate_index, { duplicate: false, matched: null });
+    }
+  }
+  return {
+    ok: true,
+    decisions: candidates.map((_, index) => byIndex.get(index)),
+  };
+}
+
+async function runAnchoredJudge(candidates, indexState, opts = {}) {
+  const input = Array.isArray(candidates) ? candidates : [];
+  const empty = {
+    kept: input.slice(),
+    dropped: [],
+    called: false,
+    prompt_tokens: 0,
+    completion_tokens: 0,
+  };
+  if (!input.length || !indexState || !indexState.usable ||
+      !Array.isArray(indexState.rows) || !indexState.rows.length) {
+    return empty;
+  }
+
+  const { prompt, rankings } = buildAnchoredJudgePrompt(input, indexState.rows, opts);
+  if (rankings.some((rows) => rows.length === 0)) return empty;
+  const invokeJudge = typeof opts.invokeJudge === 'function'
+    ? opts.invokeJudge
+    : invokeJudgeWithClaudeCode;
+  let result;
+  try {
+    result = await invokeJudge(prompt, { candidates: input, rankings });
+  } catch (error) {
+    loudLocal(opts, `anchored judge unavailable; keeping all candidates: ${error.message}`);
+    return empty;
+  }
+  if (!result || !result.ok) {
+    loudLocal(opts, `anchored judge unavailable; keeping all candidates: ${result && result.reason ? result.reason : 'unknown error'}`);
+    return empty;
+  }
+  const parsed = parseJudgeDecisions(result.out, input, rankings);
+  const usage = judgeUsage(result.usage, prompt, result.out);
+  if (!parsed.ok) {
+    loudLocal(opts, `anchored judge malformed; keeping all candidates: ${parsed.reason}`);
+    return { ...empty, called: true, ...usage };
+  }
+
+  const kept = [];
+  const dropped = [];
+  for (let index = 0; index < input.length; index += 1) {
+    const decision = parsed.decisions[index];
+    if (!decision.duplicate) {
+      kept.push(input[index]);
+      continue;
+    }
+    const audit = recordDropAudit(
+      input[index],
+      'anchored_judge',
+      decision.matched,
+      opts
+    );
+    if (audit.ok) {
+      dropped.push({
+        candidate: input[index],
+        match: decision.matched,
+        audit: audit.entry,
+      });
+    } else {
+      kept.push(input[index]);
+    }
+  }
+  return { kept, dropped, called: true, ...usage };
+}
+
+/**
  * Extract learnings locally. Returns { learnings: [...] } or { learnings: [], skipped }.
  * Only claude-code has a local extractor today; other clients rely on the agent's
  * proactive auxilo_contribute (MCP) call.
@@ -256,7 +562,12 @@ async function extractLocally(transcript, sourceType, opts = {}) {
         maxRows: opts.promptMemoryMaxRows,
       }),
     })
-    : { section: '', estimated_tokens: 0, included_count: 0 };
+    : {
+      section: '',
+      estimated_tokens: 0,
+      included_count: 0,
+      included_rows: [],
+    };
   const prompt = buildExtractionPrompt({
     previousLessonsSection: promptMemory.section,
     ...(opts.scoreExtraction !== undefined && { scoreExtraction: opts.scoreExtraction }),
@@ -266,7 +577,13 @@ async function extractLocally(transcript, sourceType, opts = {}) {
     : (text, invokeOpts) => extractWithClaudeCode(text, invokeOpts);
   const { ok, out, reason } = await invokeModel(transcript, { prompt });
   if (!ok) return { learnings: [], skipped: reason };
-  const parsed = parseLearnings(out, opts);
+  const parsed = parseExtractionOutput(out, opts);
+  const promptDropResult = applyPromptMemoryDrops(
+    parsed.prompt_drops,
+    promptMemory,
+    opts
+  );
+  const candidates = [...parsed.learnings, ...promptDropResult.restored];
 
   // Re-read immediately before the lexical filter. If the index is deleted,
   // becomes unreadable, or is corrupted while the model runs, the filter is
@@ -279,24 +596,52 @@ async function extractLocally(transcript, sourceType, opts = {}) {
       );
     } catch { /* logging cannot block extraction */ }
   }
-  const filtered = filterIndexedNearDuplicates(parsed, filterState, indexOpts);
-  if (filtered.dropped.length > 0) {
-    try {
-      (opts.log || console.error)(
-        `[extract-local] dropped ${filtered.dropped.length} candidate(s) matching the local extraction index`
-      );
-    } catch { /* logging cannot block extraction */ }
+  const filtered = filterIndexedNearDuplicates(candidates, filterState, indexOpts);
+  const lexicalDropped = [];
+  const lexicalKept = filtered.kept.slice();
+  for (const drop of filtered.dropped) {
+    const audit = recordDropAudit(
+      drop.candidate,
+      'lexical_filter',
+      drop.match,
+      opts
+    );
+    if (audit.ok) {
+      lexicalDropped.push({ ...drop, audit: audit.entry });
+    } else {
+      lexicalKept.push(drop.candidate);
+    }
+  }
+  const judged = await runAnchoredJudge(lexicalKept, filterState, opts);
+  const allDropped = [
+    ...promptDropResult.dropped,
+    ...lexicalDropped,
+    ...judged.dropped,
+  ];
+  if (allDropped.length > 0) {
+    loudLocal(
+      opts,
+      `dropped ${allDropped.length} candidate(s): prompt_memory=${promptDropResult.dropped.length}, ` +
+      `lexical_filter=${lexicalDropped.length}, anchored_judge=${judged.dropped.length}`
+    );
   }
   return {
-    learnings: filtered.kept,
-    dedup_dropped: filtered.dropped.length,
+    learnings: judged.kept,
+    dedup_dropped: allDropped.length,
+    drop_audit: allDropped.map((drop) => drop.audit),
     prompt_memory_tokens: promptMemory.estimated_tokens,
     prompt_memory_rows: promptMemory.included_count,
+    judge_calls: judged.called ? 1 : 0,
+    judge_prompt_tokens: judged.prompt_tokens,
+    judge_completion_tokens: judged.completion_tokens,
   };
 }
 
 module.exports = {
-  extractLocally, parseLearnings, resolveClaudeBin, CATEGORIES, RETIRED_CATEGORIES,
+  extractLocally, parseLearnings, parseExtractionOutput, resolveClaudeBin,
+  CATEGORIES, RETIRED_CATEGORIES,
   EXTRACTION_PROMPT, buildExtractionPrompt, scoreExtractionEnabled,
   validateQualityAssessment, QUALITY_DIMENSIONS,
+  buildAnchoredJudgePrompt, parseJudgeDecisions, runAnchoredJudge,
+  recordDropAudit, invokeJudgeWithClaudeCode, JUDGE_TOP_K,
 };

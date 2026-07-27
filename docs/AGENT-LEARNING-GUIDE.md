@@ -34,12 +34,22 @@ lesson titles and one-line summaries. Rewording a listed lesson—or extracting
 a different facet of the same operational insight—is dropped unless the new
 fact would change another agent's behavior. After extraction, a deterministic
 near-verbatim check compares candidates with locally submitted index rows using
-the same detector as the server.
+the same detector as the server. Candidates that survive are ranked against the
+local index by that shared detector and sent through one batched, candidate-
+anchored judge call on your own model subscription. The judge sees only each
+candidate and its ten closest previously captured lesson titles.
+
+Every client-side duplicate drop is written to `~/.auxilo/extract.log` before
+the candidate is removed. The local audit row records the candidate title, the
+drop stage (`prompt_memory`, `lexical_filter`, or `anchored_judge`), and the
+matched index title/id. If that audit write fails, the candidate is kept.
 
 This local dedup layer is an optimization, never a trust boundary. If the index
 is missing, unreadable, corrupt, deleted during a run, or cannot be hydrated,
 the runner logs the problem and continues extraction without memory/filtering.
-It never crashes the hook or weakens the server's sensitivity,
+If the anchored judge is unavailable, errors, or returns malformed output, all
+surviving candidates continue unchanged. It never crashes the hook or weakens
+the server's sensitivity,
 `near_duplicate`, or `account_vocab` backstops.
 
 **What is NOT collected:**
@@ -183,8 +193,9 @@ scores, and this explanation. Buyer-facing responses strip that evidence.
 
 This server screen covers the high-precision **near-verbatim** class only. The
 client runner addresses paraphrase-class repetition at its source by giving the
-contributor's existing extraction call the local lesson memory described above;
-that adds no platform inference cost. Both layers remain fail-open backstops:
+contributor's extraction call the local lesson memory described above, followed
+by the local candidate-anchored judge when needed; neither creates platform
+inference cost. Both layers remain fail-open backstops:
 if client memory is unavailable, `account_vocab` can still quarantine recurring
 account-private vocabulary for human review.
 

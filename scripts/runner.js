@@ -169,6 +169,16 @@ function log(msg) {
   } catch { /* best-effort */ }
 }
 
+// Dedup drops are different from ordinary diagnostics: the candidate may only
+// disappear after its audit row is durably appended. This sink deliberately
+// throws on write failure so extract-local can fail open and keep the candidate.
+function auditDropLog(msg) {
+  const line = `[${new Date().toISOString()}] ${msg}`;
+  console.log(line);
+  fs.mkdirSync(path.dirname(LOG_PATH), { recursive: true, mode: 0o700 });
+  fs.appendFileSync(LOG_PATH, line + '\n', { encoding: 'utf8', mode: 0o600 });
+}
+
 // ─── Ledger ─────────────────────────────────────────────────────────────────
 
 function loadLedger() {
@@ -340,6 +350,9 @@ async function postExtract(transcript, sessionId, sourceType, _scrubReport) {
   let dedupDropped = 0;
   let promptMemoryTokens = 0;
   let promptMemoryRows = 0;
+  let judgeCalls = 0;
+  let judgePromptTokens = 0;
+  let judgeCompletionTokens = 0;
   try {
     ({
       learnings,
@@ -347,10 +360,14 @@ async function postExtract(transcript, sessionId, sourceType, _scrubReport) {
       dedup_dropped: dedupDropped = 0,
       prompt_memory_tokens: promptMemoryTokens = 0,
       prompt_memory_rows: promptMemoryRows = 0,
+      judge_calls: judgeCalls = 0,
+      judge_prompt_tokens: judgePromptTokens = 0,
+      judge_completion_tokens: judgeCompletionTokens = 0,
     } = await extractLocally(transcript, sourceType, {
       baseUrl: BASE_URL,
       apiKey: API_KEY,
       log,
+      auditLog: auditDropLog,
     }));
   } catch (err) {
     throw new Error(`Local extraction failed: ${err.message}`);
@@ -368,6 +385,7 @@ async function postExtract(transcript, sessionId, sourceType, _scrubReport) {
   log(
     `[runner] client-side extraction: ${learnings.length} candidate(s), ` +
     `${dedupDropped} local duplicate(s) dropped, memory=${promptMemoryRows} row(s)/~${promptMemoryTokens} token(s) ` +
+    `judge=${judgeCalls} call(s)/${judgePromptTokens}+${judgeCompletionTokens} token(s) ` +
     `→ ${published} live, ${held} held for review, ${rejected} rejected`
   );
   return { learnings_published: published, learnings_held: held, learnings_rejected: rejected, extraction_id: `client-${sessionId}` };
