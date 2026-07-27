@@ -464,11 +464,17 @@ describe('CLI: counted-confirmation rails (structural)', () => {
     assert.ok(all.includes('confirmByTypedCount'), '--all must confirm by typed count');
   });
 
-  it('no --yes bypass exists on any approve path (only all-reject keeps it)', () => {
+  it('no --yes bypass exists on approve paths; only safe keep-private/reject paths have it', () => {
     const occurrences = CLI_SRC.split('flags.yes').length - 1;
-    assert.equal(occurrences, 1, 'flags.yes must appear exactly once');
+    assert.equal(occurrences, 2, 'flags.yes must appear exactly on the two safe-direction paths');
+    const keepPrivate = sliceAt(CLI_SRC, "if (flags['keep-private'])", 1800);
+    assert.ok(keepPrivate.includes('flags.yes'), '--keep-private may use the safe-direction bypass');
     const allReject = sliceAt(CLI_SRC, "if (flags['all-reject'])", 900);
-    assert.ok(allReject.includes('flags.yes'), 'the single flags.yes use must be the all-reject escape hatch');
+    assert.ok(allReject.includes('flags.yes'), '--all-reject may use the safe-direction bypass');
+    const approveReady = sliceAt(CLI_SRC, "if (flags['approve-ready'] || flags['approve-clean'])", 2200);
+    const all = sliceAt(CLI_SRC, 'if (flags.all)', 1400);
+    assert.equal(approveReady.includes('flags.yes'), false);
+    assert.equal(all.includes('flags.yes'), false);
   });
 
   it('typed-count prompt demands the exact number', () => {

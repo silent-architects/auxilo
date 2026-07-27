@@ -134,10 +134,46 @@ function planApproveClean(summary, opts = {}) {
   };
 }
 
+// Private-tier counterpart to planApproveClean. Selection is delegated to the
+// same lib/review.js helper as the CLI; the default is needs_your_eyes.
+function planKeepPrivate(summary, opts = {}) {
+  const sel = reviewLib.selectForKeepPrivate((summary && summary.items) || [], {
+    lane: opts.lane,
+  });
+  const brief = (r) => ({
+    id: r.id,
+    title: r.title,
+    category: r.category,
+    quality: r.quality,
+    visibility: r.visibility,
+    lane: reviewLib.reviewLane(r).lane,
+  });
+  return {
+    dry_run: true,
+    lane: sel.lane,
+    pending_count: summary ? summary.pending_count : 0,
+    would_keep_private_count: sel.selected.length,
+    would_keep_private: sel.selected.map(brief),
+    excluded_by_lane: Object.fromEntries(
+      Object.entries(sel.excluded_by_lane).map(([lane, rows]) => [lane, rows.map(brief)])
+    ),
+    next_step: sel.selected.length > 0
+      ? `Show the operator this list and count (${sel.selected.length}). After confirmation, call auxilo_review again with {action:"keep_private", dry_run:false, confirm:true, expected_count:${sel.selected.length}}. Each item stays yours; owner-only recall at $0; never published.`
+      : 'Nothing is in the selected lane. No follow-up call needed.',
+  };
+}
+
+function keepPrivateDecisions(plan) {
+  return (plan && plan.would_keep_private || []).map((row) => ({
+    id: row.id,
+    decision: 'keep_private',
+  }));
+}
+
 // Review-seamless: POST one confirmed decision batch through the counted bulk
 // endpoint, chunked at the server cap. Used by approve/reject/approve_clean.
 async function postBulkChunks(headers, decisions) {
-  const totals = { approved: 0, rejected: 0, idempotent: 0, failed: 0, results: [] };
+  const totals = { approved: 0, kept_private: 0, rejected: 0, idempotent: 0, failed: 0, results: [] };
   for (const chunk of reviewLib.chunkDecisions(decisions)) {
     const resp = await fetch(`${AUXILO_BASE}/account/pending/bulk`, {
       method: 'POST',
@@ -151,6 +187,7 @@ async function postBulkChunks(headers, decisions) {
       return totals;
     }
     totals.approved += data.approved || 0;
+    totals.kept_private += data.kept_private || 0;
     totals.rejected += data.rejected || 0;
     totals.idempotent += data.idempotent || 0;
     totals.failed += data.failed || 0;
@@ -160,7 +197,7 @@ async function postBulkChunks(headers, decisions) {
 }
 
 const server = new Server(
-  { name: 'auxilo', version: '0.9.7' },
+  { name: 'auxilo', version: '0.9.8' },
   {
     capabilities: { tools: {} },
     instructions: `You are connected to Auxilo, a knowledge marketplace where AI agents buy and sell operational learnings.
@@ -394,21 +431,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_review',
-      description: 'Review YOUR OWN pending-review learnings (from background extraction) so they can be approved to the public marketplace or rejected to stay private. Account-scoped: only the authenticated account\'s own pending items are ever visible or affected. ACTIONS: "list" returns the triage summary (counts incl. by_signal + compact rows with quality score, lane, a one-sentence why for flagged items, and platform screen verdicts: injection, content sensitivity, near-duplicate). "approve" / "reject" apply explicit decisions to the ids you pass (the operator must have named or confirmed these items). "approve_clean" selects every item that passed ALL platform screens AND has quality >= min_quality (default 14/20); it is DRY-RUN BY DEFAULT and returns exactly what WOULD be approved. "reject_by_signal" bulk-rejects every pending item carrying one flag signal (e.g. social_handle) — REJECT ONLY (items stay private; there is deliberately no bulk approve by class): the operator must confirm the signal AND its by_signal count from "list", and you pass that count as expected_count — the server refuses if the live selection differs. "sanitize" resubmits ONE operator-corrected item through EVERY screen with lineage (the original is retired to private, reason sanitize-resubmit; the replacement is ALWAYS held for the operator\'s explicit approval — never auto-published): only call it with a correction the operator reviewed. CONSENT CONTRACT: nothing goes public without the contributor\'s explicit approval. So before executing approve_clean you MUST show the operator the dry-run list and count and get their confirmation, then call again with dry_run:false, confirm:true, and expected_count set to the dry-run count. The server also enforces a counted-confirmation gate on every bulk call. Requires your configured API key (or session_token).',
+      description: 'Review YOUR OWN pending-review learnings (from background extraction) so they can be approved to the public marketplace, rejected, or kept private. Account-scoped: only the authenticated account\'s own pending items are ever visible or affected. ACTIONS: "list" returns the triage summary (counts incl. by_signal + compact rows with quality score, lane, a one-sentence why for flagged items, and platform screen verdicts: injection, content sensitivity, near-duplicate). "approve" / "reject" apply explicit decisions to the ids you pass (the operator must have named or confirmed these items). "keep_private" finalizes one id or the selected lane (needs_your_eyes by default): it stays yours; owner-only recall at $0; never published. Bulk keep_private is DRY-RUN BY DEFAULT and uses the same selection helper as the CLI. "approve_clean" selects every item that passed ALL platform screens AND has quality >= min_quality (default 14/20); it is DRY-RUN BY DEFAULT and returns exactly what WOULD be approved. "reject_by_signal" bulk-rejects every pending item carrying one flag signal (e.g. social_handle) — REJECT ONLY (items stay private; there is deliberately no bulk approve by class): the operator must confirm the signal AND its by_signal count from "list", and you pass that count as expected_count — the server refuses if the live selection differs. "sanitize" resubmits ONE operator-corrected item through EVERY screen with lineage (the original is retired to private, reason sanitize-resubmit; the replacement is ALWAYS held for the operator\'s explicit approval — never auto-published): only call it with a correction the operator reviewed. CONSENT CONTRACT: nothing goes public without the contributor\'s explicit approval. Before executing approve_clean or bulk keep_private, show the operator the dry-run list and count, then call again with dry_run:false, confirm:true, and expected_count set to the dry-run count. The server also enforces a counted-confirmation gate on every bulk call. Requires your configured API key (or session_token).',
       inputSchema: {
         type: 'object',
         properties: {
-          action: { type: 'string', enum: ['list', 'approve', 'reject', 'approve_clean', 'reject_by_signal', 'sanitize'], description: 'What to do. Start with "list".' },
+          action: { type: 'string', enum: ['list', 'approve', 'reject', 'keep_private', 'approve_clean', 'reject_by_signal', 'sanitize'], description: 'What to do. Start with "list".' },
           ids: { type: 'array', items: { type: 'string' }, description: 'Learning ids for action approve/reject. These must be items the operator explicitly chose.' },
           reason: { type: 'string', description: 'Optional rejection reason (actions reject / reject_by_signal; max 500 chars).' },
           signal: { type: 'string', description: 'reject_by_signal only. The flag signal to reject by (a name from counts.by_signal, e.g. social_handle, person_name, injection).' },
-          id: { type: 'string', description: 'sanitize only. The pending/rejected learning being corrected (operator-chosen).' },
+          id: { type: 'string', description: 'keep_private single-item or sanitize. The operator-chosen learning id.' },
           title: { type: 'string', description: 'sanitize only. Corrected title (omit to keep the original).' },
           body: { type: 'string', description: 'sanitize only. Corrected body (omit to keep the original). At least one of title/body is required.' },
           tags: { type: 'array', items: { type: 'string' }, description: 'sanitize only. Corrected tags (omit to keep the original).' },
-          dry_run: { type: 'boolean', description: 'approve_clean only. Default TRUE: report what would be approved without changing anything. Set false only together with confirm:true and expected_count after the operator confirmed the dry-run list.' },
-          confirm: { type: 'boolean', description: 'approve_clean only. Must be exactly true to execute. Never set this without the operator\'s explicit go-ahead on the dry-run output.' },
-          expected_count: { type: 'number', description: 'approve_clean execute + reject_by_signal. The count the operator confirmed (dry-run count / by_signal count), echoed back. If the live selection differs (queue changed), nothing is mutated.' },
+          lane: { type: 'string', enum: ['ready_to_publish', 'needs_score', 'needs_your_eyes'], description: 'keep_private bulk only. Lane to select; defaults to needs_your_eyes.' },
+          dry_run: { type: 'boolean', description: 'approve_clean or bulk keep_private. Default TRUE: report exactly what would change. Set false only with confirm:true and expected_count after operator confirmation.' },
+          confirm: { type: 'boolean', description: 'approve_clean or bulk keep_private. Must be exactly true to execute after operator confirmation.' },
+          expected_count: { type: 'number', description: 'approve_clean, bulk keep_private, or reject_by_signal. The confirmed selection count. If the live selection differs, nothing is mutated.' },
           min_quality: { type: 'number', description: 'approve_clean quality threshold 0-20 (default 14). 0 includes unscored items.' },
           session_token: { type: 'string', description: 'Optional JWT session token from /auth/verify. If omitted, your configured API key authenticates the account.' },
         },
@@ -665,6 +703,58 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           return text({ action: args.action, submitted: decisions.length, ...totals });
         }
 
+        if (args.action === 'keep_private') {
+          // A named id is an explicit single-item decision. It uses the
+          // existing single route and therefore surfaces server 4xx truth.
+          if (typeof args.id === 'string' && args.id) {
+            const resp = await fetch(
+              `${AUXILO_BASE}/account/pending/${encodeURIComponent(args.id)}/keep-private`,
+              { method: 'POST', headers }
+            );
+            const data = await resp.json();
+            return text(data);
+          }
+
+          const summaryResp = await fetch(`${AUXILO_BASE}/account/pending/summary`, { headers });
+          const summary = await summaryResp.json();
+          if (!summaryResp.ok) return text(summary);
+
+          let plan;
+          try {
+            plan = planKeepPrivate(summary, args);
+          } catch (err) {
+            return text({ error: err.message });
+          }
+          if (args.dry_run !== false || args.confirm !== true) {
+            return text(plan);
+          }
+          if (!Number.isInteger(args.expected_count)) {
+            return text({
+              error: 'expected_count is required to execute keep_private: echo the would_keep_private_count from the dry run.',
+              ...plan,
+            });
+          }
+          if (args.expected_count !== plan.would_keep_private_count) {
+            return text({
+              error: `Selection changed since the dry run (expected ${args.expected_count}, now ${plan.would_keep_private_count}). Nothing was changed. Re-run the dry run and re-confirm.`,
+              ...plan,
+            });
+          }
+          const decisions = keepPrivateDecisions(plan);
+          if (decisions.length === 0) {
+            return text({ action: 'keep_private', kept_private: 0, message: 'Nothing is in the selected lane.' });
+          }
+          const totals = await postBulkChunks(headers, decisions);
+          return text({
+            action: 'keep_private',
+            executed: true,
+            lane: plan.lane,
+            submitted: decisions.length,
+            ...totals,
+            note: 'These items stay yours; owner-only recall at $0; never published.',
+          });
+        }
+
         if (args.action === 'approve_clean') {
           const summaryResp = await fetch(`${AUXILO_BASE}/account/pending/summary`, { headers });
           const summary = await summaryResp.json();
@@ -752,7 +842,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           return text(await resp.json());
         }
 
-        return text({ error: `Unknown action: ${args.action}. Use list, approve, reject, approve_clean, reject_by_signal, or sanitize.` });
+        return text({ error: `Unknown action: ${args.action}. Use list, approve, reject, keep_private, approve_clean, reject_by_signal, or sanitize.` });
       }
 
       case 'get_knowledge_stats': {
@@ -775,7 +865,17 @@ function text(obj) {
 // LW-3(a): export the pure helpers so they can be unit-tested without starting
 // the stdio transport. When this file is required (not run directly), stop here
 // before the CLI dispatch and MCP startup below.
-module.exports = { fenceUnlockResult, UNTRUSTED_CONTENT_ADVISORY, baseHeaders, planApproveClean, unlockPaymentRequired, shapeWithdrawStatus, verifyWalletRequestBody };
+module.exports = {
+  fenceUnlockResult,
+  UNTRUSTED_CONTENT_ADVISORY,
+  baseHeaders,
+  planApproveClean,
+  planKeepPrivate,
+  keepPrivateDecisions,
+  unlockPaymentRequired,
+  shapeWithdrawStatus,
+  verifyWalletRequestBody,
+};
 if (require.main !== module) {
   return;
 }

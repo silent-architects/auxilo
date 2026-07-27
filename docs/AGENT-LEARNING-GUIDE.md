@@ -57,7 +57,7 @@ the server's sensitivity,
 - Raw session content prior to scrubbing.
 - File paths, environment variables, secrets, or credentials.
 - Any content matched by the sensitivity filter (emails, API keys, private URLs).
-- **Non-technical content of any kind** (CI-5 technical-only scope, 2026-07-19): interpersonal or communication strategy, copywriting/content/marketing insights, business or negotiation strategy, personal matters, creative-writing technique. The extraction prompt refuses these, the client drops any candidate outside the six technical categories (`data-processing`, `web-interaction`, `code-execution`, `storage-state`, `payment-financial`, `monitoring`), and the server refuses the retired `communication`/`content-generation` labels with `CATEGORY_OUT_OF_SCOPE`.
+- **Non-technical content in the default public-destined mode** (CI-5 technical-only scope, 2026-07-19): interpersonal or communication strategy, copywriting/content/marketing insights, business or negotiation strategy, personal matters, creative-writing technique. The default extraction prompt refuses these, the client drops any candidate outside the six technical categories (`data-processing`, `web-interaction`, `code-execution`, `storage-state`, `payment-financial`, `monitoring`), and the server refuses the retired `communication`/`content-generation` labels with `CATEGORY_OUT_OF_SCOPE`. The opt-in private capture lane described below may retain reusable non-technical candidates as `non-technical`; the local sensitivity scrub remains mandatory and unchanged.
 - **Process/workflow advice** (CI-7 system-fact test, 2026-07-19): a learning must anchor to a system and a symptom — an error, an undocumented limitation, a reproducible behavior of an external tool/API/OS. Advice about how to work (process, workflow, methodology, decision practice) is not extracted, and if submitted anyway it is held for your review (`process_advice_screen`), never published unattended.
 
 ---
@@ -165,6 +165,47 @@ Set your mode via `PATCH /account/settings`:
 ```json
 { "autonomous_extraction_mode": "automatic" }
 ```
+
+---
+
+## Private Capture and Review
+
+Private capture is opt-in. Set `AUXILO_CAPTURE_VISIBILITY=private`, or add
+`"capture_visibility": "private"` to `~/.auxilo/credentials.json`. Environment
+configuration wins when both are present. With neither setting, the runner
+keeps its existing public-destined behavior and technical-only extraction
+scope.
+
+Private-destined drafts carry `visibility: "private"`. Their extraction prompt
+may retain reusable non-technical operational candidates under category
+`non-technical`, but the same local sensitivity scrub, extraction memory, and
+dedup checks still run. Private learnings never enter the public marketplace.
+
+The review summary consumes the server's three-lane verdict directly:
+
+```bash
+npx auxilo review --list           # Ready to publish / Needs a score / Needs your eyes
+npx auxilo review --approve-ready  # public-destined ready_to_publish rows only
+npx auxilo review --min-quality 16 --approve-ready  # narrow within that lane
+npx auxilo review --keep-private   # keep Needs your eyes owner-only by default
+npx auxilo review --keep-private --lane needs_score
+```
+
+`Needs your eyes` rows show the server's `why` explanation. Every bulk path
+prints the exact IDs and requires typing the exact count; `--yes` is permitted
+only for safe-direction keep-private/reject paths, never approval. A threshold
+below 14 reaches into `needs_score` and prints an explicit beyond-verdict
+warning.
+
+The rapid-review action `p` and the bulk `--keep-private` action finalize a
+pending learning as owner-only: it stays yours, owner recall costs $0, and it
+is never published. A private-destined row cannot be made public with Approve;
+the server returns `private_requires_sanitize`. To promote one, submit
+operator-corrected public-safe content through
+`POST /account/pending/{id}/sanitize`; an approved-private `non-technical`
+source must also supply a category from the public technical taxonomy. The
+replacement runs through every screen and remains held until you explicitly
+approve it.
 
 ---
 

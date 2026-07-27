@@ -551,8 +551,9 @@ function fit(s, width) {
 /** Short lane/flag codes for a summary row, e.g. 'ready' or 'inj+sens'. */
 function shortFlags(row) {
   const resolved = review.reviewLane(row);
-  if (resolved.lane === 'ready_to_publish') return 'ready';
-  if (resolved.lane === 'needs_score') return 'score';
+  const visibility = row.visibility === 'private' ? ['priv'] : [];
+  if (resolved.lane === 'ready_to_publish') return visibility.concat('ready').join('+');
+  if (resolved.lane === 'needs_score') return visibility.concat('score').join('+');
   const map = {
     injection: 'inj',
     content_sensitivity: 'sens',
@@ -560,7 +561,7 @@ function shortFlags(row) {
     process_advice: 'advice',
     account_vocab: 'vocab',
   };
-  return (row.flags || []).map((f) => map[f] || f).join('+') || 'flagged';
+  return visibility.concat((row.flags || []).map((f) => map[f] || f)).join('+') || 'flagged';
 }
 
 /** One compact triage line (shared by the table and rapid mode). */
@@ -660,7 +661,7 @@ async function runBulk({ apiKey, baseUrl, rows, decision, reason }) {
     baseUrl,
     decisions,
     onChunk: ({ chunkIndex, chunkCount, response }) => {
-      console.log(`  chunk ${chunkIndex + 1}/${chunkCount}: approved ${response.approved || 0}, rejected ${response.rejected || 0}, already done ${response.idempotent || 0}, failed ${response.failed || 0}`);
+      console.log(`  chunk ${chunkIndex + 1}/${chunkCount}: approved ${response.approved || 0}, kept private ${response.kept_private || 0}, rejected ${response.rejected || 0}, already done ${response.idempotent || 0}, failed ${response.failed || 0}`);
     },
   });
   for (const r of totals.results) {
@@ -720,6 +721,9 @@ async function cmdReview(flags) {
     const minQuality = parseMinQuality(flags);
     const sel = review.selectForBulkApprove(rows, { mode: 'ready', minQuality });
     console.log(`approve-ready selection: ${sel.selected.length} of ${rows.length} pending (threshold: quality >= ${minQuality}).`);
+    if (sel.excluded_private.length) {
+      console.log(`  excluded ${sel.excluded_private.length} private-destined item(s); use [p]/--keep-private to keep them owner-only, or sanitize-promote them for public review.`);
+    }
     if (minQuality < review.DEFAULT_QUALITY_THRESHOLD) {
       const approvableCount = Number.isFinite(summary.approvable_count)
         ? summary.approvable_count
@@ -742,6 +746,9 @@ async function cmdReview(flags) {
   if (flags.all) {
     const includeFlagged = flags['include-flagged'] === true;
     const sel = review.selectForBulkApprove(rows, { mode: 'all', includeFlagged });
+    if (sel.excluded_private.length) {
+      console.log(`Excluded ${sel.excluded_private.length} private-destined item(s); use [p]/--keep-private to keep them owner-only, or sanitize-promote them for public review.`);
+    }
     if (includeFlagged && sel.selected.some((r) => review.reviewLane(r).lane === 'needs_your_eyes')) {
       console.log('WARNING: --include-flagged is set. This selection INCLUDES needs_your_eyes items (possible injection, sensitive content, process advice, account vocabulary, or near-duplicates). Approving publishes them publicly.');
     } else if (sel.excluded_flagged.length) {
@@ -752,6 +759,30 @@ async function cmdReview(flags) {
     if (!await confirmByTypedCount(sel.selected, 'APPROVE and PUBLISH')) return;
     const totals = await runBulk({ apiKey, baseUrl, rows: sel.selected, decision: 'approve' });
     console.log(`\nDone. Approved ${totals.approved} (already approved earlier: ${totals.idempotent}, failed: ${totals.failed}).`);
+    return;
+  }
+
+  // ── --keep-private: finalize one explicit server lane as owner-only.
+  //    Defaults to needs_your_eyes. Because this never publishes, --yes may
+  //    bypass its counted confirmation; all approve paths retain the rail. ───
+  if (flags['keep-private']) {
+    let sel;
+    try {
+      sel = review.selectForKeepPrivate(rows, { lane: flags.lane });
+    } catch (err) {
+      console.error(err.message);
+      process.exit(1);
+    }
+    console.log(`keep-private selection: ${sel.selected.length} of ${rows.length} pending (lane: ${sel.lane}).`);
+    for (const lane of ['ready_to_publish', 'needs_score', 'needs_your_eyes']) {
+      const excluded = sel.excluded_by_lane[lane];
+      if (excluded.length) console.log(`  excluded ${excluded.length} ${lane} item(s).`);
+    }
+    if (sel.selected.length === 0) { console.log('Nothing qualifies. No changes made.'); return; }
+    const ok = flags.yes || await confirmByTypedCount(sel.selected, 'KEEP PRIVATE (owner-only, $0 recall)');
+    if (!ok) return;
+    const totals = await runBulk({ apiKey, baseUrl, rows: sel.selected, decision: 'keep_private' });
+    console.log(`\nDone. Kept private ${totals.kept_private} of ${sel.selected.length} (already done earlier: ${totals.idempotent}, failed: ${totals.failed}).`);
     return;
   }
 
@@ -784,16 +815,16 @@ async function cmdReview(flags) {
     process.exit(1);
   }
 
-  console.log('Rapid review. Per item: [y] approve (goes live) · [n] reject (stays private) · [v] view full body · [s] skip · [q] quit\n');
+  console.log('Rapid review. Per item: [y] approve (goes public) · [n] reject · [p] keep private (owner-only, $0 recall) · [v] view · [s] skip · [q] quit\n');
 
-  let approved = 0, rejected = 0, skipped = 0;
+  let approved = 0, keptPrivate = 0, rejected = 0, skipped = 0;
   const ordered = rows; // quality-desc server order; the summary above groups lanes
   for (let i = 0; i < ordered.length; i++) {
     const row = ordered[i];
     console.log(triageLine(row, i + 1, ordered.length));
     let choice = '';
     for (;;) {
-      choice = (await ask('    [y/n/v/s/q]? ')).toLowerCase().slice(0, 1);
+      choice = (await ask('    [y/n/p/v/s/q]? ')).toLowerCase().slice(0, 1);
       if (!choice && readlineEnded) choice = 'q';
       if (choice === 'v') {
         const full = bodies.get(row.id);
@@ -806,7 +837,7 @@ async function cmdReview(flags) {
         console.log('    ------------------------------------------------------------');
         continue;
       }
-      if (['y', 'n', 's', 'q'].includes(choice)) break;
+      if (['y', 'n', 'p', 's', 'q'].includes(choice)) break;
     }
     if (choice === 'q') { console.log('  Stopping. Remaining items left pending.'); break; }
     if (choice === 's') { skipped += 1; continue; }
@@ -814,6 +845,9 @@ async function cmdReview(flags) {
       if (choice === 'y') {
         await review.submitDecision({ apiKey, baseUrl, id: row.id, decision: 'approve' });
         approved += 1; console.log('    ✓ approved, now live');
+      } else if (choice === 'p') {
+        await review.submitDecision({ apiKey, baseUrl, id: row.id, decision: 'keep_private' });
+        keptPrivate += 1; console.log('    ✓ kept private (owner-only)');
       } else {
         await review.submitDecision({ apiKey, baseUrl, id: row.id, decision: 'reject' });
         rejected += 1; console.log('    ✗ rejected, stays private');
@@ -823,7 +857,7 @@ async function cmdReview(flags) {
     }
   }
 
-  console.log(`\nReview complete: approved ${approved}, rejected ${rejected}, skipped ${skipped} of ${ordered.length}.`);
+  console.log(`\nReview complete: approved ${approved}, kept private ${keptPrivate}, rejected ${rejected}, skipped ${skipped} of ${ordered.length}.`);
 }
 
 // ─── Entry point ────────────────────────────────────────────────────────────
@@ -856,10 +890,16 @@ Flags:
   --min-quality N   quality threshold for --approve-ready (0-20)
   --all             approve everything except needs_your_eyes items
   --include-flagged include needs_your_eyes with --all
+  --keep-private    keep one lane owner-only (default: needs_your_eyes)
+  --lane <lane>     lane for --keep-private: ready_to_publish, needs_score,
+                    or needs_your_eyes
   --all-reject      reject the whole batch [--yes for scripted incident use]
+  --yes             bypass count only for --keep-private or --all-reject
   --base-url <url>
 
-Every approval path prints the exact list and requires typing its count.`,
+Every bulk path prints the exact list and requires typing its count. Approval
+never accepts --yes. Private-destined rows are excluded from approval; keep
+them private or sanitize-promote a corrected replacement.`,
     disable: `Usage: auxilo disable [--base-url <url>]
 
 Disable background extraction locally and optionally revoke server consent.`,
@@ -902,6 +942,8 @@ Commands:
                                 (add --include-flagged to include that lane).
                                 Same typed-count confirmation.
               --min-quality N   quality threshold for --approve-ready (0-20)
+              --keep-private    keep needs_your_eyes owner-only by default
+              --lane <lane>     choose a server lane for --keep-private
               --all-reject      reject the whole batch [--yes for scripted
                                 incident response; rejects stay private]
               --base-url <url>

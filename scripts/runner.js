@@ -59,6 +59,13 @@ const CREDS_PATH = path.join(AUXILO_DIR, 'credentials.json');
  *   2. credentials.json .base_url
  *   3. http://localhost:49152 (dev default)
  */
+function resolveCaptureVisibility(env = {}, fileCreds = {}) {
+  const value = Object.prototype.hasOwnProperty.call(env, 'AUXILO_CAPTURE_VISIBILITY')
+    ? env.AUXILO_CAPTURE_VISIBILITY
+    : fileCreds.capture_visibility;
+  return value === 'private' ? 'private' : 'public';
+}
+
 function loadCredentials() {
   let fileCreds = {};
   try {
@@ -70,10 +77,16 @@ function loadCredentials() {
     apiKey: process.env.AUXILO_API_KEY || fileCreds.api_key || null,
     baseUrl: process.env.AUXILO_BASE_URL || fileCreds.base_url || 'http://localhost:49152',
     accountLabel: fileCreds.label || fileCreds.account_id || null,
+    captureVisibility: resolveCaptureVisibility(process.env, fileCreds),
   };
 }
 
-const { apiKey: API_KEY, baseUrl: BASE_URL, accountLabel: ACCOUNT_LABEL } = loadCredentials();
+const {
+  apiKey: API_KEY,
+  baseUrl: BASE_URL,
+  accountLabel: ACCOUNT_LABEL,
+  captureVisibility: CAPTURE_VISIBILITY,
+} = loadCredentials();
 
 // Parsing contract with jobs/daily-digest.js readLogRows(): digest-relevant log
 // lines must carry `account=` (builder attribution) and, on publish lines,
@@ -290,7 +303,7 @@ function listPendingFiles() {
  *
  * @param {Array<object>} learnings
  * @param {string} sourceType
- * @param {object} [opts]  { fetchImpl, baseUrl, apiKey, indexPath, now } —
+ * @param {object} [opts]  { fetchImpl, baseUrl, apiKey, captureVisibility, indexPath, now } —
  *   injectable for tests
  * @returns {Promise<{published:number, held:number, rejected:number}>}
  */
@@ -298,6 +311,7 @@ async function submitLearnings(learnings, sourceType, opts = {}) {
   const fetchImpl = opts.fetchImpl || fetch;
   const baseUrl = opts.baseUrl || BASE_URL;
   const apiKey = opts.apiKey !== undefined ? opts.apiKey : API_KEY;
+  const captureVisibility = opts.captureVisibility || CAPTURE_VISIBILITY;
 
   let published = 0;
   let held = 0;
@@ -320,6 +334,7 @@ async function submitLearnings(learnings, sourceType, opts = {}) {
           outcome: l.outcome,
           contributor_agent: `auxilo-hook/${sourceType}`,
           submission_channel: 'extraction',
+          ...(captureVisibility === 'private' && { visibility: 'private' }),
           ...(l.quality_self_assessment && { quality_self_assessment: l.quality_self_assessment }),
         }),
       });
@@ -341,7 +356,7 @@ async function submitLearnings(learnings, sourceType, opts = {}) {
   return { published, held, rejected };
 }
 
-async function postExtract(transcript, sessionId, sourceType, _scrubReport) {
+async function postExtract(transcript, sessionId, sourceType, _scrubReport, opts = {}) {
   // CLIENT-SIDE extraction (2026-07-02). Server /extract is deprecated (410) — Auxilo
   // does not pay to extract. The local model (via `claude -p`) extracts + self-screens
   // the already-client-scrubbed transcript, and we submit finished learnings to /learn.
@@ -365,8 +380,9 @@ async function postExtract(transcript, sessionId, sourceType, _scrubReport) {
       judge_prompt_tokens: judgePromptTokens = 0,
       judge_completion_tokens: judgeCompletionTokens = 0,
     } = await extractLocally(transcript, sourceType, {
-      baseUrl: BASE_URL,
-      apiKey: API_KEY,
+      baseUrl: opts.baseUrl || BASE_URL,
+      apiKey: opts.apiKey !== undefined ? opts.apiKey : API_KEY,
+      captureVisibility: opts.captureVisibility || CAPTURE_VISIBILITY,
       log,
       auditLog: auditDropLog,
     }));
@@ -378,7 +394,10 @@ async function postExtract(transcript, sessionId, sourceType, _scrubReport) {
     return { learnings_published: 0, learnings_held: 0, learnings_rejected: 0, extraction_id: 'client-skip' };
   }
 
-  const { published, held, rejected } = await submitLearnings(learnings, sourceType);
+  const { published, held, rejected } = await submitLearnings(learnings, sourceType, {
+    ...opts,
+    captureVisibility: opts.captureVisibility || CAPTURE_VISIBILITY,
+  });
   // NOTE: token-free prose — the digest-parsed `published=`/`held=`/`rejected=`
   // tokens live ONLY on the per-run caller log lines. This line previously
   // carried `published=` too and the digest double-counted every extraction
@@ -924,7 +943,8 @@ async function main() {
       try {
         const payload = JSON.parse(fs.readFileSync(qf, 'utf-8'));
         const result = await postExtract(
-          payload.transcript, payload.sessionId, payload.source, payload.scrubReport
+          payload.transcript, payload.sessionId, payload.source, payload.scrubReport,
+          { captureVisibility: payload.capture_visibility || CAPTURE_VISIBILITY }
         );
         log(`[runner] ✓ Flushed ${path.basename(qf)}: published=${result.learnings_published || 0} held=${result.learnings_held || 0} rejected=${result.learnings_rejected || 0} ${DIGEST_ACCOUNT}`);
         flushHeld += result.learnings_held || 0;
@@ -1059,6 +1079,7 @@ async function main() {
         scrubReport: report,
         mtime: sessionRef.mtime,
         queuedAt: new Date().toISOString(),
+        ...(CAPTURE_VISIBILITY === 'private' && { capture_visibility: 'private' }),
       });
 
       try {
@@ -1093,6 +1114,7 @@ module.exports = {
   loadLedger, saveLedger, ledgerHighWater, ledgerHas, ledgerMark,
   installHooks, installSweeper, installDigest, printStatus, scrubAndVerify, enumerateActiveSources,
   loadSources, SOURCES, sweeperManifest, submitLearnings, notifyHeld,
+  resolveCaptureVisibility, postExtract,
   KILL_SWITCH_PATH, PENDING_DIR, LEDGER_PATH,
 };
 

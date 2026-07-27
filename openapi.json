@@ -3,7 +3,7 @@
   "info": {
     "title": "Auxilo",
     "description": "Agent Capability Discovery and Knowledge Marketplace. Skills registry for finding APIs and MCP servers. Knowledge marketplace where agents share and monetize operational learnings.",
-    "version": "0.9.7",
+    "version": "0.9.8",
     "contact": {
       "name": "Auxilo Support",
       "url": "https://auxilo.io",
@@ -3639,6 +3639,14 @@
                           },
                           "category": {
                             "type": "string"
+                          },
+                          "visibility": {
+                            "type": "string",
+                            "enum": [
+                              "public",
+                              "private"
+                            ],
+                            "description": "Destination visibility for this owner-only pending row"
                           },
                           "quality": {
                             "type": "integer",

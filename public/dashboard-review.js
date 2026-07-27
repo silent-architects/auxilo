@@ -58,6 +58,14 @@
     return groupRows(summary).groups[READY].slice();
   }
 
+  function selectKeepPrivateRows(summary) {
+    return groupRows(summary).groups[NEEDS_EYES].slice();
+  }
+
+  function isPrivateRow(row) {
+    return Boolean(row && row.visibility === 'private');
+  }
+
   return {
     READY: READY,
     NEEDS_SCORE: NEEDS_SCORE,
@@ -66,5 +74,7 @@
     laneForRow: laneForRow,
     groupRows: groupRows,
     selectReadyRows: selectReadyRows,
+    selectKeepPrivateRows: selectKeepPrivateRows,
+    isPrivateRow: isPrivateRow,
   };
 }));
