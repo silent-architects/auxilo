@@ -1366,6 +1366,7 @@
   function updateBulkBar() {
     var n = selectedCount();
     var approveBtn = document.getElementById('bulk-approve-btn');
+    var keepPrivateBtn = document.getElementById('bulk-keep-private-btn');
     var rejectBtn = document.getElementById('bulk-reject-btn');
     if (approveBtn) {
       approveBtn.textContent = 'Approve selected (' + n + ')';
@@ -1374,6 +1375,13 @@
     if (rejectBtn) {
       rejectBtn.textContent = 'Reject selected (' + n + ')';
       rejectBtn.disabled = n === 0;
+    }
+    if (keepPrivateBtn) {
+      var keepPrivateN = _triageRows.filter(function (row) {
+        return AuxiloReviewLanes.laneForRow(row).lane === AuxiloReviewLanes.NEEDS_EYES;
+      }).length;
+      keepPrivateBtn.textContent = 'Keep private (' + keepPrivateN + ')';
+      keepPrivateBtn.disabled = keepPrivateN === 0;
     }
   }
 
@@ -1458,6 +1466,25 @@
     approveBtn.onclick = function () { bulkDecide('approve'); };
     bar.appendChild(approveBtn);
 
+    var keepPrivateBtn = document.createElement('button');
+    keepPrivateBtn.className = 'btn btn-ghost btn-sm';
+    keepPrivateBtn.id = 'bulk-keep-private-btn';
+    keepPrivateBtn.textContent = 'Keep private (' + laneCounts.needs_your_eyes + ')';
+    keepPrivateBtn.disabled = laneCounts.needs_your_eyes === 0;
+    keepPrivateBtn.onclick = function () {
+      _triageSelected = {};
+      AuxiloReviewLanes.selectKeepPrivateRows(summary).forEach(function (r) {
+        _triageSelected[r.id] = true;
+      });
+      rows.forEach(function (r) {
+        var box = document.getElementById('triage-check-' + r.id);
+        if (box) box.checked = !!_triageSelected[r.id];
+      });
+      updateBulkBar();
+      bulkDecide('keep_private');
+    };
+    bar.appendChild(keepPrivateBtn);
+
     var rejectBtn = document.createElement('button');
     rejectBtn.className = 'btn btn-danger btn-sm';
     rejectBtn.id = 'bulk-reject-btn';
@@ -1523,6 +1550,13 @@
 
   function verdictTags(row) {
     var holder = document.createElement('span');
+    if (AuxiloReviewLanes.isPrivateRow(row)) {
+      var privateTag = document.createElement('span');
+      privateTag.className = 'tag tag-warn';
+      privateTag.style.marginRight = '4px';
+      privateTag.textContent = 'priv';
+      holder.appendChild(privateTag);
+    }
     var lane = AuxiloReviewLanes.laneForRow(row).lane;
     if (lane === AuxiloReviewLanes.READY) {
       var ok = document.createElement('span');
@@ -1646,6 +1680,11 @@
     approveBtn.textContent = 'Approve';
     approveBtn.onclick = function () { doPendingAction(row.id, 'approve', detailTr, tr); };
     actions.appendChild(approveBtn);
+    var keepPrivateBtn = document.createElement('button');
+    keepPrivateBtn.className = 'btn btn-ghost btn-sm';
+    keepPrivateBtn.textContent = 'Keep private';
+    keepPrivateBtn.onclick = function () { doPendingAction(row.id, 'keep_private', detailTr, tr); };
+    actions.appendChild(keepPrivateBtn);
     var rejectBtn = document.createElement('button');
     rejectBtn.className = 'btn btn-danger btn-sm';
     rejectBtn.textContent = 'Reject';
@@ -1692,7 +1731,8 @@
     var btns = detailTr ? detailTr.querySelectorAll('button') : [];
     btns.forEach(function (b) { b.disabled = true; });
 
-    var url = '/account/pending/' + encodeURIComponent(id) + '/' + action;
+    var routeAction = action === 'keep_private' ? 'keep-private' : action;
+    var url = '/account/pending/' + encodeURIComponent(id) + '/' + routeAction;
     var fetchOpts = { method: 'POST' };
     if (action === 'reject') {
       fetchOpts.body = JSON.stringify({});
@@ -1703,7 +1743,11 @@
       .then(function (res) {
         if (res.ok) {
           if (resultEl) {
-            resultEl.textContent = action === 'approve' ? 'Approved. This learning is now live.' : 'Rejected. This learning will not be published.';
+            resultEl.textContent = action === 'approve'
+              ? 'Approved. This learning is now live.'
+              : action === 'keep_private'
+                ? 'Successfully kept private (owner-only).'
+                : 'Rejected. This learning will not be published.';
             resultEl.className = 'alert ' + (action === 'approve' ? 'alert-success' : 'alert-warn');
             resultEl.style.display = '';
           }
@@ -1736,18 +1780,22 @@
 
     var confirmMsg = decision === 'approve'
       ? ('Approve ' + ids.length + ' learning(s)?\n\nEach one will be published to the public marketplace immediately. This confirmation is your approval of every item in the selection.')
-      : ('Reject ' + ids.length + ' learning(s)?\n\nThey stay private and will not be published.');
+      : decision === 'keep_private'
+        ? ('Keep ' + ids.length + ' learning(s) private?\n\nThey stay yours with owner-only recall at $0 and are never published.')
+        : ('Reject ' + ids.length + ' learning(s)?\n\nThey will not be published.');
     if (!window.confirm(confirmMsg)) return;
 
     var approveBtn = document.getElementById('bulk-approve-btn');
+    var keepPrivateBtn = document.getElementById('bulk-keep-private-btn');
     var rejectBtn = document.getElementById('bulk-reject-btn');
     if (approveBtn) approveBtn.disabled = true;
+    if (keepPrivateBtn) keepPrivateBtn.disabled = true;
     if (rejectBtn) rejectBtn.disabled = true;
 
     var chunks = [];
     for (var i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
 
-    var totals = { approved: 0, rejected: 0, idempotent: 0, failed: 0 };
+    var totals = { approved: 0, kept_private: 0, rejected: 0, idempotent: 0, failed: 0 };
 
     function runChunk(idx) {
       if (idx >= chunks.length) return Promise.resolve();
@@ -1760,6 +1808,7 @@
         .then(function (res) {
           if (!res.ok) throw new Error(res.data.error || 'Bulk call failed.');
           totals.approved += res.data.approved || 0;
+          totals.kept_private += res.data.kept_private || 0;
           totals.rejected += res.data.rejected || 0;
           totals.idempotent += res.data.idempotent || 0;
           totals.failed += res.data.failed || 0;
@@ -1774,6 +1823,7 @@
       .then(function () {
         var parts = [];
         if (totals.approved) parts.push(totals.approved + ' approved (now live)');
+        if (totals.kept_private) parts.push(totals.kept_private + ' kept private (owner-only)');
         if (totals.rejected) parts.push(totals.rejected + ' rejected (stay private)');
         if (totals.idempotent) parts.push(totals.idempotent + ' already decided');
         if (totals.failed) parts.push(totals.failed + ' failed');

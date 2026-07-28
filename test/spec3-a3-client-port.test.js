@@ -224,7 +224,7 @@ describe('SPEC3-A3 CLI lane rendering and selection', () => {
     assert.equal(result.code, 0, result.stderr);
     assert.match(result.stdout, /FULL BODY ready18/);
     assert.match(result.stdout, /Title ready14/);
-    assert.match(result.stdout, /Review complete: approved 0, rejected 0, skipped 1 of 6/);
+    assert.match(result.stdout, /Review complete: approved 0, kept private 0, rejected 0, skipped 1 of 6/);
   });
 
   it('falls back without crashing when an old server omits lane and prints version skew', () => {

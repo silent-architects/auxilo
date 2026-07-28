@@ -782,9 +782,9 @@ describe('N1: openapi debt closed', () => {
   });
 });
 
-describe('MCP 0.9.4 rider: auxilo_review gains sanitize + reject_by_signal', () => {
+describe('MCP review actions retain sanitize + reject_by_signal alongside keep_private', () => {
   it('action enum extended', () => {
-    assert.ok(MCP_SRC.includes("enum: ['list', 'approve', 'reject', 'approve_clean', 'reject_by_signal', 'sanitize']"));
+    assert.ok(MCP_SRC.includes("enum: ['list', 'approve', 'reject', 'keep_private', 'approve_clean', 'reject_by_signal', 'sanitize']"));
   });
 
   it('reject_by_signal handler enforces the counted gate client-side too', () => {

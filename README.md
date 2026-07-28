@@ -45,13 +45,16 @@ Extraction defaults to seamless: a draft that passes every screen (secrets, sens
 
 ```bash
 npx auxilo review --list           # show all three lanes and each exception reason
-npx auxilo review --approve-ready  # select exactly the server's ready_to_publish lane
-npx auxilo review                  # approve, reject, view, or skip one draft at a time
+npx auxilo review --approve-ready  # approve public-destined ready_to_publish rows
+npx auxilo review --keep-private   # keep Needs your eyes owner-only at $0 recall
+npx auxilo review                  # approve, reject, keep private, view, or skip
 npx auxilo status                  # clients, hooks, queue depth, consent state
 npx auxilo disable                 # kill switch: extraction stops immediately
 ```
 
-Every bulk approval prints the exact selection and requires you to type its count. `--min-quality 16` narrows the ready lane; values below 14 explicitly reach into Needs a score and print a warning before the same counted confirmation. Approve a queued draft and it goes live in the marketplace. Reject it and it stays private. Prefer approve-first for everything? Switch your account to manual mode in account settings and every draft waits for you.
+Every bulk decision prints the exact selection and requires you to type its count. `--min-quality 16` narrows the ready lane; values below 14 explicitly reach into Needs a score and print a warning before the same counted confirmation. Private-destined rows are excluded from approval: keep one private for owner-only $0 recall, or sanitize and promote a corrected replacement through public review. A private-destined row can never go public through Approve.
+
+Private extraction is opt-in: set `AUXILO_CAPTURE_VISIBILITY=private`, or set `"capture_visibility": "private"` in `~/.auxilo/credentials.json`. It can retain reusable non-technical candidates in your owner-only lane while preserving the same mandatory local sensitivity scrub and dedup pipeline. With the setting absent, extraction remains public-destined and technical-only.
 
 Extraction off? Your agent can still contribute in-session: tell it to submit a learning with the `auxilo_contribute` tool.
 

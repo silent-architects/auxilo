@@ -32,6 +32,7 @@ const {
 // lists are duplicated here from lib/category-scope-migration.js (server truth);
 // test/ci5-scope-enforcement.test.js pins the copies equal.
 const CATEGORIES = ['data-processing', 'web-interaction', 'code-execution', 'storage-state', 'payment-financial', 'monitoring'];
+const PRIVATE_CATEGORIES = [...CATEGORIES, 'non-technical'];
 const RETIRED_CATEGORIES = ['communication', 'content-generation'];
 
 /**
@@ -76,6 +77,23 @@ Output STRICT JSON ONLY — an object with:
      "matched_title": "<exact matched title>"}
   Scope/quality/sensitivity skips are not dedup_drops.`;
 
+const PUBLIC_SCOPE_BLOCK = `HARD SCOPE RULE — TECHNICAL LEARNINGS ONLY (the marketplace accepts nothing else): extract ONLY technical/operational learnings — APIs, developer tools, code, infrastructure, data pipelines, monitoring/observability, payment/crypto TECHNOLOGY, debugging. NEVER extract interpersonal or communication strategy, copywriting/content/marketing insights, business or negotiation strategy, personal matters, or creative-writing technique — DROP such candidates entirely, do not relabel them. A technical learning about a messaging/email/notification API belongs under "web-interaction" or "code-execution"; content/data pipeline TECH belongs under "data-processing".
+
+SYSTEM-FACT TEST (CI-7): Extract ONLY when a system and a symptom are at the core — an error, an undocumented limitation, a reproducible behavior of an external tool/API/OS. If the candidate is advice about how to work (process, workflow, methodology, decision practice), do NOT extract it. "Odesli cannot resolve Tidal artist URLs" is a learning; "use a two-phase consultation workflow" is not, no matter how well it would score.`;
+
+const PRIVATE_SCOPE_BLOCK = `PRIVATE CAPTURE SCOPE — OWNER-ONLY: extract reusable technical OR non-technical operational learnings. Non-technical process, workflow, communication, content, business, or creative learnings may use category "non-technical"; do not drop a genuine reusable candidate solely because it is non-technical. This private lane is never published unless the owner later sanitizes and promotes an item through public review. The mandatory sensitivity screen still applies without exception.`;
+
+function promptBaseForVisibility(captureVisibility) {
+  if (captureVisibility !== 'private') return EXTRACTION_PROMPT_BASE;
+  return EXTRACTION_PROMPT_BASE
+    .replace(
+      "to publish to a PUBLIC knowledge marketplace read by other AI agents.",
+      "for the owner's private, owner-only knowledge lane."
+    )
+    .replace(PUBLIC_SCOPE_BLOCK, PRIVATE_SCOPE_BLOCK)
+    .replace(JSON.stringify(CATEGORIES), JSON.stringify(PRIVATE_CATEGORIES));
+}
+
 /** A1: rubric addendum — appended ONLY when scoreExtractionEnabled(). */
 const QUALITY_RUBRIC_ADDENDUM = `
   "quality_self_assessment": an object scoring the learning honestly on four
@@ -105,7 +123,7 @@ function buildExtractionPrompt(opts = {}) {
   const memory = typeof opts.previousLessonsSection === 'string'
     ? opts.previousLessonsSection
     : '';
-  return EXTRACTION_PROMPT_BASE +
+  return promptBaseForVisibility(opts.captureVisibility) +
     (withScore ? QUALITY_RUBRIC_ADDENDUM : '') +
     (memory ? `\n\n${memory}` : '') +
     PROMPT_SUFFIX;
@@ -144,6 +162,7 @@ function extractWithClaudeCode(transcript, opts = {}) {
     ? opts.prompt
     : buildExtractionPrompt({
       previousLessonsSection: opts.previousLessonsSection,
+      captureVisibility: opts.captureVisibility,
       ...(opts.scoreExtraction !== undefined && { scoreExtraction: opts.scoreExtraction }),
     });
   const input = prompt + String(transcript).slice(0, 200000);
@@ -226,11 +245,15 @@ function normalizeLearningArray(arr, opts = {}) {
   // would launder a non-tech candidate (e.g. one the model labeled
   // 'communication') into the catalog wearing a tech label. Category-based,
   // so it applies identically in BOTH score-gate states.
-  const inScope = shaped.filter(l => CATEGORIES.includes(l.category));
+  const allowedCategories = opts.captureVisibility === 'private' ? PRIVATE_CATEGORIES : CATEGORIES;
+  const inScope = shaped.filter(l => allowedCategories.includes(l.category));
   // Gate-A F5: make the drop observable — count to stderr (never stdout; the
   // hook log captures it) so a silently over-dropping prompt is diagnosable.
   const dropped = shaped.length - inScope.length;
-  if (dropped > 0) console.error(`[extract-local] dropped ${dropped} candidate(s) outside the technical category set (CI-5 scope)`);
+  if (dropped > 0) {
+    const scope = opts.captureVisibility === 'private' ? 'private category set' : 'technical category set (CI-5 scope)';
+    console.error(`[extract-local] dropped ${dropped} candidate(s) outside the ${scope}`);
+  }
   return inScope
     .map(l => {
       const out = {
@@ -570,6 +593,7 @@ async function extractLocally(transcript, sourceType, opts = {}) {
     };
   const prompt = buildExtractionPrompt({
     previousLessonsSection: promptMemory.section,
+    captureVisibility: opts.captureVisibility,
     ...(opts.scoreExtraction !== undefined && { scoreExtraction: opts.scoreExtraction }),
   });
   const invokeModel = typeof opts.invokeModel === 'function'
@@ -639,7 +663,7 @@ async function extractLocally(transcript, sourceType, opts = {}) {
 
 module.exports = {
   extractLocally, parseLearnings, parseExtractionOutput, resolveClaudeBin,
-  CATEGORIES, RETIRED_CATEGORIES,
+  CATEGORIES, PRIVATE_CATEGORIES, RETIRED_CATEGORIES,
   EXTRACTION_PROMPT, buildExtractionPrompt, scoreExtractionEnabled,
   validateQualityAssessment, QUALITY_DIMENSIONS,
   buildAnchoredJudgePrompt, parseJudgeDecisions, runAnchoredJudge,
