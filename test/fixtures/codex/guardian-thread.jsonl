@@ -1,0 +1,2 @@
+{"timestamp":"2026-07-27T12:00:00.000Z","type":"session_meta","payload":{"session_id":"33333333-3333-4333-8333-333333333333","cwd":"/fixture/workspace","originator":"Codex Desktop","cli_version":"0.145.0-fixture","thread_source":"subagent","source":{"subagent":{"name":"guardian","role":"safety-judge"}},"model_provider":"fixture-provider","base_instructions":"Synthetic guardian instructions"}}
+{"timestamp":"2026-07-27T12:00:01.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Synthetic guardian verdict"}]}}

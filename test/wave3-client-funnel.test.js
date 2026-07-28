@@ -591,10 +591,10 @@ describe('UC-3 — Cline / Roo Code / Continue adapters', () => {
 });
 
 describe('UC-3 — dynamic SOURCES registry', () => {
-  it('registers all seven adapters, excludes generic/interface, unique ids', () => {
+  it('registers all eight adapters, excludes generic/interface, unique ids', () => {
     const ids = runner.SOURCES.map((S) => S.id).sort();
     assert.deepStrictEqual(ids,
-      ['antigravity', 'claude-code', 'cline', 'continue', 'gemini-cli', 'openclaw', 'roo-code']);
+      ['antigravity', 'claude-code', 'cline', 'codex-cli', 'continue', 'gemini-cli', 'openclaw', 'roo-code']);
     assert.strictEqual(new Set(ids).size, ids.length);
     for (const S of runner.SOURCES) {
       assert.ok(S.prototype instanceof TranscriptSource, `${S.id} extends TranscriptSource`);

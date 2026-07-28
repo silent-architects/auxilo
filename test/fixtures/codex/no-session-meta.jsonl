@@ -1,0 +1,2 @@
+{"timestamp":"2026-07-27T12:00:00.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Synthetic record without metadata"}]}}
+{"timestamp":"2026-07-27T12:00:01.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Synthetic response"}]}}

@@ -558,11 +558,14 @@ async function runAnchoredJudge(candidates, indexState, opts = {}) {
 
 /**
  * Extract learnings locally. Returns { learnings: [...] } or { learnings: [], skipped }.
- * Only claude-code has a local extractor today; other clients rely on the agent's
- * proactive auxilo_contribute (MCP) call.
+ * Claude Code and Codex rollout captures use the existing client-local Claude
+ * extractor; other clients rely on the agent's proactive auxilo_contribute
+ * (MCP) call.
  */
+const EXTRACTABLE_SOURCES = new Set(['claude-code', 'codex-cli']);
+
 async function extractLocally(transcript, sourceType, opts = {}) {
-  if (sourceType && sourceType !== 'claude-code') {
+  if (sourceType && !EXTRACTABLE_SOURCES.has(sourceType)) {
     return { learnings: [], skipped: `local extraction not implemented for "${sourceType}" — agent contributes via auxilo_contribute` };
   }
 

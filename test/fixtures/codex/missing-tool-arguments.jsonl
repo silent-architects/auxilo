@@ -1,0 +1,4 @@
+{"timestamp":"2026-07-27T12:00:00.000Z","type":"session_meta","payload":{"session_id":"77777777-7777-4777-8777-777777777777","cwd":"/fixture/workspace","originator":"Codex Desktop","cli_version":"0.145.0-fixture","thread_source":"user","model_provider":"fixture-provider","base_instructions":"Synthetic missing-arguments regression fixture"}}
+{"timestamp":"2026-07-27T12:00:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Run the synthetic tool without arguments"}]}}
+{"timestamp":"2026-07-27T12:00:02.000Z","type":"response_item","payload":{"type":"custom_tool_call","name":"fixture_tool_without_arguments"}}
+{"timestamp":"2026-07-27T12:00:03.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Synthetic tool call completed"}]}}
