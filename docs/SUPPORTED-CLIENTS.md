@@ -1,6 +1,6 @@
 # Auxilo — Supported Client Integrations
 
-*Last updated: 2026-07-18 (extraction data flow corrected to the as-built client-side pipeline; previously 2026-06-12: UC-0/UC-1 universal client support: 16 clients detected, MCP registration for 15, capture hooks for 8; honest per-client capture tiers introduced)*
+*Last updated: 2026-07-28 (UC-6 added Codex Desktop rollout sweeping; UC-3 best-effort adapters reconciled into the matrix)*
 
 This page lists the AI coding assistants and development environments currently supported by Auxilo, including the clients supported by the Autonomous Learning Extraction feature (ToS §5.9.3). Served at `/legal/supported-clients`. Updated in-place when new adapters are added.
 
@@ -37,11 +37,13 @@ The installer detects your clients, registers the MCP server in each, signs you 
 | **Antigravity** | `~/.gemini/antigravity/` | `~/.gemini/config/mcp_config.json` | ⚠️ **Supported (early)** — `Stop` hook (`~/.gemini/config/hooks.json`) | hook schema young; verified against live install |
 | **Windsurf** | `~/.codeium/windsurf/` | `~/.codeium/windsurf/mcp_config.json` | ✅ **Supported** — per-response transcript hook (deduplicated) | |
 | **GitHub Copilot (VS Code agent / CLI)** | `~/.copilot/` | `~/.copilot/mcp-config.json` | ✅ **Supported** — `Stop` hook (`~/.copilot/hooks/auxilo.json`) | hooks are a VS Code Preview feature |
-| **Codex CLI** | `~/.codex/` | `~/.codex/config.toml` | ✅ **Supported** — `Stop` hook (`~/.codex/hooks.json`) | requires one-time `/hooks` trust approval inside Codex |
+| **Codex (CLI + Desktop)** | `~/.codex/` | `~/.codex/config.toml` | ✅ **Supported** — `Stop` hook (`~/.codex/hooks.json`, CLI; requires one-time `/hooks` trust) **+ poll sweep of `~/.codex/sessions/` rollouts (Desktop + CLI, best-effort)** | Desktop app currently does not execute hooks (upstream openai/codex#21639); sweep covers it. |
 | **Factory droid** | `~/.factory/` | `~/.factory/mcp.json` | ✅ **Supported** — `SessionEnd` hook (`~/.factory/hooks.json`) | applies to new sessions after setup |
 | **OpenClaw** | `~/.openclaw/` | — (plugin planned) | ✅ **Best-effort** — poll-based source adapter | dedicated plugin + clawhub listing planned |
+| **Cline (VS Code)** | VS Code `globalStorage/saoudrizwan.claude-dev/` | — | ✅ **Best-effort** — poll-based source adapter | NOT locally verified; strict format probe fails silent on storage-shape drift |
+| **Roo Code (VS Code)** | VS Code `globalStorage/rooveterinaryinc.roo-{cline,code}/` | — | ✅ **Best-effort** — poll-based source adapter | NOT locally verified; strict format probe fails silent on storage-shape drift |
 | **Claude Desktop** | `~/Library/Application Support/Claude/` | `claude_desktop_config.json` | **Probabilistic** — rules/MCP contribution only | no extraction surface exists |
-| **Continue.dev** | `~/.continue/` | drop-in `~/.continue/mcpServers/auxilo.json` | **Probabilistic** (best-effort adapter planned) | |
+| **Continue.dev** | `~/.continue/` | drop-in `~/.continue/mcpServers/auxilo.json` | ✅ **Best-effort** — poll-based source adapter | NOT locally verified; strict format probe fails silent on storage-shape drift |
 | **opencode** | `~/.config/opencode/` | `opencode.json` | **Probabilistic** (plugin planned) | |
 | **Kiro** | `~/.kiro/` | `~/.kiro/settings/mcp.json` | **Probabilistic** | |
 | **JetBrains Junie** | `~/.junie/` | `~/.junie/mcp/mcp.json` | **Probabilistic** | |
