@@ -12,6 +12,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 const REPO_ROOT = path.join(__dirname, '..');
 const FIXTURES = path.join(__dirname, 'fixtures', 'codex');
@@ -231,6 +232,74 @@ describe('UC-6 — Codex Desktop capture', () => {
     } finally {
       if (previous === undefined) delete process.env.AUXILO_MAX_SESSION_BYTES;
       else process.env.AUXILO_MAX_SESSION_BYTES = previous;
+    }
+  });
+
+  it('Gate-A F-A never throws when a real-shape tool call omits arguments', async () => {
+    const filePath = path.join(FIXTURES, 'missing-tool-arguments.jsonl');
+    const source = new CodexCliSource({ homeDir: '/fixture/home' });
+    const result = await source.readSession(refFor(filePath, 'missing-tool-arguments'));
+    assert.match(result.transcript, /Tool: fixture_tool_without_arguments/);
+    assert.ok(!result.transcript.includes('undefined'));
+
+    const drifted = new CodexCliSource({ homeDir: '/fixture/home' });
+    drifted._readSession = () => { throw new Error('synthetic future shape drift'); };
+    assert.equal(
+      await drifted.readSession(refFor(filePath, 'future-shape-drift')),
+      null,
+      'the public readSession boundary must convert every unexpected normalizer throw to null'
+    );
+
+    drifted._readSession = async () => { throw new Error('synthetic future async drift'); };
+    assert.equal(
+      await drifted.readSession(refFor(filePath, 'future-async-drift')),
+      null,
+      'the public readSession boundary must also convert rejected normalizer promises to null'
+    );
+  });
+
+  it('Gate-A F-B reports one end-of-sweep refusal summary without per-file path logs', () => {
+    const home = tmpdir();
+    try {
+      const sessions = path.join(home, '.codex', 'sessions', '2026', '07', '27');
+      fs.mkdirSync(sessions, { recursive: true });
+      fs.mkdirSync(path.join(home, '.auxilo'), { recursive: true });
+      fs.writeFileSync(path.join(home, '.auxilo', 'autonomous-enabled'), 'enabled\n');
+
+      const refusedFixtures = [
+        ['subagent-thread.jsonl', '88888888-8888-4888-8888-888888888888'],
+        ['guardian-thread.jsonl', '99999999-9999-4999-8999-999999999999'],
+        ['no-session-meta.jsonl', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
+      ];
+      const old = new Date(Date.now() - 60000);
+      for (const [name, id] of refusedFixtures) {
+        const filePath = path.join(sessions, `rollout-2026-07-27T12-00-00-${id}.jsonl`);
+        fs.writeFileSync(filePath, fixture(name));
+        fs.utimesSync(filePath, old, old);
+      }
+
+      const env = {
+        ...process.env,
+        HOME: home,
+        AUXILO_CODEX_QUIESCENCE_MS: '1',
+        AUXILO_NO_NOTIFY: '1',
+      };
+      delete env.AUXILO_EXTRACTING;
+      const result = spawnSync(
+        process.execPath,
+        [path.join(REPO_ROOT, 'scripts', 'runner.js'), '--source', 'codex-cli', '--dry-run', '--force'],
+        { env, encoding: 'utf8', timeout: 30000 }
+      );
+      assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+      assert.equal(
+        count(result.stdout, 'codex-cli: 3 refused (non-user/format)'),
+        1,
+        result.stdout
+      );
+      assert.doesNotMatch(result.stdout + result.stderr, /format probe refused/);
+      assert.ok(!result.stderr.includes(sessions), 'stderr must not disclose each refused rollout path');
+    } finally {
+      cleanup(home);
     }
   });
 });

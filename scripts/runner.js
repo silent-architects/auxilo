@@ -973,6 +973,7 @@ async function main() {
   let totalOversize = 0; // N1: oversize-cap skips (subset of totalSkipped)
   let totalFailed = 0;
   let totalHeld = 0;
+  const refusedBySource = new Map();
 
   for (const source of sources) {
     log(`[runner] Discovering sessions from ${source.label} (${source.type})...`);
@@ -1021,7 +1022,7 @@ async function main() {
 
       // UC-1 format-probe refusal: null = skip silently (not a failure).
       if (!transcriptData || typeof transcriptData.transcript !== 'string') {
-        log(`[runner]   Skipped — format probe refused (source=${source.type})`);
+        refusedBySource.set(source.type, (refusedBySource.get(source.type) || 0) + 1);
         totalSkipped++;
         ledgerMark(ledger, source.type, sessionRef.sessionId, 'probe-refused', sessionRef.mtime);
         continue;
@@ -1098,6 +1099,9 @@ async function main() {
     }
   }
 
+  for (const [sourceType, count] of refusedBySource) {
+    log(`[runner] ${sourceType}: ${count} refused (non-user/format)`);
+  }
   saveLedger(ledger);
   log(`[runner] Summary: ${totalDiscovered} discovered, ${totalProcessed} processed, ${totalSkipped} skipped (${totalOversize} oversize), ${totalFailed} failed`);
   if (totalOversize > 0) {

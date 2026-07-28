@@ -73,8 +73,9 @@ function textContentItems(content) {
 }
 
 function stringifyValue(value) {
+  if (value === undefined || value === null) return '';
   if (typeof value === 'string') return value;
-  try { return JSON.stringify(value); } catch { return String(value || ''); }
+  try { return JSON.stringify(value) ?? ''; } catch { return String(value); }
 }
 
 function oneLine(value) {
@@ -155,6 +156,17 @@ class CodexCliSource extends TranscriptSource {
   }
 
   async readSession(sessionRef) {
+    try {
+      return await this._readSession(sessionRef);
+    } catch {
+      // Gate-A F-A: the adapter contract is never-throw. A newly observed
+      // optional field or other shape drift refuses the whole rollout rather
+      // than escaping into the runner as a failed session.
+      return this._refuse(sessionRef && sessionRef.path, 'unexpected normalization error');
+    }
+  }
+
+  _readSession(sessionRef) {
     const filePath = sessionRef && sessionRef.path;
     let raw;
     try {
@@ -237,7 +249,11 @@ class CodexCliSource extends TranscriptSource {
   }
 
   _refuse(filePath, reason) {
-    process.stderr.write(`[codex-cli] format probe refused ${filePath || '(unknown)'} (${reason}) — skipping\n`);
+    // Gate-A F-B: sweeps summarize refusals once in runner.js. Per-file paths
+    // are available only under an explicit local debug opt-in.
+    if (this.env.AUXILO_CODEX_DEBUG === '1') {
+      process.stderr.write(`[codex-cli] format probe refused ${filePath || '(unknown)'} (${reason}) — skipping\n`);
+    }
     return null;
   }
 
