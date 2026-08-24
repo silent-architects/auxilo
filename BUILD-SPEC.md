@@ -597,7 +597,7 @@ Create 20-30 learning objects using the data model above. Source from real opera
 - Legacy VM deployment gotchas
 - JSON persistence patterns on minimal VMs
 
-Use platform wallet `0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6` as `contributor_wallet` for all seeds. All quality scores start at zero.
+Use platform wallet `0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6` as `contributor_wallet` for all seeds. All quality scores start at zero. *(Historical: that wallet is the retired pre-LLC platform wallet — retired at the 2026-07-12 LLC rotation and never a payment destination since; seeds deliberately keep it as `contributor_wallet` identity. See `LEGACY_PLATFORM_WALLETS` in `server.js`.)*
 
 #### `openapi.json`
 Generate an OpenAPI 3.0 spec describing ALL endpoints (existing + new). Include:
