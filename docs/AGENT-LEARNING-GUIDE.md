@@ -215,7 +215,9 @@ The contributor review summary can place a pending item in
 `needs_your_eyes` when a safety or publication-readiness signal needs a human
 decision. One such signal is `account_vocab`: an identifier-shaped term recurs
 across at least two of your own learnings but does not appear in the approved
-public corpus or the common-development baseline. The summary explains the
+public corpus or the common-development baseline (a compound built entirely
+from baseline terms or numbers — `race-condition`, `7-day` — is treated as
+generic and not held). The summary explains the
 matched term and recommends the `sanitize` flow so you can replace internal
 system vocabulary with generic wording before approval.
 

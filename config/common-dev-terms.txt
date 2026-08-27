@@ -3,7 +3,21 @@
 # One lowercase term per line. This seed intentionally favors false-positive
 # suppression for common package names, CLI tools, platforms, protocols,
 # formats, environment variables, and ordinary engineering vocabulary.
-# It is read only by scripts/vocab-dryrun.js during Phase 0.
+#
+# Read by scripts/vocab-dryrun.js (Phase 0 analysis) AND by server.js at boot
+# (ACCOUNT_VOCAB_COMMON_DEV_TERMS) — it is live tuning, not analysis-only.
+#
+# Entries are matched two ways, so a single word does double duty:
+#   1. whole-token — the candidate equals this term (`value`, `chatgpt`)
+#   2. segment     — every `-`/`_` segment of a compound is known
+#                    (`race` + `condition` excludes `race-condition`)
+# Because of (2) this list is multiplicative: an added segment word suppresses
+# every compound it can form. Add single words, not compounds.
+#
+# DO NOT add generic identifier modifiers (private, public, shared, core, main,
+# lane, tier, gate, state, mode, queue...). Internal identifiers are often built
+# from two ordinary words — the ratified E1 fixture `private_queue` is exactly
+# that class — and adding those segments silently disarms the signal.
 abortcontroller
 access
 accessibility
@@ -116,7 +130,6 @@ container
 content
 context
 cookie
-core
 cors
 coverage
 cpu
@@ -338,7 +351,6 @@ publish
 pulumi
 pytest
 python
-queue
 rabbitmq
 railway
 react
@@ -702,7 +714,6 @@ secrets
 self-skips
 settimeout
 sets
-shared
 silent-skip
 site-wide
 skill
@@ -722,3 +733,73 @@ wordpress
 youtube-music
 dangerously-skip-permissions
 graceful-degradation
+
+# ─── Generic-term false-positive remediation (2026-08-06) ────────────────
+# Scoped to terms the live pending queue actually flagged (21/30 items held
+# on generic vocabulary) plus public product nouns. Deliberately NOT a broad
+# English dump — see the DO-NOT-ADD note in the header.
+already
+amplitude
+auto
+b2b
+b2c
+ccpa
+chatgpt
+cleanly
+codex
+condition
+confluence
+copilot
+cursor
+datadog
+day
+days
+dir
+dirs
+facebook
+figma
+fresh
+gdpr
+grafana
+homebrew
+instagram
+kpi
+linkedin
+loudly
+mailgun
+mcp
+mfa
+mixpanel
+otp
+paas
+pagerduty
+pii
+postmark
+processed
+processing
+prometheus
+quietly
+race
+reddit
+resend
+roi
+saas
+safely
+sendgrid
+sentry
+silently
+simulator
+sla
+sso
+stale
+substack
+testflight
+tiktok
+trello
+twilio
+twitter
+value
+values
+vetted
+xcode
+zoom
