@@ -229,7 +229,7 @@ describe('ITEM 1: publish path audit-before-mutate', () => {
     // Find the /extract handler
     const handlerIdx = SERVER_SRC.indexOf("app.post('/extract'");
     assert.ok(handlerIdx > -1, '/extract handler must exist');
-    const handler = SERVER_SRC.slice(handlerIdx, handlerIdx + 24000);
+    const handler = SERVER_SRC.slice(handlerIdx, handlerIdx + 28000);
 
     const auditIdx = handler.indexOf('appendAuditRow');
     const safeWriteIdx = handler.indexOf('safeWrite(LEARNINGS_FILE');
@@ -241,7 +241,7 @@ describe('ITEM 1: publish path audit-before-mutate', () => {
 
   it('audit failure returns 500 with code audit_integrity_error', () => {
     const handlerIdx = SERVER_SRC.indexOf("app.post('/extract'");
-    const handler = SERVER_SRC.slice(handlerIdx, handlerIdx + 24000);
+    const handler = SERVER_SRC.slice(handlerIdx, handlerIdx + 28000);
 
     assert.ok(handler.includes("code: 'audit_integrity_error'"),
       'audit failure must return code: audit_integrity_error');
@@ -253,7 +253,7 @@ describe('ITEM 1: publish path audit-before-mutate', () => {
 
   it('catalog is NOT mutated when audit write fails (published.length = 0)', () => {
     const handlerIdx = SERVER_SRC.indexOf("app.post('/extract'");
-    const handler = SERVER_SRC.slice(handlerIdx, handlerIdx + 24000);
+    const handler = SERVER_SRC.slice(handlerIdx, handlerIdx + 28000);
 
     // After the catch block for audit failure, published must be emptied
     const catchIdx = handler.indexOf('audit_integrity_error');
@@ -269,7 +269,7 @@ describe('ITEM 1: publish path audit-before-mutate', () => {
     // to learnings[] only after the audit write succeeds.
     const handlerIdx = SERVER_SRC.indexOf("app.post('/extract'");
     assert.ok(handlerIdx > -1);
-    const handler = SERVER_SRC.slice(handlerIdx, handlerIdx + 24000);
+    const handler = SERVER_SRC.slice(handlerIdx, handlerIdx + 28000);
 
     // Verify pendingCatalogEntries array is declared
     assert.ok(handler.includes('const pendingCatalogEntries = []'),
@@ -291,7 +291,7 @@ describe('ITEM 1: publish path audit-before-mutate', () => {
 
   it('learnings.push happens AFTER audit write succeeds (from pendingCatalogEntries)', () => {
     const handlerIdx = SERVER_SRC.indexOf("app.post('/extract'");
-    const handler = SERVER_SRC.slice(handlerIdx, handlerIdx + 24000);
+    const handler = SERVER_SRC.slice(handlerIdx, handlerIdx + 28000);
 
     // Find the catalog mutation section (after audit)
     const catalogMutationIdx = handler.indexOf('Catalog mutation: ONLY after successful audit');

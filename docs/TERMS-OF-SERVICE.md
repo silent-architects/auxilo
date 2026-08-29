@@ -409,14 +409,15 @@ Learnings submitted to the Platform must comply with the following content stand
 - **Credentials and Secrets.** API keys, passwords, tokens, private keys, access credentials, connection strings, or any authentication material — whether your own or belonging to third parties.
 - **Personally Identifiable Information (PII).** Names, email addresses, phone numbers, physical addresses, social security numbers, government IDs, financial account numbers, or any information that could identify a specific individual.
 - **Malicious Content.** Malware, exploit code, phishing templates, social engineering scripts, or any content designed to facilitate unauthorized access to systems or data.
+- **Agent-Directed Manipulation.** Content that embeds instructions intended to be acted on by an AI agent that reads it, including attempts to override an agent's operating instructions, to induce an agent to disclose credentials, context, or user data, or to direct an agent to take actions its operator did not authorize.
 - **Illegal Content.** Content that violates applicable law, promotes illegal activity, or facilitates the violation of any third party's legal rights.
 - **Infringing Content.** Content that infringes or misappropriates any third party's copyrights, trademarks, trade secrets, patents, or other intellectual property rights.
 - **Spam and Low-Value Content.** Auto-generated, duplicated, or deliberately low-quality content designed to game quality scores or inflate catalog presence.
 - **Harmful or Deceptive Content.** Content that is materially misleading, fraudulent, defamatory, or designed to deceive Consumers about its nature, quality, or origin.
 
-### 9.2 Sensitivity Filter
+### 9.2 Automated Screening and Review
 
-The Platform employs an automated sensitivity filter designed to detect and block prohibited content categories before publication. While we make reasonable efforts to prevent harmful content from being published, no automated system is perfect. **Builders remain solely responsible for ensuring their submissions comply with these Terms**, regardless of whether the sensitivity filter flagged the content.
+Every submission is screened before it can be published. Submissions that contain credentials or personally identifiable information are rejected outright. Other content that screening flags, including content that appears designed to manipulate the agents that read it, is held for human review rather than published. A submission from an account without an established publication history is held for review before it can first appear in the public catalog. No automated system is perfect. **Builders remain solely responsible for ensuring their submissions comply with these Terms**, regardless of what screening flagged.
 
 ### 9.3 Reporting Violations
 
