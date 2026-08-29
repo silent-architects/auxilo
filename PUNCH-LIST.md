@@ -817,6 +817,8 @@ Source: `~/.auxilo/handoffs/AD-VISUAL-SITE-REVIEW.md` (FINAL, 44KB). Sequenced A
 - **Inherited claims still source-only, NOT reproduced by the lead** (safe to act on, but verify before quoting as measured): the spacing census (558 declarations / 38 distinct values), the ~300-line dead-CSS list, `.compound-factors` diverging 2-col vs 1-col at 480px, the `.value-callout` seven-property diff, the numbered-step card padding difference, and V34's api endpoint-table risk (explicitly unreproduced and filed as latent).
 - **Test-count pin.** If BUILD-4 adds nav regression coverage for AD-10, the CI test-count pin must bump in the same commit per the standing rule; `tests/test-mobile-nav-overlay.js` today asserts DR-1 geometry only, not close/focus/scroll behaviour.
 
+**§34/§35 merged remediation plan (SITE-PM, 2026-08-29).** Filed at `~/.auxilo/handoffs/SITE-REMEDIATION-PLAN-2026-08-29.md` against 19a9bc3. Waves: R (D2/Step-5, rides R13-CLOSE), 1 (truth/canon copy, relay-ready), 2 (CSS mechanics incl. AD-15 + AD-1 prose relocation), 3 (positioning, F3-noun-gated), 4 (conversion, direction-gated), 5 (visual system, DR-3/DR-7 constraints), 6 (sweep), SPEC-2 lane (COPY-13/F25). Tyler decision queue D-2..D-6 in plan §6. AD-1 hard-bound to COPY-18; COPY-16/18 held at flip gates.
+
 ## 36. Conway Knowledge Upload (2026-08-29)
 
 Tyler, 2026-08-29: **distinct objective from the §33 infrastructure decommission — all Conway learnings should be uploaded to Auxilo.** §33 removed Conway-as-infrastructure; Conway-as-subject is wanted catalog content, and the two must never be conflated (CDX-6 resolved accordingly: the 5 live Conway learnings stay). Standing rule for every future pass: Conway-subject knowledge is inventory, not debris.
