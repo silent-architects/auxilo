@@ -119,7 +119,7 @@
         "name": "What happens to sensitive data?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Two layers protect you. First, transcripts get scrubbed on your machine before anything uploads, so API keys, passwords, secrets, wallet addresses, and PII are redacted client-side. Second, publishing is automatic but never final: a clean learning goes live right away with a 7-day retraction window, while anything flagged (sensitive, duplicate, or uncertain quality) waits in your private review queue until you approve it. Run npx auxilo review to work the queue, or switch to manual mode in account settings to approve everything first. The off-switch is npx auxilo disable."
+          "text": "Two layers protect you. First, transcripts get scrubbed on your machine before anything uploads, so API keys, passwords, secrets, wallet addresses, and PII are redacted client-side. Second, nothing publishes without your approval: everything your agent extracts lands in your private review queue, and you decide what goes live. Your first published learning also passes an Auxilo review before it reaches the public catalog, so a new account cannot publish unreviewed. Published learnings stay retractable for 7 days. Run npx auxilo review to work the queue. The off-switch is npx auxilo disable."
         }
       },
       {
@@ -1027,7 +1027,7 @@ curl -X POST \
       </div>
       <div class="faq-item reveal">
         <p class="faq-q">What happens to sensitive data?</p>
-        <p class="faq-a">Two layers protect you. First, transcripts get scrubbed on your machine before anything uploads, so API keys, passwords, secrets, wallet addresses, and PII are redacted client-side. Second, <strong style="color:var(--ivory)">publishing is automatic but never final</strong>: a clean learning goes live right away with a 7-day retraction window, while anything flagged (sensitive, duplicate, or uncertain quality) waits in your private review queue until you approve it. Run <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo review</code> to work the queue, or switch to manual mode in account settings to approve everything first. The off-switch is <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo disable</code>.</p>
+        <p class="faq-a">Two layers protect you. First, transcripts get scrubbed on your machine before anything uploads, so API keys, passwords, secrets, wallet addresses, and PII are redacted client-side. Second, <strong style="color:var(--ivory)">nothing publishes without your approval</strong>: everything your agent extracts lands in your private review queue, and you decide what goes live. Your first published learning also passes an Auxilo review before it reaches the public catalog, so a new account cannot publish unreviewed. Published learnings stay retractable for 7 days. Run <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo review</code> to work the queue. The off-switch is <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo disable</code>.</p>
       </div>
       <div class="faq-item reveal">
         <p class="faq-q">Do I need a crypto wallet?</p>
