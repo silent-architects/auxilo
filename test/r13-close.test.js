@@ -133,6 +133,33 @@ describe('R13 publication authority', () => {
     }
   });
 
+  it('refuses trusted contributor self-approval for report auto-hide and malicious-content holds', () => {
+    for (const held of [
+      {
+        platform_hold_reasons: ['report_auto_hide'],
+        report_auto_hidden_at: '2026-08-29T00:00:00.000Z',
+        report_auto_hide_distinct_count: 3,
+      },
+      {
+        platform_hold_reasons: ['malicious_content'],
+        malicious_verdict: 'injection',
+        malicious_reason: 'Reader-directed instruction.',
+      },
+    ]) {
+      const learning = pending(held);
+      const before = JSON.parse(JSON.stringify(learning));
+      const result = applySelfDecision([learning], 'acc_r13', learning.id, 'approve', {
+        account: trustedAccount(),
+        now: '2026-08-29T00:01:00.000Z',
+      });
+      assert.equal(result.ok, false);
+      assert.equal(result.code, 'platform_review_required');
+      assert.equal(result.status, 409);
+      assert.ok(result.flags.includes('platform_hold'));
+      assert.deepEqual(learning, before);
+    }
+  });
+
   it('persists platform holds into both reviewer projections and the needs-eyes lane', () => {
     const learning = pending({ platform_hold_reasons: ['untrusted_account'] });
     assert.deepEqual(screenFlags(learning), ['platform_hold']);
@@ -184,6 +211,30 @@ describe('R13 publication authority', () => {
     assert.doesNotMatch(slice, /classifySensitivityLLM|evaluateContentSensitivity/);
     assert.equal((SERVER_SRC.match(/await classifySensitivityLLM\(/g) || []).length, 1);
     assert.equal((RECLASSIFY_SRC.match(/await classifySensitivityLLM\(/g) || []).length, 1);
+  });
+
+  it('does not instruct untrusted sanitize contributors to self-publish', () => {
+    const start = SERVER_SRC.indexOf("app.post('/account/pending/:id/sanitize'");
+    const end = SERVER_SRC.indexOf('// ─── S21-3', start);
+    const slice = SERVER_SRC.slice(start, end);
+    const response = slice.slice(slice.lastIndexOf('return c.json({'));
+    const messageGate = response.indexOf('message: sanitizePublicationTrusted');
+    const trustedMessage = response.indexOf(
+      'Sanitized replacement resubmitted through every screen and held for your explicit approval. The original remains recoverable.'
+    );
+    const untrustedMessage = response.indexOf(
+      'Sanitized replacement resubmitted through every screen and held for Auxilo operator review. The original remains recoverable.'
+    );
+    assert.ok(messageGate !== -1 && messageGate < trustedMessage && trustedMessage < untrustedMessage);
+
+    const guidanceGate = response.indexOf('how_to_review: sanitizePublicationTrusted');
+    const trustedGuidance = response.indexOf(
+      'Approve or reject it yourself: run `auxilo review` (CLI), open your dashboard review queue, or GET /account/pending with your API key.'
+    );
+    const untrustedGuidance = response.indexOf(
+      'This submission requires Auxilo operator review. Contributor self-approval cannot publish an account’s first public learning.'
+    );
+    assert.ok(guidanceGate !== -1 && guidanceGate < trustedGuidance && trustedGuidance < untrustedGuidance);
   });
 });
 

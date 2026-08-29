@@ -10882,8 +10882,12 @@ app.post('/account/pending/:id/sanitize', async (c) => {
       near_duplicate_why: nearDupHold.near_duplicate_why,
       near_duplicate_evidence: nearDupHold.near_duplicate_evidence,
     }),
-    message: 'Sanitized replacement resubmitted through every screen and held for your explicit approval. The original remains recoverable.',
-    how_to_review: 'Approve or reject it yourself: run `auxilo review` (CLI), open your dashboard review queue, or GET /account/pending with your API key.',
+    message: sanitizePublicationTrusted
+      ? 'Sanitized replacement resubmitted through every screen and held for your explicit approval. The original remains recoverable.'
+      : 'Sanitized replacement resubmitted through every screen and held for Auxilo operator review. The original remains recoverable.',
+    how_to_review: sanitizePublicationTrusted
+      ? 'Approve or reject it yourself: run `auxilo review` (CLI), open your dashboard review queue, or GET /account/pending with your API key.'
+      : 'This submission requires Auxilo operator review. Contributor self-approval cannot publish an account’s first public learning.',
   });
 });
 

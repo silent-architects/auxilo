@@ -167,7 +167,9 @@ describe('DR-8 free path moves no signals', () => {
     assert.ok(owner.includes('stripOpsCounters(ownerLearning.quality)'));
     for (const f of ['injection_flags', 'possible_duplicate_of', 'moderation',
       'near_duplicate_evidence', 'near_duplicate_why',
-      'sensitivity_signals', 'sensitivity_evidence', 'learning_type', 'sanitized_from']) {
+      'sensitivity_signals', 'sensitivity_evidence', 'learning_type', 'sanitized_from',
+      'malicious_verdict', 'malicious_reason', 'platform_hold_reasons',
+      'report_auto_hidden_at', 'report_auto_hide_distinct_count']) {
       assert.ok(owner.includes(f), `strips ${f}`);
     }
   });
