@@ -58,6 +58,9 @@ const pricing = require('../lib/pricing.js');
 const csLlm = require('../lib/content-sensitivity-llm.js');
 
 const TECH = ['data-processing', 'web-interaction', 'code-execution', 'storage-state', 'payment-financial', 'monitoring'];
+const TRUSTED_ACCOUNT = Object.freeze({
+  publication_trust: { source: 'operator_grant', granted_at: 'test', ref: 'test:ci5' },
+});
 const RETIRED = ['communication', 'content-generation'];
 const SKILL_CATEGORIES_8 = [
   'data-processing', 'web-interaction', 'code-execution', 'communication',
@@ -345,7 +348,7 @@ describe('approve-path guard: retired-label items cannot be (re-)approved', () =
 
   it('tech-category approve is unaffected', () => {
     const store = [mkPending('lrn_tech', { category: 'web-interaction' })];
-    const r = selfReview.applySelfDecision(store, ACC, 'lrn_tech', 'approve');
+    const r = selfReview.applySelfDecision(store, ACC, 'lrn_tech', 'approve', { account: TRUSTED_ACCOUNT });
     assert.equal(r.ok, true);
     assert.equal(store[0].status, 'approved');
   });
@@ -355,7 +358,7 @@ describe('approve-path guard: retired-label items cannot be (re-)approved', () =
     const out = selfReview.applyBulkDecisions(store, ACC, [
       { id: 'lrn_held', decision: 'approve' },
       { id: 'lrn_tech', decision: 'approve' },
-    ], { confirmCount: 2 });
+    ], { confirmCount: 2, account: TRUSTED_ACCOUNT });
     assert.equal(out.ok, true);
     assert.equal(out.counts.approved, 1);
     assert.equal(out.counts.failed, 1);
@@ -487,8 +490,8 @@ describe('Gate-A F2/F3/F5', () => {
 // I. CI-7 — the system-fact test (one-call two-verdict extension)
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('CI-7: one LLM call, two verdicts (lib/content-sensitivity-llm.js)', () => {
-  it('the SINGLE system prompt carries both classification tasks and one JSON contract', () => {
+describe('CI-7/R13: one LLM call, three verdicts (lib/content-sensitivity-llm.js)', () => {
+  it('the SINGLE system prompt carries all classification tasks and one JSON contract', () => {
     assert.ok(csLlm.SYSTEM_PROMPT.includes('SYSTEM-FACT TEST'), 'second classification task present');
     assert.ok(csLlm.SYSTEM_PROMPT.includes('"learning_type": <"system_fact"|"process_advice">'),
       'the one response contract carries both verdicts — no second call exists');
@@ -498,12 +501,12 @@ describe('CI-7: one LLM call, two verdicts (lib/content-sensitivity-llm.js)', ()
     assert.ok(csLlm.SYSTEM_PROMPT.includes('two-phase consultation workflow'), 'canonical process_advice example');
   });
 
-  it('parseVerdict normalizes learning_type: valid values pass, anything else → null', () => {
-    const base = '{"sensitive": false, "reason": "ok", "confidence": 0.9';
+  it('parseVerdict requires valid learning_type plus the R13 malicious verdict', () => {
+    const base = '{"sensitive": false, "reason": "ok", "confidence": 0.9, "malicious": "none", "malicious_reason": "No malicious instruction."';
     assert.equal(csLlm.parseVerdict(base + ', "learning_type": "system_fact"}').learning_type, 'system_fact');
     assert.equal(csLlm.parseVerdict(base + ', "learning_type": "process_advice"}').learning_type, 'process_advice');
-    assert.equal(csLlm.parseVerdict(base + ', "learning_type": "essay"}').learning_type, null);
-    assert.equal(csLlm.parseVerdict(base + '}').learning_type, null, 'missing field → null (caller fails closed)');
+    assert.equal(csLlm.parseVerdict(base + ', "learning_type": "essay"}'), null);
+    assert.equal(csLlm.parseVerdict(base + '}'), null, 'missing field → null (caller fails closed)');
   });
 
   it('combineSensitivity passes learning_type through; null when the LLM was not consulted', () => {
@@ -526,7 +529,7 @@ describe('CI-7: one LLM call, two verdicts (lib/content-sensitivity-llm.js)', ()
   it('classifySensitivityLLM carries the verdict end-to-end via an injected call (no real API)', async () => {
     const v = await csLlm.classifySensitivityLLM('t', 'b', [], {
       apiKey: 'test-key',
-      llmCall: async () => '{"sensitive": false, "reason": "generic tech", "confidence": 0.95, "learning_type": "process_advice"}',
+      llmCall: async () => '{"sensitive": false, "reason": "generic tech", "confidence": 0.95, "learning_type": "process_advice", "malicious": "none", "malicious_reason": "No malicious instruction."}',
     });
     assert.equal(v.sensitive, false);
     assert.equal(v.learning_type, 'process_advice');
@@ -545,7 +548,7 @@ describe('CI-7: server screen wiring (structural pins)', () => {
   });
 
   it('/learn: process_advice holds (reason + persist) and blocks seamless — loud pin', () => {
-    const block = sliceAt(SERVER_SRC, 'const processAdviceHold = LEARNING_TYPE_SCREEN_ENABLED', 1400);
+    const block = sliceAt(SERVER_SRC, 'const processAdviceHold = LEARNING_TYPE_SCREEN_ENABLED', 2200);
     const squashed = block.replace(/\s+/g, ' ');
     assert.ok(squashed.includes("contentSensitivity.learning_type !== 'system_fact'"),
       'fail-closed: anything not judged system_fact holds');
@@ -559,7 +562,7 @@ describe('CI-7: server screen wiring (structural pins)', () => {
   });
 
   it('/extract candidates: same screen, same fail-closed shape (parity pin)', () => {
-    const block = sliceAt(SERVER_SRC, 'const extractProcessAdviceHold = LEARNING_TYPE_SCREEN_ENABLED', 1400);
+    const block = sliceAt(SERVER_SRC, 'const extractProcessAdviceHold = LEARNING_TYPE_SCREEN_ENABLED', 1900);
     const squashed = block.replace(/\s+/g, ' ');
     assert.ok(squashed.includes("extractContentSensitivity.learning_type !== 'system_fact'"));
     assert.ok(squashed.includes("if (extractProcessAdviceHold) extractReviewReasons.push('process_advice_screen');"));
@@ -636,10 +639,11 @@ describe('CI-7: holds land in needs_your_eyes (lib/self-review.js)', () => {
     assert.equal(rows[0].learning_type, 'process_advice');
   });
 
-  it('approve remains ALLOWED for process_advice holds — the human is the appeal path', () => {
+  it('trusted accounts retain the existing process_advice self-review flow', () => {
     const store = [held('lrn_advice', { learning_type: 'process_advice' })];
-    const r = selfReview.applySelfDecision(store, ACC, 'lrn_advice', 'approve');
-    assert.equal(r.ok, true, 'a hold is an appeal surface, not a block (unlike retired categories)');
+    const r = selfReview.applySelfDecision(store, ACC, 'lrn_advice', 'approve', { account: TRUSTED_ACCOUNT });
+    assert.equal(r.ok, true);
+    assert.equal(store[0].status, 'approved');
   });
 });
 
@@ -866,9 +870,9 @@ describe('behavioral: boot enforces the 400 and runs the migration', () => {
       assert.ok(!stats.categories.includes('communication') && !stats.categories.includes('content-generation'),
         'no retired label remains visible');
 
-      // ── Gate-A F1: /pipeline/:id/approve enforces the category allowlist ──
-      // (mutation kill: reverting the approve-loop guard publishes the retired-
-      // label candidate and these assertions fail)
+      // ── R13 R1-B: dormant pipeline approval is coherently 410-gated ──────
+      // Keep the awaiting_review storage shape intact, but no candidate may
+      // reach lookup/publication while server-side extraction is disabled.
       const joseEntry = require(require.resolve('jose', { paths: [REPO_ROOT] }));
       const jwt = await new joseEntry.SignJWT({ accountId: ACC, email: 'ci5@test.local' })
         .setProtectedHeader({ alg: 'HS256' })
@@ -880,21 +884,16 @@ describe('behavioral: boot enforces the 400 and runs the migration', () => {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
         body: JSON.stringify({ approved: [0, 1, 2], prices: {} }),
       });
-      assert.equal(approveRes.status, 200, 'approve route must be reachable with the session JWT');
+      assert.equal(approveRes.status, 410, 'authenticated pipeline approval must share the upload feature gate');
       const approveBody = await approveRes.json();
-      assert.equal(approveBody.published_count, 1, 'only the valid-category candidate publishes');
-      assert.equal(approveBody.published[0].title, 'Widget API returns 200 on failed batch when items array empty');
-      assert.equal(approveBody.rejected_out_of_scope.length, 2);
-      const byIdx = Object.fromEntries(approveBody.rejected_out_of_scope.map((r) => [r.index, r]));
-      assert.equal(byIdx[0].reason, 'category_out_of_scope', 'retired label gets the distinct reason');
-      assert.equal(byIdx[0].category, 'communication');
-      assert.equal(byIdx[1].reason, 'category_invalid', 'unknown label gets the generic reason');
-      assert.deepEqual(byIdx[0].allowed_categories, TECH);
-      // The store must contain the valid item and NEITHER skipped candidate.
+      assert.equal(approveBody.code, 'extraction_client_side');
+      // The store must contain NONE of the staged candidates.
       const postPipeline = JSON.parse(fs.readFileSync(path.join(tmpDir, 'data', 'learnings.json'), 'utf-8'));
-      assert.ok(postPipeline.some((l) => l.category === 'web-interaction' && /Widget API/.test(l.title)));
+      assert.ok(!postPipeline.some((l) => /Widget API/.test(l.title)), 'valid candidate also stays staged while dormant');
       assert.ok(!postPipeline.some((l) => /negotiation opener/.test(l.title)), 'retired-label candidate must not enter the store');
       assert.ok(!postPipeline.some((l) => l.category === 'general'), "no 'general' fallback entry may be born");
+      const stagedPipelines = JSON.parse(fs.readFileSync(path.join(tmpDir, 'data', 'pipelines.json'), 'utf-8'));
+      assert.equal(stagedPipelines[0].status, 'awaiting_review', 'future-revival storage shape remains intact');
     } finally {
       if (child) child.kill('SIGKILL');
       fs.rmSync(tmpDir, { recursive: true, force: true });

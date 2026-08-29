@@ -69,6 +69,11 @@ function fixtureAccounts() {
       id: ACCOUNT_ID,
       email: 'spec3-f2-owner@test.local',
       created_at: FIXED_AT,
+      publication_trust: {
+        source: 'operator_grant',
+        granted_at: FIXED_AT,
+        ref: 'operator:spec3-f2-fixture',
+      },
       api_keys: [{
         id: 'key_spec3_f2_read',
         hash: crypto.createHash('sha256').update(RAW_API_KEY).digest('hex'),

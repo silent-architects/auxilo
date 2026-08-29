@@ -628,6 +628,11 @@ function bootFixtureAccounts() {
       created_at: now,
       tos_version: '2026-07-04-payee-agency-a1',
       accepted_at: now,
+      publication_trust: {
+        source: 'operator_grant',
+        granted_at: now,
+        ref: 'operator:spec3-b1-fixture',
+      },
       api_keys: [{
         id: 'key_spec3boot',
         hash: crypto.createHash('sha256').update(RAW_API_KEY).digest('hex'),

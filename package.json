@@ -13,6 +13,7 @@
     "bin/",
     "lib/installer.js",
     "lib/review.js",
+    "lib/untrusted-content.js",
     "lib/hook-status.js",
     "lib/sensitivity-filter.js",
     "lib/extraction-index.js",

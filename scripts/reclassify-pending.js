@@ -22,6 +22,9 @@ const path = require('path');
 const APP = process.env.APP_DIR || '/app';
 const { classifySensitivity } = require(path.join(APP, 'lib/content-sensitivity.js'));
 const { classifySensitivityLLM, combineSensitivity, isLlmSensitivityEnabled } = require(path.join(APP, 'lib/content-sensitivity-llm.js'));
+const { isPublicationTrusted } = require(path.join(APP, 'lib/publication-authority.js'));
+const { screenFlags } = require(path.join(APP, 'lib/self-review.js'));
+const { loadAccounts } = require(path.join(APP, 'lib/accounts.js'));
 const LEARNINGS = path.join(APP, 'data/learnings.json');
 const APPLY = process.argv.includes('--apply');
 const CONCURRENCY = 5;
@@ -48,6 +51,7 @@ async function evaluate(l) {
 (async () => {
   const raw = JSON.parse(fs.readFileSync(LEARNINGS, 'utf8'));
   const arr = Array.isArray(raw) ? raw : (raw.learnings || []);
+  const accounts = loadAccounts();
   const pending = arr.filter(l => l.status === 'pending_review');
   console.log(`pending_review to reclassify: ${pending.length} | LLM enabled: ${isLlmSensitivityEnabled()} | mode: ${APPLY ? 'APPLY' : 'DRY-RUN'}`);
 
@@ -64,7 +68,21 @@ async function evaluate(l) {
       }
       try {
         const r = await evaluate(l);
-        (r.sensitive ? hold : approve).push({ l, r });
+        const persistedFlags = screenFlags(l);
+        const persistedPlatformHold = Array.isArray(l.platform_hold_reasons) && l.platform_hold_reasons.length > 0;
+        const malicious = r.malicious && r.malicious !== 'none';
+        const processAdvice = r.learning_type !== 'system_fact';
+        const trusted = isPublicationTrusted(accounts[l.contributor_account_id]);
+        const mustHold = r.sensitive || malicious || processAdvice ||
+          persistedFlags.length > 0 || persistedPlatformHold || !trusted;
+        (mustHold ? hold : approve).push({
+          l,
+          r: {
+            ...r,
+            ...(!trusted && { publication_authority: 'untrusted_account' }),
+            ...(persistedFlags.length > 0 && { persisted_flags: persistedFlags }),
+          },
+        });
       } catch (e) {
         hold.push({ l, r: { sensitive: true, sensitivity_signals: ['reclassify_error'] } });
       }

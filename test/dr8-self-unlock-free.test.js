@@ -186,7 +186,8 @@ describe('DR-8 free path moves no signals', () => {
 describe('DR-8 leaves the paid path intact', () => {
   it('non-owner fall-through: dualAuthDynamic still charges, with the unlock description', () => {
     assert.ok(h.includes("await dualAuthDynamic(c, UNLOCK_PRICE,"), 'charge call intact');
-    assert.ok(h.includes("'unlock', 'read', routerCtx)"), 'same credit type, scope, and router context');
+    assert.ok(h.includes("'unlock', 'read', routerCtx, UNTRUSTED_PREVIEW_ADVISORY)"),
+      'same credit type, scope, and router context plus the additive R13 challenge advisory');
   });
 
   it('M-2 wash guard intact as the post-payment backstop (header claims + anonymous x402 still pay, still accrue nothing)', () => {

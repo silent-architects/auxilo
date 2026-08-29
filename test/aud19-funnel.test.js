@@ -108,7 +108,9 @@ describe('applySelfDecision keeps human authority over below-floor items (AUD19-
       contributor_account_id: 'acc_h',
       quality_self_assessment: { specificity: 3, actionability: 3, novelty: 3, completeness: 3, total: 12 },
     }];
-    const r = applySelfDecision(learnings, 'acc_h', 'lrn_lowq', 'approve');
+    const r = applySelfDecision(learnings, 'acc_h', 'lrn_lowq', 'approve', {
+      account: { publication_trust: { source: 'operator_grant', granted_at: 'test', ref: 'test:aud19' } },
+    });
     assert.equal(r.ok, true);
     assert.equal(learnings[0].status, 'approved');
     assert.equal(learnings[0].moderation, 'manual');
@@ -171,20 +173,21 @@ describe('adoptWalletOrphans (AUD19-3b)', () => {
     assert.deepEqual(adoptWalletOrphans([], null, W), []);
     assert.deepEqual(adoptWalletOrphans([orphan('x', 'pending_review')], 'acc', null), []);
   });
-  it('END-TO-END CURE: invisible orphan → adopt → listed → self-approvable', () => {
+  it('END-TO-END CURE: invisible orphan → adopt → listed → operator-reviewed under R13', () => {
     const learnings = [orphan('lrn_cure', 'pending_review', { body: 'the held learning body', category: 'monitoring', created_at: 'now' })];
     // Before: the account-scoped queue cannot see it, and a decision is forbidden.
     assert.equal(listOwnPending(learnings, 'acc_new').length, 0);
     assert.equal(applySelfDecision(learnings, 'acc_new', 'lrn_cure', 'approve').code, 'forbidden');
     // Adoption (server calls this only with the account's VERIFIED linked wallet).
     assert.equal(adoptWalletOrphans(learnings, 'acc_new', W).length, 1);
-    // After: visible and decidable — the whole existing review stack works.
+    // After: visible, but wallet adoption is not publication trust (R13 R2).
     const listed = listOwnPending(learnings, 'acc_new');
     assert.equal(listed.length, 1);
     assert.equal(listed[0].id, 'lrn_cure');
-    const r = applySelfDecision(learnings, 'acc_new', 'lrn_cure', 'approve');
-    assert.equal(r.ok, true);
-    assert.equal(learnings[0].status, 'approved');
+    const r = applySelfDecision(learnings, 'acc_new', 'lrn_cure', 'approve', { account: { wallet_verified: true } });
+    assert.equal(r.ok, false);
+    assert.equal(r.code, 'operator_review_required');
+    assert.equal(learnings[0].status, 'pending_review');
   });
 });
 

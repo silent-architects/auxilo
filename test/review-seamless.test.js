@@ -46,6 +46,9 @@ function sliceAt(src, marker, span = 3000) {
 
 const ME = 'acc_me';
 const OTHER = 'acc_other';
+const TRUSTED_ACCOUNT = Object.freeze({
+  publication_trust: { source: 'operator_grant', granted_at: 'test', ref: 'test:review-seamless' },
+});
 
 function learning(id, overrides = {}) {
   return {
@@ -182,7 +185,7 @@ describe('applyBulkDecisions: batch validation gates', () => {
       assert.equal(r.code, 'confirm_count_mismatch');
     }
     assert.equal(JSON.stringify(cat), before, 'mismatched confirmation must not mutate');
-    const ok = selfReview.applyBulkDecisions(cat, ME, decisions, { confirmCount: 1 });
+    const ok = selfReview.applyBulkDecisions(cat, ME, decisions, { confirmCount: 1, account: TRUSTED_ACCOUNT });
     assert.equal(ok.ok, true);
   });
 
@@ -199,7 +202,7 @@ describe('applyBulkDecisions: per-entry semantics', () => {
     const r = selfReview.applyBulkDecisions(cat, ME, [
       { id: 'lrn_clean_hi', decision: 'approve' },
       { id: 'lrn_clean_lo', decision: 'reject', reason: 'not good enough' },
-    ], { confirmCount: 2, now: '2026-07-18T00:00:00.000Z' });
+    ], { confirmCount: 2, now: '2026-07-18T00:00:00.000Z', account: TRUSTED_ACCOUNT });
 
     assert.equal(r.ok, true);
     assert.equal(r.counts.approved, 1);
@@ -221,7 +224,7 @@ describe('applyBulkDecisions: per-entry semantics', () => {
     const r = selfReview.applyBulkDecisions(cat, ME, [
       { id: 'lrn_approved', decision: 'approve' },
       { id: 'lrn_rejected', decision: 'reject' },
-    ], { confirmCount: 2 });
+    ], { confirmCount: 2, account: TRUSTED_ACCOUNT });
     assert.equal(r.ok, true);
     assert.equal(r.counts.changed, 0);
     assert.equal(r.counts.idempotent, 2);
@@ -232,8 +235,8 @@ describe('applyBulkDecisions: per-entry semantics', () => {
     }
     // Retry safety: running the SAME approve twice ends in the same state.
     const cat2 = fixtureCatalog();
-    selfReview.applyBulkDecisions(cat2, ME, [{ id: 'lrn_clean_hi', decision: 'approve' }], { confirmCount: 1 });
-    const again = selfReview.applyBulkDecisions(cat2, ME, [{ id: 'lrn_clean_hi', decision: 'approve' }], { confirmCount: 1 });
+    selfReview.applyBulkDecisions(cat2, ME, [{ id: 'lrn_clean_hi', decision: 'approve' }], { confirmCount: 1, account: TRUSTED_ACCOUNT });
+    const again = selfReview.applyBulkDecisions(cat2, ME, [{ id: 'lrn_clean_hi', decision: 'approve' }], { confirmCount: 1, account: TRUSTED_ACCOUNT });
     assert.equal(again.results[0].idempotent, true);
     assert.equal(cat2.find((l) => l.id === 'lrn_clean_hi').status, 'approved');
   });
@@ -269,7 +272,7 @@ describe('applyBulkDecisions: per-entry semantics', () => {
       { id: 'lrn_clean_lo', decision: 'publish' },
       { id: 'lrn_unscored', decision: 'reject', reason: 'x'.repeat(selfReview.BULK_REASON_MAX + 1) },
       'not-an-object',
-    ], { confirmCount: 5 });
+    ], { confirmCount: 5, account: TRUSTED_ACCOUNT });
     assert.equal(r.ok, true);
     assert.equal(r.counts.approved, 1);
     assert.equal(r.counts.failed, 4);
@@ -286,7 +289,7 @@ describe('applyBulkDecisions: per-entry semantics', () => {
     const r = selfReview.applyBulkDecisions(cat, ME, [
       { id: 'lrn_clean_hi', decision: 'approve' },
       { id: 'lrn_clean_hi', decision: 'approve' },
-    ], { confirmCount: 2 });
+    ], { confirmCount: 2, account: TRUSTED_ACCOUNT });
     assert.equal(r.counts.changed, 1, 'the item must only transition once');
     assert.equal(r.results[1].duplicate, true);
     assert.equal(r.results[1].ok, true);
@@ -297,7 +300,7 @@ describe('applyBulkDecisions: per-entry semantics', () => {
     const r = selfReview.applyBulkDecisions(cat, ME, [
       { id: 'lrn_clean_hi', decision: 'approve' },
       { id: 'lrn_clean_hi', decision: 'reject' },
-    ], { confirmCount: 2 });
+    ], { confirmCount: 2, account: TRUSTED_ACCOUNT });
     assert.equal(r.results[0].ok, true);
     assert.equal(r.results[1].code, 'conflicting_decision');
     assert.equal(cat.find((l) => l.id === 'lrn_clean_hi').status, 'approved');
@@ -307,7 +310,7 @@ describe('applyBulkDecisions: per-entry semantics', () => {
     const r = selfReview.applyBulkDecisions(fixtureCatalog(), ME, [
       { id: 'lrn_clean_hi', decision: 'approve' },
       { id: 'lrn_missing', decision: 'approve' },
-    ], { confirmCount: 2 });
+    ], { confirmCount: 2, account: TRUSTED_ACCOUNT });
     assert.deepEqual(r.results.map((x) => x.index), [0, 1]);
   });
 });
@@ -425,7 +428,8 @@ describe('server.js: summary + bulk routes (structural)', () => {
     const h = sliceAt(SERVER_SRC, "app.post('/account/pending/bulk'", 2200);
     assert.ok(h.includes("resolveSelfReviewAccount(c, 'contribute')"), 'bulk mutations need contribute scope');
     assert.ok(h.includes('confirm_count'), 'bulk must read the counted confirmation from the body');
-    assert.ok(h.includes('applyBulkDecisions(learnings, accountId, decisions, { confirmCount })'), 'bulk must delegate to the pure core');
+    assert.ok(h.includes('applyBulkDecisions(learnings, accountId, decisions, {'), 'bulk must delegate to the pure core');
+    assert.ok(h.includes('account: loadAccounts()[accountId] || null'), 'bulk must pass durable publication trust context');
   });
 
   it('bulk route: exactly ONE persistence write per batch, only when something changed', () => {
