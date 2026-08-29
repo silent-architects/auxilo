@@ -61,6 +61,13 @@ function trustedAccount() {
 }
 
 describe('R13 publication authority', () => {
+  it('fails closed when an account has no trust record or operator grant', () => {
+    const { isPublicationTrusted } = authority();
+    assert.equal(isPublicationTrusted({ id: 'acc_no_grant' }), false);
+    assert.equal(isPublicationTrusted({ id: 'acc_empty_trust', publication_trust: {} }), false);
+    assert.equal(isPublicationTrusted(null), false);
+  });
+
   it('trusts only durable operator/admin provenance and never a verified wallet', () => {
     const { isPublicationTrusted, grantPublicationTrust } = authority();
     assert.equal(isPublicationTrusted({ wallet_verified: true, wallet: '0xabc' }), false);
