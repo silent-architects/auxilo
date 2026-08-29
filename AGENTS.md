@@ -35,6 +35,21 @@ conflict, STOP and return the question — do not pick one.
 
 - Branch naming: `codex/<spec-id>` (e.g. `codex/spec3-a3`), created from the freshly
   fetched base: `git switch -c codex/<spec-id> origin/main`.
+- **PINNED BASES OVERRIDE THE TIP, and this is not a conflict.** When a stamped BUILD-SPEC
+  pins an exact base sha, branch from THAT sha, not from the `origin/main` tip:
+  `git switch -c codex/<spec-id> <PINNED-SHA>`. The canonicality test above is a
+  CONTAINMENT test, not a tip-equality test — `git branch -r --contains <PINNED-SHA>`
+  listing `origin/main` is exactly the proof it asks for, and a pinned ancestor passes it.
+  Commits landing on `origin/main` above your pinned base are NORMAL and are not a STOP
+  condition; the record commits this repo pushes constantly would otherwise invalidate
+  every base within hours. STOP only if containment FAILS (the sha is not an ancestor of
+  `origin/main`) or if the spec's stamped baseline test numbers do not reproduce.
+  Rationale: the pin is what makes a build reproducible and its stamped suite numbers
+  meaningful. Chasing the tip mid-relay is a moving target, and the PM has already
+  verified what sits between the pin and the tip.
+  *(Ruled 2026-08-28 after R13-CLOSE STOPped here. The STOP was CORRECT — two documents
+  did appear to disagree and the builder is right never to choose between them. This
+  clause is the durable answer so the question does not recur.)*
 - Never commit to `main`. Never push `main`. Never force-push anything. Direct pushes
   of `main` are additionally blocked machine-side and repo-side; do not attempt to
   work around either block.
