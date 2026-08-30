@@ -40,6 +40,7 @@ const { spawn } = require('child_process');
 const { scanText, SENSITIVITY_FILTER_VERSION } = require('../lib/sensitivity-filter.js');
 const { appendSubmittedLearning } = require('../lib/extraction-index.js');
 const { hasAuxiloSessionEndHook } = require('../lib/hook-status.js');
+const { sendOpsAlert: defaultSendOpsAlert } = require('../lib/ops-alert.js');
 const { TranscriptSource } = require('./sources/source.interface.js');
 const { GenericJsonlSource } = require('./sources/generic-jsonl.js');
 
@@ -99,6 +100,9 @@ const KILL_SWITCH_PATH = path.join(AUXILO_DIR, 'autonomous-enabled');
 const PENDING_DIR = path.join(AUXILO_DIR, 'pending-learnings');
 const LEDGER_PATH = path.join(AUXILO_DIR, 'ledger.json');
 const LOG_PATH = path.join(AUXILO_DIR, 'extract.log');
+const EXTRACTION_SKIP_STATE_PATH = path.join(AUXILO_DIR, 'extraction-skip-state.json');
+const DEFAULT_SKIP_ALERT_THRESHOLD = 2;
+const SKIP_ALERT_MIN_INTERVAL_MS = 20 * 60 * 60 * 1000;
 
 // ─── Source Registry (§4.4 / UC-3 dynamic) ──────────────────────────────────
 //
@@ -232,6 +236,174 @@ function ledgerMark(ledger, sourceId, sessionId, sha, mtime) {
   ledger.lastSweep = new Date().toISOString();
 }
 
+function zeroExtractionSkipState() {
+  return {
+    consecutive_skips: 0,
+    first_skip_at: null,
+    last_skip_at: null,
+    last_alert_at: null,
+  };
+}
+
+function isCanonicalIsoTimestamp(value) {
+  if (value === null) return true;
+  if (typeof value !== 'string') return false;
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value;
+}
+
+function normalizeExtractionSkipState(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  if (!Number.isInteger(value.consecutive_skips) || value.consecutive_skips < 0) return null;
+  for (const key of ['first_skip_at', 'last_skip_at', 'last_alert_at']) {
+    if (!isCanonicalIsoTimestamp(value[key])) return null;
+  }
+  return {
+    consecutive_skips: value.consecutive_skips,
+    first_skip_at: value.first_skip_at,
+    last_skip_at: value.last_skip_at,
+    last_alert_at: value.last_alert_at,
+  };
+}
+
+function loadExtractionSkipState(opts = {}) {
+  const statePath = opts.statePath || EXTRACTION_SKIP_STATE_PATH;
+  const fsImpl = opts.fsImpl || fs;
+  const logger = opts.log || log;
+  try {
+    const parsed = JSON.parse(fsImpl.readFileSync(statePath, 'utf-8'));
+    const normalized = normalizeExtractionSkipState(parsed);
+    if (!normalized) throw new Error('invalid extraction skip state shape');
+    return normalized;
+  } catch (err) {
+    try {
+      logger(`[runner] extraction skip state missing or corrupt; using zeros (${err.message})`);
+    } catch { /* state diagnostics must never break a sweep */ }
+    return zeroExtractionSkipState();
+  }
+}
+
+function saveExtractionSkipState(state, opts = {}) {
+  const statePath = opts.statePath || EXTRACTION_SKIP_STATE_PATH;
+  const fsImpl = opts.fsImpl || fs;
+  const normalized = normalizeExtractionSkipState(state);
+  if (!normalized) throw new Error('refusing to write invalid extraction skip state');
+  fsImpl.mkdirSync(path.dirname(statePath), { recursive: true });
+  const tmp = `${statePath}.tmp`;
+  fsImpl.writeFileSync(tmp, JSON.stringify(normalized, null, 2), 'utf-8');
+  fsImpl.renameSync(tmp, statePath);
+}
+
+function persistExtractionSkipState(state, opts = {}) {
+  try {
+    saveExtractionSkipState(state, opts);
+    return true;
+  } catch (err) {
+    try {
+      const logger = opts.log || log;
+      logger(`[runner] extraction skip state write failed (swallowed): ${err.message}`);
+    } catch { /* state diagnostics must never break a sweep */ }
+    return false;
+  }
+}
+
+function nowIso(now) {
+  const value = typeof now === 'function' ? now() : new Date().toISOString();
+  return value instanceof Date ? value.toISOString() : String(value);
+}
+
+function resolveSkipAlertThreshold(value, env = process.env) {
+  const candidate = value === undefined ? env.AUXILO_SKIP_ALERT_THRESHOLD : value;
+  const parsed = Number(candidate === undefined ? DEFAULT_SKIP_ALERT_THRESHOLD : candidate);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_SKIP_ALERT_THRESHOLD;
+}
+
+async function finalizeExtractionRun(outcomes, opts = {}) {
+  const rows = Array.isArray(outcomes) ? outcomes.filter(Boolean) : [];
+  const state = opts.state
+    ? normalizeExtractionSkipState(opts.state) || zeroExtractionSkipState()
+    : loadExtractionSkipState(opts);
+  if (rows.length === 0) return state;
+
+  // A completed real result or a concrete model/API failure proves the local
+  // model was attempted. Either resets the auth-starvation streak. UNKNOWN is
+  // deliberately inert per rev-4 R1: it neither increments nor resets.
+  const resetsAuthStreak = rows.some((row) => !row.skipped || row.reasonCode === 'model-error');
+  if (resetsAuthStreak) {
+    const reset = {
+      ...zeroExtractionSkipState(),
+      // The streak resets, but alert delivery remains globally deduplicated
+      // for 20h even if a real extraction lands between two skip streaks.
+      last_alert_at: state.last_alert_at,
+    };
+    persistExtractionSkipState(reset, opts);
+    return reset;
+  }
+
+  if (!rows.some((row) => row.skipped && row.reasonCode === 'cli-unauthenticated')) {
+    return state;
+  }
+
+  const timestamp = nowIso(opts.now);
+  const next = {
+    consecutive_skips: state.consecutive_skips + 1,
+    first_skip_at: state.consecutive_skips > 0 && state.first_skip_at
+      ? state.first_skip_at
+      : timestamp,
+    last_skip_at: timestamp,
+    last_alert_at: state.last_alert_at,
+  };
+  const threshold = resolveSkipAlertThreshold(opts.threshold, opts.env || process.env);
+  const lastAlertMs = next.last_alert_at ? Date.parse(next.last_alert_at) : NaN;
+  const nowMs = Date.parse(timestamp);
+  const outsideDedupWindow = !Number.isFinite(lastAlertMs) || !Number.isFinite(nowMs)
+    || nowMs - lastAlertMs >= SKIP_ALERT_MIN_INTERVAL_MS;
+  const thresholdHit = next.consecutive_skips >= threshold
+    && next.consecutive_skips % threshold === 0;
+
+  if (!thresholdHit || !outsideDedupWindow) {
+    persistExtractionSkipState(next, opts);
+    return next;
+  }
+
+  // Arm the durable 20h dedup before best-effort delivery. A delivery outage
+  // must not turn the next sweep into an alert storm.
+  next.last_alert_at = timestamp;
+  if (!persistExtractionSkipState(next, opts)) return next;
+  const sendOpsAlert = opts.sendOpsAlert || defaultSendOpsAlert;
+  const logger = opts.log || log;
+  const platform = opts.platform || process.platform;
+  const arch = opts.arch || process.arch;
+  const subject = `Extraction skipped ${next.consecutive_skips} consecutive runs`;
+  const text = [
+    `Consecutive unauthenticated extraction skips: ${next.consecutive_skips}`,
+    `First skip at: ${next.first_skip_at}`,
+    'Remediation: run `claude` and /login',
+    `Machine: platform=${platform} arch=${arch}`,
+  ].join('\n');
+  try {
+    const delivered = await sendOpsAlert(subject, text, {
+      category: 'extraction-skip',
+      omitHost: true,
+    });
+    if (delivered && delivered.ok === false) {
+      logger(`[runner] extraction skip alert failed (swallowed): ${delivered.error || delivered.skipped || delivered.status || 'unknown'}`);
+    }
+  } catch (err) {
+    try {
+      logger(`[runner] extraction skip alert failed (swallowed): ${err.message}`);
+    } catch { /* alert diagnostics must never break a sweep */ }
+  }
+  return next;
+}
+
+function recordRealExtractionCompletion(ledger, detailed, opts = {}) {
+  if (!ledger || typeof ledger !== 'object' || !detailed || detailed.skipped) return false;
+  if (!detailed.result || detailed.result.extraction_id === 'client-skip') return false;
+  ledger.lastRealExtractionAt = nowIso(opts.now);
+  return true;
+}
+
 // ─── Durable Queue (A5.3 / B6) ─────────────────────────────────────────────
 
 let queueCounter = Date.now();
@@ -356,13 +528,17 @@ async function submitLearnings(learnings, sourceType, opts = {}) {
   return { published, held, rejected };
 }
 
-async function postExtract(transcript, sessionId, sourceType, _scrubReport, opts = {}) {
+async function postExtractDetailed(transcript, sessionId, sourceType, _scrubReport, opts = {}) {
   // CLIENT-SIDE extraction (2026-07-02). Server /extract is deprecated (410) — Auxilo
   // does not pay to extract. The local model (via `claude -p`) extracts + self-screens
   // the already-client-scrubbed transcript, and we submit finished learnings to /learn.
-  const { extractLocally } = require('./extract-local.js');
+  const extractLocally = opts.extractLocally || require('./extract-local.js').extractLocally;
+  const runnerLog = opts.log || log;
   let learnings;
   let skipped;
+  let reasonCode;
+  let authStatus;
+  let authDiscrepancy = false;
   let dedupDropped = 0;
   let promptMemoryTokens = 0;
   let promptMemoryRows = 0;
@@ -373,6 +549,9 @@ async function postExtract(transcript, sessionId, sourceType, _scrubReport, opts
     ({
       learnings,
       skipped,
+      reasonCode,
+      authStatus,
+      authDiscrepancy = false,
       dedup_dropped: dedupDropped = 0,
       prompt_memory_tokens: promptMemoryTokens = 0,
       prompt_memory_rows: promptMemoryRows = 0,
@@ -380,18 +559,30 @@ async function postExtract(transcript, sessionId, sourceType, _scrubReport, opts
       judge_prompt_tokens: judgePromptTokens = 0,
       judge_completion_tokens: judgeCompletionTokens = 0,
     } = await extractLocally(transcript, sourceType, {
+      ...opts,
       baseUrl: opts.baseUrl || BASE_URL,
       apiKey: opts.apiKey !== undefined ? opts.apiKey : API_KEY,
       captureVisibility: opts.captureVisibility || CAPTURE_VISIBILITY,
-      log,
+      log: runnerLog,
       auditLog: auditDropLog,
     }));
   } catch (err) {
     throw new Error(`Local extraction failed: ${err.message}`);
   }
   if (skipped) {
-    log(`[runner] ${skipped}`);
-    return { learnings_published: 0, learnings_held: 0, learnings_rejected: 0, extraction_id: 'client-skip' };
+    runnerLog(`[runner] ${skipped}`);
+    return {
+      skipped: true,
+      reasonCode: reasonCode || 'unknown',
+      authStatus: authStatus || 'unknown',
+      authDiscrepancy: Boolean(authDiscrepancy),
+      result: {
+        learnings_published: 0,
+        learnings_held: 0,
+        learnings_rejected: 0,
+        extraction_id: 'client-skip',
+      },
+    };
   }
 
   const { published, held, rejected } = await submitLearnings(learnings, sourceType, {
@@ -402,13 +593,60 @@ async function postExtract(transcript, sessionId, sourceType, _scrubReport, opts
   // tokens live ONLY on the per-run caller log lines. This line previously
   // carried `published=` too and the digest double-counted every extraction
   // (its dedup only drops byte-identical lines). P1-13b.
-  log(
+  runnerLog(
     `[runner] client-side extraction: ${learnings.length} candidate(s), ` +
     `${dedupDropped} local duplicate(s) dropped, memory=${promptMemoryRows} row(s)/~${promptMemoryTokens} token(s) ` +
     `judge=${judgeCalls} call(s)/${judgePromptTokens}+${judgeCompletionTokens} token(s) ` +
     `→ ${published} live, ${held} held for review, ${rejected} rejected`
   );
-  return { learnings_published: published, learnings_held: held, learnings_rejected: rejected, extraction_id: `client-${sessionId}` };
+  return {
+    skipped: false,
+    reasonCode: null,
+    authStatus: authStatus || 'unknown',
+    authDiscrepancy: false,
+    result: {
+      learnings_published: published,
+      learnings_held: held,
+      learnings_rejected: rejected,
+      extraction_id: `client-${sessionId}`,
+    },
+  };
+}
+
+async function postExtract(transcript, sessionId, sourceType, scrubReport, opts = {}) {
+  const detailed = await postExtractDetailed(transcript, sessionId, sourceType, scrubReport, opts);
+  return opts.returnDetailed ? detailed : detailed.result;
+}
+
+function renderExtractionResult(detailed, opts = {}) {
+  const result = detailed && detailed.result ? detailed.result : {};
+  if (!detailed || !detailed.skipped) {
+    if (opts.flushFile) {
+      return `[runner] ✓ Flushed ${path.basename(String(opts.flushFile))}: ` +
+        `published=${result.learnings_published || 0} held=${result.learnings_held || 0} ` +
+        `rejected=${result.learnings_rejected || 0} ${DIGEST_ACCOUNT}`;
+    }
+    const indent = opts.indent || '';
+    return `[runner] ${indent}✓ published=${result.learnings_published || 0} ` +
+      `held=${result.learnings_held || 0} rejected=${result.learnings_rejected || 0} ` +
+      `${DIGEST_ACCOUNT} (extraction: ${result.extraction_id})`;
+  }
+
+  const reasonCode = detailed.reasonCode || 'unknown';
+  const details = [reasonCode];
+  if (detailed.authStatus === 'logged-in') details.push('loggedIn:true');
+  else if (detailed.authStatus === 'logged-out') details.push('loggedIn:false');
+  else details.push('auth-status:UNKNOWN');
+  if (reasonCode === 'model-error') {
+    const sessionFile = opts.sessionFile || detailed.sessionFile || 'unknown-session';
+    details.push(`session=${path.basename(String(sessionFile))}`);
+  }
+  let line = `[runner] ⊘ extraction SKIPPED (${details.join('; ')})`;
+  if (reasonCode === 'cli-unauthenticated') {
+    const consecutive = Number.isInteger(opts.consecutiveSkips) ? opts.consecutiveSkips : 0;
+    line += ` — run \`claude\` and /login; consecutive=${consecutive}`;
+  }
+  return line;
 }
 
 // ─── Held-items local notification (LW-18 layer 2) ──────────────────────────
@@ -537,6 +775,7 @@ function sweeperManifest(repoRoot = path.resolve(__dirname, '..')) {
     ['lib/extraction-index.js', 'lib/extraction-index.js', 0o644],
     ['lib/similarity.js', 'lib/similarity.js', 0o644],
     ['lib/hook-status.js', 'lib/hook-status.js', 0o644],
+    ['lib/ops-alert.js', 'lib/ops-alert.js', 0o644],
     ['config/near-duplicate.json', 'config/near-duplicate.json', 0o644],
     // Client-side extraction (2026-07-02) — required by the sweep path since /extract went 410.
     // Missing from this manifest until 2026-07-19: installed sweepers crashed with
@@ -700,6 +939,34 @@ function installDigest() {
 
 // ─── Status (B14) ───────────────────────────────────────────────────────────
 
+function renderExtractionStatus(opts = {}) {
+  const state = normalizeExtractionSkipState(opts.state) || zeroExtractionSkipState();
+  const ledger = opts.ledger && typeof opts.ledger === 'object' ? opts.ledger : {};
+  const authStatus = opts.authStatus || 'unknown';
+  if (state.consecutive_skips > 0 || authStatus === 'logged-out') {
+    const since = state.first_skip_at || 'unrecorded';
+    const authDetail = authStatus === 'logged-out' ? '; loggedIn:false' : '';
+    return `Extraction: SKIPPING since ${since} (${state.consecutive_skips} consecutive${authDetail}) ` +
+      '— run `claude auth login`';
+  }
+
+  const timestamp = ledger.lastRealExtractionAt;
+  if (typeof timestamp === 'string' && isCanonicalIsoTimestamp(timestamp)) {
+    return `Extraction: OK (last real extraction ${timestamp})`;
+  }
+  return 'Extraction: OK (last real extraction unavailable)';
+}
+
+function currentExtractionStatusLine(ledger) {
+  const state = loadExtractionSkipState();
+  let authStatus = 'unknown';
+  try {
+    const { checkClaudeAuthStatus } = require('./extract-local.js');
+    authStatus = checkClaudeAuthStatus();
+  } catch { /* missing/broken local CLI state is UNKNOWN, never authenticated */ }
+  return renderExtractionStatus({ state, ledger, authStatus });
+}
+
 async function printStatus() {
   const ledger = loadLedger();
 
@@ -743,6 +1010,9 @@ async function printStatus() {
   // 6. Pending queue size
   const pendingCount = listPendingFiles().length;
   console.log(`Pending queue: ${pendingCount} file(s)`);
+
+  // 7. Extraction health — durable skip state plus the authoritative CLI auth probe.
+  console.log(currentExtractionStatusLine(ledger));
 }
 
 // ─── Scrub + Verify ─────────────────────────────────────────────────────────
@@ -806,6 +1076,18 @@ async function main() {
   if (!API_KEY && !args.dryRun) {
     console.error('[runner] AUXILO_API_KEY not set. Use --dry-run for local testing.');
     process.exit(1);
+  }
+
+  const extractionOutcomes = [];
+  const extractionResultLines = [];
+  async function finishExtractionRun() {
+    if (extractionOutcomes.length === 0) return null;
+    const finalState = await finalizeExtractionRun(extractionOutcomes);
+    for (const renderLine of extractionResultLines) {
+      log(renderLine(finalState.consecutive_skips));
+    }
+    extractionResultLines.length = 0;
+    return finalState;
   }
 
   // ── Single-file mode (--transcript <path>) ───────────────────────────
@@ -919,12 +1201,22 @@ async function main() {
     }
 
     try {
-      const result = await postExtract(cleaned, sessionId, sourceType, report);
-      log(`[runner] ✓ published=${result.learnings_published || 0} held=${result.learnings_held || 0} rejected=${result.learnings_rejected || 0} ${DIGEST_ACCOUNT} (extraction: ${result.extraction_id})`);
+      const detailed = await postExtract(cleaned, sessionId, sourceType, report, {
+        sessionFile: transcriptPath,
+        returnDetailed: true,
+      });
+      extractionOutcomes.push(detailed);
+      extractionResultLines.push((consecutiveSkips) => renderExtractionResult(detailed, {
+        consecutiveSkips,
+        sessionFile: transcriptPath,
+      }));
+      await finishExtractionRun();
+      const result = detailed.result;
       notifyHeld(result.learnings_held || 0); // LW-18 layer 2: count-only, fail-silent
       // Mark only after a successful upload so a failed POST can be retried.
       const ledger = loadLedger();
       ledgerMark(ledger, sourceType, sessionId, contentSha, sessionRef.mtime);
+      recordRealExtractionCompletion(ledger, detailed);
       saveLedger(ledger);
       process.exit(0);
     } catch (err) {
@@ -937,16 +1229,30 @@ async function main() {
   if (args.flushPending) {
     const pending = listPendingFiles();
     log(`[runner] Flushing ${pending.length} pending queue file(s)...`);
+    const flushLedger = loadLedger();
+    let flushLedgerChanged = false;
     let flushed = 0;
     let flushHeld = 0;
     for (const qf of pending) {
       try {
         const payload = JSON.parse(fs.readFileSync(qf, 'utf-8'));
-        const result = await postExtract(
+        const sessionFile = payload.session_basename || payload.sessionId || path.basename(qf);
+        const detailed = await postExtract(
           payload.transcript, payload.sessionId, payload.source, payload.scrubReport,
-          { captureVisibility: payload.capture_visibility || CAPTURE_VISIBILITY }
+          {
+            captureVisibility: payload.capture_visibility || CAPTURE_VISIBILITY,
+            sessionFile,
+            returnDetailed: true,
+          }
         );
-        log(`[runner] ✓ Flushed ${path.basename(qf)}: published=${result.learnings_published || 0} held=${result.learnings_held || 0} rejected=${result.learnings_rejected || 0} ${DIGEST_ACCOUNT}`);
+        extractionOutcomes.push(detailed);
+        extractionResultLines.push((consecutiveSkips) => renderExtractionResult(detailed, {
+          consecutiveSkips,
+          sessionFile,
+          flushFile: qf,
+        }));
+        const result = detailed.result;
+        flushLedgerChanged = recordRealExtractionCompletion(flushLedger, detailed) || flushLedgerChanged;
         flushHeld += result.learnings_held || 0;
         deleteQueueFile(qf);
         flushed++;
@@ -954,6 +1260,8 @@ async function main() {
         log(`[runner] ✗ Retry failed for ${path.basename(qf)}: ${err.message}`);
       }
     }
+    await finishExtractionRun();
+    if (flushLedgerChanged) saveLedger(flushLedger);
     log(`[runner] Flush complete: ${flushed}/${pending.length} succeeded`);
     notifyHeld(flushHeld); // LW-18 layer 2: count-only, fail-silent
     process.exit(0);
@@ -1075,6 +1383,7 @@ async function main() {
       const queueFile = writeQueueFile({
         source: source.type,
         sessionId: sessionRef.sessionId,
+        session_basename: path.basename(sessionRef.path || sessionRef.sessionId),
         transcript: cleaned,
         sha,
         scrubReport: report,
@@ -1084,10 +1393,24 @@ async function main() {
       });
 
       try {
-        const result = await postExtract(cleaned, sessionRef.sessionId, source.type, report);
-        log(`[runner]   ✓ published=${result.learnings_published || 0} held=${result.learnings_held || 0} rejected=${result.learnings_rejected || 0} ${DIGEST_ACCOUNT} (extraction: ${result.extraction_id})`);
+        const sessionFile = path.basename(sessionRef.path || sessionRef.sessionId);
+        const detailed = await postExtract(
+          cleaned,
+          sessionRef.sessionId,
+          source.type,
+          report,
+          { sessionFile, returnDetailed: true }
+        );
+        extractionOutcomes.push(detailed);
+        extractionResultLines.push((consecutiveSkips) => renderExtractionResult(detailed, {
+          consecutiveSkips,
+          sessionFile,
+          indent: '  ',
+        }));
+        const result = detailed.result;
         totalHeld += result.learnings_held || 0;
         ledgerMark(ledger, source.type, sessionRef.sessionId, sha, sessionRef.mtime);
+        recordRealExtractionCompletion(ledger, detailed);
         deleteQueueFile(queueFile);
         saveLedger(ledger);
         totalProcessed++;
@@ -1102,6 +1425,7 @@ async function main() {
   for (const [sourceType, count] of refusedBySource) {
     log(`[runner] ${sourceType}: ${count} refused (non-user/format)`);
   }
+  await finishExtractionRun();
   saveLedger(ledger);
   log(`[runner] Summary: ${totalDiscovered} discovered, ${totalProcessed} processed, ${totalSkipped} skipped (${totalOversize} oversize), ${totalFailed} failed`);
   if (totalOversize > 0) {
@@ -1116,10 +1440,12 @@ async function main() {
 module.exports = {
   parseArgs, writeQueueFile, deleteQueueFile, listPendingFiles,
   loadLedger, saveLedger, ledgerHighWater, ledgerHas, ledgerMark,
+  loadExtractionSkipState, saveExtractionSkipState, finalizeExtractionRun,
+  recordRealExtractionCompletion, renderExtractionStatus, renderExtractionResult,
   installHooks, installSweeper, installDigest, printStatus, scrubAndVerify, enumerateActiveSources,
   loadSources, SOURCES, sweeperManifest, submitLearnings, notifyHeld,
-  resolveCaptureVisibility, postExtract,
-  KILL_SWITCH_PATH, PENDING_DIR, LEDGER_PATH,
+  resolveCaptureVisibility, postExtract, postExtractDetailed,
+  KILL_SWITCH_PATH, PENDING_DIR, LEDGER_PATH, EXTRACTION_SKIP_STATE_PATH,
 };
 
 // Only run main() when executed directly (not when required for tests)
