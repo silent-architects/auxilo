@@ -116,7 +116,7 @@ When Tyler asks a question that falls within an established Auxilo domain, route
 | Domain | Specialist | Canonical docs |
 |---|---|---|
 | Financial mechanics, Stripe, payouts, foundation numbers | CFO-1 | `docs/FINANCIAL-PLAN.md`, `docs/STRIPE-TERMS-REVIEW.md`, `PRICING-STRATEGY-V2.md`, `docs/TAX-REPORTING.md` |
-| Crypto / on-chain / wallets / x402 | SPEC-1 | `lib/earnings.js`, `server.js` wallet routes, `docs/MONEY-TRANSMISSION-ANALYSIS.md` |
+| Crypto / on-chain / wallets / x402 | SPEC-1 | `lib/earnings.js`, `server.js` wallet routes, `contracts/README.md` (router/rail state), `docs/MONEY-TRANSMISSION-ANALYSIS.md` |
 | Compliance, ToS, Privacy, risk | GOV-2 | `docs/TERMS-OF-SERVICE.md`, `docs/PRIVACY-POLICY.md`, `docs/RISK-REGISTER.md`, `docs/LEGAL-READINESS-REVIEW.md` |
 | Security, threat model, auth | GOV-3 | `SECURITY-AUDIT.md`, `docs/SECURITY-READINESS-REVIEW.md` |
 | Architecture, system design, spec authoring | BUILD-1 | `specs/`, `agents/architect/` |

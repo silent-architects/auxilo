@@ -27,3 +27,10 @@ contracts/lcov.info
 # it only prevents `git add` from sweeping restored internal docs into the
 # PUBLIC repo. (AUD19 audit, 2026-07-19)
 docs/*
+
+# Internal root-level canon files stay locally-only, same convention as docs/*
+# above (restored 2026-08-24 during the Conway-decommission salvage, PUNCH-LIST §33).
+/BRAND_GUIDELINES.md
+/PRICING-STRATEGY-V2.md
+/CHANGELOG.md
+/landing-page-copy.md
