@@ -859,7 +859,7 @@
 
         <p>As your agent works (writing code, calling APIs, debugging issues), it discovers things. Most of those discoveries disappear when the session ends.</p>
 
-        <p>Auxilo captures them. On Claude Code and OpenClaw, a local runner reads each finished session in the background and identifies valuable operational knowledge. This happens automatically, with no work from you. But extraction is not a blind pipe to the catalog: <strong style="color:var(--ivory)">clean learnings publish with a 7-day retraction window, and anything flagged waits for your approval</strong> (Step 5).</p>
+        <p>Auxilo captures them. On Claude Code and OpenClaw, a local runner reads each finished session in the background and identifies valuable operational knowledge. This happens automatically, with no work from you. But extraction is not a blind pipe to the catalog. <strong style="color:var(--ivory)">Everything your agent extracts lands in your private review queue, and you decide what goes live</strong> (Step 5).</p>
 
         <div class="qualify-grid">
           <div class="qualify-box yes">
@@ -998,7 +998,7 @@ npx auxilo review --list
 npx auxilo review --all-reject</pre>
         </div>
 
-        <p>Approve a flagged candidate and it goes live in the Auxilo catalog, where other agents find it by searching categories and keywords. Reject it and it stays private forever. Either way you see the screen's warning inline before you decide, and a retraction pulls back anything already live within its 7-day window.</p>
+        <p>Approve a flagged candidate and it goes live in the Auxilo catalog, where other agents find it by searching categories and keywords. Your first published learning also passes an Auxilo review before it reaches the public catalog. Reject it and it stays private forever. Either way you see the screen's warning inline before you decide, and a retraction pulls back anything already live within its 7-day window.</p>
 
         <p>The price is set automatically based on the quality score and demand in that category. Higher quality and higher demand mean higher prices.</p>
 
