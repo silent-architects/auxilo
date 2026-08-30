@@ -133,31 +133,88 @@ function buildExtractionPrompt(opts = {}) {
 const EXTRACTION_PROMPT = buildExtractionPrompt({ scoreExtraction: false });
 
 /** Resolve the `claude` binary — hook/launchd env may have a minimal PATH. */
-function resolveClaudeBin() {
+function resolveClaudeBin(opts = {}) {
+  const homeDir = typeof opts.homeDir === 'string' ? opts.homeDir : os.homedir();
+  const existsSync = typeof opts.existsSync === 'function' ? opts.existsSync : fs.existsSync;
   const candidates = [
-    'claude',
-    path.join(os.homedir(), '.claude', 'local', 'claude'),
+    path.join(homeDir, '.claude', 'local', 'claude'),
     '/usr/local/bin/claude',
     '/opt/homebrew/bin/claude',
-    path.join(os.homedir(), '.local', 'bin', 'claude'),
+    path.join(homeDir, '.local', 'bin', 'claude'),
   ];
   for (const c of candidates) {
     try {
-      if (c === 'claude') return c; // let PATH resolve it; spawn will ENOENT if absent
-      if (fs.existsSync(c)) return c;
+      if (existsSync(c)) return c;
     } catch (_) { /* ignore */ }
   }
+  // Absolute launchd fallbacks are absent; let PATH resolve the final option.
   return 'claude';
+}
+
+/** Build the subscription-auth-only environment shared by Claude CLI children. */
+function claudeChildEnv() {
+  const childEnv = { ...process.env, AUXILO_EXTRACTING: '1' };
+  delete childEnv.ANTHROPIC_API_KEY;
+  return childEnv;
+}
+
+/**
+ * Ask Claude Code for its authoritative local auth state. Only the boolean
+ * `loggedIn` field is classified; every other outcome is unknown so callers
+ * can fall through to the real model invocation as the classifier of record.
+ */
+function checkClaudeAuthStatus(opts = {}) {
+  const spawnSyncImpl = typeof opts.spawnSyncImpl === 'function'
+    ? opts.spawnSyncImpl
+    : spawnSync;
+  const bin = typeof opts.claudeBin === 'string'
+    ? opts.claudeBin
+    : resolveClaudeBin();
+  let res;
+  try {
+    res = spawnSyncImpl(bin, ['auth', 'status'], {
+      encoding: 'utf-8',
+      env: claudeChildEnv(),
+      timeout: 5000,
+      maxBuffer: 1024 * 1024,
+    });
+  } catch {
+    return 'unknown';
+  }
+  if (!res || res.error || res.status !== 0) return 'unknown';
+  try {
+    const status = JSON.parse(String(res.stdout || ''));
+    if (!status || typeof status.loggedIn !== 'boolean') return 'unknown';
+    return status.loggedIn ? 'logged-in' : 'logged-out';
+  } catch {
+    return 'unknown';
+  }
 }
 
 /**
  * Invoke the local Claude Code model headlessly (uses the USER's subscription auth).
- * Prompt+transcript go via stdin. Returns { ok, out, reason } — never throws, so the
- * SessionEnd hook degrades gracefully (the proactive auxilo_contribute path is the
- * reliable primary; this deterministic hook is best-effort).
+ * Prompt+transcript go via stdin. Returns { ok, out, reason } plus auth/cause
+ * metadata — never throws, so the SessionEnd hook degrades gracefully (the
+ * proactive auxilo_contribute path is the reliable primary; this deterministic
+ * hook is best-effort).
  */
 function extractWithClaudeCode(transcript, opts = {}) {
-  const bin = resolveClaudeBin();
+  const spawnSyncImpl = typeof opts.spawnSyncImpl === 'function'
+    ? opts.spawnSyncImpl
+    : spawnSync;
+  const bin = typeof opts.claudeBin === 'string'
+    ? opts.claudeBin
+    : resolveClaudeBin();
+  const authStatus = checkClaudeAuthStatus({ spawnSyncImpl, claudeBin: bin });
+  if (authStatus === 'logged-out') {
+    return {
+      ok: false,
+      out: '',
+      reason: 'local model not authenticated in this context (run `claude auth login` once); skipping deterministic extraction',
+      reasonCode: 'cli-unauthenticated',
+      authStatus,
+    };
+  }
   const prompt = typeof opts.prompt === 'string'
     ? opts.prompt
     : buildExtractionPrompt({
@@ -168,17 +225,64 @@ function extractWithClaudeCode(transcript, opts = {}) {
   const input = prompt + String(transcript).slice(0, 200000);
   // Do NOT pass ANTHROPIC_API_KEY through — we want the user's logged-in Claude
   // subscription (OAuth), not an API key (which would bill someone). Delete it.
-  const childEnv = { ...process.env, AUXILO_EXTRACTING: '1' };
-  delete childEnv.ANTHROPIC_API_KEY;
-  const res = spawnSync(bin, ['-p'], { input, encoding: 'utf-8', env: childEnv, timeout: 120000, maxBuffer: 20 * 1024 * 1024 });
+  let res;
+  try {
+    res = spawnSyncImpl(bin, ['-p'], {
+      input,
+      encoding: 'utf-8',
+      env: claudeChildEnv(),
+      timeout: 120000,
+      maxBuffer: 20 * 1024 * 1024,
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      out: '',
+      reason: `spawn failed (${bin}): ${error.message}`,
+      reasonCode: 'unknown',
+      authStatus,
+    };
+  }
+  if (!res) {
+    return {
+      ok: false,
+      out: '',
+      reason: `spawn failed (${bin}): no process result`,
+      reasonCode: 'unknown',
+      authStatus,
+    };
+  }
   const out = String(res.stdout || '');
-  if (res.error) return { ok: false, out: '', reason: `spawn failed (${bin}): ${res.error.message}` };
+  if (res.error) {
+    return {
+      ok: false,
+      out: '',
+      reason: `spawn failed (${bin}): ${res.error.message}`,
+      reasonCode: 'unknown',
+      authStatus,
+    };
+  }
   // Claude prints auth failures ("API Error: 401 ... Please run /login") to stdout.
   if (/Please run \/login|authentication_error|401/i.test(out) || /Please run \/login|authentication_error/i.test(String(res.stderr || ''))) {
-    return { ok: false, out, reason: 'local model not authenticated in this context (run `claude` and /login once); skipping deterministic extraction' };
+    return {
+      ok: false,
+      out,
+      reason: 'local model not authenticated in this context (run `claude auth login` once); skipping deterministic extraction',
+      reasonCode: 'cli-unauthenticated',
+      authStatus,
+      ...(authStatus === 'logged-in' && { authDiscrepancy: true }),
+    };
   }
-  if (res.status !== 0) return { ok: false, out, reason: `local model exited ${res.status}: ${(out || String(res.stderr || '')).slice(0, 160)}` };
-  return { ok: true, out, reason: null };
+  if (res.status !== 0) {
+    return {
+      ok: false,
+      out,
+      reason: `local model exited ${res.status}: ${(out || String(res.stderr || '')).slice(0, 160)}`,
+      reasonCode: 'model-error',
+      authStatus,
+    };
+  }
+  return { ok: true, out, reason: null, authStatus };
 }
 
 /**
@@ -602,8 +706,19 @@ async function extractLocally(transcript, sourceType, opts = {}) {
   const invokeModel = typeof opts.invokeModel === 'function'
     ? opts.invokeModel
     : (text, invokeOpts) => extractWithClaudeCode(text, invokeOpts);
-  const { ok, out, reason } = await invokeModel(transcript, { prompt });
-  if (!ok) return { learnings: [], skipped: reason };
+  const modelResult = await invokeModel(transcript, { prompt });
+  const { ok, out, reason } = modelResult;
+  if (!ok) {
+    return {
+      learnings: [],
+      skipped: reason,
+      ...(modelResult.reasonCode !== undefined && { reasonCode: modelResult.reasonCode }),
+      ...(modelResult.authStatus !== undefined && { authStatus: modelResult.authStatus }),
+      ...(modelResult.authDiscrepancy !== undefined && {
+        authDiscrepancy: modelResult.authDiscrepancy,
+      }),
+    };
+  }
   const parsed = parseExtractionOutput(out, opts);
   const promptDropResult = applyPromptMemoryDrops(
     parsed.prompt_drops,
@@ -665,7 +780,8 @@ async function extractLocally(transcript, sourceType, opts = {}) {
 }
 
 module.exports = {
-  extractLocally, parseLearnings, parseExtractionOutput, resolveClaudeBin,
+  extractLocally, extractWithClaudeCode, checkClaudeAuthStatus,
+  parseLearnings, parseExtractionOutput, resolveClaudeBin,
   CATEGORIES, PRIVATE_CATEGORIES, RETIRED_CATEGORIES,
   EXTRACTION_PROMPT, buildExtractionPrompt, scoreExtractionEnabled,
   validateQualityAssessment, QUALITY_DIMENSIONS,

@@ -1,6 +1,6 @@
 {
   "name": "auxilo-mcp",
-  "version": "0.9.9",
+  "version": "0.9.10",
   "mcpName": "io.github.silent-architects/auxilo",
   "description": "MCP server for Auxilo. Your agent stops solving the same problem twice: auto-extracted learnings, free self-unlocks, and earnings when other agents unlock yours.",
   "main": "mcp-server.js",
@@ -15,6 +15,7 @@
     "lib/review.js",
     "lib/untrusted-content.js",
     "lib/hook-status.js",
+    "lib/ops-alert.js",
     "lib/sensitivity-filter.js",
     "lib/extraction-index.js",
     "lib/similarity.js",
