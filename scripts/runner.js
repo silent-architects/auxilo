@@ -239,6 +239,7 @@ function ledgerMark(ledger, sourceId, sessionId, sha, mtime) {
 function zeroExtractionSkipState() {
   return {
     consecutive_skips: 0,
+    consecutive_unknown: 0,
     first_skip_at: null,
     last_skip_at: null,
     last_alert_at: null,
@@ -255,11 +256,16 @@ function isCanonicalIsoTimestamp(value) {
 function normalizeExtractionSkipState(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   if (!Number.isInteger(value.consecutive_skips) || value.consecutive_skips < 0) return null;
+  const consecutiveUnknown = value.consecutive_unknown === undefined
+    ? 0
+    : value.consecutive_unknown;
+  if (!Number.isInteger(consecutiveUnknown) || consecutiveUnknown < 0) return null;
   for (const key of ['first_skip_at', 'last_skip_at', 'last_alert_at']) {
     if (!isCanonicalIsoTimestamp(value[key])) return null;
   }
   return {
     consecutive_skips: value.consecutive_skips,
+    consecutive_unknown: consecutiveUnknown,
     first_skip_at: value.first_skip_at,
     last_skip_at: value.last_skip_at,
     last_alert_at: value.last_alert_at,
@@ -277,7 +283,10 @@ function loadExtractionSkipState(opts = {}) {
     return normalized;
   } catch (err) {
     try {
-      logger(`[runner] extraction skip state missing or corrupt; using zeros (${err.message})`);
+      const detail = err && err.code === 'ENOENT'
+        ? `ENOENT ${path.basename(statePath)}`
+        : (err && err.message) || 'unknown error';
+      logger(`[runner] extraction skip state missing or corrupt; using zeros (${detail})`);
     } catch { /* state diagnostics must never break a sweep */ }
     return zeroExtractionSkipState();
   }
@@ -313,6 +322,7 @@ function nowIso(now) {
 }
 
 function resolveSkipAlertThreshold(value, env = process.env) {
+  // Positive integers only; the kill-switch sentinel is the supported off switch.
   const candidate = value === undefined ? env.AUXILO_SKIP_ALERT_THRESHOLD : value;
   const parsed = Number(candidate === undefined ? DEFAULT_SKIP_ALERT_THRESHOLD : candidate);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_SKIP_ALERT_THRESHOLD;
@@ -326,9 +336,9 @@ async function finalizeExtractionRun(outcomes, opts = {}) {
   if (rows.length === 0) return state;
 
   // A completed real result or a concrete model/API failure proves the local
-  // model was attempted. Either resets the auth-starvation streak. UNKNOWN is
-  // deliberately inert per rev-4 R1: it neither increments nor resets.
-  const resetsAuthStreak = rows.some((row) => !row.skipped || row.reasonCode === 'model-error');
+  // model was attempted. Either resets both visibility streaks.
+  const resetsAuthStreak = rows.some((row) => !isSkippedExtraction(row)
+    || row.reasonCode === 'model-error');
   if (resetsAuthStreak) {
     const reset = {
       ...zeroExtractionSkipState(),
@@ -340,13 +350,25 @@ async function finalizeExtractionRun(outcomes, opts = {}) {
     return reset;
   }
 
-  if (!rows.some((row) => row.skipped && row.reasonCode === 'cli-unauthenticated')) {
-    return state;
+  const hasUnauthenticated = rows.some((row) => isSkippedExtraction(row)
+    && row.reasonCode === 'cli-unauthenticated');
+  if (!hasUnauthenticated) {
+    const hasUnknown = rows.some((row) => isSkippedExtraction(row)
+      && row.reasonCode !== 'model-error');
+    if (!hasUnknown) return state;
+    const unknown = {
+      ...state,
+      // R1: UNKNOWN never increments, resets, or alerts on the auth streak.
+      consecutive_unknown: state.consecutive_unknown + 1,
+    };
+    persistExtractionSkipState(unknown, opts);
+    return unknown;
   }
 
   const timestamp = nowIso(opts.now);
   const next = {
     consecutive_skips: state.consecutive_skips + 1,
+    consecutive_unknown: 0,
     first_skip_at: state.consecutive_skips > 0 && state.first_skip_at
       ? state.first_skip_at
       : timestamp,
@@ -366,41 +388,68 @@ async function finalizeExtractionRun(outcomes, opts = {}) {
     return next;
   }
 
-  // Arm the durable 20h dedup before best-effort delivery. A delivery outage
-  // must not turn the next sweep into an alert storm.
-  next.last_alert_at = timestamp;
-  if (!persistExtractionSkipState(next, opts)) return next;
   const sendOpsAlert = opts.sendOpsAlert || defaultSendOpsAlert;
+  // Persist the streak without an alert marker first. Only a delivery result
+  // that is not `unconfigured` may arm last_alert_at; this makes it impossible
+  // for an absent client-side email configuration to record a phantom alert.
+  if (!persistExtractionSkipState(next, opts)) return next;
   const logger = opts.log || log;
   const platform = opts.platform || process.platform;
   const arch = opts.arch || process.arch;
-  const subject = `Extraction skipped ${next.consecutive_skips} consecutive runs`;
+  const subject = `Extraction skipped ${next.consecutive_skips} consecutive sweeps/attempts`;
   const text = [
     `Consecutive unauthenticated extraction skips: ${next.consecutive_skips}`,
     `First skip at: ${next.first_skip_at}`,
-    'Remediation: run `claude` and /login',
+    'Remediation: run `claude auth login`',
     `Machine: platform=${platform} arch=${arch}`,
   ].join('\n');
+  let armDedup = false;
   try {
     const delivered = await sendOpsAlert(subject, text, {
       category: 'extraction-skip',
       omitHost: true,
+      localFallback: true,
     });
-    if (delivered && delivered.ok === false) {
-      logger(`[runner] extraction skip alert failed (swallowed): ${delivered.error || delivered.skipped || delivered.status || 'unknown'}`);
+    if (delivered && delivered.skipped === 'unconfigured') {
+      logger(`[runner] extraction skip email unconfigured; local fallback ${delivered.localFallback ? 'spawned' : 'unavailable'}`);
+    } else {
+      armDedup = true;
+      if (delivered && delivered.ok === false) {
+        logger(`[runner] extraction skip alert failed (swallowed): ${delivered.error || delivered.skipped || delivered.status || 'unknown'}`);
+      }
     }
   } catch (err) {
+    // A configured transient delivery failure may arm the dedup marker.
+    armDedup = true;
     try {
       logger(`[runner] extraction skip alert failed (swallowed): ${err.message}`);
     } catch { /* alert diagnostics must never break a sweep */ }
   }
+  if (armDedup) {
+    next.last_alert_at = timestamp;
+    persistExtractionSkipState(next, opts);
+  }
   return next;
 }
 
+function isSkippedExtraction(detailed) {
+  return Boolean(detailed && (detailed.skipped
+    || (detailed.result && detailed.result.extraction_id === 'client-skip')));
+}
+
 function recordRealExtractionCompletion(ledger, detailed, opts = {}) {
-  if (!ledger || typeof ledger !== 'object' || !detailed || detailed.skipped) return false;
-  if (!detailed.result || detailed.result.extraction_id === 'client-skip') return false;
+  if (!ledger || typeof ledger !== 'object' || isSkippedExtraction(detailed)) return false;
+  if (!detailed.result) return false;
   ledger.lastRealExtractionAt = nowIso(opts.now);
+  return true;
+}
+
+function persistRealExtractionCompletion(detailed, opts = {}) {
+  const load = opts.loadLedger || loadLedger;
+  const save = opts.saveLedger || saveLedger;
+  const ledger = load();
+  if (!recordRealExtractionCompletion(ledger, detailed, opts)) return false;
+  save(ledger);
   return true;
 }
 
@@ -620,7 +669,7 @@ async function postExtract(transcript, sessionId, sourceType, scrubReport, opts 
 
 function renderExtractionResult(detailed, opts = {}) {
   const result = detailed && detailed.result ? detailed.result : {};
-  if (!detailed || !detailed.skipped) {
+  if (!isSkippedExtraction(detailed)) {
     if (opts.flushFile) {
       return `[runner] ✓ Flushed ${path.basename(String(opts.flushFile))}: ` +
         `published=${result.learnings_published || 0} held=${result.learnings_held || 0} ` +
@@ -637,14 +686,12 @@ function renderExtractionResult(detailed, opts = {}) {
   if (detailed.authStatus === 'logged-in') details.push('loggedIn:true');
   else if (detailed.authStatus === 'logged-out') details.push('loggedIn:false');
   else details.push('auth-status:UNKNOWN');
-  if (reasonCode === 'model-error') {
-    const sessionFile = opts.sessionFile || detailed.sessionFile || 'unknown-session';
-    details.push(`session=${path.basename(String(sessionFile))}`);
-  }
+  const sessionFile = opts.sessionFile || detailed.sessionFile || 'unknown-session';
+  details.push(`session=${path.basename(String(sessionFile))}`);
   let line = `[runner] ⊘ extraction SKIPPED (${details.join('; ')})`;
   if (reasonCode === 'cli-unauthenticated') {
     const consecutive = Number.isInteger(opts.consecutiveSkips) ? opts.consecutiveSkips : 0;
-    line += ` — run \`claude\` and /login; consecutive=${consecutive}`;
+    line += ` — run \`claude auth login\`; consecutive=${consecutive}`;
   }
   return line;
 }
@@ -946,8 +993,15 @@ function renderExtractionStatus(opts = {}) {
   if (state.consecutive_skips > 0 || authStatus === 'logged-out') {
     const since = state.first_skip_at || 'unrecorded';
     const authDetail = authStatus === 'logged-out' ? '; loggedIn:false' : '';
-    return `Extraction: SKIPPING since ${since} (${state.consecutive_skips} consecutive${authDetail}) ` +
+    const unknownDetail = state.consecutive_unknown > 0
+      ? `; ${state.consecutive_unknown} unknown`
+      : '';
+    return `Extraction: SKIPPING since ${since} (${state.consecutive_skips} consecutive${unknownDetail}${authDetail}) ` +
       '— run `claude auth login`';
+  }
+  if (state.consecutive_unknown > 0) {
+    return `Extraction: UNKNOWN (${state.consecutive_unknown} consecutive attempts; ` +
+      `local Claude result unavailable — inspect ${path.basename(LOG_PATH)})`;
   }
 
   const timestamp = ledger.lastRealExtractionAt;
@@ -1211,6 +1265,11 @@ async function main() {
         sessionFile: transcriptPath,
       }));
       await finishExtractionRun();
+      if (isSkippedExtraction(detailed)) {
+        // A classifier skip is not a completed upload and must not poison the
+        // content-sha ledger. The source transcript remains the retry source.
+        process.exit(0);
+      }
       const result = detailed.result;
       notifyHeld(result.learnings_held || 0); // LW-18 layer 2: count-only, fail-silent
       // Mark only after a successful upload so a failed POST can be retried.
@@ -1229,9 +1288,8 @@ async function main() {
   if (args.flushPending) {
     const pending = listPendingFiles();
     log(`[runner] Flushing ${pending.length} pending queue file(s)...`);
-    const flushLedger = loadLedger();
-    let flushLedgerChanged = false;
     let flushed = 0;
+    let flushRetained = 0;
     let flushHeld = 0;
     for (const qf of pending) {
       try {
@@ -1251,8 +1309,14 @@ async function main() {
           sessionFile,
           flushFile: qf,
         }));
+        if (isSkippedExtraction(detailed)) {
+          flushRetained++;
+          continue;
+        }
         const result = detailed.result;
-        flushLedgerChanged = recordRealExtractionCompletion(flushLedger, detailed) || flushLedgerChanged;
+        // Load immediately before each write so SessionEnd-hook marks that
+        // land during a long flush cannot be clobbered by a stale snapshot.
+        persistRealExtractionCompletion(detailed);
         flushHeld += result.learnings_held || 0;
         deleteQueueFile(qf);
         flushed++;
@@ -1261,8 +1325,7 @@ async function main() {
       }
     }
     await finishExtractionRun();
-    if (flushLedgerChanged) saveLedger(flushLedger);
-    log(`[runner] Flush complete: ${flushed}/${pending.length} succeeded`);
+    log(`[runner] Flush complete: ${flushed}/${pending.length} succeeded, ${flushRetained} retained (extraction skipped)`);
     notifyHeld(flushHeld); // LW-18 layer 2: count-only, fail-silent
     process.exit(0);
   }
@@ -1279,6 +1342,7 @@ async function main() {
   let totalProcessed = 0;
   let totalSkipped = 0;
   let totalOversize = 0; // N1: oversize-cap skips (subset of totalSkipped)
+  let totalExtractionRetained = 0;
   let totalFailed = 0;
   let totalHeld = 0;
   const refusedBySource = new Map();
@@ -1407,6 +1471,12 @@ async function main() {
           sessionFile,
           indent: '  ',
         }));
+        if (isSkippedExtraction(detailed)) {
+          // The queue file is the durable work item. A classifier skip is not
+          // processed, skipped-by-policy, failed, or safe to ledger-mark.
+          totalExtractionRetained++;
+          continue;
+        }
         const result = detailed.result;
         totalHeld += result.learnings_held || 0;
         ledgerMark(ledger, source.type, sessionRef.sessionId, sha, sessionRef.mtime);
@@ -1425,9 +1495,9 @@ async function main() {
   for (const [sourceType, count] of refusedBySource) {
     log(`[runner] ${sourceType}: ${count} refused (non-user/format)`);
   }
-  await finishExtractionRun();
   saveLedger(ledger);
-  log(`[runner] Summary: ${totalDiscovered} discovered, ${totalProcessed} processed, ${totalSkipped} skipped (${totalOversize} oversize), ${totalFailed} failed`);
+  await finishExtractionRun();
+  log(`[runner] Summary: ${totalDiscovered} discovered, ${totalProcessed} processed, ${totalSkipped} skipped (${totalOversize} oversize), ${totalExtractionRetained} retained (extraction skipped), ${totalFailed} failed`);
   if (totalOversize > 0) {
     console.error(`[runner] oversize_skipped=${totalOversize} (sessions above AUXILO_MAX_SESSION_BYTES were skipped, not read)`);
   }
@@ -1441,7 +1511,8 @@ module.exports = {
   parseArgs, writeQueueFile, deleteQueueFile, listPendingFiles,
   loadLedger, saveLedger, ledgerHighWater, ledgerHas, ledgerMark,
   loadExtractionSkipState, saveExtractionSkipState, finalizeExtractionRun,
-  recordRealExtractionCompletion, renderExtractionStatus, renderExtractionResult,
+  isSkippedExtraction, recordRealExtractionCompletion, persistRealExtractionCompletion,
+  renderExtractionStatus, renderExtractionResult,
   installHooks, installSweeper, installDigest, printStatus, scrubAndVerify, enumerateActiveSources,
   loadSources, SOURCES, sweeperManifest, submitLearnings, notifyHeld,
   resolveCaptureVisibility, postExtract, postExtractDetailed,

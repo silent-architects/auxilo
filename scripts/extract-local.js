@@ -133,20 +133,21 @@ function buildExtractionPrompt(opts = {}) {
 const EXTRACTION_PROMPT = buildExtractionPrompt({ scoreExtraction: false });
 
 /** Resolve the `claude` binary — hook/launchd env may have a minimal PATH. */
-function resolveClaudeBin() {
+function resolveClaudeBin(opts = {}) {
+  const homeDir = typeof opts.homeDir === 'string' ? opts.homeDir : os.homedir();
+  const existsSync = typeof opts.existsSync === 'function' ? opts.existsSync : fs.existsSync;
   const candidates = [
-    'claude',
-    path.join(os.homedir(), '.claude', 'local', 'claude'),
+    path.join(homeDir, '.claude', 'local', 'claude'),
     '/usr/local/bin/claude',
     '/opt/homebrew/bin/claude',
-    path.join(os.homedir(), '.local', 'bin', 'claude'),
+    path.join(homeDir, '.local', 'bin', 'claude'),
   ];
   for (const c of candidates) {
     try {
-      if (c === 'claude') return c; // let PATH resolve it; spawn will ENOENT if absent
-      if (fs.existsSync(c)) return c;
+      if (existsSync(c)) return c;
     } catch (_) { /* ignore */ }
   }
+  // Absolute launchd fallbacks are absent; let PATH resolve the final option.
   return 'claude';
 }
 
@@ -209,7 +210,7 @@ function extractWithClaudeCode(transcript, opts = {}) {
     return {
       ok: false,
       out: '',
-      reason: 'local model not authenticated in this context (run `claude` and /login once); skipping deterministic extraction',
+      reason: 'local model not authenticated in this context (run `claude auth login` once); skipping deterministic extraction',
       reasonCode: 'cli-unauthenticated',
       authStatus,
     };
@@ -266,7 +267,7 @@ function extractWithClaudeCode(transcript, opts = {}) {
     return {
       ok: false,
       out,
-      reason: 'local model not authenticated in this context (run `claude` and /login once); skipping deterministic extraction',
+      reason: 'local model not authenticated in this context (run `claude auth login` once); skipping deterministic extraction',
       reasonCode: 'cli-unauthenticated',
       authStatus,
       ...(authStatus === 'logged-in' && { authDiscrepancy: true }),
