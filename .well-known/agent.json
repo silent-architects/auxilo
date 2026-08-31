@@ -73,7 +73,7 @@
         {
             "id": "contributor-dashboard",
             "name": "Contributor Earnings",
-            "description": "Check total earnings and per-learning breakdown for any contributor wallet. Free.",
+            "description": "Check aggregate earnings totals for any contributor wallet. Per-learning earnings require authenticated account access. Free.",
             "tags": [
                 "earnings",
                 "contributor",

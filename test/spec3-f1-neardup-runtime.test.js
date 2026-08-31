@@ -284,12 +284,41 @@ describe('SPEC3-F1 Phase 1 near-duplicate runtime', () => {
     assert.doesNotMatch(route, /extractNearDup\.verdict === 'reject'/);
   });
 
-  it('strips event-time duplicate evidence from all six buyer projections', () => {
-    assert.equal(
-      (SERVER_SOURCE.match(/near_duplicate_evidence: _nde/g) || []).length +
-        (SERVER_SOURCE.match(/possible_duplicate_similarity, near_duplicate_evidence,/g) || []).length,
-      6,
-    );
+  it('strips the exact 17-field moderation set from all six established projections', () => {
+    const moderationFields = [
+      'injection_flags',
+      'possible_duplicate_of',
+      'possible_duplicate_similarity',
+      'moderation',
+      'near_duplicate_evidence',
+      'near_duplicate_why',
+      'malicious_verdict',
+      'malicious_reason',
+      'platform_hold_reasons',
+      'report_auto_hidden_at',
+      'report_auto_hide_distinct_count',
+      'sensitivity_signals',
+      'sensitivity_source',
+      'sensitivity_evidence',
+      'learning_type',
+      'sanitized_from',
+      'sanitized_to',
+    ];
+    const searchStart = SERVER_SOURCE.indexOf('.map(({ _score, _textScore, body, injection_flags');
+    const searchEnd = SERVER_SOURCE.indexOf('...rest }) => ({', searchStart);
+    assert.ok(searchStart !== -1 && searchEnd !== -1, 'search projection exists');
+    const projections = [SERVER_SOURCE.slice(searchStart, searchEnd)];
+    for (const name of ['privateLearning', 'ownerLearning', 'selfLearning', 'cappedLearning', 'publicLearning']) {
+      const end = SERVER_SOURCE.indexOf(`...${name}`);
+      const start = SERVER_SOURCE.lastIndexOf('const {', end);
+      assert.ok(start !== -1 && end !== -1, `${name} projection exists`);
+      projections.push(SERVER_SOURCE.slice(start, end));
+    }
+    for (const [index, projection] of projections.entries()) {
+      for (const field of moderationFields) {
+        assert.ok(projection.includes(field), `projection ${index + 1} strips ${field}`);
+      }
+    }
     assert.match(SERVER_SOURCE, /near_duplicate_evidence: l\.near_duplicate_evidence/,
       'admin reviewer projection retains evidence');
   });
