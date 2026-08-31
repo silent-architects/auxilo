@@ -146,9 +146,11 @@ describe('SPEC3-G1 private learnings acceptance pins', () => {
     const ownedBranchAt = privateBranch[0].indexOf("if (learning.visibility === 'private') {");
     const responseAt = privateBranch[0].indexOf('return c.json', ownedBranchAt);
     const response = privateBranch[0].slice(responseAt);
-    for (const field of ['unlock_price:', 'pricing:', 'demand:', 'earnings:', 'unlock_price_usd:']) {
+    for (const field of ['unlock_price:', 'pricing:', 'demand:', 'unlock_price_usd:']) {
       assert.doesNotMatch(response, new RegExp(field));
     }
+    assert.doesNotMatch(privateBranch[0], /earnings:\s*_eo/,
+      'private-owner recall must retain the owner earnings field');
     assert.match(privateBranch[0], /amount_paid_usd:\s*0/);
     assert.match(privateBranch[0], /owner_recall_free:\s*true/);
     assert.ok(unlock.indexOf("learning.visibility === 'private'") < unlock.indexOf('getLockedPrice('));

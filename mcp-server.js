@@ -384,7 +384,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_contributor',
-      description: 'Check earnings for a contributor wallet. Shows total earned, per-learning breakdown. Free.',
+      description: 'Check aggregate earnings totals for a contributor wallet. Per-learning earnings require the authenticated auxilo_account_earnings tool. Free.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -408,7 +408,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_account_earnings',
-      description: 'View earnings for your authenticated Auxilo account. Authenticates with your configured API key automatically, or pass a session_token (JWT). Returns total gross, contributor share, pending balance, total withdrawn, whether withdrawal is available (can_withdraw), and held_pending_assent — undisbursable receipts recorded before you accepted the current Terms, released to your withdrawable balance when you accept via auxilo_accept_terms. Earnings from on-chain-settled sales are paid to your wallet at sale time and appear in settlement history, not in pending balance. Free.',
+      description: 'View aggregate and per-learning earnings for your authenticated Auxilo account. Authenticates with your configured API key automatically, or pass a session_token (JWT). Returns total gross, contributor share, pending balance, total withdrawn, whether withdrawal is available (can_withdraw), and held_pending_assent — undisbursable receipts recorded before you accepted the current Terms, released to your withdrawable balance when you accept via auxilo_accept_terms. Earnings from on-chain-settled sales are paid to your wallet at sale time and appear in settlement history, not in pending balance. Free.',
       inputSchema: {
         type: 'object',
         properties: {

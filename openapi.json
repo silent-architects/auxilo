@@ -302,20 +302,6 @@
               "type": "string"
             }
           },
-          "earnings": {
-            "type": "object",
-            "properties": {
-              "gross_usd": {
-                "type": "number"
-              },
-              "contributor_share_usd": {
-                "type": "number"
-              },
-              "platform_share_usd": {
-                "type": "number"
-              }
-            }
-          },
           "created_at": {
             "type": "string",
             "format": "date-time"
@@ -1672,9 +1658,6 @@
                     "total_platform_usd": {
                       "type": "number"
                     },
-                    "by_learning": {
-                      "type": "object"
-                    },
                     "learnings_submitted": {
                       "type": "integer",
                       "description": "Count of the wallet's publicly visible learnings (same visibility predicate as /knowledge/stats). Submissions that are pending review, rejected, or retracted are not counted."
@@ -2182,7 +2165,7 @@
     "/account/earnings": {
       "get": {
         "summary": "View contributor earnings for the authenticated account",
-        "description": "Returns the account's earnings breakdown. total_contributor is the OWNED lifetime share (excludes unassented_pending); unassented_pending is the Builder Share received but HELD until \u00a75.10 acceptance (not yet owned, not withdrawable); pending_balance is the withdrawable subset of owned earnings; total_contributor_gross is the raw lifetime figure (owned + held). Requires session auth.",
+        "description": "Returns the authenticated owner's aggregate and per-learning earnings breakdown. total_contributor is the OWNED lifetime share (excludes unassented_pending); unassented_pending is the Builder Share received but HELD until \u00a75.10 acceptance (not yet owned, not withdrawable); pending_balance is the withdrawable subset of owned earnings; total_contributor_gross is the raw lifetime figure (owned + held). Requires session or API-key authentication with earnings-read scope.",
         "operationId": "getAccountEarnings",
         "tags": [
           "Account",
@@ -2191,6 +2174,9 @@
         "security": [
           {
             "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
           }
         ],
         "responses": {
@@ -2235,6 +2221,9 @@
                     },
                     "withdrawal_count": {
                       "type": "number"
+                    },
+                    "by_learning": {
+                      "type": "object"
                     },
                     "can_withdraw": {
                       "type": "boolean"

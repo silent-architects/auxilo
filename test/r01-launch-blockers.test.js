@@ -294,12 +294,20 @@ describe('6. openapi.json is complete and current', () => {
     assert.ok(spec.paths['/account/earnings'].get, '/account/earnings must have GET');
   });
 
-  it('/account/earnings documents the held-vs-owned split fields', () => {
+  it('documents the account-owner detail without exposing public per-learning earnings', () => {
     const props = spec.paths['/account/earnings'].get.responses['200']
       .content['application/json'].schema.properties;
     assert.ok(props.unassented_pending, 'must document unassented_pending');
     assert.ok(props.total_contributor_gross, 'must document total_contributor_gross');
     assert.ok(props.total_contributor, 'must document total_contributor');
+    assert.ok(props.by_learning, 'authenticated owner surface must document per-learning detail');
+
+    const publicContributorProps = spec.paths['/contributor/{wallet}'].get.responses['200']
+      .content['application/json'].schema.properties;
+    assert.equal(Object.hasOwn(publicContributorProps, 'by_learning'), false,
+      'unauthenticated contributor response must not document per-learning earnings');
+    assert.equal(Object.hasOwn(spec.components.schemas.LearningFull.properties, 'earnings'), false,
+      'buyer unlock schema must not document owner-only earnings');
   });
 
   it('/withdraw carries a withdraw-pause note and a 503 response', () => {

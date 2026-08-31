@@ -45,6 +45,11 @@ function fixtureLearning(id, overrides = {}) {
       completeness: 4,
       total: 16,
     },
+    earnings: {
+      total_gross_usd: 7.05,
+      contributor_earned_usd: 4.935,
+      platform_earned_usd: 2.115,
+    },
     ...overrides,
   };
 }
@@ -278,9 +283,14 @@ describe('SPEC3-F2 GET /account/learnings', { timeout: 180_000 }, () => {
     const recallBody = await ownerRecall.json();
     assert.equal(recallBody.visibility, 'private');
     assert.equal(recallBody.body.includes('Private body'), true);
-    for (const field of ['unlock_price', 'pricing', 'demand', 'earnings']) {
+    for (const field of ['unlock_price', 'pricing', 'demand']) {
       assert.equal(Object.hasOwn(recallBody, field), false);
     }
+    assert.deepEqual(recallBody.earnings, {
+      total_gross_usd: 7.05,
+      contributor_earned_usd: 4.935,
+      platform_earned_usd: 2.115,
+    });
     assert.equal(Object.hasOwn(recallBody._revenue, 'unlock_price_usd'), false);
     assert.equal(recallBody._revenue.owner_recall_free, true);
 

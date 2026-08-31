@@ -4960,6 +4960,7 @@ app.get('/account/earnings', requireSessionOrApiKey('earnings-read'), async (c) 
       pending_balance: 0,
       total_withdrawn: 0,
       withdrawal_count: 0,
+      by_learning: {},
       can_withdraw: false,
       // FB-2: both custodial payout rails are paused when the kill-switch is unset (launch
       // default). Surfaced so the dashboard form + MCP earnings tool are server-authoritative
@@ -4994,6 +4995,7 @@ app.get('/account/earnings', requireSessionOrApiKey('earnings-read'), async (c) 
     pending_balance: entry.pending_balance || 0,  // withdrawable subset of owned
     total_withdrawn: entry.total_withdrawn || 0,
     withdrawal_count: entry.withdrawal_count || 0,
+    by_learning: entry.by_learning || {},
     // FB-2: never advertise can_withdraw while the custodial payout kill-switch is engaged
     // (launch default) — both rails 503 until CUSTODIAL_WITHDRAW_ENABLED is set.
     can_withdraw: canWithdraw && process.env.CUSTODIAL_WITHDRAW_ENABLED === 'true',
@@ -7970,13 +7972,13 @@ app.post('/knowledge', optionalAuth(), apiKeyRateLimitMiddleware('/knowledge'), 
           visibility: 'private',
           quality: stripOpsCounters(r.quality),
           relevance: r.relevance,
-          _revenue: {
+          _revenue: serializeRevenue({
             amount_paid_usd: 0,
             contributor_earned_usd: 0,
             platform_earned_usd: 0,
             self_unlock: true,
             owner_recall_free: true,
-          },
+          }),
         };
       }
       // FB-4: quote the ONE price the unlock route will actually CHARGE. Resolve it with
@@ -8037,6 +8039,37 @@ function stripOpsCounters(quality) {
     ...pub
   } = quality;
   return pub;
+}
+
+// ENVELOPE-0831: contributor review and earnings details are owner-only.
+// Buyer projections retain every other field and never mutate the stored row.
+function stripOwnerOnlyFields(learning) {
+  if (!learning || typeof learning !== 'object') return learning;
+  const {
+    earnings: _earnings,
+    quality_self_assessment: _qualitySelfAssessment,
+    contributor_account_id: _contributorAccountId,
+    ...buyerLearning
+  } = learning;
+  return buyerLearning;
+}
+
+// ENVELOPE-0831: USDC response values serialize at native six-decimal
+// precision. Accrual math, persistence, WAL entries, and ledgers stay untouched.
+function serializeRevenue(revenue) {
+  if (!revenue || typeof revenue !== 'object') return revenue;
+  const serialized = { ...revenue };
+  for (const field of [
+    'unlock_price_usd',
+    'amount_paid_usd',
+    'contributor_earned_usd',
+    'platform_earned_usd',
+  ]) {
+    if (typeof serialized[field] === 'number' && Number.isFinite(serialized[field])) {
+      serialized[field] = Number(serialized[field].toFixed(6));
+    }
+  }
+  return serialized;
 }
 
 // Knowledge marketplace stats (FREE) — must be registered BEFORE /knowledge/:id
@@ -8120,8 +8153,8 @@ app.get('/knowledge/:id', async (c) => {
   const dr8OwnerAccountId = resolveProvableOwnerAccountId(c, learning);
 
   // SPEC3-G1: private recall is existence-hidden and branches before every
-  // price/payment/counter path. The response deliberately omits every economic
-  // field while retaining DR-8's truthful free-owner envelope.
+  // price/payment/counter path. The response omits marketplace pricing/demand
+  // fields while retaining the authenticated owner's own earnings detail.
   if (learning.visibility === 'private' && !dr8OwnerAccountId) {
     return c.json({ error: 'Learning not found', id }, 404);
   }
@@ -8136,7 +8169,7 @@ app.get('/knowledge/:id', async (c) => {
       sensitivity_signals: _sso, sensitivity_source: _ssrco,
       sensitivity_evidence: _seo, learning_type: _lto,
       sanitized_from: _sfo, sanitized_to: _sto,
-      unlock_price: _upo, pricing: _pro, demand: _do, earnings: _eo,
+      unlock_price: _upo, pricing: _pro, demand: _do,
       ...privateLearning
     } = learning;
     return c.json({
@@ -8144,13 +8177,13 @@ app.get('/knowledge/:id', async (c) => {
       visibility: 'private',
       quality: stripOpsCounters(privateLearning.quality),
       content_advisory: UNTRUSTED_CONTENT_ADVISORY,
-      _revenue: {
+      _revenue: serializeRevenue({
         amount_paid_usd: 0,
         contributor_earned_usd: 0,
         platform_earned_usd: 0,
         self_unlock: true,
         owner_recall_free: true,
-      },
+      }),
       timestamp: new Date().toISOString(),
     });
   }
@@ -8225,7 +8258,7 @@ app.get('/knowledge/:id', async (c) => {
       ...ownerLearning,
       quality: stripOpsCounters(ownerLearning.quality),
       content_advisory: UNTRUSTED_CONTENT_ADVISORY,
-      _revenue: {
+      _revenue: serializeRevenue({
         unlock_price_usd: UNLOCK_PRICE,
         amount_paid_usd: 0,
         contributor_earned_usd: 0,
@@ -8235,7 +8268,7 @@ app.get('/knowledge/:id', async (c) => {
         // this from the M-2 paid-self-unlock shape (which has no
         // owner_recall_free and DID cost the caller their payment).
         owner_recall_free: true,
-      },
+      }),
       timestamp: new Date().toISOString()
     });
   }
@@ -8470,10 +8503,10 @@ app.get('/knowledge/:id', async (c) => {
     } = learning;
 
     return c.json({
-      ...selfLearning,
+      ...stripOwnerOnlyFields(selfLearning),
       quality: stripOpsCounters(selfLearning.quality),
       content_advisory: UNTRUSTED_CONTENT_ADVISORY,
-      _revenue: {
+      _revenue: serializeRevenue({
         unlock_price_usd: UNLOCK_PRICE,
         contributor_earned_usd: 0,
         platform_earned_usd: 0,
@@ -8487,7 +8520,7 @@ app.get('/knowledge/:id', async (c) => {
             router: x402Router.getRouterAddress(),
           }
         } : {})
-      },
+      }),
       timestamp: new Date().toISOString()
     });
   }
@@ -8519,10 +8552,10 @@ app.get('/knowledge/:id', async (c) => {
       ...cappedLearning
     } = learning;
     return c.json({
-      ...cappedLearning,
+      ...stripOwnerOnlyFields(cappedLearning),
       quality: stripOpsCounters(cappedLearning.quality),
       content_advisory: UNTRUSTED_CONTENT_ADVISORY,
-      _revenue: {
+      _revenue: serializeRevenue({
         unlock_price_usd: UNLOCK_PRICE,
         amount_paid_usd: accrualBasis,
         contributor_earned_usd: 0,
@@ -8530,7 +8563,7 @@ app.get('/knowledge/:id', async (c) => {
         // 1 credited accrual per (buyer, learning) per 30 days — repeat
         // unlocks inside the window serve content without a new accrual.
         accrual_capped: true,
-      },
+      }),
       timestamp: new Date().toISOString()
     });
   }
@@ -8721,13 +8754,13 @@ app.get('/knowledge/:id', async (c) => {
   } = learning;
 
   return c.json({
-    ...publicLearning,
+    ...stripOwnerOnlyFields(publicLearning),
     quality: stripOpsCounters(publicLearning.quality),
     // LW-3(a): untrusted-content envelope. `body` above stays RAW (programmatic
     // consumers parse it); this advisory is the contract signal that it is
     // unverified third-party data, not instructions.
     content_advisory: UNTRUSTED_CONTENT_ADVISORY,
-    _revenue: {
+    _revenue: serializeRevenue({
       unlock_price_usd: UNLOCK_PRICE,
       // AUD19-2: the amount the buyer actually paid — the accrual basis.
       amount_paid_usd: accrualBasis,
@@ -8741,7 +8774,7 @@ app.get('/knowledge/:id', async (c) => {
           router: x402Router.getRouterAddress(),
         }
       } : {})
-    },
+    }),
     timestamp: new Date().toISOString()
   });
 
@@ -9115,7 +9148,6 @@ app.get('/contributor/:wallet', (c) => {
     pending_balance: data.pending_balance || 0,
     total_withdrawn: data.total_withdrawn || 0,
     withdrawal_count: data.withdrawal_count || 0,
-    by_learning: data.by_learning,
     learnings_submitted: visibleLearningsList().filter(l => l.contributor_wallet === wallet).length,
     last_updated: data.last_updated
   });
