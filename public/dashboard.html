@@ -938,7 +938,7 @@
     }
 
     var items = [
-      { label: 'Your share (withdrawable)', value: fmt(data.pending_balance), highlight: true },
+      { label: 'Your share (accrued)', value: fmt(data.pending_balance), highlight: true },
       { label: 'Lifetime gross', value: fmt(data.total_gross_usd || data.total_gross || 0) },
       { label: 'Your revenue share (70%, earned to date)', value: fmt(data.total_contributor) },
       { label: 'Total withdrawn', value: fmt(data.total_withdrawn) },
@@ -950,7 +950,7 @@
       // CP-7 framing: an undisbursable receipt released on Terms acceptance —
       // never "money we're holding for you".
       items.splice(1, 0, {
-        label: 'Undisbursable receipts — released on Terms acceptance',
+        label: 'Undisbursable receipts (released on Terms acceptance)',
         value: fmt(held),
         held: true,
       });
@@ -977,7 +977,7 @@
         heldNote.style.fontSize = '11px';
         heldNote.style.color = 'var(--slate)';
         heldNote.style.marginTop = '4px';
-        heldNote.textContent = 'Receipts recorded before you accepted the current Terms. Not part of your balance or withdrawable share — accepting the Terms above releases them to your withdrawable share immediately.';
+        heldNote.textContent = 'Receipts recorded before you accepted the current Terms. Not part of your balance or accrued share. Accepting the Terms above releases them to your accrued share immediately.';
         wrap.appendChild(heldNote);
       }
 
@@ -1018,6 +1018,15 @@
       pausedBody.textContent = 'Both withdrawal rails (Stripe-to-bank and USDC on Base) are paused while we complete our non-custodial migration. Your earnings accrue now and remain payable to you under the Terms; they become withdrawable as soon as the non-custodial rail goes live. No lock-ups, no expiry.';
       pausedWrap.appendChild(pausedBody);
 
+      var pausedStatus = document.createElement('a');
+      pausedStatus.href = '/status';
+      pausedStatus.textContent = 'See where things stand';
+      pausedStatus.style.fontSize = '13px';
+      pausedStatus.style.color = 'var(--aurum)';
+      pausedStatus.style.display = 'inline-block';
+      pausedStatus.style.marginTop = '8px';
+      pausedWrap.appendChild(pausedStatus);
+
       if (data.wallet) {
         var pausedWallet = document.createElement('p');
         pausedWallet.style.fontSize = '12px';
@@ -1056,14 +1065,14 @@
       var note = document.createElement('div');
       note.style.marginTop = '8px';
       note.style.fontSize = '12px';
-      note.textContent = 'USDC withdrawals on Base are paused while our non-custodial rail rolls out. Bank withdrawals via Stripe are available in the section below when your balance is ready. Your wallet stays linked and ready.';
+      note.textContent = 'USDC withdrawals on Base are paused while our non-custodial rail rolls out. Bank withdrawals via Stripe open soon as well. The withdrawals section below shows where things stand. Your wallet stays linked and ready.';
 
       cryptoWrap.appendChild(linkedLine);
       cryptoWrap.appendChild(addrSpan);
       cryptoWrap.appendChild(note);
     } else {
       var noWallet = document.createElement('div');
-      noWallet.textContent = 'No wallet linked. USDC withdrawals on Base are rolling out on our non-custodial rail (coming soon). You can link a wallet now through your agent: verify it with auxilo_verify_wallet, then link it with auxilo_link_wallet — linking asks the wallet to sign a one-time challenge proving you control it. Bank withdrawals via Stripe are available in the section below when your balance is ready.';
+      noWallet.textContent = 'No wallet linked. USDC withdrawals on Base are rolling out on our non-custodial rail (coming soon). You can link a wallet now through your agent. Verify it with auxilo_verify_wallet, then link it with auxilo_link_wallet. Linking asks the wallet to sign a one-time challenge proving you control it. Bank withdrawals via Stripe open soon as well. The withdrawals section below shows where things stand.';
       cryptoWrap.appendChild(noWallet);
     }
 
