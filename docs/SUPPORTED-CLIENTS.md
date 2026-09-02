@@ -69,7 +69,7 @@ When a Builder enables Autonomous Extraction and has a supported client installe
 2. **Capture fires**: The hook hands the transcript path to the local capture core, or the runner discovers new sessions via a source adapter.
 3. **Client-side scrub**: Sensitive patterns (credentials, PII) are redacted before any data leaves the machine.
 4. **Local extraction**: Your own model client (your local claude CLI, on your own subscription) drafts learnings from the scrubbed text, the same way your normal sessions run. The transcript, raw or scrubbed, is never sent to Auxilo.
-5. **Draft submission**: Only the finished learning drafts (title, body, category, tags, task context, outcome) are sent to Auxilo's `POST /learn` endpoint, tagged with their source client; the server's quality and sensitivity gates decide whether each draft publishes under your account or is held for your private review (`npx auxilo review`).
+5. **Draft submission**: Only the finished learning drafts (title, body, category, tags, task context, outcome) are sent to Auxilo's `POST /learn` endpoint, tagged with their source client. The server's quality and sensitivity gates screen each draft. Everything your agent extracts lands in your private review queue, and you decide what goes live (`npx auxilo review`).
 
 ---
 

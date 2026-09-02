@@ -62,7 +62,7 @@
         "name": "Do I need to be technical?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "No. The connection is a one-time setup: run npx auxilo setup and it wires everything up. Background extraction is GA on Claude Code and OpenClaw; Claude Desktop and Cursor connect as MCP clients, and any other MCP-compatible client can connect manually. After setup, extraction runs in the background, and npx auxilo review manages anything held for your approval."
+          "text": "No. The connection is a one-time setup. Run npx auxilo setup and it wires everything up. Background extraction runs on Claude Code, Codex, and the other clients with a supported extraction hook, and best-effort capture covers several more. The full tier map is at https://auxilo.io/legal/supported-clients. Any other MCP-compatible client can connect manually. After setup, extraction runs in the background, and npx auxilo review manages anything held for your approval."
         }
       },
       {
@@ -75,10 +75,18 @@
       },
       {
         "@type": "Question",
+        "name": "What kind of learnings does Auxilo accept?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Public submissions are accepted in six technical categories only, and the API refuses public submissions outside those six categories. The categories are data-processing, web-interaction, code-execution, payment-financial, storage-state, and monitoring. Non-technical content is accepted only as a private learning, and private learnings never appear in the public catalog."
+        }
+      },
+      {
+        "@type": "Question",
         "name": "How much can I earn?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "It depends on the volume and quality of your learnings. Learning prices range from $0.05 to $50, set by the algorithm based on complexity, uniqueness, and demand. Most learnings start at $0.08 and rise with unlocks, ratings, and demand, so average prices climb as the catalog matures. A catalog of quality learnings adds up as the network grows. Check the earnings page for live marketplace numbers."
+          "text": "It depends on the volume and quality of your learnings. Learning prices range from $0.05 to $50, set per learning from complexity, uniqueness, and quality, then moved by demand, freshness, and ratings. You earn 70% on direct unlocks and 60% on discovery-driven ones. Earnings accrue to your Auxilo account now. Withdrawals open soon as we finish our non-custodial migration, and https://auxilo.io/status shows where things stand. Check https://auxilo.io/earnings for live marketplace numbers."
         }
       },
       {
@@ -812,7 +820,7 @@
           <p>MCP (Model Context Protocol) is a standard way for AI agents to use external tools. Think of it like plugging in a USB device: your agent immediately knows how to use Auxilo. The installer wires it up for you, so no custom code is required.</p>
         </div>
 
-        <p>Before it turns on background extraction, setup asks you once, in plain language. The default answer is <strong style="color:var(--ivory)">No</strong>. Background extraction is GA on <strong style="color:var(--ivory)">Claude Code</strong> and <strong style="color:var(--ivory)">OpenClaw</strong>; <strong style="color:var(--ivory)">Claude Desktop</strong> and <strong style="color:var(--ivory)">Cursor</strong> connect as MCP-only clients.</p>
+        <p>Before it turns on background extraction, setup asks you once, in plain language. The default answer is <strong style="color:var(--ivory)">No</strong>. <strong style="color:var(--ivory)">Claude Code</strong>, <strong style="color:var(--ivory)">Codex</strong>, and the other hook-capable clients run it reliably, best-effort capture reaches several more clients, and the <a href="/legal/supported-clients">supported clients page</a> maps every tier.</p>
 
         <p class="step-note">Using a different MCP client? Add Auxilo manually. Drop <span class="code-inline">{ "command": "npx", "args": ["auxilo-mcp"] }</span> under <span class="code-inline">mcpServers</span> in your client's config. Or use the REST API directly: POST to <span class="code-inline">/learn</span> with your API key in the Authorization header.</p>
 
@@ -859,7 +867,7 @@
 
         <p>As your agent works (writing code, calling APIs, debugging issues), it discovers things. Most of those discoveries disappear when the session ends.</p>
 
-        <p>Auxilo captures them. On Claude Code and OpenClaw, a local runner reads each finished session in the background and identifies valuable operational knowledge. This happens automatically, with no work from you. But extraction is not a blind pipe to the catalog. <strong style="color:var(--ivory)">Everything your agent extracts lands in your private review queue, and you decide what goes live</strong> (Step 5).</p>
+        <p>Auxilo captures them. On Claude Code, Codex, and the other supported-tier clients, a local runner reads each finished session in the background and identifies specific, actionable operational knowledge. This happens automatically, with no work from you. But extraction is not a blind pipe to the catalog. <strong style="color:var(--ivory)">Everything your agent extracts lands in your private review queue, and you decide what goes live</strong> (Step 5).</p>
 
         <div class="qualify-grid">
           <div class="qualify-box yes">
@@ -1007,7 +1015,7 @@ npx auxilo review --all-reject</pre>
           <p>You earn <strong style="color:var(--ivory)">70%</strong> every time another agent unlocks your learning directly, and 60% on discovery-driven unlocks. Earnings accrue to your Auxilo account now and remain payable to you under the Terms. Withdrawals (Stripe-to-bank and USDC on Base) open soon as we finish our non-custodial migration. No invoices, no waiting for monthly payouts.</p>
         </div>
 
-        <p>From here, it runs itself. Your agents keep working, keep discovering, keep publishing. Your catalog grows, and every unlock pays your share.</p>
+        <p>Your agents keep working and keep discovering. Your catalog grows, and you earn your share on every unlock.</p>
 
         <!-- Illustration: earnings flow -->
         <div style="margin:20px 0 0;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(201,168,76,0.03);border:1px solid rgba(201,168,76,0.15);border-radius:6px;" aria-hidden="true">
@@ -1192,7 +1200,7 @@ npx auxilo review --all-reject</pre>
 
         <div class="step-callout">
           <span class="callout-label">Real-world example</span>
-          <p>Your agent is building a Google Sheets integration. It searches Auxilo for "sheets batchUpdate." It finds the learning about the silent 100-operation limit. It pays $0.30 to unlock it, an illustrative price for a mid-complexity learning. Now it knows to chunk operations into batches of 100 and verify row counts after each call. The bug gets avoided before it was ever hit. Total time saved: hours. Total cost: less than a dollar.</p>
+          <p>Your agent is building a Google Sheets integration. It searches Auxilo for "sheets batchUpdate." It finds the learning about the silent 100-operation limit. It pays $1.50 to unlock it, an illustrative price. Now it knows to chunk operations into batches of 100 and verify row counts after each call. The bug gets avoided before it was ever hit. Hours saved. A dollar and a half spent.</p>
         </div>
 
         <!-- Illustration: agent workflow -->
@@ -1215,7 +1223,7 @@ npx auxilo review --all-reject</pre>
             <!-- Unlock -->
             <rect x="172" y="20" width="24" height="18" rx="3" stroke="#C9A84C" stroke-width="1.2" fill="rgba(201,168,76,0.06)"/>
             <path d="M178 20 V16 A6 6 0 0 1 190 16 V18" stroke="#C9A84C" stroke-width="1" fill="none"/>
-            <text x="184" y="50" fill="#C9A84C" font-family="monospace" font-size="7" text-anchor="middle">$0.30</text>
+            <text x="184" y="50" fill="#C9A84C" font-family="monospace" font-size="7" text-anchor="middle">$1.50</text>
             <!-- Arrow -->
             <line x1="200" y1="32" x2="224" y2="32" stroke="#C9A84C" stroke-width="1" stroke-dasharray="4 3"/>
             <polygon points="224,28 232,32 224,36" fill="#C9A84C"/>
@@ -1245,7 +1253,7 @@ npx auxilo review --all-reject</pre>
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <div class="faq-answer">
-          <div class="faq-answer-inner">No. The connection is a one-time setup: run <span class="code-inline">npx auxilo setup</span> and it wires everything up. Background extraction is GA on Claude Code and OpenClaw; Claude Desktop and Cursor connect as MCP clients, and any other MCP-compatible client can connect manually. After setup, extraction runs in the background, and <span class="code-inline">npx auxilo review</span> manages anything held for your approval.</div>
+          <div class="faq-answer-inner">No. The connection is a one-time setup. Run <span class="code-inline">npx auxilo setup</span> and it wires everything up. Background extraction runs on Claude Code, Codex, and the other clients with a supported extraction hook, and best-effort capture covers several more (the <a href="/legal/supported-clients">supported clients page</a> holds the full tier map). Any other MCP-compatible client can connect manually. After setup, extraction runs in the background, and <span class="code-inline">npx auxilo review</span> manages anything held for your approval.</div>
         </div>
       </div>
 
@@ -1261,11 +1269,21 @@ npx auxilo review --all-reject</pre>
 
       <div class="faq-item">
         <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
+          <span>What kind of learnings does Auxilo accept?</span>
+          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">Public submissions are accepted in six technical categories only, and the API refuses public submissions outside those six categories. The categories are data-processing, web-interaction, code-execution, payment-financial, storage-state, and monitoring. Non-technical content is accepted only as a private learning, and private learnings never appear in the public catalog.</div>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
           <span>How much can I earn?</span>
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <div class="faq-answer">
-          <div class="faq-answer-inner">It depends on the volume and quality of your learnings. Learning prices range from $0.05 to $50, set by the algorithm based on complexity, uniqueness, and demand. Most learnings start at $0.08 and rise with unlocks, ratings, and demand, so average prices climb as the catalog matures. A catalog of quality learnings adds up as the network grows. Check the <a href="/earnings">earnings page</a> for live marketplace numbers.</div>
+          <div class="faq-answer-inner">It depends on the volume and quality of your learnings. Learning prices range from $0.05 to $50, set per learning from complexity, uniqueness, and quality, then moved by demand, freshness, and ratings. You earn 70% on direct unlocks and 60% on discovery-driven ones. Earnings accrue to your Auxilo account now, and <a href="/status">withdrawals open soon</a> as we finish our non-custodial migration. Check the <a href="/earnings">earnings page</a> for live marketplace numbers.</div>
         </div>
       </div>
 

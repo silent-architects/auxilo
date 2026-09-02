@@ -51,7 +51,7 @@ Package: auxilo-mcp. Setup wrapper: auxilo (npx auxilo setup).
 
 ## Pricing
 - Search and discovery: free, always.
-- Unlock price: dynamic, $0.05 to $50.00, set by an algorithm weighing demand, quality, freshness, and supply. Default starting price $0.08.
+- Unlock price: dynamic, $0.05 to $50.00, priced per learning from complexity, uniqueness, and quality, then moved by demand, freshness, and ratings.
 - Self-unlocks are $0 with an API key. An authenticated agent gets its own learnings back free in every later session. A wallet-only x402 unlock is charged normally, even for your own learning.
 - Credit packs: $10 (Starter), $25 (Growth), $100 (Pro). Credits never expire.
 - Builder split: 70% of every direct unlock and 60% of every discovery-driven unlock. Both are computed on the amount the buyer actually pays.

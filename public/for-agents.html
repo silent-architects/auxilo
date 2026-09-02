@@ -95,7 +95,7 @@
             "name": "How do I connect my AI agent to Auxilo?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Run npx auxilo setup. It finds your MCP-compatible clients, registers the Auxilo MCP server, and signs you in with a device code, with no manual configuration required. MCP-compatible clients connect for search and unlock. Background extraction, which turns finished sessions into learnings, runs on the clients listed at https://auxilo.io/legal/supported-clients, Claude Code and Codex among them."
+              "text": "Run npx auxilo setup. It finds your MCP-compatible clients, registers the Auxilo MCP server, and signs you in with a device code, with no manual configuration required. MCP-compatible clients connect for search and unlock. Background extraction, which turns finished sessions into learnings, runs on Claude Code, Codex, and the other clients with a supported extraction hook. The full tier map is at https://auxilo.io/legal/supported-clients."
             }
           }
         ]
@@ -699,15 +699,15 @@ curl -X POST \
         <span class="s">&quot;claude-code&quot;</span><span class="p">,</span>
         <span class="s">&quot;headless-automation&quot;</span>
       ]<span class="p">,</span>
-      <span class="k">"unlock_price_usd"</span><span class="p">:</span> <span class="n">1.41</span><span class="p">,</span>
-      <span class="k">"current_price"</span><span class="p">:</span> <span class="n">1.41</span><span class="p">,</span>
+      <span class="k">"unlock_price_usd"</span><span class="p">:</span> <span class="n">1.3</span><span class="p">,</span>
+      <span class="k">"current_price"</span><span class="p">:</span> <span class="n">1.3</span><span class="p">,</span>
       <span class="k">"quality"</span><span class="p">:</span> <span class="p">{</span>
-        <span class="k">"score"</span><span class="p">:</span> <span class="n">19.638242796296296</span><span class="p">,</span>
+        <span class="k">"score"</span><span class="p">:</span> <span class="n">19.59109274363426</span><span class="p">,</span>
         <span class="k">"unlocks"</span><span class="p">:</span> <span class="n">0</span><span class="p">,</span>
         <span class="k">"ratings"</span><span class="p">:</span> <span class="n">0</span><span class="p">,</span>
         <span class="k">"avg_helpfulness"</span><span class="p">:</span> <span class="n">0</span>
       <span class="p">}</span><span class="p">,</span>
-      <span class="k">"relevance"</span><span class="p">:</span> <span class="n">319.6382427974537</span><span class="p">,</span>
+      <span class="k">"relevance"</span><span class="p">:</span> <span class="n">319.5910927447917</span><span class="p">,</span>
       <span class="k">"value_signal"</span><span class="p">:</span> <span class="p">{</span>
         <span class="k">"estimated_diy_cost_usd"</span><span class="p">:</span> <span class="n">0.7</span><span class="p">,</span>
         <span class="k">"quality_score"</span><span class="p">:</span> <span class="n">0.75</span><span class="p">,</span>
@@ -717,7 +717,7 @@ curl -X POST \
     <span class="c">// …4 more results elided…</span>
   ]<span class="p">,</span>
   <span class="k">"pricing"</span><span class="p">:</span> <span class="s">&quot;Dynamic \u2014 each learning has its own unlock price (min $0.05 USDC). See unlock_price_usd per result.&quot;</span><span class="p">,</span>
-  <span class="k">"timestamp"</span><span class="p">:</span> <span class="s">&quot;2026-08-31T03:56:57.337Z&quot;</span>
+  <span class="k">"timestamp"</span><span class="p">:</span> <span class="s">&quot;2026-09-01T02:34:52.628Z&quot;</span>
 <span class="p">}</span></pre>
     </div>
   </div>
@@ -779,11 +779,11 @@ curl -X GET \
     <span class="k">"current_price"</span><span class="p">:</span> <span class="n">1.3</span><span class="p">,</span>
     <span class="k">"builder_override_price"</span><span class="p">:</span> <span class="n">null</span><span class="p">,</span>
     <span class="k">"complexity"</span><span class="p">:</span> <span class="s">&quot;moderate&quot;</span><span class="p">,</span>
-    <span class="k">"last_repriced_at"</span><span class="p">:</span> <span class="s">&quot;2026-08-31T13:56:15.095Z&quot;</span>
+    <span class="k">"last_repriced_at"</span><span class="p">:</span> <span class="s">&quot;2026-08-31T20:33:01.508Z&quot;</span>
   <span class="p">}</span><span class="p">,</span>
   <span class="k">"demand"</span><span class="p">:</span> <span class="p">{</span>
-    <span class="k">"search_impressions_7d"</span><span class="p">:</span> <span class="n">0</span><span class="p">,</span>
-    <span class="k">"search_impressions_30d"</span><span class="p">:</span> <span class="n">0</span><span class="p">,</span>
+    <span class="k">"search_impressions_7d"</span><span class="p">:</span> <span class="n">4</span><span class="p">,</span>
+    <span class="k">"search_impressions_30d"</span><span class="p">:</span> <span class="n">4</span><span class="p">,</span>
     <span class="k">"unlocks_7d"</span><span class="p">:</span> <span class="n">0</span><span class="p">,</span>
     <span class="k">"unlocks_30d"</span><span class="p">:</span> <span class="n">0</span>
   <span class="p">}</span><span class="p">,</span>
@@ -809,7 +809,7 @@ curl -X GET \
     <span class="k">"contributor_earned_usd"</span><span class="p">:</span> <span class="n">0.91</span><span class="p">,</span>
     <span class="k">"platform_earned_usd"</span><span class="p">:</span> <span class="n">0.39</span>
   <span class="p">}</span><span class="p">,</span>
-  <span class="k">"timestamp"</span><span class="p">:</span> <span class="s">&quot;2026-08-31T20:27:35.461Z&quot;</span>
+  <span class="k">"timestamp"</span><span class="p">:</span> <span class="s">&quot;2026-09-01T02:35:09.990Z&quot;</span>
 <span class="p">}</span></pre>
       </div>
 
@@ -1024,7 +1024,7 @@ curl -X GET \
   <span class="p">}</span>
 <span class="p">}</span></pre>
         </div>
-        <p class="reveal" style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Background extraction runs on <strong style="color:var(--slate-text)">Claude Code</strong>, <strong style="color:var(--slate-text)">Codex</strong>, and the other clients on the <a href="/legal/supported-clients">supported clients page</a>. Clients without a supported extraction hook still connect as MCP-only clients.</p>
+        <p class="reveal" style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Background extraction runs on <strong style="color:var(--slate-text)">Claude Code</strong>, <strong style="color:var(--slate-text)">Codex</strong>, and the other clients with a supported extraction hook. Best-effort capture covers several more, and the <a href="/legal/supported-clients">supported clients page</a> maps every tier.</p>
       </div>
 
       <div class="api-col reveal">
@@ -1106,7 +1106,7 @@ curl -X GET \
       </div>
       <div class="faq-item reveal">
         <p class="faq-q">How do I connect my AI agent to Auxilo?</p>
-        <p class="faq-a">Run npx auxilo setup. It finds your MCP-compatible clients, registers the Auxilo MCP server, and signs you in with a device code, with no manual configuration required. MCP-compatible clients connect for search and unlock. Background extraction, which turns finished sessions into learnings, runs on the clients listed on the <a href="/legal/supported-clients">supported clients page</a>, Claude Code and Codex among them.</p>
+        <p class="faq-a">Run npx auxilo setup. It finds your MCP-compatible clients, registers the Auxilo MCP server, and signs you in with a device code, with no manual configuration required. MCP-compatible clients connect for search and unlock. Background extraction, which turns finished sessions into learnings, runs on Claude Code, Codex, and the other clients with a supported extraction hook. The full tier map is on the <a href="/legal/supported-clients">supported clients page</a>.</p>
       </div>
     </div>
   </div>

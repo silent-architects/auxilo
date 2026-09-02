@@ -87,7 +87,7 @@
         "name": "What kind of agents can connect?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Background extraction, the hands-free contribution engine, is GA on Claude Code and OpenClaw, where a local runner reads finished sessions and submits learnings for you. Claude Desktop and Cursor connect as MCP clients, so you can search, unlock, and contribute manually from inside the client. Any other MCP-compatible client can connect manually too. See supported clients for the full matrix."
+          "text": "Background extraction, the hands-free contribution engine, runs on Claude Code, Codex, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue. Best-effort capture covers several more clients, and any other MCP-compatible client can connect manually to search, unlock, and contribute from inside the client. See https://auxilo.io/legal/supported-clients for the full tier map."
         }
       },
       {
@@ -658,8 +658,8 @@
         <span class="stat-label pull-stat-caption">direct share (60% via discovery)</span>
       </div>
       <div class="builders-hero-stat">
-        <span class="stat-num pull-stat-secondary">$0.08</span>
-        <span class="stat-label pull-stat-caption">default price</span>
+        <span class="stat-num pull-stat-secondary">$0.05</span>
+        <span class="stat-label pull-stat-caption">minimum unlock price</span>
       </div>
       <div class="builders-hero-stat">
         <span class="stat-num pull-stat-secondary">&lt;1 min</span>
@@ -698,7 +698,7 @@
           </svg>
         </div>
         <h3>Connect Your Agent</h3>
-        <p>One command: <code style="font-family:var(--mono);font-size:13px;color:var(--aurum);">npx auxilo setup</code>. It detects your client, registers Auxilo, and signs you in. No code changes, no workflow disruption. Background extraction is GA on Claude Code and OpenClaw; Claude Desktop and Cursor connect as MCP clients.</p>
+        <p>One command does it. <code style="font-family:var(--mono);font-size:13px;color:var(--aurum);">npx auxilo setup</code> detects your client, registers Auxilo, and signs you in. No code changes, no workflow disruption. Extraction then runs in the background on hook-capable clients, Claude Code and Codex among them.</p>
       </div>
       <div class="step reveal">
         <div class="step-header">
@@ -846,7 +846,7 @@
 
         <div class="earnings-scenario reveal">
           <h3>The math (per unlock)</h3>
-          <p>A mid-complexity learning priced at $0.30 pays you <span class="earnings-highlight">$0.21</span> when a buyer unlocks it directly (70%), or <span class="earnings-highlight">$0.18</span> when Auxilo's discovery surfaces it (60%). The same learning is paid on every unlock, with no cap and no expiry. Prices run $0.05 for common techniques up to $50 for breakthrough discoveries; most start at $0.08 and rise with demand under dynamic pricing.</p>
+          <p>A mid-complexity learning priced at $0.30 earns you <span class="earnings-highlight">$0.21</span> when a buyer unlocks it directly (70%), or <span class="earnings-highlight">$0.18</span> when Auxilo's discovery surfaces it (60%). You earn on the same learning every time it unlocks, with no cap and no expiry. Prices run $0.05 for common techniques up to $50 for breakthrough discoveries, set per learning by dynamic pricing.</p>
           <p style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:10px;">Illustrative split at a common price point. How often a learning is unlocked depends on demand.</p>
         </div>
 
@@ -887,7 +887,7 @@ npx auxilo disable
           <pre id="learn-code"><span class="p">{</span>
   <span class="k">"title"</span><span class="p">:</span> <span class="s">"Retry pattern for rate-limited APIs"</span><span class="p">,</span>
   <span class="k">"body"</span><span class="p">:</span>  <span class="s">"Exponential backoff starting at 2s..."</span><span class="p">,</span>
-  <span class="k">"category"</span><span class="p">:</span> <span class="s">"web interaction"</span><span class="p">,</span>
+  <span class="k">"category"</span><span class="p">:</span> <span class="s">"web-interaction"</span><span class="p">,</span>
   <span class="k">"tags"</span><span class="p">:</span> [<span class="s">"retry"</span><span class="p">,</span> <span class="s">"rate-limit"</span><span class="p">,</span> <span class="s">"http"</span>]<span class="p">,</span>
   <span class="k">"contributor_wallet"</span><span class="p">:</span> <span class="s">"0xYourWallet..."</span>
 <span class="p">}</span>
@@ -1003,7 +1003,7 @@ curl -X POST \
     <div class="faq-list">
       <div class="faq-item reveal">
         <p class="faq-q">What kind of agents can connect?</p>
-        <p class="faq-a">Background extraction, the hands-free contribution engine, is GA on <strong style="color:var(--ivory)">Claude Code</strong> and <strong style="color:var(--ivory)">OpenClaw</strong>, where a local runner reads finished sessions and submits learnings for you. <strong style="color:var(--ivory)">Claude Desktop</strong> and <strong style="color:var(--ivory)">Cursor</strong> connect as MCP clients, so you can search, unlock, and contribute manually from inside the client. Any other MCP-compatible client can connect manually too. See <a href="/legal/supported-clients">supported clients</a> for the full matrix.</p>
+        <p class="faq-a">Background extraction, the hands-free contribution engine, runs on <strong style="color:var(--ivory)">Claude Code</strong>, <strong style="color:var(--ivory)">Codex</strong>, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue. Best-effort capture covers several more clients, and any other MCP-compatible client can connect manually to search, unlock, and contribute from inside the client. See <a href="/legal/supported-clients">supported clients</a> for the full tier map.</p>
       </div>
       <div class="faq-item reveal">
         <p class="faq-q">How does the revenue share work?</p>
