@@ -42,7 +42,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { spawn } = require('child_process');
+const { reservePort, stageServer, bootServer, stopServer } = require('./helpers/staged-server');
 
 const REPO_ROOT = path.join(__dirname, '..');
 const SERVER_SRC = fs.readFileSync(path.join(REPO_ROOT, 'server.js'), 'utf-8');
@@ -684,38 +684,6 @@ describe('CI-7: prompt litmus + rubric anchors (collection gates)', () => {
 // C. Behavioral: real boot — /learn 400 + migration on a fixture store
 // ─────────────────────────────────────────────────────────────────────────────
 
-function bootServer(tmpDir, extraEnv = {}) {
-  return new Promise((resolve) => {
-    const child = spawn(process.execPath, ['server.js'], {
-      cwd: tmpDir,
-      env: {
-        ...process.env,
-        NODE_ENV: 'test',
-        WALLET_PRIVATE_KEY: '0x' + '11'.repeat(32),
-        ...extraEnv,
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let out = '';
-    let settled = false;
-    const settle = (result) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(result);
-    };
-    const timer = setTimeout(() => settle({ child, out, up: false }), 20_000);
-    const onData = (buf) => {
-      out += buf.toString();
-      if (out.includes('Auxilo running at')) settle({ child, out, up: true });
-      if (out.includes('EADDRINUSE') || out.includes('UNCAUGHT EXCEPTION')) settle({ child, out, up: false });
-    };
-    child.stdout.on('data', onData);
-    child.stderr.on('data', onData);
-    child.on('exit', () => settle({ child, out, up: false }));
-  });
-}
-
 function fixtureCatalog() {
   const base = (Array.isArray(SEED) ? SEED : SEED.learnings)[0];
   const mk = (over) => {
@@ -749,32 +717,33 @@ describe('behavioral: boot enforces the 400 and runs the migration', () => {
     let nodeModulesDir;
     try {
       const honoEntry = require.resolve('hono', { paths: [REPO_ROOT] });
-      nodeModulesDir = honoEntry.slice(0, honoEntry.lastIndexOf(`${path.sep}node_modules${path.sep}`) + '/node_modules'.length);
+      nodeModulesDir = honoEntry.slice(
+        0,
+        honoEntry.lastIndexOf(`${path.sep}node_modules${path.sep}`) + '/node_modules'.length
+      );
     } catch {
       t.skip('hono not resolvable from repo root — skipping real boot (unit + structural legs still enforce)');
+      return;
+    }
+    const reservation = await reservePort();
+    if (reservation.skipReason) {
+      t.skip(reservation.skipReason);
       return;
     }
 
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'auxilo-ci5-'));
     let child = null;
+    let baseUrl;
     try {
-      for (const f of ['server.js', 'seed-knowledge.json', 'skills.json', 'openapi.json', 'package.json']) {
-        const src = path.join(REPO_ROOT, f);
-        if (fs.existsSync(src)) fs.copyFileSync(src, path.join(tmpDir, f));
-      }
-      // Boot gate: point the staged copy's WALLET const at the dummy key's address
-      // (config-only patch — same idiom as pricing-visibility).
-      const staged = fs.readFileSync(path.join(tmpDir, 'server.js'), 'utf-8');
-      const patched = staged.replace(/^const WALLET = '0x[0-9a-fA-F]{40}';$/m,
-        "const WALLET = '0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A';");
-      assert.notEqual(patched, staged, 'expected exactly one WALLET const line to patch for the boot gate');
-      fs.writeFileSync(path.join(tmpDir, 'server.js'), patched);
-      for (const d of ['lib', 'public', 'prompts', 'config']) {
-        const src = path.join(REPO_ROOT, d);
-        if (fs.existsSync(src)) fs.symlinkSync(src, path.join(tmpDir, d));
-      }
-      fs.symlinkSync(nodeModulesDir, path.join(tmpDir, 'node_modules'));
-      fs.mkdirSync(path.join(tmpDir, 'data'));
+      stageServer({
+        repoRoot: REPO_ROOT,
+        tmpDir,
+        nodeModulesDir,
+        port: reservation.port,
+        rootFiles: ['server.js', 'seed-knowledge.json', 'skills.json', 'openapi.json', 'package.json'],
+        linkDirs: ['lib', 'public', 'prompts', 'config'],
+        replacements: [],
+      });
       fs.writeFileSync(path.join(tmpDir, 'data', 'learnings.json'), JSON.stringify(fixtureCatalog(), null, 2));
 
       // Gate-A F1 behavioral leg: stage a session account + an awaiting_review
@@ -804,28 +773,29 @@ describe('behavioral: boot enforces the 400 and runs the migration', () => {
         ],
       }], null, 2));
 
-      // Port 3000 is shared with other boot tests under the parallel runner — retry.
       const bootEnv = {
+        NODE_ENV: 'test',
+        WALLET_PRIVATE_KEY: '0x' + '11'.repeat(32),
         SESSION_SECRET,
         AUXILO_ACCOUNTS_FILE: path.join(tmpDir, 'data', 'accounts.json'),
       };
-      let boot = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        boot = await bootServer(tmpDir, bootEnv);
-        if (boot.up) break;
-        boot.child.kill('SIGKILL');
-        if (!boot.out.includes('EADDRINUSE')) break;
-        await new Promise((r) => setTimeout(r, 3000));
-      }
-      child = boot.child;
-      if (!boot.up) {
-        t.skip(`server did not reach listen — skipping behavioral leg (unit + structural legs still enforce). Output tail: ${boot.out.slice(-400)}`);
+      const boot = await bootServer({
+        tmpDir,
+        port: reservation.port,
+        env: bootEnv,
+        timeoutMs: 60_000,
+        maxAttempts: 3,
+      });
+      if (boot.skipReason) {
+        t.skip(boot.skipReason);
         return;
       }
+      child = boot.child;
+      baseUrl = boot.baseUrl;
 
       // ── /learn: retired labels get the machine-readable 400 ──────────────
       const submit = async (category) => {
-        const res = await fetch('http://127.0.0.1:3000/learn', {
+        const res = await fetch(`${baseUrl}/learn`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -865,7 +835,7 @@ describe('behavioral: boot enforces the 400 and runs the migration', () => {
       assert.equal(byId.ci5_rejected.category, 'communication');
 
       // ── Visibility agrees: resend01 + the 2 tech items; the stray is hidden ─
-      const stats = await (await fetch('http://127.0.0.1:3000/knowledge/stats')).json();
+      const stats = await (await fetch(`${baseUrl}/knowledge/stats`)).json();
       assert.equal(stats.learnings_count, 3, 'visible = resend01 + 2 tech items; demoted stray hidden');
       assert.ok(!stats.categories.includes('communication') && !stats.categories.includes('content-generation'),
         'no retired label remains visible');
@@ -879,7 +849,7 @@ describe('behavioral: boot enforces the 400 and runs the migration', () => {
         .setIssuedAt()
         .setExpirationTime('1h')
         .sign(Buffer.from(SESSION_SECRET));
-      const approveRes = await fetch('http://127.0.0.1:3000/pipeline/pipe_ci5/approve', {
+      const approveRes = await fetch(`${baseUrl}/pipeline/pipe_ci5/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
         body: JSON.stringify({ approved: [0, 1, 2], prices: {} }),
@@ -895,7 +865,7 @@ describe('behavioral: boot enforces the 400 and runs the migration', () => {
       const stagedPipelines = JSON.parse(fs.readFileSync(path.join(tmpDir, 'data', 'pipelines.json'), 'utf-8'));
       assert.equal(stagedPipelines[0].status, 'awaiting_review', 'future-revival storage shape remains intact');
     } finally {
-      if (child) child.kill('SIGKILL');
+      if (child) await stopServer(child);
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });

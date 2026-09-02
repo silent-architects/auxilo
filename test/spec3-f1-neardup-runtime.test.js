@@ -15,7 +15,13 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { spawn } = require('node:child_process');
+const {
+  reservePort,
+  stageServer,
+  bootServer,
+  stopServer,
+  BOOT_SANDBOX_SKIP_REASON,
+} = require('./helpers/staged-server');
 
 const REPO = path.join(__dirname, '..');
 const SERVER_SOURCE = fs.readFileSync(path.join(REPO, 'server.js'), 'utf8');
@@ -141,116 +147,6 @@ function catalog() {
   ];
 }
 
-function stageServer(tmpDir, nodeModulesDir) {
-  for (const file of [
-    'server.js',
-    'seed-knowledge.json',
-    'skills.json',
-    'openapi.json',
-    'package.json',
-    'model_config.json',
-  ]) {
-    const source = path.join(REPO, file);
-    if (fs.existsSync(source)) fs.copyFileSync(source, path.join(tmpDir, file));
-  }
-
-  const staged = fs.readFileSync(path.join(tmpDir, 'server.js'), 'utf8');
-  let patched = staged.replace(
-    /^const WALLET = '0x[0-9a-fA-F]{40}';$/m,
-    "const WALLET = '0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A';",
-  );
-  assert.notEqual(patched, staged, 'expected the staged wallet constant to be patched');
-  const providerResponse = JSON.stringify([extractionCandidate()]);
-  const beforeProvider = patched;
-  patched = patched.replace(
-    "const { extractWithRetry } = require('./lib/providers/anthropic.js');",
-    `const extractWithRetry = async () => ({ text: ${JSON.stringify(providerResponse)}, usage: { input_tokens: 100, output_tokens: 100 }, model: 'spec3-f1-test' });`,
-  );
-  assert.notEqual(patched, beforeProvider, 'expected the staged extraction provider to be stubbed');
-  const beforeSearch = patched;
-  patched = patched.replace(
-    'searchFn: (query, opts) => matchLearnings(query, opts),',
-    'searchFn: () => [],',
-  );
-  assert.notEqual(patched, beforeSearch, 'expected extractor pre-dedup search to be isolated');
-  fs.writeFileSync(path.join(tmpDir, 'server.js'), patched);
-
-  for (const directory of ['lib', 'public', 'prompts', 'config']) {
-    fs.symlinkSync(path.join(REPO, directory), path.join(tmpDir, directory));
-  }
-  fs.symlinkSync(nodeModulesDir, path.join(tmpDir, 'node_modules'));
-  fs.mkdirSync(path.join(tmpDir, 'data'));
-  fs.writeFileSync(
-    path.join(tmpDir, 'data', 'learnings.json'),
-    JSON.stringify(catalog(), null, 2),
-  );
-  fs.writeFileSync(
-    path.join(tmpDir, 'data', 'accounts.json'),
-    JSON.stringify(accountRecord(), null, 2),
-  );
-  fs.writeFileSync(
-    path.join(tmpDir, 'data', 'extraction-consent.jsonl'),
-    `${JSON.stringify({
-      account_id: ACCOUNT_ID,
-      action: 'grant',
-      consent_version: '2026-04-14',
-      timestamp: FIXED_AT,
-      ip_redacted: '127.0.*.*',
-      user_agent: 'spec3-f1-test',
-    })}\n`,
-  );
-}
-
-function bootServer(tmpDir) {
-  return new Promise((resolve) => {
-    const child = spawn(process.execPath, ['server.js'], {
-      cwd: tmpDir,
-      env: {
-        ...process.env,
-        NODE_ENV: 'test',
-        WALLET_PRIVATE_KEY: `0x${'11'.repeat(32)}`,
-        LLM_SENSITIVITY_ENABLED: 'false',
-        LEARNING_TYPE_SCREEN_ENABLED: 'false',
-        SERVER_SIDE_EXTRACTION_ENABLED: 'true',
-        AUXILO_DATA_DIR: path.join(tmpDir, 'data'),
-        AUXILO_ACCOUNTS_FILE: path.join(tmpDir, 'data', 'accounts.json'),
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let output = '';
-    let settled = false;
-    const settle = (result) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(result);
-    };
-    const timer = setTimeout(() => settle({ child, output, up: false }), 20_000);
-    const onData = (buffer) => {
-      output += buffer.toString();
-      if (output.includes('Auxilo running at')) settle({ child, output, up: true });
-      if (output.includes('EADDRINUSE') || output.includes('UNCAUGHT EXCEPTION')) {
-        settle({ child, output, up: false });
-      }
-    };
-    child.stdout.on('data', onData);
-    child.stderr.on('data', onData);
-    child.on('exit', () => settle({ child, output, up: false }));
-  });
-}
-
-async function bootWithRetry(tmpDir) {
-  let boot;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    boot = await bootServer(tmpDir);
-    if (boot.up) return boot;
-    boot.child.kill('SIGKILL');
-    if (!boot.output.includes('EADDRINUSE')) return boot;
-    await new Promise((resolve) => setTimeout(resolve, 3_000));
-  }
-  return boot;
-}
-
 function submission(learning, overrides = {}) {
   return {
     title: learning.title,
@@ -339,18 +235,92 @@ describe('SPEC3-F1 Phase 1 near-duplicate runtime', () => {
       return;
     }
 
+    const reservation = await reservePort();
+    if ('skipReason' in reservation) {
+      assert.equal(reservation.skipReason, BOOT_SANDBOX_SKIP_REASON);
+      t.skip(BOOT_SANDBOX_SKIP_REASON);
+      return;
+    }
+
+    const { port } = reservation;
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'auxilo-spec3-f1-neardup-'));
     const headers = {
       'X-API-Key': RAW_API_KEY,
       'Content-Type': 'application/json',
     };
-    const base = 'http://127.0.0.1:3000';
     let child;
     try {
-      stageServer(tmpDir, nodeModulesDir);
-      const boot = await bootWithRetry(tmpDir);
+      const providerResponse = JSON.stringify([extractionCandidate()]);
+      stageServer({
+        repoRoot: REPO,
+        tmpDir,
+        nodeModulesDir,
+        port,
+        rootFiles: [
+          'server.js',
+          'seed-knowledge.json',
+          'skills.json',
+          'openapi.json',
+          'package.json',
+          'model_config.json',
+        ],
+        linkDirs: ['lib', 'public', 'prompts', 'config'],
+        replacements: [
+          {
+            name: 'staged extraction provider stub',
+            search: "const { extractWithRetry } = require('./lib/providers/anthropic.js');",
+            replace: `const extractWithRetry = async () => ({ text: ${JSON.stringify(providerResponse)}, usage: { input_tokens: 100, output_tokens: 100 }, model: 'spec3-f1-test' });`,
+          },
+          {
+            name: 'extractor pre-dedup search isolation',
+            search: 'searchFn: (query, opts) => matchLearnings(query, opts),',
+            replace: 'searchFn: () => [],',
+          },
+        ],
+      });
+      fs.writeFileSync(
+        path.join(tmpDir, 'data', 'learnings.json'),
+        JSON.stringify(catalog(), null, 2),
+      );
+      fs.writeFileSync(
+        path.join(tmpDir, 'data', 'accounts.json'),
+        JSON.stringify(accountRecord(), null, 2),
+      );
+      fs.writeFileSync(
+        path.join(tmpDir, 'data', 'extraction-consent.jsonl'),
+        `${JSON.stringify({
+          account_id: ACCOUNT_ID,
+          action: 'grant',
+          consent_version: '2026-04-14',
+          timestamp: FIXED_AT,
+          ip_redacted: '127.0.*.*',
+          user_agent: 'spec3-f1-test',
+        })}\n`,
+      );
+
+      const boot = await bootServer({
+        tmpDir,
+        port,
+        env: {
+          ...process.env,
+          NODE_ENV: 'test',
+          WALLET_PRIVATE_KEY: `0x${'11'.repeat(32)}`,
+          LLM_SENSITIVITY_ENABLED: 'false',
+          LEARNING_TYPE_SCREEN_ENABLED: 'false',
+          SERVER_SIDE_EXTRACTION_ENABLED: 'true',
+          AUXILO_DATA_DIR: path.join(tmpDir, 'data'),
+          AUXILO_ACCOUNTS_FILE: path.join(tmpDir, 'data', 'accounts.json'),
+        },
+        timeoutMs: 60_000,
+        maxAttempts: 4,
+      });
+      if ('skipReason' in boot) {
+        assert.equal(boot.skipReason, BOOT_SANDBOX_SKIP_REASON);
+        t.skip(BOOT_SANDBOX_SKIP_REASON);
+        return;
+      }
       child = boot.child;
-      assert.equal(boot.up, true, `server failed to boot: ${boot.output.slice(-1000)}`);
+      const base = boot.baseUrl;
 
       const publishedResponse = await fetch(`${base}/learn`, {
         method: 'POST',
@@ -500,7 +470,7 @@ describe('SPEC3-F1 Phase 1 near-duplicate runtime', () => {
       assert.equal(extractedHeld.possible_duplicate_of, published.id);
       assert.equal(extractedHeld.near_duplicate_why, extraction.published[0].near_duplicate_why);
     } finally {
-      if (child) child.kill('SIGKILL');
+      if (child) await stopServer(child);
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });

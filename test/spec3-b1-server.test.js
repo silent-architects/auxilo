@@ -31,7 +31,7 @@ process.env.AUXILO_DATA_DIR = TMP_DATA;
 const { describe, it, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');
-const { spawn } = require('child_process');
+const { reservePort, stageServer, bootServer, stopServer } = require('./helpers/staged-server');
 
 const selfReview = require('../lib/self-review.js');
 const reviewLib = require('../lib/review.js');
@@ -684,83 +684,36 @@ function extractionPayload(n) {
   };
 }
 
-function bootServerWithEnv(tmpDir, extraEnv) {
-  return new Promise((resolve) => {
-    const child = spawn(process.execPath, ['server.js'], {
-      cwd: tmpDir,
-      env: {
-        ...process.env,
-        NODE_ENV: 'test',
-        // dummy key so the boot survives the WALLET_PRIVATE_KEY gate
-        WALLET_PRIVATE_KEY: '0x' + '11'.repeat(32),
-        // regex-only sensitivity: the LLM layer fails CLOSED without a real
-        // key, which would hold every submission and mask the lane under test
-        LLM_SENSITIVITY_ENABLED: 'false',
-        // lib modules (accounts, clean-lane, audit writer) resolve their data
-        // dir through the SYMLINKED lib/ (realpath = repo), so they must be
-        // pointed at the staged data dir explicitly
-        AUXILO_DATA_DIR: path.join(tmpDir, 'data'),
-        AUXILO_ACCOUNTS_FILE: path.join(tmpDir, 'data', 'accounts.json'),
-        ...extraEnv,
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let out = '';
-    let settled = false;
-    const settle = (result) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(result);
-    };
-    const timer = setTimeout(() => settle({ child, out, up: false }), 20_000);
-    const onData = (buf) => {
-      out += buf.toString();
-      if (out.includes('Auxilo running at')) settle({ child, out, up: true });
-      if (out.includes('EADDRINUSE') || out.includes('UNCAUGHT EXCEPTION')) settle({ child, out, up: false });
-    };
-    child.stdout.on('data', onData);
-    child.stderr.on('data', onData);
-    child.on('exit', () => settle({ child, out, up: false }));
-  });
-}
-
-async function bootWithRetry(tmpDir, extraEnv) {
-  // Hardcoded port 3000: another test file's boot can hold it briefly under
-  // the parallel runner. Retry on EADDRINUSE (pricing-visibility pattern).
-  let boot = null;
-  for (let attempt = 0; attempt < 4; attempt++) {
-    boot = await bootServerWithEnv(tmpDir, extraEnv);
-    if (boot.up) return boot;
-    boot.child.kill('SIGKILL');
-    if (!boot.out.includes('EADDRINUSE')) return boot;
-    await new Promise((r) => setTimeout(r, 3000));
-  }
-  return boot;
-}
-
 describe('behavioral: clean-lane guardrail + channel-hold end to end', () => {
   it('freeze fires at BOTH call sites; dark 404 is un-fingerprintable; grant row while dark still holds', { timeout: 240_000 }, async (t) => {
     let nodeModulesDir;
     try {
       const honoEntry = require.resolve('hono', { paths: [REPO_ROOT] });
-      nodeModulesDir = honoEntry.slice(0, honoEntry.lastIndexOf(`${path.sep}node_modules${path.sep}`) + '/node_modules'.length);
+      nodeModulesDir = honoEntry.slice(
+        0,
+        honoEntry.lastIndexOf(`${path.sep}node_modules${path.sep}`) + '/node_modules'.length
+      );
     } catch {
       t.skip('hono not resolvable from repo root — skipping real boot (structural pins remain enforcing)');
+      return;
+    }
+    const reservation = await reservePort();
+    if (reservation.skipReason) {
+      t.skip(reservation.skipReason);
       return;
     }
 
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'auxilo-spec3boot-'));
     let child = null;
-    const base = 'http://127.0.0.1:3000';
+    let baseUrl;
     const H = { 'X-API-Key': RAW_API_KEY, 'Content-Type': 'application/json' };
     const get = async (p, expectStatus = 200) => {
-      const res = await fetch(`${base}${p}`, { headers: H });
+      const res = await fetch(`${baseUrl}${p}`, { headers: H });
       assert.equal(res.status, expectStatus, `GET ${p} → ${res.status}`);
       return res.json();
     };
     const post = async (p, body, expectStatus) => {
-      const res = await fetch(`${base}${p}`, { method: 'POST', headers: H, body: JSON.stringify(body) });
+      const res = await fetch(`${baseUrl}${p}`, { method: 'POST', headers: H, body: JSON.stringify(body) });
       assert.equal(res.status, expectStatus, `POST ${p} → ${res.status}: ${JSON.stringify(await res.clone().json().catch(() => ({})))}`);
       return res.json();
     };
@@ -772,31 +725,44 @@ describe('behavioral: clean-lane guardrail + channel-hold end to end', () => {
 
     try {
       // ── Stage the sandbox (pricing-visibility pattern) ────────────────────
-      for (const f of ['server.js', 'seed-knowledge.json', 'skills.json', 'openapi.json', 'package.json', 'model_config.json']) {
-        const src = path.join(REPO_ROOT, f);
-        if (fs.existsSync(src)) fs.copyFileSync(src, path.join(tmpDir, f));
-      }
-      const staged = fs.readFileSync(path.join(tmpDir, 'server.js'), 'utf-8');
-      const patched = staged.replace(/^const WALLET = '0x[0-9a-fA-F]{40}';$/m,
-        "const WALLET = '0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A';");
-      assert.notEqual(patched, staged, 'expected exactly one WALLET const line to patch for the boot gate');
-      fs.writeFileSync(path.join(tmpDir, 'server.js'), patched);
-      for (const d of ['lib', 'public', 'prompts', 'config']) {
-        const src = path.join(REPO_ROOT, d);
-        if (fs.existsSync(src)) fs.symlinkSync(src, path.join(tmpDir, d));
-      }
-      fs.symlinkSync(nodeModulesDir, path.join(tmpDir, 'node_modules'));
-      fs.mkdirSync(path.join(tmpDir, 'data'));
+      stageServer({
+        repoRoot: REPO_ROOT,
+        tmpDir,
+        nodeModulesDir,
+        port: reservation.port,
+        rootFiles: ['server.js', 'seed-knowledge.json', 'skills.json', 'openapi.json', 'package.json', 'model_config.json'],
+        linkDirs: ['lib', 'public', 'prompts', 'config'],
+        replacements: [],
+      });
       fs.writeFileSync(path.join(tmpDir, 'data', 'learnings.json'), JSON.stringify(bootFixtureCatalog(), null, 2));
       fs.writeFileSync(path.join(tmpDir, 'data', 'accounts.json'), JSON.stringify(bootFixtureAccounts(), null, 2));
 
+      const bootEnv = {
+        NODE_ENV: 'test',
+        WALLET_PRIVATE_KEY: '0x' + '11'.repeat(32),
+        // regex-only sensitivity: the LLM layer fails CLOSED without a real
+        // key, which would hold every submission and mask the lane under test
+        LLM_SENSITIVITY_ENABLED: 'false',
+        // lib modules resolve through the symlinked repo lib/, so point their
+        // data reads and writes back at the staged fixture store explicitly.
+        AUXILO_DATA_DIR: path.join(tmpDir, 'data'),
+        AUXILO_ACCOUNTS_FILE: path.join(tmpDir, 'data', 'accounts.json'),
+      };
+
       // ══ BOOT 1: flag LIT ══════════════════════════════════════════════════
-      let boot = await bootWithRetry(tmpDir, { EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED: 'true' });
-      child = boot.child;
-      if (!boot.up) {
-        t.skip(`server did not reach listen — skipping behavioral leg (structural pins remain enforcing). Output tail: ${boot.out.slice(-400)}`);
+      let boot = await bootServer({
+        tmpDir,
+        port: reservation.port,
+        env: { ...bootEnv, EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED: 'true' },
+        timeoutMs: 60_000,
+        maxAttempts: 4,
+      });
+      if (boot.skipReason) {
+        t.skip(boot.skipReason);
         return;
       }
+      child = boot.child;
+      baseUrl = boot.baseUrl;
 
       // No consent yet → status visible (flag on) and inactive.
       const s0 = await get('/account/clean-lane');
@@ -817,7 +783,7 @@ describe('behavioral: clean-lane guardrail + channel-hold end to end', () => {
 
       // Retract it → 1/1 in 30d = 100% > 5% → the POST-RETRACTION guardrail
       // site must freeze the lane NOW.
-      const delRes = await fetch(`${base}/learn/${r1.id}?reason=retract`, { method: 'DELETE', headers: H });
+      const delRes = await fetch(`${baseUrl}/learn/${r1.id}?reason=retract`, { method: 'DELETE', headers: H });
       assert.equal(delRes.status, 200, `retraction → ${delRes.status}`);
       const del = await delRes.json();
       assert.equal(del.status, 'retracted');
@@ -859,24 +825,31 @@ describe('behavioral: clean-lane guardrail + channel-hold end to end', () => {
       // Leave an ACTIVE grant row on disk for the dark boot below.
       await post('/account/clean-lane/grant', grantBody, 200);
 
-      child.kill('SIGKILL');
+      await stopServer(child);
       child = null;
 
       // ══ BOOT 2: flag DARK (absent), SAME data dir ═════════════════════════
-      boot = await bootWithRetry(tmpDir, {});
-      child = boot.child;
-      if (!boot.up) {
-        t.skip(`dark re-boot did not reach listen — lit-leg assertions above already ran. Output tail: ${boot.out.slice(-400)}`);
+      boot = await bootServer({
+        tmpDir,
+        port: reservation.port,
+        env: bootEnv,
+        timeoutMs: 60_000,
+        maxAttempts: 4,
+      });
+      if (boot.skipReason) {
+        t.skip(boot.skipReason);
         return;
       }
+      child = boot.child;
+      baseUrl = boot.baseUrl;
 
       // F2: the dark 404 must be byte-shape-identical to the catch-all 404 —
       // same keys, same error/help, same message pattern — so the routes'
       // existence cannot be fingerprinted by a body diff.
-      const darkRes = await fetch(`${base}/account/clean-lane`, { headers: H });
+      const darkRes = await fetch(`${baseUrl}/account/clean-lane`, { headers: H });
       assert.equal(darkRes.status, 404);
       const dark = await darkRes.json();
-      const unknownRes = await fetch(`${base}/account/definitely-not-a-route`, { headers: H });
+      const unknownRes = await fetch(`${baseUrl}/account/definitely-not-a-route`, { headers: H });
       assert.equal(unknownRes.status, 404);
       const unknown = await unknownRes.json();
       assert.deepEqual(Object.keys(dark).sort(), Object.keys(unknown).sort(), 'dark 404 body keys must match the catch-all');
@@ -893,7 +866,7 @@ describe('behavioral: clean-lane guardrail + channel-hold end to end', () => {
       assert.equal(r4.status, 'pending_review', 'a grant row on disk must be inert while the flag is dark');
       assert.ok(r4.review_reason.includes('standing_consent_off'), `expected standing_consent_off, got ${JSON.stringify(r4.review_reason)}`);
     } finally {
-      if (child) child.kill('SIGKILL');
+      if (child) await stopServer(child);
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
