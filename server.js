@@ -312,6 +312,10 @@ const WALLET = '0xA19Cf92cc1daCf742f0E50b4128cAD3A86A81EC4';
 // keep recognizing it or the platform-seed catalog 409s. NEVER used as payTo.
 // Balance sweep + retirement ride the Slam-side Assignment (papering v0.3).
 const LEGACY_PLATFORM_WALLETS = ['0x1BE960313c93b3aA0AA62BF33B300CAB48c36Ca6'];
+// SEED-ATTR (2026-09): 45 visible legacy-wallet rows now carry acc_platform.
+// Legacy-wallet recognition remains load-bearing: wallet clause (a) runs before
+// the platform-account clause, so removing it from PLATFORM_WALLETS would
+// classify every attributed row as external and make the §5.10 gate return 409.
 const PLATFORM_WALLETS = [WALLET, ...LEGACY_PLATFORM_WALLETS];
 const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 const FACILITATOR = 'https://facilitator.openx402.ai';
@@ -1173,6 +1177,8 @@ const {
   CURRENT_TOS_VERSION,
   hasAcceptedCurrentTos,
   isPayeeAgencyInForce,
+  PLATFORM_ACCOUNT_IDS,
+  normalizeCreditingContributorAccountId,
   isPlatformContributor,
   getTosStatus,
   recordTosAcceptance,
@@ -1237,6 +1243,7 @@ const { computeCurrentPrice, getLockedPrice, lockPrice } = pricingEngine;
  */
 function replayUnlock(entry) {
   const { learning_id, builder_wallet, contributor_account_id, unlock_price, contributor_earned, platform_earned, settled_onchain, settlement_tx, settlement_bps, agency_in_force, amount_paid_usd } = entry.payload;
+  const replayContributorAccountId = normalizeCreditingContributorAccountId(contributor_account_id);
   const steps = entry.steps_completed || [];
 
   // AUD19-2: gross books the amount actually paid (the accrual basis stored at
@@ -1258,15 +1265,15 @@ function replayUnlock(entry) {
 
     // SPEC-P0.5: resolve via account_id (new WAL entries) or wallet (legacy)
     const { key, entry: e, source } = resolveEarningsEntry(earnings, {
-      account_id: contributor_account_id || null,
+      account_id: replayContributorAccountId,
       wallet: builder_wallet,
     });
     const resolvedKey = (source === 'new')
-      ? (contributor_account_id || builder_wallet)
+      ? (replayContributorAccountId || builder_wallet)
       : key;
 
     if (source === 'new') {
-      earnings[resolvedKey] = initEarningsEntry(contributor_account_id || null, builder_wallet);
+      earnings[resolvedKey] = initEarningsEntry(replayContributorAccountId, builder_wallet);
     }
     const earningsEntry = earnings[resolvedKey];
 
@@ -1328,7 +1335,7 @@ function replayUnlock(entry) {
           learning_id,
           amount_paid_usd: grossAmount,
           funding_source: entry.payload.funding_source || null,
-          contributor_account_id: contributor_account_id || null,
+          contributor_account_id: replayContributorAccountId,
           contributor_wallet: builder_wallet || null,
           settled_onchain: !!settled_onchain,
         });
@@ -3683,6 +3690,9 @@ app.post('/account/api-keys/rotate', async (c) => {
   const auth = await resolveAccountAndKeyFromRequest(c, 'read');
   if (auth.error) return c.json({ error: auth.error }, auth.status);
   const accountId = auth.accountId;
+  if (PLATFORM_ACCOUNT_IDS.has(accountId)) {
+    return c.json({ error: 'Invalid or expired credentials' }, 401);
+  }
 
   // D2-F2: per-account rotate rate limit. A stolen key looping rotate was a
   // DoS amplifier (unbounded accounts.json growth, parsed every request);
@@ -3976,6 +3986,9 @@ app.post('/auth/device/authorize', async (c) => {
   }
   if (!payload || !payload.accountId) {
     return c.json({ error: 'Invalid session token' }, 401);
+  }
+  if (PLATFORM_ACCOUNT_IDS.has(payload.accountId)) {
+    return c.json({ error: 'Invalid or expired session token' }, 401);
   }
   // A-2: use the canonical exported account helpers — migrate legacy single-key
   // accounts, set active:true, register the new key in the in-memory index so it
@@ -8402,9 +8415,12 @@ app.get('/knowledge/:id', async (c) => {
   const accrualCapped = (fundingSource === 'credit_pack') && !!buyerAccountId
     && isAccrualCapped(buyerAccountId, id);
 
-  // SPEC-P0.5: Resolve contributor earnings entry via account_id (preferred) or wallet fallback
+  // SEED-ATTR: platform-account attribution is legibility-only. Normalize it to
+  // the pre-attribution null-account shape once, before every crediting branch,
+  // so wallet-keyed booking, CP-6 holding, WAL replay, and router reconciliation
+  // remain byte-equivalent to today's legacy-wallet behavior.
   const contribWallet = learning.contributor_wallet;
-  const contribAccountId = learning.contributor_account_id || null;
+  const contribAccountId = normalizeCreditingContributorAccountId(learning.contributor_account_id);
 
   // M-2: Self-unlock wash-trade guard. A contributor must never be able to unlock
   // their OWN learning and collect withdrawable USDC for cheap credits — that

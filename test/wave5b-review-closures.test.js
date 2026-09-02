@@ -65,6 +65,14 @@ function sliceAt(src, marker, span = 5000) {
   return src.slice(i, i + span);
 }
 
+function sliceBetween(src, startMarker, endMarker) {
+  const start = src.indexOf(startMarker);
+  const end = src.indexOf(endMarker, start + startMarker.length);
+  assert.notEqual(start, -1, `marker not found: ${startMarker}`);
+  assert.ok(end > start, `end marker not found after ${startMarker}: ${endMarker}`);
+  return src.slice(start, end);
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // A. B2 — evidence capture at classification time
 // ═════════════════════════════════════════════════════════════════════════════
@@ -576,7 +584,7 @@ describe('D2-F2: caps and route hardening (structural)', () => {
   });
 
   it('rotate route: per-account rate limit before any work; 429 with Retry-After', () => {
-    const h = sliceAt(SERVER_SRC, "app.post('/account/api-keys/rotate'", 2600);
+    const h = sliceBetween(SERVER_SRC, "app.post('/account/api-keys/rotate'", '// ─── Device Code Login Flow');
     assert.ok(h.includes('isRotateRateLimited(accountId)'));
     assert.ok(h.includes('}, 429)'));
     assert.ok(h.includes("c.header('Retry-After'"));
@@ -584,7 +592,7 @@ describe('D2-F2: caps and route hardening (structural)', () => {
   });
 
   it('rotate route: index rebuilt when compaction shifted array positions (stale key_index kills)', () => {
-    const h = sliceAt(SERVER_SRC, "app.post('/account/api-keys/rotate'", 2600);
+    const h = sliceBetween(SERVER_SRC, "app.post('/account/api-keys/rotate'", '// ─── Device Code Login Flow');
     assert.ok(h.includes('if (compacted > 0) rebuildKeyIndex()'),
       'compaction shifts api_keys positions; the in-memory key_index must be rebuilt');
     const save = h.indexOf('saveAccounts(accts)');
