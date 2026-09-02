@@ -24,8 +24,8 @@
  *      (where the server's runtime deps aren't installed).
  *   2. Behavioral — boot the real server against a fixture catalog mixing
  *      approved / legacy-no-status / pending_review / rejected / retracted
- *      learnings and assert the three endpoints agree. Self-skips (loudly)
- *      when hono isn't resolvable or port 3000 is contended.
+ *      learnings and assert the three endpoints agree. The shared staged-server
+ *      harness isolates the port and skips only sandbox-denied loopback binds.
  *
  * DR-5 (2026-07-20, PUNCH-LIST §31): GET /health reported catalog_size:
  * skills.length — the static 27-item skills.json capability catalog — while
@@ -45,10 +45,10 @@
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { reservePort, stageServer, bootServer, stopServer } = require('./helpers/staged-server');
 
 const REPO_ROOT = path.join(__dirname, '..');
 const SERVER_SRC = fs.readFileSync(path.join(REPO_ROOT, 'server.js'), 'utf-8');
@@ -201,38 +201,6 @@ function fixtureCatalog() {
   ];
 }
 
-function bootServer(tmpDir) {
-  return new Promise((resolve) => {
-    const child = spawn(process.execPath, ['server.js'], {
-      cwd: tmpDir,
-      env: {
-        ...process.env,
-        NODE_ENV: 'test',
-        // dummy key so the boot survives the WALLET_PRIVATE_KEY gate
-        WALLET_PRIVATE_KEY: '0x' + '11'.repeat(32),
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let out = '';
-    let settled = false;
-    const settle = (result) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(result);
-    };
-    const timer = setTimeout(() => settle({ child, out, up: false }), 20_000);
-    const onData = (buf) => {
-      out += buf.toString();
-      if (out.includes('Auxilo running at')) settle({ child, out, up: true });
-      if (out.includes('EADDRINUSE') || out.includes('UNCAUGHT EXCEPTION')) settle({ child, out, up: false });
-    };
-    child.stdout.on('data', onData);
-    child.stderr.on('data', onData);
-    child.on('exit', () => settle({ child, out, up: false }));
-  });
-}
-
 describe('behavioral: the three public endpoints agree on visibility', () => {
   it('stats, categories, and pricing-insights all exclude non-approved learnings', { timeout: 90_000 }, async (t) => {
     // Resolve the ACTUAL node_modules dir hono lives in — in a git worktree the
@@ -241,55 +209,55 @@ describe('behavioral: the three public endpoints agree on visibility', () => {
     let nodeModulesDir;
     try {
       const honoEntry = require.resolve('hono', { paths: [REPO_ROOT] });
-      nodeModulesDir = honoEntry.slice(0, honoEntry.lastIndexOf(`${path.sep}node_modules${path.sep}`) + '/node_modules'.length);
+      nodeModulesDir = honoEntry.slice(
+        0,
+        honoEntry.lastIndexOf(`${path.sep}node_modules${path.sep}`) + '/node_modules'.length
+      );
     } catch {
       t.skip('hono not resolvable from repo root — skipping real boot (structural guard still enforces the predicate)');
+      return;
+    }
+    const reservation = await reservePort();
+    if (reservation.skipReason) {
+      t.skip(reservation.skipReason);
       return;
     }
 
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'auxilo-pricingviz-'));
     let child = null;
+    let baseUrl;
     try {
-      for (const f of ['server.js', 'seed-knowledge.json', 'skills.json', 'openapi.json', 'package.json']) {
-        const src = path.join(REPO_ROOT, f);
-        if (fs.existsSync(src)) fs.copyFileSync(src, path.join(tmpDir, f));
-      }
-      // The rotation-invariant gate refuses to boot unless the advertised WALLET
-      // const matches the WALLET_PRIVATE_KEY-derived address. We run the dummy
-      // key 0x11…11, which derives 0x19E7…f2A, so point the STAGED COPY's const
-      // at it — a config-only patch; the visibility logic under test is untouched.
-      const staged = fs.readFileSync(path.join(tmpDir, 'server.js'), 'utf-8');
-      const patched = staged.replace(/^const WALLET = '0x[0-9a-fA-F]{40}';$/m,
-        "const WALLET = '0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A';");
-      assert.notEqual(patched, staged, 'expected exactly one WALLET const line to patch for the boot gate');
-      fs.writeFileSync(path.join(tmpDir, 'server.js'), patched);
-      for (const d of ['lib', 'public', 'prompts']) {
-        const src = path.join(REPO_ROOT, d);
-        if (fs.existsSync(src)) fs.symlinkSync(src, path.join(tmpDir, d));
-      }
-      fs.symlinkSync(nodeModulesDir, path.join(tmpDir, 'node_modules'));
+      stageServer({
+        repoRoot: REPO_ROOT,
+        tmpDir,
+        nodeModulesDir,
+        port: reservation.port,
+        rootFiles: ['server.js', 'seed-knowledge.json', 'skills.json', 'openapi.json', 'package.json', 'model_config.json'],
+        linkDirs: ['lib', 'public', 'prompts', 'config'],
+        replacements: [],
+      });
       // Pre-populated data dir: non-empty catalog means no re-seeding (CS-1).
-      fs.mkdirSync(path.join(tmpDir, 'data'));
       fs.writeFileSync(path.join(tmpDir, 'data', 'learnings.json'), JSON.stringify(fixtureCatalog(), null, 2));
 
-      // The server listens on a hardcoded port 3000; another test file's boot
-      // (cold-start-seed) can hold it briefly under the parallel runner. Retry.
-      let boot = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        boot = await bootServer(tmpDir);
-        if (boot.up) break;
-        boot.child.kill('SIGKILL');
-        if (!boot.out.includes('EADDRINUSE')) break;
-        await new Promise((r) => setTimeout(r, 3000));
-      }
-      child = boot.child;
-      if (!boot.up) {
-        t.skip(`server did not reach listen — skipping behavioral leg (structural guard still enforces the predicate). Output tail: ${boot.out.slice(-400)}`);
+      const boot = await bootServer({
+        tmpDir,
+        port: reservation.port,
+        env: {
+          NODE_ENV: 'test',
+          WALLET_PRIVATE_KEY: '0x' + '11'.repeat(32),
+        },
+        timeoutMs: 60_000,
+        maxAttempts: 3,
+      });
+      if (boot.skipReason) {
+        t.skip(boot.skipReason);
         return;
       }
+      child = boot.child;
+      baseUrl = boot.baseUrl;
 
       const get = async (p, expectStatus = 200) => {
-        const res = await fetch(`http://127.0.0.1:3000${p}`);
+        const res = await fetch(`${baseUrl}${p}`);
         assert.equal(res.status, expectStatus, `GET ${p} → ${res.status}`);
         return res.json();
       };
@@ -358,7 +326,7 @@ describe('behavioral: the three public endpoints agree on visibility', () => {
       assert.equal(dashHidden.learnings_submitted, 0,
         'a wallet with only non-approved submissions must read 0 — no hidden-submission oracle');
     } finally {
-      if (child) child.kill('SIGKILL');
+      if (child) await stopServer(child);
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });

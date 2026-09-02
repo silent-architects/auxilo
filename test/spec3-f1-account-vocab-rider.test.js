@@ -13,7 +13,13 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { spawn } = require('node:child_process');
+const {
+  reservePort,
+  stageServer,
+  bootServer,
+  stopServer,
+  BOOT_SANDBOX_SKIP_REASON,
+} = require('./helpers/staged-server');
 
 const REPO = path.join(__dirname, '..');
 const RAW_API_KEY = `axl_${'f'.repeat(40)}`;
@@ -101,94 +107,6 @@ function bootAccounts() {
   };
 }
 
-function stageServer(tmpDir, nodeModulesDir) {
-  for (const file of [
-    'server.js',
-    'seed-knowledge.json',
-    'skills.json',
-    'openapi.json',
-    'package.json',
-    'model_config.json',
-  ]) {
-    const source = path.join(REPO, file);
-    if (fs.existsSync(source)) fs.copyFileSync(source, path.join(tmpDir, file));
-  }
-
-  const staged = fs.readFileSync(path.join(tmpDir, 'server.js'), 'utf8');
-  const patched = staged.replace(
-    /^const WALLET = '0x[0-9a-fA-F]{40}';$/m,
-    "const WALLET = '0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A';"
-  );
-  assert.notEqual(patched, staged, 'expected the staged wallet constant to be patched');
-  fs.writeFileSync(path.join(tmpDir, 'server.js'), patched);
-
-  for (const directory of ['lib', 'public', 'prompts', 'config']) {
-    const source = path.join(REPO, directory);
-    if (fs.existsSync(source)) fs.symlinkSync(source, path.join(tmpDir, directory));
-  }
-  fs.symlinkSync(nodeModulesDir, path.join(tmpDir, 'node_modules'));
-  fs.mkdirSync(path.join(tmpDir, 'data'));
-  fs.writeFileSync(
-    path.join(tmpDir, 'data', 'learnings.json'),
-    JSON.stringify(bootCatalog(), null, 2)
-  );
-  fs.writeFileSync(
-    path.join(tmpDir, 'data', 'accounts.json'),
-    JSON.stringify(bootAccounts(), null, 2)
-  );
-}
-
-function bootServer(tmpDir) {
-  return new Promise((resolve) => {
-    const child = spawn(process.execPath, ['server.js'], {
-      cwd: tmpDir,
-      env: {
-        ...process.env,
-        NODE_ENV: 'test',
-        WALLET_PRIVATE_KEY: `0x${'11'.repeat(32)}`,
-        LLM_SENSITIVITY_ENABLED: 'false',
-        AUXILO_DATA_DIR: path.join(tmpDir, 'data'),
-        AUXILO_ACCOUNTS_FILE: path.join(tmpDir, 'data', 'accounts.json'),
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let output = '';
-    let settled = false;
-    const settle = (result) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(result);
-    };
-    const timer = setTimeout(
-      () => settle({ child, output, up: false }),
-      20_000
-    );
-    const onData = (buffer) => {
-      output += buffer.toString();
-      if (output.includes('Auxilo running at')) settle({ child, output, up: true });
-      if (output.includes('EADDRINUSE') || output.includes('UNCAUGHT EXCEPTION')) {
-        settle({ child, output, up: false });
-      }
-    };
-    child.stdout.on('data', onData);
-    child.stderr.on('data', onData);
-    child.on('exit', () => settle({ child, output, up: false }));
-  });
-}
-
-async function bootWithRetry(tmpDir) {
-  let boot;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    boot = await bootServer(tmpDir);
-    if (boot.up) return boot;
-    boot.child.kill('SIGKILL');
-    if (!boot.output.includes('EADDRINUSE')) return boot;
-    await new Promise((resolve) => setTimeout(resolve, 3_000));
-  }
-  return boot;
-}
-
 describe('SPEC3-F1 account_vocab reject-by-signal rider', () => {
   it('keeps the pure selector exactly aligned with the summary-derived count', () => {
     const rows = riderPendingRows();
@@ -219,19 +137,68 @@ describe('SPEC3-F1 account_vocab reject-by-signal rider', () => {
       return;
     }
 
+    const reservation = await reservePort();
+    if ('skipReason' in reservation) {
+      assert.equal(reservation.skipReason, BOOT_SANDBOX_SKIP_REASON);
+      t.skip(BOOT_SANDBOX_SKIP_REASON);
+      return;
+    }
+
+    const { port } = reservation;
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'auxilo-spec3-f1-rider-'));
     let child;
     const headers = {
       'X-API-Key': RAW_API_KEY,
       'Content-Type': 'application/json',
     };
-    const base = 'http://127.0.0.1:3000';
 
     try {
-      stageServer(tmpDir, nodeModulesDir);
-      const boot = await bootWithRetry(tmpDir);
+      stageServer({
+        repoRoot: REPO,
+        tmpDir,
+        nodeModulesDir,
+        port,
+        rootFiles: [
+          'server.js',
+          'seed-knowledge.json',
+          'skills.json',
+          'openapi.json',
+          'package.json',
+          'model_config.json',
+        ],
+        linkDirs: ['lib', 'public', 'prompts', 'config'],
+        replacements: [],
+      });
+      fs.writeFileSync(
+        path.join(tmpDir, 'data', 'learnings.json'),
+        JSON.stringify(bootCatalog(), null, 2)
+      );
+      fs.writeFileSync(
+        path.join(tmpDir, 'data', 'accounts.json'),
+        JSON.stringify(bootAccounts(), null, 2)
+      );
+
+      const boot = await bootServer({
+        tmpDir,
+        port,
+        env: {
+          ...process.env,
+          NODE_ENV: 'test',
+          WALLET_PRIVATE_KEY: `0x${'11'.repeat(32)}`,
+          LLM_SENSITIVITY_ENABLED: 'false',
+          AUXILO_DATA_DIR: path.join(tmpDir, 'data'),
+          AUXILO_ACCOUNTS_FILE: path.join(tmpDir, 'data', 'accounts.json'),
+        },
+        timeoutMs: 60_000,
+        maxAttempts: 4,
+      });
+      if ('skipReason' in boot) {
+        assert.equal(boot.skipReason, BOOT_SANDBOX_SKIP_REASON);
+        t.skip(BOOT_SANDBOX_SKIP_REASON);
+        return;
+      }
       child = boot.child;
-      assert.equal(boot.up, true, `server failed to boot: ${boot.output.slice(-800)}`);
+      const base = boot.baseUrl;
 
       const summaryResponse = await fetch(`${base}/account/pending/summary`, { headers });
       assert.equal(summaryResponse.status, 200);
@@ -281,7 +248,7 @@ describe('SPEC3-F1 account_vocab reject-by-signal rider', () => {
         );
       }
     } finally {
-      if (child) child.kill('SIGKILL');
+      if (child) await stopServer(child);
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
