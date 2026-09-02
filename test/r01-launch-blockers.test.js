@@ -74,7 +74,41 @@ describe('1. Stripe payout kill-switch', () => {
 // ─── 2. Receipt-cure: refuse-at-unlock for un-onboarded external builders ────────
 
 describe('2. isPlatformContributor predicate (lib/accounts.js)', () => {
-  const { isPlatformContributor } = require('../lib/accounts.js');
+  const {
+    PLATFORM_ACCOUNT_IDS,
+    normalizeCreditingContributorAccountId,
+    isPlatformContributor,
+  } = require('../lib/accounts.js');
+
+  it('SEED-ATTR: platform-account identity set contains only acc_platform', () => {
+    assert.ok(PLATFORM_ACCOUNT_IDS instanceof Set);
+    assert.deepEqual([...PLATFORM_ACCOUNT_IDS], ['acc_platform']);
+    assert.equal(normalizeCreditingContributorAccountId('acc_platform'), null);
+    assert.equal(normalizeCreditingContributorAccountId('acc_ext'), 'acc_ext');
+    assert.equal(normalizeCreditingContributorAccountId(undefined), null);
+  });
+
+  it('SEED-ATTR: acc_platform with no wallet is platform-owned', () => {
+    assert.equal(isPlatformContributor({ contributor_account_id: 'acc_platform' }, PLATFORM_WALLETS), true);
+  });
+
+  it('SEED-ATTR: acc_platform with a platform wallet is platform-owned', () => {
+    assert.equal(isPlatformContributor(
+      { contributor_account_id: 'acc_platform', contributor_wallet: LEGACY_PLATFORM_WALLET },
+      PLATFORM_WALLETS), true);
+  });
+
+  it('SEED-ATTR: acc_platform with an external wallet remains external', () => {
+    assert.equal(isPlatformContributor(
+      { contributor_account_id: 'acc_platform', contributor_wallet: '0xdead000000000000000000000000000000000001' },
+      PLATFORM_WALLETS), false);
+  });
+
+  it('SEED-ATTR: an ordinary account with a platform wallet remains external', () => {
+    assert.equal(isPlatformContributor(
+      { contributor_account_id: 'acc_ext', contributor_wallet: PLATFORM_WALLET },
+      PLATFORM_WALLETS), false);
+  });
 
   it('platform-owned: seed learning whose contributor IS the platform wallet', () => {
     assert.equal(isPlatformContributor({ contributor_wallet: PLATFORM_WALLET }, PLATFORM_WALLET), true);
@@ -106,7 +140,15 @@ describe('2. isPlatformContributor predicate (lib/accounts.js)', () => {
   //    recognizing legacy-wallet seed learnings as platform, else the refuse gate
   //    409s the existing catalog the moment the receiving address rotates.
   it('ROTATION: legacy-wallet seed learning is still platform-owned under the PLATFORM_WALLETS set', () => {
-    assert.equal(isPlatformContributor({ contributor_wallet: LEGACY_PLATFORM_WALLET }, PLATFORM_WALLETS), true);
+    const attributedSeed = {
+      contributor_account_id: 'acc_platform',
+      contributor_wallet: LEGACY_PLATFORM_WALLET,
+    };
+    assert.equal(isPlatformContributor(attributedSeed, PLATFORM_WALLETS), true);
+    assert.equal(isPlatformContributor(attributedSeed, [PLATFORM_WALLET]), false,
+      'wallet clause (a) runs first, so legacy recognition remains load-bearing after attribution');
+    assert.ok(SERVER_SRC.includes('Legacy-wallet recognition remains load-bearing'));
+    assert.ok(!SERVER_SRC.includes('residual non-visible rows'));
   });
   it('ROTATION: new-wallet learning is platform-owned under the set', () => {
     assert.equal(isPlatformContributor({ contributor_wallet: PLATFORM_WALLET }, PLATFORM_WALLETS), true);
