@@ -26,12 +26,18 @@ const OPENAPI = require('../openapi.json');
 const OWNER_ACCOUNT_ID = 'acc_envelope_0831_owner';
 const BUYER_ACCOUNT_ID = 'acc_envelope_0831_buyer';
 const ZERO_ACCOUNT_ID = 'acc_envelope_0831_zero';
+const FLOAT_ACCOUNT_ID = 'acc_envelope_0831_float';
 const RAW_OWNER_KEY = `axl_${'a'.repeat(40)}`;
 const RAW_BUYER_KEY = `axl_${'b'.repeat(40)}`;
 const RAW_ZERO_KEY = `axl_${'c'.repeat(40)}`;
+const RAW_FLOAT_KEY = `axl_${'d'.repeat(40)}`;
 const OWNER_WALLET = '0x2222222222222222222222222222222222222222';
+const FLOAT_WALLET = '0x4444444444444444444444444444444444444444';
+const UNKNOWN_WALLET = '0x5555555555555555555555555555555555555555';
 const PUBLIC_ID = 'lrn_envelope_0831_public';
 const PRIVATE_ID = 'lrn_envelope_0831_private';
+const FLOAT_ID_A = 'lrn_envelope_0831_float_a';
+const FLOAT_ID_B = 'lrn_envelope_0831_float_b';
 const FIXED_AT = '2026-08-31T12:00:00.000Z';
 const CURRENT_TOS_VERSION = '2026-07-04-payee-agency-a1';
 
@@ -77,9 +83,14 @@ function extractNamedFunction(name) {
   assert.fail(`${name} declaration is not balanced`);
 }
 
-function actualSourceFunction(name) {
+function actualSourceFunction(name, dependencies = []) {
+  const dependencyDeclarations = dependencies
+    .map((dependency) => extractNamedFunction(dependency))
+    .join('\n\n');
   const declaration = extractNamedFunction(name);
-  return Function(`"use strict"; return (${declaration});`)();
+  return Function(
+    `"use strict"; ${dependencyDeclarations}\nreturn (${declaration});`
+  )();
 }
 
 function sourceSlice(source, startMarker, endMarker, from = 0) {
@@ -100,6 +111,15 @@ function assertFieldsPresent(payload, fields, label) {
   for (const field of fields) {
     assert.equal(Object.hasOwn(payload, field), true, `${label} retains ${field}`);
   }
+}
+
+function assertSerializedMoney(actual, raw, label) {
+  assert.equal(typeof actual, 'number', `${label} is a number`);
+  assert.equal(actual, parseFloat(raw.toFixed(6)), `${label} uses exact 6dp semantics`);
+  const rendered = String(actual);
+  assert.doesNotMatch(rendered, /e/i, `${label} does not use exponent notation`);
+  const fraction = rendered.includes('.') ? rendered.split('.')[1] : '';
+  assert.ok(fraction.length <= 6, `${label} has at most six fractional digits`);
 }
 
 function logProbeExcerpt(label, payload) {
@@ -141,8 +161,23 @@ describe('ENVELOPE-0831 pure projections and route wiring', () => {
     assert.deepEqual(input, snapshot, 'source learning is unchanged');
   });
 
+  it('serializeMoney rounds finite float tails to six places and passes non-money values through', () => {
+    const serializeMoney = actualSourceFunction('serializeMoney');
+    const marker = { preserve: true };
+
+    assert.equal(serializeMoney(0.1 + 0.2), 0.3);
+    assert.equal(serializeMoney(1.41), 1.41);
+    assert.equal(serializeMoney(0), 0);
+    assert.strictEqual(serializeMoney(null), null);
+    assert.strictEqual(serializeMoney(undefined), undefined);
+    assert.equal(serializeMoney(Infinity), Infinity);
+    assert.ok(Number.isNaN(serializeMoney(NaN)));
+    assert.strictEqual(serializeMoney('0.30000000000000004'), '0.30000000000000004');
+    assert.strictEqual(serializeMoney(marker), marker);
+  });
+
   it('serializeRevenue rounds all present money fields to six places, preserves clean values, flags and settlement, and is immutable', () => {
-    const serializeRevenue = actualSourceFunction('serializeRevenue');
+    const serializeRevenue = actualSourceFunction('serializeRevenue', ['serializeMoney']);
     const input = {
       unlock_price_usd: 1.41,
       amount_paid_usd: 0.125,
@@ -374,6 +409,59 @@ function fixtureAccounts() {
         'earnings-read'
       )],
     },
+    [FLOAT_ACCOUNT_ID]: {
+      id: FLOAT_ACCOUNT_ID,
+      email: 'envelope-float@test.local',
+      wallet: FLOAT_WALLET,
+      created_at: FIXED_AT,
+      api_keys: [apiKeyEntry(
+        RAW_FLOAT_KEY,
+        'key_envelope_float',
+        'float',
+        'earnings-read'
+      )],
+    },
+  };
+}
+
+function fixtureFloatEarningsEntry() {
+  return {
+    account_id: FLOAT_ACCOUNT_ID,
+    wallet: FLOAT_WALLET,
+    total_gross: 0.30000000000000004,
+    total_contributor: 0.23333333333333334,
+    total_platform: 0.06666666666666668,
+    by_learning: {
+      [FLOAT_ID_A]: {
+        gross: 0.10000000000000002,
+        contributor: 0.07777777777777779,
+        platform: 0.022222222222222227,
+        unlocks: 3,
+        unknown_nested: { fixture: 'alpha', preserved_count: 11 },
+      },
+      [FLOAT_ID_B]: {
+        gross: 0.20000000000000004,
+        contributor: 0.15555555555555556,
+        platform: 0.04444444444444445,
+        unlocks: 4,
+        unknown_nested: { fixture: 'beta', preserved_count: 13 },
+      },
+    },
+    last_updated: FIXED_AT,
+    pending_balance: 0.16666666666666669,
+    unassented_pending: 0.04444444444444445,
+    total_withdrawn: 0.03333333333333334,
+    withdrawal_count: 7,
+    processed_settlements: ['settlement_float_fixture'],
+  };
+}
+
+function fixtureEarnings() {
+  return {
+    [FLOAT_ACCOUNT_ID]: fixtureFloatEarningsEntry(),
+    __wallet_index: {
+      [FLOAT_WALLET]: FLOAT_ACCOUNT_ID,
+    },
   };
 }
 
@@ -449,12 +537,24 @@ function stageServer(tmpDir, nodeModulesDir, port) {
 
   const dataDir = path.join(tmpDir, 'data');
   fs.mkdirSync(dataDir);
+  const floatLearningA = {
+    ...fixtureLearning(FLOAT_ID_A, 'public'),
+    contributor_account_id: FLOAT_ACCOUNT_ID,
+    contributor_wallet: FLOAT_WALLET,
+  };
+  const floatLearningB = {
+    ...fixtureLearning(FLOAT_ID_B, 'public'),
+    contributor_account_id: FLOAT_ACCOUNT_ID,
+    contributor_wallet: FLOAT_WALLET,
+  };
   writeJson(path.join(dataDir, 'learnings.json'), [
     fixtureLearning(PUBLIC_ID, 'public'),
     fixtureLearning(PRIVATE_ID, 'private'),
+    floatLearningA,
+    floatLearningB,
   ]);
   writeJson(path.join(dataDir, 'accounts.json'), fixtureAccounts());
-  writeJson(path.join(dataDir, 'earnings.json'), {});
+  writeJson(path.join(dataDir, 'earnings.json'), fixtureEarnings());
   writeJson(path.join(dataDir, 'credits.json'), fixtureCredits());
   writeJson(path.join(dataDir, 'unlock-attribution.json'), {});
   writeJson(path.join(dataDir, 'purchase-ledger.json'), {});
@@ -538,6 +638,103 @@ describe('ENVELOPE-0831 staged live response envelopes', { timeout: 180_000 }, (
   after(() => {
     if (child) child.kill('SIGKILL');
     if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('serializes every earnings and contributor money field to 6dp without mutating staged stores', async () => {
+    const dataDir = path.join(tmpDir, 'data');
+    const storeFiles = ['earnings.json', 'accounts.json', 'learnings.json'];
+    const before = Object.fromEntries(
+      storeFiles.map((file) => [file, fs.readFileSync(path.join(dataDir, file))])
+    );
+    const raw = fixtureFloatEarningsEntry();
+
+    const accountDashboard = await getJson(
+      `${baseUrl}/account/earnings`,
+      { 'X-API-Key': RAW_FLOAT_KEY },
+      getServerOutput
+    );
+    const contributorDashboard = await getJson(
+      `${baseUrl}/contributor/${FLOAT_WALLET}`,
+      {},
+      getServerOutput
+    );
+
+    const accountMoney = {
+      total_gross_usd: raw.total_gross,
+      total_gross: raw.total_gross,
+      total_contributor: parseFloat((
+        parseFloat(raw.total_contributor.toFixed(6)) -
+        parseFloat(raw.unassented_pending.toFixed(6))
+      ).toFixed(6)),
+      total_contributor_gross: raw.total_contributor,
+      held_pending_assent: raw.unassented_pending,
+      unassented_pending: raw.unassented_pending,
+      pending_balance: raw.pending_balance,
+      total_withdrawn: raw.total_withdrawn,
+    };
+    assertFieldsPresent(
+      accountDashboard,
+      Object.keys(accountMoney),
+      'account float earnings'
+    );
+    for (const [field, value] of Object.entries(accountMoney)) {
+      assertSerializedMoney(accountDashboard[field], value, `account.${field}`);
+    }
+
+    assert.deepEqual(Object.keys(accountDashboard.by_learning).sort(), [
+      FLOAT_ID_A,
+      FLOAT_ID_B,
+    ]);
+    for (const learningId of [FLOAT_ID_A, FLOAT_ID_B]) {
+      const detail = accountDashboard.by_learning[learningId];
+      assertFieldsPresent(
+        detail,
+        ['gross', 'contributor', 'platform'],
+        `account.by_learning.${learningId}`
+      );
+      for (const field of ['gross', 'contributor', 'platform']) {
+        assertSerializedMoney(
+          detail[field],
+          raw.by_learning[learningId][field],
+          `account.by_learning.${learningId}.${field}`
+        );
+      }
+      assert.equal(detail.unlocks, raw.by_learning[learningId].unlocks);
+      assert.deepEqual(
+        detail.unknown_nested,
+        raw.by_learning[learningId].unknown_nested,
+        `${learningId} unknown nested fields survive serialization`
+      );
+    }
+    assert.equal(accountDashboard.withdrawal_count, raw.withdrawal_count);
+
+    const contributorMoney = {
+      total_gross_usd: raw.total_gross,
+      total_contributor_usd: raw.total_contributor,
+      total_platform_usd: raw.total_platform,
+      pending_balance: raw.pending_balance,
+      total_withdrawn: raw.total_withdrawn,
+    };
+    assertFieldsPresent(
+      contributorDashboard,
+      Object.keys(contributorMoney),
+      'public float contributor'
+    );
+    for (const [field, value] of Object.entries(contributorMoney)) {
+      assertSerializedMoney(contributorDashboard[field], value, `contributor.${field}`);
+    }
+    assert.equal(contributorDashboard.withdrawal_count, raw.withdrawal_count);
+    assert.equal(contributorDashboard.learnings_submitted, 2);
+    assert.equal(contributorDashboard.last_updated, raw.last_updated);
+    assert.equal(Object.hasOwn(contributorDashboard, 'by_learning'), false);
+
+    for (const file of storeFiles) {
+      assert.deepEqual(
+        fs.readFileSync(path.join(dataDir, file)),
+        before[file],
+        `GET responses leave data/${file} byte-identical`
+      );
+    }
   });
 
   it('serves paid public buyers the stripped learning, retained buyer fields, frozen four-key revenue shape, and clean 1.41 split', async () => {
@@ -679,6 +876,13 @@ describe('ENVELOPE-0831 staged live response envelopes', { timeout: 180_000 }, (
       getServerOutput
     );
     assert.deepEqual(zeroDashboard.by_learning, {});
+
+    const unknownWalletDashboard = await getJson(
+      `${baseUrl}/contributor/${UNKNOWN_WALLET}`,
+      {},
+      getServerOutput
+    );
+    assert.equal(unknownWalletDashboard.total_contributor_usd, 0);
   });
 });
 

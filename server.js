@@ -4979,23 +4979,23 @@ app.get('/account/earnings', requireSessionOrApiKey('earnings-read'), async (c) 
   // (gross − held) as `total_contributor`, expose the held bucket as its own field, and
   // keep the raw lifetime figure as `total_contributor_gross`. No double-count:
   // owned + held == gross.
-  const heldPending = Number((entry.unassented_pending || 0).toFixed(6));
-  const contributorGross = Number((entry.total_contributor || 0).toFixed(6));
-  const contributorOwned = Number(Math.max(0, contributorGross - heldPending).toFixed(6));
+  const heldPending = serializeMoney(entry.unassented_pending || 0);
+  const contributorGross = serializeMoney(entry.total_contributor || 0);
+  const contributorOwned = serializeMoney(Math.max(0, contributorGross - heldPending));
 
   return c.json({
     account_id: accountId,
     wallet: entry.wallet || account.wallet || null,
-    total_gross_usd: entry.total_gross || 0,
-    total_gross: entry.total_gross || 0,
+    total_gross_usd: serializeMoney(entry.total_gross || 0),
+    total_gross: serializeMoney(entry.total_gross || 0),
     total_contributor: contributorOwned,          // owned lifetime share (excludes held)
     total_contributor_gross: contributorGross,    // lifetime gross including held
     held_pending_assent: heldPending,             // AUD19-8(b): undisbursable receipts, released on §5.10 acceptance
     unassented_pending: heldPending,              // legacy alias of held_pending_assent (back-compat)
-    pending_balance: entry.pending_balance || 0,  // withdrawable subset of owned
-    total_withdrawn: entry.total_withdrawn || 0,
+    pending_balance: serializeMoney(entry.pending_balance || 0),  // withdrawable subset of owned
+    total_withdrawn: serializeMoney(entry.total_withdrawn || 0),
     withdrawal_count: entry.withdrawal_count || 0,
-    by_learning: entry.by_learning || {},
+    by_learning: serializeByLearningMoney(entry.by_learning || {}),
     // FB-2: never advertise can_withdraw while the custodial payout kill-switch is engaged
     // (launch default) — both rails 503 until CUSTODIAL_WITHDRAW_ENABLED is set.
     can_withdraw: canWithdraw && process.env.CUSTODIAL_WITHDRAW_ENABLED === 'true',
@@ -8054,8 +8054,13 @@ function stripOwnerOnlyFields(learning) {
   return buyerLearning;
 }
 
-// ENVELOPE-0831: USDC response values serialize at native six-decimal
-// precision. Accrual math, persistence, WAL entries, and ledgers stay untouched.
+// ENVELOPE-0831 / FLOAT-EARN: one response-boundary primitive for every USD
+// value. Accrual math, persistence, WAL entries, and ledgers stay untouched.
+function serializeMoney(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return value;
+  return Number(value.toFixed(6));
+}
+
 function serializeRevenue(revenue) {
   if (!revenue || typeof revenue !== 'object') return revenue;
   const serialized = { ...revenue };
@@ -8065,9 +8070,26 @@ function serializeRevenue(revenue) {
     'contributor_earned_usd',
     'platform_earned_usd',
   ]) {
-    if (typeof serialized[field] === 'number' && Number.isFinite(serialized[field])) {
-      serialized[field] = Number(serialized[field].toFixed(6));
+    if (Object.hasOwn(serialized, field)) serialized[field] = serializeMoney(serialized[field]);
+  }
+  return serialized;
+}
+
+function serializeByLearningMoney(byLearning) {
+  if (!byLearning || typeof byLearning !== 'object') return byLearning;
+  const serialized = {};
+  for (const [learningId, values] of Object.entries(byLearning)) {
+    if (!values || typeof values !== 'object') {
+      serialized[learningId] = values;
+      continue;
     }
+    const serializedValues = { ...values };
+    for (const field of ['gross', 'contributor', 'platform']) {
+      if (Object.hasOwn(serializedValues, field)) {
+        serializedValues[field] = serializeMoney(serializedValues[field]);
+      }
+    }
+    serialized[learningId] = serializedValues;
   }
   return serialized;
 }
@@ -9135,18 +9157,18 @@ app.get('/contributor/:wallet', (c) => {
     return c.json({
       wallet,
       message: 'No earnings found for this wallet',
-      total_contributor_usd: 0,
+      total_contributor_usd: serializeMoney(0),
       learnings_submitted: visibleLearningsList().filter(l => l.contributor_wallet === wallet).length
     });
   }
 
   return c.json({
     wallet,
-    total_gross_usd: data.total_gross,
-    total_contributor_usd: data.total_contributor,
-    total_platform_usd: data.total_platform,
-    pending_balance: data.pending_balance || 0,
-    total_withdrawn: data.total_withdrawn || 0,
+    total_gross_usd: serializeMoney(data.total_gross),
+    total_contributor_usd: serializeMoney(data.total_contributor),
+    total_platform_usd: serializeMoney(data.total_platform),
+    pending_balance: serializeMoney(data.pending_balance || 0),
+    total_withdrawn: serializeMoney(data.total_withdrawn || 0),
     withdrawal_count: data.withdrawal_count || 0,
     learnings_submitted: visibleLearningsList().filter(l => l.contributor_wallet === wallet).length,
     last_updated: data.last_updated
