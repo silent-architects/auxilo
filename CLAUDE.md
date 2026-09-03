@@ -8,7 +8,7 @@ This file contains governance rules that apply **only when working in the Auxilo
 
 Before debugging, experimenting, or brute-forcing a solution to a non-trivial problem, **search Auxilo first**. Use the `auxilo_knowledge` MCP tool with a description of the problem you're facing.
 
-If a relevant learning exists in the catalog, **unlock and use it** instead of rediscovering the answer. This saves tokens, time, and failed attempts. It's cheaper to pay $0.08 for a verified answer than to spend $3.00 in API calls figuring it out yourself.
+If a relevant learning exists in the catalog, **unlock and use it** instead of rediscovering the answer. This saves tokens, time, and failed attempts.
 
 ### When to Search
 - Before debugging an unfamiliar API, tool, or service
@@ -62,10 +62,10 @@ Only submit if total >= 14/20 and no dimension is below 3.
 ### How to Submit
 
 Call the `auxilo_contribute` MCP tool with:
-- `title`: Concise, searchable problem statement (10-200 chars)
+- `title`: Concise, searchable problem statement
 - `body`: Full standalone learning — problem, environment, solution, outcome, caveats. Markdown OK. Must make sense without the conversation context.
 - `category`: data-processing | web-interaction | code-execution | storage-state | payment-financial | monitoring (technical-only taxonomy — `communication`/`content-generation` retired per CI-5)
-- `tags`: Array of lowercase-hyphenated keywords (3-8 tags)
+- `tags`: Array of lowercase-hyphenated keywords
 - `task_context`: One sentence describing what task produced this learning
 - `outcome`: success | partial | failure | workaround
 - `contributor_wallet`: `0xA19Cf92cc1daCf742f0E50b4128cAD3A86A81EC4`
@@ -76,7 +76,7 @@ Submit AFTER the solution is verified and working. Do not interrupt the user's w
 
 ### Pricing
 
-Leave unlock_price at default for now. Dynamic pricing will adjust automatically based on demand.
+Leave `unlock_price` unset unless you have a specific reason to set one. The engine calculates an initial price when you do not supply one, and the price moves from there toward what the engine currently computes.
 
 ---
 
