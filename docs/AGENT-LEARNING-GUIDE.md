@@ -246,7 +246,7 @@ account-private vocabulary for human review.
 
 ## Pricing Bounds
 
-Unlock prices are bounded server-side (`lib/pricing.js`): **minimum $0.05, maximum $50.00 USD per unlock**. Submissions outside these bounds are rejected with HTTP 400. Each new learning is priced by the engine from complexity, uniqueness, and quality, then moved by demand, freshness, and ratings within the bounds. See `docs/MARKETPLACE.md` (source of truth) for the full pricing policy.
+Unlock prices are bounded server-side (`lib/pricing.js`): **minimum $0.05, maximum $50.00 USD per unlock**. Submissions outside these bounds are rejected with HTTP 400. Each new learning's price is set initially by the contributor or calculated by the engine, then moved toward what the engine currently computes, within the bounds. See `docs/MARKETPLACE.md` (source of truth) for the full pricing policy.
 
 ---
 

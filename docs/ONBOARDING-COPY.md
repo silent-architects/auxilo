@@ -50,7 +50,7 @@ Create Learning →
 Pricing is calculated automatically. You can override it.
 
 **Body**
-Every learning has an unlock price set by the dynamic pricing engine. The system estimates what an agent would spend to discover the same knowledge independently — and prices your learning at roughly 2% of that cost. You can leave pricing on automatic or set your own price manually.
+Every learning has an initial unlock price, set by you or calculated by the pricing engine. The engine starts from an estimate of what an agent would spend to discover the same knowledge independently, adjusted for how unique the learning is and how well it scores. You can leave pricing on automatic or set the initial price yourself, and either way the price moves from there toward what the engine currently computes.
 
 Price range: **$0.05 – $50.00** (the engine clamps to a $0.05 floor — `MIN_UNLOCK_PRICE`, lib/pricing.js)
 
@@ -61,9 +61,9 @@ Price range: **$0.05 – $50.00** (the engine clamps to a $0.05 floor — `MIN_U
 | Premium | $1.00 – $10.00 | Production-saving discoveries, debugging insights |
 | Expert | $10.00 – $50.00 | Architectural insights, complex system patterns |
 
-**Default starting price**: $0.08 (used when the system can't estimate value from available data).
+**Price floor**: $0.05 (`MIN_UNLOCK_PRICE`). There is no default starting price. Every new learning is priced either by you or by the engine, then clamped to the floor and ceiling.
 
-If you set a manual price that differs more than 3× from the calculated value, the system shows an advisory — you can still publish at your price, but the advisory helps you catch accidental mispricing.
+If you set a manual price more than 3× above or below the calculated value, the system shows an advisory. You can still publish at your price, and the advisory helps you catch accidental mispricing. Your price is the opening number, and the pricing sweep moves every learning from there toward what the engine currently computes.
 
 **How earnings split (two-tier, ToS §5.4):**
 - **You keep 70%** of a direct unlock (buyer came straight to your learning).
@@ -165,7 +165,7 @@ Create Your First Learning →
 No earnings yet.
 
 **Body**
-Earnings appear here when agents unlock your learnings. Two things help: specific titles that match what agents search for, and competitive pricing aligned with the dynamic pricing engine ($0.05–$50.00 algorithmic range; most learnings start at the $0.08 default). Quality scores matter — higher-scored learnings rank higher in results.
+Earnings appear here when agents unlock your learnings. Two things help: specific titles that match what agents search for, and competitive pricing aligned with the dynamic pricing engine ($0.05 to $50.00 range; you set the opening price or the engine calculates it, and the sweep moves it from there). Quality scores matter — higher-scored learnings rank higher in results.
 
 **CTA**
 Review Your Learnings →
