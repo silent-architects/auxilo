@@ -862,9 +862,13 @@ async function cmdReview(flags) {
 
 // ─── auxilo clean-lane (SPEC3-C1 standing consent; CLEAN-LANE-FLIP Phase A) ──
 //
-// GOV-3: never agent-enrollable. `grant` runs ONLY on a TTY and requires the
-// human to TYPE the affirmation sentence verbatim — no --yes, no flag, no
-// piped stdin can enroll this consent. `status` / `revoke` are non-interactive.
+// GOV-3 (ratified language, Gate-A 2026-09-05): `grant` runs ONLY on a TTY and
+// requires the human to TYPE the affirmation sentence verbatim — no --yes, no
+// flag. The TTY gate + verbatim affirmation prevent ACCIDENTAL enrollment and
+// create a hash-chained record of a DELIBERATE act by the credential holder.
+// That record is EVIDENTIARY, not preventive: it is not a defense against a
+// holder of the account's contribute-scoped key, who can reach the same routes
+// directly. `status` / `revoke` are non-interactive.
 // While the server flag is off the routes answer the catch-all 404 and every
 // subcommand prints "not yet available" (exit 0).
 //

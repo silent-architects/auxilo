@@ -2819,7 +2819,7 @@
     "/learn/{id}": {
       "delete": {
         "summary": "Retract a learning (P2.1a \u00a75.2)",
-        "description": "Retracts a learning published via autonomous extraction within the 7-day retraction window. After 7 days, returns 409 and the standard takedown process applies.",
+        "description": "Retracts a learning published via autonomous extraction within the 7-day retraction window. After 7 days, returns 409 and the standard takedown process applies. Accepts the owner's session JWT as well as a contribute-scoped API key.",
         "operationId": "retractLearning",
         "tags": [
           "Extraction"
@@ -3085,6 +3085,19 @@
                             "type": "string",
                             "nullable": true,
                             "format": "date-time"
+                          },
+                          "published_via": {
+                            "type": "string",
+                            "description": "Optional. Present only on learnings published under clean-lane standing consent (value: clean_lane_standing_consent). Absent on every other learning."
+                          },
+                          "standing_consent_version": {
+                            "type": "string",
+                            "description": "Optional. Present only on learnings published under clean-lane standing consent: the consent version that was in force at publish time."
+                          },
+                          "retractable_until": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "Optional. Present only on learnings published under clean-lane standing consent: the end of the 7-day retraction window (DELETE /learn/{id}?reason=retract)."
                           }
                         }
                       }

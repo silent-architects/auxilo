@@ -2899,6 +2899,9 @@ async function runOpenClawDaemon() {
   console.log('[openclaw-daemon] Starting run...');
   try {
     const llmCall = async (prompt) => {
+      // Gate-A 2026-09-05: surface a missing extraction block (resolver fell
+      // through to the hardcoded default) — the model choice is unchanged.
+      if (resolveModelConfig('extraction').source === 'default') console.warn('[model-config] extraction block missing; using default model');
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -6759,6 +6762,9 @@ app.post('/learn', async (c) => {
     // wave; this response line is the in-band half.)
     ...(cleanLanePublish && {
       published_via: PUBLISHED_VIA_CLEAN_LANE,
+      // Gate-A 2026-09-05: the version rides the response too, so the client's
+      // local index (lib/extraction-index.js localIndexRow) persists it.
+      standing_consent_version: cleanLanePublish.consent_version,
       retractable_until: learning.retractable_until,
       standing_consent_notice: `Published under your standing consent (${cleanLanePublish.consent_version}). ` +
         `Retractable until ${learning.retractable_until}: DELETE /learn/${learning.id}?reason=retract, ` +
@@ -7507,6 +7513,11 @@ app.post('/extract', async (c) => {
     }
   }
 
+  // Gate-A 2026-09-05: surface a missing extraction block (resolver fell
+  // through to the hardcoded default) before the audit row records the model
+  // — the model choice itself is unchanged. (Placed ABOVE the Step 17 marker:
+  // test/p2-1a-*.test.js slice fixed windows from that marker.)
+  if (resolveModelConfig('extraction').source === 'default') console.warn('[model-config] extraction block missing; using default model');
   // ── Step 17: Audit log FIRST, then catalog mutation (§9.1) ────────────
   // ITEM-1 (Phase 8): audit-before-mutate on publish path.
   // Same invariant as the retraction path (CORRECTION 1.5):
@@ -12134,6 +12145,9 @@ Filter out: opinions, greetings, meta-discussion, anything with credentials/PII.
 Conversation:
 ${conversation.substring(0, 100000)}`;
 
+    // Gate-A 2026-09-05: surface a missing extraction block (resolver fell
+    // through to the hardcoded default) — the model choice is unchanged.
+    if (resolveModelConfig('extraction').source === 'default') console.warn('[model-config] extraction block missing; using default model');
     const extractionResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {

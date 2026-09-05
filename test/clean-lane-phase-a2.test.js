@@ -420,4 +420,76 @@ describe('CLEAN-LANE-FLIP Phase A2: localIndexRow persists the standing-consent 
       tmp.cleanup();
     }
   });
+
+  // Gate-A 2026-09-05: PRODUCER-DRIVEN rollup. The fixture above is hand-shaped;
+  // this test derives the response shape from the /learn clean-lane branch in
+  // server.js itself, so a key dropped from the producer (the standing-consent
+  // version was missing from the response until this fix) turns the rollup red
+  // instead of the hand fixture silently staying green.
+  it('producer-driven: a /learn clean-lane response body appended via appendSubmittedLearning is counted once by countStandingConsentPublishes over the real index file', () => {
+    // 1. Extract the /learn response's clean-lane spread block from the producer.
+    const learnRoute = SERVER_SRC.slice(SERVER_SRC.indexOf("app.post('/learn'"), SERVER_SRC.indexOf("app.post('/learn'") + 40000);
+    const responseStart = learnRoute.indexOf('return c.json({\n    id: learning.id,');
+    assert.ok(responseStart > 0, '/learn response object not found');
+    const responseSrc = learnRoute.slice(responseStart, learnRoute.indexOf('}, 201);', responseStart));
+    const blockStart = responseSrc.indexOf('...(cleanLanePublish && {');
+    assert.ok(blockStart > 0, '/learn clean-lane spread block not found');
+    const blockSrc = responseSrc.slice(blockStart, responseSrc.indexOf('}),', blockStart));
+    const producerKeys = [...blockSrc.matchAll(/^\s+([a-z_]+):/gm)].map((m) => m[1]).sort();
+    assert.deepEqual(producerKeys, ['published_via', 'retractable_until', 'standing_consent_notice', 'standing_consent_version']);
+    assert.match(blockSrc, /published_via: PUBLISHED_VIA_CLEAN_LANE,/);
+    assert.match(blockSrc, /standing_consent_version: cleanLanePublish\.consent_version,/);
+    assert.match(blockSrc, /retractable_until: learning\.retractable_until,/);
+
+    // 2. Build the response body shaped exactly like that branch (every
+    //    top-level key the /learn 201 emits for a clean-lane publish).
+    const topLevelKeys = [...responseSrc.matchAll(/^    ([a-z_]+):/gm)].map((m) => m[1]);
+    for (const k of ['id', 'message', 'status', 'visibility', 'unlock_price', 'pricing', 'contributor_wallet', 'timestamp']) {
+      assert.ok(topLevelKeys.includes(k), `/learn response lost top-level key ${k}`);
+    }
+    const learningId = 'lrn_a2_producer';
+    const response = {
+      id: learningId,
+      message: 'Learning submitted successfully',
+      status: 'approved',
+      visibility: 'public',
+      published_via: PUBLISHED_VIA,
+      standing_consent_version: STAMP_VERSION,
+      retractable_until: UNTIL,
+      standing_consent_notice: `Published under your standing consent (${STAMP_VERSION}). ` +
+        `Retractable until ${UNTIL}: DELETE /learn/${learningId}?reason=retract, ` +
+        '`auxilo review`, or your dashboard.',
+      unlock_price: 0.05,
+      pricing: { computed_price: 0.05 },
+      contributor_wallet: null,
+      timestamp: FIXED_AT,
+    };
+    for (const k of producerKeys) assert.ok(Object.hasOwn(response, k), `fixture missing producer key ${k}`);
+
+    // 3. Append through the real client path into the real index location for
+    //    a temp HOME, then run the rollup over THAT file.
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'auxilo-a2-producer-home-'));
+    try {
+      const indexPath = notice.submittedIndexPath(home);
+      assert.equal(indexLib.appendSubmittedLearning(learning(), response, { indexPath, now: FIXED_AT }), true);
+      // A plain (non-clean-lane) /learn response on the same file is NOT counted.
+      assert.equal(indexLib.appendSubmittedLearning(learning(), {
+        id: 'lrn_a2_producer_plain', message: 'Learning submitted for review. It will be visible after approval.',
+        status: 'pending_review', visibility: 'public', unlock_price: 0.05, pricing: {}, contributor_wallet: null, timestamp: FIXED_AT,
+      }, { indexPath, now: FIXED_AT }), true);
+
+      const rows = notice.readSubmittedRows(home);
+      assert.equal(rows.length, 2);
+      assert.equal(rows[0].published_via, PUBLISHED_VIA);
+      assert.equal(rows[0].standing_consent_version, STAMP_VERSION);
+      assert.equal(rows[0].retractable_until, UNTIL);
+      assert.equal(Object.hasOwn(rows[0], 'standing_consent_notice'), false, 'the notice text is not persisted');
+      assert.equal(notice.countStandingConsentPublishes(rows, undefined), 1);
+      // The notice stamp gates the count: a stamp AFTER the publish → 0, BEFORE → 1.
+      assert.equal(notice.countStandingConsentPublishes(rows, '2026-07-26T13:00:00.000Z'), 0);
+      assert.equal(notice.countStandingConsentPublishes(rows, '2026-07-26T11:00:00.000Z'), 1);
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
 });
