@@ -1,7 +1,7 @@
 # Privacy Policy
 
 **Effective Date: March 17, 2026**
-**Last Updated: July 18, 2026**
+**Last Updated: September 5, 2026**
 
 ---
 
@@ -406,4 +406,4 @@ We aim to respond to all privacy-related inquiries within 30 days.
 
 ---
 
-*This Privacy Policy was last updated on July 18, 2026.*
+*This Privacy Policy was last updated on September 5, 2026.*
