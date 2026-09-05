@@ -151,7 +151,9 @@ function stageServer({
 
   const dataDir = path.join(tmpDir, 'data');
   fs.mkdirSync(dataDir);
-  return { dataDir, serverPath };
+  const walDir = path.join(dataDir, 'wal');
+  fs.mkdirSync(walDir);
+  return { dataDir, walDir, serverPath };
 }
 
 function classifyBootFailure({ output = '', error = null, timedOut = false } = {}) {
@@ -211,6 +213,7 @@ function runBootAttempt({ tmpDir, port, env, timeoutMs }) {
         cwd: tmpDir,
         env: {
           ...process.env,
+          AUXILO_WAL_DIR: path.join(tmpDir, 'data', 'wal'),
           ...env,
         },
         stdio: ['ignore', 'pipe', 'pipe'],

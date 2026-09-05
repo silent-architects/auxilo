@@ -35,6 +35,7 @@ const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'auxilo-wave1-'));
 process.env.AUXILO_CREDITS_FILE = path.join(TMP, 'credits.json');
 process.env.AUXILO_UNLOCK_ATTRIBUTION_FILE = path.join(TMP, 'unlock-attribution.json');
 process.env.AUXILO_PURCHASE_LEDGER_FILE = path.join(TMP, 'purchase-ledger.json');
+process.env.AUXILO_WAL_DIR = path.join(TMP, 'wal');
 
 const credits = require('../lib/credits.js');
 const attribution = require('../lib/unlock-attribution.js');
@@ -46,7 +47,10 @@ const SERVER_SRC = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf
 const MCP_SRC = fs.readFileSync(path.join(__dirname, '..', 'mcp-server.js'), 'utf-8');
 const EIP712_SRC = fs.readFileSync(path.join(__dirname, '..', 'lib', 'eip712.js'), 'utf-8');
 
-after(() => { try { fs.rmSync(TMP, { recursive: true, force: true }); } catch { /* best effort */ } });
+after(() => {
+  delete process.env.AUXILO_WAL_DIR;
+  try { fs.rmSync(TMP, { recursive: true, force: true }); } catch { /* best effort */ }
+});
 
 function unlockHandlerSlice() {
   const start = SERVER_SRC.indexOf("app.get('/knowledge/:id'");
