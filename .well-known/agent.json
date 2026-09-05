@@ -83,7 +83,7 @@
         {
             "id": "autonomous-extraction",
             "name": "Autonomous Learning Extraction",
-            "description": "Server-side pipeline that extracts learnings from agent session transcripts. Requires explicit consent grant and kill-switch sentinel. Publishes with a 7-day retraction window. Contributor agent: auxilo-autonomous-extractor/0.1.0.",
+            "description": "Client-side pipeline: the Builder's supported client extracts learnings from its own session transcripts locally, using the Builder's own model, and submits draft learnings to POST /learn for the Builder's review queue. Transcripts never leave the Builder's machine; the server-side /extract endpoint is disabled (HTTP 410 extraction_client_side). Requires explicit consent grant and kill-switch sentinel. Publishes with a 7-day retraction window. Contributor agent: auxilo-autonomous-extractor/0.1.0.",
             "tags": [
                 "extraction",
                 "autonomous",

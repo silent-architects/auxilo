@@ -1,7 +1,7 @@
 # Terms of Service
 
 **Effective Date: March 17, 2026**
-**Last Updated: July 11, 2026**
+**Last Updated: September 5, 2026**
 **Current Amendment: `2026-07-04-payee-agency-a1` — Payment-Collection Agency (Section 5.10), effective July 11, 2026.** The payment-collection agency in Section 5.10 was added by this amendment and applies only on and after its effective date shown above (July 11, 2026); it does not apply retroactively to the original March 17, 2026 Effective Date or to any Builder Share received before the amendment's effective date.
 
 ---
@@ -77,7 +77,7 @@ Auxilo is a knowledge marketplace where human Builders publish structured operat
 
 ### 4.1 How It Works
 
-Builders submit Learnings containing operational knowledge derived from real-world task execution. Each submission is automatically quality-scored and, if it passes content and sensitivity filters, published to the catalog. Consumers search the catalog, discover relevant Learnings, and unlock full content by paying the price set by the Builder.
+Builders submit Learnings containing operational knowledge derived from real-world task execution. Each submission is automatically quality-scored and screened for content and sensitivity, and is published to the catalog only when the Builder approves it from their review queue; a new account's first Learning is additionally held for operator review. Consumers search the catalog, discover relevant Learnings, and unlock full content by paying the current price, which is set initially by the Builder or calculated by Auxilo's pricing engine and then moved toward what the engine currently computes.
 
 ### 4.2 Access Methods
 
@@ -89,7 +89,7 @@ The Platform is accessible through:
 
 ### 4.3 Discovery and Unlocks
 
-Discovery queries and knowledge searches require a registered account with available credits or an active x402 wallet. Learning unlocks require a funded account with available credits. Auxilo may offer promotional credits or introductory offers at its discretion. Current offers, if any, are displayed in your account dashboard.
+Discovery queries and knowledge searches are free and do not require an account. Learning unlocks require either an account with available credits or an x402 payment. Auxilo may offer promotional credits or introductory offers at its discretion. Current offers, if any, are displayed in your account dashboard.
 
 ### 4.4 Marketplace Facilitator
 
@@ -139,9 +139,9 @@ Changes to either Builder Share percentage or to the platform fee constitute a m
 
 ### 5.5 Pricing
 
-Unlock prices are set by Auxilo's dynamic pricing algorithm based on demand, quality ratings, freshness, and supply factors. Contributors may suggest initial pricing, but final prices are determined algorithmically. Auxilo reserves the right to adjust algorithm parameters and price bounds at any time.
+Unlock prices are set initially by the Builder or calculated by Auxilo's pricing engine from complexity, uniqueness, and quality, then moved by demand, freshness, ratings, and how the rest of the catalog changes, within the published price bounds. Auxilo reserves the right to adjust algorithm parameters and price bounds at any time.
 
-Changes to the platform fee percentage (currently 30%) require at least **30 days' advance notice** to Builders, delivered via email or platform notification.
+Changes to the platform fee percentage (currently 30% of direct unlocks and 40% of unlocks surfaced by Auxilo search, per Section 5.4) require at least **30 days' advance notice** to Builders, delivered via email or platform notification.
 
 ### 5.6 Earnings and Payouts
 
@@ -151,7 +151,7 @@ Settlement occurs on a periodic basis as determined by Auxilo. We will make reas
 
 **Minimum Payout Threshold.** Auxilo may establish a minimum earnings threshold that must be met before a payout is processed. The current threshold, if any, is published in the API documentation.
 
-**Network (Gas) Costs on Withdrawal.** As provided in Section 7.4, you are responsible for the network transaction ("gas") fees associated with your transactions. This Section 5.6 states how that general responsibility applies to withdrawals of your earnings. On the custodial USDC withdrawal rail currently in operation, the gas cost of settling your earnings on-chain is borne by you and is deducted from your pending balance at the time of withdrawal. Auxilo applies a fixed gas estimate to each withdrawal (currently **USD $0.005** per withdrawal, subject to change on notice under Section 17), and remits to you the net amount after that single deduction; if your balance is insufficient to cover the estimated gas, the withdrawal will not be processed. Where earnings are settled through the Auxilo Split Router's direct-settlement flow (Section 5.10.4(b)), Auxilo bears the on-chain gas cost of that settlement and no gas deduction is applied to your Builder Share on that path. This paragraph is the specific application of Section 7.4 to earnings withdrawals and does not impose any gas charge in addition to the one described here.
+**Network (Gas) Costs on Withdrawal.** As provided in Section 7.4, you are responsible for the network transaction ("gas") fees associated with your transactions. This Section 5.6 states how that general responsibility applies to withdrawals of your earnings. On the custodial USDC withdrawal rail (withdrawals on which are paused while Auxilo migrates to the direct-settlement flow in Section 5.10.4(b); the current state is shown at https://auxilo.io/status), the gas cost of settling your earnings on-chain is borne by you and is deducted from your pending balance at the time of withdrawal. Auxilo applies a fixed gas estimate to each withdrawal (currently **USD $0.005** per withdrawal, subject to change on notice under Section 17), and remits to you the net amount after that single deduction; if your balance is insufficient to cover the estimated gas, the withdrawal will not be processed. Where earnings are settled through the Auxilo Split Router's direct-settlement flow (Section 5.10.4(b)), Auxilo bears the on-chain gas cost of that settlement and no gas deduction is applied to your Builder Share on that path. This paragraph is the specific application of Section 7.4 to earnings withdrawals and does not impose any gas charge in addition to the one described here.
 
 **Tax Obligations.** Builders are solely responsible for reporting and paying any taxes applicable to their earnings. Auxilo may request tax documentation (such as W-9 or W-8BEN forms) as required for compliance with applicable tax reporting obligations. Failure to provide requested documentation may result in withholding or suspension of payouts.
 
@@ -196,7 +196,7 @@ The Platform uses third-party large language model providers to process uploaded
 
 #### 5.9.3 Autonomous Learning Extraction
 
-The Platform offers an autonomous extraction feature ("Autonomous Extraction") that allows Builders to enable continuous, hands-off generation of Learnings from their AI session transcripts. When enabled, supported client integrations transmit redacted session transcripts to Auxilo's `/extract` endpoint, where Auxilo's extraction pipeline analyzes the transcript and publishes qualifying Learnings to the catalog under the Builder's account. A current list of supported client integrations is maintained at https://auxilo.io/legal/supported-clients.
+The Platform offers an autonomous extraction feature ("Autonomous Extraction") that allows Builders to enable continuous, hands-off generation of Learnings from their AI session transcripts. When enabled, the supported client integration processes each session transcript locally on the Builder's machine: it applies a client-side redaction pass, runs the extraction step through the Builder's own model client under the Builder's own agreement with their model provider, and submits only the resulting draft Learnings to Auxilo (`POST /learn`), where they are held in the Builder's own review queue until the Builder publishes them. Session transcripts, raw or redacted, are not transmitted to Auxilo. An optional server-side extraction path exists in Auxilo's software but is disabled and not in operation; if it is ever activated, these Terms and the Privacy Policy will be updated before use. A current list of supported client integrations is maintained at https://auxilo.io/legal/supported-clients.
 
 **(a) Default behavior and trigger modes.** Autonomous Extraction is the Platform's default contribution mechanism for users who activate it. Builders may select among three trigger modes:
 
@@ -208,9 +208,9 @@ A Builder may change trigger modes or disable Autonomous Extraction at any time 
 
 **(b) Initial consent and continued use.** Autonomous Extraction is disabled by default and is activated only by an affirmative Builder action. At the moment of activation, the Builder's consent to the terms of this Section 5.9.3 is recorded in a durable, versioned consent log retained by Auxilo for the life of the account plus three (3) years. Subsequent updates to these Terms governing Autonomous Extraction take effect under the change-of-terms mechanism in Section 17, and the Builder's continued use of the feature after the effective date of any update constitutes acceptance of the updated terms. Auxilo will provide notice of material changes in the manner described in Section 17.
 
-**(c) Builder responsibility for transcript content; Auxilo compensating controls.** The Builder is solely responsible for the contents of any session transcript submitted under Autonomous Extraction, including any personally identifiable information, credentials, third-party data, or confidential information contained therein. The representations and warranties in Sections 5.7 and 5.8 apply to all transcripts submitted via Autonomous Extraction with the same force as if the Builder had manually uploaded them. As a compensating control and not as a substitute for Builder responsibility, Auxilo applies (i) a client-side redaction pass before transmission, (ii) a server-side sensitivity rescan on receipt, and (iii) a Platform-defined category allowlist constraining the topics on which Learnings may be autonomously published. These controls are reasonable precautions and not a guarantee.
+**(c) Builder responsibility for transcript content; Auxilo compensating controls.** The Builder is solely responsible for the contents of any session transcript processed under Autonomous Extraction and of every Learning derived from it, including any personally identifiable information, credentials, third-party data, or confidential information contained therein. The representations and warranties in Sections 5.7 and 5.8 apply to all Learnings submitted via Autonomous Extraction with the same force as if the Builder had submitted them manually. As a compensating control and not as a substitute for Builder responsibility, Auxilo applies (i) a client-side redaction pass before any draft Learning is submitted, (ii) a server-side sensitivity screen on each submitted Learning (Auxilo does not receive transcripts and therefore does not screen them), and (iii) a Platform-defined category allowlist constraining the topics on which Learnings may be autonomously published. These controls are reasonable precautions and not a guarantee.
 
-**(d) AI subprocessor.** Auxilo processes Autonomous Extraction transcripts using one or more third-party large language model providers acting as Auxilo's subprocessors. At the effective date of these Terms, the sole such subprocessor is **Anthropic, PBC**, accessed via the Claude API. Auxilo may add, replace, or remove subprocessors over time and will maintain a current list in the Privacy Policy and at https://auxilo.io/legal/subprocessors. By enabling Autonomous Extraction, the Builder authorizes Auxilo to transmit redacted transcript content to its current subprocessor(s) for the sole purpose of Learning extraction.
+**(d) Model processing and subprocessors.** The extraction step runs through the Builder's own model client under the Builder's own agreement with their model provider; Auxilo does not transmit transcript content to any subprocessor. Auxilo uses a third-party large language model provider, acting as Auxilo's subprocessor, only for automated sensitivity screening of submitted Learning text before publication; at the effective date of these Terms that subprocessor is **Anthropic, PBC**, accessed via the Claude API. Auxilo may add, replace, or remove subprocessors over time and will maintain a current list in the Privacy Policy and at https://auxilo.io/legal/subprocessors.
 
 **(e) Kill-switch and revocation.** A Builder may disable Autonomous Extraction at any time, by either (1) removing the local activation sentinel on the machine running the Builder's client, or (2) toggling Autonomous Extraction off in the Builder's account settings on auxilo.io. Either action halts further transmission of new transcripts and revokes Auxilo's authorization to process additional transcripts under this subsection. Disablement does not affect Learnings already published, the validity of Consumer unlocks already completed, or earnings already accrued. The retraction right in Section 5.9.4 governs removal of already-published Learnings.
 
@@ -218,9 +218,9 @@ A Builder may change trigger modes or disable Autonomous Extraction at any time 
 
 #### 5.9.4 Retraction Right; No Clawback of Completed Unlocks
 
-**(a) Seven-day retraction window.** A Builder may retract any Learning published via Autonomous Extraction for a period of seven (7) calendar days following its publication date. Retraction is effected by request through the Platform's catalog management interface or by email to hello@auxilo.io identifying the Learning. Upon a valid retraction request, Auxilo will remove the Learning from public discovery, search results, and the catalog API within a commercially reasonable time.
+**(a) Seven-day retraction window.** A Builder may retract any Learning they published, however it was submitted, for a period of seven (7) calendar days following its publication (approval) date. Retraction is effected by request through the Platform's catalog management interface or by email to hello@auxilo.io identifying the Learning. Upon a valid retraction request, Auxilo will remove the Learning from public discovery, search results, and the catalog API within a commercially reasonable time.
 
-**(b) After the retraction window.** Following the seven-day window, autonomously-published Learnings are subject to the same removal mechanisms as any other published Learning, including Auxilo's content moderation and enforcement rights under Section 10 and the notice-and-takedown procedure in our [DMCA Copyright Policy](/dmca), which is incorporated into these Terms.
+**(b) After the retraction window.** Following the seven-day window, published Learnings are subject to the same removal mechanisms as any other published Learning, including Auxilo's content moderation and enforcement rights under Section 10 and the notice-and-takedown procedure in our [DMCA Copyright Policy](/dmca), which is incorporated into these Terms.
 
 **(c) No clawback; no refund.** Retraction removes a Learning from the catalog on a forward-going basis only. It does **not** reverse, refund, or unwind any unlock transaction completed prior to retraction. Consumers who unlocked the Learning before retraction retain the perpetual license described in Section 5.3 and Section 6.4. Builder earnings already accrued from pre-retraction unlocks remain payable on the normal settlement schedule and are not subject to clawback.
 
@@ -261,7 +261,7 @@ Nothing in this Section 5.10 modifies the independent-contractor relationship in
 
 This Section 5.10 applies to all Builder Share payments across the rails Auxilo supports, under whichever settlement flow is in effect at the time of the unlock.
 
-**(a) x402 / USDC rail — custodial flow (the currently-operated default).** Where a Consumer pays in USDC via the x402 protocol and settlement is directed to Auxilo's platform wallet, Auxilo receives the full unlock amount as your collection agent as to the Builder Share portion, and in its own right as to the platform fee. Auxilo's receipt of the Builder Share into the platform wallet is payment to you under Section 5.10.2, and Auxilo thereafter holds the Builder Share as your debtor under Section 5.10.3 until settlement to your verified wallet under Section 5.6. This custodial flow is the rail currently in operation.
+**(a) x402 / USDC rail — custodial flow (the default; withdrawals paused during migration).** Where a Consumer pays in USDC via the x402 protocol and settlement is directed to Auxilo's platform wallet, Auxilo receives the full unlock amount as your collection agent as to the Builder Share portion, and in its own right as to the platform fee. Auxilo's receipt of the Builder Share into the platform wallet is payment to you under Section 5.10.2, and Auxilo thereafter holds the Builder Share as your debtor under Section 5.10.3 until settlement to your verified wallet under Section 5.6. This custodial flow is the default rail. Withdrawals on it are paused while Auxilo migrates settlement to the direct flow in (b); accrued Builder Shares remain payable and the current state is shown at https://auxilo.io/status.
 
 **(b) x402 / USDC rail — direct-settlement flow via the Auxilo Split Router (buyer-attested receive path only).** Where, and only where, an unlock is settled through the Auxilo Split Router's buyer-attested receive path — a settlement in which the Builder Share destination and split are cryptographically bound to the authorization the Consumer signed (an on-chain contract that, in a single transaction, transfers the Builder Share directly to your verified wallet and the platform fee to Auxilo's fee wallet) — the Builder Share is settled directly to your verified wallet and does not enter an Auxilo-controlled address on that path. On that buyer-attested receive path, receipt by your wallet is receipt by you, and the Consumer's obligation is extinguished at that on-chain receipt.
 
@@ -686,4 +686,4 @@ Section headings are for convenience and reference only and shall not affect the
 
 ---
 
-*These Terms of Service were last updated on July 11, 2026. Current amendment: 2026-07-04-payee-agency-a1.*
+*These Terms of Service were last updated on September 5, 2026 (descriptive corrections to Sections 4.1, 4.3, 5.5, 5.6, 5.9.3 and 5.10.4 so the text matches the Platform as operated; no new obligations). Current amendment: 2026-07-04-payee-agency-a1.*

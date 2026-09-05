@@ -2603,8 +2603,8 @@
     },
     "/extract": {
       "post": {
-        "summary": "Server-side autonomous extraction (P2.1a)",
-        "description": "Processes a scrubbed session transcript through the server-side extraction pipeline: auth verification, consent check, OFAC screening, server-side sensitivity rescan, LLM extraction via Anthropic, quality gate, and catalog publication. Requires X-API-Key auth. Account must have autonomous_extraction_mode != 'off' and valid consent.",
+        "summary": "Server-side extraction \u2014 DISABLED (answers 410)",
+        "description": "Disabled. Extraction runs client-side: the supported client redacts the session transcript locally, runs the extraction step through the Builder's own model, and submits draft learnings to POST /learn, where they wait in the Builder's review queue. This endpoint processes nothing and answers 410 with code extraction_client_side; it is retained so stale clients receive a machine-readable redirect. Session transcripts, raw or redacted, are not transmitted to Auxilo.",
         "operationId": "extractLearnings",
         "tags": [
           "Extraction"
@@ -2691,6 +2691,7 @@
           }
         },
         "responses": {
+          "410": {"description": "Server-side extraction is disabled; code extraction_client_side. Extract locally and submit draft learnings to POST /learn. This is the response the endpoint gives today; the 200 schema documents the dormant path."},
           "200": {
             "description": "Extraction completed",
             "content": {
