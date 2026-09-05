@@ -677,7 +677,7 @@ async function runAnchoredJudge(candidates, indexState, opts = {}) {
  * source ids — and is the authority; a new adapter or hook client that is not
  * added here turns CI red.
  */
-const EXTRACTABLE_SOURCES = new Set(Object.freeze([
+const EXTRACTABLE_SOURCE_IDS = Object.freeze([
   'antigravity',
   'claude-code',
   'cline',
@@ -690,7 +690,27 @@ const EXTRACTABLE_SOURCES = new Set(Object.freeze([
   'openclaw',
   'roo-code',
   'windsurf',
-]));
+]);
+
+// Gate-A 2026-09-05: the exported set is IMMUTABLE. It stays a real Set (same
+// name, `.has()` / iteration / `instanceof Set` unchanged) but its own
+// add/delete/clear shadow the prototype's and throw, so no importer can widen
+// or narrow the allowlist at runtime — the frozen id array above is the only
+// source and the closure test is the only authority.
+function immutableSet(ids) {
+  const set = new Set(ids);
+  const refuse = (op) => function () {
+    throw new TypeError(`EXTRACTABLE_SOURCES is immutable (${op} refused)`);
+  };
+  Object.defineProperties(set, {
+    add: { value: refuse('add'), writable: false, configurable: false, enumerable: false },
+    delete: { value: refuse('delete'), writable: false, configurable: false, enumerable: false },
+    clear: { value: refuse('clear'), writable: false, configurable: false, enumerable: false },
+  });
+  return Object.freeze(set);
+}
+
+const EXTRACTABLE_SOURCES = immutableSet(EXTRACTABLE_SOURCE_IDS);
 
 async function extractLocally(transcript, sourceType, opts = {}) {
   if (sourceType && !EXTRACTABLE_SOURCES.has(sourceType)) {
@@ -804,7 +824,7 @@ async function extractLocally(transcript, sourceType, opts = {}) {
 }
 
 module.exports = {
-  extractLocally, extractWithClaudeCode, checkClaudeAuthStatus, EXTRACTABLE_SOURCES,
+  extractLocally, extractWithClaudeCode, checkClaudeAuthStatus, EXTRACTABLE_SOURCES, EXTRACTABLE_SOURCE_IDS,
   parseLearnings, parseExtractionOutput, resolveClaudeBin,
   CATEGORIES, PRIVATE_CATEGORIES, RETIRED_CATEGORIES,
   EXTRACTION_PROMPT, buildExtractionPrompt, scoreExtractionEnabled,

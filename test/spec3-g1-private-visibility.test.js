@@ -171,8 +171,12 @@ describe('SPEC3-G1 private learnings acceptance pins', () => {
     assert.match(listing, /visibility:\s*learning\.visibility === 'private' \? 'private' : 'public'/);
     const schema = OPENAPI.paths['/account/learnings'].get.responses['200'].content['application/json'].schema;
     const row = schema.properties.learnings.items;
-    assert.deepEqual(Object.keys(row.properties).sort(),
+    // Seven required metadata fields; the three OPTIONAL clean-lane stamps
+    // (Gate-A 2026-09-05) are documented but never required.
+    assert.deepEqual([...row.required].sort(),
       ['category', 'created_at', 'id', 'status', 'tags', 'title', 'visibility']);
+    assert.deepEqual(Object.keys(row.properties).sort(),
+      ['category', 'created_at', 'id', 'published_via', 'retractable_until', 'standing_consent_version', 'status', 'tags', 'title', 'visibility']);
     assert.equal(row.additionalProperties, false);
   });
 

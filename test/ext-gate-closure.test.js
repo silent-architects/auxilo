@@ -23,7 +23,7 @@ const path = require('node:path');
 
 const runner = require('../scripts/runner.js');
 const { clientRegistry } = require('../lib/installer.js');
-const { extractLocally, EXTRACTABLE_SOURCES } = require('../scripts/extract-local.js');
+const { extractLocally, EXTRACTABLE_SOURCES, EXTRACTABLE_SOURCE_IDS } = require('../scripts/extract-local.js');
 
 const sorted = (xs) => [...xs].sort();
 
@@ -49,6 +49,20 @@ describe('EXT-GATE — EXTRACTABLE_SOURCES closure', () => {
     const expected = expectedSourceIds();
     assert.ok(expected.length >= 12, `expected at least 12 live ids, got ${expected.length}`);
     assert.deepStrictEqual(sorted(EXTRACTABLE_SOURCES), expected);
+  });
+
+  it('the exported set is immutable: add/delete/clear throw, size stays 12, the id array is frozen (Gate-A 2026-09-05)', () => {
+    assert.equal(EXTRACTABLE_SOURCES.size, 12);
+    assert.throws(() => EXTRACTABLE_SOURCES.add('evil'), TypeError);
+    assert.throws(() => EXTRACTABLE_SOURCES.delete('claude-code'), TypeError);
+    assert.throws(() => EXTRACTABLE_SOURCES.clear(), TypeError);
+    assert.equal(EXTRACTABLE_SOURCES.size, 12);
+    assert.ok(!EXTRACTABLE_SOURCES.has('evil'));
+    assert.ok(EXTRACTABLE_SOURCES.has('claude-code'));
+    assert.ok(EXTRACTABLE_SOURCES instanceof Set, 'still a real Set (.has / iteration semantics unchanged)');
+    assert.ok(Object.isFrozen(EXTRACTABLE_SOURCE_IDS));
+    assert.throws(() => { EXTRACTABLE_SOURCE_IDS.push('evil'); }, TypeError);
+    assert.deepStrictEqual(sorted(EXTRACTABLE_SOURCES), sorted(EXTRACTABLE_SOURCE_IDS));
   });
 
   it('every allowlisted id reaches invokeModel (no "not implemented" skip)', async () => {

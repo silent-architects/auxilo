@@ -120,6 +120,22 @@ describe('SCREEN-MODEL-CONFIG: model_config.json resolver', () => {
       { model: DEFAULT_MODEL, fallbacks: [], max_attempts: 1, source: 'default' });
   });
 
+  it('caches only a SUCCESSFUL parse: a missing file is not memoized, so a file created afterwards is read on the next resolve (Gate-A 2026-09-05)', () => {
+    const p = path.join(tmpDir, 'appears-later.json');
+    // 1. first read fails (missing file) → default, and NOT cached
+    assert.deepEqual(resolveModelConfig('sensitivity_screen', { configPath: p }),
+      { model: DEFAULT_MODEL, fallbacks: [], max_attempts: 1, source: 'default' });
+    // 2. file then created → the very next resolve reads it (no clearModelConfigCache() in between)
+    fs.writeFileSync(p, JSON.stringify({ sensitivity_screen: { model: 'late-primary', fallbacks: ['late-fallback'], max_attempts: 2 } }));
+    assert.deepEqual(resolveModelConfig('sensitivity_screen', { configPath: p }),
+      { model: 'late-primary', fallbacks: ['late-fallback'], max_attempts: 2, source: 'config' });
+    // 3. a successful parse IS cached: rewriting the file is not observed until the cache is cleared
+    fs.writeFileSync(p, JSON.stringify({ sensitivity_screen: { model: 'rewritten' } }));
+    assert.equal(resolveModelConfig('sensitivity_screen', { configPath: p }).model, 'late-primary');
+    clearModelConfigCache();
+    assert.equal(resolveModelConfig('sensitivity_screen', { configPath: p }).model, 'rewritten');
+  });
+
   it('caps max_attempts at the number of distinct models and dedups the fallback list', () => {
     const p = writeConfig(tmpDir, 'caps.json', {
       sensitivity_screen: { model: 'a', fallbacks: ['a', 'b', 'b', 'c', '', 7], max_attempts: 10 },
@@ -134,18 +150,19 @@ describe('SCREEN-MODEL-CONFIG: model_config.json resolver', () => {
 });
 
 describe('SCREEN-MODEL-CONFIG: retryable provider error classification', () => {
-  it('treats 404 / 429 / 5xx / timeout as retryable', () => {
+  it('treats 404 / 429 / 5xx as retryable', () => {
     assert.equal(isRetryableProviderError(apiError(404)), true);
     assert.equal(isRetryableProviderError(apiError(429)), true);
     assert.equal(isRetryableProviderError(apiError(500)), true);
     assert.equal(isRetryableProviderError(apiError(502)), true);
     assert.equal(isRetryableProviderError(apiError(529)), true);
-    assert.equal(isRetryableProviderError(abortError()), true);
     // message-only errors (no .status) are classified from the API-error text
     assert.equal(isRetryableProviderError(new Error('Anthropic API error 503: overloaded')), true);
   });
 
-  it('treats everything else as non-retryable', () => {
+  it('treats everything else as non-retryable — including a timeout (Gate-A 2026-09-05: no hot-path latency doubling)', () => {
+    assert.equal(isRetryableProviderError(abortError()), false);
+    assert.equal(isRetryableProviderError(new Error('The operation was aborted')), false);
     assert.equal(isRetryableProviderError(apiError(400)), false);
     assert.equal(isRetryableProviderError(apiError(401)), false);
     assert.equal(isRetryableProviderError(apiError(403)), false);
@@ -185,7 +202,7 @@ describe('SCREEN-MODEL-CONFIG: classifySensitivityLLM fallback + fail-closed con
     assert.equal(verdict.reason, 'generic public tooling');
   });
 
-  for (const [label, make] of [['429', () => apiError(429)], ['503', () => apiError(503)], ['timeout', abortError]]) {
+  for (const [label, make] of [['429', () => apiError(429)], ['503', () => apiError(503)]]) {
     it(`one retryable error (${label}) -> exactly one fallback attempt`, async () => {
       const calls = [];
       const verdict = await classifySensitivityLLM('t', 'b', [], {
@@ -196,6 +213,18 @@ describe('SCREEN-MODEL-CONFIG: classifySensitivityLLM fallback + fail-closed con
       assert.equal(verdict.sensitive, false);
     });
   }
+
+  it('timeout on the primary -> NO fallback attempt; fails closed immediately with the byte-identical timeout reason (Gate-A 2026-09-05)', async () => {
+    const calls = [];
+    const verdict = await classifySensitivityLLM('t', 'b', [], {
+      ...OPTS,
+      // a fallback IS available in the chain (shipped config: one fallback, max_attempts 2)
+      llmCall: async (a) => { calls.push(a.model); if (calls.length === 1) throw abortError(); return CLEAN_VERDICT; },
+    });
+    assert.deepEqual(calls, ['claude-haiku-4-5'], 'a timeout must not consume the fallback (would double hot-path latency)');
+    assert.deepEqual(verdict, { sensitive: true, reason: 'llm timeout after 6000ms (fail-closed)', confidence: 1 });
+    assert.deepEqual(Object.keys(verdict), ['sensitive', 'reason', 'confidence']);
+  });
 
   it('non-retryable error -> fails closed immediately with the EXISTING shape (no fallback attempt)', async () => {
     const calls = [];
@@ -234,12 +263,12 @@ describe('SCREEN-MODEL-CONFIG: classifySensitivityLLM fallback + fail-closed con
     });
   });
 
-  it('timeout on both models -> the pre-existing timeout reason string, same shape', async () => {
+  it('timeout with a custom timeoutMs -> one call, the pre-existing timeout reason string carries that budget, same shape', async () => {
     const calls = [];
     const verdict = await classifySensitivityLLM('t', 'b', [], {
       ...OPTS, timeoutMs: 1234, llmCall: async (a) => { calls.push(a.model); throw abortError(); },
     });
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 1, 'timeouts are not retried');
     assert.deepEqual(verdict, { sensitive: true, reason: 'llm timeout after 1234ms (fail-closed)', confidence: 1 });
   });
 

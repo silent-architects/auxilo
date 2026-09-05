@@ -1475,7 +1475,11 @@
     el.appendChild(loading);
 
     var all = [];
-    function page(offset) {
+    // Gate-A 2026-09-05: recursive paging is capped at MAX_PAGES and stops
+    // early when a page comes back short (fewer than PAGE_LIMIT rows).
+    var PAGE_LIMIT = 500;
+    var MAX_PAGES = 4;
+    function page(offset, pageNo) {
       return apiFetch('/account/learnings?status=approved&visibility=public&limit=500&offset=' + offset)
         .then(parseJsonResponse)
         .then(function (res) {
@@ -1483,11 +1487,11 @@
           var items = res.data.learnings || [];
           all = all.concat(items);
           var next = offset + items.length;
-          if (items.length > 0 && next < (res.data.total || 0)) return page(next);
+          if (items.length >= PAGE_LIMIT && pageNo + 1 < MAX_PAGES && next < (res.data.total || 0)) return page(next, pageNo + 1);
           return all;
         });
     }
-    page(0)
+    page(0, 0)
       .then(function (rows) { renderStandingConsentList(AuxiloCleanLane.selectStandingConsentItems(rows, Date.now())); })
       .catch(function (err) {
         el.textContent = '';
