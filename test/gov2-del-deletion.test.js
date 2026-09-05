@@ -101,6 +101,24 @@ describe('GOV2-DEL deletion routes', { timeout: 180_000 }, () => {
     if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  it('accepts the confirmation page\'s own form encoding (the human path), not only JSON', async () => {
+    // The GET page posts application/x-www-form-urlencoded. The S-3 body-cap
+    // middleware has already consumed the body once; the route must still parse
+    // the form. A dummy token proves parsing without consuming a real one:
+    // parse OK -> 401 (invalid token); parse failure -> 400.
+    const dummy = 'A'.repeat(43);
+    const form = await fetch(`${baseUrl}/account/delete-confirm`, {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ method: 'email', token: dummy }).toString(),
+    });
+    assert.equal(form.status, 401, `form-encoded confirm must parse (got ${form.status}: ${await form.text()})`);
+    const json = await fetch(`${baseUrl}/account/delete-confirm`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ method: 'email', token: dummy }),
+    });
+    assert.equal(json.status, 401);
+  });
+
   it('keeps wallet-only requests non-enumerating until a delete-account proof', async (t) => {
     if (skipReason) return t.skip(skipReason);
     const response = await fetch(`${baseUrl}/account/delete-request`, {

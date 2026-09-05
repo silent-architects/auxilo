@@ -3959,7 +3959,12 @@ app.post('/account/delete-confirm', async (c) => {
   let body;
   const contentType = c.req.header('content-type') || '';
   try {
-    body = contentType.includes('application/json') ? await c.req.json() : await c.req.parseBody();
+    // The S-3 body-cap middleware has already read the body once; Hono serves
+    // json()/text() from its body cache but cannot rebuild formData() (the
+    // content type is lost), so decode the page's urlencoded form from text().
+    body = contentType.includes('application/json')
+      ? await c.req.json()
+      : Object.fromEntries(new URLSearchParams(await c.req.text()));
   } catch {
     return c.json({ error: 'Invalid confirmation body' }, 400);
   }
