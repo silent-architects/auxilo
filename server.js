@@ -7623,6 +7623,22 @@ app.delete('/learn/:id', async (c) => {
   const learningId = c.req.param('id');
   const reason = (new URL(c.req.url, 'http://localhost')).searchParams.get('reason');
 
+  // CLEAN-LANE-FLIP Phase A2: the dashboard's Retract button calls this route
+  // with its session JWT (public/dashboard-clean-lane.js). A Bearer credential
+  // that is not an `axl_` API key (validateApiKey rejects every other prefix)
+  // resolves through the same session-or-key resolver the self-review routes
+  // use (resolveSelfReviewAccount → lib/accounts.js resolveAccountFromRequest:
+  // contribute scope, suspended accounts refused). Everything else takes the
+  // pre-existing API-key path below, unchanged. Ownership below is the same
+  // contributor_account_id check for both paths.
+  let accountId = null;
+  const sessionAuthHeader = c.req.header('Authorization') || '';
+  const sessionBearer = sessionAuthHeader.startsWith('Bearer ') ? sessionAuthHeader.slice(7) : null;
+  if (!c.req.header('X-API-Key') && sessionBearer && !sessionBearer.startsWith('axl_')) {
+    const sessionAuth = await resolveSelfReviewAccount(c, 'contribute');
+    if (!sessionAuth.accountId) return c.json({ error: sessionAuth.error }, sessionAuth.status);
+    accountId = sessionAuth.accountId;
+  } else {
   // Auth: API key required
   let apiKey = c.req.header('X-API-Key');
   if (!apiKey) {
@@ -7639,7 +7655,8 @@ app.delete('/learn/:id', async (c) => {
     return c.json({ error: `API key scope '${keyResult.scope}' is insufficient (requires contribute)` }, 403);
   }
 
-  const accountId = keyResult.accountId;
+  accountId = keyResult.accountId;
+  }
 
   // GOV-3: suspended accounts cannot retract (this route uses neither middleware).
   const retractAccount = loadAccounts()[accountId];
@@ -8166,6 +8183,18 @@ app.get('/account/learnings', requireSessionOrApiKey('read'), (c) => {
       status: learning.status || 'approved',
       visibility: learning.visibility === 'private' ? 'private' : 'public',
       created_at: learning.created_at || null,
+      // CLEAN-LANE-FLIP Phase A2: the SPEC3 C1 standing-consent publish stamps
+      // (server.js /learn: published_via / standing_consent_version /
+      // retractable_until), exposed ONLY when present on the row so the
+      // dashboard card can list "published under standing consent" items and
+      // their retraction deadline. Still metadata-only: no body, no
+      // screen/ops fields (platform_hold_reasons, sensitivity_*,
+      // injection_flags, ...) — the projection stays an explicit allow-list.
+      ...(learning.published_via != null && { published_via: learning.published_via }),
+      ...(learning.standing_consent_version != null && {
+        standing_consent_version: learning.standing_consent_version,
+      }),
+      ...(learning.retractable_until != null && { retractable_until: learning.retractable_until }),
     }));
 
   return c.json({
