@@ -59,5 +59,13 @@
     "retraction_window_days": 7,
     "idempotency_ttl_hours": 24,
     "consent_version": "2026-04-14"
+  },
+  "sensitivity_screen": {
+    "_note": "SCREEN-MODEL-CONFIG \u2014 the GOV-3 sensitivity screen (the one live inference call). Primary model + ordered fallbacks; the next fallback is tried once on a retryable provider error (404/429/5xx/timeout). Any other error, or exhaustion, fails CLOSED (held for review). Unreadable config \u2192 hardcoded last-resort default in lib/content-sensitivity-llm.js.",
+    "model": "claude-haiku-4-5",
+    "fallbacks": [
+      "claude-sonnet-4-5"
+    ],
+    "max_attempts": 2
   }
 }
