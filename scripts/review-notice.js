@@ -24,6 +24,13 @@
  *   - Count source: GET /account/pending/summary with the credentials from
  *     ~/.auxilo/credentials.json; 3.5s abort so session start is never held
  *     hostage by a slow network.
+ *   - Standing-consent rollup (CLEAN-LANE-FLIP Phase A, SPEC3-C1 §4.3): ONE
+ *     more count-only line when the LOCAL submitted-learnings log
+ *     (~/.auxilo/extracted-index.jsonl, lib/extraction-index.js) holds rows
+ *     stamped published_via = clean_lane_standing_consent since the last
+ *     notice. Zero platform cost; reaches the human in their own client.
+ *     Suppression and the last-notice stamp are shared with the held-count
+ *     line (one state file, one 4h window).
  *
  * Self-contained (fs/path/os + global fetch) — ships in RUNNER_STACK to
  * ~/.auxilo/bin/scripts/ and must not require anything outside that layout
@@ -86,6 +93,61 @@ function renderNotice(count) {
   return `Auxilo: ${count} learning(s) held for your review — run auxilo_review (MCP) or \`npx auxilo review\`.`;
 }
 
+/**
+ * Stamp lib/clean-lane.js writes on lane publishes (PUBLISHED_VIA_CLEAN_LANE).
+ * A literal here because this script is self-contained (RUNNER_STACK layout);
+ * test/clean-lane-phase-a.test.js pins the two byte-equal.
+ */
+const PUBLISHED_VIA_CLEAN_LANE = 'clean_lane_standing_consent';
+
+/** Local submitted-learnings log (lib/extraction-index.js DEFAULT_INDEX_PATH). */
+function submittedIndexPath(homeDir) {
+  return path.join(auxiloDir(homeDir), 'extracted-index.jsonl');
+}
+
+/** Read the local log; absent/unreadable → []; malformed lines skipped. */
+function readSubmittedRows(homeDir) {
+  let raw;
+  try {
+    raw = fs.readFileSync(submittedIndexPath(homeDir), 'utf-8');
+  } catch {
+    return [];
+  }
+  const rows = [];
+  for (const line of String(raw).split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const row = JSON.parse(trimmed);
+      if (row && typeof row === 'object') rows.push(row);
+    } catch { /* skip */ }
+  }
+  return rows;
+}
+
+/**
+ * Pure: how many local rows were published under standing consent AFTER
+ * `sinceIso` (the last notice stamp). No stamp → every such row counts.
+ */
+function countStandingConsentPublishes(rows, sinceIso) {
+  const since = sinceIso ? Date.parse(sinceIso) : NaN;
+  let n = 0;
+  for (const row of rows || []) {
+    if (!row || row.published_via !== PUBLISHED_VIA_CLEAN_LANE) continue;
+    if (Number.isFinite(since)) {
+      const t = Date.parse(row.submitted_at);
+      if (!Number.isFinite(t) || t <= since) continue;
+    }
+    n += 1;
+  }
+  return n;
+}
+
+/** The rollup line. Count only — same contract as renderNotice. */
+function renderStandingConsentNotice(count) {
+  return `Auxilo: ${count} learning(s) auto-published under your standing consent (retract within 7 days: npx auxilo review).`;
+}
+
 /** Load credentials; null when absent/malformed/keyless. */
 function readCredentials(homeDir) {
   try {
@@ -125,18 +187,26 @@ async function main() {
   const creds = readCredentials(homeDir);
   if (!creds) return;
 
-  if (!shouldNotify(readState(homeDir))) return;
+  const state = readState(homeDir);
+  if (!shouldNotify(state)) return;
 
   const count = await fetchPendingCount(creds);
-  if (count == null || count <= 0) return;
+  const autoPublished = countStandingConsentPublishes(readSubmittedRows(homeDir), state.last_notice_at);
 
-  process.stdout.write(renderNotice(count) + '\n');
+  const lines = [];
+  if (count != null && count > 0) lines.push(renderNotice(count));
+  if (autoPublished > 0) lines.push(renderStandingConsentNotice(autoPublished));
+  if (lines.length === 0) return;
+
+  process.stdout.write(lines.join('\n') + '\n');
   writeState(homeDir);
 }
 
 module.exports = {
   shouldNotify, renderNotice, readState, writeState, readCredentials,
   fetchPendingCount, NOTICE_SUPPRESSION_MS, FETCH_TIMEOUT_MS,
+  PUBLISHED_VIA_CLEAN_LANE, submittedIndexPath, readSubmittedRows,
+  countStandingConsentPublishes, renderStandingConsentNotice,
 };
 
 if (require.main === module) {
