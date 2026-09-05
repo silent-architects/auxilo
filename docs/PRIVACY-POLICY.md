@@ -93,7 +93,7 @@ We use the information we collect for the following specific purposes:
 
 **Operating the Platform.** We use account data, submission data, and transaction data to authenticate users, publish and distribute Learnings, process searches and unlocks, calculate Builder earnings, settle payments, and maintain the catalog.
 
-**Processing Payments.** We use wallet addresses, transaction records, credit balance data, and x402 payment headers to facilitate micropayments, process credit pack transactions, calculate the 70/30 revenue split, and settle Builder payouts.
+**Processing Payments.** We use wallet addresses, transaction records, credit balance data, and x402 payment headers to facilitate micropayments, process credit pack transactions, calculate the Builder Share (70% of direct unlocks, 60% of unlocks surfaced by Auxilo search), and settle Builder payouts.
 
 **Security and Abuse Prevention.** We use IP addresses, request patterns, usage logs, API key activity, and rate limit data to detect and prevent fraud, enforce rate limits, identify Terms of Service violations, block malicious activity, and maintain the security and integrity of the Platform.
 
