@@ -651,6 +651,48 @@
       <div id="payout-content" style="display:none"></div>
     </div>
 
+    <!-- Auto-publish clean learnings (SPEC3-C1 standing consent; CLEAN-LANE-FLIP Phase A).
+         Session-JWT only, same as the pending queue. While the server flag is off the
+         status route answers the catch-all 404 and this card shows one plain line. -->
+    <div class="dash-card">
+      <div class="dash-card-title">Auto-publish clean learnings</div>
+      <div id="clean-lane-loading" class="loading-text"><span class="spinner"></span>Loading...</div>
+      <div id="clean-lane-alert" class="alert" style="display:none;margin-bottom:12px"></div>
+      <div id="clean-lane-content" style="display:none">
+        <p id="clean-lane-unavailable" style="font-size:13px;color:var(--slate);line-height:1.6;display:none"></p>
+        <div id="clean-lane-frozen" class="alert alert-error" style="display:none;margin-bottom:12px"></div>
+        <div id="clean-lane-grant-form" style="display:none">
+          <p style="font-size:13px;color:var(--slate);margin-bottom:10px;line-height:1.6">
+            When this is on, a learning is published without waiting for your review only when all three hold: it was extracted by your own model, every server screen came back clean, and its quality score is at or above the threshold you set.
+          </p>
+          <p style="font-size:13px;color:var(--slate);margin-bottom:16px;line-height:1.6">
+            What is never auto-published: your first public learning (it waits for operator review), anything a screen flags, anything below your threshold, and anything after an auto-freeze. Every auto-published learning can be retracted for 7 days.
+          </p>
+          <label for="clean-lane-min-quality" style="display:block;font-size:13px;color:var(--ivory);margin-bottom:6px">Publish only when the quality score is at least</label>
+          <select id="clean-lane-min-quality" style="margin-bottom:16px;padding:6px 10px;border-radius:6px;background:rgba(255,255,255,0.05);color:var(--ivory);border:1px solid rgba(229,229,227,0.2);font-family:var(--sans);font-size:13px">
+            <option value="14">14</option>
+            <option value="15">15</option>
+            <option value="16" selected>16</option>
+            <option value="17">17</option>
+            <option value="18">18</option>
+            <option value="19">19</option>
+            <option value="20">20</option>
+          </select>
+          <label style="display:flex;align-items:flex-start;gap:10px;font-size:14px;color:var(--ivory);cursor:pointer;margin-bottom:16px">
+            <input type="checkbox" id="clean-lane-agree" style="margin-top:3px" onchange="onCleanLaneAgreeChange()">
+            <span id="clean-lane-affirmation">I understand and choose auto-publish for qualifying extracted learnings.</span>
+          </label>
+          <button class="btn btn-primary" id="clean-lane-grant-btn" onclick="grantCleanLane()" disabled>Turn on auto-publish</button>
+        </div>
+        <div id="clean-lane-on" style="display:none">
+          <p id="clean-lane-on-line" style="font-size:14px;color:var(--ivory);margin-bottom:12px;line-height:1.6"></p>
+          <button class="btn btn-ghost btn-sm" id="clean-lane-revoke-btn" onclick="revokeCleanLane()" style="margin-bottom:16px">Turn off</button>
+          <div style="font-size:13px;color:var(--ivory);margin-bottom:8px">Published under standing consent</div>
+          <div id="clean-lane-published"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Pending review queue -->
     <div class="dash-card">
       <div class="dash-card-title">Pending Review Queue <span id="pending-count-badge" class="count-badge" style="display:none">0</span></div>
@@ -680,6 +722,7 @@
 </div>
 
 <script src="/dashboard-review.js?v=1"></script>
+<script src="/dashboard-clean-lane.js?v=1"></script>
 <script>
 (function () {
   'use strict';
@@ -808,6 +851,7 @@
     loadApiKeys();
     loadPurchases();
     loadPendingBadge(); // auto-review: surface the pending count without a click
+    loadCleanLane();    // standing-consent card (404 while the flag is dark → one plain line)
     // Payout loads after earnings to know the balance
   }
 
@@ -1273,6 +1317,250 @@
         if (btn) { btn.disabled = false; btn.textContent = 'Withdraw'; }
         var a = document.getElementById('withdraw-alert');
         if (a) { a.textContent = 'Request failed. Check your connection.'; a.className = 'alert alert-error'; a.style.display = ''; }
+      });
+  }
+
+  // ── Auto-publish clean learnings (SPEC3-C1 standing consent) ─────
+  // CLEAN-LANE-FLIP Phase A. Same auth as the pending queue: the login
+  // session (Bearer JWT via apiFetch) — session-JWT only, no API key in the
+  // browser, so there is no agent-reachable enrollment path here. While the
+  // server flag is off GET /account/clean-lane answers the catch-all 404 and
+  // the card renders one plain line: never an error, never a control.
+  // ALL dynamic data rendered via textContent/createElement (file-wide rule).
+  // The affirmation sentence is READ FROM THE DOM label at submit time and
+  // never retyped in script; the consent version always comes from the GET.
+  // The checkbox is never pre-checked and never remembered across renders.
+
+  var _cleanLane = null; // last GET /account/clean-lane body
+
+  function parseJsonResponse(r) {
+    return r.json()
+      .catch(function () { return {}; })
+      .then(function (d) { return { ok: r.ok, status: r.status, data: d || {} }; });
+  }
+
+  function cleanLaneResetGrantForm() {
+    var box = document.getElementById('clean-lane-agree');
+    var btn = document.getElementById('clean-lane-grant-btn');
+    var sel = document.getElementById('clean-lane-min-quality');
+    if (box) box.checked = false;
+    if (btn) { btn.disabled = true; btn.textContent = 'Turn on auto-publish'; }
+    if (sel) sel.value = String(AuxiloCleanLane.DEFAULT_MIN_QUALITY);
+  }
+
+  window.onCleanLaneAgreeChange = function () {
+    var box = document.getElementById('clean-lane-agree');
+    var btn = document.getElementById('clean-lane-grant-btn');
+    if (btn) btn.disabled = !(box && box.checked);
+  };
+
+  function renderCleanLane(view, data) {
+    hide('clean-lane-loading');
+    show('clean-lane-content');
+    hide('clean-lane-unavailable');
+    hide('clean-lane-frozen');
+    hide('clean-lane-grant-form');
+    hide('clean-lane-on');
+    cleanLaneResetGrantForm();
+
+    if (view.state === AuxiloCleanLane.STATE_UNAVAILABLE) {
+      setText('clean-lane-unavailable', AuxiloCleanLane.NOT_AVAILABLE_TEXT);
+      show('clean-lane-unavailable');
+      return;
+    }
+    if (view.state === AuxiloCleanLane.STATE_ERROR) {
+      showAlert('clean-lane-alert', view.message, 'error');
+      return;
+    }
+    if (view.state === AuxiloCleanLane.STATE_ON) {
+      setText('clean-lane-on-line', AuxiloCleanLane.onStateLine(data));
+      show('clean-lane-on');
+      loadStandingConsentList();
+      return;
+    }
+    if (view.state === AuxiloCleanLane.STATE_FROZEN) {
+      setText('clean-lane-frozen', AuxiloCleanLane.frozenLine(view.freezeReason));
+      show('clean-lane-frozen');
+    }
+    show('clean-lane-grant-form');
+  }
+
+  function loadCleanLane() {
+    hideAlert('clean-lane-alert');
+    show('clean-lane-loading');
+    hide('clean-lane-content');
+    apiFetch('/account/clean-lane')
+      .then(parseJsonResponse)
+      .then(function (res) {
+        _cleanLane = res.ok ? res.data : null;
+        renderCleanLane(AuxiloCleanLane.viewState(res.status, res.data), res.data);
+      })
+      .catch(function () {
+        hide('clean-lane-loading');
+        show('clean-lane-content');
+        showAlert('clean-lane-alert', 'Request failed. Check your connection.', 'error');
+      });
+  }
+
+  window.grantCleanLane = function () {
+    var box = document.getElementById('clean-lane-agree');
+    var affEl = document.getElementById('clean-lane-affirmation');
+    var sel = document.getElementById('clean-lane-min-quality');
+    var btn = document.getElementById('clean-lane-grant-btn');
+    if (!box || !box.checked || !affEl || !_cleanLane) return;
+    hideAlert('clean-lane-alert');
+    if (btn) { btn.disabled = true; btn.textContent = 'Turning on...'; }
+
+    var body = AuxiloCleanLane.buildGrantBody({
+      consentVersion: _cleanLane.consent_version_current,
+      affirmationText: affEl.textContent, // the label IS the sentence; read, never retyped
+      minQuality: sel ? sel.value : undefined,
+    });
+    apiFetch('/account/clean-lane/grant', { method: 'POST', body: JSON.stringify(body) })
+      .then(parseJsonResponse)
+      .then(function (res) {
+        if (res.status === 409) {
+          // The consent version moved under us: reload and re-render the form.
+          loadCleanLane();
+          showAlert('clean-lane-alert', 'The consent text was updated. Please read it again and re-affirm.', 'info');
+          return;
+        }
+        if (!res.ok) {
+          showAlert('clean-lane-alert', res.data.error || 'Could not turn on auto-publish.', 'error');
+          if (btn) { btn.disabled = !box.checked; btn.textContent = 'Turn on auto-publish'; }
+          return;
+        }
+        loadCleanLane();
+      })
+      .catch(function () {
+        showAlert('clean-lane-alert', 'Request failed. Check your connection.', 'error');
+        if (btn) { btn.disabled = !box.checked; btn.textContent = 'Turn on auto-publish'; }
+      });
+  };
+
+  // Revoke is ONE click — no confirm dialog (turning it off must never be harder than turning it on).
+  window.revokeCleanLane = function () {
+    var btn = document.getElementById('clean-lane-revoke-btn');
+    hideAlert('clean-lane-alert');
+    if (btn) { btn.disabled = true; btn.textContent = 'Turning off...'; }
+    apiFetch('/account/clean-lane/revoke', { method: 'POST', body: '{}' })
+      .then(parseJsonResponse)
+      .then(function (res) {
+        if (!res.ok) {
+          showAlert('clean-lane-alert', res.data.error || 'Could not turn off auto-publish.', 'error');
+          if (btn) { btn.disabled = false; btn.textContent = 'Turn off'; }
+          return;
+        }
+        loadCleanLane();
+      })
+      .catch(function () {
+        showAlert('clean-lane-alert', 'Request failed. Check your connection.', 'error');
+        if (btn) { btn.disabled = false; btn.textContent = 'Turn off'; }
+      });
+  };
+
+  // The human-visible per-publish notice: every learning published under
+  // standing consent, newest first, with its retraction deadline and a
+  // Retract button while the window is open.
+  function loadStandingConsentList() {
+    var el = document.getElementById('clean-lane-published');
+    if (!el) return;
+    el.textContent = '';
+    var loading = document.createElement('div');
+    loading.className = 'loading-text';
+    var spin = document.createElement('span');
+    spin.className = 'spinner';
+    loading.appendChild(spin);
+    loading.appendChild(document.createTextNode('Loading...'));
+    el.appendChild(loading);
+
+    var all = [];
+    function page(offset) {
+      return apiFetch('/account/learnings?status=approved&visibility=public&limit=500&offset=' + offset)
+        .then(parseJsonResponse)
+        .then(function (res) {
+          if (!res.ok) throw new Error(res.data.error || 'load failed');
+          var items = res.data.learnings || [];
+          all = all.concat(items);
+          var next = offset + items.length;
+          if (items.length > 0 && next < (res.data.total || 0)) return page(next);
+          return all;
+        });
+    }
+    page(0)
+      .then(function (rows) { renderStandingConsentList(AuxiloCleanLane.selectStandingConsentItems(rows, Date.now())); })
+      .catch(function (err) {
+        el.textContent = '';
+        var p = document.createElement('div');
+        p.className = 'alert alert-error';
+        p.style.display = 'block';
+        p.textContent = 'Could not load the published list: ' + (err && err.message ? err.message : 'request failed');
+        el.appendChild(p);
+      });
+  }
+
+  function renderStandingConsentList(items) {
+    var el = document.getElementById('clean-lane-published');
+    if (!el) return;
+    el.textContent = '';
+    if (!items.length) {
+      var empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.textContent = 'No learnings published under standing consent yet.';
+      el.appendChild(empty);
+      return;
+    }
+    items.forEach(function (item) {
+      var row = document.createElement('div');
+      row.style.display = 'flex';
+      row.style.alignItems = 'center';
+      row.style.gap = '10px';
+      row.style.padding = '8px 0';
+      row.style.borderBottom = '1px solid rgba(229,229,227,0.08)';
+
+      var text = document.createElement('div');
+      text.style.flex = '1';
+      text.style.fontSize = '13px';
+      var title = document.createElement('div');
+      title.style.color = 'var(--ivory)';
+      title.textContent = item.title;
+      text.appendChild(title);
+      var meta = document.createElement('div');
+      meta.style.color = 'var(--slate)';
+      meta.textContent = item.retractable
+        ? 'Retractable until ' + item.retractable_until
+        : 'Retraction window closed' + (item.retractable_until ? ' (' + item.retractable_until + ')' : '');
+      text.appendChild(meta);
+      row.appendChild(text);
+
+      if (item.retractable) {
+        var btn = document.createElement('button');
+        btn.className = 'btn btn-danger btn-sm';
+        btn.textContent = 'Retract';
+        btn.onclick = function () { retractStandingConsentItem(item, btn); };
+        row.appendChild(btn);
+      }
+      el.appendChild(row);
+    });
+  }
+
+  function retractStandingConsentItem(item, btn) {
+    if (!window.confirm('Retract "' + item.title + '"? It leaves the public catalog now.')) return;
+    hideAlert('clean-lane-alert');
+    if (btn) { btn.disabled = true; btn.textContent = 'Retracting...'; }
+    apiFetch('/learn/' + encodeURIComponent(item.id) + '?reason=retract', { method: 'DELETE' })
+      .then(parseJsonResponse)
+      .then(function (res) {
+        if (!res.ok) {
+          showAlert('clean-lane-alert', res.data.error || 'Could not retract this learning.', 'error');
+          if (btn) { btn.disabled = false; btn.textContent = 'Retract'; }
+          return;
+        }
+        loadStandingConsentList();
+      })
+      .catch(function () {
+        showAlert('clean-lane-alert', 'Request failed. Check your connection.', 'error');
+        if (btn) { btn.disabled = false; btn.textContent = 'Retract'; }
       });
   }
 
