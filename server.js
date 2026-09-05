@@ -437,6 +437,77 @@ const queryLog = { total: 0, byCategory: {}, bySkill: {} };
 const DATA_DIR = path.join(__dirname, 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
+const WITHDRAWALS_FILE = path.join(DATA_DIR, 'withdrawals.jsonl');
+const RESERVATIONS_FILE = path.join(DATA_DIR, 'reservations.json');
+
+// WAL-TDZ: this block must be initialized BEFORE Startup Wiring — WAL recovery at module load calls appendSettlement → invalidateCachedSettlement.
+// ─── AU-7: In-Memory Cache (accounts + settlements) ─────────────────────────
+// Simple Map-based TTL cache — no external dependencies.
+// TTL: 60s for accounts, 30s for settlements.
+// Invalidation: clear relevant entry on write (create/update account, new settlement).
+
+const ACCOUNT_CACHE_TTL_MS  = 60 * 1000;  // 60 seconds
+const SETTLEMENT_CACHE_TTL_MS = 30 * 1000; // 30 seconds
+
+// Cache store: Map<key, { value, expiresAt }>
+const accountCache    = new Map();
+const settlementCache = new Map();
+
+// Cache counters (exposed via /stats)
+const cacheStats = {
+  accounts:    { hits: 0, misses: 0 },
+  settlements: { hits: 0, misses: 0 },
+};
+
+function cacheGet(store, key, statsKey) {
+  const entry = store.get(key);
+  if (!entry) { cacheStats[statsKey].misses++; return null; }
+  if (Date.now() > entry.expiresAt) {
+    store.delete(key);
+    cacheStats[statsKey].misses++;
+    return null;
+  }
+  cacheStats[statsKey].hits++;
+  return entry.value;
+}
+
+function cacheSet(store, key, value, ttlMs) {
+  store.set(key, { value, expiresAt: Date.now() + ttlMs });
+}
+
+function cacheInvalidate(store, key) {
+  store.delete(key);
+}
+
+// Convenience wrappers
+function getCachedAccount(accountId) {
+  return cacheGet(accountCache, accountId, 'accounts');
+}
+function setCachedAccount(accountId, data) {
+  cacheSet(accountCache, accountId, data, ACCOUNT_CACHE_TTL_MS);
+}
+function invalidateCachedAccount(accountId) {
+  cacheInvalidate(accountCache, accountId);
+}
+
+function getCachedSettlement(settlementId) {
+  return cacheGet(settlementCache, settlementId, 'settlements');
+}
+function setCachedSettlement(settlementId, data) {
+  cacheSet(settlementCache, settlementId, data, SETTLEMENT_CACHE_TTL_MS);
+}
+function invalidateCachedSettlement(settlementId) {
+  cacheInvalidate(settlementCache, settlementId);
+}
+
+// Sweep expired entries every 5 minutes (shared cleanup interval)
+const cacheCleanupInterval = setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of accountCache)    { if (now > v.expiresAt) accountCache.delete(k); }
+  for (const [k, v] of settlementCache) { if (now > v.expiresAt) settlementCache.delete(k); }
+}, 5 * 60 * 1000);
+cacheCleanupInterval.unref();
+
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
@@ -3313,73 +3384,6 @@ function matchLearnings(query, filters = {}) {
     }));
 }
 
-// ─── AU-7: In-Memory Cache (accounts + settlements) ─────────────────────────
-// Simple Map-based TTL cache — no external dependencies.
-// TTL: 60s for accounts, 30s for settlements.
-// Invalidation: clear relevant entry on write (create/update account, new settlement).
-
-const ACCOUNT_CACHE_TTL_MS  = 60 * 1000;  // 60 seconds
-const SETTLEMENT_CACHE_TTL_MS = 30 * 1000; // 30 seconds
-
-// Cache store: Map<key, { value, expiresAt }>
-const accountCache    = new Map();
-const settlementCache = new Map();
-
-// Cache counters (exposed via /stats)
-const cacheStats = {
-  accounts:    { hits: 0, misses: 0 },
-  settlements: { hits: 0, misses: 0 },
-};
-
-function cacheGet(store, key, statsKey) {
-  const entry = store.get(key);
-  if (!entry) { cacheStats[statsKey].misses++; return null; }
-  if (Date.now() > entry.expiresAt) {
-    store.delete(key);
-    cacheStats[statsKey].misses++;
-    return null;
-  }
-  cacheStats[statsKey].hits++;
-  return entry.value;
-}
-
-function cacheSet(store, key, value, ttlMs) {
-  store.set(key, { value, expiresAt: Date.now() + ttlMs });
-}
-
-function cacheInvalidate(store, key) {
-  store.delete(key);
-}
-
-// Convenience wrappers
-function getCachedAccount(accountId) {
-  return cacheGet(accountCache, accountId, 'accounts');
-}
-function setCachedAccount(accountId, data) {
-  cacheSet(accountCache, accountId, data, ACCOUNT_CACHE_TTL_MS);
-}
-function invalidateCachedAccount(accountId) {
-  cacheInvalidate(accountCache, accountId);
-}
-
-function getCachedSettlement(settlementId) {
-  return cacheGet(settlementCache, settlementId, 'settlements');
-}
-function setCachedSettlement(settlementId, data) {
-  cacheSet(settlementCache, settlementId, data, SETTLEMENT_CACHE_TTL_MS);
-}
-function invalidateCachedSettlement(settlementId) {
-  cacheInvalidate(settlementCache, settlementId);
-}
-
-// Sweep expired entries every 5 minutes (shared cleanup interval)
-const cacheCleanupInterval = setInterval(() => {
-  const now = Date.now();
-  for (const [k, v] of accountCache)    { if (now > v.expiresAt) accountCache.delete(k); }
-  for (const [k, v] of settlementCache) { if (now > v.expiresAt) settlementCache.delete(k); }
-}, 5 * 60 * 1000);
-cacheCleanupInterval.unref();
-
 // ─── AU-8: Per-API-Key Rate Limiter ──────────────────────────────────────────
 // Sliding window implementation — pure in-memory, no external dependencies.
 // Limits apply per API key (not per IP). x402 callers have their own limiter below.
@@ -4240,7 +4244,6 @@ app.get('/checkout/cancel', (c) => {
 });
 
 // ─── Stripe Connect Withdrawals (Change 6) ─────────────────────────────────────
-const WITHDRAWALS_FILE = path.join(DATA_DIR, 'withdrawals.jsonl');
 
 // ── Per-account async mutex ─────────────────────────────────────────────────
 // Same promise-chaining pattern as lib/wallet-lock.js / acquireEarningsLock,
@@ -9190,8 +9193,6 @@ app.get('/contributor/:wallet', (c) => {
     last_updated: data.last_updated
   });
 });
-
-const RESERVATIONS_FILE = path.join(DATA_DIR, 'reservations.json');
 
 function loadReservations() {
   return loadDataFile(RESERVATIONS_FILE, {}, false); // M-E: NON-CRITICAL

@@ -22,15 +22,24 @@
  * Runner: node --test test/wave5a-money-closures.test.js
  */
 
-const { describe, it, before } = require('node:test');
+const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+
+const TMP_WAL = fs.mkdtempSync(path.join(os.tmpdir(), 'auxilo-wave5a-wal-'));
+process.env.AUXILO_WAL_DIR = TMP_WAL;
 
 const pricing = require('../lib/pricing.js');
 const wal = require('../lib/wal.js');
 
 const SERVER_SRC = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf-8');
+
+after(() => {
+  delete process.env.AUXILO_WAL_DIR;
+  try { fs.rmSync(TMP_WAL, { recursive: true, force: true }); } catch { /* best effort */ }
+});
 
 // ─── Slices ──────────────────────────────────────────────────────────────────
 
