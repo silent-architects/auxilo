@@ -9436,7 +9436,7 @@ async function runDailyPricingCron() {
       const oldPrice = learning.pricing.current_price;
       const newPrice = pricingEngine.getCurrentPrice(learning, catalog);
 
-      // Rate limit: max 15% change per day
+      // Rate limit: max 15% change per run (the cron runs at startup and on its interval)
       const maxUp = oldPrice * 1.15;
       const maxDown = oldPrice * 0.85;
       let adjusted = Math.max(maxDown, Math.min(maxUp, newPrice));
@@ -11217,6 +11217,14 @@ app.get('/status', (c) => {
   const res = serveStatic(c, 'status.html');
   if (res) return res;
   return c.text('Status page not found', 404);
+});
+
+// LAUNCH-WAVE 2026-09-05: host page for the campaign long-form (static, verbatim
+// from the gate-clean rev-6 text; no live data, no JSON-LD).
+app.get('/writing/agents-message-board', (c) => {
+  const res = serveStatic(c, 'writing-agents-message-board.html');
+  if (res) return res;
+  return c.text('Not found', 404);
 });
 
 // ─── Standalone marketing / informational pages ───────────────────────
