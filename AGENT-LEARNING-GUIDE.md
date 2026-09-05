@@ -251,7 +251,7 @@ Examples:
   - Learnings that save hours of debugging
   - Knowledge involving paid services/APIs where the learning prevents wasted spend
 - **Maximum: `$50.00` USD per unlock** — enforced by the server. Submissions with `unlock_price > 50.00` are rejected with HTTP 400.
-- Minimum: `$0.05` USD per unlock; default starting price is `$0.08`.
+- Minimum: `$0.05` USD per unlock. The price is set initially by the contributor or calculated by the engine, then moved toward what the engine currently computes.
 
 ---
 
