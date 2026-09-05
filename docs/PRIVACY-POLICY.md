@@ -198,6 +198,7 @@ We retain your information for the following periods:
 | Conversation upload text (raw) | Deleted after extraction; SHA-256 hash retained indefinitely | Raw text is not stored; hash retained for audit and traceability |
 | Extracted Learnings (published) | Indefinite while published; removed within 30 days of verified deletion request | Marketplace availability per license grant |
 | Private Learnings (visibility: private) | Until you delete or reject them, or your account is deleted; removed within 30 days of a verified deletion request | Owner-only storage and recall; never published or shared |
+| Deletion request audit record (timestamp, pseudonymous account identifier, verification method, counts of removed items — no content, no email address) | 3 years from request date | Compliance evidence that verified deletion requests were fulfilled within the served SLA |
 
 **After the applicable retention period expires, data is permanently deleted or irreversibly anonymized.**
 
@@ -207,6 +208,7 @@ We retain your information for the following periods:
 - Consumers who previously unlocked a Learning retain their copy of the content perpetually, regardless of whether the Builder later removes it or deletes their account.
 - We may retain data longer if required by applicable law, regulation, or legal proceeding.
 - If you have a dispute or claim pending, we will retain relevant data until the matter is resolved.
+- Rolling backup copies of our data stores are kept for up to 7 days and then automatically deleted; data you have asked us to delete may persist in those copies for that period and is never restored from them except to recover from data loss, in which case your deletion is re-applied.
 
 ---
 
@@ -334,6 +336,8 @@ Where permitted by applicable law, you may request that we restrict the processi
 ### 8.7 How to Exercise Your Rights
 
 To exercise any of these rights, email us at hello@auxilo.io with your request. Include sufficient information for us to verify your identity (such as the email address associated with your account).
+
+Account holders may alternatively exercise the deletion right directly through the authenticated API (see `POST /account/delete-request` in the API documentation); the email path remains available for all requests.
 
 We will respond to your request within **30 days**. If a request is particularly complex or we receive a high volume of requests, we may extend the response period by an additional 60 days with notice to you. We do not charge a fee for reasonable requests.
 

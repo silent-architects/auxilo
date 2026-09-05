@@ -41,7 +41,7 @@ describe('SPEC3-G1 private learnings acceptance pins', () => {
   it('1. count-pins every retained audited raw-read path with stable allow markers', () => {
     const markers = [...SERVER.matchAll(/G1_RAW_READ_ALLOW:(\d+)/g)].map((m) => Number(m[1]));
     const retained = [1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 13, 14, 15, 16,
-      19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 32, 33];
+      19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 32, 33, 34, 35, 36];
     assert.deepEqual([...new Set(markers)].sort((a, b) => a - b), retained);
     assert.equal(markers.length, retained.length,
       'each retained semantic raw-read path has exactly one allow marker');
@@ -54,7 +54,7 @@ describe('SPEC3-G1 private learnings acceptance pins', () => {
       const nestedProperty = SERVER[match.index - 1] === '.';
       return !insideCanonical && !nestedProperty;
     });
-    assert.equal(rawCalls.length, 27,
+    assert.equal(rawCalls.length, 30,
       'post-G1 retained raw-read call-site count drifted; audit and mark any new path');
   });
 
@@ -230,7 +230,14 @@ describe('SPEC3-G1 private learnings acceptance pins', () => {
     assert.match(privateSearch, /quality:\s*stripOpsCounters\(/);
   });
 
-  it('17. records GOV-2 deletion as a deploy blocker because no deletion path exists in this repo', () => {
-    assert.doesNotMatch(SERVER, /app\.(?:delete|post)\('\/account\/(?:delete|deletion)|deleteAccountData/);
+  it('17. keeps GOV-2 deletion behind fresh, purpose-bound proof and two ownership axes', () => {
+    const request = route("app.post('/account/delete-request'", "app.get('/account/delete-confirm'");
+    const confirm = route("app.post('/account/delete-confirm'", '// ── GET /account/api-keys');
+    assert.match(request, /issuePurposeMagicLink\(account\.email, 'delete-account'\)/);
+    assert.match(request, /createNonce\(body\.wallet, 'delete-account'\)/);
+    assert.match(confirm, /consumePurposeMagicLink\(body\.token, 'delete-account'\)/);
+    assert.match(confirm, /consumeNonce\(body\.wallet\)/);
+    assert.match(SERVER, /learning\.contributor_account_id === accountId/);
+    assert.match(SERVER, /normalizedWallet\(learning\.contributor_wallet\) === wallet/);
   });
 });
