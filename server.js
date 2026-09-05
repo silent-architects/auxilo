@@ -24,6 +24,7 @@ const {
   classifySensitivityLLM,
   combineSensitivity,
   isLlmSensitivityEnabled,
+  resolveModelConfig, // SCREEN-MODEL-CONFIG: shared model_config.json resolver (dormant extraction pins)
 } = require('./lib/content-sensitivity-llm.js'); // LW-16 content-sensitivity gate (LLM semantic layer)
 const {
   findNearDuplicate,
@@ -2906,7 +2907,8 @@ async function runOpenClawDaemon() {
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          // SCREEN-MODEL-CONFIG / MODEL-PIN (b-2): config read, no dated pin.
+          model: resolveModelConfig('extraction').model,
           max_tokens: 4096,
           messages: [{ role: 'user', content: prompt }],
         }),
@@ -2937,7 +2939,9 @@ async function runOpenClawDaemon() {
   }
 }
 
-if (process.env.ANTHROPIC_API_KEY) {
+// SCREEN-MODEL-CONFIG (ii): gate the timer on the extraction flag, not on the
+// deployed API-key secret — prod no longer schedules an hourly no-op tick.
+if (SERVER_SIDE_EXTRACTION_ENABLED && process.env.ANTHROPIC_API_KEY) {
   runOpenClawDaemon().catch(err => console.error('[openclaw-daemon] Startup error:', err.message));
   setInterval(() => runOpenClawDaemon().catch(err => console.error('[openclaw-daemon] Interval error:', err.message)), OPENCLAW_DAEMON_INTERVAL_MS);
 }
@@ -7534,7 +7538,7 @@ app.post('/extract', async (c) => {
       client_scrub_matches: validatedPatterns,
       server_scrub_matches: [],
       provider: 'anthropic',
-      model: extractionConfig.primary?.model || 'claude-haiku-4-5',
+      model: extractionConfig.primary?.model || resolveModelConfig('extraction').model, // SCREEN-MODEL-CONFIG: no dated pin
       usage: { input_tokens: totalInputTokens, output_tokens: totalOutputTokens },
       cost_usd: totalCostUsd,
       quality_pass_count: published.length + (accountMode !== 'automatic' ? candidates.length - rejected.length : 0),
@@ -11930,6 +11934,7 @@ app.get('/dmca', (c) => serveLegalPage(c, 'DMCA-POLICY.md', 'DMCA Copyright Poli
 // ── OpenClaw Adapter Routes ──────────────────────────────────────────────────
 // S9-1: All OpenClaw endpoints require admin auth (S-3 audit finding)
 app.get('/openclaw/status', adminAuth('read'), (c) => {
+  if (!SERVER_SIDE_EXTRACTION_ENABLED) return c.json(EXTRACTION_DEPRECATED, 410);
   return c.json({
     daemon_running: openclawDaemonRunning,
     last_run: openclawLastRun,
@@ -11941,6 +11946,7 @@ app.get('/openclaw/status', adminAuth('read'), (c) => {
 });
 
 app.post('/openclaw/trigger', adminAuth('admin'), async (c) => {
+  if (!SERVER_SIDE_EXTRACTION_ENABLED) return c.json(EXTRACTION_DEPRECATED, 410);
   if (openclawDaemonRunning) {
     return c.json({ error: 'Daemon already running' }, 409);
   }
@@ -11950,6 +11956,7 @@ app.post('/openclaw/trigger', adminAuth('admin'), async (c) => {
 });
 
 app.post('/openclaw/config', adminAuth('admin'), async (c) => {
+  if (!SERVER_SIDE_EXTRACTION_ENABLED) return c.json(EXTRACTION_DEPRECATED, 410);
   try {
     const body = await c.req.json();
     const allowed = ['glob_pattern', 'max_depth', 'max_file_size', 'max_files_per_run', 'min_file_size', 'delay_between_files_ms', 'auto_publish'];
@@ -11967,6 +11974,7 @@ app.post('/openclaw/config', adminAuth('admin'), async (c) => {
 });
 
 app.get('/openclaw/state', adminAuth('read'), async (c) => {
+  if (!SERVER_SIDE_EXTRACTION_ENABLED) return c.json(EXTRACTION_DEPRECATED, 410);
   try {
     const { AdapterState } = require('./lib/openclaw-adapter.js');
     const state = new AdapterState(openclawRuntimeConfig.state_file);
@@ -12105,7 +12113,8 @@ ${conversation.substring(0, 100000)}`;
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        // SCREEN-MODEL-CONFIG / MODEL-PIN (b-2): config read, no dated pin.
+        model: resolveModelConfig('extraction').model,
         max_tokens: 4096,
         messages: [{ role: 'user', content: extractionPrompt }],
       }),
