@@ -10,6 +10,7 @@ const {
   createNonce,
   consumeNonce,
   verifyChallengeSignature,
+  verifyDeleteAccountSignature,
   linkAction,
   verifyLinkSignature,
   verifyWithdrawalSignature,
@@ -92,7 +93,8 @@ const { getConsentState, appendConsent, hasActiveConsent } = require('./lib/extr
 // R-01 / red-team P0-3 + P0-B: durable, versioned, hash-chained ToS-acceptance
 // log — the tamper-evident evidentiary half of the §5.10 clickwrap capture.
 // The account record (lib/accounts.js) gates; this proves assent for a dispute.
-const { appendTosAcceptance } = require('./lib/tos-acceptance-log.js');
+const { appendTosAcceptance, getAcceptanceRow, pruneTosAcceptanceRows } = require('./lib/tos-acceptance-log.js');
+const { TOS_RETENTION_MS, BACKUP_RETENTION_MS, isoAfter, planTosPruning } = require('./lib/deletion-cleanup.js');
 
 const {
   UNTRUSTED_CONTENT_ADVISORY,
@@ -139,7 +141,8 @@ const geoEmbargo = require('./lib/geo-embargo.js');
 const { rescreenVerifiedWallets } = require('./lib/ofac-rescreen.js');
 // Quiet phase: payout-notification waitlist (validation, dedupe, storage, and
 // the per-IP limiter live in lib; the routes below own transport only).
-const { addToWaitlist, waitlistCount, isWaitlistRateLimited } = require('./lib/waitlist.js');
+const { addToWaitlist, removeWaitlistEmail, waitlistCount, isWaitlistRateLimited } = require('./lib/waitlist.js');
+const { sendDeletionConfirmation } = require('./lib/email.js');
 // Quiet phase: inert-by-default analytics readiness (Plausible). Everything is
 // a no-op unless ANALYTICS_DOMAIN is set; see lib/analytics.js.
 const { resolveAnalyticsDomain, injectAnalytics, buildContentSecurityPolicy } = require('./lib/analytics.js');
@@ -467,6 +470,7 @@ const SETTLEMENT_COMPACTION_THRESHOLD = 1000; // M-C: lines before compaction tr
 const UNLOCK_EVENTS_FILE = path.join(DATA_DIR, 'unlock-events.jsonl');
 const RATE_LIMITS_FILE = path.join(DATA_DIR, 'rate-limits.json'); // M-A: persisted rate limit state
 const STAGED_KEY_FILE  = path.join(DATA_DIR, 'staged-key.json');  // M-F: pending key rotation
+const DELETION_LOG_FILE = path.join(DATA_DIR, 'deletion-log.jsonl');
 
 // S21-1: Persistent x402 transaction hash deduplication store.
 // Append-only file recording every accepted tx hash — prevents replay attacks where
@@ -985,12 +989,265 @@ function safeWrite(filepath, data) {
           console.error(`Backup cleanup failed for ${f}:`, unlinkErr.message);
         }
       }
+      // Deletion audit rows carry the post-deletion ToS retention deadline.
+      // This uses its own atomic JSONL writer (not safeWrite) so the hourly
+      // cleanup cannot recurse into itself.
+      pruneExpiredDeletionTosRecords(new Date());
     } catch (e) {
       console.error('Backup cleanup read/stat failed:', e.message);
     } finally {
       cleanupRunning = false;        // M-G: release mutex (always, even on error)
     }
   }
+}
+
+// ─── GOV2-DEL: Account deletion helpers ────────────────────────────────────
+// These helpers intentionally operate on the existing JSON/JSONL stores. The
+// deletion API never changes the backup retention policy or restores an account
+// from a backup; it only removes live-store records after fresh proof.
+let deletionExecution = Promise.resolve();
+
+function withDeletionExecutionLock(operation) {
+  const run = deletionExecution.then(operation, operation);
+  deletionExecution = run.catch(() => {});
+  return run;
+}
+
+function readJsonlRows(filepath) {
+  if (!fs.existsSync(filepath)) return [];
+  return fs.readFileSync(filepath, 'utf8').split('\n').filter(Boolean).map((raw) => {
+    try { return { raw, row: JSON.parse(raw) }; }
+    catch { return { raw, row: null }; }
+  });
+}
+
+function writeJsonlRows(filepath, entries) {
+  const tmp = `${filepath}.tmp`;
+  const contents = entries.map(({ raw, row }) => row ? JSON.stringify(row) : raw).join('\n');
+  writeAndSync(tmp, contents ? `${contents}\n` : '');
+  fs.renameSync(tmp, filepath);
+}
+
+function countAccountRows(filepath, accountId) {
+  return readJsonlRows(filepath).filter(({ row }) => row && row.account_id === accountId).length;
+}
+
+function normalizedEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizedWallet(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function learningBelongsToDeletion(learning, accountId, wallet) {
+  return Boolean(learning && (
+    (accountId && learning.contributor_account_id === accountId)
+    || (wallet && normalizedWallet(learning.contributor_wallet) === wallet)
+  ));
+}
+
+function deletionCounts(account, accountId, wallet) {
+  const email = normalizedEmail(account && account.email);
+  const walletLower = normalizedWallet(wallet || (account && account.wallet));
+  const accountKeys = Array.isArray(account && account.api_keys) ? account.api_keys.length : 0;
+  const storedRateLimits = loadDataFile(RATE_LIMITS_FILE, {}, false);
+  const rateLimitKeys = Object.keys(storedRateLimits).filter((key) => key === email || key === walletLower).length;
+  const waitlistRows = email && fs.existsSync(path.join(DATA_DIR, 'waitlist.json'))
+    ? loadDataFile(path.join(DATA_DIR, 'waitlist.json'), [], false).filter((entry) => entry && entry.email === email).length
+    : 0;
+  return {
+    // G1_RAW_READ_ALLOW:34 — verified deletion enumerates only the requester's
+    // account/wallet axes; it emits counts and never serializes learning bodies.
+    learnings: learnings.filter((learning) => learningBelongsToDeletion(learning, accountId, walletLower)).length,
+    account_record: Boolean(accountId && account),
+    api_keys: accountKeys,
+    magic_links: email ? countMagicLinksForEmail(email) : 0,
+    verified_wallet: Boolean(walletLower && verifiedWallets[walletLower]),
+    identity_record: Boolean(accountId && identityVault.hasIdentity(accountId)),
+    extraction_review_rows: accountId ? countAccountRows(REVIEW_FILE, accountId) : 0,
+    extractions_redacted: accountId ? countAccountRows(EXTRACTIONS_FILE, accountId) : 0,
+    rate_limit_keys: rateLimitKeys,
+    waitlist: waitlistRows,
+  };
+}
+
+function deletionPreview(account, accountId, wallet) {
+  const counts = deletionCounts(account, accountId, wallet);
+  if (accountId && hasCompletedPayout(accountId, wallet)) counts.identity_record = false;
+  return counts;
+}
+
+function deletionPreviewDetails(account, accountId, wallet) {
+  const walletLower = normalizedWallet(wallet || (account && account.wallet));
+  const learning_buckets = {};
+  // G1_RAW_READ_ALLOW:36 — authenticated preview aggregates only status and
+  // visibility; no learning titles, bodies, or identifiers leave this loop.
+  for (const learning of learnings) {
+    if (!learningBelongsToDeletion(learning, accountId, walletLower)) continue;
+    const bucket = `${learning.status || 'approved'}:${learning.visibility || 'public'}`;
+    learning_buckets[bucket] = (learning_buckets[bucket] || 0) + 1;
+  }
+  return { ...deletionPreview(account, accountId, wallet), learning_buckets };
+}
+
+function hasCompletedPayout(accountId, wallet) {
+  const walletLower = normalizedWallet(wallet);
+  const candidateEntries = [earnings[accountId], earnings[walletLower]].filter(Boolean);
+  if (candidateEntries.some((entry) => Number(entry.total_withdrawn) > 0 || Number(entry.withdrawal_count) > 0)) return true;
+  return readJsonlRows(WITHDRAWALS_FILE).some(({ row }) => row && (
+    row.account_id === accountId || normalizedWallet(row.wallet) === walletLower
+  ));
+}
+
+function deletionRetentionNotice({ hasPayout, accountId, wallet }) {
+  const credits = accountId ? loadCredits()[accountId] : null;
+  const earningsEntry = (accountId && earnings[accountId]) || earnings[normalizedWallet(wallet)] || null;
+  const hasFinancialRecord = Boolean(
+    hasPayout || (credits && Object.values(credits).some((value) => Number(value) > 0))
+    || (earningsEntry && Object.values(earningsEntry).some((value) => Number(value) > 0))
+  );
+  if (!hasFinancialRecord && !hasPayout) return null;
+  const notice = 'Some records are retained after account deletion as described in Privacy Policy §4: transaction and earnings records (up to 3 years, for tax, audit, and compliance), extraction consent and audit logs, and data recorded on the blockchain, which cannot be deleted. Retained records are keyed to a pseudonymous identifier; your email address is deleted.';
+  return hasPayout
+    ? `${notice} Identity and tax-attestation information is also retained because completed payouts require it for tax reporting and legal compliance.`
+    : notice;
+}
+
+function deleteRateLimitKeys(email, wallet) {
+  const targetEmail = normalizedEmail(email);
+  const targetWallet = normalizedWallet(wallet);
+  const stored = loadDataFile(RATE_LIMITS_FILE, {}, false);
+  let removed = 0;
+  for (const key of Object.keys(stored)) {
+    if (key === targetEmail || key === targetWallet) {
+      delete stored[key];
+      removed++;
+    }
+  }
+  if (removed > 0) safeWrite(RATE_LIMITS_FILE, stored);
+  if (targetWallet) {
+    challengeRateLimit.delete(targetWallet);
+    delete learnRateStore.wallet[targetWallet];
+    delete lastWithdrawalAttempt[targetWallet];
+  }
+  return removed;
+}
+
+function pruneExpiredDeletionTosRecords(now = new Date()) {
+  const entries = readJsonlRows(DELETION_LOG_FILE);
+  const due = planTosPruning(entries.map(({ row }) => row).filter(Boolean), now);
+  if (due.length === 0) return 0;
+  const dueIds = new Set(due.map((row) => row.account_id));
+  for (const accountId of dueIds) pruneTosAcceptanceRows(accountId);
+  const stampedAt = new Date(now).toISOString();
+  for (const entry of entries) {
+    if (entry.row && dueIds.has(entry.row.account_id) && !entry.row.tos_pruned_at) entry.row.tos_pruned_at = stampedAt;
+  }
+  writeJsonlRows(DELETION_LOG_FILE, entries);
+  return dueIds.size;
+}
+
+async function executeAccountDeletion({ accountId = null, wallet = null, method }) {
+  return withDeletionExecutionLock(async () => {
+    const currentAccounts = loadAccounts();
+    const account = accountId ? currentAccounts[accountId] : null;
+    const linkedWallet = normalizedWallet((account && account.wallet) || wallet);
+    const effectiveWallet = linkedWallet || normalizedWallet(wallet);
+    const counts = deletionPreview(account, accountId, effectiveWallet);
+    const hasPayout = Boolean(accountId && hasCompletedPayout(accountId, effectiveWallet));
+    const completedAt = new Date().toISOString();
+    const tosRetainedUntil = accountId ? isoAfter(completedAt, TOS_RETENTION_MS) : null;
+
+    let releaseAccount = null;
+    let releaseLearningsLock = null;
+    try {
+      if (accountId) releaseAccount = await acquireAccountLock(accountId);
+      if (accountId) releaseLearningsLock = await acquireLearningsLock();
+
+      // Capture pre-delete assent before the account record disappears. This
+      // creates evidence only from fields already in the account record and
+      // deliberately passes no email address into the durable log.
+      if (account && account.tos_version && account.accepted_at && !getAcceptanceRow(accountId, { forceReload: true })) {
+        appendTosAcceptance({
+          accountId,
+          tosVersion: account.tos_version,
+          ipRedacted: redactIp(account.accepted_ip),
+          userAgent: account.accepted_ua,
+          acceptPath: 'account-deletion-synthesis',
+          affirmed: account.accepted_affirmed === true,
+        });
+      }
+
+      if (counts.learnings > 0) {
+        const backupName = `learnings-pre-deletion-${completedAt.replace(/[:.]/g, '-')}.json`;
+        const backupPath = path.join(BACKUP_DIR, backupName);
+        writeAndSync(`${backupPath}.tmp`, JSON.stringify(learnings, null, 2));
+        fs.renameSync(`${backupPath}.tmp`, backupPath);
+        // G1_RAW_READ_ALLOW:35 — fresh deletion proof authorizes full-row removal
+        // on both ownership axes, including private and non-public rows.
+        learnings = learnings.filter((learning) => !learningBelongsToDeletion(learning, accountId, effectiveWallet));
+        safeWrite(LEARNINGS_FILE, learnings);
+      }
+
+      if (accountId) {
+        const nextAccounts = loadAccounts();
+        delete nextAccounts[accountId];
+        saveAccounts(nextAccounts);
+        accounts = nextAccounts;
+        rebuildKeyIndex(nextAccounts);
+        counts.magic_links = removeMagicLinksForEmail(account.email);
+        counts.waitlist = removeWaitlistEmail(account.email);
+      }
+
+      if (effectiveWallet && verifiedWallets[effectiveWallet]) {
+        delete verifiedWallets[effectiveWallet];
+        safeWrite(VERIFIED_WALLETS_FILE, verifiedWallets);
+      }
+
+      if (accountId && counts.identity_record && !hasPayout) {
+        identityVault.restoreIdentity(accountId, null);
+      }
+      if (accountId) {
+        const reviewEntries = readJsonlRows(REVIEW_FILE);
+        const remainingReview = reviewEntries.filter(({ row }) => !row || row.account_id !== accountId);
+        if (remainingReview.length !== reviewEntries.length) writeJsonlRows(REVIEW_FILE, remainingReview);
+
+        const extractionEntries = readJsonlRows(EXTRACTIONS_FILE);
+        let extractionChanged = false;
+        for (const entry of extractionEntries) {
+          if (entry.row && entry.row.account_id === accountId) {
+            entry.row.response_cache = { redacted: 'account_deleted' };
+            extractionChanged = true;
+          }
+        }
+        if (extractionChanged) writeJsonlRows(EXTRACTIONS_FILE, extractionEntries);
+      }
+
+      counts.rate_limit_keys = deleteRateLimitKeys(account && account.email, effectiveWallet);
+      fs.appendFileSync(DELETION_LOG_FILE, JSON.stringify({
+        ts: completedAt,
+        completed_at: completedAt,
+        account_id: accountId,
+        wallet: effectiveWallet || null,
+        method,
+        removed: counts,
+        deleted: counts,
+        sla_deadline: isoAfter(completedAt, TOS_RETENTION_MS),
+      }) + '\n', 'utf8');
+    } finally {
+      if (releaseLearningsLock) releaseLearningsLock();
+      if (releaseAccount) releaseAccount();
+    }
+
+    return {
+      deleted: counts,
+      retained_notice: deletionRetentionNotice({ hasPayout, accountId, wallet: effectiveWallet }),
+      backups_expire_by: isoAfter(completedAt, BACKUP_RETENTION_MS),
+      tos_record_retained_until: tosRetainedUntil,
+      completed_at: completedAt,
+    };
+  });
 }
 
 let settlementAppendCount = 0; // M-C: track appends for compaction trigger
@@ -1188,6 +1445,11 @@ const {
   migrateToApiKeysArray,
   loadAccounts,
   saveAccounts,
+  issuePurposeMagicLink,
+  consumePurposeMagicLink,
+  removeMagicLinksForEmail,
+  countMagicLinksForEmail,
+  isMagicLinkRateLimited,
 } = require('./lib/accounts.js');
 const requireSession = requireAuth; // alias used by /pipeline/* and /referral/* routes
 
@@ -3583,6 +3845,148 @@ rateLimiterCleanupInterval.unref();
 
 // ─── Phase 0.1: Account Routes (SPEC-P0.1) ──────────────────────────────────
 setupAccountRoutes(app);
+
+// ── GOV2-DEL: account deletion request / confirmation ──────────────────────
+function deletionChallengeBody(wallet, challenge) {
+  return {
+    wallet: normalizedWallet(wallet),
+    challenge: challenge.nonce,
+    timestamp: challenge.timestamp,
+    expires_at: challenge.expires_at,
+    eip712: {
+      domain: EIP712_DOMAIN,
+      types: CHALLENGE_TYPES,
+      primaryType: 'Challenge',
+      message: {
+        wallet,
+        nonce: challenge.nonce,
+        timestamp: String(challenge.timestamp),
+        action: 'delete-account',
+      },
+    },
+  };
+}
+
+async function deletionRequestBody(c) {
+  try { return await c.req.json(); }
+  catch { return null; }
+}
+
+function deletionAccountForWallet(wallet) {
+  const lower = normalizedWallet(wallet);
+  for (const [accountId, account] of Object.entries(loadAccounts())) {
+    if (normalizedWallet(account.wallet) === lower) return { accountId, account };
+  }
+  return { accountId: null, account: null };
+}
+
+app.post('/account/delete-request', async (c) => {
+  const body = await deletionRequestBody(c);
+  if (!body || !['email', 'wallet'].includes(body.method)) {
+    return c.json({ error: 'method must be "email" or "wallet"' }, 400);
+  }
+
+  if (body.method === 'email') {
+    const resolved = await resolveAccountFromRequest(c, 'read');
+    if (resolved.error) return c.json({ error: resolved.error }, resolved.status);
+    const account = loadAccounts()[resolved.accountId];
+    if (!account) return c.json({ error: 'Account not found' }, 401);
+    if (isMagicLinkRateLimited(normalizedEmail(account.email), getClientIp(c))) {
+      return c.json({ error: 'Too many deletion confirmation requests. Please wait 15 minutes.' }, 429);
+    }
+    const preview = deletionPreviewDetails(account, resolved.accountId, account.wallet);
+    const token = issuePurposeMagicLink(account.email, 'delete-account');
+    const baseUrl = process.env.BASE_URL || `https://${c.req.header('host')}`;
+    await sendDeletionConfirmation(account.email, `${baseUrl}/account/delete-confirm?token=${encodeURIComponent(token)}`);
+    return c.json({
+      confirmation_sent: true,
+      method: 'email',
+      preview,
+      retained_notice: deletionRetentionNotice({
+        hasPayout: hasCompletedPayout(resolved.accountId, account.wallet),
+        accountId: resolved.accountId,
+        wallet: account.wallet,
+      }),
+    });
+  }
+
+  if (!body.wallet || !isAddress(body.wallet)) return c.json({ error: 'Valid wallet address required' }, 400);
+  const hasCredentials = Boolean(c.req.header('X-API-Key') || /^Bearer\s+/i.test(c.req.header('Authorization') || ''));
+  let accountId = null;
+  let account = null;
+  if (hasCredentials) {
+    const resolved = await resolveAccountFromRequest(c, 'read');
+    if (resolved.error) return c.json({ error: resolved.error }, resolved.status);
+    accountId = resolved.accountId;
+    account = loadAccounts()[accountId];
+    if (!account || normalizedWallet(account.wallet) !== normalizedWallet(body.wallet)) {
+      return c.json({ error: 'The requested wallet is not linked to this account' }, 403);
+    }
+    if (!verifiedWallets[normalizedWallet(body.wallet)]) {
+      return c.json({ error: 'The requested wallet is not currently verified' }, 403);
+    }
+  }
+  const challenge = createNonce(body.wallet, 'delete-account');
+  const proof = deletionChallengeBody(body.wallet, challenge);
+  // A wallet-only caller may be a former account holder. Do not disclose
+  // whether that wallet has an account until its fresh signature is verified.
+  if (!hasCredentials) return c.json({ proof_required: true, method: 'wallet', ...proof });
+  return c.json({
+    proof_required: true,
+    method: 'wallet',
+    preview: deletionPreviewDetails(account, accountId, body.wallet),
+    retained_notice: deletionRetentionNotice({
+      hasPayout: hasCompletedPayout(accountId, body.wallet),
+      accountId,
+      wallet: body.wallet,
+    }),
+    ...proof,
+  });
+});
+
+app.get('/account/delete-confirm', (c) => {
+  const token = c.req.query('token');
+  if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return c.text('Invalid or expired deletion confirmation link.', 400);
+  c.header('Cache-Control', 'no-store');
+  return c.html(`<!doctype html><html><head><meta charset="utf-8"><title>Confirm account deletion</title></head><body><main><h1>Confirm account deletion</h1><p>This permanently removes your account data from live Auxilo systems.</p><form method="post" action="/account/delete-confirm"><input type="hidden" name="method" value="email"><input type="hidden" name="token" value="${token}"><button type="submit">Confirm account deletion</button></form></main></body></html>`);
+});
+
+app.post('/account/delete-confirm', async (c) => {
+  let body;
+  const contentType = c.req.header('content-type') || '';
+  try {
+    body = contentType.includes('application/json') ? await c.req.json() : await c.req.parseBody();
+  } catch {
+    return c.json({ error: 'Invalid confirmation body' }, 400);
+  }
+  if (!body || !['email', 'wallet'].includes(body.method)) return c.json({ error: 'method must be "email" or "wallet"' }, 400);
+
+  if (body.method === 'email') {
+    const confirmation = consumePurposeMagicLink(body.token, 'delete-account');
+    if (!confirmation) return c.json({ error: 'Invalid or expired deletion confirmation' }, 401);
+    const email = normalizedEmail(confirmation.email);
+    const match = Object.entries(loadAccounts()).find(([, account]) => normalizedEmail(account.email) === email);
+    if (!match) return c.json({ error: 'Account not found' }, 401);
+    const [accountId, account] = match;
+    return c.json(await executeAccountDeletion({ accountId, wallet: account.wallet, method: 'email' }));
+  }
+
+  if (!body.wallet || !isAddress(body.wallet) || !body.signature) {
+    return c.json({ error: 'wallet and signature are required' }, 400);
+  }
+  const nonce = consumeNonce(body.wallet);
+  if (!nonce || nonce.action !== 'delete-account') {
+    return c.json({ error: 'No active deletion challenge or challenge expired' }, 401);
+  }
+  let signatureValid = process.env.NODE_ENV !== 'production' && process.env.TEST_MODE === '1' && body.signature === 'test-bypass';
+  if (!signatureValid) {
+    try { signatureValid = await verifyDeleteAccountSignature(body.wallet, nonce.nonce, nonce.timestamp, body.signature); }
+    catch { signatureValid = false; }
+  }
+  if (!signatureValid) return c.json({ error: 'Deletion signature verification failed' }, 401);
+  const { accountId, account } = deletionAccountForWallet(body.wallet);
+  return c.json(await executeAccountDeletion({ accountId, wallet: body.wallet, method: 'wallet' }));
+});
 
 // ── GET /account/api-keys — list key metadata (D2: scoped keys) ──────────────
 // D2 (Wave 3.4): session-or-key at 'read' — metadata only (labels, scopes,

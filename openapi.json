@@ -2010,6 +2010,72 @@
         }
       }
     },
+    "/account/delete-request": {
+      "post": {
+        "summary": "Request account deletion",
+        "description": "Starts deletion with either an authenticated email confirmation or a fresh wallet signature. Wallet-only requests return proof requirements without revealing whether an account exists.",
+        "operationId": "requestAccountDeletion",
+        "tags": ["Account"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["method"],
+                "properties": {
+                  "method": { "type": "string", "enum": ["email", "wallet"] },
+                  "wallet": { "type": "string", "description": "Required when method is wallet." }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Email confirmation sent or a delete-account EIP-712 challenge returned" },
+          "400": { "description": "Invalid request" },
+          "401": { "description": "Authentication required for the email method" },
+          "403": { "description": "Authenticated caller requested a wallet not linked to its account" }
+        }
+      }
+    },
+    "/account/delete-confirm": {
+      "get": {
+        "summary": "Render email deletion confirmation",
+        "operationId": "renderAccountDeletionConfirmation",
+        "tags": ["Account"],
+        "parameters": [{ "name": "token", "in": "query", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Confirmation form" }, "400": { "description": "Invalid confirmation link" } }
+      },
+      "post": {
+        "summary": "Confirm and execute account deletion",
+        "description": "Consumes a single-use deletion email token or validates a fresh delete-account wallet signature, then deletes live-store data and returns retention notices.",
+        "operationId": "confirmAccountDeletion",
+        "tags": ["Account"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["method"],
+                "properties": {
+                  "method": { "type": "string", "enum": ["email", "wallet"] },
+                  "token": { "type": "string", "description": "Required for email confirmation." },
+                  "wallet": { "type": "string", "description": "Required for wallet confirmation." },
+                  "signature": { "type": "string", "description": "Fresh EIP-712 signature with action delete-account." }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Deletion completed; returns deleted counts, completion time, backup expiry, and any retained-record notice" },
+          "400": { "description": "Invalid confirmation body" },
+          "401": { "description": "Expired, consumed, or invalid proof" }
+        }
+      }
+    },
     "/account/accept-terms": {
       "post": {
         "summary": "Accept the current Terms of Service (clickwrap assent)",
