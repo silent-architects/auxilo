@@ -1,18 +1,29 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <!-- Background: Obsidian -->
-  <rect width="1200" height="630" fill="#0A0A0A"/>
-
-  <!-- Triangle-A mark, small, top-left -->
-  <g transform="translate(72,56)">
-    <polygon points="22,4 40,36 4,36" fill="none" stroke="#C9A84C" stroke-width="3" stroke-linejoin="round"/>
-    <line x1="22" y1="22.5" x2="40" y2="22.5" stroke="#C9A84C" stroke-width="2.4"/>
-    <text x="54" y="31" font-family="Inter, Helvetica, Arial, sans-serif" font-weight="500" font-size="24" fill="#FAFAF8" letter-spacing="-0.01">auxilo</text>
-  </g>
-
-  <!-- Headline: value-first, ivory, Inter 700 -->
-  <text x="72" y="312" font-family="Inter, Helvetica, Arial, sans-serif" font-weight="700" font-size="64" fill="#FAFAF8" letter-spacing="-1.3">A marketplace for what</text>
-  <text x="72" y="392" font-family="Inter, Helvetica, Arial, sans-serif" font-weight="700" font-size="64" fill="#FAFAF8" letter-spacing="-1.3">agents learn</text>
-
-  <!-- Proof line: gold mono -->
-  <text x="72" y="482" font-family="JetBrains Mono, Menlo, Consolas, monospace" font-weight="400" font-size="27" fill="#C9A84C"></text>
+<defs>
+  <pattern id="tile" width="120" height="120" patternUnits="userSpaceOnUse">
+    <g opacity="0.62">
+      <polygon points="60,18 68,38 52,38" fill="none" stroke="#C9A84C" stroke-width="0.8" opacity="0.12"/>
+      <line x1="60" y1="30" x2="68" y2="30" stroke="#C9A84C" stroke-width="0.6" opacity="0.12"/>
+      <polygon points="90,78 98,98 82,98" fill="none" stroke="#C9A84C" stroke-width="0.8" opacity="0.10"/>
+      <line x1="90" y1="90" x2="98" y2="90" stroke="#C9A84C" stroke-width="0.6" opacity="0.10"/>
+    </g>
+  </pattern>
+  <radialGradient id="glow" cx="980" cy="300" r="520" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#C9A84C" stop-opacity="0.07"/><stop offset="1" stop-color="#C9A84C" stop-opacity="0"/>
+  </radialGradient>
+</defs>
+<rect width="1200" height="630" fill="#0F0F0F"/>
+<rect width="1200" height="630" fill="url(#tile)"/>
+<rect width="1200" height="630" fill="url(#glow)"/>
+<g transform="translate(626.1569620253165,40) scale(1.6456)" opacity="0.16">
+  <polygon points="256,88 434,404 78,404" fill="none" stroke="#C9A84C" stroke-width="30" stroke-linejoin="round"/>
+  <line x1="256" y1="272" x2="434" y2="272" stroke="#C9A84C" stroke-width="26"/>
+</g>
+<text x="72" y="290" font-family="Inter, Helvetica, Arial, sans-serif" font-weight="500" font-size="72" fill="#FAFAF8" letter-spacing="-1.44">A marketplace for</text>
+<text x="72" y="376" font-family="Inter, Helvetica, Arial, sans-serif" font-weight="500" font-size="72" fill="#FAFAF8" letter-spacing="-1.44">what agents learn</text>
+<g transform="translate(72,534) scale(1.600)">
+  <polygon points="22,4 40,36 4,36" fill="none" stroke="#C9A84C" stroke-width="3" stroke-linejoin="round"/>
+  <line x1="22" y1="22.5" x2="40" y2="22.5" stroke="#C9A84C" stroke-width="2.4"/>
+  <text x="54" y="31" font-family="Inter, Helvetica, Arial, sans-serif" font-weight="500" font-size="24" fill="#FAFAF8" letter-spacing="-0.01">auxilo</text>
+</g>
 </svg>
