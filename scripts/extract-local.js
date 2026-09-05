@@ -662,11 +662,35 @@ async function runAnchoredJudge(candidates, indexState, opts = {}) {
 
 /**
  * Extract learnings locally. Returns { learnings: [...] } or { learnings: [], skipped }.
- * Claude Code and Codex rollout captures use the existing client-local Claude
- * extractor; other clients rely on the agent's proactive auxilo_contribute
- * (MCP) call.
+ *
+ * EXT-GATE: every capture source id runs the client-local extractor. The
+ * extractor is transcript-text based (buildExtractionPrompt carries no
+ * per-source branch), so nothing here depends on WHICH client captured.
+ * Unknown ids still short-circuit: a `--source` value the registry does not
+ * know is a misconfigured shim, not a client, and the skip message below is
+ * matched by runner.js and test/uc6-codex-capture.test.js — do not change it.
+ *
+ * The list is static on purpose: lib/installer.js is not in RUNNER_STACK, so
+ * this file cannot enumerate the registry at runtime. The closure test
+ * (test/ext-gate-closure.test.js) derives the expected set from the two live
+ * enumerations — scripts/sources/*.js adapter ids ∪ installer hook-client
+ * source ids — and is the authority; a new adapter or hook client that is not
+ * added here turns CI red.
  */
-const EXTRACTABLE_SOURCES = new Set(['claude-code', 'codex-cli']);
+const EXTRACTABLE_SOURCES = new Set(Object.freeze([
+  'antigravity',
+  'claude-code',
+  'cline',
+  'codex-cli',
+  'continue',
+  'copilot',
+  'cursor',
+  'factory',
+  'gemini-cli',
+  'openclaw',
+  'roo-code',
+  'windsurf',
+]));
 
 async function extractLocally(transcript, sourceType, opts = {}) {
   if (sourceType && !EXTRACTABLE_SOURCES.has(sourceType)) {
@@ -780,7 +804,7 @@ async function extractLocally(transcript, sourceType, opts = {}) {
 }
 
 module.exports = {
-  extractLocally, extractWithClaudeCode, checkClaudeAuthStatus,
+  extractLocally, extractWithClaudeCode, checkClaudeAuthStatus, EXTRACTABLE_SOURCES,
   parseLearnings, parseExtractionOutput, resolveClaudeBin,
   CATEGORIES, PRIVATE_CATEGORIES, RETIRED_CATEGORIES,
   EXTRACTION_PROMPT, buildExtractionPrompt, scoreExtractionEnabled,
