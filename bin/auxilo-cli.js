@@ -15,12 +15,15 @@
  * Supersedes `auxilo-mcp setup` and `auxilo-mcp login` (Change 3/4).
  */
 
+const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const readline = require('readline');
 const { exec } = require('child_process');
 const installer = require('../lib/installer.js');
 const review = require('../lib/review.js');
+const providers = require('../scripts/providers/index.js');
+const byoKeyProvider = require('../scripts/providers/byo-key.js');
 
 const HOME = os.homedir();
 
@@ -82,6 +85,50 @@ async function askYesNo(question, defaultYes = false) {
   return answer === 'y' || answer === 'yes';
 }
 
+/**
+ * Hidden-input prompt (PART C, `auxilo provider set`'s key entry) — the
+ * typed key is never echoed to the terminal. Reuses the SAME shared
+ * readline interface / line-buffering scheme as `ask()` (LW-17: a second
+ * independent readline interface loses whatever the first already buffered
+ * on piped stdin), and suppresses only the per-keystroke echo `_writeToOutput`
+ * would otherwise perform — the question text itself is written directly,
+ * and the terminating newline is always passed through so the cursor
+ * advances normally. `_writeToOutput` is an internal Node readline hook (not
+ * a documented public API) — the same technique widely used before a
+ * dedicated password-prompt package existed; degrades safely to a normal
+ * (echoed) prompt on any Node build where the hook is absent.
+ */
+function askHidden(question) {
+  const rl = getRl();
+  process.stdout.write(question);
+  let restore = () => {};
+  if (process.stdin.isTTY && typeof rl._writeToOutput === 'function') {
+    const original = rl._writeToOutput.bind(rl);
+    rl._writeToOutput = (stringToWrite) => {
+      if (stringToWrite === '\r\n' || stringToWrite === '\n' || stringToWrite === '\r') {
+        original(stringToWrite);
+      }
+      // else: swallow the echoed keystroke.
+    };
+    restore = () => { rl._writeToOutput = original; };
+  }
+  if (bufferedLines.length > 0) {
+    const line = bufferedLines.shift();
+    restore();
+    return Promise.resolve(line);
+  }
+  if (readlineEnded) {
+    restore();
+    return Promise.resolve('');
+  }
+  return new Promise((resolve) => {
+    lineWaiters.push((answer) => {
+      restore();
+      resolve(answer);
+    });
+  });
+}
+
 function openBrowser(url) {
   const cmd = process.platform === 'darwin' ? 'open'
     : process.platform === 'win32' ? 'start ""'
@@ -119,21 +166,29 @@ const CONSENT_TEXT = `
     • READS the session transcript on your machine,
     • SCRUBS it locally (sensitivity filter: API keys, tokens, emails, PII
       are redacted first),
-    • EXTRACTS reusable learnings locally using your own claude CLI (your
-      existing subscription). For this step your transcript is processed
-      only by your own model provider the same way your normal sessions
-      are, and is never sent to Auxilo, raw or scrubbed.
+    • EXTRACTS reusable learnings locally through the first model client you
+      have installed (Claude Code, then Codex) or, when neither is
+      available, a provider key you set yourself. For this step your
+      scrubbed transcript goes only to that provider, under your own
+      account with them, and any use is charged to that account, never to
+      Auxilo. It is never sent to Auxilo, raw or scrubbed.
     • UPLOADS only the finished learning drafts (title, body, category,
-      tags, task context, outcome) to Auxilo (${'POST /learn'}). A draft
-      that passes every screen publishes to the marketplace immediately
-      under your account, and you can retract it for 7 days. A draft that
-      any screen flags (sensitive, duplicate, uncertain quality) waits in
-      your private queue for \`auxilo review\`. Manual mode (approve first,
-      for everything) is available in your account settings. You earn 70%
-      of sales.
+      tags, task context, outcome) to Auxilo (${'POST /learn'}). Everything
+      waits in your review queue until you approve it, one learning at a
+      time or in advance in your dashboard. Your first public learning
+      waits for operator review. A draft that any screen flags (sensitive,
+      duplicate, uncertain quality) waits in your private queue for
+      \`auxilo review\`. Auto-publish for learnings that pass every screen is
+      off unless you turn it on in your dashboard. Your share of a paid
+      unlock by another agent goes to your Auxilo account, 70% of what they
+      paid on a direct unlock and 60% via discovery. A repeat unlock by the
+      same buyer within 30 days earns nothing. Earnings depend on whether
+      other agents unlock your learnings and are not guaranteed. Earnings
+      accrue now. Withdrawals open soon, and auxilo.io/status shows where
+      things stand.
   You can stop any time with \`auxilo disable\` (local kill-switch) and review
-  every run in ~/.auxilo/extract.log. Saying No installs the MCP server only —
-  no session-end capture hook is written into any client config unless you say
+  every run in ~/.auxilo/extract.log. Saying No installs the MCP server only.
+  No session-end capture hook is written into any client config unless you say
   Yes, and any capture hooks left by an earlier install are removed.
 `;
 
@@ -497,6 +552,16 @@ async function cmdStatus() {
     const line = runnerSkewLine(installer.runnerVersionSkew(HOME));
     if (line) console.log(line);
   }
+  console.log(extractionProviderLine(await providers.resolveProvider({})));
+  // Lazy require: scripts/runner.js is a heavier module (sources, sensitivity
+  // filter, ops-alert) than this one status line needs at require-time for
+  // every CLI invocation.
+  let skipState = null;
+  try {
+    skipState = require('../scripts/runner.js').loadExtractionSkipState();
+  } catch { /* status must never throw on a missing/corrupt skip-state file */ }
+  const skipLine = extractionSkipReasonLine(skipState);
+  if (skipLine) console.log(skipLine);
   console.log(`SessionEnd hook: ${s.hookInstalled ? 'installed' : 'not installed'}${s.hookRegistered ? ', registered in Claude Code settings' : ''}`);
   for (const c of s.clients.filter((c) => c.captureHook)) {
     console.log(`Capture hooks: ${c.name} (${c.captureEvent}, ${c.captureRegistered ? 'registered' : 'not registered'})`);
@@ -514,6 +579,65 @@ function runnerSkewLine(skew) {
   if (!skew || !skew.skew) return null;
   const installed = skew.installed ? `v${skew.installed}` : 'unstamped (pre-0.9.12)';
   return `  ⚠ Installed runner is ${installed} (package v${skew.package}) — run: npx auxilo setup`;
+}
+
+/**
+ * Mirrors lib/clean-lane.js's CLEAN_LANE_CALIBRATED_PROVIDERS — that module
+ * is server-side and not in the published package's files[] (same reason
+ * CLEAN_LANE_AFFIRMATION below is a literal mirror, not an import; see
+ * test/clean-lane-phase-a.test.js's "the CLI must not require the unshipped
+ * server module" pin). test/clean-lane-calibration.test.js pins the two
+ * arrays equal.
+ */
+const CLI_CLEAN_LANE_CALIBRATED_PROVIDERS = ['claude-code'];
+
+/**
+ * EXTRACT-PER-CLIENT W1 PART A/C — one unconditional line naming which
+ * extraction model provider resolves, why (env override vs auto-detected),
+ * and (PART C) whether that provider's submissions can reach the clean-lane
+ * auto-publish path at all (server-side gate: lib/clean-lane.js's
+ * CLEAN_LANE_CALIBRATED_PROVIDERS, mirrored above).
+ */
+function extractionProviderLine(resolution) {
+  if (resolution && resolution.ok) {
+    const via = process.env.AUXILO_EXTRACTION_PROVIDER
+      ? 'env override AUXILO_EXTRACTION_PROVIDER'
+      : 'auto-detected';
+    const calibration = CLI_CLEAN_LANE_CALIBRATED_PROVIDERS.includes(resolution.id)
+      ? 'clean-lane calibrated'
+      : 'review-lane only';
+    return `Extraction model provider: ${resolution.id} (${via}, ${calibration})`;
+  }
+  const reason = (resolution && resolution.reason) || 'no provider available';
+  return `Extraction model provider: none (${reason})`;
+}
+
+/**
+ * EXTRACT-PER-CLIENT W1 PART C — the companion conditional line PART A left
+ * unimplemented (see its report): printed ONLY when the last recorded
+ * extraction skip reasonCode (runner.js's normalizeExtractionSkipState,
+ * last_reason_code field, added in this part) is one of the names below;
+ * null (nothing printed) for every other state, including "no state file
+ * yet" and "last outcome was a real success."
+ *
+ * 'no-usable-provider' added in the W1 P1 fix (PUNCH-LIST): distinct from
+ * 'no-model-provider-available' (nothing even LOOKED usable at the detect()
+ * stage) — this is the selection-fall-through exhaustion code from
+ * scripts/providers/index.js's runModel(), where every provider in
+ * PROVIDER_ORDER was actually tried and each failed for its own reason.
+ */
+const STATUS_WORTHY_SKIP_REASON_CODES = Object.freeze([
+  'cli-billing-helper-configured',
+  'cli-unauthenticated',
+  'no-model-provider-available',
+  'no-usable-provider',
+]);
+
+/** Pure render, mirroring runnerSkewLine(skew) above — the caller loads the
+ * state; this only decides whether/what to print. */
+function extractionSkipReasonLine(state) {
+  if (!state || !STATUS_WORTHY_SKIP_REASON_CODES.includes(state.last_reason_code)) return null;
+  return `  ⚠ Last extraction attempt: ${state.last_reason_code}`;
 }
 
 // ─── auxilo disable ─────────────────────────────────────────────────────────
@@ -893,6 +1017,23 @@ async function cmdReview(flags) {
 // byte-equal. The consent VERSION is never a client literal — it always comes
 // from GET /account/clean-lane (consent_version_current).
 const CLEAN_LANE_AFFIRMATION = 'I understand and choose auto-publish for qualifying extracted learnings.';
+
+/**
+ * EXTRACT-PER-CLIENT W1 PART C — `auxilo provider set`'s consent sentence.
+ * SITE-PM-authored, verbatim. States: this is the builder's OWN key; where
+ * it lives on disk and at what permission (~/.auxilo/providers.json, owner-
+ * read-only); that Auxilo never receives it; what it is used for (drafting
+ * learnings from the builder's own scrubbed sessions); that drafting sends
+ * sessions to the builder's chosen provider under the builder's own account,
+ * billed to that account and never to Auxilo; and how to remove it
+ * (`auxilo provider clear`). `cmdProvider('set')` refuses to run at all
+ * (reasonCode 'consent-sentence-missing') were this ever empty again — see
+ * the test asserting that refusal — and, before ever printing this sentence
+ * or storing anything, verifies any existing providers.json is actually
+ * owner-read-only (reasonCode 'providers-file-mode-unsafe' if not), so the
+ * "readable only by your user account" claim below is never printed false.
+ */
+const PROVIDER_KEY_CONSENT_SENTENCE = 'This key is yours. It stays on this machine in ~/.auxilo/providers.json, readable only by your user account, and Auxilo never receives it. It is used for one thing, drafting learnings from your own scrubbed sessions. Drafting sends those sessions to that provider under your own account, and any use is charged to that account, never to Auxilo. Run auxilo provider clear to remove it.';
 const CLEAN_LANE_UNAVAILABLE = 'Auto-publish for clean learnings is not yet available on this account.';
 // CLEAN-LANE-FLIP Phase B (legal; DRAFT pending Tyler): the full text of ToS
 // §5.9.3(g) (plus its ratchet paragraph) prints ABOVE the affirmation prompt —
@@ -1107,6 +1248,182 @@ async function cmdCleanLane(flags) {
   console.log('  Turn it off any time: npx auxilo clean-lane revoke');
 }
 
+// ─── auxilo provider (EXTRACT-PER-CLIENT W1 PART C: BYO provider key) ───────
+//
+// Mirrors cmdCleanLane's grant discipline exactly: `set` runs ONLY on a TTY,
+// refuses piped input, and requires typing the consent sentence verbatim —
+// no confirmation flag, no bypass. Unlike clean-lane, nothing here ever reaches
+// the Auxilo server: the key is the builder's own, read from a hidden
+// prompt (never argv, never env), and written straight to
+// ~/.auxilo/providers.json (0600) via scripts/providers/byo-key.js.
+//
+// PROVIDER_KEY_CONSENT_SENTENCE is a SITE-PM string slot (see the module
+// comment on its declaration below) — `set` refuses to run at all while it
+// is empty, with reasonCode 'consent-sentence-missing'. This keeps the path
+// disabled end-to-end until that copy is written, rather than shipping a
+// silent placeholder sentence nobody actually reviewed.
+const PROVIDER_VENDORS = ['openai', 'anthropic', 'gemini'];
+
+/**
+ * PROVIDER_KEY_CONSENT_SENTENCE promises the stored key is "readable only
+ * by your user account." Before `set` ever prints that sentence, or stores
+ * anything, verify the promise is actually true of any providers.json
+ * already on disk. Owner-read-only means no group/other bits at all
+ * (mode & 0o077 === 0); a file that fails this predates this discipline
+ * (e.g. survived an umask that widened it) and must be fixed or removed
+ * before `set` is allowed to run — never fail open on a false claim.
+ * No file yet is not unsafe: writeByoConfig always writes 0600 itself.
+ */
+/**
+ * (EXTRACT-PER-CLIENT W1 FIX, GOV-3 should-fix item 10): a stat error other
+ * than ENOENT (e.g. EACCES) now fails CLOSED — returns true (unsafe) — the
+ * same "cannot verify, so don't trust it" discipline
+ * byo-key.js's own isProvidersFileModeUnsafe documents and follows. The old
+ * rethrow here let a raw fs error propagate out of cmdProvider uncaught,
+ * printing whatever bubbled to run()'s generic catch instead of a clean
+ * reason. Never throws now.
+ */
+function providersFileModeUnsafe(target) {
+  let stat;
+  try {
+    stat = fs.statSync(target);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return false;
+    return true; // cannot verify permissions — fail closed, not open
+  }
+  return (stat.mode & 0o077) !== 0;
+}
+
+async function cmdProvider(flags) {
+  const sub = process.argv[3];
+  if (!['status', 'set', 'clear'].includes(sub)) {
+    if (sub) console.error(`Unknown provider subcommand: ${sub}`);
+    usage('provider');
+    process.exit(sub ? 1 : 0);
+  }
+
+  if (sub === 'status') {
+    const config = byoKeyProvider.readByoConfig();
+    if (!config) {
+      console.log('BYO provider key: none configured');
+      return;
+    }
+    console.log(`BYO provider key: configured (vendor: ${config.provider}, model: ${config.model}, key: present)`);
+    return;
+  }
+
+  if (sub === 'clear') {
+    // clearProvidersFile() never throws (GOV-3 should-fix item 10) — every
+    // outcome is a plain string, handled explicitly below rather than
+    // falling into the generic success message for a case that isn't one.
+    const result = byoKeyProvider.clearProvidersFile();
+    if (result === 'removed-file') {
+      console.log('✓ ~/.auxilo/providers.json removed (nothing left to keep).');
+    } else if (result === 'removed-byo') {
+      console.log('✓ BYO provider key cleared. providers.json kept (your auto-detected provider selection, if any, is unchanged).');
+    } else if (result === 'unreadable') {
+      console.error('auxilo provider clear could not read ~/.auxilo/providers.json (reasonCode: providers-file-unreadable). Check its permissions and try again.');
+      process.exit(1);
+    } else if (result === 'unresolved') {
+      console.error('auxilo provider clear could not resolve your home directory (reasonCode: provider-home-unresolved).');
+      process.exit(1);
+    } else {
+      console.log('✓ Nothing to remove (no BYO provider key configured).');
+    }
+    return;
+  }
+
+  // sub === 'set' below.
+  if (PROVIDER_KEY_CONSENT_SENTENCE === '') {
+    console.error('auxilo provider set is not available yet: the operator has not configured the consent sentence for this build (reasonCode: consent-sentence-missing).');
+    process.exit(1);
+  }
+
+  // Fail closed BEFORE printing the sentence or storing anything: an
+  // existing providers.json that is not owner-read-only would make the
+  // sentence's "readable only by your user account" claim false.
+  if (providersFileModeUnsafe(byoKeyProvider.DEFAULT_PROVIDERS_STATE_PATH)) {
+    console.error('auxilo provider set refuses to continue: ~/.auxilo/providers.json exists and is not owner-read-only, so this build cannot truthfully make the consent promise (reasonCode: providers-file-mode-unsafe). Fix its permissions (chmod 600 ~/.auxilo/providers.json) or remove the file, then try again.');
+    process.exit(1);
+  }
+
+  // The TTY gate runs BEFORE any prompt: a piped or scripted stdin can never
+  // reach the hidden key prompt or the typed affirmation.
+  if (!process.stdin.isTTY) {
+    console.error('auxilo provider set must be run by a person in an interactive terminal. It does not accept piped input, and there is no flag that skips typing the consent sentence or the key.');
+    process.exit(1);
+  }
+
+  let vendor = String(flags.vendor || '').toLowerCase();
+  while (!PROVIDER_VENDORS.includes(vendor)) {
+    vendor = (await ask(`Vendor [${PROVIDER_VENDORS.join('|')}]: `)).toLowerCase();
+    if (readlineEnded) { console.log('Aborted. Nothing changed.'); return; }
+  }
+
+  // GOV-3 item 3: base_url must be https:// — a plaintext endpoint would
+  // send the transcript, and for two of the three vendors the key itself,
+  // in cleartext. Checked here (set time) AND again at read time inside
+  // byo-key.js's runModel/detect (reasonCode provider-base-url-insecure) —
+  // a hand-edited providers.json can't bypass either.
+  let baseUrl = flags['base-url'] ? String(flags['base-url']) : '';
+  if (baseUrl && byoKeyProvider.isBaseUrlInsecure(baseUrl)) {
+    console.error(`auxilo provider set refuses --base-url "${baseUrl}": it must be https:// (reasonCode: provider-base-url-insecure).`);
+    process.exit(1);
+  }
+  if (!flags['base-url']) {
+    for (;;) {
+      baseUrl = await ask(`Base URL (optional — press Enter for the ${vendor} default; must be https:// if given): `);
+      if (readlineEnded) { console.log('Aborted. Nothing changed.'); return; }
+      if (!baseUrl || !byoKeyProvider.isBaseUrlInsecure(baseUrl)) break;
+      console.log(`"${baseUrl}" is not https:// — try again, or press Enter for the ${vendor} default.`);
+    }
+  }
+
+  let model = flags.model ? String(flags.model) : '';
+  while (!model) {
+    model = await ask('Model (e.g. gpt-4o-mini, claude-sonnet-4-5, gemini-2.5-flash): ');
+    if (readlineEnded) { console.log('Aborted. Nothing changed.'); return; }
+  }
+
+  // Printed in FULL, word-wrapped to the terminal width — never truncated —
+  // before the (hidden) key prompt further below.
+  console.log(`\n${wrapForTerminal(PROVIDER_KEY_CONSENT_SENTENCE)}\n`);
+  console.log('To continue, type this sentence exactly as written, then press Enter:');
+  console.log(`\n${wrapForTerminal(PROVIDER_KEY_CONSENT_SENTENCE)}\n`);
+  const typed = await ask('> ');
+  if (typed !== PROVIDER_KEY_CONSENT_SENTENCE) {
+    console.log('The sentence did not match. Aborted. Nothing changed.');
+    return;
+  }
+
+  const apiKey = await askHidden('API key (input hidden): ');
+  if (readlineEnded || !apiKey) {
+    console.log('Aborted. Nothing changed.');
+    return;
+  }
+
+  // writeByoConfig throws ONLY on an unresolved home directory (GOV-3 item
+  // 13) — caught here so that reaches a clean reason + exit(1), never a raw
+  // stack (should-fix item 10), matching the fail-closed contract every
+  // other providers.json entry point in this file now follows.
+  let written;
+  try {
+    written = byoKeyProvider.writeByoConfig({
+      provider: vendor,
+      ...(baseUrl && { base_url: baseUrl }),
+      model,
+      api_key: apiKey,
+    });
+  } catch (err) {
+    if (err && err.reasonCode === 'provider-home-unresolved') {
+      console.error(`auxilo provider set could not resolve your home directory (reasonCode: provider-home-unresolved). ${err.message}`);
+      process.exit(1);
+    }
+    throw err;
+  }
+  console.log(`\n✓ Saved to ${written} (mode 0600). This machine will use your own ${vendor} key for extraction when no earlier provider in the order is available.`);
+}
+
 // ─── Entry point ────────────────────────────────────────────────────────────
 
 function usage(command) {
@@ -1162,6 +1479,19 @@ available on your account every subcommand says so and changes nothing.
            this for you.
   revoke   Turn it off (one step, no confirmation). Already-published
            learnings keep their 7-day retraction window.`,
+    provider: `Usage: auxilo provider <status|set|clear>
+
+Configure a bring-your-own (BYO) model provider key for local extraction —
+used only when no earlier provider in the fixed order (claude-code,
+codex-cli) is available. Auxilo never sees or bills this key.
+
+  status   Show the configured vendor and model (never the key itself).
+  set      Configure a vendor, model, and key. Interactive ONLY: the key is
+           read from a hidden prompt (never a flag, never an env var), and
+           you must type the consent sentence exactly. No flag skips this.
+  clear    Remove your BYO key. Keeps your auto-detected provider selection
+           (\`selected\`), if any — only deletes the file outright when
+           nothing but the key was in it.`,
   };
   if (command && blocks[command]) {
     console.log(`\n${blocks[command]}\n`);
@@ -1213,6 +1543,10 @@ Commands:
   clean-lane <status|grant|revoke>
             Auto-publish clean learnings (standing consent). grant is
             interactive only: you type the consent sentence yourself.
+  provider <status|set|clear>
+            Configure a bring-your-own model provider key for local
+            extraction. set is interactive only: hidden key prompt, typed
+            consent sentence.
 
 Docs: https://auxilo.io · API: ${installer.DEFAULT_BASE_URL}
 `);
@@ -1221,7 +1555,7 @@ Docs: https://auxilo.io · API: ${installer.DEFAULT_BASE_URL}
 async function main() {
   const cmd = process.argv[2];
   const subcommandHelp = ['help', '--help', '-h'].includes(process.argv[3]);
-  if (['setup', 'init', 'status', 'review', 'disable', 'clean-lane'].includes(cmd) && subcommandHelp) {
+  if (['setup', 'init', 'status', 'review', 'disable', 'clean-lane', 'provider'].includes(cmd) && subcommandHelp) {
     return usage(cmd);
   }
   const flags = parseFlags(process.argv);
@@ -1232,6 +1566,7 @@ async function main() {
     case 'review': return cmdReview(flags);
     case 'disable': return cmdDisable(flags);
     case 'clean-lane': return cmdCleanLane(flags);
+    case 'provider': return cmdProvider(flags);
     case 'help': case '--help': case '-h': case undefined: return usage();
     default:
       console.error(`Unknown command: ${cmd}`);
@@ -1260,6 +1595,7 @@ if (require.main === module) {
 module.exports = {
   parseFlags,
   runnerSkewLine,
+  extractionProviderLine,
   resolveBaseUrl,
   shortFlags,
   groupSummaryRows,
@@ -1272,4 +1608,10 @@ module.exports = {
   CLEAN_LANE_TERMS_G2,
   CLEAN_LANE_NO_EMAIL_LINE,
   wrapForTerminal,
+  PROVIDER_KEY_CONSENT_SENTENCE,
+  CLI_CLEAN_LANE_CALIBRATED_PROVIDERS,
+  STATUS_WORTHY_SKIP_REASON_CODES,
+  extractionSkipReasonLine,
+  cmdProvider,
+  providersFileModeUnsafe,
 };

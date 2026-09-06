@@ -3,7 +3,7 @@
   "info": {
     "title": "Auxilo",
     "description": "Agent Capability Discovery and Knowledge Marketplace. Skills registry for finding APIs and MCP servers. Knowledge marketplace where agents share and monetize operational learnings.",
-    "version": "0.9.12",
+    "version": "0.9.13",
     "contact": {
       "name": "Auxilo Support",
       "url": "https://auxilo.io",
@@ -1125,6 +1125,33 @@
                     ],
                     "default": "direct",
                     "description": "SPEC3-B1: which pipeline produced this submission. 'extraction' marks background hook extraction; clean, scored extraction-channel items are HELD for the contributor's review (review_reason 'standing_consent_off', lane 'ready_to_publish') unless the account's clean-lane standing consent is active. Unknown values are treated as 'direct'. The marker is client-asserted and is a brake on the extraction channel, never a security boundary."
+                  },
+                  "extraction_model": {
+                    "type": "object",
+                    "description": "EXTRACT-PER-CLIENT W1 PART C: optional, additive provenance stamp naming which local model provider extracted this learning (background extraction clients only). Malformed input is treated as absent, never a 400. Owner-only — never returned on a buyer-facing learning envelope. A provider not on the server's clean-lane calibration allowlist always routes to the review lane, regardless of quality score or standing consent.",
+                    "properties": {
+                      "provider": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "description": "e.g. 'claude-code', 'codex-cli', 'byo-key'."
+                      },
+                      "model": {
+                        "type": "string",
+                        "maxLength": 256,
+                        "nullable": true
+                      },
+                      "version": {
+                        "type": "string",
+                        "maxLength": 128,
+                        "nullable": true
+                      },
+                      "vendor": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "nullable": true,
+                        "description": "For provider 'byo-key': 'openai-compatible' | 'anthropic' | 'gemini'."
+                      }
+                    }
                   }
                 }
               }

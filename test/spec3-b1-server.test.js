@@ -462,7 +462,7 @@ describe('retraction-rate auto-freeze guardrail (SPEC3 §7)', () => {
 
 describe('server.js /learn wiring: channel + assessor + hold (structural)', () => {
   it('destructures and normalizes submission_channel; persists it on the learning', () => {
-    assert.match(SERVER_SRC, /quality_self_assessment, extraction_context, submission_channel, visibility \} = body/);
+    assert.match(SERVER_SRC, /quality_self_assessment, extraction_context, submission_channel, visibility,\s*extraction_model \} = body/);
     assert.match(SERVER_SRC, /const submissionChannel = normalizeSubmissionChannel\(submission_channel\)/);
     assert.match(SERVER_SRC, /submission_channel: submissionChannel,/);
   });
