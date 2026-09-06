@@ -279,7 +279,11 @@
     }
 
     #earnings-cta h2 {
-      font-size: clamp(30px, 4vw, 52px);
+      /* Wave E fix (F5): point at the shared closing-CTA token
+         (styles.css --h2-cta, AD sheet 9's site-wide replacement for the
+         old 60/56/52/44px scatter) instead of this page's own hardcoded
+         clamp — 42px at 1440, matching every other page's closing h2. */
+      font-size: var(--h2-cta);
       font-weight: 700;
       letter-spacing: -0.02em;
       color: var(--ivory);
