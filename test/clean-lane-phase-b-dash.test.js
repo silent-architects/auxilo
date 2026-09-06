@@ -13,6 +13,9 @@
  *      card's request with the limit interpolated (no `limit=500` literal in
  *      loadStandingConsentList), and dashboard.html calls it with PAGE_LIMIT.
  *   3. openapi.json documents the two params on the /account/learnings path.
+ *   4. N2 follow-up: `status=retracted` is an accepted EXPLICIT value (never in
+ *      the default set); the card pages a second query for it and merges both
+ *      lists newest-first in the pure builder (mergeStandingConsentRows).
  *
  * Staged-server pattern: test/clean-lane-phase-a2.test.js.
  *
@@ -83,9 +86,11 @@ function stamped(id, overrides = {}) {
 }
 
 // Stored order: plain_mid, stamped_old, stamped_newest, plain_new, stamped_mid,
-// then rows the filters must drop (private stamped, pending stamped, other
-// account stamped, a different published_via value). Gate-A N2: the dashboard
-// query carries no status filter, so the pending stamped row is IN there.
+// then rows the filters must drop (private stamped, pending stamped, retracted
+// stamped, other account stamped, a different published_via value). Gate-A N2:
+// the dashboard query carries no status filter, so the pending stamped row is
+// IN there; the retracted row is out of the default set and reached only by
+// the second, explicit status=retracted query.
 function fixtureCatalog() {
   return [
     fixtureLearning('lrn_b_plain_mid', { created_at: T.mid }),
@@ -95,6 +100,9 @@ function fixtureCatalog() {
     stamped('lrn_b_stamped_mid', { created_at: T.mid }),
     stamped('lrn_b_stamped_private', { created_at: T.newest, visibility: 'private' }),
     stamped('lrn_b_stamped_pending', { created_at: T.newest, status: 'pending_review' }),
+    // N2: a retracted stamped row — OUT of every default-status listing, IN
+    // only when the caller asks for status=retracted explicitly.
+    stamped('lrn_b_stamped_retracted', { created_at: T.new, status: 'retracted', retracted_at: T.newest }),
     stamped('lrn_b_stamped_other', { created_at: T.newest, contributor_account_id: OTHER }),
     fixtureLearning('lrn_b_via_other', { created_at: T.newest, published_via: 'chat_pipeline' }),
   ];
@@ -158,7 +166,42 @@ describe('dashboard-clean-lane.js standingConsentListQuery', () => {
     assert.equal(view.standingConsentListQuery(0, NaN), expected);
   });
 
-  it('dashboard.html loadStandingConsentList calls the builder with PAGE_LIMIT and carries no limit=500 literal', () => {
+  it('N2: standingConsentRetractedListQuery is the same request plus an explicit status=retracted', () => {
+    const base = view.standingConsentListQuery(500, 0);
+    assert.equal(view.standingConsentRetractedListQuery(500, 0), `${base}&status=retracted`);
+    assert.equal(
+      view.standingConsentRetractedListQuery(200, 400),
+      `${view.standingConsentListQuery(200, 400)}&status=retracted`
+    );
+    assert.equal(view.standingConsentRetractedListQuery(), `${base}&status=retracted`);
+    assert.equal(view.standingConsentRetractedListQuery('x', -3), `${base}&status=retracted`);
+    // The default-set query is byte-identical to before: still no status filter.
+    assert.ok(!/status=/.test(base), 'the default query still carries no status');
+  });
+
+  it('N2: mergeStandingConsentRows joins both lists newest-first, dedupes by id, tolerates junk', () => {
+    const row = (id, created_at, status = 'approved') => ({ id, created_at, status });
+    const defaults = [row('n', T.newest), row('p', T.newest, 'pending_review'), row('m', T.mid), row('o', T.old)];
+    const retracted = [row('r', T.new, 'retracted')];
+    const merged = view.mergeStandingConsentRows(defaults, retracted);
+    assert.deepEqual(merged.map((r) => r.id), ['n', 'p', 'r', 'm', 'o'], 'created_at desc; ties keep arrival order');
+    assert.deepEqual(merged.map((r) => r.status), ['approved', 'pending_review', 'retracted', 'approved', 'approved']);
+    // Inputs are not mutated.
+    assert.deepEqual(defaults.map((r) => r.id), ['n', 'p', 'm', 'o']);
+    // A row in both responses (retraction landed between the two requests) is listed once; first wins.
+    const dup = view.mergeStandingConsentRows([row('x', T.mid)], [row('x', T.mid, 'retracted'), row('y', T.old, 'retracted')]);
+    assert.deepEqual(dup.map((r) => [r.id, r.status]), [['x', 'approved'], ['y', 'retracted']]);
+    // Unparseable dates sink to the end in arrival order; junk is dropped; non-arrays are empty.
+    const junk = view.mergeStandingConsentRows([row('a', 'nope'), null, 'str', row('b', T.old)], [row('c', undefined), 7]);
+    assert.deepEqual(junk.map((r) => r.id), ['b', 'a', 'c']);
+    assert.deepEqual(view.mergeStandingConsentRows(undefined, null), []);
+    assert.deepEqual(view.mergeStandingConsentRows('x', { id: 'obj' }), []);
+    // Empty + retracted-only and defaults-only both work.
+    assert.deepEqual(view.mergeStandingConsentRows([], retracted).map((r) => r.id), ['r']);
+    assert.deepEqual(view.mergeStandingConsentRows(defaults, []).map((r) => r.id), ['n', 'p', 'm', 'o']);
+  });
+
+  it('dashboard.html loadStandingConsentList pages both builder queries with PAGE_LIMIT, merges them, and carries no limit=500 literal', () => {
     const start = DASHBOARD_HTML.indexOf('function loadStandingConsentList()');
     assert.ok(start > 0, 'loadStandingConsentList present');
     const end = DASHBOARD_HTML.indexOf('function renderStandingConsentList', start);
@@ -167,11 +210,16 @@ describe('dashboard-clean-lane.js standingConsentListQuery', () => {
     assert.match(fn, /var PAGE_LIMIT = \d+;/, 'PAGE_LIMIT still declared');
     assert.match(fn, /var MAX_PAGES = 4;/, 'the 4-page cap is kept while paging is kept');
     assert.ok(
-      fn.includes('apiFetch(AuxiloCleanLane.standingConsentListQuery(PAGE_LIMIT, offset))'),
-      'the request comes from the builder with PAGE_LIMIT, not an inline string'
+      fn.includes('apiFetch(buildQuery(PAGE_LIMIT, offset))'),
+      'the request comes from a builder with PAGE_LIMIT, not an inline string'
     );
+    // N2: the default-set query AND the explicit retracted query are both paged.
+    assert.ok(fn.includes('pageAll(AuxiloCleanLane.standingConsentListQuery)'), 'default-set list paged');
+    assert.ok(fn.includes('pageAll(AuxiloCleanLane.standingConsentRetractedListQuery)'), 'retracted list paged');
+    assert.ok(fn.includes('AuxiloCleanLane.mergeStandingConsentRows(pages[0], pages[1])'), 'merged in the pure builder');
     assert.ok(!/limit=500/.test(fn), 'no limit literal in loadStandingConsentList');
     assert.ok(!/\/account\/learnings\?/.test(fn), 'no inline /account/learnings query string');
+    assert.ok(!/status=/.test(fn), 'no inline status literal — the retracted opt-in lives in the builder');
     // The defensive second filter stays in place.
     assert.ok(fn.includes('AuxiloCleanLane.selectStandingConsentItems(rows, Date.now())'));
   });
@@ -345,6 +393,48 @@ describe('CLEAN-LANE-FLIP Phase B: GET /account/learnings published_via + sort',
     const selected = view.selectStandingConsentItems(page.payload.learnings, Date.now());
     assert.deepEqual(selected.map((item) => item.id), ['lrn_b_stamped_newest', 'lrn_b_stamped_pending', 'lrn_b_stamped_mid', 'lrn_b_stamped_old']);
     assert.deepEqual(selected.map((item) => item.status), ['approved', 'pending_review', 'approved', 'approved']);
+  });
+
+  it('N2: status=retracted lists the stamped retracted row only when asked; the default query never carries it', async (t) => {
+    if (bootSkipReason) { t.skip(bootSkipReason); return; }
+    // Explicit opt-in: exactly the caller's retracted stamped row, labelled.
+    const only = await listing(`?published_via=${PUBLISHED_VIA}&status=retracted`);
+    assert.equal(only.status, 200);
+    assert.equal(only.payload.total, 1);
+    assert.deepEqual(ids(only.payload), ['lrn_b_stamped_retracted']);
+    assert.equal(only.payload.learnings[0].status, 'retracted');
+    assert.equal(only.payload.learnings[0].published_via, PUBLISHED_VIA);
+
+    // Without `status` the default set is unchanged: the retracted row is absent
+    // from the plain stamp filter AND from the dashboard's default-set query.
+    const plain = await listing(`?published_via=${PUBLISHED_VIA}`);
+    assert.equal(plain.status, 200);
+    assert.ok(!ids(plain.payload).includes('lrn_b_stamped_retracted'), 'not in the default status set');
+    const defaults = await listing(view.standingConsentListQuery(500, 0).replace('/account/learnings', ''));
+    assert.equal(defaults.status, 200);
+    assert.equal(defaults.payload.total, 4, 'default-set total unchanged by the retracted row');
+    assert.ok(!ids(defaults.payload).includes('lrn_b_stamped_retracted'));
+
+    // The card's second query is the retracted opt-in, and the pure merge
+    // yields the one newest-first list the card renders (created_at desc:
+    // newest, pending@newest, retracted@new, mid, old).
+    const retracted = await listing(view.standingConsentRetractedListQuery(500, 0).replace('/account/learnings', ''));
+    assert.equal(retracted.status, 200);
+    assert.deepEqual(ids(retracted.payload), ['lrn_b_stamped_retracted']);
+    const merged = view.mergeStandingConsentRows(defaults.payload.learnings, retracted.payload.learnings);
+    assert.deepEqual(merged.map((r) => r.id), [
+      'lrn_b_stamped_newest', 'lrn_b_stamped_pending', 'lrn_b_stamped_retracted', 'lrn_b_stamped_mid', 'lrn_b_stamped_old',
+    ]);
+    const selected = view.selectStandingConsentItems(merged, Date.now());
+    assert.deepEqual(selected.map((item) => item.status),
+      ['approved', 'pending_review', 'retracted', 'approved', 'approved'], 'the retracted row carries its label');
+
+    // A value outside the allow-list is still a 400 with the updated string.
+    const bogus = await listing('?status=bogus');
+    assert.equal(bogus.status, 400);
+    assert.deepEqual(bogus.payload, {
+      error: 'status must be a comma-list containing only approved,rejected,pending_review,retracted',
+    });
   });
 
   it('rejects an empty published_via and any sort other than desc with 400', async (t) => {

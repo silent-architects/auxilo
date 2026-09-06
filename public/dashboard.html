@@ -1538,27 +1538,40 @@
     loading.appendChild(document.createTextNode('Loading...'));
     el.appendChild(loading);
 
-    var all = [];
     // CLEAN-LANE-FLIP Phase B: the server filters published_via and sorts
     // newest-first (AuxiloCleanLane.standingConsentListQuery), so the first
     // page IS the list in the common case. Paging only continues when a page
     // comes back full, and stays capped at MAX_PAGES (Gate-A 2026-09-05).
+    // N2: the server's default status set never includes retracted rows, so
+    // the card pages the default list AND the retracted list
+    // (AuxiloCleanLane.standingConsentRetractedListQuery) and merges them
+    // newest-first in the pure builder. The badge count is unaffected.
     var PAGE_LIMIT = 500;
     var MAX_PAGES = 4;
-    function page(offset, pageNo) {
-      return apiFetch(AuxiloCleanLane.standingConsentListQuery(PAGE_LIMIT, offset))
-        .then(parseJsonResponse)
-        .then(function (res) {
-          if (!res.ok) throw new Error(res.data.error || 'load failed');
-          var items = res.data.learnings || [];
-          all = all.concat(items);
-          var next = offset + items.length;
-          if (items.length >= PAGE_LIMIT && pageNo + 1 < MAX_PAGES && next < (res.data.total || 0)) return page(next, pageNo + 1);
-          return all;
-        });
+    function pageAll(buildQuery) {
+      var all = [];
+      function page(offset, pageNo) {
+        return apiFetch(buildQuery(PAGE_LIMIT, offset))
+          .then(parseJsonResponse)
+          .then(function (res) {
+            if (!res.ok) throw new Error(res.data.error || 'load failed');
+            var items = res.data.learnings || [];
+            all = all.concat(items);
+            var next = offset + items.length;
+            if (items.length >= PAGE_LIMIT && pageNo + 1 < MAX_PAGES && next < (res.data.total || 0)) return page(next, pageNo + 1);
+            return all;
+          });
+      }
+      return page(0, 0);
     }
-    page(0, 0)
-      .then(function (rows) { renderStandingConsentList(AuxiloCleanLane.selectStandingConsentItems(rows, Date.now())); })
+    Promise.all([
+      pageAll(AuxiloCleanLane.standingConsentListQuery),
+      pageAll(AuxiloCleanLane.standingConsentRetractedListQuery),
+    ])
+      .then(function (pages) {
+        var rows = AuxiloCleanLane.mergeStandingConsentRows(pages[0], pages[1]);
+        renderStandingConsentList(AuxiloCleanLane.selectStandingConsentItems(rows, Date.now()));
+      })
       .catch(function (err) {
         el.textContent = '';
         var p = document.createElement('div');

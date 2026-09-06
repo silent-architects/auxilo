@@ -42,8 +42,23 @@
    * Gate-A 2026-09-06 (N2, badge vs list): no status filter — the badge counts
    * stamped rows regardless of status, so the list shows every stamped row the
    * server returns (its default status set), each with a status label.
+   *
+   * N2 follow-up: the server's default status set never includes `retracted`
+   * (that is an explicit opt-in on GET /account/learnings), so the card issues
+   * this query for the default set PLUS standingConsentRetractedListQuery for
+   * the retracted rows, then mergeStandingConsentRows joins the two. The badge
+   * count is untouched — it still comes from GET /account/clean-lane.
    */
   function standingConsentListQuery(pageLimit, offset) {
+    return standingConsentQueryBase(pageLimit, offset);
+  }
+
+  /** The same list request, restricted to the caller's retracted stamped rows. */
+  function standingConsentRetractedListQuery(pageLimit, offset) {
+    return standingConsentQueryBase(pageLimit, offset) + '&status=retracted';
+  }
+
+  function standingConsentQueryBase(pageLimit, offset) {
     var limit = parseInt(pageLimit, 10);
     if (!Number.isInteger(limit) || limit < 1) limit = 500;
     var off = parseInt(offset, 10);
@@ -51,6 +66,42 @@
     return '/account/learnings?visibility=public' +
       '&published_via=' + encodeURIComponent(PUBLISHED_VIA_CLEAN_LANE) +
       '&sort=desc&limit=' + limit + '&offset=' + off;
+  }
+
+  function createdAtMs(row) {
+    var t = Date.parse(row && row.created_at);
+    return Number.isFinite(t) ? t : -Infinity;
+  }
+
+  /**
+   * Join the rows from the default-status list and the retracted list into
+   * one newest-first array (created_at desc; unparseable dates sink to the
+   * end; ties keep their arrival order). Rows are deduplicated by id — the
+   * first occurrence wins — so a row present in both responses (a retraction
+   * landing between the two requests) is listed once. Non-array inputs count
+   * as empty.
+   */
+  function mergeStandingConsentRows(defaultRows, retractedRows) {
+    var seen = Object.create(null);
+    var out = [];
+    [defaultRows, retractedRows].forEach(function (rows) {
+      if (!Array.isArray(rows)) return;
+      rows.forEach(function (r) {
+        if (!r || typeof r !== 'object') return;
+        var key = typeof r.id === 'string' && r.id ? r.id : null;
+        if (key !== null) {
+          if (seen[key]) return;
+          seen[key] = true;
+        }
+        out.push(r);
+      });
+    });
+    // Array.prototype.sort is stable (ES2019): equal timestamps keep order.
+    out.sort(function (a, b) {
+      var d = createdAtMs(b) - createdAtMs(a);
+      return Number.isNaN(d) ? 0 : d; // both unparseable → keep arrival order
+    });
+    return out;
   }
 
   /**
@@ -189,6 +240,8 @@
     DEFAULT_MIN_QUALITY: DEFAULT_MIN_QUALITY,
     PUBLISHED_VIA_CLEAN_LANE: PUBLISHED_VIA_CLEAN_LANE,
     standingConsentListQuery: standingConsentListQuery,
+    standingConsentRetractedListQuery: standingConsentRetractedListQuery,
+    mergeStandingConsentRows: mergeStandingConsentRows,
     viewState: viewState,
     qualityOptions: qualityOptions,
     buildGrantBody: buildGrantBody,

@@ -2980,7 +2980,7 @@
     "/account/learnings": {
       "get": {
         "summary": "List your own submitted-learning metadata",
-        "description": "SPEC3-F2 fresh-machine hydration surface. Returns metadata only for learnings whose contributor_account_id is the authenticated caller. The default includes approved, rejected, and pending_review records. Bodies, evidence, quality objects, and every other content-bearing field are deliberately excluded.",
+        "description": "SPEC3-F2 fresh-machine hydration surface. Returns metadata only for learnings whose contributor_account_id is the authenticated caller. The default includes approved, rejected, and pending_review records; retracted records are returned only when status names retracted explicitly. Bodies, evidence, quality objects, and every other content-bearing field are deliberately excluded.",
         "operationId": "listAccountLearnings",
         "tags": [
           "Account",
@@ -3002,7 +3002,7 @@
               "type": "string",
               "default": "approved,rejected,pending_review"
             },
-            "description": "Comma-list containing only approved, rejected, and/or pending_review."
+            "description": "Comma-list containing only approved, rejected, pending_review, and/or retracted. retracted is an explicit opt-in: it is never part of the default set, so omitting status never returns retracted records."
           },
           {
             "name": "visibility",
@@ -3114,7 +3114,8 @@
                             "enum": [
                               "approved",
                               "rejected",
-                              "pending_review"
+                              "pending_review",
+                              "retracted"
                             ]
                           },
                           "visibility": {
