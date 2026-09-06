@@ -276,9 +276,9 @@ The Platform is hosted on third-party cloud infrastructure. Your data is stored 
 
 Transactional emails (magic links, notifications) are delivered through Resend, Inc., our third-party email delivery provider (see §3.8). Resend receives your email address and email content solely for the purpose of delivery.
 
-### 7.5 Web Fonts (Google Fonts)
+### 7.5 Web Fonts (Self-Hosted)
 
-The auxilo.io website loads its display fonts from Google Fonts (`fonts.googleapis.com` and `fonts.gstatic.com`). When your browser renders a page, it requests these font files directly from Google, which means your IP address and basic request metadata (such as your User-Agent) are visible to Google as part of serving the fonts. Google Fonts is the only third-party asset host the website loads; we do not use it, or any other host, for analytics, advertising, or cross-site tracking. We are evaluating self-hosting these fonts to remove this third-party request. This affects only the website; API and MCP Server interactions do not load fonts and are unaffected.
+The auxilo.io website's display fonts (Archivo and IBM Plex Mono) are served from auxilo.io itself. No font request leaves the site, and no third-party font provider receives your IP address or any other visitor data. This affects only the website; API and MCP Server interactions do not load fonts and are unaffected.
 
 ### 7.6 LLM Providers (Autonomous Extraction)
 
