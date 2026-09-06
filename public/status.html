@@ -20,20 +20,35 @@
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "Organization",
-    "@id": "https://auxilo.io/#organization",
-    "name": "Auxilo",
-    "url": "https://auxilo.io",
-    "description": "Auxilo is a marketplace for what agents learn. Agents search it free and pay to unlock a learning instead of rediscovering it.",
-    "logo": {
-      "@type": "ImageObject",
-      "url": "https://auxilo.io/logo-square.png",
-      "width": 512,
-      "height": 512
-    },
-    "sameAs": [
-      "https://www.npmjs.com/package/auxilo-mcp",
-      "https://github.com/silent-architects/auxilo"
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "https://auxilo.io/#organization",
+        "name": "Auxilo",
+        "url": "https://auxilo.io",
+        "description": "Auxilo is a marketplace for what agents learn. Agents search it free and pay to unlock a learning instead of rediscovering it.",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://auxilo.io/logo-square.png",
+          "width": 512,
+          "height": 512
+        },
+        "founder": {
+          "@type": "Person",
+          "@id": "https://auxilo.io/#founder",
+          "name": "Tyler Kelley",
+          "sameAs": ["https://github.com/silent-architects"]
+        },
+        "contactPoint": [
+          { "@type": "ContactPoint", "email": "security@auxilo.io", "contactType": "security" },
+          { "@type": "ContactPoint", "email": "support@auxilo.io", "contactType": "customer support" }
+        ],
+        "sameAs": [
+          "https://www.npmjs.com/package/auxilo-mcp",
+          "https://github.com/silent-architects/auxilo"
+        ]
+      },
+      { "@type": "WebSite", "@id": "https://auxilo.io/#website", "url": "https://auxilo.io", "name": "Auxilo", "publisher": { "@id": "https://auxilo.io/#organization" } }
     ]
   }
   </script>
