@@ -12106,7 +12106,7 @@ app.get('/llms.txt', (c) => {
 
 // ─── Legal pages (terms, privacy) ────────────────────────────────────
 
-function serveLegalPage(c, filename, title) {
+function serveLegalPage(c, filename, title, seo) {
   try {
     const md = fs.readFileSync(path.join(__dirname, 'docs', filename), 'utf8');
     // Minimal markdown-to-HTML: headings, paragraphs, bold, italic, lists,
@@ -12142,12 +12142,27 @@ function serveLegalPage(c, filename, title) {
     // Restore protected code blocks, unwrapping any <p> the paragraph rule added.
     body = body.replace(/<p> CODE(\d+) <\/p>| CODE(\d+) /g,
       (_m, a, b) => codeBlocks[a !== undefined ? a : b]);
+    // SEO-BASELINE-2026-09-06: canonical + og/twitter block, /terms and /privacy only
+    // (routes below pass `seo`; other serveLegalPage callers pass nothing and get no tags).
+    const seoTags = seo ? [
+      `<link rel="canonical" href="https://auxilo.io${seo.path}"/>`,
+      `<meta property="og:type" content="website"/>`,
+      `<meta property="og:url" content="https://auxilo.io${seo.path}"/>`,
+      `<meta property="og:title" content="${title} | Auxilo"/>`,
+      `<meta name="twitter:card" content="summary"/>`,
+      ...(seo.description ? [
+        `<meta name="description" content="${seo.description}"/>`,
+        `<meta property="og:description" content="${seo.description}"/>`,
+        `<meta name="twitter:description" content="${seo.description}"/>`,
+      ] : []),
+    ].join('\n  ') : '';
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>${title} | Auxilo</title>
+  ${seoTags}
   <link rel="stylesheet" href="/styles.css?v=2"/>
   <style>
     .legal-wrap{max-width:720px;margin:0 auto;padding:120px 24px 80px;color:#E5E5E3}
@@ -12180,8 +12195,14 @@ function serveLegalPage(c, filename, title) {
   }
 }
 
-app.get('/terms', (c) => serveLegalPage(c, 'TERMS-OF-SERVICE.md', 'Terms of Service'));
-app.get('/privacy', (c) => serveLegalPage(c, 'PRIVACY-POLICY.md', 'Privacy Policy'));
+app.get('/terms', (c) => serveLegalPage(c, 'TERMS-OF-SERVICE.md', 'Terms of Service', {
+  path: '/terms',
+  description: 'Auxilo terms of service covering accounts, payments, and the knowledge marketplace.',
+}));
+app.get('/privacy', (c) => serveLegalPage(c, 'PRIVACY-POLICY.md', 'Privacy Policy', {
+  path: '/privacy',
+  description: 'Auxilo privacy policy covering data collection, use, and retention.',
+}));
 app.get('/legal/subprocessors', (c) => serveLegalPage(c, 'SUBPROCESSORS.md', 'Sub-Processors'));
 app.get('/legal/supported-clients', (c) => serveLegalPage(c, 'SUPPORTED-CLIENTS.md', 'Supported Clients'));
 // FB-1: /dmca is incorporated into the Terms (§5.9.4(b)) and must resolve, not 404.
