@@ -46,7 +46,7 @@ const cli = require('../bin/auxilo-cli.js');
 const G_LEAD = '**(g) Standing publication consent (optional).**';
 const F_LEAD = '**(f) Audit log.**';
 const G2_LEAD = 'The quality threshold in effect for a Builder is the one that Builder selected';
-const S41_CLAUSE = ', unless the Builder has activated standing publication consent under Section 5.9.3(g); a new account\'s first Learning is additionally held for operator review.';
+const S41_CLAUSE = 'is then either held in the Builder\'s review queue for the Builder\'s approval or published to the catalog on submission, depending on the screening result, the submission channel, and whether the Builder has activated standing publication consent under Section 5.9.3(g); a new account\'s first Learning is additionally held for operator review.';
 const CHAPEAU_CLAUSE = 'until the Builder publishes them, except as provided in subsection (g).';
 const LAST_UPDATED = '**Last Updated: September 6, 2026**';
 
@@ -108,10 +108,10 @@ describe('Terms of Service: §5.9.3(g), ratchet paragraph, §4.1 clause, chapeau
     assert.equal(TOS.split(G2_LEAD).length - 1, 1, 'ratchet exactly once');
   });
 
-  it('§4.1 carries the standing-consent clause BEFORE the first-Learning semicolon', () => {
+  it('§4.1 carries the standing-consent clause BEFORE the first-Learning semicolon (dark-path-b2 Appendix B fix)', () => {
     const s41 = /### 4\.1 How It Works\n\n(.+)\n/.exec(TOS);
     assert.ok(s41, '§4.1 present');
-    assert.ok(s41[1].includes('only when the Builder approves it from their review queue' + S41_CLAUSE),
+    assert.ok(s41[1].includes(S41_CLAUSE),
       'clause sits between "review queue" and the semicolon so operator review governs both branches');
     assert.equal(TOS.split('standing publication consent under Section 5.9.3(g)').length - 1, 1);
   });

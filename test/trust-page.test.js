@@ -359,6 +359,38 @@ function tpWithExternalCatalog() {
   ];
 }
 
+// TRUST-P0 (2026-09-06 P0 fix): the live-bug shape. config/internal-identities.json
+// (linked into the staged server via linkDirs, so this is the REAL tracked
+// register, not a synthetic one) registers only the operator WALLET, never
+// an account id. The live catalog's rows mostly carry the operator's real
+// account id with NO wallet on that particular row — only one sibling row
+// carries both the account id and the registered wallet. Pre-fix, the
+// no-wallet rows read as external (data-partition-state="b", "An outside
+// builder has published here") on a catalog with zero outside builders.
+const TP_OPERATOR_WALLET = '0xA19Cf92cc1daCf742f0E50b4128cAD3A86A81EC4'; // config/internal-identities.json
+const TP_OPERATOR_ACCOUNT = 'acc_trust_operator_real';
+
+function tpOperatorLinkedCatalog() {
+  return [
+    tpRow({ id: 'tp_op_link', title: 'operator linking row', category: 'code-execution',
+      contributor_account_id: TP_OPERATOR_ACCOUNT, contributor_wallet: TP_OPERATOR_WALLET }),
+    tpRow({ id: 'tp_op_no_wallet_1', title: 'operator, no wallet on this row', category: 'code-execution',
+      contributor_account_id: TP_OPERATOR_ACCOUNT }),
+    tpRow({ id: 'tp_op_no_wallet_2', title: 'operator, no wallet on this row either', category: 'web-interaction',
+      contributor_account_id: TP_OPERATOR_ACCOUNT }),
+  ];
+}
+
+// Same operator account id, but the register never sees the wallet at all
+// (no linking row anywhere in the catalog) — the documented residual: state
+// stays 'b' until INTERNAL_IDENTITIES_EXTRA_ACCOUNT_IDS names it.
+function tpOperatorUnlinkedCatalog() {
+  return [
+    tpRow({ id: 'tp_op_orphan_1', title: 'operator, never linked', category: 'code-execution',
+      contributor_account_id: TP_OPERATOR_ACCOUNT }),
+  ];
+}
+
 function tpLedgerLine(id, learning_id) {
   return JSON.stringify({
     id, ts: '2026-09-06T00:00:00.000Z', learning_id, amount_paid_usd: 0.05,
@@ -373,11 +405,17 @@ function tpPartitionState(html) {
 }
 // TRUST-PAGE-3 content pass: the text server-injected between the
 // SSR:PARTITION-STATE markers (renderTrustPagePartition), distinct from the
-// data-partition-state attribute tpPartitionState reads.
+// data-partition-state attribute tpPartitionState reads. TRUST-P0 (comment
+// stripping, item 4): the served body no longer carries the
+// <!-- SSR:PARTITION-STATE --> marker comments at all (they are stripped
+// along with every other HTML comment) — read the text from the
+// s4-partition-state element's own content instead of the now-absent
+// markers. A dedicated test below (comment stripping) still asserts the
+// markers are gone from the wire.
 function tpPartitionStateText(html) {
-  const m = html.match(/<!-- SSR:PARTITION-STATE -->([\s\S]*?)<!-- \/SSR:PARTITION-STATE -->/);
-  assert.ok(m, 'SSR:PARTITION-STATE markers present in the served HTML');
-  return m[1];
+  const m = html.match(/<([a-z]+) id="s4-partition-state" data-partition-state="[^"]*"[^>]*>([^<]*)<\/\1>/);
+  assert.ok(m, 's4-partition-state element content present in the served HTML');
+  return m[2];
 }
 function tpCell(html, id) {
   const m = html.match(new RegExp(`id="${id}"[^>]*>([^<]*)<`));
@@ -385,7 +423,7 @@ function tpCell(html, id) {
   return m[1];
 }
 
-async function withTrustPageStagedServer(t, { catalog, ledger }, body) {
+async function withTrustPageStagedServer(t, { catalog, ledger, env: envOverrides }, body) {
   let nodeModulesDir;
   try {
     const honoEntry = require.resolve('hono', { paths: [REPO] });
@@ -426,6 +464,7 @@ async function withTrustPageStagedServer(t, { catalog, ledger }, body) {
         LLM_SENSITIVITY_ENABLED: 'false',
         AUXILO_DATA_DIR: dataDir,
         AUXILO_ACCOUNTS_FILE: path.join(dataDir, 'accounts.json'),
+        ...(envOverrides || {}),
       },
       timeoutMs: 60_000,
       maxAttempts: 4,
@@ -502,6 +541,64 @@ describe('TRUST-PAGE-SSR: §4 partition render + §7 live counts + no-store', { 
   it('GET /how-submissions-work sends Cache-Control: no-store', { timeout: 240_000 }, async (t) => {
     await withTrustPageStagedServer(t, { catalog: tpAllInternalCatalog(), ledger: '' }, async (_html, res) => {
       assert.equal(res.headers.get('cache-control'), 'no-store');
+    });
+  });
+
+  // TRUST-P0 (2026-09-06): the live-bug regression, end to end through the
+  // real route and the REAL tracked config/internal-identities.json (linked
+  // into the staged server, not a synthetic register). Pre-fix this served
+  // data-partition-state="b" ("An outside builder has published here") on a
+  // catalog with zero outside builders — root cause: operator rows carrying
+  // the operator's account id with no wallet on that row read as external
+  // because the register held only the operator's wallet, never the account
+  // id, and nothing linked the two.
+  it('TRUST-P0: operator account id + no wallet, linked via a sibling row through the REAL register → state a (was falsely state b)', { timeout: 240_000 }, async (t) => {
+    await withTrustPageStagedServer(t, { catalog: tpOperatorLinkedCatalog(), ledger: '' }, async (html, _res, stats) => {
+      assert.equal(tpPartitionState(html), 'a', 'linked operator rows must never fabricate State B');
+      assert.equal(tpPartitionStateText(html), S4_STATE_A, 'state A text verbatim — no magnitude sentence rendered');
+      assert.equal(stats.total_contributors, 1, 'sanity: /knowledge/stats agrees — one contributor (the operator account), matching computePartition state a');
+    });
+  });
+
+  it('TRUST-P0: operator account id with NO wallet anywhere in the catalog (unlinkable) → state b (documented residual)', { timeout: 240_000 }, async (t) => {
+    await withTrustPageStagedServer(t, { catalog: tpOperatorUnlinkedCatalog(), ledger: '' }, async (html) => {
+      assert.equal(tpPartitionState(html), 'b', 'an account id the register never saw next to a registered wallet cannot be discovered by linking');
+    });
+  });
+
+  it('TRUST-P0: the same unlinkable catalog resolves state a once INTERNAL_IDENTITIES_EXTRA_ACCOUNT_IDS names the account id (the documented mitigation)', { timeout: 240_000 }, async (t) => {
+    await withTrustPageStagedServer(t, {
+      catalog: tpOperatorUnlinkedCatalog(),
+      ledger: '',
+      env: { INTERNAL_IDENTITIES_EXTRA_ACCOUNT_IDS: TP_OPERATOR_ACCOUNT },
+    }, async (html) => {
+      assert.equal(tpPartitionState(html), 'a', 'env-extra mitigation resolves the residual without a code change');
+    });
+  });
+
+  // TRUST-P0 item 4: serve-time comment stripping on this route only.
+  it('TRUST-P0: the served page carries zero HTML comments (build-reference markers stripped at serve time)', { timeout: 240_000 }, async (t) => {
+    assert.ok(TRUST_HTML.includes('<!--'), 'sanity: the SOURCE file does carry HTML comments (so this test is not vacuous)');
+    assert.ok(TRUST_HTML.includes('SITE-PM'), 'sanity: the source carries the "SITE-PM" build-reference marker, and only inside comments');
+    await withTrustPageStagedServer(t, { catalog: tpWithExternalCatalog(), ledger: '' }, async (html) => {
+      assert.equal(html.includes('<!--'), false, 'zero "<!--" anywhere in the served body');
+      assert.equal(html.includes('-->'), false, 'zero "-->" anywhere in the served body');
+      assert.equal(html.includes('SSR:PARTITION-STATE'), false, 'the SSR marker comments themselves are stripped, not just their content');
+      assert.equal(html.includes('SITE-PM'), false, 'the build-reference comment content itself is gone, not just its delimiters');
+      // The content the markers wrapped must still be present and correct —
+      // stripping removes the <!-- --> delimiters, never the substituted text.
+      assert.ok(html.includes(S4_STATE_B_BASE), 'the state text survives comment-stripping');
+    });
+  });
+
+  it('TRUST-P0: comment stripping does not remove ordinary visible text that merely contains the substrings "SSR:" or a build-rev token', { timeout: 240_000 }, async (t) => {
+    await withTrustPageStagedServer(t, { catalog: tpAllInternalCatalog(), ledger: '' }, async (html) => {
+      // The stripped page must still be well-formed enough to carry the
+      // spec's required head tags and h1 — a regex-based stripper that ate
+      // too much (e.g. matched greedily past the first "-->") would corrupt
+      // the rest of the document; this is the corruption tripwire.
+      assert.ok(html.includes(`<title>${TITLE}</title>`), 'title tag intact after stripping');
+      assert.ok(html.includes(`<h1>${H1}</h1>`) || new RegExp(`<h1[^>]*>${H1.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</h1>`).test(html), 'h1 intact after stripping');
     });
   });
 });

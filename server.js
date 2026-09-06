@@ -4497,6 +4497,19 @@ app.post('/checkout/session', requireAuth, async (c) => {
     // are globally disabled — a session minted now would complete into a
     // webhook we are refusing.
     if (!paymentsEnabled()) return c.json(paymentsDisabledBody(), 503);
+
+    const accountId = c.get('accountId');
+
+    // GOV-2 A3 (blocking, CREDITS-CONTROL PART 1): a credit purchase is a
+    // Terms-bound transaction (§7.1/§7.2/§7.3 — non-refundable, no cash value,
+    // credits do not expire), so it gets the same current-Terms-acceptance
+    // gate as the builder-side money paths (wallet-link :5120, withdrawal
+    // :10183). No existing hasAcceptedCurrentTos gate reached this route
+    // before this change.
+    const checkoutAccount = loadAccounts()[accountId];
+    if (!checkoutAccount) return c.json({ error: 'Account not found' }, 404);
+    if (!hasAcceptedCurrentTos(checkoutAccount)) return termsNotAcceptedResponse(c);
+
     let body;
     try { body = await c.req.json(); } catch {
         return c.json({ error: 'Invalid JSON body' }, 400);
@@ -4509,13 +4522,11 @@ app.post('/checkout/session', requireAuth, async (c) => {
             valid_packs: Object.keys(PACKS).map(k => ({
                 id: k,
                 price_usd: PACKS[k].price_usd,
-                queries: PACKS[k].queries,
                 unlocks: PACKS[k].unlocks,
             })),
         }, 400);
     }
 
-    const accountId = c.get('accountId');
     const baseUrl = process.env.BASE_URL || `https://${c.req.header('host')}`;
 
     try {
@@ -4653,21 +4664,17 @@ app.get('/account/purchases', requireAuth, (c) => {
 });
 
 // ── GET /checkout/success (Phase 0.4 — redirect landing) ───────────────────
+// CREDITS-CONTROL PART 1 (SPEC-1 A7/Q5, STOP gate c): 302 to the dashboard,
+// carrying no session_id and no account data — the webhook can land after
+// this redirect, so the dashboard polls /account/purchases + /account/credits
+// itself rather than trusting anything in this URL.
 app.get('/checkout/success', (c) => {
-    const sessionId = c.req.query('session_id');
-    return c.json({
-        status: 'success',
-        message: 'Payment successful! Your credits have been added to your account.',
-        session_id: sessionId || null,
-    });
+    return c.redirect('/dashboard?checkout=success', 302);
 });
 
 // ── GET /checkout/cancel (Phase 0.4 — redirect landing) ────────────────────
 app.get('/checkout/cancel', (c) => {
-    return c.json({
-        status: 'cancelled',
-        message: 'Payment was cancelled. No credits were added.',
-    });
+    return c.redirect('/dashboard?checkout=cancel', 302);
 });
 
 // ─── Stripe Connect Withdrawals (Change 6) ─────────────────────────────────────
@@ -4822,6 +4829,18 @@ function notePendingReviewEntries(count, context = {}) {
 // POST /account/connect-stripe: onboard a Stripe Express connected account
 app.post('/account/connect-stripe', requireAuth, async (c) => {
   const accountId = c.get('accountId');
+
+  // CREDITS-CONTROL PART 1 (SPEC-1 A2): close the dark Connect-onboarding
+  // surface a bare STRIPE_SECRET_KEY would otherwise open before the custodial
+  // payout rail itself re-opens. Same sentinel, same 503 shape as
+  // /withdraw/stripe below — in ADDITION to (not replacing) the getStripe()
+  // check that follows.
+  if (process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true') {
+    return c.json({
+      error: 'Withdrawals temporarily paused during non-custodial migration',
+      code: 'withdraw_paused_noncustodial_migration',
+    }, 503);
+  }
 
   // Check if Stripe is configured (cheap, no account read, do before taking the lock)
   const { getStripe } = require('./lib/stripe.js');
@@ -5618,9 +5637,9 @@ app.get('/api/info', (c) => {
       '/withdraw': { price: 'free', method: 'POST', description: 'Withdraw pending USDC earnings to verified wallet. Body: { wallet, signature }. Requires prior challenge + EIP-712 signature.', auth: 'wallet-signed' },
       '/account/link-wallet': { price: 'free', method: 'POST', description: 'Link a verified wallet to the authenticated account. Body: { wallet }', auth: 'session or api-key' },
       '/account/earnings': { price: 'free', method: 'GET', description: 'View contributor earnings for the authenticated account', auth: 'session or api-key' },
-      '/account/credits': { price: 'free', method: 'GET', description: 'View query and unlock credit balance for the authenticated account', auth: 'session' },
+      '/account/credits': { price: 'free', method: 'GET', description: 'View unlock credit balance for the authenticated account', auth: 'session' },
       '/account/purchases': { price: 'free', method: 'GET', description: 'View credit purchase history for the authenticated account', auth: 'session' },
-      '/checkout/session': { price: 'free', method: 'POST', description: 'Create a Stripe checkout session to purchase credits. Body: { pack_id }', auth: 'session' },
+      '/checkout/session': { price: 'free', method: 'POST', description: 'Create a Stripe checkout session to purchase credits. Body: { pack }', auth: 'session' },
       '/checkout/success': { price: 'free', method: 'GET', description: 'Stripe payment success landing page (redirect target)' },
       '/checkout/cancel': { price: 'free', method: 'GET', description: 'Stripe payment cancelled landing page (redirect target)' },
       '/openapi.json': { price: 'free', method: 'GET', description: 'OpenAPI 3.0 specification for all endpoints' },
@@ -5633,9 +5652,9 @@ app.get('/api/info', (c) => {
       '/account/api-keys': { price: 'free', method: 'POST', description: 'Generate a new axl_ API key. Body: { name? }', auth: 'session' },
       '/account/link-wallet': { price: 'free', method: 'POST', description: 'Link a verified wallet to the authenticated account. Body: { wallet }', auth: 'session or api-key' },
       '/account/earnings': { price: 'free', method: 'GET', description: 'View contributor earnings for the authenticated account', auth: 'session or api-key' },
-      '/account/credits': { price: 'free', method: 'GET', description: 'View query and unlock credit balance for the authenticated account', auth: 'session' },
+      '/account/credits': { price: 'free', method: 'GET', description: 'View unlock credit balance for the authenticated account', auth: 'session' },
       '/account/purchases': { price: 'free', method: 'GET', description: 'View credit purchase history for the authenticated account', auth: 'session' },
-      '/checkout/session': { price: 'free', method: 'POST', description: 'Create a Stripe checkout session to purchase credits. Body: { pack_id }', auth: 'session' },
+      '/checkout/session': { price: 'free', method: 'POST', description: 'Create a Stripe checkout session to purchase credits. Body: { pack }', auth: 'session' },
       '/checkout/success': { price: 'free', method: 'GET', description: 'Stripe payment success landing page (redirect target)' },
       '/checkout/cancel': { price: 'free', method: 'GET', description: 'Stripe payment cancelled landing page (redirect target)' },
       '/report': { price: 'free', method: 'POST', description: 'Report harmful or inappropriate content. Body: { learning_id, reason, details? }', auth: 'public', rateLimit: '10/hour per IP' },
@@ -5664,6 +5683,13 @@ app.get('/health', (c) => {
     // Wave 2b: effective global payment-switch state (observability — an
     // operator or monitor can see the pause without probing a paid endpoint).
     payments_enabled: paymentsEnabled(),
+    // CREDITS-CONTROL PART 1 (SPEC-1 A3): whether Stripe is actually
+    // provisioned, independent of the payments kill switch above. The
+    // purchase control on /pricing and the dashboard renders no Buy button
+    // unless BOTH payments_enabled and stripe_configured are true — the
+    // dark-safe invariant this build ships under (no STRIPE_SECRET_KEY on
+    // prod yet).
+    stripe_configured: !!process.env.STRIPE_SECRET_KEY,
     timestamp: new Date().toISOString()
   });
 });
@@ -11957,6 +11983,15 @@ function renderTrustPagePartition(html) {
       isPlatformContributorFn: isPlatformContributor,
     });
     if (!partition) return html; // non-array catalog: treat as derivation failure, neither branch
+    if (partition.state === null) {
+      // TRUST-P0 pass 2: computePartition could not form an opinion
+      // (register-error or identity-conflict, lib/partition-guard.js) —
+      // serve neither branch. The static container's default
+      // data-partition-state="none" is left untouched.
+      console.error(`[trust-page] §4 partition unresolved (${partition.reason}), serving neither branch` +
+        (partition.reason === 'identity-conflict' ? ` (${partition.conflicts.length} identities split-brained)` : ''));
+      return html;
+    }
     // The state marker moves, and (this pass) the container between the
     // SSR:PARTITION-STATE comments fills with the matching state string —
     // never both, per finding 13's render contract.
@@ -12003,11 +12038,27 @@ function renderTrustPageLiveCounts(html) {
   }
 }
 
+// TRUST-P0 (2026-09-06): the served source for this route carries
+// build-reference HTML comments (section-authorship markers like "SITE-PM
+// sections file, REV 6", ship-rev citations like "ship-rev 2026-09-06 rev
+// 1a", and (after substitution) the leftover <!-- SSR:PARTITION-STATE -->
+// / <!-- /SSR:PARTITION-STATE --> marker pair renderTrustPagePartition
+// preserves around its injected text) — none of that is meant for a public
+// audience. Strip every HTML comment from the FINAL served body for this
+// route only (not a global serveStatic change — every other page keeps its
+// comments). Runs AFTER substitution (renderTrustPagePartition /
+// renderTrustPageLiveCounts / injectAnalytics), never before: stripping
+// first would remove the SSR:PARTITION-STATE markers those functions match
+// on and silently break the §4 render.
+function stripHtmlComments(html) {
+  return String(html).replace(/<!--[\s\S]*?-->/g, '');
+}
+
 // TRUST-PAGE route (PUNCH-LIST TRUST-PAGE row; spec rev 3g §1). Content =
 // SITE-PM §2b/§3b (sections file rev 6) + §9b (rev 3a); §4/§7's SSR is this
 // pass's addition. CACHE (precondition, finding 13's cache bind): this
 // route sends `Cache-Control: no-store` on every path (including the
-// serveStatic fallback below), NOT the property's `public, max-age=3600` —
+// static fallback below), NOT the property's `public, max-age=3600` —
 // the render is a state-dependent truth claim over an in-memory filter, and
 // the property default was written for static copy. No `Vary` header: the
 // render depends only on server-side state (the catalog + the unlock
@@ -12020,15 +12071,33 @@ app.get('/how-submissions-work', (c) => {
       let html = fs.readFileSync(filePath, 'utf8');
       html = renderTrustPagePartition(html);
       html = renderTrustPageLiveCounts(html);
+      html = injectAnalytics(html, ANALYTICS_DOMAIN);
+      html = stripHtmlComments(html);
       c.header('Content-Type', 'text/html; charset=utf-8');
       c.header('Cache-Control', 'no-store');
-      return c.body(injectAnalytics(html, ANALYTICS_DOMAIN));
+      return c.body(html);
     }
   } catch (e) {
     console.error('[trust-page] server-render failed, falling back to static:', e.message);
   }
-  const res = serveStatic(c, 'how-submissions-work.html', 'no-store');
-  if (res) return res;
+  // Static fallback (file read/SSR failed above, or was absent): serve the
+  // raw file directly rather than delegating to the generic serveStatic()
+  // helper, so the same comment-strip contract holds on this path too —
+  // serveStatic() is shared by every other page and deliberately untouched.
+  try {
+    const filePath = path.join(PUBLIC_DIR, 'how-submissions-work.html');
+    if (fs.existsSync(filePath)) {
+      let html = fs.readFileSync(filePath, 'utf8');
+      html = injectAnalytics(html, ANALYTICS_DOMAIN);
+      html = stripHtmlComments(html);
+      c.header('Content-Type', 'text/html; charset=utf-8');
+      c.header('Cache-Control', 'no-store');
+      return c.body(html);
+    }
+  } catch (e) {
+    console.error('[trust-page] static fallback also failed:', e.message);
+    return c.text('Internal Server Error', 500);
+  }
   return c.text('Not found', 404);
 });
 
@@ -12277,6 +12346,31 @@ function renderLiveCatalogStats(html) {
   }
 }
 
+// CREDITS-CONTROL PART 1: pack sizes/prices (id, name, unlocks, price_usd)
+// injected as a JSON script global at render time, straight from lib/stripe.js
+// PACKS — the single source of truth. Neither the pricing page's pack-card
+// copy shell nor the dashboard control hand-types a count or a dollar amount;
+// if PACKS ever changes, both pages change with it on the next request, no
+// separate edit required. A page with no consumer of the global (any page
+// this helper runs on that isn't pricing.html/dashboard.html) just carries a
+// small unused script tag.
+function renderPackData(html) {
+  try {
+    if (!html.includes('</head>')) return html;
+    const packData = Object.keys(PACKS).map(k => ({
+      id: k,
+      name: PACKS[k].name,
+      price_usd: PACKS[k].price_usd,
+      unlocks: PACKS[k].unlocks,
+    }));
+    const script = `<script>window.__AUXILO_PACKS__ = ${JSON.stringify(packData)};</script>\n`;
+    return html.replace('</head>', `${script}</head>`);
+  } catch (e) {
+    console.error('[pack-data] render failed:', e.message);
+    return html;
+  }
+}
+
 function serveHtmlWithLiveData(c, file) {
   try {
     const filePath = path.join(PUBLIC_DIR, file);
@@ -12284,6 +12378,7 @@ function serveHtmlWithLiveData(c, file) {
       let html = fs.readFileSync(filePath, 'utf8');
       html = renderRecentLearnings(html);
       html = renderLiveCatalogStats(html);
+      html = renderPackData(html);
       c.header('Content-Type', 'text/html; charset=utf-8');
       c.header('Cache-Control', 'public, max-age=3600');
       // Quiet phase: no-op while ANALYTICS_DOMAIN is unset (returns html as is).
@@ -12309,6 +12404,22 @@ app.get('/earnings', (c) => c.redirect('/pricing', 301));
 // pending review queue, payout controls). No auth enforced at the route
 // level. The page handles auth client-side via localStorage JWT + API calls.
 app.get('/dashboard', (c) => {
+  // CREDITS-CONTROL PART 1: server-render the pack-data global (renderPackData)
+  // the same way /pricing does, so the dashboard's credit-purchase control
+  // never hand-types PACKS numbers either. Falls back to the plain static file
+  // on any render failure.
+  try {
+    const filePath = path.join(PUBLIC_DIR, 'dashboard.html');
+    if (fs.existsSync(filePath)) {
+      let html = fs.readFileSync(filePath, 'utf8');
+      html = renderPackData(html);
+      c.header('Content-Type', 'text/html; charset=utf-8');
+      c.header('Cache-Control', 'public, max-age=3600');
+      return c.body(injectAnalytics(html, ANALYTICS_DOMAIN));
+    }
+  } catch (e) {
+    console.error('[dashboard] server-render failed, falling back to static:', e.message);
+  }
   const res = serveStatic(c, 'dashboard.html');
   if (res) return res;
   return c.text('Dashboard page not found', 404);
@@ -12397,7 +12508,19 @@ function serveLegalPage(c, filename, title, seo) {
     let body = protectedMd2
       .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
       .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+      // CREDITS-CONTROL PART 1 (GOV-2 D8): the served /terms page carried no
+      // section anchors at all, so a "jump to §7" link had nothing to target.
+      // Generic rule for every ## heading: a leading "N. " gets id="section-N"
+      // (matches the D8 link target /terms#section-7); anything else falls
+      // back to a slugified id. Applies to every legal page through this
+      // shared renderer (/terms, /privacy), not just Payment Terms.
+      .replace(/^## (.+)$/gm, (_m, text) => {
+        const numMatch = text.match(/^(\d+)\./);
+        const id = numMatch
+          ? `section-${numMatch[1]}`
+          : text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-+|-+$)/g, '');
+        return `<h2 id="${id}">${text}</h2>`;
+      })
       .replace(/^# (.+)$/gm, '<h1>$1</h1>')
       // Wave E3 item 4: a line that is exactly a markdown rule (---) becomes
       // an <hr>, not a literal "---" paragraph. Matched before the catch-all

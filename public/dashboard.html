@@ -67,6 +67,53 @@
       .earnings-grid { grid-template-columns: 1fr; }
     }
 
+    /* ── Credits card (CREDITS-CONTROL PART 1) ─────────────────────────
+       GOV-2 A6: this card and the Earnings card above share the dashboard
+       but never share a string, layout, or visual grouping that would imply
+       one wallet or link funding to withdrawal eligibility. */
+    #credit-balance-line {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--ivory);
+      margin-bottom: 4px;
+    }
+    #credit-balance-sub {
+      font-size: 13px;
+      color: var(--slate);
+      margin-bottom: 24px;
+    }
+    .credit-pack-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 0;
+      border-top: 1px solid rgba(229,229,227,0.08);
+    }
+    .credit-pack-row:first-of-type { border-top: none; }
+    .credit-pack-row .cpr-name { font-size: 14px; color: var(--ivory); font-weight: 600; }
+    .credit-pack-row .cpr-detail { font-size: 13px; color: var(--slate); margin-top: 2px; }
+    .credit-pack-row .cpr-price { font-size: 14px; color: var(--ivory); white-space: nowrap; }
+    .credit-buy-btn { white-space: nowrap; }
+    .purchase-disclosures {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(229,229,227,0.08);
+      font-size: 13px;
+      color: var(--slate);
+      line-height: 1.6;
+    }
+    .purchase-disclosures p { margin: 0 0 8px; }
+    .purchase-disclosures p:last-of-type { margin-bottom: 0; }
+    .purchase-disclosures a { color: var(--aurum); }
+    .purchase-legal {
+      margin: 0 0 8px;
+      padding: 10px 12px;
+      border-left: 2px solid rgba(229,229,227,0.25);
+      font-style: normal;
+    }
+    #checkout-banner { margin-bottom: 16px; }
+
     .earnings-item {
       background: rgba(255,255,255,0.02);
       border: 1px solid rgba(229,229,227,0.07);
@@ -624,6 +671,11 @@
     <!-- Global alert -->
     <div id="dash-alert" class="alert" style="display:none;margin-bottom:20px"></div>
 
+    <!-- CREDITS-CONTROL PART 1: /dashboard?checkout=success|cancel landing banner.
+         The redirect carries no session_id (spec STOP gate c), so this never
+         asserts "payment received" from the URL alone — see showCheckoutBanner(). -->
+    <div id="checkout-banner" class="alert" style="display:none"></div>
+
     <!-- Terms of Service clickwrap gate (R-01 §5.10 payee-agency) -->
     <div id="terms-gate" class="dash-card" style="display:none;border:1px solid var(--aurum)">
       <div class="dash-card-title">Action required: accept the updated Terms</div>
@@ -737,6 +789,32 @@
       <div class="dash-card-title">API Keys</div>
       <div id="apikeys-loading" class="loading-text"><span class="spinner"></span>Loading...</div>
       <div id="apikeys-content" style="display:none"></div>
+    </div>
+
+    <!-- Credits (CREDITS-CONTROL PART 1). GOV-2 A6: no string, layout, or
+         visual grouping links this card to the Earnings card above — a
+         separate balance, a separate purpose. Pack names/prices/unlock
+         counts and the D2 sentence are rendered from window.__AUXILO_PACKS__
+         (server-injected from lib/stripe.js PACKS by renderPackData), never
+         hand-typed. Buy buttons stay hidden until GET /health reports
+         payments_enabled && stripe_configured (dark-safe invariant). -->
+    <div class="dash-card">
+      <div class="dash-card-title">Credits</div>
+      <div id="credits-loading" class="loading-text"><span class="spinner"></span>Loading...</div>
+      <div id="credits-content" style="display:none">
+        <div id="credit-balance-line">—</div>
+        <div id="credit-balance-sub">Credits do not expire.</div>
+        <p style="font-size:13px;color:var(--ivory);margin-bottom:2px">Your agent spends credits through an API key you generate.</p>
+        <p style="font-size:13px;color:var(--slate);margin-bottom:20px">One credit unlocks one learning, whatever its listed price.</p>
+        <div id="credit-pack-rows"></div>
+        <div id="purchase-disclosures" class="purchase-disclosures" style="display:none">
+          <p>By continuing, you agree to the <a href="/terms" target="_blank" rel="noopener">Terms of Service</a>, including that credits are non-refundable and do not expire.</p>
+          <blockquote class="purchase-legal">Prepaid credits are non-refundable and non-transferable. Credits have no cash value outside the Platform and cannot be redeemed for currency. All transactions on the Platform are final.</blockquote>
+          <p>Questions about a purchase go to support@auxilo.io. <a href="/terms#section-7" target="_blank" rel="noopener">Refund and dispute policy</a></p>
+          <p>Prices are in USD and exclude any applicable taxes.</p>
+          <p style="font-size:12px;color:var(--slate)">Powered by Stripe</p>
+        </div>
+      </div>
     </div>
 
     <!-- Purchase history -->
@@ -905,6 +983,7 @@
     loadEarnings();
     loadApiKeys();
     loadPurchases();
+    loadCredits();       // CREDITS-CONTROL PART 1: balance + pack controls
     loadPendingBadge(); // auto-review: surface the pending count without a click
     loadCleanLane();    // standing-consent card (404 while the flag is dark → one plain line)
     // Payout loads after earnings to know the balance
@@ -2348,6 +2427,178 @@
     });
   }
 
+  // ── Credits (CREDITS-CONTROL PART 1) ────────────────────────────────
+  // Dark-safe invariant (spec STOP gate e): no Buy button renders, and no
+  // checkout POST fires, until GET /health reports payments_enabled &&
+  // stripe_configured. Pack names/prices/unlock counts come from
+  // window.__AUXILO_PACKS__ (server-injected from lib/stripe.js PACKS by
+  // renderPackData) — never hand-typed here.
+  var _stripeReady = false;
+
+  function loadCredits() {
+    show('credits-loading');
+    hide('credits-content');
+    apiFetch('/account/credits')
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        hide('credits-loading');
+        show('credits-content');
+        renderCreditBalance(res.ok ? res.data : null);
+        renderCreditPackRows();
+        checkStripeConfigured();
+      })
+      .catch(function () {
+        hide('credits-loading');
+        show('credits-content');
+        renderCreditBalance(null);
+        renderCreditPackRows();
+        checkStripeConfigured();
+      });
+  }
+
+  function renderCreditBalance(data) {
+    var line = document.getElementById('credit-balance-line');
+    if (!line) return;
+    var purchased = data && data.unlocks && typeof data.unlocks.purchased === 'number'
+      ? data.unlocks.purchased : null;
+    // D4 (Terms §7.2 verbatim), never adjacent to the Earnings card's numbers (GOV-2 A6).
+    line.textContent = purchased !== null
+      ? purchased.toLocaleString('en-US') + ' unlock credits'
+      : '— unlock credits';
+  }
+
+  function renderCreditPackRows() {
+    var el = document.getElementById('credit-pack-rows');
+    if (!el) return;
+    el.textContent = '';
+    var packs = window.__AUXILO_PACKS__ || [];
+    packs.forEach(function (p) {
+      var row = document.createElement('div');
+      row.className = 'credit-pack-row';
+
+      var left = document.createElement('div');
+      var name = document.createElement('div');
+      name.className = 'cpr-name';
+      name.textContent = p.name; // textContent -- safe
+      var detail = document.createElement('div');
+      detail.className = 'cpr-detail';
+      // D2 (dashboard only — /pricing's card already states the count under the
+      // "unlocks" unit name, so this line would say it twice under two names there).
+      detail.textContent = 'This pack grants ' + Number(p.unlocks).toLocaleString('en-US') + ' unlock credits.'; // textContent -- safe
+      left.appendChild(name);
+      left.appendChild(detail);
+
+      var right = document.createElement('div');
+      right.style.display = 'flex';
+      right.style.alignItems = 'center';
+      right.style.gap = '12px';
+      var price = document.createElement('span');
+      price.className = 'cpr-price';
+      price.textContent = '$' + p.price_usd + '/pack'; // textContent -- safe
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-primary btn-sm credit-buy-btn pack-buy-btn';
+      btn.setAttribute('data-pack', p.id);
+      btn.style.display = 'none'; // dark-safe default; checkStripeConfigured() reveals it
+      btn.textContent = 'Buy credits';
+      btn.onclick = function () { auxiloBuyCredits(p.id, btn); };
+      right.appendChild(price);
+      right.appendChild(btn);
+
+      row.appendChild(left);
+      row.appendChild(right);
+      el.appendChild(row);
+    });
+  }
+
+  function checkStripeConfigured() {
+    if (_stripeReady) {
+      document.querySelectorAll('#credits-content .pack-buy-btn').forEach(function (b) { b.style.display = ''; });
+      show('purchase-disclosures');
+      return;
+    }
+    fetch('/health')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        _stripeReady = !!(data && data.payments_enabled === true && data.stripe_configured === true);
+        if (_stripeReady) {
+          document.querySelectorAll('#credits-content .pack-buy-btn').forEach(function (b) { b.style.display = ''; });
+          show('purchase-disclosures');
+        }
+      })
+      .catch(function () { /* stays dark-safe: no button, no disclosures */ });
+  }
+
+  window.auxiloBuyCredits = function (packId, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = 'Redirecting…'; }
+    apiFetch('/checkout/session', {
+      method: 'POST',
+      body: JSON.stringify({ pack: packId }),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); })
+      .then(function (res) {
+        if (res.ok && res.data && res.data.url) {
+          window.location = res.data.url;
+          return;
+        }
+        if (btn) { btn.disabled = false; btn.textContent = 'Buy credits'; }
+        // CREDITS-CONTROL PART 1 micro-fix (should-fix 2): a TERMS_NOT_ACCEPTED
+        // 403 has a real route to resolution on this page — the existing
+        // #terms-gate clickwrap card — so surface that instead of a dead-end
+        // alert with no way to accept.
+        if (res.data && res.data.code === 'TERMS_NOT_ACCEPTED') {
+          show('terms-gate');
+          var gateEl = document.getElementById('terms-gate');
+          if (gateEl && gateEl.scrollIntoView) gateEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          var checkEl = document.getElementById('terms-agree-check');
+          if (checkEl && checkEl.focus) checkEl.focus();
+          return;
+        }
+        showAlert('dash-alert', (res.data && res.data.error) || 'Could not start checkout. Please try again.', 'error');
+      })
+      .catch(function () {
+        if (btn) { btn.disabled = false; btn.textContent = 'Buy credits'; }
+        showAlert('dash-alert', 'Could not start checkout. Check your connection and try again.', 'error');
+      });
+  };
+
+  // ── Checkout return (?checkout=success|cancel) ──────────────────────
+  // The redirect carries no session_id (spec STOP gate c), so this never
+  // asserts "payment received" from the URL — the webhook can land after
+  // the browser redirect, so success polls the balance instead.
+  function showCheckoutBanner(state) {
+    if (state === 'success') {
+      showAlert('checkout-banner', 'Your credits appear here as soon as the purchase lands.', 'info');
+      pollForCreditIncrease(0, null);
+    } else if (state === 'cancel') {
+      showAlert('checkout-banner', 'Checkout cancelled. Nothing was charged.', 'info');
+    }
+  }
+
+  function pollForCreditIncrease(attempt, priorBalance) {
+    apiFetch('/account/credits')
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        var balance = (res.ok && res.data && res.data.unlocks) ? res.data.unlocks.purchased : null;
+        if (priorBalance === null) priorBalance = balance;
+        renderCreditBalance(res.ok ? res.data : null);
+        if (balance !== null && priorBalance !== null && balance > priorBalance) {
+          loadPurchases();
+          return; // balance moved -- stop polling
+        }
+        if (attempt >= 4) {
+          showAlert('checkout-banner', 'Credits have not appeared yet. If they do not show in a few minutes, write to support@auxilo.io.', 'info');
+          return;
+        }
+        setTimeout(function () { pollForCreditIncrease(attempt + 1, priorBalance); }, 3000);
+      })
+      .catch(function () {
+        if (attempt >= 4) {
+          showAlert('checkout-banner', 'Credits have not appeared yet. If they do not show in a few minutes, write to support@auxilo.io.', 'info');
+        }
+      });
+  }
+
   // ── Purchases ────────────────────────────────────────────────────────
   function loadPurchases() {
     show('purchases-loading');
@@ -2406,7 +2657,10 @@
 
     var thead = document.createElement('thead');
     var headRow = document.createElement('tr');
-    ['Date', 'Pack', 'Amount', 'Queries', 'Unlocks'].forEach(function (h) {
+    // D11 (CREDITS-CONTROL PART 1): no query-credit benefit anywhere, including
+    // this purchase-history table — the "Queries" column is retired (queries_added
+    // stays in the API response and purchases.jsonl; only the rendered column goes).
+    ['Date', 'Pack', 'Amount', 'Unlocks'].forEach(function (h) {
       var th = document.createElement('th');
       th.textContent = h;
       headRow.appendChild(th);
@@ -2430,10 +2684,6 @@
       var amtTd = document.createElement('td');
       amtTd.textContent = fmt(p.amount_usd); // textContent -- safe
       tr.appendChild(amtTd);
-
-      var qTd = document.createElement('td');
-      qTd.textContent = p.queries_added != null ? String(p.queries_added) : ''; // textContent -- safe
-      tr.appendChild(qTd);
 
       var uTd = document.createElement('td');
       uTd.textContent = p.unlocks_added != null ? String(p.unlocks_added) : ''; // textContent -- safe
@@ -2460,6 +2710,20 @@
     var params = new URLSearchParams(window.location.search);
     var magicToken = params.get('token');
 
+    // CREDITS-CONTROL PART 1: ?checkout=success|cancel landing state (the
+    // /checkout/success and /checkout/cancel routes 302 here with no
+    // session_id — spec STOP gate c). Stripped from the URL immediately so a
+    // reload or back-navigation never re-shows the banner or re-polls.
+    var checkoutState = params.get('checkout');
+    if (checkoutState === 'success' || checkoutState === 'cancel') {
+      var cleanCheckoutUrl = window.location.pathname;
+      if (history.replaceState) {
+        history.replaceState({}, '', cleanCheckoutUrl);
+      }
+    } else {
+      checkoutState = null;
+    }
+
     if (magicToken) {
       // Strip token from URL before anything else (never expose in history)
       var cleanUrl = window.location.pathname;
@@ -2478,6 +2742,7 @@
             // Decode email from JWT payload for display (decode only, no verify needed client-side)
             var email = decodeJwtEmail(res.data.token);
             showDashboard(email);
+            if (checkoutState) showCheckoutBanner(checkoutState);
           } else {
             showLoginScreen();
             showAlert('login-alert', res.data.error || 'Invalid or expired link. Please request a new one.', 'error');
@@ -2495,6 +2760,7 @@
     if (token) {
       var email = decodeJwtEmail(token);
       showDashboard(email);
+      if (checkoutState) showCheckoutBanner(checkoutState);
     } else {
       showLoginScreen();
     }
