@@ -227,7 +227,12 @@ describe('BUILDERS-STRIP-ZEROS: static file and source pins', () => {
     assert.doesNotMatch(STATIC_HTML, /class="stat-num pull-stat-num" id="lc-unlocks"/, 'lc-unlocks no longer carries the gold pull-stat-num class');
     assert.doesNotMatch(STATIC_HTML, /class="stat-num pull-stat-num" id="lc-paid"/, 'lc-paid no longer carries the gold pull-stat-num class');
     assert.equal(countSupplyLine(STATIC_HTML), 1, 'the static file (the fail-path baseline) still carries the sentence');
-    assert.match(STATIC_HTML, /<p class="reveal" id="lc-supply-line"[^>]*>Supply is ahead of demand\.<\/p>/, 'the sentence is wrapped for the renderer\'s removal regex to target');
+    // Wave E3 item 7 removed the dead scroll-reveal system (and every
+    // class="reveal" attribute) from for-builders.html, so this <p> no
+    // longer carries a class -- server.js's removal regex
+    // (<p[^>]*\bid="lc-supply-line"[^>]*>...) is attribute-order/-presence
+    // agnostic and still matches it either way.
+    assert.match(STATIC_HTML, /<p id="lc-supply-line"[^>]*>Supply is ahead of demand\.<\/p>/, 'the sentence is wrapped for the renderer\'s removal regex to target');
 
     // Same regex-injection hazard the strip-date-hook suite guards against:
     // a literal id="lc-…" inside an HTML comment would be matched by the

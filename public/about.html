@@ -53,14 +53,16 @@
       --ivory-dim:  #B0ADA8;
       --aurum:      #C9A84C;
       --aurum-glow: rgba(201,168,76,0.15);
-      --green:      #22C55E;
-      --green-bg:   rgba(34,197,94,0.08);
-      --yellow:     #EAB308;
-      --yellow-bg:  rgba(234,179,8,0.08);
-      --red:        #EF4444;
-      --red-bg:     rgba(239,68,68,0.08);
       --border:     rgba(229,229,227,0.08);
     }
+    /* Wave E2 item 14: --green/--green-bg/--yellow/--yellow-bg/--red/--red-bg
+       and every rule that consumed them (.overall-status, .status-dot, the
+       pulse keyframes, .badge and its three variants, .health-* / #live-health,
+       .page-subtitle, and h2) were verified against this page's actual markup
+       (grep of the <body> below) and are unreferenced here — this page never
+       renders a status banner or badge. Confirmed dead, not moved: deleted.
+       PageSpeed-FINAL-2026-09-06.md read the remainder as "genuinely
+       page-specific," but that read didn't cross-check against markup usage. */
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -73,14 +75,6 @@
       flex-direction: column;
     }
 
-    header {
-      border-bottom: 1px solid var(--border);
-      padding: 1.25rem 2rem;
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-    }
-
     .logo {
       font-weight: 700;
       font-size: 1.2rem;
@@ -90,15 +84,6 @@
 
     .logo span { color: var(--ivory); }
 
-    header a {
-      margin-left: auto;
-      color: var(--ivory-dim);
-      text-decoration: none;
-      font-size: 0.85rem;
-      transition: color 0.2s;
-    }
-    header a:hover { color: var(--aurum); }
-
     main {
       max-width: 760px;
       margin: 0 auto;
@@ -107,127 +92,17 @@
       width: 100%;
     }
 
+    /* Wave E2 item 13: display type scale — 1.1 leading (was inheriting
+       styles.css body's 1.6, measured 28px at 44.8px leading, AD-STEP4-
+       FINAL-2026-09-06.md §2) and the site's tracking (was -0.03em/-0.84px,
+       flagged against every main h1's -1.12 to -1.68px; -0.02em matches the
+       ratio #hero h1 and the other main headings use). */
     .page-title {
       font-size: 1.75rem;
       font-weight: 700;
-      letter-spacing: -0.03em;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
       margin-bottom: 0.5rem;
-    }
-
-    .page-subtitle {
-      color: var(--ivory-dim);
-      font-size: 0.9rem;
-      margin-bottom: 2.5rem;
-    }
-
-    /* ── Overall Status Banner ─────────────────────────────────── */
-    .overall-status {
-      background: var(--green-bg);
-      border: 1px solid rgba(34,197,94,0.2);
-      border-radius: 12px;
-      padding: 1.25rem 1.5rem;
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-      margin-bottom: 2.5rem;
-    }
-
-    .status-dot {
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      background: var(--green);
-      box-shadow: 0 0 8px var(--green);
-      flex-shrink: 0;
-      animation: pulse 2.5s ease-in-out infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-
-    /* Respect a reduced-motion preference: stop the infinite status-dot pulse
-       and the hamburger transitions for users who ask for less motion. */
-    @media (prefers-reduced-motion: reduce) {
-      .status-dot { animation: none; }
-      .hamburger span { transition: none; }
-    }
-
-    /* ── Mobile hamburger nav (parity with the other pages) ────────── */
-    .status-nav {
-      display: flex;
-      align-items: center;
-      gap: 1.25rem;
-      margin-left: auto;
-    }
-    .hamburger {
-      display: none;
-      flex-direction: column;
-      justify-content: center;
-      gap: 4px;
-      width: 34px;
-      height: 34px;
-      margin-left: auto;
-      padding: 5px;
-      background: none;
-      border: none;
-      cursor: pointer;
-    }
-    .hamburger span {
-      display: block;
-      width: 22px;
-      height: 2px;
-      background: var(--ivory);
-      border-radius: 2px;
-      transition: transform 0.25s ease, opacity 0.25s ease;
-    }
-    .hamburger[aria-expanded="true"] span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
-    .hamburger[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
-    .hamburger[aria-expanded="true"] span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
-
-    @media (max-width: 720px) {
-      header { position: relative; flex-wrap: wrap; }
-      .hamburger { display: flex; }
-      .status-nav {
-        display: none;
-        position: absolute;
-        top: 100%;
-        left: 0;
-        right: 0;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0;
-        margin-left: 0;
-        padding: 0.5rem 2rem 1rem;
-        background: var(--obsidian-2);
-        border-bottom: 1px solid var(--border);
-        z-index: 50;
-      }
-      .status-nav.nav-open { display: flex; }
-      .status-nav a { margin-left: 0; padding: 0.65rem 0; width: 100%; font-size: 0.95rem; }
-    }
-
-    .overall-status .status-label {
-      font-weight: 600;
-      font-size: 1rem;
-      color: var(--green);
-    }
-
-    .overall-status .status-sub {
-      color: var(--ivory-dim);
-      font-size: 0.82rem;
-      margin-left: auto;
-    }
-
-    /* ── Section ───────────────────────────────────────────────── */
-    h2 {
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--ivory-dim);
-      margin-bottom: 0.75rem;
     }
 
     /* ── Component Table ───────────────────────────────────────── */
@@ -261,152 +136,13 @@
       flex: 2;
     }
 
-    .badge {
-      font-size: 0.75rem;
-      font-weight: 600;
-      padding: 0.25rem 0.65rem;
-      border-radius: 999px;
-      flex-shrink: 0;
-    }
-
-    .badge.operational {
-      background: var(--green-bg);
-      color: var(--green);
-      border: 1px solid rgba(34,197,94,0.25);
-    }
-
-    .badge.degraded {
-      background: var(--yellow-bg);
-      color: var(--yellow);
-      border: 1px solid rgba(234,179,8,0.25);
-    }
-
-    .badge.outage {
-      background: var(--red-bg);
-      color: var(--red);
-      border: 1px solid rgba(239,68,68,0.25);
-    }
-
-    /* AD sheet 9: the payout-waitlist component (.waitlist-*) is dead — no
-       element in this page's markup carries any of these classes (the
-       notify-me form lives on /for-builders, sheet 4 item 3). */
-
-    /* ── Quick Links ────────────────────────────────────────────── */
-    .links-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 0.75rem;
-      margin-bottom: 2.5rem;
-    }
-
-    .link-card {
-      background: var(--obsidian-2);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 1rem 1.25rem;
-      text-decoration: none;
-      color: var(--ivory);
-      transition: border-color 0.2s, background 0.2s;
-      display: flex;
-      flex-direction: column;
-      gap: 0.25rem;
-    }
-
-    .link-card:hover {
-      border-color: var(--aurum);
-      background: var(--aurum-glow);
-    }
-
-    .link-card-label {
-      font-size: 0.8rem;
-      font-weight: 600;
-      color: var(--aurum);
-    }
-
-    .link-card-desc {
-      font-size: 0.8rem;
-      color: var(--ivory-dim);
-    }
-
-    /* ── Health Monitor ─────────────────────────────────────────── */
-    .health-block {
-      background: var(--obsidian-2);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.25rem;
-      margin-bottom: 2.5rem;
-    }
-
-    .health-endpoint {
-      font-family: var(--mono); /* DR-6: canonical mono stack */
-      font-size: 0.82rem;
-      color: var(--aurum);
-      margin-bottom: 0.75rem;
-    }
-
-    .health-response {
-      font-family: var(--mono); /* DR-6: canonical mono stack */
-      font-size: 0.78rem;
-      color: var(--ivory-dim);
-      background: var(--obsidian-3);
-      border-radius: 8px;
-      padding: 0.75rem 1rem;
-      line-height: 1.6;
-      overflow-x: auto;
-    }
-
-    #live-health {
-      margin-top: 0.75rem;
-      font-size: 0.78rem;
-      color: var(--ivory-dim);
-    }
-
-    #live-health.ok { color: var(--green); }
-    #live-health.err { color: var(--red); }
-
-    /* ── Contact ────────────────────────────────────────────────── */
-    .contact-block {
-      background: var(--obsidian-2);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.25rem;
-    }
-
-    .contact-block p {
-      font-size: 0.875rem;
-      color: var(--ivory-dim);
-      line-height: 1.6;
-    }
-
-    .contact-block a {
-      color: var(--aurum);
-      text-decoration: none;
-    }
-    .contact-block a:hover { text-decoration: underline; }
-
     /* N3: footer/.footer-inner/.footer-logo/.footer-meta are gone from here —
        styles.css (now linked) renders the footer with the shared tokens
        (--slate link colour, 0.06 border), matching every sibling page. */
 
     /* ── Mobile ─────────────────────────────────────────────────── */
     @media (max-width: 640px) {
-      header {
-        padding: 1rem 1.25rem;
-        flex-wrap: wrap;
-        gap: 0.5rem 1rem;
-      }
       main { padding: 2rem 1.25rem; }
-
-      /* The header nav holds six links in one row that overflow a phone.
-         Let them wrap and shrink so they stay within the viewport. */
-      header nav {
-        flex-wrap: wrap;
-        gap: 0.5rem 1rem !important;
-        row-gap: 0.5rem;
-        min-width: 0;
-        margin-left: 0 !important;
-        font-size: 0.85rem;
-      }
 
       /* Component rows stack so name + desc + badge don't push wide. */
       .component-row {
@@ -415,20 +151,6 @@
       }
       .component-name { flex: 1 1 auto; min-width: 0; }
       .component-desc { flex: 1 1 100%; }
-
-      /* Overall-status banner stacks; sub no longer pinned right. */
-      .overall-status { flex-wrap: wrap; gap: 0.5rem 1rem; }
-      .overall-status .status-sub { margin-left: 0; flex: 1 1 100%; }
-
-      /* Single-column link grid. */
-      .links-grid { grid-template-columns: 1fr; }
-
-      /* Long JSON wraps instead of widening the page. */
-      .health-response {
-        white-space: pre-wrap;
-        word-break: break-word;
-        overflow-wrap: anywhere;
-      }
     }
   </style>
   <style>
@@ -455,21 +177,29 @@
   </style>
 </head>
 <body>
-  <header>
-    <div class="logo">Auxilo<span> About</span></div>
+  <nav id="main-nav" aria-label="Main navigation">
+    <a href="/" class="nav-logo" id="nav-logo">
+      <!-- Angular A mark -->
+      <svg class="logo-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <polygon points="16,2 30,28 2,28" fill="none" stroke="#C9A84C" stroke-width="2.2" stroke-linejoin="round"/>
+        <line x1="16" y1="17" x2="30" y2="17" stroke="#C9A84C" stroke-width="1.8"/>
+      </svg>
+      <span class="wordmark">auxilo</span>
+    </a>
+    <ul class="nav-links" role="list">
+      <li><a href="/for-builders" id="nav-builders">For Builders</a></li>
+      <li><a href="/for-agents" id="nav-agents">For Agents</a></li>
+      <li><a href="/how-it-works" id="nav-how">How It Works</a></li>
+      <li><a href="/pricing" id="nav-pricing">Pricing</a></li>
+      <li><a href="/earnings" id="nav-earnings">Earnings</a></li>
+      <li><a href="/api" id="nav-api">API</a></li>
+      <li><a href="/dashboard" id="nav-dashboard">Sign in</a></li>
+      <li><a href="/#install" id="nav-cta-access" class="nav-cta">Connect your agent</a></li>
+    </ul>
     <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
       <span></span><span></span><span></span>
     </button>
-    <nav class="status-nav" id="status-nav" aria-label="Main navigation">
-      <a href="/for-builders">For Builders</a>
-      <a href="/for-agents">For Agents</a>
-      <a href="/how-it-works">How It Works</a>
-      <a href="/pricing">Pricing</a>
-      <a href="/api">API</a>
-      <a href="/dashboard">Sign in</a>
-      <a href="/">← auxilo.io</a>
-    </nav>
-  </header>
+  </nav>
 
   <main>
     <h1 class="page-title">About Auxilo</h1>
@@ -520,26 +250,37 @@
   </footer>
 
   <script>
+    // ── Hamburger nav toggle ───────────────────────────────────────────
     function toggleNav() {
-      const nav = document.getElementById('status-nav');
+      const nav = document.querySelector('.nav-links');
       const btn = document.getElementById('hamburger');
-      if (!nav || !btn) return;
-      const open = nav.classList.toggle('nav-open');
-      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      const expanded = btn.getAttribute('aria-expanded') === 'true';
+      btn.setAttribute('aria-expanded', !expanded);
+      nav.classList.toggle('nav-open');
     }
-    function closeNav() {
-      const nav = document.getElementById('status-nav');
-      const btn = document.getElementById('hamburger');
-      if (nav && nav.classList.contains('nav-open')) {
-        nav.classList.remove('nav-open');
-        if (btn) btn.setAttribute('aria-expanded', 'false');
-      }
-    }
-    document.querySelectorAll('#status-nav a').forEach(function (a) {
-      a.addEventListener('click', closeNav);
+
+    // Close mobile nav on link click
+    document.querySelectorAll('.nav-links a').forEach(a => {
+      a.addEventListener('click', () => {
+        const nav = document.querySelector('.nav-links');
+        const btn = document.getElementById('hamburger');
+        if (nav.classList.contains('nav-open')) {
+          nav.classList.remove('nav-open');
+          btn.setAttribute('aria-expanded', 'false');
+        }
+      });
     });
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') closeNav();
+
+    // Close mobile nav on Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const nav = document.querySelector('.nav-links');
+        const btn = document.getElementById('hamburger');
+        if (nav && nav.classList.contains('nav-open')) {
+          nav.classList.remove('nav-open');
+          btn.setAttribute('aria-expanded', 'false');
+        }
+      }
     });
   </script>
 </body>

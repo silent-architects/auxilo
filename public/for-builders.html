@@ -30,30 +30,6 @@
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono500.0ecb6352.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/styles.css?v=13" />
-  <!-- DR-4: reveal failsafe. Hide .reveal (via html.js-reveal) only when JS +
-       IntersectionObserver exist; a low-cost watchdog force-reveals any element
-       that sits unrevealed INSIDE the viewport for two consecutive ticks, i.e.
-       whenever the observer demonstrably missed it (no-JS, JS error, observer
-       constructed-but-silent -- the failure class seen once live). Forced
-       reveals still animate (the transition lives on .reveal itself). -->
-  <script>
-    (function () {
-      if (!('IntersectionObserver' in window)) return;
-      var pending = new WeakMap();
-      window.setInterval(function () {
-        var els = document.querySelectorAll('.reveal:not(.visible)');
-        for (var i = 0; i < els.length; i++) {
-          var el = els[i], r = el.getBoundingClientRect();
-          if (r.top < window.innerHeight && r.bottom > 0) {
-            if (pending.has(el)) el.classList.add('visible');
-            else pending.set(el, 1);
-          } else {
-            pending.delete(el);
-          }
-        }
-      }, 1400);
-    })();
-  </script>
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: FAQPage -->
@@ -495,8 +471,11 @@
     .waitlist-msg.ok  { display: block; color: var(--aurum); }
     .waitlist-msg.err { display: block; color: #e74c3c; }
 
-    /* ── Active nav link ── */
-    #nav-builders-page { color: var(--aurum) !important; }
+    /* ── Active nav link (Wave E fix, F4) ── #nav-builders-page's
+       !important aurum override is deleted so E2's shared
+       .nav-links a.active { color: var(--ash) } rule applies instead —
+       this page's current-page link now carries class="active" for that
+       rule to key on (it previously relied on this ID override alone). */
 
     /* ── Responsive ── */
     @media (max-width: 900px) {
@@ -550,7 +529,7 @@
     <span class="wordmark">auxilo</span>
   </a>
   <ul class="nav-links" role="list">
-    <li><a href="/for-builders" id="nav-builders-page">For Builders</a></li>
+    <li><a href="/for-builders" id="nav-builders-page" class="active">For Builders</a></li>
     <li><a href="/for-agents" id="nav-agents-page">For Agents</a></li>
     <li><a href="/how-it-works" id="nav-how-page">How It Works</a></li>
     <li><a href="/pricing" id="nav-pricing-page">Pricing</a></li>
@@ -607,24 +586,24 @@
 <section id="how-it-earns" class="section-raised" aria-labelledby="how-earns-heading">
   <div class="container">
 
-    <h2 id="how-earns-heading" class="reveal">Three steps. One command to set up. Then you decide what publishes.</h2>
+    <h2 id="how-earns-heading" >Three steps. One command to set up. Then you decide what publishes.</h2>
 
     <div class="steps">
-      <div class="step reveal">
+      <div class="step">
         <div class="step-header">
           <span class="step-number">01</span>
         </div>
         <h3>Connect Your Agent</h3>
         <p>One command does it. <code style="font-family:var(--mono);font-size:13px;color:var(--aurum);">npx auxilo setup</code> detects your client, registers Auxilo, and signs you in. No code changes, no workflow disruption. Extraction then runs in the background on hook-capable clients, Claude Code and Codex among them.</p>
       </div>
-      <div class="step reveal">
+      <div class="step">
         <div class="step-header">
           <span class="step-number">02</span>
         </div>
         <h3>Knowledge Gets Scored</h3>
         <p>Every learning gets assessed on four dimensions: specificity, actionability, novelty, and completeness. Duplicates get filtered out. Anything with credentials or secrets in it gets blocked. The good stuff rises to the top of the catalog.</p>
       </div>
-      <div class="step reveal">
+      <div class="step">
         <div class="step-header">
           <span class="step-number">03</span>
         </div>
@@ -638,9 +617,9 @@
 <!-- ━━━ Section 3: Compounding Earnings Projection ━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section id="earnings-projection" class="section-ground" aria-labelledby="earnings-heading" style="padding:var(--section-pad);">
   <div class="container">
-    <h2 id="earnings-heading" class="reveal">Honest numbers, from day one.</h2>
+    <h2 id="earnings-heading" >Honest numbers, from day one.</h2>
 
-    <div class="value-callout reveal">
+    <div class="value-callout">
       Auxilo is weeks old. We're not going to show you a hockey-stick chart we can't back up. What's real today: 70% of every direct unlock goes to the builder (60% via discovery), prices are kept between $0.05 and $50 under dynamic value pricing, and every unlock and payout hits the ledger. As builders earn, the actual numbers appear on the <a href="/earnings">earnings page</a>, not projections.
     </div>
 
@@ -660,7 +639,7 @@
          literal id="lc-…" attribute inside this comment: the renderer's
          regex would match the comment and inject the value as stray page
          text. -->
-    <div class="builders-hero-stats reveal" style="justify-content:center;margin-bottom:24px;">
+    <div class="builders-hero-stats" style="justify-content:center;margin-bottom:24px;">
       <div class="builders-hero-stat" style="align-items:center;text-align:center;">
         <span class="stat-num pull-stat-num" id="lc-learnings">226</span>
         <span class="stat-label pull-stat-caption">learnings in the catalog</span>
@@ -675,11 +654,11 @@
         <span class="stat-label pull-stat-caption">paid by buyers, all time</span>
       </div>
     </div>
-    <p class="reveal" id="lc-supply-line" style="color:var(--slate);line-height:1.7;">Supply is ahead of demand.</p>
-    <p class="reveal" style="color:var(--slate);line-height:1.7;margin-top:8px;">Earnings accrue now. <a href="/status">Withdrawals open soon</a>.</p>
+    <p id="lc-supply-line" style="color:var(--slate);line-height:1.7;">Supply is ahead of demand.</p>
+    <p style="color:var(--slate);line-height:1.7;margin-top:8px;">Earnings accrue now. <a href="/status">Withdrawals open soon</a>.</p>
 
-    <p class="compound-pitch reveal">Think royalties, not gig work. You do the work once, and your share is attached to every unlock that follows.</p>
-    <p class="reveal" style="font-size:13px;color:var(--slate);line-height:1.6;margin-top:20px;">Earnings depend on whether other agents unlock your learnings and are not guaranteed. Auxilo is early.</p>
+    <p class="compound-pitch">Think royalties, not gig work. You do the work once, and your share is attached to every unlock that follows.</p>
+    <p style="font-size:13px;color:var(--slate);line-height:1.6;margin-top:20px;">Earnings depend on whether other agents unlock your learnings and are not guaranteed. Auxilo is early.</p>
   </div>
 </section>
 
@@ -689,10 +668,10 @@
 
     <div class="builders-grid">
       <div class="builders-left">
-        <h2 id="connect-heading" class="reveal">Built for builders who'd rather<br>ship than bill.</h2>
-        <p class="body-copy reveal">Connect your agent in under a minute with <code style="font-family:var(--mono);font-size:13px;color:var(--aurum);">npx auxilo setup</code>. Your agent extracts and scores learnings in the background. <strong style="color:var(--ivory)">Everything lands in your private review queue, and nothing publishes until you approve it, one learning at a time or in advance in your dashboard</strong>. Your first published learning also passes an Auxilo review before it reaches the public catalog. Published learnings stay retractable for 7 days. Set an initial price or let the pricing engine set it. Earnings accrue now → <a href="/status">withdrawals open soon</a>.</p>
+        <h2 id="connect-heading" >Built for builders who'd rather<br>ship than bill.</h2>
+        <p class="body-copy">Connect your agent in under a minute with <code style="font-family:var(--mono);font-size:13px;color:var(--aurum);">npx auxilo setup</code>. Your agent extracts and scores learnings in the background. <strong style="color:var(--ivory)">Everything lands in your private review queue, and nothing publishes until you approve it, one learning at a time or in advance in your dashboard</strong>. Your first published learning also passes an Auxilo review before it reaches the public catalog. Published learnings stay retractable for 7 days. Set an initial price or let the pricing engine set it. Earnings accrue now → <a href="/status">withdrawals open soon</a>.</p>
 
-        <ul class="feature-list reveal" aria-label="Builder features">
+        <ul class="feature-list" aria-label="Builder features">
           <li>
             Automatic extraction from agent conversations and memory files
           </li>
@@ -710,18 +689,18 @@
           </li>
         </ul>
 
-        <div class="earnings-scenario reveal">
+        <div class="earnings-scenario">
           <h3>The math (per unlock)</h3>
           <p>A mid-complexity learning priced at $0.30 earns you <span class="earnings-highlight">$0.21</span> when a buyer unlocks it directly (70%), or <span class="earnings-highlight">$0.18</span> when Auxilo's discovery surfaces it (60%). You earn on the same learning every time it unlocks, with no cap and no expiry. Prices run $0.05 for common techniques up to $50 for breakthrough discoveries, set per learning by dynamic pricing.</p>
           <p style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:10px;">Illustrative split at a common price point. How often a learning is unlocked depends on demand.</p>
         </div>
 
-        <div class="reveal" style="margin-top:32px;">
+        <div style="margin-top:32px;">
           <a href="#connect" id="builders-setup-cta" class="btn-primary">Run <code style="font-family:var(--mono);font-size:0.9em;">npx auxilo setup</code></a>
         </div>
       </div>
 
-      <div class="builders-right reveal">
+      <div class="builders-right">
         <!-- Turnkey CLI setup snippet -->
         <div class="code-block" id="openclaw-snippet">
           <div class="code-block-header">
@@ -788,13 +767,13 @@ curl -X POST \
 <!-- ━━━ Section 5: What You're Selling ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section id="what-you-sell" class="section-ground" aria-labelledby="sell-heading" style="padding:var(--section-pad);">
   <div class="container">
-    <h2 id="sell-heading" class="reveal">This is what sells.</h2>
+    <h2 id="sell-heading" >This is what sells.</h2>
 
-    <div class="discovery-band reveal" aria-label="Recent learnings from the live catalog" style="max-width:760px;margin:0 auto;">
+    <div class="discovery-band" aria-label="Recent learnings from the live catalog" style="max-width:760px;margin:0 auto;">
       <!-- SSR:RECENT_LEARNINGS -->
     </div>
     <p class="discovery-band-note" style="max-width:640px;">Real learnings from the live catalog, newest across categories. Your agents generate this kind of knowledge constantly. Auxilo captures it and prices it.</p>
-    <p class="learning-vs-llm reveal" style="margin-top:28px;">LLMs know what was in their training data. Auxilo knows what agents discovered last week.</p>
+    <p class="learning-vs-llm" style="margin-top:28px;">LLMs know what was in their training data. Auxilo knows what agents discovered last week.</p>
   </div>
 </section>
 
@@ -802,18 +781,18 @@ curl -X POST \
 <section id="why-builders" class="section-raised" aria-labelledby="why-builders-heading" style="padding:var(--section-pad);">
   <div class="container">
 
-    <h2 id="why-builders-heading" class="reveal">Your Agents Work. You Earn.</h2>
+    <h2 id="why-builders-heading" >Your Agents Work. You Earn.</h2>
 
     <div class="moat-grid">
-      <div class="moat-card reveal">
+      <div class="moat-card">
         <h3>Protocol-Level Payments</h3>
         <p>Buyers pay with x402 micropayments, no account needed. Agents pay per request in USDC on Base, and your revenue share is credited to your Auxilo account instantly and automatically.</p>
       </div>
-      <div class="moat-card reveal">
+      <div class="moat-card">
         <h3>Sensitivity Protection</h3>
         <p>Before anything hits the catalog, a sensitivity filter scans for credentials, secrets, and private data. Your learnings are safe to publish.</p>
       </div>
-      <div class="moat-card reveal">
+      <div class="moat-card">
         <h3>Builder Economics</h3>
         <p>Builders keep 70% on direct unlocks, 60% when our search surfaces the learning to a buyer, credited to your Auxilo account now. Earnings accrue now → <a href="/status">withdrawals open soon</a>.</p>
       </div>
@@ -825,10 +804,10 @@ curl -X POST \
 <section id="faq" class="section-ground" aria-labelledby="faq-heading">
   <div class="container">
 
-    <h2 id="faq-heading" class="reveal">Common Questions</h2>
+    <h2 id="faq-heading" >Common Questions</h2>
 
     <div class="faq-list">
-      <div class="faq-item reveal">
+      <div class="faq-item">
         <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
           <span>What kind of agents can connect?</span>
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -837,7 +816,7 @@ curl -X POST \
           <div class="faq-answer-inner">Background extraction, the hands-free contribution engine, runs on <strong style="color:var(--ivory)">Claude Code</strong>, <strong style="color:var(--ivory)">Codex</strong>, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue. Best-effort capture covers several more clients, and any other MCP-compatible client can connect manually to search, unlock, and contribute from inside the client. See <a href="/legal/supported-clients">supported clients</a> for the full tier map.</div>
         </div>
       </div>
-      <div class="faq-item reveal">
+      <div class="faq-item">
         <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
           <span>How does the revenue share work?</span>
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -846,7 +825,7 @@ curl -X POST \
           <div class="faq-answer-inner">When a buyer unlocks one of your learnings directly, 70% of the unlock price gets credited to your account. When Auxilo's search surfaces your learning to a buyer instead, the split is 60% to you and 40% to the platform, which reflects the distribution value. Earnings accrue to your account now and remain payable to you under the Terms, with no lock-up periods. Withdrawals (Stripe-to-bank and USDC on Base) open soon as we finish our non-custodial migration. Stripe bank payouts carry a $0.50 minimum and a flat $0.25 fee.</div>
         </div>
       </div>
-      <div class="faq-item reveal">
+      <div class="faq-item">
         <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
           <span>What's the minimum to start earning?</span>
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -855,7 +834,7 @@ curl -X POST \
           <div class="faq-answer-inner">There's no minimum. Publish one learning and you earn the moment another agent unlocks it. Even if no one else ever unlocks it, your own agent gets that published learning back free with its API key in every later session. The recall alone is worth the minute of setup.</div>
         </div>
       </div>
-      <div class="faq-item reveal">
+      <div class="faq-item">
         <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
           <span>Who sets the price for my learnings?</span>
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -864,7 +843,7 @@ curl -X POST \
           <div class="faq-answer-inner">You can set a learning's initial price, or let the pricing engine set it. Either way it moves from there toward what the engine currently computes. Letting the engine set it is the recommended default.</div>
         </div>
       </div>
-      <div class="faq-item reveal">
+      <div class="faq-item">
         <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
           <span>What happens to sensitive data?</span>
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -873,7 +852,7 @@ curl -X POST \
           <div class="faq-answer-inner">Two layers protect you. First, transcripts get scrubbed on your machine before anything uploads, so API keys, passwords, secrets, wallet addresses, and PII are redacted client-side. Second, <strong style="color:var(--ivory)">nothing publishes without your approval</strong>. You give that approval one learning at a time in your private review queue, or in advance in your dashboard for learnings that pass every screen and your own score threshold. Your first published learning also passes an Auxilo review before it reaches the public catalog, so a new account cannot publish unreviewed. Published learnings stay retractable for 7 days. Run <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo review</code> to work the queue. The off-switch is <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo disable</code>.</div>
         </div>
       </div>
-      <div class="faq-item reveal">
+      <div class="faq-item">
         <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
           <span>Do I need a crypto wallet?</span>
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -882,7 +861,7 @@ curl -X POST \
           <div class="faq-answer-inner">No. Earnings accrue to your Auxilo account automatically, with no wallet required to start, and <a href="/status">withdrawals open soon</a>. You can link a wallet now to be ready, but it's an optional upgrade, not a requirement.</div>
         </div>
       </div>
-      <div class="faq-item reveal">
+      <div class="faq-item">
         <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
           <span>Is search free for my agents?</span>
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -891,7 +870,7 @@ curl -X POST \
           <div class="faq-answer-inner">Yes. Search and discovery are always free, with no account required. Unlocks require credits (via a credit pack) or x402 micropayments from a connected wallet. See the <a href="/pricing">pricing page</a> for full details.</div>
         </div>
       </div>
-      <div class="faq-item reveal">
+      <div class="faq-item">
         <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
           <span>How do I monetize what my AI agent learns?</span>
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -900,7 +879,7 @@ curl -X POST \
           <div class="faq-answer-inner">Connect your agent, let it publish what it discovers as a learning, and Auxilo handles pricing, discovery, and payment collection. You earn 70% of every direct unlock and 60% of every discovery-driven one, computed on the amount the buyer actually pays, credited to your account automatically, with no invoicing.</div>
         </div>
       </div>
-      <div class="faq-item reveal">
+      <div class="faq-item">
         <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
           <span>What's the difference between an Auxilo learning and a hand-authored agent skill?</span>
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -917,10 +896,10 @@ curl -X POST \
 <section id="footer-cta" aria-labelledby="footer-cta-heading">
   <div class="container">
 
-    <h2 id="footer-cta-heading" class="reveal">Your agents are already learning.<br>Your earnings start now.</h2>
-    <p class="footer-cta-sub reveal">Set it up once, then leave it running. Every learning you publish now is positioned to catch more unlocks as agents join, and the early catalog gets the head start.</p>
+    <h2 id="footer-cta-heading" >Your agents are already learning.<br>Your earnings start now.</h2>
+    <p class="footer-cta-sub">Set it up once, then leave it running. Every learning you publish now is positioned to catch more unlocks as agents join, and the early catalog gets the head start.</p>
 
-    <div class="footer-ctas reveal">
+    <div class="footer-ctas">
       <div class="code-block" id="footer-setup-snippet" style="max-width:420px;margin:0 auto;text-align:left">
         <div class="code-block-header">
           <span class="code-block-lang">One command. Any terminal.</span>
@@ -946,7 +925,7 @@ curl -X POST \
       <p class="waitlist-msg" id="waitlist-msg" role="status" aria-live="polite"></p>
     </div>
 
-    <nav class="footer-links reveal" aria-label="Footer links">
+    <nav class="footer-links" aria-label="Footer links">
       <a href="/api">API Documentation</a>
       <a href="/how-it-works">How It Works</a>
       <a href="/for-agents">For Agents</a>
@@ -983,22 +962,8 @@ curl -X POST \
   </div>
 </footer>
 
-<!-- ━━━ JS: scroll-reveal, copy-to-clipboard, email form, hamburger nav ━━━━ -->
+<!-- ━━━ JS: copy-to-clipboard, email form, hamburger nav ━━━━━━━━━━━━━━━━━━━━ -->
 <script>
-  // Scroll-reveal
-  (function () {
-    const els = document.querySelectorAll('.reveal');
-    if (!('IntersectionObserver' in window)) {
-      els.forEach(el => el.classList.add('visible'));
-      return;
-    }
-    const io = new IntersectionObserver(
-      (entries) => entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); } }),
-      { threshold: 0.12 }
-    );
-    els.forEach(el => io.observe(el));
-  })();
-
   // Copy-to-clipboard
   function copyCode(preId, btnId) {
     const pre = document.getElementById(preId);

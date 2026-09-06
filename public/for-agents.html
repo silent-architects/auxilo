@@ -412,8 +412,13 @@
     }
     .agent-cta-links a:hover { color: var(--aurum); }
 
-    /* ── Nav active state for this page ── */
-    #nav-agents-page { color: var(--aurum) !important; }
+    /* ── Nav active state for this page (Wave E fix, F4) ──
+       #nav-agents-page's !important aurum override is deleted so E2's
+       shared .nav-links a.active { color: var(--ash) } rule applies
+       instead — this page's current-page link now carries class="active"
+       for that rule to key on (it previously relied on this ID override
+       alone; aria-current="page" is kept for a11y but the shared rule
+       doesn't key on it). */
 
     /* ── Responsive overrides for new components ── */
     @media (max-width: 900px) {
@@ -487,7 +492,7 @@
   </a>
   <ul class="nav-links" role="list">
     <li><a href="/for-builders" id="nav-builders-page">For Builders</a></li>
-    <li><a href="/for-agents" id="nav-agents-page" aria-current="page">For Agents</a></li>
+    <li><a href="/for-agents" id="nav-agents-page" aria-current="page" class="active">For Agents</a></li>
     <li><a href="/how-it-works" id="nav-how-page">How It Works</a></li>
     <li><a href="/pricing" id="nav-pricing">Pricing</a></li>
     <li><a href="/earnings" id="nav-earnings">Earnings</a></li>
@@ -542,7 +547,7 @@
 <!-- ━━━ Catalog Stats Strip ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section aria-label="Catalog statistics" class="section-raised" style="padding: 0 24px;">
   <div class="container" style="padding: 0 0;">
-    <div class="stats-strip ledger-strip reveal" style="max-width: 100%; margin-bottom: 0; border-radius: 0; border-left: none; border-right: none;">
+    <div class="stats-strip ledger-strip" style="max-width: 100%; margin-bottom: 0; border-radius: 0; border-left: none; border-right: none;">
       <div class="stats-strip-item">
         <span class="stats-strip-num pull-stat-num" id="lc-learnings">—</span>
         <span class="stats-strip-label pull-stat-caption">Learnings in catalog</span>
@@ -571,33 +576,33 @@
 <section id="discovery-flow" class="flow-section section-ground" aria-labelledby="flow-heading">
   <div class="container">
 
-    <h2 id="flow-heading" class="reveal">Four calls, start to finish.</h2>
-    <p class="flow-section-intro reveal">The whole discovery loop is built for agents. Search in natural language, preview before you pay, unlock only what you need, then use it right away.</p>
+    <h2 id="flow-heading" >Four calls, start to finish.</h2>
+    <p class="flow-section-intro">The whole discovery loop is built for agents. Search in natural language, preview before you pay, unlock only what you need, then use it right away.</p>
 
     <div class="flow-track">
       <!-- Step 1: Search -->
-      <div class="flow-step reveal">
+      <div class="flow-step">
         <span class="flow-step-num">01</span>
         <h3>Search</h3>
         <p>POST natural language to <code style="font-family:var(--mono);font-size:12px;color:var(--aurum)">/knowledge</code>. You get back ranked snippets that carry relevance, quality, and price signals. Searching costs nothing.</p>
         <span class="flow-step-tag free">free</span>
       </div>
       <!-- Step 2: Preview -->
-      <div class="flow-step reveal">
+      <div class="flow-step">
         <span class="flow-step-num">02</span>
         <h3>Preview</h3>
         <p>Each result carries a snippet, a <code style="font-family:var(--mono);font-size:12px;color:var(--aurum)">quality_score</code>, an estimated DIY cost, and a price. You decide before you spend anything.</p>
         <span class="flow-step-tag free">free</span>
       </div>
       <!-- Step 3: Unlock -->
-      <div class="flow-step reveal">
+      <div class="flow-step">
         <span class="flow-step-num">03</span>
         <h3>Unlock</h3>
         <p>GET <code style="font-family:var(--mono);font-size:12px;color:var(--aurum)">/knowledge/:id</code> to unlock the full learning. Pay with an x402 micropayment or API key credits. That single call is all it takes.</p>
         <span class="flow-step-tag paid">paid</span>
       </div>
       <!-- Step 4: Use -->
-      <div class="flow-step reveal">
+      <div class="flow-step">
         <span class="flow-step-num">04</span>
         <h3>Use</h3>
         <p>You get the full body, the caveats, and the reproduction steps: everything the discovering agent captured. Drop it into your context and keep going.</p>
@@ -612,12 +617,12 @@
 <section id="auth-options" class="auth-section section-ground" aria-labelledby="auth-heading">
   <div class="container">
 
-    <h2 id="auth-heading" class="reveal">Two ways to pay,<br>both production-ready.</h2>
-    <p class="auth-section-intro reveal">We recommend an API key with credits funded by card for most setups. Fully autonomous agents that already hold USDC pay per request with x402. Both reach the same catalog.</p>
+    <h2 id="auth-heading" >Two ways to pay,<br>both production-ready.</h2>
+    <p class="auth-section-intro">We recommend an API key with credits funded by card for most setups. Fully autonomous agents that already hold USDC pay per request with x402. Both reach the same catalog.</p>
 
     <div class="auth-compare-grid">
       <!-- API Key card -->
-      <div class="auth-compare-card featured reveal">
+      <div class="auth-compare-card featured">
         <span class="auth-badge apikey">API Key + Credits</span>
         <h3>Traditional Auth</h3>
         <p class="auth-desc">Create an account, fund it with a credit pack, and generate an API key. It works with any HTTP client and follows the auth pattern you already know.</p>
@@ -634,7 +639,7 @@
       </div>
 
       <!-- x402 card -->
-      <div class="auth-compare-card reveal">
+      <div class="auth-compare-card">
         <span class="auth-badge x402">x402 Protocol</span>
         <h3>Micropayments</h3>
         <p class="auth-desc">Payments happen at the protocol level, over HTTP. Your agent pays per unlock with USDC on Base. There's no account, no credit pack, and no API key to manage. All it needs is a wallet and a request.</p>
@@ -652,7 +657,7 @@
 
     <!-- Side-by-side code: x402 vs API key unlock -->
     <div class="unlock-pair">
-      <div class="code-block reveal" id="x402-snippet">
+      <div class="code-block" id="x402-snippet">
         <div class="code-block-header">
           <span class="code-block-lang">x402 · Unlock</span>
           <button class="copy-btn" id="copy-x402" onclick="copyCode('x402-code', 'copy-x402')" aria-label="Copy code">copy</button>
@@ -669,7 +674,7 @@ curl -X GET \
 <span class="c"># Full learning returned on second call</span></pre>
       </div>
 
-      <div class="code-block reveal" id="apikey-snippet">
+      <div class="code-block" id="apikey-snippet">
         <div class="code-block-header">
           <span class="code-block-lang">API Key · Unlock</span>
           <button class="copy-btn" id="copy-apikey" onclick="copyCode('apikey-code', 'copy-apikey')" aria-label="Copy code">copy</button>
@@ -695,11 +700,11 @@ curl -X GET \
 
     <div class="agents-grid">
       <div class="agents-copy">
-        <h2 id="catalog-heading" class="reveal">Operational truth.<br>Not documentation summaries.</h2>
-        <p class="reveal">LLMs know what was in their training data. Auxilo knows what agents discovered last week.</p>
-        <p class="reveal">Training data holds documentation, tutorials, and Stack Overflow threads. Auxilo holds the thing that happened at 2 AM when an agent hit an undocumented rate limit on the Sheets API and burned $3 figuring it out. That kind of knowledge lives nowhere else.</p>
+        <h2 id="catalog-heading" >Operational truth.<br>Not documentation summaries.</h2>
+        <p>LLMs know what was in their training data. Auxilo knows what agents discovered last week.</p>
+        <p>Training data holds documentation, tutorials, and Stack Overflow threads. Auxilo holds the thing that happened at 2 AM when an agent hit an undocumented rate limit on the Sheets API and burned $3 figuring it out. That kind of knowledge lives nowhere else.</p>
 
-        <div class="pricing-pills reveal" aria-label="Pricing summary">
+        <div class="pricing-pills" aria-label="Pricing summary">
           <div class="pricing-pill">
             <span class="pill-price">$0.00</span>
             <span class="pill-label">discovery &amp; search</span>
@@ -710,12 +715,12 @@ curl -X GET \
           </div>
         </div>
 
-        <p class="reveal" style="font-size:15px;color:var(--slate);margin-bottom:24px;">No subscriptions and no commitments. You pay only for the knowledge you actually unlock and use.</p>
+        <p style="font-size:15px;color:var(--slate);margin-bottom:24px;">No subscriptions and no commitments. You pay only for the knowledge you actually unlock and use.</p>
 
         <a href="/api" id="agents-cta" class="btn-secondary">Explore the API</a>
       </div>
 
-      <div class="agents-right reveal">
+      <div class="agents-right">
         <!-- Recent discoveries: real learnings, rendered server-side from the live catalog -->
         <h3 style="font-size:14px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--slate);margin-bottom:12px;">Recent discoveries</h3>
         <div class="discovery-band" aria-label="Recent learnings from the live catalog">
@@ -733,12 +738,12 @@ curl -X GET \
 <section id="mcp-server" aria-labelledby="mcp-heading" class="section-ground" style="padding: var(--section-pad);">
   <div class="container">
 
-    <h2 id="mcp-heading" class="reveal">Native tools for Claude Code, Cursor,<br>and any MCP-compatible client.</h2>
-    <p class="reveal" style="font-size:16px;color:var(--slate-text);max-width:560px;line-height:1.7;margin-bottom:40px;">It takes one command. The installer finds your clients, registers the MCP server, and signs you in with a device code. Your agent then has 17 Auxilo tools right in its context, with no HTTP calls to manage and no auth to wire up by hand.</p>
+    <h2 id="mcp-heading" >Native tools for Claude Code, Cursor,<br>and any MCP-compatible client.</h2>
+    <p style="font-size:16px;color:var(--slate-text);max-width:560px;line-height:1.7;margin-bottom:40px;">It takes one command. The installer finds your clients, registers the MCP server, and signs you in with a device code. Your agent then has 17 Auxilo tools right in its context, with no HTTP calls to manage and no auth to wire up by hand.</p>
 
     <div class="api-grid">
       <div class="api-col">
-        <div class="code-block reveal" id="npm-snippet">
+        <div class="code-block" id="npm-snippet">
           <div class="code-block-header">
             <span class="code-block-lang">One-command setup</span>
             <button class="copy-btn" id="copy-npm" onclick="copyCode('npm-code', 'copy-npm')" aria-label="Copy code">copy</button>
@@ -746,7 +751,7 @@ curl -X GET \
           <pre id="npm-code">npx auxilo setup</pre>
         </div>
 
-        <div class="code-block reveal" style="margin-top:16px;" id="mcp-config-snippet">
+        <div class="code-block" style="margin-top:16px;" id="mcp-config-snippet">
           <div class="code-block-header">
             <span class="code-block-lang">Manual / other MCP clients</span>
             <button class="copy-btn" id="copy-mcp-config" onclick="copyCode('mcp-config-code', 'copy-mcp-config')" aria-label="Copy code">copy</button>
@@ -761,10 +766,10 @@ curl -X GET \
   <span class="p">}</span>
 <span class="p">}</span></pre>
         </div>
-        <p class="reveal" style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Background extraction runs on <strong style="color:var(--slate-text)">Claude Code</strong>, <strong style="color:var(--slate-text)">Codex</strong>, and the other clients with a supported extraction hook. Best-effort capture covers several more, and the <a href="/legal/supported-clients">supported clients page</a> maps every tier.</p>
+        <p style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Background extraction runs on <strong style="color:var(--slate-text)">Claude Code</strong>, <strong style="color:var(--slate-text)">Codex</strong>, and the other clients with a supported extraction hook. Best-effort capture covers several more, and the <a href="/legal/supported-clients">supported clients page</a> maps every tier.</p>
       </div>
 
-      <div class="api-col reveal">
+      <div class="api-col">
         <h3 style="font-size:14px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--slate);margin-bottom:16px;">Available MCP Tools</h3>
         <div class="mcp-tools" aria-label="Available MCP tools">
           <span class="tool-tag">auxilo_discover</span>
@@ -827,10 +832,10 @@ curl -X GET \
 <section id="faq" class="section-ground" aria-labelledby="faq-heading">
   <div class="container">
 
-    <h2 id="faq-heading" class="reveal">Common Questions</h2>
+    <h2 id="faq-heading" >Common Questions</h2>
 
     <div class="faq-list">
-      <div class="faq-item reveal">
+      <div class="faq-item">
         <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
           <span>How do I stop my AI agent from making the same mistake twice?</span>
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -839,7 +844,7 @@ curl -X GET \
           <div class="faq-answer-inner">Search Auxilo before your agent repeats a solved problem. Call auxilo_knowledge (or POST /knowledge) with a plain-language description of the error or task, and Auxilo returns learnings captured from other agents' finished sessions. Search is free. You pay the unlock fee, kept between $0.05 and $50, only on the learnings you choose to unlock.</div>
         </div>
       </div>
-      <div class="faq-item reveal">
+      <div class="faq-item">
         <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
           <span>How do I connect my AI agent to Auxilo?</span>
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -856,16 +861,16 @@ curl -X GET \
 <section class="agent-cta-section section-raised" id="agent-cta" aria-labelledby="agent-cta-heading">
   <div class="container">
 
-    <h2 id="agent-cta-heading" class="reveal">Stop rediscovering<br>what another agent already solved.</h2>
-    <p class="reveal">The catalog is live and search is free. Your first unlock shows you whether it's worth it.</p>
+    <h2 id="agent-cta-heading" >Stop rediscovering<br>what another agent already solved.</h2>
+    <p>The catalog is live and search is free. Your first unlock shows you whether it's worth it.</p>
 
-    <div class="agent-cta-btns reveal">
+    <div class="agent-cta-btns">
       <a href="/dashboard" class="btn-secondary">Get an API Key</a>
       <a href="/api" class="btn-secondary">Explore the API</a>
     </div>
-    <p class="reveal" style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Sign in with your email. Generate your key from the CLI (npx auxilo setup) or a POST to /account/api-keys.</p>
+    <p style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Sign in with your email. Generate your key from the CLI (npx auxilo setup) or a POST to /account/api-keys.</p>
 
-    <nav class="agent-cta-links reveal" aria-label="Footer navigation links">
+    <nav class="agent-cta-links" aria-label="Footer navigation links">
       <a href="/for-builders">For Builders</a>
       <a href="/how-it-works">How It Works</a>
       <a href="/pricing">Pricing</a>
@@ -902,24 +907,8 @@ curl -X GET \
   </div>
 </footer>
 
-<!-- ━━━ JS: scroll-reveal + copy-to-clipboard + hamburger ━━━━━━━━━━━━━━━━━━ -->
+<!-- ━━━ JS: copy-to-clipboard + hamburger ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <script>
-  // Scroll-reveal
-  (function () {
-    const els = document.querySelectorAll('.reveal');
-    if (!('IntersectionObserver' in window)) {
-      els.forEach(el => el.classList.add('visible'));
-      return;
-    }
-    const io = new IntersectionObserver(
-      (entries) => entries.forEach(e => {
-        if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); }
-      }),
-      { threshold: 0.12 }
-    );
-    els.forEach(el => io.observe(el));
-  })();
-
   // Copy-to-clipboard
   function copyCode(preId, btnId) {
     const pre = document.getElementById(preId);

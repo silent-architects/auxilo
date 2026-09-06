@@ -12318,11 +12318,49 @@ function serveLegalPage(c, filename, title, seo) {
       codeBlocks.push(`<pre class="legal-pre">${esc}</pre>`);
       return ` CODE${codeBlocks.length - 1} `;
     });
-    let body = protectedMd
+    // Wave E fix (F7): minimal GitHub-flavoured table support. A table
+    // (header row, separator row, contiguous body rows, all "| a | b |")
+    // is pulled out into an HTML placeholder BEFORE the line-based
+    // heading/list/paragraph transforms below, the same way fenced code
+    // blocks are protected above -- otherwise the catch-all paragraph-wrap
+    // regex (which only skips lines already starting with <h, <u, or <l)
+    // would wrap every table row in its own stray <p>. Restored at the
+    // very end, alongside the code-block restoration.
+    const inlineMd = (text) => text
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, linkText, url) =>
+        /^(https?:|mailto:|\/|#)/i.test(url) ? `<a href="${url.replace(/"/g, '&quot;')}">${linkText}</a>` : linkText);
+    const splitTableRow = (line) => {
+      let row = line.trim();
+      if (row.startsWith('|')) row = row.slice(1);
+      if (row.endsWith('|')) row = row.slice(0, -1);
+      return row.split('|').map((cell) => cell.trim());
+    };
+    const tables = [];
+    const protectedMd2 = protectedMd.replace(
+      /^(\|.*\|)[ \t]*\r?\n(\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)+\|?)[ \t]*\r?\n((?:\|.*\|[ \t]*\r?\n?)*)/gm,
+      (_m, headerLine, _sepLine, bodyBlock) => {
+        const headHtml = splitTableRow(headerLine).map((cell) => `<th>${inlineMd(cell)}</th>`).join('');
+        const bodyRows = bodyBlock.split(/\r?\n/).filter((line) => line.trim().length > 0);
+        const bodyHtml = bodyRows.map((row) => {
+          const cells = splitTableRow(row).map((cell) => `<td>${inlineMd(cell)}</td>`).join('');
+          return `<tr>${cells}</tr>`;
+        }).join('');
+        tables.push(`<table><thead><tr>${headHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`);
+        return `\n TABLE${tables.length - 1} \n`;
+      }
+    );
+    let body = protectedMd2
       .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
       .replace(/^### (.+)$/gm, '<h3>$1</h3>')
       .replace(/^## (.+)$/gm, '<h2>$1</h2>')
       .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+      // Wave E3 item 4: a line that is exactly a markdown rule (---) becomes
+      // an <hr>, not a literal "---" paragraph. Matched before the catch-all
+      // paragraph-wrap rule below; the wrap rule's `(?!<[hul])` lookahead
+      // already skips lines starting with <h, so <hr> passes through untouched.
+      .replace(/^---$/gm, '<hr>')
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.+?)\*/g, '<em>$1</em>')
       // Inline links [text](url) → <a>. Before list/paragraph wrapping so links
@@ -12336,6 +12374,9 @@ function serveLegalPage(c, filename, title, seo) {
     // Restore protected code blocks, unwrapping any <p> the paragraph rule added.
     body = body.replace(/<p> CODE(\d+) <\/p>| CODE(\d+) /g,
       (_m, a, b) => codeBlocks[a !== undefined ? a : b]);
+    // Restore protected tables, unwrapping any <p> the paragraph rule added.
+    body = body.replace(/<p> TABLE(\d+) <\/p>| TABLE(\d+) /g,
+      (_m, a, b) => tables[a !== undefined ? a : b]);
     // SEO-BASELINE-2026-09-06: canonical + og/twitter block, /terms and /privacy only
     // (routes below pass `seo`; other serveLegalPage callers pass nothing and get no tags).
     // AD-STRINGS-PACKET-10-SEO-FINAL-2026-09-06: `seo.full` gives a page the full
@@ -12387,12 +12428,36 @@ function serveLegalPage(c, filename, title, seo) {
     .legal-wrap li{margin-bottom:6px;line-height:1.6}
     .legal-wrap strong{color:#FAFAF8}
     .legal-wrap a{color:#C9A84C}
+    .legal-wrap hr{border:none;border-top:1px solid rgba(229,229,227,0.12);margin:24px 0}
     .legal-wrap pre.legal-pre{background:#111;border:1px solid rgba(229,229,227,0.12);border-radius:6px;padding:16px;margin-bottom:16px;overflow-x:auto;white-space:pre-wrap;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;line-height:1.6;color:#E5E5E3}
     .legal-back{display:inline-block;margin-bottom:32px;color:#C9A84C;text-decoration:none;font-size:14px}
     .legal-back:hover{text-decoration:underline}
   </style>
 </head>
 <body>
+  <nav id="main-nav" aria-label="Main navigation">
+    <a href="/" class="nav-logo" id="nav-logo">
+      <!-- Angular A mark -->
+      <svg class="logo-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <polygon points="16,2 30,28 2,28" fill="none" stroke="#C9A84C" stroke-width="2.2" stroke-linejoin="round"/>
+        <line x1="16" y1="17" x2="30" y2="17" stroke="#C9A84C" stroke-width="1.8"/>
+      </svg>
+      <span class="wordmark">auxilo</span>
+    </a>
+    <ul class="nav-links" role="list">
+      <li><a href="/for-builders" id="nav-builders">For Builders</a></li>
+      <li><a href="/for-agents" id="nav-agents">For Agents</a></li>
+      <li><a href="/how-it-works" id="nav-how">How It Works</a></li>
+      <li><a href="/pricing" id="nav-pricing">Pricing</a></li>
+      <li><a href="/earnings" id="nav-earnings">Earnings</a></li>
+      <li><a href="/api" id="nav-api">API</a></li>
+      <li><a href="/dashboard" id="nav-dashboard">Sign in</a></li>
+      <li><a href="/#install" id="nav-cta-access" class="nav-cta">Connect your agent</a></li>
+    </ul>
+    <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
   <div class="legal-wrap">
     <a href="/" class="legal-back">← Back to Auxilo</a>
     ${body}
@@ -12421,6 +12486,40 @@ function serveLegalPage(c, filename, title, seo) {
     </p>
   </div>
 </footer>
+<script>
+  // ── Hamburger nav toggle ───────────────────────────────────────────
+  function toggleNav() {
+    const nav = document.querySelector('.nav-links');
+    const btn = document.getElementById('hamburger');
+    const expanded = btn.getAttribute('aria-expanded') === 'true';
+    btn.setAttribute('aria-expanded', !expanded);
+    nav.classList.toggle('nav-open');
+  }
+
+  // Close mobile nav on link click
+  document.querySelectorAll('.nav-links a').forEach(a => {
+    a.addEventListener('click', () => {
+      const nav = document.querySelector('.nav-links');
+      const btn = document.getElementById('hamburger');
+      if (nav.classList.contains('nav-open')) {
+        nav.classList.remove('nav-open');
+        btn.setAttribute('aria-expanded', 'false');
+      }
+    });
+  });
+
+  // Close mobile nav on Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const nav = document.querySelector('.nav-links');
+      const btn = document.getElementById('hamburger');
+      if (nav && nav.classList.contains('nav-open')) {
+        nav.classList.remove('nav-open');
+        btn.setAttribute('aria-expanded', 'false');
+      }
+    }
+  });
+</script>
 </body>
 </html>`;
     c.header('Content-Type', 'text/html; charset=utf-8');
@@ -12440,14 +12539,23 @@ app.get('/privacy', (c) => serveLegalPage(c, 'PRIVACY-POLICY.md', 'Privacy Polic
   path: '/privacy',
   description: 'Auxilo privacy policy covering data collection, use, and retention.',
 }));
-app.get('/legal/subprocessors', (c) => serveLegalPage(c, 'SUBPROCESSORS.md', 'Sub-Processors'));
+// Wave E fix (F6): minimal seo object (canonical + og:type + og:url +
+// og:site_name via the reduced, no-description branch) — no description,
+// no title change.
+app.get('/legal/subprocessors', (c) => serveLegalPage(c, 'SUBPROCESSORS.md', 'Sub-Processors', {
+  path: '/legal/subprocessors',
+}));
 app.get('/legal/supported-clients', (c) => serveLegalPage(c, 'SUPPORTED-CLIENTS.md', 'Supported clients', {
   path: '/legal/supported-clients',
   description: 'Which coding clients the local runner can capture learnings from once you opt in, by tier, with the caveat for each.',
   full: true,
 }));
 // FB-1: /dmca is incorporated into the Terms (§5.9.4(b)) and must resolve, not 404.
-app.get('/dmca', (c) => serveLegalPage(c, 'DMCA-POLICY.md', 'DMCA Copyright Policy'));
+// Wave E fix (F6): minimal seo object, same reduced/no-description shape as
+// /legal/subprocessors above.
+app.get('/dmca', (c) => serveLegalPage(c, 'DMCA-POLICY.md', 'DMCA Copyright Policy', {
+  path: '/dmca',
+}));
 
 // ── OpenClaw Adapter Routes ──────────────────────────────────────────────────
 // S9-1: All OpenClaw endpoints require admin auth (S-3 audit finding)
