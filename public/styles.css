@@ -6,15 +6,15 @@
    self-hosted, subset latin + latin-ext. Both SIL OFL 1.1. */
 @font-face {
   font-family: 'Archivo'; font-style: normal; font-weight: 100 900; font-display: swap;
-  src: url('/fonts/ArchivoVariable.woff2') format('woff2');
+  src: url('/fonts/ArchivoVariable.1b4d984f.woff2') format('woff2');
 }
 @font-face {
   font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap;
-  src: url('/fonts/PlexMono400.woff2') format('woff2');
+  src: url('/fonts/PlexMono400.0698749e.woff2') format('woff2');
 }
 @font-face {
   font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: swap;
-  src: url('/fonts/PlexMono500.woff2') format('woff2');
+  src: url('/fonts/PlexMono500.0ecb6352.woff2') format('woff2');
 }
 
 /* ── Reset & Base ──────────────────────────────────────────────────────────── */

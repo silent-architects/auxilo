@@ -18,9 +18,21 @@
  * the CURRENT tip across every public page, not copied from the sheets'
  * stale line numbers.
  *
+ * Wave D1 FIX PASS (2026-09-06, Gate-A FAIL remediation): the wave failed
+ * review on one blocker + five should-fix findings. The final describe
+ * block below (WAVE-D1 fix pass) covers three of those structurally —
+ * the fingerprinted-font immutable-cache route, the CSP no longer
+ * allowing fonts.googleapis.com/fonts.gstatic.com, and for-agents.html
+ * carrying no ungated .reveal opacity rule. The font-filename and
+ * @font-face assertions above were also updated in the fix pass to match
+ * the now-content-hashed filenames (see the HASH-aware matchers).
+ *
  * Purely structural / file-level: every assertion is checkable from the
  * served bytes on disk, no live server needed (same convention as
- * test/site-system.test.js).
+ * test/site-system.test.js). The fix pass's cache-header claim was also
+ * hand-verified live (PORT=4179 node server.js + curl -I) — see the
+ * delivery report; that live check is not repeated here as a standing
+ * test to keep this file boot-free.
  *
  * Runner: node --test test/wave-d1.test.js
  */
@@ -29,11 +41,13 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { buildContentSecurityPolicy } = require('../lib/analytics.js');
 
 const REPO_ROOT = path.join(__dirname, '..');
 const PUBLIC_DIR = path.join(REPO_ROOT, 'public');
 const STYLES_PATH = path.join(PUBLIC_DIR, 'styles.css');
 const STYLES = fs.readFileSync(STYLES_PATH, 'utf8');
+const SERVER_SRC = fs.readFileSync(path.join(REPO_ROOT, 'server.js'), 'utf8');
 
 // Every public page this wave touched. public/writing/index.html (the /writing
 // hub) is a real, separate, footer-bearing page distinct from
@@ -102,46 +116,57 @@ describe('WAVE-D1 type pairing: tokens + @font-face', () => {
     assert.doesNotMatch(monoLine[1], /Geist/);
   });
 
-  it('three @font-face rules exist (Archivo variable 100-900, IBM Plex Mono 400 and 500 statics)', () => {
+  // Wave D1 fix pass (F3, 2026-09-06): the three font files now ship
+  // content-hashed (an 8-hex-char sha256 short-sum inserted before the
+  // extension, e.g. ArchivoVariable.1b4d984f.woff2) so server.js can cache
+  // them immutably for a year — a byte change forces a new URL. Matchers
+  // below are hash-agnostic ([0-9a-f]{8}) so a legitimate future re-hash
+  // (the font bytes changing) doesn't require touching this test.
+  const HASH = '[0-9a-f]{8}';
+
+  it('three @font-face rules exist (Archivo variable 100-900, IBM Plex Mono 400 and 500 statics), each on a content-hashed woff2 URL', () => {
     const faceBlocks = [...STYLES.matchAll(/@font-face\s*\{([^}]*)\}/g)].map((m) => m[1]);
     assert.equal(faceBlocks.length, 3, `expected 3 @font-face rules, found ${faceBlocks.length}`);
 
     const archivo = faceBlocks.find((b) => /font-family:\s*'Archivo'/.test(b));
     assert.ok(archivo, 'an Archivo @font-face rule exists');
     assert.match(archivo, /font-weight:\s*100 900/);
-    assert.match(archivo, /url\('\/fonts\/ArchivoVariable\.woff2'\)\s*format\('woff2'\)/);
+    assert.match(archivo, new RegExp(`url\\('\\/fonts\\/ArchivoVariable\\.${HASH}\\.woff2'\\)\\s*format\\('woff2'\\)`));
 
     const plex400 = faceBlocks.find((b) => /font-family:\s*'IBM Plex Mono'/.test(b) && /font-weight:\s*400\b/.test(b));
     assert.ok(plex400, 'an IBM Plex Mono 400 @font-face rule exists');
-    assert.match(plex400, /url\('\/fonts\/PlexMono400\.woff2'\)\s*format\('woff2'\)/);
+    assert.match(plex400, new RegExp(`url\\('\\/fonts\\/PlexMono400\\.${HASH}\\.woff2'\\)\\s*format\\('woff2'\\)`));
 
     const plex500 = faceBlocks.find((b) => /font-family:\s*'IBM Plex Mono'/.test(b) && /font-weight:\s*500\b/.test(b));
     assert.ok(plex500, 'an IBM Plex Mono 500 @font-face rule exists');
-    assert.match(plex500, /url\('\/fonts\/PlexMono500\.woff2'\)\s*format\('woff2'\)/);
+    assert.match(plex500, new RegExp(`url\\('\\/fonts\\/PlexMono500\\.${HASH}\\.woff2'\\)\\s*format\\('woff2'\\)`));
   });
 
-  it('the three self-hosted font files exist on disk within the byte ceilings', () => {
-    const files = [
-      ['ArchivoVariable.woff2', 70 * 1024],
-      ['PlexMono400.woff2', 28 * 1024],
-      ['PlexMono500.woff2', 28 * 1024],
+  it('the three self-hosted font files exist on disk (content-hashed names) within the byte ceilings', () => {
+    const prefixes = [
+      ['ArchivoVariable', 70 * 1024],
+      ['PlexMono400', 28 * 1024],
+      ['PlexMono500', 28 * 1024],
     ];
-    for (const [name, ceiling] of files) {
-      const p = path.join(PUBLIC_DIR, 'fonts', name);
-      assert.ok(fs.existsSync(p), `${p} should exist`);
-      const size = fs.statSync(p).size;
-      assert.ok(size <= ceiling, `${name} is ${size} bytes, over its ${ceiling}-byte ceiling`);
-      assert.ok(size > 1000, `${name} is suspiciously small (${size} bytes) — likely not a real font`);
+    const fontsDir = path.join(PUBLIC_DIR, 'fonts');
+    const onDisk = fs.readdirSync(fontsDir);
+    for (const [prefix, ceiling] of prefixes) {
+      const re = new RegExp(`^${prefix}\\.${HASH}\\.woff2$`);
+      const match = onDisk.find((f) => re.test(f));
+      assert.ok(match, `a ${prefix}.<hash>.woff2 file should exist in ${fontsDir}, found: ${onDisk.join(', ')}`);
+      const size = fs.statSync(path.join(fontsDir, match)).size;
+      assert.ok(size <= ceiling, `${match} is ${size} bytes, over its ${ceiling}-byte ceiling`);
+      assert.ok(size > 1000, `${match} is suspiciously small (${size} bytes) — likely not a real font`);
     }
   });
 
   for (const page of [...PAIRING_SHEET_PAGES, ...GAP_FILL_FONT_PAGES]) {
-    it(`${page} links both font preloads and carries no Google Fonts reference`, () => {
+    it(`${page} links both font preloads (content-hashed) and carries no Google Fonts reference`, () => {
       const html = readPage(page);
-      assert.match(html, /<link rel="preload" href="\/fonts\/ArchivoVariable\.woff2" as="font" type="font\/woff2" crossorigin \/>/,
-        `${page} should preload ArchivoVariable.woff2`);
-      assert.match(html, /<link rel="preload" href="\/fonts\/PlexMono400\.woff2" as="font" type="font\/woff2" crossorigin \/>/,
-        `${page} should preload PlexMono400.woff2`);
+      assert.match(html, new RegExp(`<link rel="preload" href="\\/fonts\\/ArchivoVariable\\.${HASH}\\.woff2" as="font" type="font\\/woff2" crossorigin \\/>`),
+        `${page} should preload the content-hashed ArchivoVariable.woff2`);
+      assert.match(html, new RegExp(`<link rel="preload" href="\\/fonts\\/PlexMono400\\.${HASH}\\.woff2" as="font" type="font\\/woff2" crossorigin \\/>`),
+        `${page} should preload the content-hashed PlexMono400.woff2`);
       assert.doesNotMatch(html, /fonts\.googleapis\.com|fonts\.gstatic\.com/,
         `${page} should carry no Google Fonts reference`);
     });
@@ -358,4 +383,81 @@ describe('WAVE-D1: styles.css ?v= bump rides in this commit, consistent across e
   // ?v= could NOT be bumped alongside this commit's styles.css changes —
   // that test is EXPECTED to fail until a server.js change lands. See the
   // wave D1 delivery report for the exact line (server.js:12203).
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// WAVE-D1 fix pass (2026-09-06): Gate-A FAIL remediation, F2/F3/F4
+// ═══════════════════════════════════════════════════════════════════════
+
+describe('WAVE-D1 fix pass: font cache immutability, CSP tightened, for-agents reveal gate', () => {
+  // F3 — the font files ship content-hashed and server.js must give them an
+  // immutable year-long cache via a dedicated /fonts/ route, registered
+  // before the generic static catch-all (which only grants the default
+  // 1-hour cache). Static-analysis check on server.js source, mirroring
+  // this repo's existing convention (test/geo-embargo.test.js) of reading
+  // server.js as text rather than booting it — server.js starts listening
+  // as a side effect of require(), so it isn't import-safe for a plain
+  // unit test (the staged-server harness in test/helpers/staged-server.js
+  // exists precisely to work around that for tests that need a live
+  // socket; this one doesn't need to reach that far).
+  it('server.js registers an immutable-cache /fonts/ route for hashed woff2 files, ahead of the generic static catch-all', () => {
+    const fontsRouteRe = /app\.get\('\/fonts\/:file\{[\s\S]{0,80}?\}',\s*\(c\)\s*=>\s*\{[\s\S]{0,400}?\}\);/;
+    const fontsRouteMatch = SERVER_SRC.match(fontsRouteRe);
+    assert.ok(fontsRouteMatch, 'server.js should define a /fonts/:file{...woff2...} route');
+    assert.match(fontsRouteMatch[0], /public,\s*max-age=31536000,\s*immutable/,
+      'the /fonts/ route should serve woff2 files with an immutable, one-year Cache-Control');
+
+    const genericCatchAllRe = /app\.get\('\/:file\{[^}]*woff2[^}]*\}'/;
+    const genericMatch = SERVER_SRC.match(genericCatchAllRe);
+    assert.ok(genericMatch, 'server.js should still define the generic static catch-all covering woff2');
+    assert.ok(fontsRouteMatch.index < genericMatch.index,
+      'the /fonts/ immutable-cache route must be registered before the generic static catch-all, or the catch-all would shadow it');
+  });
+
+  it('every shipped font filename under public/fonts/ matches the immutable route\'s hash pattern', () => {
+    const fontsDir = path.join(PUBLIC_DIR, 'fonts');
+    const woff2Files = fs.readdirSync(fontsDir).filter((f) => f.endsWith('.woff2'));
+    assert.equal(woff2Files.length, 3, `expected 3 woff2 files in ${fontsDir}, found ${woff2Files.length}`);
+    for (const f of woff2Files) {
+      assert.match(f, /^[A-Za-z0-9]+\.[0-9a-f]{8}\.woff2$/,
+        `${f} should be named <name>.<8-hex-hash>.woff2 to match the immutable /fonts/ cache route`);
+    }
+  });
+
+  // F4 — style-src/font-src no longer allow fonts.googleapis.com /
+  // fonts.gstatic.com now that Archivo + IBM Plex Mono are self-hosted.
+  // Exercised through the real helper (not a copied string) so a future
+  // edit to lib/analytics.js can't silently regress this un-caught.
+  it('the CSP (both the unset-domain baseline and the analytics-on variant) carries no Google Fonts allowance', () => {
+    const baselineCsp = buildContentSecurityPolicy('');
+    const analyticsCsp = buildContentSecurityPolicy('example.plausible.io');
+    for (const [label, csp] of [['baseline', baselineCsp], ['analytics-on', analyticsCsp]]) {
+      assert.doesNotMatch(csp, /fonts\.googleapis\.com|fonts\.gstatic\.com/,
+        `${label} CSP should carry no fonts.googleapis.com/fonts.gstatic.com allowance`);
+      assert.match(csp, /font-src 'self'(?:;| )/, `${label} CSP's font-src should be exactly 'self'`);
+    }
+  });
+
+  // F2 — for-agents.html was the one page still carrying an ungated
+  // `.reveal { opacity: 0; ... }` / `.reveal.visible {...}` pair in its own
+  // inline <style> block (the html.js-reveal opt-in that used to gate it
+  // sitewide was already removed, so this rule hid the element by default
+  // with nothing left to ever un-hide it). Guards against that regressing.
+  it('for-agents.html carries no page-local .reveal opacity rule and no js-reveal reference', () => {
+    const html = readPage('for-agents.html');
+    assert.doesNotMatch(html, /\.reveal\s*\{[^}]*opacity\s*:\s*0/,
+      'for-agents.html should carry no .reveal rule that sets opacity: 0');
+    assert.doesNotMatch(html, /\.reveal\.visible\s*\{/,
+      'for-agents.html should carry no page-local .reveal.visible rule');
+    assert.doesNotMatch(html, /js-reveal/i,
+      'for-agents.html should carry no js-reveal reference (markup, CSS, or comment)');
+    // The shared sitewide rule (styles.css) only sets a transition, never
+    // opacity — so with the page-local override gone, no .reveal element
+    // on this page is opacity:0 by default. Belt-and-suspenders: confirm
+    // the shared rule itself still carries no opacity/hiding declaration.
+    const sharedRevealRule = STYLES.match(/^\.reveal\s*\{([^}]*)\}/m);
+    assert.ok(sharedRevealRule, 'styles.css should still define the shared .reveal transition rule');
+    assert.doesNotMatch(sharedRevealRule[1], /opacity\s*:\s*0/,
+      'the shared .reveal rule should not set opacity: 0');
+  });
 });

@@ -25,33 +25,10 @@
   <!-- Favicon: Angular A mark -->
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
-  <link rel="preload" href="/fonts/ArchivoVariable.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="preload" href="/fonts/PlexMono400.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/PlexMono500.0ecb6352.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/styles.css?v=13" />
-  <!-- DR-4: reveal failsafe. Hide .reveal (via html.js-reveal) only when JS +
-       IntersectionObserver exist; a low-cost watchdog force-reveals any element
-       that sits unrevealed INSIDE the viewport for two consecutive ticks, i.e.
-       whenever the observer demonstrably missed it (no-JS, JS error, observer
-       constructed-but-silent -- the failure class seen once live). Forced
-       reveals still animate (the transition lives on .reveal itself). -->
-  <script>
-    (function () {
-      if (!('IntersectionObserver' in window)) return;
-      var pending = new WeakMap();
-      window.setInterval(function () {
-        var els = document.querySelectorAll('.reveal:not(.visible)');
-        for (var i = 0; i < els.length; i++) {
-          var el = els[i], r = el.getBoundingClientRect();
-          if (r.top < window.innerHeight && r.bottom > 0) {
-            if (pending.has(el)) el.classList.add('visible');
-            else pending.set(el, 1);
-          } else {
-            pending.delete(el);
-          }
-        }
-      }, 1400);
-    })();
-  </script>
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: Organization + FAQPage -->
@@ -436,17 +413,6 @@
 
     /* ── Nav active state for this page ── */
     #nav-agents-page { color: var(--aurum) !important; }
-
-    /* ── Reveal animation ── */
-    .reveal {
-      opacity: 0;
-      transform: translateY(18px);
-      transition: opacity 0.55s ease, transform 0.55s ease;
-    }
-    .reveal.visible {
-      opacity: 1;
-      transform: none;
-    }
 
     /* ── Responsive overrides for new components ── */
     @media (max-width: 900px) {

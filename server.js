@@ -5509,6 +5509,16 @@ app.get('/', (c) => {
 // styles.css is loaded as /styles.css?v=N — the query bumps on every CSS change,
 // so the file content at a given URL is immutable and can cache for a year.
 app.get('/styles.css', (c) => serveStatic(c, 'styles.css', 'public, max-age=31536000, immutable') || c.text('Not found', 404));
+// Self-hosted font files ship content-hashed (public/fonts/*.<8-hex-sha256>.woff2)
+// — the hash changes whenever the font bytes change, so a matched URL is
+// immutable and safe to cache for a year, same shape as the styles.css?v=N
+// rule above. Must be registered before the generic static catch-all below,
+// which would otherwise serve fonts at the default 1-hour cache.
+app.get('/fonts/:file{.+\\.[0-9a-f]{8}\\.woff2$}', (c) => {
+  const file = c.req.param('file');
+  const res = serveStatic(c, `fonts/${file}`, 'public, max-age=31536000, immutable');
+  return res || c.text('Not found', 404);
+});
 app.get('/favicon.ico', async (c) => {
   // Serve SVG favicon (browsers accept SVG favicons)
   const filePath = path.join(__dirname, 'public', 'favicon.svg');

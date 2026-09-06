@@ -45,11 +45,16 @@ function sliceAt(marker, span = 2000) {
 // The exact policy served before the analytics work landed. If this string
 // changes, the unset-env byte-identity guarantee is broken: treat any edit
 // here as a security-header change requiring Gate-A security review.
+// Wave D1 fix pass (F4, 2026-09-06): style-src/font-src dropped their
+// fonts.googleapis.com / fonts.gstatic.com allowances now that the site
+// self-hosts Archivo + IBM Plex Mono (see public/fonts/, public/styles.css)
+// and no longer requests fonts from Google — deliberate tightening, updated
+// here alongside lib/analytics.js.
 const BASELINE_CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self'",
   "img-src 'self' data:",
   "connect-src 'self'",
   "frame-ancestors 'none'",
