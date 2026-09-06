@@ -5509,6 +5509,16 @@ app.get('/', (c) => {
 // styles.css is loaded as /styles.css?v=N — the query bumps on every CSS change,
 // so the file content at a given URL is immutable and can cache for a year.
 app.get('/styles.css', (c) => serveStatic(c, 'styles.css', 'public, max-age=31536000, immutable') || c.text('Not found', 404));
+// Self-hosted font files ship content-hashed (public/fonts/*.<8-hex-sha256>.woff2)
+// — the hash changes whenever the font bytes change, so a matched URL is
+// immutable and safe to cache for a year, same shape as the styles.css?v=N
+// rule above. Must be registered before the generic static catch-all below,
+// which would otherwise serve fonts at the default 1-hour cache.
+app.get('/fonts/:file{.+\\.[0-9a-f]{8}\\.woff2$}', (c) => {
+  const file = c.req.param('file');
+  const res = serveStatic(c, `fonts/${file}`, 'public, max-age=31536000, immutable');
+  return res || c.text('Not found', 404);
+});
 app.get('/favicon.ico', async (c) => {
   // Serve SVG favicon (browsers accept SVG favicons)
   const filePath = path.join(__dirname, 'public', 'favicon.svg');
@@ -11987,7 +11997,13 @@ function renderLiveCatalogStats(html) {
     const visible = visibleLearningsList();
     const count = visible.length.toLocaleString('en-US');
     const cats = new Set(visible.map(l => l.category)).size.toLocaleString('en-US');
-    let range = '$0.05 to $50.00';
+    // AD strings packet 8 rev 2 (brand, decision 6): no static fallback band
+    // survives — an empty catalog means no live range to show, and a stale
+    // "$0.05 to $50.00" literal is a false claim, not a softer one. range
+    // stays '' on the fail path; the markup-side fail path (below) strips
+    // the whole cell/tile rather than stranding its label+desc over an
+    // empty value.
+    let range = '';
     if (visible.length) {
       const prices = visible.map(displayPrice);
       range = `$${Math.min(...prices).toFixed(2)} to $${Math.max(...prices).toFixed(2)}`;
@@ -12010,8 +12026,22 @@ function renderLiveCatalogStats(html) {
       .replace(/(id="lc-learnings"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${count}<`)
       .replace(/(id="lc-learnings-hero"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${count}<`)
       .replace(/(id="lc-categories"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${cats}<`)
-      .replace(/(id="lc-price-range"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${range}<`)
       .replace(/(id="lc-asof"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${asOf}<`);
+
+    // Price-range cell/tile (for-agents strip, pricing tile): the markup
+    // wraps the whole cell (label + desc + value) between
+    // <!--LC-PRICE-RANGE-CELL--> ... <!--/LC-PRICE-RANGE-CELL-->. On the
+    // success path we drop the markers and fill the value; on the fail
+    // path (range === '') we drop the whole block so no caption strands
+    // over an empty value.
+    if (range) {
+      out = out
+        .replace(/<!--LC-PRICE-RANGE-CELL-->/g, '')
+        .replace(/<!--\/LC-PRICE-RANGE-CELL-->/g, '')
+        .replace(/(id="lc-price-range"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${range}<`);
+    } else {
+      out = out.replace(/<!--LC-PRICE-RANGE-CELL-->[\s\S]*?<!--\/LC-PRICE-RANGE-CELL-->/g, '');
+    }
 
     // Honest-zeros strip cells (AD sheet 4 item 1, AD strings packet 3 rev 2
     // §5): the lc-unlocks and lc-paid cells on /for-builders, from the SAME
@@ -12200,7 +12230,7 @@ function serveLegalPage(c, filename, title, seo) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>${title} | Auxilo</title>
   ${seoTags}
-  <link rel="stylesheet" href="/styles.css?v=12"/>
+  <link rel="stylesheet" href="/styles.css?v=13"/>
   <style>
     .legal-wrap{max-width:720px;margin:0 auto;padding:120px 24px 80px;color:#E5E5E3}
     .legal-wrap h1{color:#FAFAF8;font-size:32px;margin-bottom:24px}

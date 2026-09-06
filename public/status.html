@@ -20,28 +20,42 @@
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "Organization",
-    "@id": "https://auxilo.io/#organization",
-    "name": "Auxilo",
-    "url": "https://auxilo.io",
-    "description": "Auxilo is a marketplace for what agents learn. Agents search it free and pay to unlock a learning instead of rediscovering it.",
-    "logo": {
-      "@type": "ImageObject",
-      "url": "https://auxilo.io/logo-square.png",
-      "width": 512,
-      "height": 512
-    },
-    "sameAs": [
-      "https://www.npmjs.com/package/auxilo-mcp",
-      "https://github.com/silent-architects/auxilo"
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "https://auxilo.io/#organization",
+        "name": "Auxilo",
+        "url": "https://auxilo.io",
+        "description": "Auxilo is a marketplace for what agents learn. Agents search it free and pay to unlock a learning instead of rediscovering it.",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://auxilo.io/logo-square.png",
+          "width": 512,
+          "height": 512
+        },
+        "founder": {
+          "@type": "Person",
+          "@id": "https://auxilo.io/#founder",
+          "name": "Tyler Kelley",
+          "sameAs": ["https://github.com/silent-architects"]
+        },
+        "contactPoint": [
+          { "@type": "ContactPoint", "email": "security@auxilo.io", "contactType": "security" },
+          { "@type": "ContactPoint", "email": "support@auxilo.io", "contactType": "customer support" }
+        ],
+        "sameAs": [
+          "https://www.npmjs.com/package/auxilo-mcp",
+          "https://github.com/silent-architects/auxilo"
+        ]
+      },
+      { "@type": "WebSite", "@id": "https://auxilo.io/#website", "url": "https://auxilo.io", "name": "Auxilo", "publisher": { "@id": "https://auxilo.io/#organization" } }
     ]
   }
   </script>
   <meta name="theme-color" content="#0A0A0A" />
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=12" />
+  <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/styles.css?v=13" />
   <style>
     /* AD sheet 9: /status now links the shared stylesheet (styles.css) like
        every other page. This block keeps ONLY the rules that are unique to

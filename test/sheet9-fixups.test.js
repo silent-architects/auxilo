@@ -19,15 +19,21 @@
  * gracefully (t.skip()) if playwright is not resolvable, same as DR-1.
  *
  * Items covered:
- *   B1  .moat-grid/.moat-card/.moat-icon restored to styles.css verbatim
- *       from 624044c, still used by /for-builders (:959-985): .moat-icon
- *       32x32, two columns above 900px, one column at/below it.
+ *   B1  SUPERSEDED 2026-09-06 by wave D1 (the AD design-tells sweep): the
+ *       original ruling restored .moat-grid/.moat-card/.moat-icon verbatim
+ *       from 624044c after a Gate-A regression. Wave D1's tells 5/6
+ *       deliberately remove .moat-icon and flatten .moat-card to a ruled
+ *       list, so this block now protects THAT state instead — no .moat-icon
+ *       anywhere, .moat-card full-width at both 1440px and 800px.
  *   S1  /status: hero h1 and the body's first block share one left edge at
  *       375/768/1440 (.status-body's own horizontal padding dropped so
  *       .container alone drives both insets).
  *   S3  /for-builders: the mobile (<=600px) hero h1 left edge equals the
  *       body section's left edge (40px — .builders-hero-content now picks
- *       up the same 24px .container normally supplies).
+ *       up the same 24px .container normally supplies). Reference element
+ *       updated 2026-09-06 (wave D1): the section's own h2 replaces the
+ *       .section-label eyebrow the AD design-tells sweep removed — both
+ *       shared the same left edge, so the measurement is unchanged.
  *   N1  the FAQ accordion's closed state (visibility:hidden) pulls a link
  *       inside the still-in-DOM answer text out of tab order; it's
  *       reachable again once the item opens (visibility:visible).
@@ -82,28 +88,26 @@ function ruleBody(css, selectorPattern) {
 // Tier 1: static CSS + HTML assertions
 // ═══════════════════════════════════════════════════════════════════════
 
-describe('B1 (static): .moat-grid/.moat-card/.moat-icon restored to styles.css', () => {
-  it('all six rules exist with the values carried over verbatim from 624044c', () => {
+describe('B1 (static, SUPERSEDED by the wave D1 AD design-tells sweep): .moat-card is a ruled list, .moat-icon is gone', () => {
+  // The original B1 protected the 2-col bordered-card + 32x32 icon design
+  // against an accidental dead-CSS deletion (Gate-A regression, sheet 9).
+  // Wave D1's AD design-tells sweep (tell 5 card-wall, tell 6 icon-marker)
+  // deliberately supersedes that design: .moat-icon is removed sitewide and
+  // .moat-card flattens to a hairline-ruled list, no grid/box/hover chrome.
+  // This block now protects the NEW state instead.
+  it('.moat-card is flattened (no background/border/border-radius/hover), .moat-icon rule is gone', () => {
     const moatGrid = ruleBody(STYLES, '^\\.moat-grid\\s*\\{');
     assert.ok(moatGrid, '.moat-grid rule exists');
-    assert.match(moatGrid, /display:\s*grid/);
-    assert.match(moatGrid, /grid-template-columns:\s*1fr 1fr/);
-    assert.match(moatGrid, /gap:\s*24px/);
-    assert.match(moatGrid, /max-width:\s*800px/);
+    assert.doesNotMatch(moatGrid, /display:\s*grid/, '.moat-grid is no longer a grid (flattened to a block ruled list)');
 
     const moatCard = ruleBody(STYLES, '^\\.moat-card\\s*\\{');
     assert.ok(moatCard, '.moat-card rule exists');
-    assert.match(moatCard, /padding:\s*32px 28px/);
-    assert.match(moatCard, /border-radius:\s*6px/);
+    assert.match(moatCard, /border-top:\s*1px solid rgba\(229,229,227,0\.13\)/);
+    assert.doesNotMatch(moatCard, /background:/, '.moat-card carries no fill');
+    assert.doesNotMatch(moatCard, /border-radius:/, '.moat-card carries no radius');
 
-    const moatCardHover = ruleBody(STYLES, '^\\.moat-card:hover\\s*\\{');
-    assert.ok(moatCardHover, '.moat-card:hover rule exists');
-    assert.match(moatCardHover, /border-color:\s*var\(--aurum-border\)/);
-
-    const moatIcon = ruleBody(STYLES, '^\\.moat-icon\\s*\\{');
-    assert.ok(moatIcon, '.moat-icon rule exists');
-    assert.match(moatIcon, /width:\s*32px/);
-    assert.match(moatIcon, /height:\s*32px/);
+    assert.equal(ruleBody(STYLES, '^\\.moat-card:hover\\s*\\{'), null, '.moat-card:hover rule is gone (no hover chrome on a ruled list)');
+    assert.equal(ruleBody(STYLES, '^\\.moat-icon\\s*\\{'), null, '.moat-icon rule is gone (icon-as-marker tell removed)');
 
     const moatCardH3 = ruleBody(STYLES, '^\\.moat-card h3\\s*\\{');
     assert.ok(moatCardH3, '.moat-card h3 rule exists');
@@ -114,17 +118,17 @@ describe('B1 (static): .moat-grid/.moat-card/.moat-icon restored to styles.css',
     assert.match(moatCardP, /font-size:\s*15px/);
   });
 
-  it('the <=900px media query still collapses .moat-grid to one column', () => {
+  it('the <=900px media query no longer collapses .moat-grid to one column (nothing to collapse — it is already a single-column ruled list)', () => {
     const mediaBlock = ruleBody(STYLES, '^@media \\(max-width: 900px\\)\\s*\\{');
     assert.ok(mediaBlock, 'the <=900px media query exists');
-    assert.match(mediaBlock, /\.moat-grid\s*\{\s*grid-template-columns:\s*1fr;\s*\}/);
+    assert.doesNotMatch(mediaBlock, /\.moat-grid\s*\{/, 'no .moat-grid override remains in the <=900px block');
   });
 
-  it('/for-builders still renders .moat-grid/.moat-card/.moat-icon (the only remaining consumer)', () => {
+  it('/for-builders renders .moat-grid/.moat-card but never .moat-icon', () => {
     const html = readPublic('for-builders.html');
     assert.match(html, /<div class="moat-grid">/);
     assert.match(html, /<div class="moat-card reveal">/);
-    assert.match(html, /class="moat-icon"/);
+    assert.doesNotMatch(html, /class="moat-icon"/, '.moat-icon markup is gone from /for-builders');
   });
 });
 
@@ -304,25 +308,27 @@ describe('Tier 2 (dynamic, playwright)', () => {
     }
   }
 
-  it('B1: .moat-icon renders 32x32 and .moat-grid is two columns above 900px, one column at/below it', async (t) => {
+  it('B1 (SUPERSEDED): .moat-icon renders nowhere and .moat-card renders full-width (ruled list, not a grid) at both 1440px and 800px', async (t) => {
     if (!tier2ok) { t.skip('playwright not resolvable'); return; }
     const wide = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const wp = await wide.newPage();
     try {
       await wp.goto(`${base}/for-builders.html`, { waitUntil: 'networkidle' });
-      const iconBox = await wp.evaluate(() => {
-        const el = document.querySelector('.moat-icon');
-        const r = el.getBoundingClientRect();
-        return { width: r.width, height: r.height };
-      });
-      assert.ok(Math.abs(iconBox.width - 32) <= 0.5, `.moat-icon width should be 32px, got ${iconBox.width}`);
-      assert.ok(Math.abs(iconBox.height - 32) <= 0.5, `.moat-icon height should be 32px, got ${iconBox.height}`);
+      const iconCount = await wp.evaluate(() => document.querySelectorAll('.moat-icon').length);
+      assert.equal(iconCount, 0, '.moat-icon should render nowhere (icon-as-marker tell removed)');
 
-      const wideCols = await wp.evaluate(() => {
+      const widths = await wp.evaluate(() => {
         const grid = document.querySelector('.moat-grid');
-        return getComputedStyle(grid).gridTemplateColumns.trim().split(/\s+/).length;
+        const cards = [...document.querySelectorAll('.moat-card')];
+        return {
+          gridW: grid.getBoundingClientRect().width,
+          cardWs: cards.map((c) => c.getBoundingClientRect().width),
+        };
       });
-      assert.equal(wideCols, 2, `.moat-grid should be 2 columns at 1440px, got ${wideCols}`);
+      for (const cardW of widths.cardWs) {
+        assert.ok(Math.abs(cardW - widths.gridW) <= 1,
+          `each .moat-card should span the full .moat-grid width (ruled list, not a 2-col grid): card ${cardW} vs grid ${widths.gridW}`);
+      }
     } finally {
       await wide.close();
     }
@@ -331,11 +337,18 @@ describe('Tier 2 (dynamic, playwright)', () => {
     const np = await narrow.newPage();
     try {
       await np.goto(`${base}/for-builders.html`, { waitUntil: 'networkidle' });
-      const narrowCols = await np.evaluate(() => {
+      const widths = await np.evaluate(() => {
         const grid = document.querySelector('.moat-grid');
-        return getComputedStyle(grid).gridTemplateColumns.trim().split(/\s+/).length;
+        const cards = [...document.querySelectorAll('.moat-card')];
+        return {
+          gridW: grid.getBoundingClientRect().width,
+          cardWs: cards.map((c) => c.getBoundingClientRect().width),
+        };
       });
-      assert.equal(narrowCols, 1, `.moat-grid should collapse to 1 column at 800px (<=900), got ${narrowCols}`);
+      for (const cardW of widths.cardWs) {
+        assert.ok(Math.abs(cardW - widths.gridW) <= 1,
+          `each .moat-card should still span the full width at 800px: card ${cardW} vs grid ${widths.gridW}`);
+      }
     } finally {
       await narrow.close();
     }
@@ -370,7 +383,10 @@ describe('Tier 2 (dynamic, playwright)', () => {
       await p.goto(`${base}/for-builders.html`, { waitUntil: 'networkidle' });
       const lefts = await p.evaluate(() => ({
         heroH1: document.getElementById('builders-hero-heading').getBoundingClientRect().left,
-        bodyLabel: document.querySelector('#how-it-earns .section-label').getBoundingClientRect().left,
+        // The AD design-tells sweep (wave D1) removed .section-label
+        // eyebrows sitewide; #how-earns-heading (the section's own h2,
+        // previously right below the label) is the same left edge.
+        bodyLabel: document.getElementById('how-earns-heading').getBoundingClientRect().left,
       }));
       assert.ok(
         Math.abs(lefts.heroH1 - lefts.bodyLabel) <= 0.5,
