@@ -1360,31 +1360,47 @@
                       "$ref": "#/components/schemas/UntrustedPreviewAdvisory"
                     },
                     "learnings_count": {
-                      "type": "integer"
+                      "type": "integer",
+                      "description": "Count of publicly visible learnings (the canonical visibleCatalog predicate)."
                     },
                     "categories": {
                       "type": "array",
                       "items": {
                         "type": "string"
-                      }
+                      },
+                      "description": "Distinct categories over the visible catalog."
                     },
                     "total_unlocks": {
-                      "type": "integer"
+                      "type": "integer",
+                      "description": "STATS-TRUTH: count of credited unlock events in the per-unlock ledger (data/unlock-events.jsonl, deduplicated on event id) whose learning is visible; never a stored counter. OMITTED when the ledger is unreadable."
                     },
                     "total_ratings": {
-                      "type": "integer"
+                      "type": "integer",
+                      "description": "Sum of the per-learning ratings count over the visible catalog."
                     },
                     "total_earnings_usd": {
-                      "type": "number"
+                      "type": "number",
+                      "description": "STATS-TRUTH: sum of total_gross over earnings-ledger entries whose key is a contributor identity present in the visible catalog (account id, or case-insensitive wallet); entries owning no visible learning contribute nothing. Rounded to 2 dp."
                     },
                     "total_contributors": {
-                      "type": "integer"
+                      "type": "integer",
+                      "description": "STATS-TRUTH: distinct contributor identities over the visible catalog — contributor_account_id when present, else the lowercased contributor_wallet; a row with neither counts as the single platform identity."
                     },
                     "top_learnings": {
                       "type": "array",
                       "items": {
-                        "type": "object"
-                      }
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "title": { "type": "string" },
+                          "score": { "type": "number" },
+                          "unlocks": {
+                            "type": "integer",
+                            "description": "STATS-TRUTH: this learning's credited unlock events in the per-unlock ledger; OMITTED when the ledger is unreadable."
+                          }
+                        }
+                      },
+                      "description": "Top five visible learnings by quality score."
                     },
                     "timestamp": {
                       "type": "string",
