@@ -602,7 +602,7 @@
   </p>
 </section>
 <script>
-  // DR-7f: reveal the hero ledger only once a real number is served (never a placeholder).
+  // DR-7f: show the hero ledger only once a real number is served (never a placeholder).
   (function () {
     fetch('/knowledge/stats').then(function (r) { return r.json(); }).then(function (s) {
       var hl = document.getElementById('hero-ledger');
@@ -1310,26 +1310,6 @@ npx auxilo review --all-reject</pre>
     });
   }
 
-  // ── Scroll reveal ──
-  (function() {
-    // This page uses no .reveal classes, but keep the observer
-    // in case classes are added later.
-    var els = document.querySelectorAll('.reveal');
-    if (!els.length) return;
-    if (!('IntersectionObserver' in window)) {
-      els.forEach(function(el) { el.classList.add('visible'); });
-      return;
-    }
-    var io = new IntersectionObserver(function(entries) {
-      entries.forEach(function(e) {
-        if (e.isIntersecting) {
-          e.target.classList.add('visible');
-          io.unobserve(e.target);
-        }
-      });
-    }, { threshold: 0.12 });
-    els.forEach(function(el) { io.observe(el); });
-  })();
 </script>
 
 </body>

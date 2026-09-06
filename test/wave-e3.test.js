@@ -96,8 +96,11 @@ describe('WAVE-E3 item 6: PlexMono500 preload on the four Lighthouse-named pages
 // Item 7: reveal system removal
 // ═══════════════════════════════════════════════════════════════════════
 
-describe('WAVE-E3 item 7: reveal system code removed from the five named pages', () => {
-  const PAGES = ['index.html', 'for-agents.html', 'for-builders.html', 'pricing.html', 'api.html'];
+describe('WAVE-E3 item 7: reveal system code removed from the seven named pages', () => {
+  // Wave E4 extended this list: earnings.html and how-it-works.html had the
+  // reveal system (and how-it-works.html's dead leftover observer) removed
+  // the same way the original five pages were in wave E3.
+  const PAGES = ['index.html', 'for-agents.html', 'for-builders.html', 'pricing.html', 'api.html', 'earnings.html', 'how-it-works.html'];
 
   for (const page of PAGES) {
     it(`${page} carries no class="reveal" / reveal-in-class-list attribute`, () => {
@@ -114,11 +117,11 @@ describe('WAVE-E3 item 7: reveal system code removed from the five named pages',
     });
   }
 
-  it('earnings.html and how-it-works.html are untouched (out of scope, reported not built)', () => {
+  it('earnings.html and how-it-works.html carry zero "reveal" substring occurrences (Wave E4)', () => {
     const earnings = readPublic('earnings.html');
     const howItWorks = readPublic('how-it-works.html');
-    assert.match(earnings, /IntersectionObserver/, 'earnings.html should still carry its reveal code (out of scope for this wave)');
-    assert.match(howItWorks, /IntersectionObserver/, 'how-it-works.html should still carry its leftover observer (out of scope for this wave)');
+    assert.doesNotMatch(earnings, /reveal/, 'earnings.html should carry no "reveal" substring at all');
+    assert.doesNotMatch(howItWorks, /reveal/, 'how-it-works.html should carry no "reveal" substring at all');
   });
 
   it('the shared styles.css .reveal rule is untouched (CSS builder\'s file, not this wave\'s)', () => {
@@ -159,7 +162,7 @@ describe('WAVE-E3 item 2: /api response envelopes have a keyboard-operable expan
   it('toggleEnvelope flips aria-expanded and toggles the is-expanded class (no separate reveal system)', () => {
     const fnStart = API_HTML.indexOf('function toggleEnvelope(scrollId, btnId)');
     assert.notEqual(fnStart, -1);
-    const fnBody = API_HTML.slice(fnStart, fnStart + 500);
+    const fnBody = API_HTML.slice(fnStart, fnStart + 700);
     assert.match(fnBody, /aria-expanded/);
     assert.match(fnBody, /is-expanded/);
   });
@@ -171,14 +174,21 @@ describe('WAVE-E3 item 2: /api response envelopes have a keyboard-operable expan
     assert.doesNotMatch(css, /code-block--envelope/, 'styles.css must not gain envelope rules — that file belongs to the CSS builder');
   });
 
-  it('the expand button reuses the site\'s existing "Toggle navigation" aria-label (no new visible string, no new copy)', () => {
-    // No "Show more"/"Expand"-class control label exists anywhere on the
-    // site (confirmed by grep before building); the hamburger's
-    // aria-label="Toggle navigation" is the only existing icon-only button
-    // + aria-expanded pattern, reused verbatim per the build sheet's
-    // fallback rule. Flagged to SITE-PM as a string slot needing real copy.
-    const matches = API_HTML.match(/id="(search|unlock)-expand"[^>]*aria-label="Toggle navigation"/g) || [];
-    assert.equal(matches.length, 2, 'both expand buttons should carry the copied aria-label pending a real string');
+  it('the expand button carries the real SITE-PM copy for its accessible name (collapsed state in the static markup)', () => {
+    // Wave E4: SITE-PM supplied real strings replacing the placeholder
+    // "Toggle navigation" aria-label — "Show the full response" when
+    // collapsed (the initial markup state) and "Show less of the response"
+    // when expanded (set by the script at runtime).
+    const matches = API_HTML.match(/id="(search|unlock)-expand"[^>]*aria-label="Show the full response"/g) || [];
+    assert.equal(matches.length, 2, 'both expand buttons should carry the collapsed-state aria-label in their static markup');
+  });
+
+  it('toggleEnvelope() switches the aria-label between the collapsed and expanded strings', () => {
+    const fnStart = API_HTML.indexOf('function toggleEnvelope(scrollId, btnId)');
+    assert.notEqual(fnStart, -1);
+    const fnBody = API_HTML.slice(fnStart, fnStart + 500);
+    assert.match(fnBody, /Show the full response/);
+    assert.match(fnBody, /Show less of the response/);
   });
 });
 
@@ -353,5 +363,14 @@ describe('WAVE-E3 items 3+4 (live): legal routes render the nav and no literal -
     const body = await res.text();
     const hrCount = (body.match(/<hr>/g) || []).length;
     assert.equal(hrCount, 13);
+  });
+
+  it('GET /legal/supported-clients carries the Wave E4 extractor paragraph and drops "on your own subscription"', async (t) => {
+    if (bootSkipReason) { t.skip(bootSkipReason); return; }
+    const res = await fetch(`${baseUrl}/legal/supported-clients`);
+    assert.equal(res.status, 200);
+    const body = await res.text();
+    assert.match(body, /Today the runner drafts learnings for every client it captures through the Claude Code CLI signed in on your machine\. Without it, captured sessions are held and nothing is submitted\. Per-client model paths are being built\./);
+    assert.doesNotMatch(body, /on your own subscription/);
   });
 });
