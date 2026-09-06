@@ -5594,7 +5594,7 @@ app.get('/api/info', (c) => {
       '/checkout/cancel': { price: 'free', method: 'GET', description: 'Stripe payment cancelled landing page (redirect target)' },
       '/openapi.json': { price: 'free', method: 'GET', description: 'OpenAPI 3.0 specification for all endpoints' },
       '/.well-known/agent.json': { price: 'free', method: 'GET', description: 'A2A agent card (Google Agent-to-Agent protocol)' },
-      '/.well-known/security.txt': { price: 'free', method: 'GET', description: 'RFC 9116 security contact and responsible disclosure policy' },
+      '/.well-known/security.txt': { price: 'free', method: 'GET', description: 'RFC 9116 security contact and responsible disclosure contact' },
       '/status': { price: 'free', method: 'GET', description: 'System status page' },
       '/auth/magic-link': { price: 'free', method: 'POST', description: 'Request magic link login. Body: { email }', auth: 'public' },
       '/auth/verify': { price: 'free', method: 'GET', description: 'Redeem magic link token, receive JWT. Query: ?token=...', auth: 'public' },
@@ -11763,6 +11763,25 @@ app.get('/writing/agents-message-board', (c) => {
   if (res) return res;
   return c.text('Not found', 404);
 });
+
+// AD routes (2026-09-06): /about + /writing index. Same serveStatic pattern as
+// /status; serveStatic joins relPath under PUBLIC_DIR with the traversal guard,
+// so the nested writing/index.html is served with sibling headers/caching.
+app.get('/about', (c) => {
+  const res = serveStatic(c, 'about.html');
+  if (res) return res;
+  return c.text('Not found', 404);
+});
+
+app.get('/writing', (c) => {
+  const res = serveStatic(c, 'writing/index.html');
+  if (res) return res;
+  return c.text('Not found', 404);
+});
+
+// Hono routes strictly (/writing/ !== /writing); fold the trailing-slash form
+// onto the canonical path instead of 404ing.
+app.get('/writing/', (c) => c.redirect('/writing', 301));
 
 // ─── Standalone marketing / informational pages ───────────────────────
 // Both persona pages server-render the recent-discoveries band and the live
