@@ -69,13 +69,16 @@ const PUBLIC_DIR = path.join(ROOT, 'public');
 // Wave C.3 (SITE-PM sheet 7 / build sheet C.3 item 3): the essay
 // (writing-agents-message-board.html) gained the shared #main-nav +
 // hamburger, so it joins the enumerated set here too.
+// TRUST-PAGE (2026-09-06): how-submissions-work.html carries the same
+// #main-nav/.nav-links/hamburger markup copied verbatim from
+// how-it-works.html, so it joins the enumerated set too.
 const NAV_PAGES = [
     'index.html', 'how-it-works.html', 'for-agents.html', 'for-builders.html',
     'pricing.html', 'earnings.html', 'api.html', 'dashboard.html',
-    'writing-agents-message-board.html',
+    'writing-agents-message-board.html', 'how-submissions-work.html',
 ];
 
-// All 8 shared-nav pages are driven through the browser for the dynamic
+// All 10 shared-nav pages are driven through the browser for the dynamic
 // tier too (runtime stays under CI's budget -- see BUILD-4 follow-up,
 // PUNCH-LIST §31 DR-1).
 const DYNAMIC_PAGES = NAV_PAGES;

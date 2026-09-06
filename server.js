@@ -11873,6 +11873,27 @@ app.get('/writing', (c) => {
   return c.text('Not found', 404);
 });
 
+// TRUST-PAGE (PUNCH-LIST TRUST-PAGE row; spec rev 3g,
+// TRUST-PAGE-BUILD-SPEC-2026-09-02.md §1): engineering half only — route,
+// shell, redirects. Content = SITE-PM §2b/§3b (sections file rev 6) + §9b
+// (rev 3a). Same serveStatic pattern as /about; no live-data render
+// contract in this build (§4/§7's server-side partition guard and ledger
+// fetch are out of scope — see build report).
+app.get('/how-submissions-work', (c) => {
+  const res = serveStatic(c, 'how-submissions-work.html');
+  if (res) return res;
+  return c.text('Not found', 404);
+});
+
+// TRUST-REDIRECTS (PUNCH-LIST TRUST-REDIRECTS row; spec rev 3c): four
+// guessed paths 301 to the canonical route. Deliberately NOT /security
+// (means vulnerability disclosure; security.txt is already live there) and
+// NOT /about (a different page).
+app.get('/trust', (c) => c.redirect('/how-submissions-work', 301));
+app.get('/governance', (c) => c.redirect('/how-submissions-work', 301));
+app.get('/for-platforms', (c) => c.redirect('/how-submissions-work', 301));
+app.get('/platforms', (c) => c.redirect('/how-submissions-work', 301));
+
 // Hono routes strictly (/writing/ !== /writing); fold the trailing-slash form
 // onto the canonical path instead of 404ing.
 app.get('/writing/', (c) => c.redirect('/writing', 301));
