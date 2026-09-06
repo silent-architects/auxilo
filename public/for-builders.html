@@ -776,7 +776,7 @@
          fail path — never a baked or default date. The unlocks and paid
          cells are server-rendered from the same ledger truth
          (catalogStatsTruth, shared with /knowledge/stats and /earnings);
-         they ship EMPTY here and stay empty on the renderer's fail path —
+         they ship "…" here and stay "…" on the renderer's fail path —
          never a static digit. The abstraction sentence below the strip
          comes out only when the ledger cells actually render (same
          substitution pass); on the fail path it stays. Do not write a
@@ -790,11 +790,11 @@
         <span class="stat-label pull-stat-caption" id="lc-asof"></span>
       </div>
       <div class="builders-hero-stat" style="align-items:center;text-align:center;">
-        <span class="stat-num pull-stat-num" id="lc-unlocks"></span>
+        <span class="stat-num pull-stat-secondary" id="lc-unlocks">…</span>
         <span class="stat-label pull-stat-caption">unlocks, all time</span>
       </div>
       <div class="builders-hero-stat" style="align-items:center;text-align:center;">
-        <span class="stat-num pull-stat-num" id="lc-paid"></span>
+        <span class="stat-num pull-stat-secondary" id="lc-paid">…</span>
         <span class="stat-label pull-stat-caption">paid by buyers, all time</span>
       </div>
     </div>
