@@ -11929,6 +11929,15 @@ function renderTrustPagePartition(html) {
       isPlatformContributorFn: isPlatformContributor,
     });
     if (!partition) return html; // non-array catalog: treat as derivation failure, neither branch
+    if (partition.state === null) {
+      // TRUST-P0 pass 2: computePartition could not form an opinion
+      // (register-error or identity-conflict, lib/partition-guard.js) —
+      // serve neither branch. The static container's default
+      // data-partition-state="none" is left untouched.
+      console.error(`[trust-page] §4 partition unresolved (${partition.reason}), serving neither branch` +
+        (partition.reason === 'identity-conflict' ? ` (${partition.conflicts.length} identities split-brained)` : ''));
+      return html;
+    }
     // The state marker moves, and (this pass) the container between the
     // SSR:PARTITION-STATE comments fills with the matching state string —
     // never both, per finding 13's render contract.
@@ -11975,11 +11984,27 @@ function renderTrustPageLiveCounts(html) {
   }
 }
 
+// TRUST-P0 (2026-09-06): the served source for this route carries
+// build-reference HTML comments (section-authorship markers like "SITE-PM
+// sections file, REV 6", ship-rev citations like "ship-rev 2026-09-06 rev
+// 1a", and (after substitution) the leftover <!-- SSR:PARTITION-STATE -->
+// / <!-- /SSR:PARTITION-STATE --> marker pair renderTrustPagePartition
+// preserves around its injected text) — none of that is meant for a public
+// audience. Strip every HTML comment from the FINAL served body for this
+// route only (not a global serveStatic change — every other page keeps its
+// comments). Runs AFTER substitution (renderTrustPagePartition /
+// renderTrustPageLiveCounts / injectAnalytics), never before: stripping
+// first would remove the SSR:PARTITION-STATE markers those functions match
+// on and silently break the §4 render.
+function stripHtmlComments(html) {
+  return String(html).replace(/<!--[\s\S]*?-->/g, '');
+}
+
 // TRUST-PAGE route (PUNCH-LIST TRUST-PAGE row; spec rev 3g §1). Content =
 // SITE-PM §2b/§3b (sections file rev 6) + §9b (rev 3a); §4/§7's SSR is this
 // pass's addition. CACHE (precondition, finding 13's cache bind): this
 // route sends `Cache-Control: no-store` on every path (including the
-// serveStatic fallback below), NOT the property's `public, max-age=3600` —
+// static fallback below), NOT the property's `public, max-age=3600` —
 // the render is a state-dependent truth claim over an in-memory filter, and
 // the property default was written for static copy. No `Vary` header: the
 // render depends only on server-side state (the catalog + the unlock
@@ -11992,15 +12017,33 @@ app.get('/how-submissions-work', (c) => {
       let html = fs.readFileSync(filePath, 'utf8');
       html = renderTrustPagePartition(html);
       html = renderTrustPageLiveCounts(html);
+      html = injectAnalytics(html, ANALYTICS_DOMAIN);
+      html = stripHtmlComments(html);
       c.header('Content-Type', 'text/html; charset=utf-8');
       c.header('Cache-Control', 'no-store');
-      return c.body(injectAnalytics(html, ANALYTICS_DOMAIN));
+      return c.body(html);
     }
   } catch (e) {
     console.error('[trust-page] server-render failed, falling back to static:', e.message);
   }
-  const res = serveStatic(c, 'how-submissions-work.html', 'no-store');
-  if (res) return res;
+  // Static fallback (file read/SSR failed above, or was absent): serve the
+  // raw file directly rather than delegating to the generic serveStatic()
+  // helper, so the same comment-strip contract holds on this path too —
+  // serveStatic() is shared by every other page and deliberately untouched.
+  try {
+    const filePath = path.join(PUBLIC_DIR, 'how-submissions-work.html');
+    if (fs.existsSync(filePath)) {
+      let html = fs.readFileSync(filePath, 'utf8');
+      html = injectAnalytics(html, ANALYTICS_DOMAIN);
+      html = stripHtmlComments(html);
+      c.header('Content-Type', 'text/html; charset=utf-8');
+      c.header('Cache-Control', 'no-store');
+      return c.body(html);
+    }
+  } catch (e) {
+    console.error('[trust-page] static fallback also failed:', e.message);
+    return c.text('Internal Server Error', 500);
+  }
   return c.text('Not found', 404);
 });
 
