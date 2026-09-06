@@ -1,8 +1,9 @@
 # Terms of Service
 
 **Effective Date: March 17, 2026**
-**Last Updated: September 5, 2026**
+**Last Updated: September 6, 2026**
 **Current Amendment: `2026-07-04-payee-agency-a1` — Payment-Collection Agency (Section 5.10), effective July 11, 2026.** The payment-collection agency in Section 5.10 was added by this amendment and applies only on and after its effective date shown above (July 11, 2026); it does not apply retroactively to the original March 17, 2026 Effective Date or to any Builder Share received before the amendment's effective date.
+**Amendment `2026-09-06-clean-lane-b1` — Standing Publication Consent (Section 5.9.3(g)), Non-Material, posted September 6, 2026.** This amendment added subsection (g) to Section 5.9.3, with conforming edits to Section 4.1 and to the opening paragraph of Section 5.9.3. It is a Non-Material change under Section 17: it imposes no new obligation, the feature it describes is off by default, and it takes effect for an account only on that Builder's separate affirmative activation. The Current Amendment id above (the acceptance version of record) is unchanged.
 
 ---
 
@@ -77,7 +78,7 @@ Auxilo is a knowledge marketplace where human Builders publish structured operat
 
 ### 4.1 How It Works
 
-Builders submit Learnings containing operational knowledge derived from real-world task execution. Each submission is automatically quality-scored and screened for content and sensitivity, and is published to the catalog only when the Builder approves it from their review queue; a new account's first Learning is additionally held for operator review. Consumers search the catalog, discover relevant Learnings, and unlock full content by paying the current price, which is set initially by the Builder or calculated by Auxilo's pricing engine and then moved toward what the engine currently computes.
+Builders submit Learnings containing operational knowledge derived from real-world task execution. Each submission is automatically quality-scored and screened for content and sensitivity, and is published to the catalog only when the Builder approves it from their review queue, unless the Builder has activated standing publication consent under Section 5.9.3(g); a new account's first Learning is additionally held for operator review. Consumers search the catalog, discover relevant Learnings, and unlock full content by paying the current price, which is set initially by the Builder or calculated by Auxilo's pricing engine and then moved toward what the engine currently computes.
 
 ### 4.2 Access Methods
 
@@ -196,7 +197,7 @@ The Platform uses third-party large language model providers to process uploaded
 
 #### 5.9.3 Autonomous Learning Extraction
 
-The Platform offers an autonomous extraction feature ("Autonomous Extraction") that allows Builders to enable continuous, hands-off generation of Learnings from their AI session transcripts. When enabled, the supported client integration processes each session transcript locally on the Builder's machine: it applies a client-side redaction pass, runs the extraction step through the Builder's own model client under the Builder's own agreement with their model provider, and submits only the resulting draft Learnings to Auxilo (`POST /learn`), where they are held in the Builder's own review queue until the Builder publishes them. Session transcripts, raw or redacted, are not transmitted to Auxilo. An optional server-side extraction path exists in Auxilo's software but is disabled and not in operation; if it is ever activated, these Terms and the Privacy Policy will be updated before use. A current list of supported client integrations is maintained at https://auxilo.io/legal/supported-clients.
+The Platform offers an autonomous extraction feature ("Autonomous Extraction") that allows Builders to enable continuous, hands-off generation of Learnings from their AI session transcripts. When enabled, the supported client integration processes each session transcript locally on the Builder's machine: it applies a client-side redaction pass, runs the extraction step through the Builder's own model client under the Builder's own agreement with their model provider, and submits only the resulting draft Learnings to Auxilo (`POST /learn`), where they are held in the Builder's own review queue until the Builder publishes them, except as provided in subsection (g). Session transcripts, raw or redacted, are not transmitted to Auxilo. An optional server-side extraction path exists in Auxilo's software but is disabled and not in operation; if it is ever activated, these Terms and the Privacy Policy will be updated before use. A current list of supported client integrations is maintained at https://auxilo.io/legal/supported-clients.
 
 **(a) Default behavior and trigger modes.** Autonomous Extraction is the Platform's default contribution mechanism for users who activate it. Builders may select among three trigger modes:
 
@@ -215,6 +216,10 @@ A Builder may change trigger modes or disable Autonomous Extraction at any time 
 **(e) Kill-switch and revocation.** A Builder may disable Autonomous Extraction at any time, by either (1) removing the local activation sentinel on the machine running the Builder's client, or (2) toggling Autonomous Extraction off in the Builder's account settings on auxilo.io. Either action halts further transmission of new transcripts and revokes Auxilo's authorization to process additional transcripts under this subsection. Disablement does not affect Learnings already published, the validity of Consumer unlocks already completed, or earnings already accrued. The retraction right in Section 5.9.4 governs removal of already-published Learnings.
 
 **(f) Audit log.** Auxilo retains an audit log of each Autonomous Extraction event — including session identifier hash, trigger mode, timestamp, subprocessor invoked, quality-gate result, and publication or rejection outcome — for a period of three (3) years.
+
+**(g) Standing publication consent (optional).** Standing publication consent is off by default. A Builder may turn it on by an affirmative act — a dashboard setting, or a terminal command that requires typing the affirmation sentence shown on that screen. Auxilo records that act, the affirmation, and the consent-text version in a durable, hash-chained consent log, retained for the life of the account plus three (3) years under subsection (b). While it is on, a Learning submitted through Autonomous Extraction is published without separate per-item approval only if it passes every Platform screen and the quality threshold the Builder chose at activation. An account's first public Learning is never published this way; it is held for operator review under Section 4.1. Auxilo records each such publication in the Builder's dashboard and returns a notice in the response to the submission that produced it; each is retractable for seven (7) days under Section 5.9.4. If more than five percent (5%) of a Builder's Learnings published this way in any thirty (30) day period are retracted, Auxilo freezes the feature for that account until the Builder turns it on again. A Builder may turn it off at any time, effective immediately for later submissions; doing so does not affect Learnings already published. Subsection (c) applies in full to every Learning so published.
+
+The quality threshold in effect for a Builder is the one that Builder selected, and Auxilo will not broaden the conditions under which a Learning qualifies for publication under this subsection without recording a new consent; Auxilo may make those conditions stricter at any time.
 
 #### 5.9.4 Retraction Right; No Clawback of Completed Unlocks
 

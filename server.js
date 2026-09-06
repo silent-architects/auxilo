@@ -6758,8 +6758,11 @@ app.post('/learn', async (c) => {
     ...(howToReview && { how_to_review: howToReview }),
     // SPEC3 C1 (§4.3): per-publish notice for standing-consent publishes — the
     // human must reliably learn about every unattended publish while the
-    // retraction window is live. (The rollup email rides the C1 activation
-    // wave; this response line is the in-band half.)
+    // retraction window is live. The notice surfaces exactly as shipped: this
+    // response field (in-band), the dashboard's "Published under standing
+    // consent" list, and the client's session notice (scripts/review-notice.js).
+    // No email (Tyler, 2026-09-05: "dashboard option"); ToS §5.9.3(g) describes
+    // these channels and nothing more.
     ...(cleanLanePublish && {
       published_via: PUBLISHED_VIA_CLEAN_LANE,
       // Gate-A 2026-09-05: the version rides the response too, so the client's

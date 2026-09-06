@@ -879,6 +879,15 @@ async function cmdReview(flags) {
 // from GET /account/clean-lane (consent_version_current).
 const CLEAN_LANE_AFFIRMATION = 'I understand and choose auto-publish for qualifying extracted learnings.';
 const CLEAN_LANE_UNAVAILABLE = 'Auto-publish for clean learnings is not yet available on this account.';
+// CLEAN-LANE-FLIP Phase B (legal; DRAFT pending Tyler): the full text of ToS
+// §5.9.3(g) (plus its ratchet paragraph) prints ABOVE the affirmation prompt —
+// counsel condition: the enrollment surface must show what "qualifying",
+// revocation and the 7-day retraction mean, on both the dashboard and CLI
+// paths. Same package-boundary reason as the affirmation: these literals are
+// pinned byte-equal to docs/TERMS-OF-SERVICE.md and public/dashboard.html by
+// test/clean-lane-phase-b-legal.test.js. Edit the Terms first, then mirror.
+const CLEAN_LANE_TERMS_G = '(g) Standing publication consent (optional). Standing publication consent is off by default. A Builder may turn it on by an affirmative act — a dashboard setting, or a terminal command that requires typing the affirmation sentence shown on that screen. Auxilo records that act, the affirmation, and the consent-text version in a durable, hash-chained consent log, retained for the life of the account plus three (3) years under subsection (b). While it is on, a Learning submitted through Autonomous Extraction is published without separate per-item approval only if it passes every Platform screen and the quality threshold the Builder chose at activation. An account\'s first public Learning is never published this way; it is held for operator review under Section 4.1. Auxilo records each such publication in the Builder\'s dashboard and returns a notice in the response to the submission that produced it; each is retractable for seven (7) days under Section 5.9.4. If more than five percent (5%) of a Builder\'s Learnings published this way in any thirty (30) day period are retracted, Auxilo freezes the feature for that account until the Builder turns it on again. A Builder may turn it off at any time, effective immediately for later submissions; doing so does not affect Learnings already published. Subsection (c) applies in full to every Learning so published.';
+const CLEAN_LANE_TERMS_G2 = 'The quality threshold in effect for a Builder is the one that Builder selected, and Auxilo will not broaden the conditions under which a Learning qualifies for publication under this subsection without recording a new consent; Auxilo may make those conditions stricter at any time.';
 const CLEAN_LANE_MIN_QUALITY_MIN = 14;
 const CLEAN_LANE_MIN_QUALITY_MAX = 20;
 const CLEAN_LANE_MIN_QUALITY_DEFAULT = 16;
@@ -896,6 +905,18 @@ operator review), anything a screen flags, anything below your threshold,
 and anything after an auto-freeze. Every auto-published learning can be
 retracted for 7 days (\`npx auxilo review\` or your dashboard).
 `;
+
+/** Word-wrap a single paragraph at `width` columns (whitespace only; no word is altered). */
+function wrapForTerminal(paragraph, width = 78) {
+  const lines = [];
+  let line = '';
+  for (const word of paragraph.split(' ')) {
+    if (line && (line.length + 1 + word.length) > width) { lines.push(line); line = word; }
+    else line = line ? `${line} ${word}` : word;
+  }
+  if (line) lines.push(line);
+  return lines.map((l) => `  ${l}`).join('\n');
+}
 
 async function cleanLaneRequest({ apiKey, baseUrl, method, route, body }) {
   const url = `${String(baseUrl).replace(/\/+$/, '')}${route}`;
@@ -1011,6 +1032,12 @@ async function cmdCleanLane(flags) {
     console.log(`Enter a whole number from ${CLEAN_LANE_MIN_QUALITY_MIN} to ${CLEAN_LANE_MIN_QUALITY_MAX}.`);
   }
 
+  // The consent text itself, verbatim (word-wrapped for the terminal only), before the sentence.
+  console.log('\nTerms of Service, Section 5.9.3(g): the consent you are giving\n');
+  console.log(wrapForTerminal(CLEAN_LANE_TERMS_G));
+  console.log('');
+  console.log(wrapForTerminal(CLEAN_LANE_TERMS_G2));
+  console.log(`\nFull Terms: ${baseUrl}/terms`);
   console.log('\nTo turn on auto-publish, type this sentence exactly as written, then press Enter:');
   console.log(`\n  ${CLEAN_LANE_AFFIRMATION}\n`);
   const typed = await ask('> ');
@@ -1212,4 +1239,7 @@ module.exports = {
   run,
   CLEAN_LANE_AFFIRMATION,
   CLEAN_LANE_UNAVAILABLE,
+  CLEAN_LANE_TERMS_G,
+  CLEAN_LANE_TERMS_G2,
+  wrapForTerminal,
 };
