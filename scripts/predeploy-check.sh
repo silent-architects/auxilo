@@ -127,10 +127,11 @@ fi
 
 echo ""
 echo "── predeploy-check: asset cache-bust (?v= hashes current) ──"
-# ASSET-CACHE-BUST: styles.css and the other ?v=N-referenced static assets are
-# served with an immutable long-lived cache-control (server.js). A content
-# change that doesn't also bump the ?v= value ships silently — returning
-# visitors keep the stale bytes for up to a year. scripts/asset-versions.js
+# ASSET-CACHE-BUST: styles.css is served with an immutable one-year
+# cache-control (its dedicated route in server.js); the two ?v=-referenced
+# dashboard scripts use the generic one-hour static handler and ride the same
+# scheme for consistency. A styles.css change that doesn't also bump the ?v=
+# value ships silently — returning visitors keep the stale bytes for up to a year. scripts/asset-versions.js
 # --check compares every ?v= reference in tracked public/ HTML against its
 # asset's current sha256 content hash and exits 1 on any mismatch.
 if node "${SCRIPT_DIR}/asset-versions.js" --check; then
