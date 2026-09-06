@@ -47,7 +47,7 @@ const SOURCES_MD = fs.readFileSync(path.join(LOGOS_DIR, 'SOURCES.md'), 'utf8');
 
 const TITLE = '<title>Works with the client you already run | Auxilo</title>';
 const DESCRIPTION = 'The AI coding clients Auxilo works with, what it captures where capture is live, and what is still being built.';
-const HONEST_LINE = "Auxilo works with every client below. Once you turn extraction on, it captures sessions on the clients marked for capture, and the label on each cell says which. Drafting still runs through a single model client on your machine, not through the client a session came from. Per-client extraction is being built.";
+const HONEST_LINE = "Auxilo works with every client below. Once you turn extraction on, it captures sessions on the clients marked for capture, and the label on each cell says which. Drafting still runs through a single model path on your machine, not through the client a session came from. Per-client extraction is being built.";
 const BAND_EYEBROW = 'works with the client you already run';
 const STEP01_NEW = 'On the clients that support capture';
 const STEP01_OLD = 'On Claude Code and Codex';

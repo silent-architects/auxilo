@@ -12,12 +12,16 @@
  *      and byte-equal to the spec's SEO strings.
  *   4. h1 = the spec's h1 (`What stands between a submission and the public
  *      catalog`).
- *   5. The page never contains "Claude Code" as a requirement phrase —
- *      Tyler's ruling 2026-09-06 ("approved - build the trust page without
- *      the mention of a specific Claude Code requirement"). Asserted as: the
- *      literal string "Claude Code" does not appear anywhere in the served
- *      page at all (the strictest reading — the approved §2b/§3b copy names
- *      no client by name, so a clean page has zero occurrences).
+ *   5. §2b "What Leaves Your Machine" table (TRUST-PAGE-WHAT-RUNS-WHERE-
+ *      RIDER-2026-09-06.md rev 2e, on the published auxilo-mcp@0.9.13
+ *      tarball): the What-is-read cell, the What-runs-where cell (Stage A +
+ *      Stage B shipped together), and the row label render verbatim.
+ *      Supersedes the earlier 2026-09-06 reading of Tyler's ruling ("no
+ *      mention of a specific Claude Code requirement") — the ruling barred a
+ *      Claude-Code REQUIREMENT, not disclosure of the shipped selection
+ *      order, per the rider's own binds. Asserted as: "Claude Code" appears
+ *      exactly once, inside the selection-order sentence, never as "any
+ *      client" wording.
  *   6. sitemap.xml lists the route; llms.txt carries the spec's Quick-start
  *      line.
  *   7. Structural: server.js registers the route and all four redirects.
@@ -84,6 +88,14 @@ const S6_HOLD = "When the safety screen cannot clear a submission, the submissio
 const S7_FRAMING = "The counts in this section are live, read from the ledger each time the page loads.";
 const S7_LEARNINGS_LABEL = "learnings live in the catalog";
 const S7_UNLOCKS_LABEL = "unlocks recorded"; // packet 15 rev 3a caption change (v97 assembly): the unlock counter began with the event log, so "all time" overclaims; the same label change lands on /pricing and /for-builders in the same wave
+
+// ─── §2b "What Leaves Your Machine" table — TRUST-PAGE-WHAT-RUNS-WHERE-RIDER-
+// 2026-09-06.md rev 2e (SITE-PM successor, on the published auxilo-mcp@0.9.13
+// tarball; both stages ship together). Strings copied verbatim for byte
+// comparison against the served page.
+const S2B_WHAT_IS_READ = "Session transcripts on your machine, from the coding clients Auxilo has an adapter for. Where a client fires a capture hook, the hook hands over the transcript. Where it does not, a local sweep reads that client's own session files on a schedule. The current list is at <a href=\"/legal/supported-clients\">auxilo.io/legal/supported-clients</a>. The runner looks for those session files and for its own state under ~/.auxilo. It does not search the rest of your disk. What the model itself can read on each path is in the row What runs where, below.";
+const S2B_WHAT_RUNS_WHERE = "Drafting runs on your machine, never through Auxilo's. It uses the first model client you are signed in to, Claude Code first and then Codex, and only one runs at a time. If neither is signed in, you can set a provider key of your own. It stays on this machine, readable only by your user account, and Auxilo never receives it. A run with your key sends the scrubbed transcript only to that provider, under your own account. The model reads nothing on your machine. Any use is charged to that account, never to Auxilo. Run auxilo provider clear to remove it. The scrubbed transcript goes to that client's model provider under your own agreement with them. Before the run, Auxilo removes the provider's billing variables from the run. On the Claude path the model has no tools, so it cannot open files on your machine. On the Codex path the model cannot write to your files, but it can read what its sandbox allows. Which clients Auxilo can capture sessions from is listed at auxilo.io/legal/supported-clients.";
+const S2B_ROW_LABEL = "If no model client is signed in and no key is set";
 
 function tpStaticCell(html, id) {
   const m = html.match(new RegExp(`id="${id}"[^>]*>([^<]*)<`));
@@ -189,8 +201,15 @@ describe('Trust page: route, redirects, head tags, h1, forbidden strings', { tim
     assert.ok(h1Matches[0].includes(H1), `h1 reads "${H1}"`);
   });
 
-  it('no "Claude Code" requirement phrase anywhere in the served page (Tyler\'s ruling 2026-09-06)', () => {
-    assert.ok(!TRUST_HTML.includes('Claude Code'), 'the string "Claude Code" does not appear on the page');
+  it('§2b: "What Leaves Your Machine" table — What is read, What runs where, and the row label render verbatim (TRUST-PAGE-WHAT-RUNS-WHERE-RIDER-2026-09-06.md rev 2e)', () => {
+    assert.ok(TRUST_HTML.includes(S2B_WHAT_IS_READ), '§2b What-is-read cell verbatim, including the What-runs-where pointer sentence');
+    assert.ok(TRUST_HTML.includes(S2B_WHAT_RUNS_WHERE), '§2b What-runs-where cell verbatim (Stage A + Stage B, both shipped together per rev 2e)');
+    assert.ok(TRUST_HTML.includes(`<td>${S2B_ROW_LABEL}</td>`), '§2b row label verbatim: "If no model client is signed in and no key is set"');
+  });
+
+  it('"Claude Code" appears exactly once, naming the shipped selection order in §2b (not a requirement) — supersedes the 2026-09-06 "no Claude Code" ban per TRUST-PAGE-WHAT-RUNS-WHERE-RIDER-2026-09-06.md rev 2e binds ("Tyler\'s approval bars a Claude Code requirement, not the disclosure of the order")', () => {
+    const claudeCodeMatches = TRUST_HTML.match(/Claude Code/g) || [];
+    assert.equal(claudeCodeMatches.length, 1, 'exactly one "Claude Code" occurrence, inside the §2b What-runs-where selection-order sentence');
   });
 
   it('sitemap.xml lists /how-submissions-work; llms.txt carries the spec\'s Quick-start line', () => {

@@ -368,12 +368,20 @@ describe('WAVE-E3 items 3+4 (live): legal routes render the nav and no literal -
     assert.equal(hrCount, 13);
   });
 
-  it('GET /legal/supported-clients carries the Wave E4 extractor paragraph and drops "on your own subscription"', async (t) => {
+  it('GET /legal/supported-clients carries the TRUST-PAGE-WHAT-RUNS-WHERE-RIDER-2026-09-06.md rev 2e extractor paragraph (both stages, published 0.9.13) and drops "on your own subscription"', async (t) => {
     if (bootSkipReason) { t.skip(bootSkipReason); return; }
     const res = await fetch(`${baseUrl}/legal/supported-clients`);
     assert.equal(res.status, 200);
     const body = await res.text();
-    assert.match(body, /Today the runner drafts learnings for every client it captures through the Claude Code CLI signed in on your machine\. Without it, captured sessions are held and nothing is submitted\. Per-client model paths are being built\./);
+    assert.match(body, /Today the runner drafts learnings for every client it captures through the first model client you are signed in to on your machine, Claude Code first and then Codex\. Without one, captured sessions are held and nothing is submitted\. Or set a provider key of your own with auxilo provider set\. It stays on your machine and Auxilo never receives it\. Per-client model paths are being built\./);
     assert.doesNotMatch(body, /on your own subscription/);
+  });
+
+  it('GET /legal/supported-clients step 4 ("Local extraction") carries the rev 2e provider-order sentence', async (t) => {
+    if (bootSkipReason) { t.skip(bootSkipReason); return; }
+    const res = await fetch(`${baseUrl}/legal/supported-clients`);
+    assert.equal(res.status, 200);
+    const body = await res.text();
+    assert.match(body, /Local extraction<\/strong>\s*:\s*the first model client you are signed in to on your machine, Claude Code first and then Codex, or a provider key you set yourself, drafts learnings from the scrubbed text\./);
   });
 });

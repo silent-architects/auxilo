@@ -293,14 +293,14 @@
         <tbody>
           <tr>
             <td>What is read</td>
-            <td>Session transcripts on your machine, from the coding clients Auxilo has an adapter for. Where a client fires a capture hook, the hook hands over the transcript. Where it does not, a local sweep reads that client's own session files on a schedule. The current list is at <a href="/legal/supported-clients">auxilo.io/legal/supported-clients</a>. The runner looks for those session files and for its own state under ~/.auxilo. It does not search the rest of your disk.</td>
+            <td>Session transcripts on your machine, from the coding clients Auxilo has an adapter for. Where a client fires a capture hook, the hook hands over the transcript. Where it does not, a local sweep reads that client's own session files on a schedule. The current list is at <a href="/legal/supported-clients">auxilo.io/legal/supported-clients</a>. The runner looks for those session files and for its own state under ~/.auxilo. It does not search the rest of your disk. What the model itself can read on each path is in the row What runs where, below.</td>
           </tr>
           <tr>
             <td>What runs where</td>
-            <td>Extraction runs on your machine, through a model client you already have signed in, never through Auxilo's. The scrubbed transcript goes to that client's model provider under your own agreement with them, the same way your own sessions do. Auxilo removes the provider API key from that process before the run. Which clients Auxilo can capture sessions from is listed at auxilo.io/legal/supported-clients. Drafting runs through one signed-in model client on your machine today.</td>
+            <td>Drafting runs on your machine, never through Auxilo's. It uses the first model client you are signed in to, Claude Code first and then Codex, and only one runs at a time. If neither is signed in, you can set a provider key of your own. It stays on this machine, readable only by your user account, and Auxilo never receives it. A run with your key sends the scrubbed transcript only to that provider, under your own account. The model reads nothing on your machine. Any use is charged to that account, never to Auxilo. Run auxilo provider clear to remove it. The scrubbed transcript goes to that client's model provider under your own agreement with them. Before the run, Auxilo removes the provider's billing variables from the run. On the Claude path the model has no tools, so it cannot open files on your machine. On the Codex path the model cannot write to your files, but it can read what its sandbox allows. Which clients Auxilo can capture sessions from is listed at auxilo.io/legal/supported-clients.</td>
           </tr>
           <tr>
-            <td>If no model client Auxilo can use is signed in</td>
+            <td>If no model client is signed in and no key is set</td>
             <td>Nothing is submitted. The runner writes one line to its log under ~/.auxilo, and your coding client is never affected.</td>
           </tr>
           <tr>
