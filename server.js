@@ -11940,6 +11940,17 @@ function renderRecentLearnings(html) {
   }
 }
 
+// "as of September 6, 2026 UTC" (AD strings packet 3 §4): English month name,
+// day without a leading zero, four-digit year, literal UTC. Throws on an
+// invalid date so the caller's fail path (span left EMPTY) is the only
+// alternative to a true date — never a default or placeholder date.
+const AS_OF_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+function formatAsOfUtc(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) throw new Error('as-of: invalid date');
+  return `as of ${AS_OF_MONTHS[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()} UTC`;
+}
+
 function renderLiveCatalogStats(html) {
   try {
     const visible = visibleLearningsList();
@@ -11950,10 +11961,19 @@ function renderLiveCatalogStats(html) {
       const prices = visible.map(displayPrice);
       range = `$${Math.min(...prices).toFixed(2)} to $${Math.max(...prices).toFixed(2)}`;
     }
+    // As-of line for the /for-builders strip (id="lc-asof"): the stats above
+    // are computed at render time, so the as-of is the same construction GET
+    // /knowledge/stats carries (`timestamp: new Date().toISOString()` at
+    // computation time — the renderer holds no stored timestamp). It sits
+    // inside this try on purpose: any derivation failure returns the html
+    // untouched and the span stays empty. A stale count is a soft error; an
+    // asserted stale date is a positive false claim.
+    const asOf = formatAsOfUtc(new Date());
     return html
       .replace(/(id="lc-learnings"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${count}<`)
       .replace(/(id="lc-categories"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${cats}<`)
-      .replace(/(id="lc-price-range"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${range}<`);
+      .replace(/(id="lc-price-range"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${range}<`)
+      .replace(/(id="lc-asof"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${asOf}<`);
   } catch (e) {
     console.error('[live-stats] render failed, serving static values:', e.message);
     return html;
