@@ -29,18 +29,37 @@
   --slate: #8B929A;
   --slate-text: #8B929A;
   --ash: #E5E5E3;
+  /* Wave E2 item 10: one accent event per screen — the nav's active-link
+     gold and .nav-cta's gold border/text move to ash (the wordmark
+     triangle stroke, inline SVG in each page, keeps gold and is untouched
+     here); this token mirrors --aurum-border's alpha (0.35) on ash. */
+  --ash-border: rgba(229, 229, 227, 0.35);
   --code-bg: #111111;
   --section-pad: 120px 24px;
   --max-w: 1100px;
-  --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --sans: 'Archivo', 'Helvetica Neue', Arial, system-ui, sans-serif;
+  /* Wave E2 item 11: the size-adjust'd fallback faces (defined near the
+     end of this sheet, next to the @font-face rules they support) sit
+     right after the primary font, ahead of the original raw fallback
+     names — a system with neither Menlo/Helvetica Neue installed just
+     falls through local()'s failure to the original chain. */
+  --mono: 'IBM Plex Mono', 'IBM Plex Mono Fallback', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: 'Archivo', 'Archivo Fallback', 'Helvetica Neue', Arial, system-ui, sans-serif;
 
   /* ── AD sheet 9: site-wide tokens ─────────────────────────────────────
      One section-h2 size, one closing-CTA h2 size, and one hero mobile
      padding pair, replacing the per-page values audited in
      AD-STEP4-RESPONSIVE-QC-2026-09-06.md §1.3 and §1.9. */
   --h2-section: clamp(28px, 3.5vw, 42px);
-  --h2-cta: clamp(32px, 4.5vw, 56px);
+  /* Wave E2 item 9: one large headline per page — the closing-CTA h2 drops
+     to the section size (42) so the h1 (56, 72 on /) is the single
+     dominant type event; amends the earlier 60-closing/42-section pair.
+     Set equal to --h2-section (rather than repointing the #footer-cta h2
+     etc. selector at var(--h2-section) directly) so --h2-cta stays a valid,
+     independently-settable token for any future page that still wants to
+     reference "the closing-CTA size" by name. /earnings' #earnings-cta h2
+     has its own hardcoded clamp(30px,4vw,52px) in earnings.html, a file
+     outside this builder's ownership — not reachable from here. */
+  --h2-cta: clamp(28px, 3.5vw, 42px);
   --hero-pad-mobile: 100px 16px 60px;
 
   /* Wave C.3b: one label-size token for the three inline drawings' SVG text
@@ -165,12 +184,14 @@ section h2 {
   pointer-events: none;
 }
 
+/* Wave E2 item 12: 44px tap target (was 28.8px, AD-STEP4-FINAL P3.19). */
 .nav-logo {
   display: flex;
   align-items: center;
   gap: 10px;
   text-decoration: none;
   color: var(--ivory);
+  min-height: 44px;
 }
 
 .nav-logo .logo-mark {
@@ -202,17 +223,22 @@ section h2 {
 }
 
 .nav-links a:hover { color: var(--ivory); }
-.nav-links a.active { color: var(--aurum); }
+/* Wave E2 item 10: active-link gold -> ash. */
+.nav-links a.active { color: var(--ash); }
 
-/* AD sheet 9: nav CTA >= 36px tall (measured 35px live). */
+/* AD sheet 9: nav CTA >= 36px tall (measured 35px live).
+   Wave E2 item 12: raised to 44px (measured 40.4px live, AD-STEP4-FINAL
+   P3.18). Wave E2 item 10: gold border/text -> ash; hover moves to a
+   neutral highlight (matching .btn-secondary's hover treatment) instead of
+   the old gold-tinted --aurum-dim, so hovering doesn't reintroduce gold. */
 .nav-cta {
   font-size: 14px !important;
   font-weight: 500 !important;
-  color: var(--aurum) !important;
-  border: 1px solid var(--aurum-border);
+  color: var(--ash) !important;
+  border: 1px solid var(--ash-border);
   padding: 8px 18px;
   border-radius: 4px;
-  min-height: 36px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   box-sizing: border-box;
@@ -220,8 +246,8 @@ section h2 {
 }
 
 .nav-cta:hover {
-  background: var(--aurum-dim) !important;
-  color: var(--aurum) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: var(--ash) !important;
 }
 
 /* ── Hero ──────────────────────────────────────────────────────────────────── */
@@ -268,6 +294,11 @@ section h2 {
   flex-wrap: wrap;
 }
 
+/* Wave E2 item 12: pinned to 54px (was 52px — .btn-secondary's 1px border
+   adds the 2px .btn-primary lacked, AD-STEP4-FINAL-2026-09-06.md §4: 52px
+   at 375 on how-it-works/for-agents/pricing/api, 52px at both widths on
+   earnings, vs .btn-secondary's 54px). A transparent 1px border matches
+   btn-secondary's box-model exactly without changing the visible fill. */
 .btn-primary {
   display: inline-flex;
   align-items: center;
@@ -280,7 +311,7 @@ section h2 {
   padding: 14px 28px;
   border-radius: 4px;
   text-decoration: none;
-  border: none;
+  border: 1px solid transparent;
   cursor: pointer;
   transition: opacity 0.2s, transform 0.15s;
   letter-spacing: -0.01em;
@@ -1143,11 +1174,13 @@ footer {
   gap: 16px;
 }
 
+/* Wave E2 item 12: 44px tap target (was 24px, AD-STEP4-FINAL P3.19). */
 .footer-logo {
   display: flex;
   align-items: center;
   gap: 8px;
   text-decoration: none;
+  min-height: 44px;
 }
 
 .footer-logo .wordmark { font-size: 15px; font-weight: 500; color: var(--slate); }
@@ -1304,10 +1337,20 @@ footer {
   transform: rotate(-45deg) translate(5px, -5px);
 }
 
-/* ── Responsive ────────────────────────────────────────────────────────────── */
-@media (max-width: 900px) {
-  :root { --section-pad: 80px 20px; }
-
+/* ── Responsive: nav (Wave E2 item 1) ─────────────────────────────────────
+   901-959px rendered the desktop nav squeezed with no hamburger fallback
+   (AD-STEP4-FINAL-2026-09-06.md §1.1: wordmark/first-link collision through
+   959px even net of the type swap, and the ruled seven-label reorder needs
+   1057 on one line). Per the wave sheet this moves to 1057, not the AD
+   pass's own 960. This is the ONLY media query gating the desktop-nav-vs-
+   hamburger switch (confirmed: no other .hamburger/.nav-links rule exists
+   in this sheet, and every per-page 900px query elsewhere in the codebase
+   gates unrelated grids, not this switch) — split out from the general
+   900px responsive block below so those unrelated breakpoints don't move
+   with it. Wave E2 item 12: the open-menu background goes from 0.97 to
+   full opacity (var(--obsidian)) so the hero/gold copy button stop reading
+   through it. */
+@media (max-width: 1057px) {
   .hamburger {
     display: flex;
   }
@@ -1318,7 +1361,7 @@ footer {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(10,10,10,0.97);
+    background: var(--obsidian);
     flex-direction: column;
     align-items: center;
     justify-content: center;
@@ -1340,6 +1383,11 @@ footer {
     display: block;
     text-align: center;
   }
+}
+
+/* ── Responsive: general layout ──────────────────────────────────────────── */
+@media (max-width: 900px) {
+  :root { --section-pad: 80px 20px; }
 
   .steps { grid-template-columns: 1fr; }
   .builders-grid { grid-template-columns: 1fr; gap: 40px; }
@@ -1995,14 +2043,24 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
 /* ── DR-7f: single gold "ledger stat" for the thin chapter heroes (earnings,
    pricing, how-it-works). Hidden until a real number arrives from /knowledge/stats
    — never renders a fabricated or placeholder figure. One gold event per hero. */
+/* Wave E2 item 11: display:none while hidden removed the box from layout
+   entirely, so a min-height on it (see below) was inert — nothing was ever
+   reserved until .is-live flipped display, which is exactly the CLS
+   PageSpeed-FINAL-2026-09-06.md P2.3 measured. Switched to visibility, so
+   the box (and its reserved min-height) stays in flow at all times,
+   painting nothing until live. Still satisfies DR-7f ("never renders a
+   fabricated or placeholder figure"): visibility:hidden paints nothing and
+   is excluded from the accessibility tree, same as display:none was. */
 .hero-ledger {
-  display: none;
+  display: flex;
+  visibility: hidden;
+  min-height: 26px;
   margin: 20px auto 0;
   align-items: baseline;
   justify-content: center;
   gap: 10px;
 }
-.hero-ledger.is-live { display: flex; } /* justify-content:center below centers it regardless of parent text-align */
+.hero-ledger.is-live { visibility: visible; } /* justify-content:center below centers it regardless of parent text-align */
 .hero-ledger .hero-ledger-num {
   font-family: var(--mono);
   font-size: 22px;
@@ -2148,4 +2206,310 @@ span.pull-stat-range.pull-stat-range, .pull-stat-range.pull-stat-range.pull-stat
   line-height: 1.3;
   display: block;
   padding: 6px 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Wave E2 (SITE-PM final wave sheet, 2026-09-06) — items 5, 8, 11-13
+   This builder owns styles.css only, plus the <style> block CONTENTS of
+   about.html and writing/index.html (item 14). Every rule below that
+   targets a class/id living in another page's own markup or own <style>
+   block reaches it purely through this sheet's cascade — none of those
+   other HTML files were edited. Where a rule needs !important, it is
+   because that page's own <style> block declares the same property on the
+   same selector and loads AFTER this sheet in <head>, so equal specificity
+   would otherwise resolve to source order, not to this fix.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Item 5: /for-builders hero stat row ─────────────────────────────────
+   Markup ships 70% and "under 1 minute" as `.stat-num.pull-stat-caption`
+   (one tier below `.pull-stat-secondary` — AD-STEP4-FINAL-2026-09-06.md §5
+   residual 7: number+label render at the same 13px slate as their own
+   caption, 226 alone at 88px gold). for-builders.html is out of this
+   builder's file ownership so the class can't be renamed in markup; this
+   promotes just those two spans to the pull-stat-secondary treatment.
+   :not(.reveal) scopes to the TOP hero row only — the page's second,
+   lower "Supply is ahead of demand" stats strip reuses the identical
+   .builders-hero-stat/.stat-num classes but is already correct
+   (pull-stat-num / pull-stat-secondary) and carries the .reveal class this
+   sheet's own comment already treats as a marker for that second strip. */
+.builders-hero-stats:not(.reveal) .builders-hero-stat .stat-num.pull-stat-caption {
+  font-size: clamp(28px, 4vw, 40px);
+  font-weight: 500;
+  font-family: var(--mono);
+  color: var(--ivory);
+  letter-spacing: -0.02em;
+  text-transform: none;
+  margin-top: 0;
+}
+/* One label baseline across the three cells: reserve the SAME box height
+   (the 226 cell's own clamp) under every stat-num regardless of its own
+   font-size, bottom-aligning the number so the caption beneath always
+   starts at the same y. Fixes the 59.2px label-top break AD measured. */
+.builders-hero-stats:not(.reveal) .builders-hero-stat .stat-num {
+  min-height: clamp(48px, 7vw, 88px);
+  display: flex;
+  align-items: flex-end;
+  line-height: 1;
+}
+
+/* ── Item 8: /status badges onto the brand palette ───────────────────────
+   status.html defines its own --green/--yellow/--red tokens at :root in a
+   <style> block that loads after this sheet (AD-STEP4-FINAL §1.4: rgb
+   (34,197,94) green + rgb(234,179,8) yellow next to the nav's brand
+   rgb(201,168,76) — "two different yellows plus a green" on one screen).
+   Redefining the SAME custom-property names here with !important cascades
+   through every var(--green)/var(--yellow) consumer on that page: the
+   static .badge/.overall-status/.status-dot CSS, the inline
+   style="color:var(--yellow)" markup, and the JS-set
+   .style.color/.style.background on the degraded-health path — all of
+   them resolve the variable at compute time, so redefining the token once
+   is enough; no per-selector override needed for anything routed through
+   var(). The brand has no green, so "Operational" reads as neutral ash;
+   anything needing attention (Migrating, Degraded) converges on the SAME
+   aurum the nav already carries, so the page stops running a second,
+   off-brand accent colour alongside it. A few border-colors on that page
+   are literal rgba(34,197,94,…) / rgba(234,179,8,…) values, not routed
+   through a var(), so those are overridden directly below (also
+   !important, same later-source-wins reason). Outage/red is untouched:
+   not part of what's live on screen today, and the brand has no red
+   either — a genuine design call left for whoever owns status.html. */
+:root {
+  --green: var(--ash) !important;
+  --green-bg: rgba(229, 229, 227, 0.08) !important;
+  --yellow: var(--aurum) !important;
+  --yellow-bg: var(--aurum-dim) !important;
+}
+.overall-status,
+.badge.degraded {
+  border-color: var(--aurum-border) !important;
+}
+.badge.operational {
+  border-color: rgba(229, 229, 227, 0.25) !important;
+}
+
+/* ── Item 11: .hero-ledger reserved min-height ────────────────────────────
+   Implemented in place on the original .hero-ledger rule above (near the
+   pull-stat section), not here — kept together with the display/visibility
+   fix it depends on. Live-measured (this builder, headless Chrome via the
+   browser tool, same getBoundingClientRect method AD-STEP4 uses) on the
+   running production DOM once .is-live has rendered a real number: 24.70px
+   on /how-it-works at 1280 and 375, 25.30px on /pricing at 1280 (identical
+   num+label markup on both pages; the two are 24.7-25.3 apart only by
+   subpixel/font-hinting noise, not a real per-page difference) — 26px
+   covers both with a small margin. PageSpeed-FINAL-2026-09-06.md P2.3
+   asked for this on /how-it-works and /pricing specifically; the class is
+   shared with /earnings too and this fix is strictly beneficial there as
+   well (same CLS bug, same fix), so it's left in scope rather than
+   excluded. */
+
+/* ── Item 11: size-adjust fallback-metric overrides ───────────────────────
+   PageSpeed-FINAL-2026-09-06.md P2.4 names no target numbers ("no such
+   property exists anywhere in styles.css") — the ratios below come from
+   AD-STEP4-FINAL-2026-09-06.md §2's own live advance-width measurements
+   (Range.getClientRects on the real DOM, woff2 blocked to force the
+   fallback), the best available already-measured data; this builder could
+   not reproduce that block-the-font measurement live against the prod
+   site without editing it. Archivo: 16px regular vs Helvetica Neue,
+   294.9/305.8 = 96.43% (the body-copy weight — the dominant contributor to
+   the swap's ~30px page-height reflow AD measured, not the 72px-bold
+   figure, which is a different, less-representative weight comparison).
+   Plex Mono: 13px vs Menlo, 124.8/125.2 = 99.68% (the exact weight/size
+   Plex Mono ships at everywhere it's used, .code-block pre).
+   Deliberate deviation from a literal reading of "add to both @font-face
+   rules": size-adjust is added to NEW synthetic fallback @font-face
+   declarations, not to Archivo's/Plex Mono's own existing @font-face
+   rules. Putting it on the real webfonts' own faces would scale their
+   PERMANENT rendered size (not just the swap window), shrinking every
+   approved h1/h2/body size on the site by the same ~3.6% this is supposed
+   to only apply to the fallback during the brief pre-load flash — that
+   would be a real, if small, visual regression against every measurement
+   in this whole wave. The fallback face is inserted into --sans/--mono
+   right after the primary font as a local()-only face (an unmatched
+   local() fails closed to the next fallback, so a system with neither
+   Helvetica Neue nor Menlo just falls through to the original chain). */
+@font-face {
+  font-family: 'Archivo Fallback';
+  src: local('Helvetica Neue'), local('Arial');
+  size-adjust: 96.43%;
+}
+@font-face {
+  font-family: 'IBM Plex Mono Fallback';
+  src: local('Menlo'), local('Consolas');
+  size-adjust: 99.68%;
+}
+
+/* ── Item 12 (remainder): 44px targets not reachable via a shared class ── */
+/* for-agents.html's own <style> block defines .agent-cta-links a (the six
+   footer links, AD-STEP4-FINAL P3.19: 38.4px) with no display/min-height
+   declared for that selector at all, so these two new properties apply
+   uncontested — no !important needed, nothing else sets them. */
+.agent-cta-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+/* index.html's own <style> block sets `.dive-arrow { opacity: 0; }`
+   unconditionally (hover-only reveal) — AD-STEP4-FINAL §3: "Dive Deeper on
+   touch. Not fixed. .dive-arrow is opacity 0 and reveals on hover only,"
+   meaning a touch user (no hover state) never sees it. Coarse-pointer
+   devices get it shown permanently instead. !important needed: the local
+   rule declares the same property, unconditionally, and loads after this
+   sheet. */
+@media (pointer: coarse) {
+  .dive-arrow {
+    opacity: 1 !important;
+    transform: translateX(0) !important;
+  }
+}
+
+/* ── Item 13: hero `br` conditional above 768px ──────────────────────────
+   index (#hero h1), for-agents (.page-hero h1) and pricing
+   (.pricing-page-header h1) each hard-code exactly one <br> inside their
+   h1 (verified: one match each), forcing the same two-line break at every
+   width and stranding words at 375 (AD-STEP4-FINAL §2: index "this." at
+   24%, for-agents "what" alone at 26%, pricing "$0.05." orphaned at 38%).
+   Hiding just these three <br>s below 768px lets the h1 wrap naturally on
+   phones without touching any other <br> on the site (for-builders' own
+   "Build Once.<br>Keep Earning." break is deliberately NOT in this
+   selector list and is unaffected). */
+@media (max-width: 768px) {
+  #hero h1 br,
+  .page-hero h1 br,
+  .pricing-page-header h1 br {
+    display: none;
+  }
+}
+
+/* ── Item 13: pricing measure widened from 295 to the site value ─────────
+   pricing.html wraps its hero h1 in a `.container` (base rule above:
+   `padding: 0 24px`) INSIDE `.pricing-page-header` (mobile padding
+   `var(--hero-pad-mobile)`, 16px horizontal) — the two stack to a 40px
+   inset at 375 (16+24), where for-agents/how-it-works reach the same hero
+   at a plain 16px inset with no .container wrapper. 375 - 2*40 = 295,
+   375 - 2*16 = 343: exactly AD-STEP4-FINAL's measured 295 and 343 figures
+   (§2 hero-wraps table). Removing just the doubled .container padding
+   inside this one hero converges pricing to the same 343px "site value"
+   for-agents/how-it-works already use — AD's own prediction is that this
+   alone drops "$0.05." from 5 lines to 4. */
+@media (max-width: 600px) {
+  .pricing-page-header .container {
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
+
+/* ── Item 13: for-builders hero top padding cut ───────────────────────────
+   for-builders.html's own <style> block sets `.builders-hero-content {
+   padding-top: 110px; }` unconditionally (no media query), stacking on
+   top of `#builders-hero`'s own mobile padding (var(--hero-pad-mobile) =
+   100px top at <=600px) for a combined 210px — exactly where this builder
+   live-measured the h1's top at 375 (getBoundingClientRect, matches AD's
+   210 in AD-STEP4-FINAL §1.5). Overriding just the mobile padding-top on
+   this page-local class (not shared with any other page) to 40px brings
+   the combined total to 100+40=140, landing first ink at the "near 140"
+   target. !important: the local rule is unconditional (equal specificity,
+   loads after this sheet). Getting the CTA pair fully into a real ~700-
+   750px mobile fold (AD-STEP4-FINAL §0: browser chrome shortens the
+   measured 812px fold by 60-110px) also depends on the sub-paragraph and
+   stat-row heights below the h1, which this item doesn't touch — this
+   padding cut alone measured the CTA top moving from 898.8px to roughly
+   828.8px, still outside a realistic mobile fold; flagging rather than
+   overclaiming the "CTA pair in the fold" half of this item. */
+@media (max-width: 600px) {
+  .builders-hero-content {
+    padding-top: 40px !important;
+  }
+}
+
+/* ── Item 13: for-agents strip caption widened at 375 ─────────────────────
+   for-agents.html's own <style> block switches `.stats-strip` to a 2-col
+   grid at <=768px (163.5px cells at 375), which wraps the longer captions
+   ("LEARNINGS IN CATALOG", "COST TO SEARCH") to two lines while shorter
+   neighbours ("CATEGORIES") hold one — a 17.2px label-baseline break
+   (AD-STEP4-FINAL §1.3 residual). Single-columning the strip at <=600px
+   (phone widths) gives every cell the full ~343px row width instead of
+   half, which comfortably fits the longest caption on one line;
+   768-600px (tablet) keeps the existing 2-col layout, which AD didn't
+   flag as broken. !important: same-specificity rule, loads after this
+   sheet, and the local rule isn't itself inside a narrower media query
+   whose specificity CSS would otherwise prioritize on its own. */
+@media (max-width: 600px) {
+  .stats-strip {
+    grid-template-columns: 1fr !important;
+  }
+  .stats-strip-item {
+    border-right: none !important;
+  }
+  .stats-strip-item:last-child {
+    grid-column: span 1 !important;
+  }
+}
+
+/* ── Item 13: /api method column mono to 13px ─────────────────────────────
+   `.ep-method` (10px) is shared with the compact `.endpoint-list` badges
+   used elsewhere on api.html and on for-agents.html's own MCP quick
+   reference — the wave sheet names only "the /api method column" (the
+   Method column of the two full endpoint-reference TABLES,
+   AD-STEP4-FINAL §2 "Spec table mono": 10px method spans under the 12px
+   floor next to 13px endpoint spans in the same row). `.endpoint-table
+   .ep-method` scopes to just those two tables (api.html has no
+   .endpoint-list at all), leaving the compact-list badges on both pages
+   at their current size. */
+.endpoint-table .ep-method {
+  font-size: 13px;
+}
+
+/* ── Item 13: five older how-it-works diagram labels up to the 12px floor ─
+   The three newer drawings (index hero-figure, for-agents hero-exchange,
+   the how-it-works approval fork) already clear the floor via the shared
+   --svg-label token. The five older mini-diagrams on how-it-works
+   (magic-link auth, MCP connection, discovery pricing flow, learning-
+   example card, before/after resolution) instead carry raw
+   font-size="7|8|9|10" presentation attributes directly on their <text>
+   nodes, no class (AD-STEP4-FINAL §2: svg#13 7/8, svg#16 7/8/9, svg#2 9,
+   svg#4 8/10, svg#10 8/9/16). `.hiw-step-card` is the shared wrapper class
+   these five diagrams sit inside — defined only in this sheet, used only
+   by how-it-works.html — so it scopes this cleanly to just those five
+   without touching the approval fork's own text (which has no font-size
+   attribute at all, set once at the parent <svg> via --svg-label, so it
+   can't match these attribute selectors) or any other page's SVGs. CSS
+   `font-size` overrides an SVG presentation attribute at any specificity,
+   so no !important is needed. FLAGGED, not verified live: these five
+   diagrams have small fixed viewBoxes sized around their original 7-10px
+   text; a ~30-70% size jump to 12px risks overflow/collision inside a few
+   of them (e.g. "FREE PREVIEW" at font-size 7) that this builder could not
+   visually confirm without the page live in this wave — recommend a
+   render QA pass before merge. */
+.hiw-step-card svg text[font-size="7"],
+.hiw-step-card svg text[font-size="8"],
+.hiw-step-card svg text[font-size="9"],
+.hiw-step-card svg text[font-size="10"] {
+  font-size: 12px;
+}
+
+/* ── Item 13: terms/privacy onto the display type scale ──────────────────
+   /terms and /privacy are server-rendered by serveLegalPage() in
+   server.js (out of this builder's ownership — no static terms.html or
+   privacy.html exists), whose inline <style> block defines `.legal-wrap
+   h1`/`h2` with font-size/color/margin only — no line-height or
+   letter-spacing declared for either selector, so these new declarations
+   apply uncontested (no !important needed). AD-STEP4-FINAL §2: h1 32px at
+   51.2px leading (32*1.6, the plain body inheritance) and h2 22px at
+   35.2px (22*1.6), both "normal" tracking, against every main h1's
+   -1.12 to -1.68px. */
+.legal-wrap h1,
+.legal-wrap h2 {
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+/* ── Item 13: the essay onto the display type scale ───────────────────────
+   writing-agents-message-board.html's own <style> block already sets
+   `.writing-wrap h1 { line-height: 1.25; }` explicitly (not inherited) —
+   AD-STEP4-FINAL §2: "writing-amb runs 32 at 40" (32*1.25). !important
+   needed: same property, same selector, declared later. No letter-spacing
+   was set at all there, so that half needs no !important. */
+.writing-wrap h1 {
+  line-height: 1.1 !important;
+  letter-spacing: -0.02em;
 }
