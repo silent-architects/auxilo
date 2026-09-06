@@ -21,6 +21,7 @@ const readline = require('readline');
 const { exec } = require('child_process');
 const installer = require('../lib/installer.js');
 const review = require('../lib/review.js');
+const providers = require('../scripts/providers/index.js');
 
 const HOME = os.homedir();
 
@@ -497,6 +498,7 @@ async function cmdStatus() {
     const line = runnerSkewLine(installer.runnerVersionSkew(HOME));
     if (line) console.log(line);
   }
+  console.log(extractionProviderLine(await providers.resolveProvider({})));
   console.log(`SessionEnd hook: ${s.hookInstalled ? 'installed' : 'not installed'}${s.hookRegistered ? ', registered in Claude Code settings' : ''}`);
   for (const c of s.clients.filter((c) => c.captureHook)) {
     console.log(`Capture hooks: ${c.name} (${c.captureEvent}, ${c.captureRegistered ? 'registered' : 'not registered'})`);
@@ -514,6 +516,28 @@ function runnerSkewLine(skew) {
   if (!skew || !skew.skew) return null;
   const installed = skew.installed ? `v${skew.installed}` : 'unstamped (pre-0.9.12)';
   return `  ⚠ Installed runner is ${installed} (package v${skew.package}) — run: npx auxilo setup`;
+}
+
+/**
+ * EXTRACT-PER-CLIENT W1 PART A — one unconditional line naming which extraction
+ * model provider resolves, and why (env override vs auto-detected). The
+ * companion conditional line (printed only when the last recorded extraction
+ * skip reasonCode is cli-billing-helper-configured/cli-unauthenticated/
+ * no-model-provider-available, per the spec's item 10) needs a
+ * `last_reason_code` field added to runner.js's extraction skip-state schema
+ * (normalizeExtractionSkipState/zeroExtractionSkipState) — scripts/runner.js is
+ * outside PART A's touched-file scope, so that half is NOT implemented here;
+ * flagged for the PM to route (extend PART A's scope or a follow-up part).
+ */
+function extractionProviderLine(resolution) {
+  if (resolution && resolution.ok) {
+    const via = process.env.AUXILO_EXTRACTION_PROVIDER
+      ? 'env override AUXILO_EXTRACTION_PROVIDER'
+      : 'auto-detected';
+    return `Extraction model provider: ${resolution.id} (${via})`;
+  }
+  const reason = (resolution && resolution.reason) || 'no provider available';
+  return `Extraction model provider: none (${reason})`;
 }
 
 // ─── auxilo disable ─────────────────────────────────────────────────────────
@@ -1260,6 +1284,7 @@ if (require.main === module) {
 module.exports = {
   parseFlags,
   runnerSkewLine,
+  extractionProviderLine,
   resolveBaseUrl,
   shortFlags,
   groupSummaryRows,
