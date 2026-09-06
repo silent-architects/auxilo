@@ -167,7 +167,7 @@ const CONSENT_TEXT = `
     • SCRUBS it locally (sensitivity filter: API keys, tokens, emails, PII
       are redacted first),
     • EXTRACTS reusable learnings locally through the first model client you
-      have installed (Claude Code, then Codex) or, when neither is
+      are signed in to (Claude Code, then Codex) or, when neither is
       available, a provider key you set yourself. For this step your
       scrubbed transcript goes only to that provider, under your own
       account with them, and any use is charged to that account, never to
@@ -1402,10 +1402,13 @@ async function cmdProvider(flags) {
     return;
   }
 
-  // writeByoConfig throws ONLY on an unresolved home directory (GOV-3 item
-  // 13) — caught here so that reaches a clean reason + exit(1), never a raw
-  // stack (should-fix item 10), matching the fail-closed contract every
-  // other providers.json entry point in this file now follows.
+  // writeByoConfig throws on an unresolved home directory (GOV-3 item 13)
+  // OR, since EXTRACTION-LOW-FOLLOWUPS item 4, on an existing providers.json
+  // path that is not a regular file owned by this account (a symlink or a
+  // foreign owner) — both caught here so they reach a clean reason +
+  // exit(1), never a raw stack (should-fix item 10), matching the
+  // fail-closed contract every other providers.json entry point in this
+  // file now follows.
   let written;
   try {
     written = byoKeyProvider.writeByoConfig({
@@ -1417,6 +1420,10 @@ async function cmdProvider(flags) {
   } catch (err) {
     if (err && err.reasonCode === 'provider-home-unresolved') {
       console.error(`auxilo provider set could not resolve your home directory (reasonCode: provider-home-unresolved). ${err.message}`);
+      process.exit(1);
+    }
+    if (err && err.reasonCode === 'provider-state-target-unsafe') {
+      console.error(`auxilo provider set refuses to continue: ${err.message} (reasonCode: provider-state-target-unsafe). Remove or replace it, then try again.`);
       process.exit(1);
     }
     throw err;
