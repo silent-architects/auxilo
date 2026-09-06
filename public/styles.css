@@ -19,6 +19,14 @@
   --max-w: 1100px;
   --mono: 'JetBrains Mono', 'Geist Mono', 'Fira Mono', monospace;
   --sans: 'Inter', 'Geist', system-ui, sans-serif;
+
+  /* ── AD sheet 9: site-wide tokens ─────────────────────────────────────
+     One section-h2 size, one closing-CTA h2 size, and one hero mobile
+     padding pair, replacing the per-page values audited in
+     AD-STEP4-RESPONSIVE-QC-2026-09-06.md §1.3 and §1.9. */
+  --h2-section: clamp(28px, 3.5vw, 42px);
+  --h2-cta: clamp(32px, 4.5vw, 56px);
+  --hero-pad-mobile: 100px 16px 60px;
 }
 
 html { scroll-behavior: smooth; }
@@ -49,7 +57,44 @@ a { color: var(--aurum); text-decoration: underline; }
   padding: 0 24px;
 }
 
+/* AD sheet 9: a section already carries --section-pad's own 24px horizontal
+   inset (below); .container's OWN 24px padding then stacks on top of it once
+   the viewport is wide enough for .container's max-width + auto-margin
+   centering to be doing the centering work (>= 1150px), pushing content to
+   194px instead of the intended 170px (measured live: pricing and api hero
+   AND every .container-wrapped body section on every page). Dropping the
+   inner padding at that breakpoint collapses hero and body to the same
+   170px edge everywhere, with no change below 1150px where the padding is
+   still the only gutter. (AD-STEP4-RESPONSIVE-QC-2026-09-06.md §1.3, §2 P2.13) */
+@media (min-width: 1150px) {
+  .container { padding-left: 0; padding-right: 0; }
+}
+
 section { padding: var(--section-pad); }
+
+/* AD sheet 9: one section-h2 size site-wide. This is a low-specificity
+   fallback — any section heading without its own per-page rule (e.g.
+   index #own-learnings-free, .explore-section, for-agents #agent-catalog,
+   for-builders #connect) now gets the shared token instead of the browser
+   default; sections that already carry a more specific selector (an id or
+   class) still win the cascade and are unified to the same value below. */
+section h2 {
+  font-size: var(--h2-section);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--ivory);
+}
+
+/* AD sheet 9: one closing-CTA h2 size site-wide, replacing 60/56/52/44px
+   across index, for-builders, how-it-works, for-agents, pricing, api. */
+#footer-cta h2,
+.hiw-cta-section h2,
+.agent-cta-section h2,
+.pricing-cta-section h2,
+.api-cta-section h2 {
+  font-size: var(--h2-cta);
+  font-weight: 700;
+}
 
 /* ── Section Labels ────────────────────────────────────────────────────────── */
 .section-label {
@@ -151,6 +196,7 @@ section { padding: var(--section-pad); }
 .nav-links a:hover { color: var(--ivory); }
 .nav-links a.active { color: var(--aurum); }
 
+/* AD sheet 9: nav CTA >= 36px tall (measured 35px live). */
 .nav-cta {
   font-size: 14px !important;
   font-weight: 500 !important;
@@ -158,6 +204,10 @@ section { padding: var(--section-pad); }
   border: 1px solid var(--aurum-border);
   padding: 8px 18px;
   border-radius: 4px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
   transition: background 0.2s, color 0.2s !important;
 }
 
@@ -361,11 +411,8 @@ section { padding: var(--section-pad); }
    centered label with a centered head; #how-it-works and the subpage sections
    pair a left/default label with a left head), so there were no true outliers to
    flip. Hero and closing-CTA heads are the standing centered "moments". */
-#learning-example h2 {
-  text-align: center; /* DR-7e: matches its centered .section-label */
-  font-size: 32px;
-  margin-bottom: 40px;
-}
+/* AD sheet 9: #learning-example no longer exists on any page (dead selector,
+   removed with the h2 consolidation below). */
 .learning-card {
   max-width: 640px;
   margin: 0 auto 32px;
@@ -455,10 +502,7 @@ section { padding: var(--section-pad); }
 }
 
 #how-it-works h2 {
-  font-size: clamp(28px, 3.5vw, 42px);
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  color: var(--ivory);
+  /* font-size/weight/letter-spacing/color now come from the shared section h2 rule */
   margin-bottom: 20px;
 }
 
@@ -528,18 +572,8 @@ section { padding: var(--section-pad); }
   line-height: 1.7;
 }
 
-/* ── Compounding Earnings ────────────────────────────────────────── */
-#compounding-earnings .section-label {
-  text-align: center;
-}
-#compounding-earnings h2 {
-  text-align: center;
-  font-size: clamp(28px, 3.5vw, 42px);
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  color: var(--ivory);
-  margin-bottom: 16px;
-}
+/* AD sheet 9: #compounding-earnings no longer exists on any page (dead
+   selector, removed with the h2 consolidation below). */
 .compound-intro {
   max-width: 640px;
   margin: 0 auto 48px;
@@ -746,11 +780,8 @@ section { padding: var(--section-pad); }
   text-align: center;
 }
 #the-market h2 {
+  /* font-size/weight/letter-spacing/color now come from the shared section h2 rule */
   text-align: center; /* DR-7e: matches its centered .section-label */
-  font-size: clamp(28px, 3.5vw, 42px);
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  color: var(--ivory);
   margin-bottom: 48px;
   line-height: 1.15;
 }
@@ -774,60 +805,9 @@ section { padding: var(--section-pad); }
   font-weight: 500;
 }
 
-/* ── How It Holds Up ─────────────────────────────────────────────── */
-#why-auxilo .section-label {
-  text-align: center;
-}
-
-#why-auxilo h2 {
-  text-align: center; /* DR-7e: matches its centered .section-label */
-  font-size: clamp(28px, 3.5vw, 42px);
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  color: var(--ivory);
-  margin-bottom: 48px;
-}
-
-.moat-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.moat-card {
-  padding: 32px 28px;
-  background: rgba(255,255,255,0.02);
-  border: 1px solid rgba(229,229,227,0.08);
-  border-radius: 6px;
-  transition: border-color 0.2s;
-}
-
-.moat-card:hover {
-  border-color: var(--aurum-border);
-}
-
-.moat-icon {
-  width: 32px;
-  height: 32px;
-  margin-bottom: 20px;
-  opacity: 0.85;
-}
-
-.moat-card h3 {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--ivory);
-  margin-bottom: 10px;
-  letter-spacing: -0.01em;
-}
-
-.moat-card p {
-  font-size: 15px;
-  line-height: 1.65;
-  color: var(--slate-text);
-}
+/* AD sheet 9: "How It Holds Up" (#why-auxilo, .moat-*) removed. The section
+   was deleted from index.html in an earlier wave (RF-6); this was the last
+   of its CSS. */
 
 /* ── For Builders ──────────────────────────────────────────────────────────── */
 #for-builders {
@@ -836,15 +816,8 @@ section { padding: var(--section-pad); }
   border-bottom: 1px solid rgba(229,229,227,0.06);
 }
 
-#for-builders h2 {
-  font-size: clamp(28px, 3.5vw, 42px);
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  color: var(--ivory);
-  max-width: 660px;
-  margin-bottom: 20px;
-  line-height: 1.15;
-}
+/* AD sheet 9: #for-builders (no such id on for-builders.html) is dead; its h2
+   rule is removed with the h2 consolidation. */
 
 .builders-grid {
   display: grid;
@@ -897,15 +870,8 @@ section { padding: var(--section-pad); }
 /* ── For Agents ────────────────────────────────────────────────────────────── */
 #for-agents { background: var(--obsidian); }
 
-#for-agents h2 {
-  font-size: clamp(28px, 3.5vw, 42px);
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  color: var(--ivory);
-  max-width: 680px;
-  margin-bottom: 20px;
-  line-height: 1.15;
-}
+/* AD sheet 9: #for-agents h2 (no such id on for-agents.html) is dead; removed
+   with the h2 consolidation. */
 
 .agents-grid {
   display: grid;
@@ -1017,9 +983,12 @@ section { padding: var(--section-pad); }
   text-transform: uppercase;
 }
 
+/* AD sheet 9: 44px minimum tap target (was 36px), 13px type (was 11px), on
+   every .copy-btn instance site-wide (22 plain instances plus the gold
+   #install variant below, which inherits font-size from here). */
 .copy-btn {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--slate);
   background: none;
   border: none;
@@ -1028,9 +997,11 @@ section { padding: var(--section-pad); }
   border-radius: 3px;
   transition: color 0.2s, background 0.2s;
   letter-spacing: 0.05em;
-  min-height: 36px;
+  min-height: 44px;
+  min-width: 44px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
 }
 
 .copy-btn:hover { color: var(--aurum); background: var(--aurum-dim); }
@@ -1062,13 +1033,8 @@ section { padding: var(--section-pad); }
   border-bottom: 1px solid rgba(229,229,227,0.06);
 }
 
-#pricing h2 {
-  font-size: clamp(28px, 3.5vw, 42px);
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  color: var(--ivory);
-  margin-bottom: 12px;
-}
+/* AD sheet 9: #pricing h2 (no such id on pricing.html) is dead; removed with
+   the h2 consolidation. */
 
 .pricing-sub {
   font-size: 16px;
@@ -1200,13 +1166,8 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
 /* ── API & Integration ──────────────────────────────────────────────────────── */
 #api-integration { background: var(--obsidian); }
 
-#api-integration h2 {
-  font-size: clamp(28px, 3.5vw, 42px);
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  color: var(--ivory);
-  margin-bottom: 56px;
-}
+/* AD sheet 9: #api-integration h2 (no such id on api.html) is dead; removed
+   with the h2 consolidation. */
 
 .api-grid {
   display: grid;
@@ -1324,8 +1285,7 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
 }
 
 #footer-cta h2 {
-  font-size: clamp(32px, 4.5vw, 60px);
-  font-weight: 700;
+  /* font-size/font-weight now come from the shared closing-CTA rule above */
   letter-spacing: -0.02em;
   color: var(--ivory);
   max-width: 760px;
@@ -1410,6 +1370,52 @@ footer {
 
 .footer-meta a:hover { color: var(--aurum); }
 
+/* ── AD sheet 9: one FAQ accordion component, site-wide ──────────────────────
+   Matches how-it-works' pattern (the only page with a working accordion
+   before this pass); index, for-agents, for-builders, pricing and api
+   previously rendered a static <p class="faq-q">/<p class="faq-a"> pair with
+   no interaction. Markup for every FAQ item is now
+   <div class="faq-item"><button class="faq-question" onclick="toggleFaq(this)">
+   <span>question</span><svg class="faq-icon">...</svg></button>
+   <div class="faq-answer"><div class="faq-answer-inner">answer</div></div></div>,
+   toggled by the shared toggleFaq() function each page defines locally. The
+   open max-height is set generously above how-it-works' own 400px so longer
+   answers on other pages are never clipped. */
+.faq-list { max-width: 700px; margin: 0 auto; }
+.faq-item { border-bottom: 1px solid rgba(229,229,227,0.08); }
+.faq-item:first-child { border-top: 1px solid rgba(229,229,227,0.08); }
+.faq-question {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 24px 0;
+  text-align: left;
+  font-family: var(--sans);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ivory);
+  line-height: 1.4;
+  transition: color 0.2s;
+}
+.faq-question:hover { color: var(--aurum); }
+.faq-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: var(--slate);
+  transition: transform 0.3s, color 0.3s;
+}
+.faq-item.open .faq-icon { transform: rotate(45deg); color: var(--aurum); }
+.faq-answer { max-height: 0; overflow: hidden; transition: max-height 0.35s ease; }
+.faq-item.open .faq-answer { max-height: 1000px; }
+.faq-answer-inner { padding: 0 0 24px; font-size: 15px; line-height: 1.7; color: var(--ash); }
+.faq-answer-inner a { color: var(--aurum); text-decoration: underline; }
+
 /* ── How It Works Page ───────────────────────────────────────────── */
 .hiw-page-header {
   text-align: center;
@@ -1432,13 +1438,9 @@ footer {
 .hiw-section {
   padding: 60px 0;
 }
-.hiw-section h2 {
-  font-size: 32px;
-  font-weight: 700;
-  color: var(--ivory);
-  margin-bottom: 12px;
-  letter-spacing: -0.02em;
-}
+/* AD sheet 9: .hiw-section h2 (no element carries class="hiw-section"; the
+   actual heading class is .hiw-section-heading, defined page-locally in
+   how-it-works.html) is dead; removed with the h2 consolidation. */
 .hiw-section-intro {
   font-size: 16px;
   color: var(--ash);
@@ -1521,19 +1523,9 @@ footer {
   text-align: center;
   padding: 80px 0 40px;
 }
-.hiw-ready h2 {
-  font-size: 32px;
-  text-align: center;
-}
-
-/* ── Sub-headings ──────────────────────────────────────────────────────────── */
-h2.section-h2 {
-  font-size: clamp(28px, 3.5vw, 44px);
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  color: var(--ivory);
-  margin-bottom: 16px;
-}
+/* AD sheet 9: .hiw-ready is not used in how-it-works.html markup (the actual
+   closing CTA is .hiw-cta-section); its h2 rule and the also-unused
+   h2.section-h2 class are removed with the h2 consolidation. */
 
 /* ── Hamburger Menu ──────────────────────────────────────────────── */
 .hamburger {
@@ -1608,7 +1600,6 @@ h2.section-h2 {
   .api-grid { grid-template-columns: 1fr; gap: 48px; }
   .pricing-packs { grid-template-columns: repeat(2, 1fr); }
   .auth-options { grid-template-columns: 1fr; }
-  .moat-grid { grid-template-columns: 1fr; }
 
   .footer-inner { flex-direction: column; align-items: center; text-align: center; }
 }
@@ -1633,8 +1624,7 @@ h2.section-h2 {
     font-size: 40px !important;
     line-height: 1.1 !important;
   }
-  section h2,
-  #learning-example h2 {
+  section h2 {
     font-size: 25px !important;
   }
 
@@ -1744,9 +1734,7 @@ abbr[title] {
 
 .section-ground,
 #how-it-works,
-#why-auxilo,
-#footer-cta,
-#compounding-earnings {
+#footer-cta {
   background-color: var(--obsidian);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cpolygon points='60,10 100,90 20,90' fill='none' stroke='%23C9A84C' stroke-opacity='0.018' stroke-width='1.5'/%3E%3Cline x1='60' y1='50' x2='115' y2='50' stroke='%23C9A84C' stroke-opacity='0.018' stroke-width='1'/%3E%3C/svg%3E");
   background-size: 120px 120px;
@@ -1755,9 +1743,7 @@ abbr[title] {
 @media (max-width: 600px) {
   .section-ground,
   #how-it-works,
-  #why-auxilo,
-  #footer-cta,
-  #compounding-earnings {
+  #footer-cta {
     background-size: 90px 90px;
   }
 }
@@ -2109,11 +2095,10 @@ abbr[title] {
   white-space: nowrap;
 }
 
-.value-tiers-table .example-text {
-  font-size: 13px;
-  color: var(--slate);
-  font-style: italic;
-}
+/* AD sheet 9: .value-tiers-table .example-text is dead — the fabricated
+   EXAMPLE column was removed from pricing.html in an earlier wave (the
+   table is 3 columns now); removed here with the mobile ::before rule
+   below. */
 
 /* ── Earnings Scenario (For Builders) ──────────────────────────────────────── */
 .earnings-scenario {
@@ -2459,7 +2444,6 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   }
   .value-tiers-table td:nth-child(2)::before { content: 'What it covers'; }
   .value-tiers-table td.price-range::before { content: 'Price range'; }
-  .value-tiers-table td.example-text::before { content: 'Example'; }
 }
 
 /* Range strings in a ledger strip: compact mono so the range holds one line */

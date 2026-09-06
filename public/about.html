@@ -137,7 +137,6 @@
     @media (prefers-reduced-motion: reduce) {
       .status-dot { animation: none; }
       .hamburger span { transition: none; }
-      .waitlist-input, .waitlist-btn { transition: none; }
     }
 
     /* ── Mobile hamburger nav (parity with the other pages) ────────── */
@@ -273,77 +272,9 @@
       border: 1px solid rgba(239,68,68,0.25);
     }
 
-    /* ── Payout Waitlist (quiet phase) ─────────────────────────── */
-    .waitlist-row {
-      padding: 1rem 1.25rem 1.15rem;
-      border-bottom: 1px solid var(--border);
-      background: var(--obsidian-3);
-    }
-
-    .waitlist-heading {
-      font-size: 0.9rem;
-      font-weight: 600;
-      color: var(--ivory);
-      margin-bottom: 0.35rem;
-    }
-
-    .waitlist-body {
-      font-size: 0.8rem;
-      color: var(--ivory-dim);
-      line-height: 1.5;
-      margin-bottom: 0.75rem;
-    }
-
-    .waitlist-form {
-      display: flex;
-      gap: 0.5rem;
-      max-width: 420px;
-    }
-
-    .waitlist-input {
-      flex: 1;
-      min-width: 0;
-      padding: 0.55rem 0.75rem;
-      font-family: inherit;
-      font-size: 0.85rem;
-      color: var(--ivory);
-      background: var(--obsidian);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-
-    .waitlist-input::placeholder { color: var(--ivory-dim); }
-    .waitlist-input:focus { border-color: var(--aurum); }
-    .waitlist-input.input-error { border-color: var(--red); background: var(--red-bg); }
-
-    .waitlist-btn {
-      flex-shrink: 0;
-      padding: 0.55rem 1rem;
-      font-family: inherit;
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--obsidian);
-      background: var(--aurum);
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: opacity 0.2s;
-    }
-
-    .waitlist-btn:hover { opacity: 0.9; }
-    .waitlist-btn:disabled { opacity: 0.6; cursor: default; }
-
-    .waitlist-msg { font-size: 0.8rem; margin-top: 0.6rem; display: none; }
-    .waitlist-msg.ok  { display: block; color: var(--green); }
-    .waitlist-msg.err { display: block; color: var(--red); }
-
-    @media (max-width: 480px) {
-      .waitlist-form { flex-direction: column; }
-      .waitlist-btn { width: 100%; }
-      .waitlist-input { font-size: 16px; }
-    }
+    /* AD sheet 9: the payout-waitlist component (.waitlist-*) is dead — no
+       element in this page's markup carries any of these classes (the
+       notify-me form lives on /for-builders, sheet 4 item 3). */
 
     /* ── Quick Links ────────────────────────────────────────────── */
     .links-grid {
@@ -438,15 +369,33 @@
     }
     .contact-block a:hover { text-decoration: underline; }
 
+    /* AD sheet 9: footer markup now matches every other page byte-for-byte
+       (.footer-inner/.footer-logo/.footer-meta); this page carries no
+       styles.css import (out of this sheet's scope, unlike /status), so the
+       same rules from styles.css are duplicated here, scoped to the footer
+       only. */
     footer {
       border-top: 1px solid var(--border);
-      padding: 1.25rem 2rem;
+      padding: 32px 24px;
       text-align: center;
-      font-size: 0.8rem;
-      color: var(--ivory-dim);
     }
-    footer a { color: var(--ivory-dim); text-decoration: none; }
-    footer a:hover { color: var(--aurum); }
+    .footer-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .footer-logo { display: flex; align-items: center; gap: 8px; text-decoration: none; }
+    .footer-logo .wordmark { font-size: 15px; font-weight: 500; color: var(--ivory-dim); }
+    .footer-meta { font-size: 13px; color: var(--ivory-dim); }
+    .footer-meta a { color: var(--ivory-dim); text-decoration: none; transition: color 0.2s; }
+    .footer-meta a:hover { color: var(--aurum); }
+    @media (max-width: 600px) {
+      .footer-inner { flex-direction: column; align-items: center; text-align: center; }
+    }
 
     /* ── Mobile ─────────────────────────────────────────────────── */
     @media (max-width: 640px) {
@@ -558,7 +507,26 @@
   </main>
 
   <footer>
-    <span><a href="/">auxilo.io</a> &middot; <a href="/for-builders">builders</a> &middot; <a href="/for-agents">agents</a> &middot; <a href="/pricing">pricing</a> &middot; <a href="/api">api</a> &middot; <a href="/how-it-works">how it works</a> &middot; <a href="/status">status</a> &middot; <a href="/.well-known/security.txt">security.txt</a></span>
+    <div class="footer-inner">
+      <a href="/" class="footer-logo" id="footer-logo" aria-label="Auxilo home">
+        <svg style="width:20px;height:20px" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <polygon points="16,2 30,28 2,28" fill="none" stroke="#6B7280" stroke-width="2" stroke-linejoin="round"/>
+          <line x1="16" y1="17" x2="30" y2="17" stroke="#6B7280" stroke-width="1.5"/>
+        </svg>
+        <span class="wordmark">auxilo</span>
+      </a>
+      <p class="footer-meta">
+        Your agent already solved this. Auxilo remembers. ·
+        <a href="/about">About</a> ·
+        <a href="/writing">Writing</a> ·
+        <a href="/status">Status</a> ·
+        <a href="/.well-known/security.txt">Security</a> ·
+        <a href="/.well-known/agent.json">Agent card</a> ·
+        <a href="/terms">Terms</a> ·
+        <a href="/privacy">Privacy</a> ·
+        <a href="https://github.com/silent-architects/auxilo">GitHub</a>
+      </p>
+    </div>
   </footer>
 
   <script>
