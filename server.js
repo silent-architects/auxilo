@@ -12482,6 +12482,22 @@ app.get('/llms.txt', (c) => {
   }
 });
 
+// SEARCH-CONSOLE-VERIFY (2026-09-06): Google Search Console site-ownership
+// verification for https://auxilo.io/. Google's HTML-verification method
+// requires the exact filename it issues to be reachable at that same path
+// (google319f7b1ffb42b07d.html -> /google319f7b1ffb42b07d.html), served
+// verbatim, not redirected. The generic static catch-all a few hundred lines
+// up only matches css|js|png|jpg|jpeg|gif|svg|ico|webp|woff|woff2|ttf|txt|xml
+// (no html), and every existing HTML page is served at a route with the
+// .html suffix stripped (e.g. /about -> about.html) — so without this exact-
+// path route the verification file would 404. Deliberately excluded from
+// sitemap.xml, llms.txt, and the nav; it is not a page. Keep this route
+// permanently — GSC re-checks ownership periodically.
+app.get('/google319f7b1ffb42b07d.html', (c) => {
+  const res = serveStatic(c, 'google319f7b1ffb42b07d.html');
+  return res || c.text('Not found', 404);
+});
+
 // ─── Legal pages (terms, privacy) ────────────────────────────────────
 
 function serveLegalPage(c, filename, title, seo) {
