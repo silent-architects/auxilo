@@ -178,7 +178,7 @@ describe('dashboard card: Auto-publish clean learnings', () => {
     assert.ok(!/confirm\(/.test(revoke), 'revoke must be ONE click — no confirm dialog');
     assert.match(DASHBOARD_HTML, /loadCleanLane\(\);\s*\/\/ standing-consent card/, 'loaded on dashboard boot like the pending badge');
     assert.doesNotMatch(DASHBOARD_HTML, /\.innerHTML\s*=/);
-    assert.ok(DASHBOARD_HTML.includes('<script src="/dashboard-clean-lane.js?v=2"></script>'));
+    assert.ok(DASHBOARD_HTML.includes('<script src="/dashboard-clean-lane.js?v=3"></script>'));
   });
 
   it('dark state renders the one plain line, never an error or a control', () => {
@@ -200,7 +200,10 @@ describe('dashboard card: Auto-publish clean learnings', () => {
     assert.match(list, /if \(item\.retractable\)/, 'Retract only inside the window');
     const retract = sliceAt(DASHBOARD_HTML, 'function retractStandingConsentItem', 900);
     assert.match(retract, /apiFetch\('\/learn\/' \+ encodeURIComponent\(item\.id\) \+ '\?reason=retract', \{ method: 'DELETE' \}\)/);
-    const on = sliceAt(DASHBOARD_HTML, 'id="clean-lane-on"', 700);
+    // Window widened 700 → 1600 (CLEAN-LANE-FLIP Phase B notice hardening: the
+    // unread badge + "I've reviewed these" button now sit between Turn off and
+    // the list label).
+    const on = sliceAt(DASHBOARD_HTML, 'id="clean-lane-on"', 1600);
     assert.match(on, /Published under standing consent/);
     assert.match(on, /onclick="revokeCleanLane\(\)"[^>]*>Turn off<\/button>/);
   });

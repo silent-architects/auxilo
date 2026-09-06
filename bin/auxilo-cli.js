@@ -888,6 +888,11 @@ const CLEAN_LANE_UNAVAILABLE = 'Auto-publish for clean learnings is not yet avai
 // test/clean-lane-phase-b-legal.test.js. Edit the Terms first, then mirror.
 const CLEAN_LANE_TERMS_G = '(g) Standing publication consent (optional). Standing publication consent is off by default. A Builder may turn it on by an affirmative act — a dashboard setting, or a terminal command that requires typing the affirmation sentence shown on that screen. Auxilo records that act, the affirmation, and the consent-text version in a durable, hash-chained consent log, retained for the life of the account plus three (3) years under subsection (b). While it is on, a Learning submitted through Autonomous Extraction is published without separate per-item approval only if it passes every Platform screen and the quality threshold the Builder chose at activation. An account\'s first public Learning is never published this way; it is held for operator review under Section 4.1. Auxilo records each such publication in the Builder\'s dashboard and returns a notice in the response to the submission that produced it; each is retractable for seven (7) days under Section 5.9.4. If more than five percent (5%) of a Builder\'s Learnings published this way in any thirty (30) day period are retracted, Auxilo freezes the feature for that account until the Builder turns it on again. A Builder may turn it off at any time, effective immediately for later submissions; doing so does not affect Learnings already published. Subsection (c) applies in full to every Learning so published.';
 const CLEAN_LANE_TERMS_G2 = 'The quality threshold in effect for a Builder is the one that Builder selected, and Auxilo will not broaden the conditions under which a Learning qualifies for publication under this subsection without recording a new consent; Auxilo may make those conditions stricter at any time.';
+// CLEAN-LANE-FLIP Phase B (notice hardening): the no-email enrollment line —
+// GOV-2 counsel draft §6 read #2 "move 3" — printed verbatim before the
+// affirmation prompt on every enrollment surface. Byte-equal to the dashboard's
+// #clean-lane-no-email-line (test/clean-lane-phase-b-notice.test.js).
+const CLEAN_LANE_NO_EMAIL_LINE = 'You will not receive an email for these. Publications appear in your dashboard and in the response to the session that submitted them. The 7-day retraction window runs from publication.';
 const CLEAN_LANE_MIN_QUALITY_MIN = 14;
 const CLEAN_LANE_MIN_QUALITY_MAX = 20;
 const CLEAN_LANE_MIN_QUALITY_DEFAULT = 16;
@@ -948,6 +953,12 @@ function printCleanLaneStatus(data) {
     console.log(`  a grant exists under consent version ${data.consent_version_recorded} but the current version is ${data.consent_version_current}; re-grant to re-activate.`);
   }
   console.log(`  current consent version: ${data.consent_version_current}`);
+  // CLEAN-LANE-FLIP Phase B (notice hardening): the unread count, printed only
+  // when > 0. Nothing here acknowledges it — only the dashboard button does.
+  const unread = data.unacknowledged_publications;
+  if (Number.isInteger(unread) && unread > 0) {
+    console.log(`  auto-published since you last checked: ${unread} (review and acknowledge them in your dashboard)`);
+  }
 }
 
 async function cmdCleanLane(flags) {
@@ -1038,6 +1049,8 @@ async function cmdCleanLane(flags) {
   console.log('');
   console.log(wrapForTerminal(CLEAN_LANE_TERMS_G2));
   console.log(`\nFull Terms: ${baseUrl}/terms`);
+  // The no-email line, verbatim, directly before the affirmation prompt.
+  console.log(`\n${wrapForTerminal(CLEAN_LANE_NO_EMAIL_LINE)}`);
   console.log('\nTo turn on auto-publish, type this sentence exactly as written, then press Enter:');
   console.log(`\n  ${CLEAN_LANE_AFFIRMATION}\n`);
   const typed = await ask('> ');
@@ -1241,5 +1254,6 @@ module.exports = {
   CLEAN_LANE_UNAVAILABLE,
   CLEAN_LANE_TERMS_G,
   CLEAN_LANE_TERMS_G2,
+  CLEAN_LANE_NO_EMAIL_LINE,
   wrapForTerminal,
 };

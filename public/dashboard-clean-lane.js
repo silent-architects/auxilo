@@ -116,6 +116,35 @@
   }
 
   /**
+   * CLEAN-LANE-FLIP Phase B (notice hardening; GOV-2 counsel draft §6 read #2):
+   * the unread count from GET /account/clean-lane `unacknowledged_publications`
+   * — a non-negative integer, 0 for anything missing or malformed. The server
+   * computes it from the account's ack cursor; this module never counts rows.
+   */
+  function unacknowledgedCount(data) {
+    var body = data && typeof data === 'object' ? data : {};
+    var n = body.unacknowledged_publications;
+    if (typeof n !== 'number' || !Number.isInteger(n) || n < 0) return 0;
+    return n;
+  }
+
+  /** "N auto-published since you last checked" — the persistent badge text. */
+  function unreadBadgeLine(count) {
+    var n = Number.isInteger(count) && count > 0 ? count : 0;
+    return n + ' auto-published since you last checked';
+  }
+
+  /**
+   * Body for PATCH /account/settings from the "I've reviewed these" button:
+   * the acknowledgement cursor, stamped to now (or the given ms). This PATCH
+   * is the ONLY thing that clears the badge — viewing never does.
+   */
+  function buildAckBody(nowMs) {
+    var t = Number.isFinite(nowMs) ? nowMs : Date.now();
+    return { standing_consent_ack_at: new Date(t).toISOString() };
+  }
+
+  /**
    * Items published under standing consent, newest first, each with its
    * retraction window state. Input: rows from GET /account/learnings (any
    * shape); only rows carrying standing_consent_version count.
@@ -161,6 +190,9 @@
     buildGrantBody: buildGrantBody,
     onStateLine: onStateLine,
     frozenLine: frozenLine,
+    unacknowledgedCount: unacknowledgedCount,
+    unreadBadgeLine: unreadBadgeLine,
+    buildAckBody: buildAckBody,
     selectStandingConsentItems: selectStandingConsentItems,
   };
 }));

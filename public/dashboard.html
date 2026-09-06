@@ -687,6 +687,10 @@
             <p id="clean-lane-terms-g2" style="margin-bottom:10px">The quality threshold in effect for a Builder is the one that Builder selected, and Auxilo will not broaden the conditions under which a Learning qualifies for publication under this subsection without recording a new consent; Auxilo may make those conditions stricter at any time.</p>
             <p style="margin-bottom:0"><a href="/terms" target="_blank" rel="noopener" style="color:var(--aurum)">Read the full Terms of Service</a></p>
           </details>
+          <!-- CLEAN-LANE-FLIP Phase B (notice hardening): the no-email enrollment line, GOV-2 counsel
+               draft §6 read #2 "move 3", rendered verbatim directly above the affirmation. Byte-equal to
+               the CLI literal (bin/auxilo-cli.js CLEAN_LANE_NO_EMAIL_LINE) — test/clean-lane-phase-b-notice.test.js. -->
+          <p id="clean-lane-no-email-line" style="font-size:13px;color:var(--ivory);margin-bottom:16px;line-height:1.6">You will not receive an email for these. Publications appear in your dashboard and in the response to the session that submitted them. The 7-day retraction window runs from publication.</p>
           <label style="display:flex;align-items:flex-start;gap:10px;font-size:14px;color:var(--ivory);cursor:pointer;margin-bottom:16px">
             <input type="checkbox" id="clean-lane-agree" style="margin-top:3px" onchange="onCleanLaneAgreeChange()">
             <span id="clean-lane-affirmation">I understand and choose auto-publish for qualifying extracted learnings.</span>
@@ -696,6 +700,13 @@
         <div id="clean-lane-on" style="display:none">
           <p id="clean-lane-on-line" style="font-size:14px;color:var(--ivory);margin-bottom:12px;line-height:1.6"></p>
           <button class="btn btn-ghost btn-sm" id="clean-lane-revoke-btn" onclick="revokeCleanLane()" style="margin-bottom:16px">Turn off</button>
+          <!-- CLEAN-LANE-FLIP Phase B (notice hardening): persistent unread badge. Shown whenever the
+               server's unacknowledged_publications is > 0; ONLY the button below clears it (it PATCHes
+               the acknowledgement cursor to now) — loading, viewing, or reloading the card never does. -->
+          <div id="clean-lane-unread" style="display:none;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;padding:10px 12px;border:1px solid rgba(212,175,55,0.45);border-radius:8px;background:rgba(212,175,55,0.08)">
+            <span id="clean-lane-unread-badge" style="font-size:13px;color:var(--ivory);flex:1"></span>
+            <button class="btn btn-ghost btn-sm" id="clean-lane-ack-btn" onclick="ackCleanLanePublications()">I've reviewed these</button>
+          </div>
           <div style="font-size:13px;color:var(--ivory);margin-bottom:8px">Published under standing consent</div>
           <div id="clean-lane-published"></div>
         </div>
@@ -731,7 +742,7 @@
 </div>
 
 <script src="/dashboard-review.js?v=1"></script>
-<script src="/dashboard-clean-lane.js?v=2"></script>
+<script src="/dashboard-clean-lane.js?v=3"></script>
 <script>
 (function () {
   'use strict';
@@ -1383,6 +1394,7 @@
     }
     if (view.state === AuxiloCleanLane.STATE_ON) {
       setText('clean-lane-on-line', AuxiloCleanLane.onStateLine(data));
+      renderCleanLaneUnread(data);
       show('clean-lane-on');
       loadStandingConsentList();
       return;
@@ -1465,6 +1477,47 @@
       .catch(function () {
         showAlert('clean-lane-alert', 'Request failed. Check your connection.', 'error');
         if (btn) { btn.disabled = false; btn.textContent = 'Turn off'; }
+      });
+  };
+
+  // CLEAN-LANE-FLIP Phase B (notice hardening; GOV-2 counsel draft §6 read
+  // #2): the persistent unread badge. The count comes from the GET body
+  // (server-computed from the ack cursor); the badge shows whenever it is
+  // > 0 and is cleared ONLY by ackCleanLanePublications() below — never by
+  // loading, viewing, or re-rendering the card.
+  function renderCleanLaneUnread(data) {
+    var box = document.getElementById('clean-lane-unread');
+    var btn = document.getElementById('clean-lane-ack-btn');
+    if (!box) return;
+    var n = AuxiloCleanLane.unacknowledgedCount(data);
+    if (n > 0) {
+      setText('clean-lane-unread-badge', AuxiloCleanLane.unreadBadgeLine(n));
+      if (btn) { btn.disabled = false; btn.textContent = "I've reviewed these"; }
+      box.style.display = 'flex';
+    } else {
+      box.style.display = 'none';
+    }
+  }
+
+  // "I've reviewed these": PATCH the acknowledgement cursor to now, then
+  // reload the card so the server's recount drives the badge.
+  window.ackCleanLanePublications = function () {
+    var btn = document.getElementById('clean-lane-ack-btn');
+    hideAlert('clean-lane-alert');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+    apiFetch('/account/settings', { method: 'PATCH', body: JSON.stringify(AuxiloCleanLane.buildAckBody(Date.now())) })
+      .then(parseJsonResponse)
+      .then(function (res) {
+        if (!res.ok) {
+          showAlert('clean-lane-alert', res.data.error || 'Could not record your review.', 'error');
+          if (btn) { btn.disabled = false; btn.textContent = "I've reviewed these"; }
+          return;
+        }
+        loadCleanLane();
+      })
+      .catch(function () {
+        showAlert('clean-lane-alert', 'Request failed. Check your connection.', 'error');
+        if (btn) { btn.disabled = false; btn.textContent = "I've reviewed these"; }
       });
   };
 

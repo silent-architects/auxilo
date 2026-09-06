@@ -3187,6 +3187,11 @@
                       "manual"
                     ],
                     "description": "Extraction trigger mode"
+                  },
+                  "standing_consent_ack_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "CLEAN-LANE-FLIP Phase B (notice hardening): the account's acknowledgement cursor for standing-consent publications. Set it to now from the dashboard's 'I've reviewed these' button; GET /account/clean-lane then counts only clean-lane publishes created after it (unacknowledged_publications). Must be an ISO 8601 date-time and not in the future (400 otherwise). This PATCH is the only thing that moves the cursor — nothing clears the unread count implicitly, and no email is sent."
                   }
                 }
               }
@@ -5068,6 +5073,17 @@
                     "consent_version_current": {
                       "type": "string",
                       "description": "The consent version the server currently accepts (e.g. 2026-07-19-clean-lane-a1). Send it back verbatim in POST /account/clean-lane/grant."
+                    },
+                    "standing_consent_ack_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true,
+                      "description": "CLEAN-LANE-FLIP Phase B (notice hardening): the account's acknowledgement cursor for standing-consent publications, or null when the Builder has never acknowledged. Moved only by PATCH /account/settings {standing_consent_ack_at}."
+                    },
+                    "unacknowledged_publications": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "CLEAN-LANE-FLIP Phase B (notice hardening): how many of this account's learnings stamped published_via 'clean_lane_standing_consent' were created after standing_consent_ack_at (all of them when the cursor is null). Drives the dashboard's persistent 'N auto-published since you last checked' badge; reading this route never changes it."
                     },
                     "last_action": {
                       "type": "string",
