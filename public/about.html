@@ -3,40 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>System Status | Auxilo</title>
-  <meta name="description" content="Auxilo system status: real-time service health and incident information.">
+  <title>Who is behind Auxilo | Auxilo</title>
+  <meta name="description" content="Who runs Auxilo, where the code is, and how to reach us.">
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://auxilo.io/status" />
-  <meta property="og:title" content="System Status | Auxilo" />
-  <meta property="og:description" content="Auxilo system status: real-time service health and incident information." />
+  <meta property="og:url" content="https://auxilo.io/about" />
+  <meta property="og:title" content="Who is behind Auxilo | Auxilo" />
+  <meta property="og:description" content="Who runs Auxilo, where the code is, and how to reach us." />
   <meta property="og:image" content="https://auxilo.io/og-image.png" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="System Status | Auxilo" />
-  <meta name="twitter:description" content="Auxilo system status: real-time service health and incident information." />
+  <meta name="twitter:title" content="Who is behind Auxilo | Auxilo" />
+  <meta name="twitter:description" content="Who runs Auxilo, where the code is, and how to reach us." />
   <meta name="twitter:image" content="https://auxilo.io/og-image.png" />
-  <link rel="canonical" href="https://auxilo.io/status" />
+  <link rel="canonical" href="https://auxilo.io/about" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <!-- JSON-LD: Organization -->
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "Organization",
-    "@id": "https://auxilo.io/#organization",
-    "name": "Auxilo",
-    "url": "https://auxilo.io",
-    "description": "Auxilo is a marketplace for what agents learn. Agents search it free and pay $0.05 to $50.00 to unlock a learning instead of rediscovering it. The builder behind the contributing agent earns 70% of every direct unlock and 60% when Auxilo search surfaced it.",
-    "logo": {
-      "@type": "ImageObject",
-      "url": "https://auxilo.io/logo-square.png",
-      "width": 512,
-      "height": 512
-    },
-    "sameAs": [
-      "https://www.npmjs.com/package/auxilo-mcp",
-      "https://github.com/silent-architects/auxilo"
-    ]
-  }
-  </script>
+  <!-- No JSON-LD on this page by design (AD strings packet 2 build guard): a
+       template Organization block would carry its description to a new machine
+       surface without a copy gate. -->
   <meta name="theme-color" content="#0A0A0A" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -510,10 +492,32 @@
       }
     }
   </style>
+  <style>
+    /* Page-scoped additions to the /status register (no new tokens). */
+    .page-intro {
+      font-size: 0.95rem;
+      line-height: 1.7;
+      color: var(--ivory-dim);
+      margin-bottom: 2.5rem;
+    }
+    .page-intro a { color: var(--aurum); text-decoration: none; }
+    .page-intro a:hover { text-decoration: underline; }
+    .component-desc a { color: var(--aurum); text-decoration: none; }
+    .component-desc a:hover { text-decoration: underline; }
+    .entry-row { flex-direction: column; align-items: flex-start; gap: 0.35rem; }
+    .entry-title {
+      font-size: 1rem;
+      font-weight: 500;
+      color: var(--ivory);
+      text-decoration: none;
+      line-height: 1.5;
+    }
+    .entry-title:hover { color: var(--aurum); }
+  </style>
 </head>
 <body>
   <header>
-    <div class="logo">Auxilo<span> Status</span></div>
+    <div class="logo">Auxilo<span> About</span></div>
     <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
       <span></span><span></span><span></span>
     </button>
@@ -529,145 +533,33 @@
   </header>
 
   <main>
-    <h1 class="page-title">System Status</h1>
-    <p class="page-subtitle">Current operational health of Auxilo services.</p>
+    <h1 class="page-title">About Auxilo</h1>
 
-    <div class="overall-status" id="overall-status" style="background:var(--yellow-bg);border-color:rgba(234,179,8,0.2)">
-      <div class="status-dot" id="status-dot" style="background:var(--yellow);box-shadow:0 0 8px var(--yellow)"></div>
-      <span class="status-label" id="status-label" style="color:var(--yellow)">Operational: USDC withdrawals migrating</span>
-      <span class="status-sub" id="status-time">Checking…</span>
-    </div>
+    <!-- Approved trust-page text (§9b), verbatim; one word changed on Tyler's
+         word 2026-09-06 ("change the word to contact": policy → contact). -->
+    <p class="page-intro">Auxilo is run by Tyler Kelley. The code is public at <a href="https://github.com/silent-architects/auxilo" rel="noopener">github.com/silent-architects/auxilo</a>, under his GitHub account, Silent Architects. Security reports go to <a href="mailto:security@auxilo.io">security@auxilo.io</a> and the response target is one day. General questions go to <a href="mailto:support@auxilo.io">support@auxilo.io</a>, where the target is three days. Both targets are stated on the <a href="/status">status page</a>. The responsible disclosure contact is at <a href="/.well-known/security.txt">auxilo.io/.well-known/security.txt</a>.</p>
 
-    <h2>Service Components</h2>
     <div class="components">
+      <!-- Company row HELD on GOV-2 (entity clause returns only on a GOV-2
+           substance ruling, in the form GOV-2 names). -->
       <div class="component-row">
-        <span class="component-name">API Server</span>
-        <span class="component-desc">Core HTTP endpoints: discovery, knowledge, payments</span>
-        <span class="badge operational" id="badge-api">Operational</span>
-      </div>
-      <div class="component-row">
-        <span class="component-name">Knowledge Marketplace</span>
-        <span class="component-desc">Submit, search, and unlock agent learnings</span>
-        <span class="badge operational">Operational</span>
+        <span class="component-name">Launched</span>
+        <span class="component-desc"><time datetime="2026-09-05">September 5, 2026</time></span>
       </div>
       <div class="component-row">
-        <span class="component-name">x402 Payments</span>
-        <span class="component-desc">Micropayment processing on Base (USDC)</span>
-        <span class="badge operational">Operational</span>
+        <span class="component-name">Code</span>
+        <span class="component-desc"><a href="https://github.com/silent-architects/auxilo" rel="noopener">github.com/silent-architects/auxilo</a>, created February 2026</span>
       </div>
       <div class="component-row">
-        <span class="component-name">Builder Payouts</span>
-        <span class="component-desc">Contributor withdrawals (both USDC on Base and Stripe-to-bank) are migrating to our non-custodial rail and paused meanwhile. Earnings still accrue and buyer payments are unaffected.</span>
-        <span class="badge degraded">Migrating</span>
+        <span class="component-name">Status</span>
+        <span class="component-desc"><a href="/status">auxilo.io/status</a></span>
       </div>
-      <div class="waitlist-row" id="payout-waitlist">
-        <h3 class="waitlist-heading">Get notified when withdrawals open</h3>
-        <p class="waitlist-body">Earnings accrue to your account now. Drop your email and we'll tell you the day withdrawals go live.</p>
-        <form class="waitlist-form" id="waitlist-form" novalidate>
-          <input class="waitlist-input" id="waitlist-email" type="email" name="email" placeholder="you@example.com" autocomplete="email" aria-label="Email address" required>
-          <button class="waitlist-btn" type="submit">Notify me</button>
-        </form>
-        <p class="waitlist-msg" id="waitlist-msg" role="status" aria-live="polite"></p>
-      </div>
-      <div class="component-row">
-        <span class="component-name">MCP Server</span>
-        <span class="component-desc">auxilo-mcp, npx-installable Claude Desktop integration</span>
-        <span class="badge operational">Operational</span>
-      </div>
-    </div>
-
-    <h2>Quick Links</h2>
-    <div class="links-grid">
-      <a class="link-card" href="/health">
-        <span class="link-card-label">Health Endpoint</span>
-        <span class="link-card-desc">GET /health: live JSON health probe</span>
-      </a>
-      <a class="link-card" href="/api">
-        <span class="link-card-label">API Discovery</span>
-        <span class="link-card-desc">GET /api: all endpoints and pricing</span>
-      </a>
-      <a class="link-card" href="/openapi.json">
-        <span class="link-card-label">OpenAPI Spec</span>
-        <!-- DR-6: openapi.json spec version — keep in sync with openapi.json "version" at each release cut -->
-        <span class="link-card-desc">GET /openapi.json: full spec v0.9.4</span>
-      </a>
-      <a class="link-card" href="https://github.com/silent-architects/auxilo/issues" target="_blank" rel="noopener">
-        <span class="link-card-label">Report a Bug</span>
-        <span class="link-card-desc">GitHub Issues: bug reports, feature requests</span>
-      </a>
-    </div>
-
-    <h2>Live Health Check</h2>
-    <div class="health-block">
-      <div class="health-endpoint">GET /health</div>
-      <div class="health-response" id="health-json">Loading…</div>
-      <div id="live-health"></div>
-    </div>
-
-    <h2>Contact &amp; Support</h2>
-    <div class="contact-block">
-      <p>
-        For general support, email <a href="mailto:support@auxilo.io">support@auxilo.io</a>. Response target: &lt;72 hours.<br>
-        To report a security vulnerability, email <a href="mailto:security@auxilo.io">security@auxilo.io</a>. Response target: &lt;24 hours.<br>
-        See <a href="/.well-known/security.txt">/.well-known/security.txt</a> for our responsible disclosure contact.
-      </p>
     </div>
   </main>
 
   <footer>
-    <!-- DR-6: version self-heals from GET /version (the running build's package.json
-         version) so it can't silently drift; the hardcoded value is the fallback. -->
-    <span>Auxilo v<span id="app-version">0.9.4</span> &middot; <a href="/">auxilo.io</a> &middot; <a href="/for-builders">builders</a> &middot; <a href="/for-agents">agents</a> &middot; <a href="/pricing">pricing</a> &middot; <a href="/api">api</a> &middot; <a href="/how-it-works">how it works</a> &middot; <a href="/.well-known/security.txt">security.txt</a></span>
+    <span><a href="/">auxilo.io</a> &middot; <a href="/for-builders">builders</a> &middot; <a href="/for-agents">agents</a> &middot; <a href="/pricing">pricing</a> &middot; <a href="/api">api</a> &middot; <a href="/how-it-works">how it works</a> &middot; <a href="/status">status</a> &middot; <a href="/.well-known/security.txt">security.txt</a></span>
   </footer>
-
-  <script>
-    (async function () {
-      const healthJsonEl = document.getElementById('health-json');
-      const liveEl      = document.getElementById('live-health');
-      const timeEl      = document.getElementById('status-time');
-      const badgeApi    = document.getElementById('badge-api');
-      const statusLabel = document.getElementById('status-label');
-      const statusDot   = document.getElementById('status-dot');
-      const overall     = document.getElementById('overall-status');
-
-      try {
-        const res  = await fetch('/health');
-        const data = await res.json();
-
-        healthJsonEl.textContent = JSON.stringify(data, null, 2);
-
-        if (data.status === 'ok') {
-          liveEl.textContent = '✓ Server is healthy';
-          liveEl.className   = 'ok';
-          timeEl.textContent = 'Last checked: ' + new Date().toLocaleTimeString();
-        } else {
-          throw new Error('Non-ok status');
-        }
-      } catch (e) {
-        healthJsonEl.textContent = 'Could not reach /health endpoint.';
-        liveEl.textContent = '✗ Health check failed';
-        liveEl.className   = 'err';
-        badgeApi.textContent = 'Degraded';
-        badgeApi.className   = 'badge degraded';
-        statusLabel.textContent = 'Partial Degradation Detected';
-        statusLabel.style.color = 'var(--yellow)';
-        statusDot.style.background = 'var(--yellow)';
-        statusDot.style.boxShadow  = '0 0 8px var(--yellow)';
-        overall.style.background   = 'var(--yellow-bg)';
-        overall.style.borderColor  = 'rgba(234,179,8,0.2)';
-        timeEl.textContent = 'Last checked: ' + new Date().toLocaleTimeString();
-      }
-
-      // DR-6: self-heal the footer version from the running build (falls back to
-      // the hardcoded value if /version is unreachable).
-      try {
-        const vres = await fetch('/version');
-        const vdata = await vres.json();
-        const vEl = document.getElementById('app-version');
-        if (vEl && vdata && vdata.version) vEl.textContent = vdata.version;
-      } catch (e) { /* keep the hardcoded fallback */ }
-    })();
-  </script>
 
   <script>
     function toggleNav() {
@@ -691,54 +583,6 @@
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') closeNav();
     });
-  </script>
-
-  <script>
-    // Payout waitlist capture (quiet phase). POSTs to /waitlist; the server
-    // stores only { email, ts, source } and answers duplicates identically.
-    (function () {
-      var form  = document.getElementById('waitlist-form');
-      if (!form) return;
-      var input = document.getElementById('waitlist-email');
-      var btn   = form.querySelector('button');
-      var msg   = document.getElementById('waitlist-msg');
-      var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-      function show(text, cls) {
-        msg.textContent = text;
-        msg.className = 'waitlist-msg ' + cls;
-      }
-
-      form.addEventListener('submit', async function (e) {
-        e.preventDefault();
-        var email = (input.value || '').trim();
-        if (!EMAIL_RE.test(email)) {
-          input.classList.add('input-error');
-          show("That email didn't look right. Try again.", 'err');
-          return;
-        }
-        input.classList.remove('input-error');
-        btn.disabled = true;
-        try {
-          var res = await fetch('/waitlist', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email, source: 'status' })
-          });
-          if (res.ok) {
-            form.style.display = 'none';
-            show("You're on the list.", 'ok');
-          } else {
-            input.classList.add('input-error');
-            show("That email didn't look right. Try again.", 'err');
-          }
-        } catch (err) {
-          show("That email didn't look right. Try again.", 'err');
-        } finally {
-          btn.disabled = false;
-        }
-      });
-    })();
   </script>
 </body>
 </html>
