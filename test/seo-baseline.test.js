@@ -250,4 +250,67 @@ describe('SEO baseline (markup): /terms + /privacy canonical/og, sitemap /status
     assert.equal(countMeta(privacyBody, 'og:site_name'), 1);
     assert.equal(metaContent(privacyBody, 'og:site_name'), 'Auxilo');
   });
+
+  // ─── v102 givens (TERMS META noun): "...and the knowledge marketplace."
+  // → "...and the Auxilo marketplace." on /terms' meta description,
+  // og:description, twitter:description (all three sourced from the one
+  // `seo.description` string in the server.js route). /privacy is a
+  // separate seo object and untouched by this given.
+
+  it('GET /terms meta description, og:description, twitter:description all read "...and the Auxilo marketplace."; zero "knowledge marketplace" in the <head> shell (legal document body is a separate, untouched scope)', async (t) => {
+    if (bootSkipReason) { t.skip(bootSkipReason); return; }
+    const res = await fetch(`${baseUrl}/terms`);
+    assert.equal(res.status, 200);
+    const body = await res.text();
+    const expected = 'Auxilo terms of service covering accounts, payments, and the Auxilo marketplace.';
+    assert.equal(metaContent(body, 'description'), expected);
+    assert.equal(metaContent(body, 'og:description'), expected);
+    assert.equal(metaContent(body, 'twitter:description'), expected);
+    const headEnd = body.indexOf('</head>');
+    assert.ok(headEnd > 0, '/terms has a </head>');
+    const head = body.slice(0, headEnd);
+    assert.equal((head.match(/knowledge marketplace/g) || []).length, 0, '/terms <head> shell carries zero "knowledge marketplace" occurrences (the legal document body may legitimately still use the term as substantive text -- out of this given\'s scope)');
+  });
+
+  it('GET /privacy description unchanged by the /terms meta-noun given', async (t) => {
+    if (bootSkipReason) { t.skip(bootSkipReason); return; }
+    const res = await fetch(`${baseUrl}/privacy`);
+    assert.equal(res.status, 200);
+    const body = await res.text();
+    const expected = 'Auxilo privacy policy covering data collection, use, and retention.';
+    assert.equal(metaContent(body, 'description'), expected);
+    assert.equal(metaContent(body, 'og:description'), expected);
+    assert.equal(metaContent(body, 'twitter:description'), expected);
+  });
+
+  // ─── v102 givens (ANCHORS, packet 13 line 40 ruling): in-page jump links
+  // that pointed at #id targets on for-agents.html/for-builders.html now
+  // point at the page that owns the content. Static file read, no server.
+
+  it('for-agents.html "See How It Works" and "Install the MCP Server" CTAs point at owning pages, not in-page anchors', () => {
+    const html = fs.readFileSync(path.join(REPO, 'public', 'for-agents.html'), 'utf8');
+    assert.ok(
+      html.includes('<a href="/how-it-works" class="btn-secondary">See How It Works</a>'),
+      '"See How It Works" links to /how-it-works'
+    );
+    assert.ok(
+      html.includes('<a href="/connect" class="btn-primary">Install the MCP Server</a>'),
+      '"Install the MCP Server" links to /connect'
+    );
+    assert.ok(!html.includes('href="#discovery-flow"'), 'no remaining #discovery-flow href');
+    assert.ok(!html.includes('href="#mcp-server"'), 'no remaining #mcp-server href');
+    // id targets stay in place per the ruling (owning-page anchors, not deleted sections).
+    assert.ok(html.includes('id="discovery-flow"'), 'discovery-flow id target still present');
+    assert.ok(html.includes('id="mcp-server"'), 'mcp-server id target still present');
+  });
+
+  it('for-builders.html "See How It Works" CTA points at /how-it-works, not an in-page anchor', () => {
+    const html = fs.readFileSync(path.join(REPO, 'public', 'for-builders.html'), 'utf8');
+    assert.ok(
+      html.includes('<a href="/how-it-works" class="btn-secondary">See How It Works</a>'),
+      '"See How It Works" links to /how-it-works'
+    );
+    assert.ok(!html.includes('href="#how-it-earns"'), 'no remaining #how-it-earns href');
+    assert.ok(html.includes('id="how-it-earns"'), 'how-it-earns id target still present');
+  });
 });
