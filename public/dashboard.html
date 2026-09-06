@@ -722,7 +722,7 @@
 </div>
 
 <script src="/dashboard-review.js?v=1"></script>
-<script src="/dashboard-clean-lane.js?v=1"></script>
+<script src="/dashboard-clean-lane.js?v=2"></script>
 <script>
 (function () {
   'use strict';
@@ -1475,12 +1475,14 @@
     el.appendChild(loading);
 
     var all = [];
-    // Gate-A 2026-09-05: recursive paging is capped at MAX_PAGES and stops
-    // early when a page comes back short (fewer than PAGE_LIMIT rows).
+    // CLEAN-LANE-FLIP Phase B: the server filters published_via and sorts
+    // newest-first (AuxiloCleanLane.standingConsentListQuery), so the first
+    // page IS the list in the common case. Paging only continues when a page
+    // comes back full, and stays capped at MAX_PAGES (Gate-A 2026-09-05).
     var PAGE_LIMIT = 500;
     var MAX_PAGES = 4;
     function page(offset, pageNo) {
-      return apiFetch('/account/learnings?status=approved&visibility=public&limit=500&offset=' + offset)
+      return apiFetch(AuxiloCleanLane.standingConsentListQuery(PAGE_LIMIT, offset))
         .then(parseJsonResponse)
         .then(function (res) {
           if (!res.ok) throw new Error(res.data.error || 'load failed');

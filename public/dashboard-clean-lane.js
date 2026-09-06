@@ -33,6 +33,24 @@
   var PUBLISHED_VIA_CLEAN_LANE = 'clean_lane_standing_consent';
 
   /**
+   * CLEAN-LANE-FLIP Phase B: the GET /account/learnings query for the
+   * "Published under standing consent" list — server-side published_via
+   * filter + newest-first, so one page holds the common case and the client
+   * never walks an account's whole catalog from the oldest end
+   * (WAVE-0905-RESIDUALS (1)/(2)). `pageLimit` is interpolated, never a
+   * literal. selectStandingConsentItems stays as the defensive second filter.
+   */
+  function standingConsentListQuery(pageLimit, offset) {
+    var limit = parseInt(pageLimit, 10);
+    if (!Number.isInteger(limit) || limit < 1) limit = 500;
+    var off = parseInt(offset, 10);
+    if (!Number.isInteger(off) || off < 0) off = 0;
+    return '/account/learnings?status=approved&visibility=public' +
+      '&published_via=' + encodeURIComponent(PUBLISHED_VIA_CLEAN_LANE) +
+      '&sort=desc&limit=' + limit + '&offset=' + off;
+  }
+
+  /**
    * Map a GET /account/clean-lane result to a card state.
    * 404 → unavailable (the flag is off; never an error state). Other non-2xx →
    * error with the server's message. 2xx → on / frozen / off from the body.
@@ -137,6 +155,7 @@
     MIN_QUALITY_MAX: MIN_QUALITY_MAX,
     DEFAULT_MIN_QUALITY: DEFAULT_MIN_QUALITY,
     PUBLISHED_VIA_CLEAN_LANE: PUBLISHED_VIA_CLEAN_LANE,
+    standingConsentListQuery: standingConsentListQuery,
     viewState: viewState,
     qualityOptions: qualityOptions,
     buildGrantBody: buildGrantBody,
