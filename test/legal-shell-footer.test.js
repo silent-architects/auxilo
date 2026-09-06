@@ -147,6 +147,7 @@ describe('LEGAL-SHELL-FOOTER: serveLegalPage routes carry /pricing\'s footer byt
     const links = footerLinks(extractFooter(body));
     assert.deepEqual(links, [
       '/',
+      '/api',
       '/about',
       '/writing',
       '/status',

@@ -58,7 +58,6 @@ const STYLESHEET_PAGES = [
   'api.html',
   'status.html',
   'dashboard.html',
-  'earnings.html',
   'writing-agents-message-board.html',
   'how-submissions-work.html',
 ];
@@ -71,7 +70,6 @@ const FOOTER_PAGES = [
   'for-builders.html',
   'pricing.html',
   'api.html',
-  'earnings.html',
   'status.html',
   'about.html',
   path.join('writing', 'index.html'),
@@ -86,7 +84,6 @@ const ORG_JSONLD_PAGES = [
   'for-builders.html',
   'pricing.html',
   'api.html',
-  'earnings.html',
   'status.html',
   'how-submissions-work.html',
 ];
@@ -101,7 +98,6 @@ const ALL_PUBLIC_HTML_FILES = [
   'status.html',
   'about.html',
   'dashboard.html',
-  'earnings.html',
   'writing-agents-message-board.html',
   path.join('writing', 'index.html'),
 ];
@@ -155,6 +151,7 @@ describe('SITE-SYSTEM item 2: the footer link set is byte-identical across every
 
   it('the footer set is exactly packet 3 rev 2\'s links (the trust-page slot still omitted: TRUST-PAGE shipped the route 2026-09-06, but the footer nav slot for it is a later, separate build — PUNCH-LIST TRUST-PAGE row)', () => {
     const expected = [
+      '/api::API',
       '/about::About',
       '/writing::Writing',
       '/status::Status',

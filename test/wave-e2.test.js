@@ -21,33 +21,40 @@ const REPO_ROOT = path.join(__dirname, '..');
 const PUBLIC_DIR = path.join(REPO_ROOT, 'public');
 const STYLES = fs.readFileSync(path.join(PUBLIC_DIR, 'styles.css'), 'utf8');
 
-describe('Wave E2 item 1: nav breakpoint is 1057px, exactly once', () => {
-  it('the .hamburger/.nav-links desktop-nav-vs-hamburger switch is gated by exactly one @media (max-width: 1057px) block', () => {
-    const m = STYLES.match(/@media \(max-width: 1057px\) \{([\s\S]*?)\n\}/);
-    assert.ok(m, 'a @media (max-width: 1057px) block exists');
-    assert.match(m[1], /\.hamburger\s*\{[^}]*display:\s*flex/, 'the 1057px block shows the hamburger');
-    assert.match(m[1], /\.nav-links\s*\{/, 'the 1057px block gates .nav-links');
+describe('Wave E2 item 1 (reverted, NAV-WAVE amendment 2026-09-06): nav breakpoint is 900px, exactly once', () => {
+  it('the .hamburger/.nav-links desktop-nav-vs-hamburger switch is gated by exactly one @media (max-width: 900px) block', () => {
+    const navBlockMatch = STYLES.match(/@media \(max-width: 900px\) \{([\s\S]*?)\n\}/);
+    assert.ok(navBlockMatch, 'a @media (max-width: 900px) block exists');
+    assert.match(navBlockMatch[1], /\.hamburger\s*\{[^}]*display:\s*flex/, 'the 900px nav block shows the hamburger');
+    assert.match(navBlockMatch[1], /\.nav-links\s*\{/, 'the 900px nav block gates .nav-links');
 
-    // Exactly one such gating breakpoint site-wide: no other 900px-family
-    // media query in this sheet still touches .hamburger or .nav-links
-    // (they were split apart from the unrelated general-layout 900px block
-    // in this same wave).
-    const otherHamburgerOrNavLinks = [...STYLES.matchAll(/@media \(max-width: (\d+)px\) \{([\s\S]*?)\n\}/g)]
-      .filter((mm) => mm[1] !== '1057' && /\.hamburger|\.nav-links/.test(mm[2]));
-    assert.equal(otherHamburgerOrNavLinks.length, 0, 'no other media query gates .hamburger/.nav-links');
+    // Exactly one such gating breakpoint site-wide. The AD nav re-rule
+    // sheet's correction 1 voided the 1057px number (it was computed for a
+    // seven-label set that no longer exists) and reverted to 900, so this
+    // sheet now carries TWO independent @media (max-width: 900px) blocks
+    // (this nav block and the separate general-layout block below it) —
+    // still kept split apart rather than merged. Across every @media
+    // (max-width: Npx) block in the sheet regardless of px value, only ONE
+    // may still touch .hamburger or .nav-links.
+    const allBlocks = [...STYLES.matchAll(/@media \(max-width: (\d+)px\) \{([\s\S]*?)\n\}/g)];
+    const gatingBlocks = allBlocks.filter((mm) => /\.hamburger|\.nav-links/.test(mm[2]));
+    assert.equal(gatingBlocks.length, 1, 'exactly one media query anywhere gates .hamburger/.nav-links');
+    assert.equal(gatingBlocks[0][1], '900', 'the one gating block is the 900px breakpoint');
   });
 
-  it('the general-layout 900px block (unrelated grids/section-pad) still exists and no longer contains nav rules', () => {
-    const m = STYLES.match(/@media \(max-width: 900px\) \{([\s\S]*?)\n\}/);
-    assert.ok(m, 'a @media (max-width: 900px) block still exists for unrelated layout');
-    assert.doesNotMatch(m[1], /\.hamburger/, '900px block no longer gates .hamburger');
-    assert.doesNotMatch(m[1], /\.nav-links\s*\{/, '900px block no longer gates .nav-links');
-    assert.match(m[1], /--section-pad/, '900px block still sets --section-pad');
+  it('the general-layout 900px block (unrelated grids/section-pad) still exists as a SEPARATE block from the nav block, and contains no nav rules', () => {
+    const allNineHundredBlocks = [...STYLES.matchAll(/@media \(max-width: 900px\) \{([\s\S]*?)\n\}/g)];
+    assert.equal(allNineHundredBlocks.length, 2,
+      'two independent @media (max-width: 900px) blocks exist (the nav block and the general-layout block) — the revert did not merge them');
+    const generalLayoutBlock = allNineHundredBlocks.find((mm) => /--section-pad/.test(mm[1]));
+    assert.ok(generalLayoutBlock, 'a 900px block setting --section-pad (the general-layout block) exists');
+    assert.doesNotMatch(generalLayoutBlock[1], /\.hamburger/, 'general-layout 900px block does not gate .hamburger');
+    assert.doesNotMatch(generalLayoutBlock[1], /\.nav-links\s*\{/, 'general-layout 900px block does not gate .nav-links');
   });
 
   it('.nav-links open-menu background is full opacity (item 12)', () => {
-    const m = STYLES.match(/@media \(max-width: 1057px\) \{[\s\S]*?\.nav-links \{([^}]*)\}/);
-    assert.ok(m, '.nav-links rule found inside the 1057px block');
+    const m = STYLES.match(/@media \(max-width: 900px\) \{[\s\S]*?\.nav-links \{([^}]*)\}/);
+    assert.ok(m, '.nav-links rule found inside the 900px nav block');
     assert.doesNotMatch(m[1], /rgba\(10,\s*10,\s*10,\s*0\.97\)/, 'the old 0.97 partial opacity is gone');
     assert.match(m[1], /background:\s*var\(--obsidian\)/, '.nav-links background is the full-opacity obsidian token');
   });
@@ -64,32 +71,48 @@ describe('Wave E2 item 9: --h2-cta equals --h2-section (one large headline per p
   });
 });
 
-describe('Wave E2 item 10: nav accent tokens converge on ash', () => {
-  it('.nav-links a.active is ash, not aurum', () => {
+describe('Wave E2 item 10 (partially reverted by the AD nav re-rule sheet, 2026-09-06 §2/§4/§6): the CTA is the band\'s one gold element', () => {
+  it('.nav-links a.active is still ash, not aurum (unchanged by the NAV-WAVE amendment)', () => {
     const m = STYLES.match(/\.nav-links a\.active\s*\{([^}]*)\}/);
     assert.ok(m, '.nav-links a.active rule found');
     assert.match(m[1], /color:\s*var\(--ash\)/, '.nav-links a.active color is var(--ash)');
     assert.doesNotMatch(m[1], /var\(--aurum\)/, '.nav-links a.active no longer references --aurum');
   });
 
-  it('.nav-cta border/text are ash, not aurum (and 44px tall, item 12)', () => {
+  it('.nav-cta is a FILLED gold button — background var(--aurum), text var(--obsidian), border recolored to var(--aurum) (and still 44px tall, item 12)', () => {
     const m = STYLES.match(/^\.nav-cta\s*\{([^}]*)\}/m);
     assert.ok(m, '.nav-cta rule found');
-    assert.match(m[1], /color:\s*var\(--ash\)\s*!important/, '.nav-cta text color is ash');
-    assert.match(m[1], /border:\s*1px solid var\(--ash-border\)/, '.nav-cta border color is ash-border');
+    assert.match(m[1], /background:\s*var\(--aurum\)/, '.nav-cta background is the gold token — the AD sheet\'s filled button, superseding Wave E2 item 10\'s ash ghost button');
+    assert.match(m[1], /color:\s*var\(--obsidian\)\s*!important/, '.nav-cta text color is obsidian (on a gold ground)');
+    assert.match(m[1], /border:\s*1px solid var\(--aurum\)/, '.nav-cta border recolors to aurum so the 1px box math stays unchanged');
     assert.match(m[1], /min-height:\s*44px/, '.nav-cta is 44px tall');
-    assert.doesNotMatch(m[1], /var\(--aurum(?!-)/, '.nav-cta base rule no longer references --aurum directly');
+    assert.doesNotMatch(m[1], /var\(--ash\b/, '.nav-cta base rule no longer references any --ash token');
   });
 
-  it('.nav-cta:hover does not reintroduce gold', () => {
+  it('.nav-cta:hover raises the ground to --aurum-hi, a new token, text stays obsidian', () => {
     const m = STYLES.match(/\.nav-cta:hover\s*\{([^}]*)\}/);
     assert.ok(m, '.nav-cta:hover rule found');
-    assert.doesNotMatch(m[1], /var\(--aurum/, '.nav-cta:hover no longer references any --aurum token');
-    assert.match(m[1], /color:\s*var\(--ash\)/, '.nav-cta:hover text stays ash');
+    assert.match(m[1], /background:\s*var\(--aurum-hi\)/, '.nav-cta:hover raises the ground to --aurum-hi');
+    assert.match(m[1], /color:\s*var\(--obsidian\)/, '.nav-cta:hover text stays obsidian');
+    assert.doesNotMatch(m[1], /var\(--ash\b/, '.nav-cta:hover no longer references any --ash token');
   });
 
-  it('--ash-border token exists, mirroring --aurum-border alpha', () => {
+  it('--aurum-hi token exists at #D8B95F (the AD sheet\'s CTA hover ground)', () => {
+    assert.match(STYLES, /--aurum-hi:\s*#D8B95F/);
+  });
+
+  it('--ash-border token still exists (still used by .nav-links a.active\'s neighborhood), mirroring --aurum-border alpha', () => {
     assert.match(STYLES, /--ash-border:\s*rgba\(229,\s*229,\s*227,\s*0\.35\)/);
+  });
+
+  it('within the nav band\'s CSS, .nav-cta (base + hover) is the only rule painting a gold background — .nav-links/.nav-links a/.nav-links a.active never do', () => {
+    const navLinksM = STYLES.match(/\.nav-links\s*\{([^}]*)\}/);
+    const navLinksAM = STYLES.match(/\.nav-links a\s*\{([^}]*)\}/);
+    const navLinksActiveM = STYLES.match(/\.nav-links a\.active\s*\{([^}]*)\}/);
+    for (const [name, m] of [['.nav-links', navLinksM], ['.nav-links a', navLinksAM], ['.nav-links a.active', navLinksActiveM]]) {
+      assert.ok(m, `${name} rule found`);
+      assert.doesNotMatch(m[1], /background:\s*var\(--aurum/, `${name} does not paint a gold background`);
+    }
   });
 });
 

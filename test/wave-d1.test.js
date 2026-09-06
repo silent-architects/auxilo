@@ -56,7 +56,6 @@ const ALL_PAGES = [
   'about.html',
   'api.html',
   'dashboard.html',
-  'earnings.html',
   'for-agents.html',
   'for-builders.html',
   'how-it-works.html',
@@ -67,14 +66,14 @@ const ALL_PAGES = [
   path.join('writing', 'index.html'),
 ];
 
-// The 9 pages the AD-TYPE-PAIRING sheet names explicitly for the font
-// preload swap (about.html and writing/index.html carried the same Google
-// Fonts pattern but were not named by the sheet — fixed anyway, tracked
-// separately below since they're a builder-found gap, not a sheet item).
+// The pages the AD-TYPE-PAIRING sheet names explicitly for the font
+// preload swap (earnings.html retired under packet 15, v97 assembly;
+// about.html and writing/index.html carried the same Google Fonts pattern
+// but were not named by the sheet — fixed anyway, tracked separately below
+// since they're a builder-found gap, not a sheet item).
 const PAIRING_SHEET_PAGES = [
   'api.html',
   'dashboard.html',
-  'earnings.html',
   'for-agents.html',
   'for-builders.html',
   'how-it-works.html',
@@ -309,10 +308,10 @@ describe('WAVE-D1 design-tells sweep: removed markup + CSS carry no residue', ()
     }
   });
 
-  it('the six .dive-arrow row-affordance spans on index.html survive untouched (explicit keep)', () => {
+  it('the five .dive-arrow row-affordance spans on index.html survive untouched (explicit keep; was 6 before the Earnings dive-row was removed when /earnings folded into /pricing, packet 15 rev 3a, v97 assembly)', () => {
     const html = readPage('index.html');
     const matches = [...html.matchAll(/<span class="dive-arrow">→<\/span>/g)];
-    assert.equal(matches.length, 6, `expected 6 .dive-arrow spans on index.html, found ${matches.length}`);
+    assert.equal(matches.length, 5, `expected 5 .dive-arrow spans on index.html, found ${matches.length}`);
   });
 
   // Tell 5: card wall + border-radius normalization.

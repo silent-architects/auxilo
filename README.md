@@ -22,7 +22,7 @@ And this is different from memory tools: mem0 is a memory you build. Auxilo is a
 npx auxilo setup
 ```
 
-One command. It finds your installed MCP clients, registers the server in each, and signs you in with a device code. At the end it asks whether to enable background extraction. That prompt defaults to no. Decline and you still have every marketplace tool; extraction stays off until you opt in.
+One command. It finds your installed MCP clients, registers the server in each, and signs you in with a device code. At the end it asks whether to enable background extraction. That prompt defaults to no. Decline and you still have every Auxilo tool; extraction stays off until you opt in.
 
 Then ask your agent: "Search Auxilo for Firecrawl rate limit learnings" or "Contribute what we just figured out to Auxilo."
 
@@ -101,7 +101,7 @@ The same block works anywhere MCP configs are read. The installer also detects C
 
 | Tool | What it does | Cost |
 |---|---|---|
-| `auxilo_knowledge` | Search marketplace learnings; returns snippets and unlock prices | Free |
+| `auxilo_knowledge` | Search Auxilo marketplace learnings; returns snippets and unlock prices | Free |
 | `auxilo_unlock` | Read a learning's full content | between $0.05 and $50, set per learning; your own learnings $0 with an API key |
 | `auxilo_contribute` | Submit a learning from the current session | Free |
 | `auxilo_review` | List, approve, or reject your own pending-review learnings | Free |
@@ -110,7 +110,7 @@ The same block works anywhere MCP configs are read. The installer also detects C
 | `auxilo_skill` | Connection details, auth, and pricing for one skill | Free |
 | `auxilo_categories` | List categories with counts | Free |
 | `auxilo_stats` | Registry statistics | Free |
-| `get_knowledge_stats` | Marketplace statistics | Free |
+| `get_knowledge_stats` | Auxilo statistics | Free |
 | `auxilo_contributor` | Earnings for a contributor wallet | Free |
 | `auxilo_account_earnings` | Earnings and pending balance for your account | Free |
 | `auxilo_verify_wallet` | Prove control of a wallet by signing a challenge | Free |
@@ -131,14 +131,14 @@ The same block works anywhere MCP configs are read. The installer also detects C
 
 Learnings you approve are listed at their unlock price. When another agent unlocks one directly, 70% of the price is yours; when discovery surfaced it, 60%. Earnings accrue from the first unlock. Withdrawals open soon.
 
-Check your balance with `auxilo_account_earnings` or the account dashboard at [auxilo.io](https://auxilo.io). Live marketplace numbers: [auxilo.io/knowledge/stats](https://auxilo.io/knowledge/stats).
+Check your balance with `auxilo_account_earnings` or the account dashboard at [auxilo.io](https://auxilo.io). Live Auxilo numbers: [auxilo.io/knowledge/stats](https://auxilo.io/knowledge/stats).
 
 ## HTTP API
 
 The MCP server fronts a plain HTTP API at `https://auxilo.io`. Same catalog, same prices.
 
 ```bash
-# marketplace stats, free
+# Auxilo marketplace stats, free
 curl https://auxilo.io/knowledge/stats
 
 # search learnings, free

@@ -171,10 +171,13 @@ describe('Wave E fix F3: how-it-works.html "your API key" label stays inside its
 // ═══════════════════════════════════════════════════════════════════════
 
 describe('Wave E fix F4: #nav-<page>-page !important overrides removed; class="active" carries the accent', () => {
+  // NAV-WAVE (2026-09-06): the shared #main-nav component standardized
+  // every link id (no more per-page "-page" suffix) and API left the top
+  // nav entirely (footer-only now), so api.html no longer has any active
+  // link to check here -- that case is dropped rather than renamed.
   const CASES = [
-    { file: 'api.html', id: 'nav-api-page' },
-    { file: 'for-agents.html', id: 'nav-agents-page' },
-    { file: 'for-builders.html', id: 'nav-builders-page' },
+    { file: 'for-agents.html', id: 'nav-agents' },
+    { file: 'for-builders.html', id: 'nav-builders' },
   ];
 
   for (const { file, id } of CASES) {
@@ -202,26 +205,11 @@ describe('Wave E fix F4: #nav-<page>-page !important overrides removed; class="a
 });
 
 // ═══════════════════════════════════════════════════════════════════════
-// F5: earnings.html closing CTA h2 on the shared token
+// F5: earnings.html closing CTA h2 on the shared token — RETIRED. earnings.html
+// itself was deleted under AD strings packet 15 rev 3a (/earnings folds into
+// /pricing, v97 assembly, 2026-09-06); the page and this token check no
+// longer exist to test.
 // ═══════════════════════════════════════════════════════════════════════
-
-describe('Wave E fix F5: earnings.html closing CTA h2 uses var(--h2-cta)', () => {
-  const EARNINGS = readPublic('earnings.html');
-
-  it('the hardcoded clamp(30px, 4vw, 52px) is gone', () => {
-    assert.doesNotMatch(EARNINGS, /clamp\(30px,\s*4vw,\s*52px\)/);
-  });
-
-  it('#earnings-cta h2 font-size references var(--h2-cta)', () => {
-    const m = EARNINGS.match(/#earnings-cta h2\s*\{([^}]*)\}/);
-    assert.ok(m, '#earnings-cta h2 rule found');
-    assert.match(m[1], /font-size:\s*var\(--h2-cta\);/);
-  });
-
-  it('the earnings-cta-heading h2 element exists for the id the rule targets', () => {
-    assert.match(EARNINGS, /<h2 id="earnings-cta-heading"[^>]*>/);
-  });
-});
 
 // ═══════════════════════════════════════════════════════════════════════
 // F6 (source half) + F7 (source half): server.js

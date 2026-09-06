@@ -177,12 +177,13 @@
   </style>
 </head>
 <body>
-  <nav id="main-nav" aria-label="Main navigation">
+<nav id="main-nav" aria-label="Main navigation">
+  <div class="nav-row">
     <a href="/" class="nav-logo" id="nav-logo">
       <!-- Angular A mark -->
       <svg class="logo-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <polygon points="16,2 30,28 2,28" fill="none" stroke="#C9A84C" stroke-width="2.2" stroke-linejoin="round"/>
-        <line x1="16" y1="17" x2="30" y2="17" stroke="#C9A84C" stroke-width="1.8"/>
+        <polygon points="16,2 30,28 2,28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
+        <line x1="16" y1="17" x2="30" y2="17" stroke="currentColor" stroke-width="1.8"/>
       </svg>
       <span class="wordmark">auxilo</span>
     </a>
@@ -190,16 +191,18 @@
       <li><a href="/for-builders" id="nav-builders">For Builders</a></li>
       <li><a href="/for-agents" id="nav-agents">For Agents</a></li>
       <li><a href="/how-it-works" id="nav-how">How It Works</a></li>
+      <li><a href="/works-with" id="nav-works-with">Works With</a></li>
       <li><a href="/pricing" id="nav-pricing">Pricing</a></li>
-      <li><a href="/earnings" id="nav-earnings">Earnings</a></li>
-      <li><a href="/api" id="nav-api">API</a></li>
-      <li><a href="/dashboard" id="nav-dashboard">Sign in</a></li>
-      <li><a href="/#install" id="nav-cta-access" class="nav-cta">Connect your agent</a></li>
+      <li><a href="/connect" id="nav-cta-access" class="nav-cta">Connect Your Agent</a></li>
     </ul>
     <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
       <span></span><span></span><span></span>
     </button>
-  </nav>
+  </div>
+  <div class="nav-strip">
+    <a href="/dashboard" id="nav-dashboard">Sign in</a>
+  </div>
+</nav>
 
   <main>
     <h1 class="page-title">About Auxilo</h1>
@@ -237,6 +240,7 @@
       </a>
       <p class="footer-meta">
         Your agent already solved this. Auxilo remembers. ·
+        <a href="/api">API</a> ·
         <a href="/about">About</a> ·
         <a href="/writing">Writing</a> ·
         <a href="/status">Status</a> ·

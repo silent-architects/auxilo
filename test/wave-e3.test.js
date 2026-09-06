@@ -97,10 +97,11 @@ describe('WAVE-E3 item 6: PlexMono500 preload on the four Lighthouse-named pages
 // ═══════════════════════════════════════════════════════════════════════
 
 describe('WAVE-E3 item 7: reveal system code removed from the seven named pages', () => {
-  // Wave E4 extended this list: earnings.html and how-it-works.html had the
-  // reveal system (and how-it-works.html's dead leftover observer) removed
-  // the same way the original five pages were in wave E3.
-  const PAGES = ['index.html', 'for-agents.html', 'for-builders.html', 'pricing.html', 'api.html', 'earnings.html', 'how-it-works.html'];
+  // Wave E4 extended this list: earnings.html (retired, packet 15
+  // rev 3a — folded into /pricing, v97 assembly) and how-it-works.html had
+  // the reveal system (and how-it-works.html's dead leftover observer)
+  // removed the same way the original five pages were in wave E3.
+  const PAGES = ['index.html', 'for-agents.html', 'for-builders.html', 'pricing.html', 'api.html', 'how-it-works.html'];
 
   for (const page of PAGES) {
     it(`${page} carries no class="reveal" / reveal-in-class-list attribute`, () => {
@@ -117,10 +118,8 @@ describe('WAVE-E3 item 7: reveal system code removed from the seven named pages'
     });
   }
 
-  it('earnings.html and how-it-works.html carry zero "reveal" substring occurrences (Wave E4)', () => {
-    const earnings = readPublic('earnings.html');
+  it('how-it-works.html carries zero "reveal" substring occurrences (Wave E4; earnings.html retired under packet 15)', () => {
     const howItWorks = readPublic('how-it-works.html');
-    assert.doesNotMatch(earnings, /reveal/, 'earnings.html should carry no "reveal" substring at all');
     assert.doesNotMatch(howItWorks, /reveal/, 'how-it-works.html should carry no "reveal" substring at all');
   });
 

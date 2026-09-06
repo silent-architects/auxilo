@@ -7,7 +7,7 @@
  * Item 1: `/pricing` moves onto the `serveHtmlWithLiveData` path (the same
  * one `/how-it-works`, `/for-builders`, `/for-agents` already use), so the
  * old "Max Price" `$50.00` econ tile is replaced by the observed unlock
- * price range, under SITE-PM's gated label `Current unlock price range`
+ * price range, under SITE-PM's gated label `Current Unlock Price Range`
  * (AD build sheet 5 item 1, 2026-09-06). The tile carries the same
  * `id="lc-price-range"` substitution `renderLiveCatalogStats` already
  * performs on /how-it-works, /for-builders, /for-agents. The static fallback
@@ -53,7 +53,9 @@ const REPO_ROOT = path.join(__dirname, '..');
 const SERVER_SRC = fs.readFileSync(path.join(REPO_ROOT, 'server.js'), 'utf8');
 const PRICING_HTML = fs.readFileSync(path.join(REPO_ROOT, 'public', 'pricing.html'), 'utf8');
 const DEFAULT_UNLOCK_PRICE = 0.08; // server.js's own fallback (mirrored here, not imported)
-const OBSERVED_RANGE_LABEL = 'Current unlock price range';
+// Title Case per Tyler's 2026-09-06 casing ruling, carried into packet 15
+// rev 3a's pricing-ledger recomposition (v97 assembly).
+const OBSERVED_RANGE_LABEL = 'Current Unlock Price Range';
 
 function routeSlice(marker) {
   const start = SERVER_SRC.indexOf(marker);
@@ -85,7 +87,7 @@ describe('structural: /pricing on the live-data path; EXAMPLE column gone from t
       'the retired "Max Price" label must not remain anywhere on the page');
   });
 
-  it('the gated label "Current unlock price range" appears exactly once, immediately above the lc-price-range tile', () => {
+  it('the gated label "Current Unlock Price Range" appears exactly once, immediately above the lc-price-range tile', () => {
     const occurrences = PRICING_HTML.split(OBSERVED_RANGE_LABEL).length - 1;
     assert.equal(occurrences, 1, 'the label string must appear exactly once on the page');
     const labelIdx = PRICING_HTML.indexOf(OBSERVED_RANGE_LABEL);
@@ -238,7 +240,7 @@ describe('behavioral: GET /pricing renders the live price range, no EXAMPLE colu
         'a two-learning fixture at $0.20/$5.00 must not render the untouched static fallback');
 
       // The gated label rides with the live value, exactly once.
-      const labelCount = html.split('Current unlock price range').length - 1;
+      const labelCount = html.split('Current Unlock Price Range').length - 1;
       assert.equal(labelCount, 1, 'the label text must be present exactly once in the served HTML');
 
       // Item 2: EXAMPLE column absent from the live-rendered page too.

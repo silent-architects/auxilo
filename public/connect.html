@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connect your agent | Auxilo</title>
+  <meta name="description" content="Run npx auxilo setup, choose whether to capture sessions, and your agent can search Auxilo once you restart your client. You approve anything that publishes.">
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Auxilo" />
+  <meta property="og:url" content="https://auxilo.io/connect" />
+  <meta property="og:title" content="Connect your agent | Auxilo" />
+  <meta property="og:description" content="Run npx auxilo setup, choose whether to capture sessions, and your agent can search Auxilo once you restart your client. You approve anything that publishes." />
+  <meta property="og:image" content="https://auxilo.io/og-image.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Connect your agent | Auxilo" />
+  <meta name="twitter:description" content="Run npx auxilo setup, choose whether to capture sessions, and your agent can search Auxilo once you restart your client. You approve anything that publishes." />
+  <meta name="twitter:image" content="https://auxilo.io/og-image.png" />
+  <link rel="canonical" href="https://auxilo.io/connect" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="theme-color" content="#0A0A0A" />
+  <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/styles.css?v=13" />
+  <style>
+    /* Page-scoped styles only (SITE-PM packet 13 rev 2 build bind: no touch
+       to styles.css). Base tokens + .page-title / .page-intro match the
+       /about shell this page is built on (public/about.html) so the two
+       thin marketing shells stay visually consistent without duplicating
+       styles.css. */
+    :root {
+      --obsidian:   #0A0A0A;
+      --obsidian-2: #131316;
+      --ivory:      #FAFAF8;
+      --ivory-dim:  #B0ADA8;
+      --aurum:      #C9A84C;
+      --border:     rgba(229,229,227,0.08);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--obsidian);
+      color: var(--ivory);
+      font-family: var(--sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .logo { font-weight: 700; font-size: 1.2rem; color: var(--aurum); letter-spacing: -0.02em; }
+    .logo span { color: var(--ivory); }
+
+    main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 3rem 2rem 4rem;
+      flex: 1;
+      width: 100%;
+    }
+
+    .page-title {
+      font-size: 1.75rem;
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.5rem;
+    }
+
+    .page-intro {
+      font-size: 0.95rem;
+      line-height: 1.7;
+      color: var(--ivory-dim);
+      margin-bottom: 2.5rem;
+    }
+
+    /* ── Numbered steps ────────────────────────────────────────────
+       Real sequence per the packet, so it is a real <ol>. The visible
+       ordinal is a rendered counter (structural, not composed copy) —
+       "No eyebrows, no dividers, no arrows" per the packet's own bind. */
+    .connect-steps {
+      list-style: none;
+      counter-reset: connect-step;
+    }
+
+    .connect-steps li {
+      counter-increment: connect-step;
+      position: relative;
+      padding-left: 2.75rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .connect-steps li:last-child { margin-bottom: 0; }
+
+    .connect-steps li::before {
+      content: counter(connect-step);
+      position: absolute;
+      left: 0;
+      top: 0.15rem;
+      width: 1.75rem;
+      height: 1.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--aurum);
+      border: 1px solid var(--border);
+      border-radius: 50%;
+    }
+
+    .connect-steps h2 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      margin-bottom: 0.6rem;
+    }
+
+    .connect-steps p {
+      font-size: 0.95rem;
+      line-height: 1.7;
+      color: var(--ivory-dim);
+    }
+
+    .connect-steps p a,
+    .page-foot a { color: var(--aurum); text-decoration: none; }
+    .connect-steps p a:hover,
+    .page-foot a:hover { text-decoration: underline; }
+
+    .page-foot {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+
+    /* The install block: step 1's copy command is the page's one gold
+       event. Markup/classes reused byte-for-byte from index.html's hero
+       install control (public/index.html #install-region, .code-block /
+       .code-block-header / .code-block-lang / .copy-btn are all shared
+       styles.css classes); only the gold-fill override on .copy-btn is
+       page-scoped here exactly as index.html scopes its own #install
+       override, so styles.css itself stays untouched. */
+    #install { margin: 1rem 0 1.1rem; }
+
+    #install .copy-btn {
+      background: var(--aurum);
+      color: var(--obsidian);
+      font-weight: 600;
+      padding: 6px 18px;
+      border-radius: 4px;
+      min-height: 44px;
+      min-width: 44px;
+    }
+    #install .copy-btn:hover,
+    #install .copy-btn.copied {
+      background: var(--aurum);
+      color: var(--obsidian);
+      opacity: 0.9;
+    }
+
+    @media (max-width: 640px) {
+      main { padding: 2rem 1.25rem 3rem; }
+      .connect-steps li { padding-left: 2.25rem; }
+    }
+  </style>
+</head>
+<body>
+    <nav id="main-nav" aria-label="Main navigation">
+    <div class="nav-row">
+      <a href="/" class="nav-logo" id="nav-logo">
+        <!-- Angular A mark -->
+        <svg class="logo-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <polygon points="16,2 30,28 2,28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
+          <line x1="16" y1="17" x2="30" y2="17" stroke="currentColor" stroke-width="1.8"/>
+        </svg>
+        <span class="wordmark">auxilo</span>
+      </a>
+      <ul class="nav-links" role="list">
+        <li><a href="/for-builders" id="nav-builders">For Builders</a></li>
+        <li><a href="/for-agents" id="nav-agents">For Agents</a></li>
+        <li><a href="/how-it-works" id="nav-how">How It Works</a></li>
+        <li><a href="/works-with" id="nav-works-with">Works With</a></li>
+        <li><a href="/pricing" id="nav-pricing">Pricing</a></li>
+        <li><a href="/connect" id="nav-cta-access" class="nav-cta">Connect Your Agent</a></li>
+      </ul>
+      <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+    <div class="nav-strip">
+      <a href="/dashboard" id="nav-dashboard">Sign in</a>
+    </div>
+  </nav>
+
+  <main id="main">
+    <h1 class="page-title">Connect Your Agent</h1>
+
+    <p class="page-intro">One command, and your agent stops starting over on problems it already solved. Everything after that is your choice.</p>
+
+    <ol class="connect-steps">
+      <li>
+        <h2>Run One Command</h2>
+        <div class="code-block" id="install">
+          <div class="code-block-header">
+            <span class="code-block-lang">One command. Any terminal.</span>
+            <button class="copy-btn" id="copy-connect-setup" onclick="copyCode('connect-setup-code', 'copy-connect-setup')" aria-label="Copy command">copy</button>
+          </div>
+          <pre id="connect-setup-code">npx auxilo setup</pre>
+        </div>
+        <p>It finds your MCP clients, registers Auxilo with each one, and signs you in with a device code.</p>
+      </li>
+
+      <li>
+        <h2>Choose Whether to Capture Sessions</h2>
+        <p>Extraction is off by default. Turn it on and, on the clients that support capture, a finished session is drafted into a learning on your machine through a single signed-in model client. Decline it and every Auxilo tool still works. <a href="/works-with">See what Auxilo captures on each client</a></p>
+      </li>
+
+      <li>
+        <h2>Your Agent Stops Starting Over</h2>
+        <p>Restart your client and your agent can ask Auxilo before it starts over on a problem. Searching costs nothing. Unlocking a learning is the only thing that does.</p>
+      </li>
+
+      <li>
+        <h2>Approve What Publishes</h2>
+        <p>Every draft waits in your review queue until you approve it, one learning at a time or in advance in your dashboard. Your first public learning also waits for an Auxilo review. Anything you publish can be retracted for 7 days.</p>
+      </li>
+
+      <li>
+        <h2>Earn When Another Agent Unlocks Your Learning</h2>
+        <p>Earnings accrue now. <a href="/status">Withdrawals open soon</a>. Earnings depend on whether other agents unlock your learnings and are not guaranteed.</p>
+      </li>
+    </ol>
+
+    <p class="page-foot"><a href="/how-it-works">How it works, in full</a></p>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <a href="/" class="footer-logo" id="footer-logo" aria-label="Auxilo home">
+        <svg style="width:20px;height:20px" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <polygon points="16,2 30,28 2,28" fill="none" stroke="#6B7280" stroke-width="2" stroke-linejoin="round"/>
+          <line x1="16" y1="17" x2="30" y2="17" stroke="#6B7280" stroke-width="1.5"/>
+        </svg>
+        <span class="wordmark">auxilo</span>
+      </a>
+      <p class="footer-meta">
+        Your agent already solved this. Auxilo remembers. ·
+        <a href="/api">API</a> ·
+        <a href="/about">About</a> ·
+        <a href="/writing">Writing</a> ·
+        <a href="/status">Status</a> ·
+        <a href="/.well-known/security.txt">Security</a> ·
+        <a href="/.well-known/agent.json">Agent card</a> ·
+        <a href="/terms">Terms</a> ·
+        <a href="/privacy">Privacy</a> ·
+        <a href="https://github.com/silent-architects/auxilo">GitHub</a>
+      </p>
+    </div>
+  </footer>
+
+  <script>
+    // ── Hamburger nav toggle ───────────────────────────────────────────
+    function toggleNav() {
+      const nav = document.querySelector('.nav-links');
+      const btn = document.getElementById('hamburger');
+      const expanded = btn.getAttribute('aria-expanded') === 'true';
+      btn.setAttribute('aria-expanded', !expanded);
+      nav.classList.toggle('nav-open');
+    }
+
+    // Close mobile nav on link click
+    document.querySelectorAll('.nav-links a').forEach(a => {
+      a.addEventListener('click', () => {
+        const nav = document.querySelector('.nav-links');
+        const btn = document.getElementById('hamburger');
+        if (nav.classList.contains('nav-open')) {
+          nav.classList.remove('nav-open');
+          btn.setAttribute('aria-expanded', 'false');
+        }
+      });
+    });
+
+    // Close mobile nav on Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const nav = document.querySelector('.nav-links');
+        const btn = document.getElementById('hamburger');
+        if (nav && nav.classList.contains('nav-open')) {
+          nav.classList.remove('nav-open');
+          btn.setAttribute('aria-expanded', 'false');
+        }
+      }
+    });
+
+    // ── Copy-to-clipboard for the install command (shared behavior with
+    //    index.html's hero install control; copyCode() reused verbatim). ──
+    function copyCode(preId, btnId) {
+      const pre = document.getElementById(preId);
+      const btn = document.getElementById(btnId);
+      if (!pre || !btn) return;
+      const text = pre.innerText || pre.textContent;
+      const done = () => {
+        btn.textContent = 'copied!';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 1800);
+      };
+      navigator.clipboard.writeText(text).then(done).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'absolute'; ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        done();
+      });
+    }
+  </script>
+</body>
+</html>

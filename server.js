@@ -3640,7 +3640,7 @@ function matchLearnings(query, filters = {}) {
       if (learning.task_context.toLowerCase().includes(token)) textScore += SCORING.CONTEXT_TOKEN_WEIGHT;
     }
 
-    // Private owner search is lexical recall, not marketplace ranking.
+    // Private owner search is lexical recall, not Auxilo marketplace ranking.
     const qualityScore = learning.visibility === 'private' ? 0 : computeScore(learning);
     return { ...learning, _score: (textScore * SCORING.TEXT_SCORE_MULTIPLIER) + qualityScore, _textScore: textScore };
   });
@@ -5544,6 +5544,17 @@ app.get('/fonts/:file{.+\\.[0-9a-f]{8}\\.woff2$}', (c) => {
   const res = serveStatic(c, `fonts/${file}`, 'public, max-age=31536000, immutable');
   return res || c.text('Not found', 404);
 });
+// Self-hosted client logo marks (2026-09-06, works-with build). Filenames are
+// NOT content-hashed (public/logos/<client>.svg, e.g. claude-code.svg) so they
+// get serveStatic's default cache, not the fonts route's immutable arm above
+// (that arm is reserved for fingerprinted filenames whose URL changes when the
+// bytes do). Registered before the generic static catch-all below so a nested
+// /logos/*.svg path resolves here instead of falling through unmatched.
+app.get('/logos/:file{.+\\.svg$}', (c) => {
+  const file = c.req.param('file');
+  const res = serveStatic(c, `logos/${file}`);
+  return res || c.text('Not found', 404);
+});
 app.get('/favicon.ico', async (c) => {
   // Serve SVG favicon (browsers accept SVG favicons)
   const filePath = path.join(__dirname, 'public', 'favicon.svg');
@@ -5595,7 +5606,7 @@ app.get('/api/info', (c) => {
     // DR-5 fix (2026-07-20, CAT-1/BUILD-2, PUNCH-LIST §31): catalog_size used
     // to be skills.length (the static 27-item skills.json capability catalog)
     // while GET /knowledge/stats reported learnings_count from
-    // visibleLearningsList() (the crowd-contributed knowledge marketplace,
+    // visibleLearningsList() (the crowd-contributed Auxilo knowledge marketplace,
     // ~103 visible) — two different data sources sharing one ambiguous name
     // on the API's own front door. Ruling: "catalog_size" is now reserved
     // everywhere it appears to mean the canonical visible-catalog count (same
@@ -5618,7 +5629,7 @@ app.get('/api/info', (c) => {
       '/knowledge': { price: 'free', method: 'POST', description: 'Search knowledge. Returns snippets. Body: { "query": "what you need" }' },
       '/knowledge/:id': { price: '$0.05', method: 'GET', description: 'Unlock full learning. 70% goes to contributor. Your own learnings are $0 (API key of the contributing account, or an account with the contributor wallet linked).' },
       '/knowledge/:id/rate': { price: 'free', method: 'POST', description: 'Rate a learning 1-5 after using it. Requires your API key and a prior unlock of the learning by your account (LW-7).', auth: 'session-or-api-key' },
-      '/knowledge/stats': { price: 'free', method: 'GET', description: 'Knowledge marketplace statistics' },
+      '/knowledge/stats': { price: 'free', method: 'GET', description: 'Auxilo knowledge statistics' },
       '/contributor/:wallet': { price: 'free', method: 'GET', description: 'Contributor earnings dashboard' },
       '/contributor/:wallet/settlements': { price: 'free', method: 'GET', description: 'Settlement history for a contributor wallet' },
       '/wallet/challenge': { price: 'free', method: 'POST', description: 'Request an EIP-712 signing challenge. Body: { wallet, action? }', auth: 'public' },
@@ -5830,7 +5841,7 @@ app.get('/skill/:id', optionalAuth(), apiKeyRateLimitMiddleware('/skill'), (c) =
   });
 });
 
-// ─── Knowledge Marketplace Endpoints ────────────────────────────────
+// ─── Auxilo Knowledge Marketplace Endpoints ───────────────────────────
 
 // CI-5 (PUNCH-LIST §30, 2026-07-19): learnings are TECHNICAL-ONLY. The learning
 // taxonomy is the six tech categories; `communication` and `content-generation`
@@ -6168,7 +6179,7 @@ app.post('/learn', async (c) => {
     return c.json({
       error: `Category '${PRIVATE_LEARNING_CATEGORY}' is private-only under CI-5`,
       code: 'CATEGORY_OUT_OF_SCOPE',
-      message: 'CI-5 permits only technical categories in the public marketplace. Submit this category with visibility private, or rewrite it into the technical taxonomy.',
+      message: 'CI-5 permits only technical categories in the public Auxilo marketplace. Submit this category with visibility private, or rewrite it into the technical taxonomy.',
     }, 400);
   }
 
@@ -8729,7 +8740,7 @@ function serializeByLearningMoney(byLearning) {
   return serialized;
 }
 
-// Knowledge marketplace stats (FREE) — must be registered BEFORE /knowledge/:id
+// Auxilo knowledge marketplace stats (FREE) — must be registered BEFORE /knowledge/:id
 //
 // STATS-TRUTH: this surface is machine-read (agents, the trust page, GTM's
 // register) and FAILS CLOSED — every number derives from the visible catalog
@@ -8854,7 +8865,7 @@ app.get('/knowledge/:id', async (c) => {
   const dr8OwnerAccountId = resolveProvableOwnerAccountId(c, learning);
 
   // SPEC3-G1: private recall is existence-hidden and branches before every
-  // price/payment/counter path. The response omits marketplace pricing/demand
+  // price/payment/counter path. The response omits Auxilo marketplace pricing/demand
   // fields while retaining the authenticated owner's own earnings detail.
   if (learning.visibility === 'private' && !dr8OwnerAccountId) {
     return c.json({ error: 'Learning not found', id }, 404);
@@ -10984,7 +10995,7 @@ app.post('/account/pending/:id/approve', async (c) => {
 });
 
 // POST /account/pending/:id/keep-private — caller keeps their OWN pending
-// learning recoverably, without publishing or retaining marketplace economics.
+// learning recoverably, without publishing or retaining Auxilo marketplace economics.
 app.post('/account/pending/:id/keep-private', async (c) => {
   const auth = await resolveSelfReviewAccount(c, 'contribute');
   if (!auth.accountId) return c.json({ error: auth.error }, auth.status);
@@ -11312,7 +11323,7 @@ app.post('/account/pending/:id/sanitize', async (c) => {
   // overwrites the stamp, lifting the guard.
   if (original.moderation_action && original.moderation_action.action === 'rejected') {
     return c.json({
-      error: 'This learning was rejected by marketplace moderation and cannot be sanitized. Moderation decisions are final — submit substantially new content as a fresh learning instead.',
+      error: 'This learning was rejected by Auxilo marketplace moderation and cannot be sanitized. Moderation decisions are final — submit substantially new content as a fresh learning instead.',
       code: 'ADMIN_REJECTED_FINAL', id,
     }, 409);
   }
@@ -11929,6 +11940,23 @@ app.get('/about', (c) => {
   return c.text('Not found', 404);
 });
 
+// Works with (2026-09-06, AD-CLIENTS-VISUAL-SHEET / TECH-PM build): the
+// client-support visual surface, same static-serve pattern as /about above.
+app.get('/works-with', (c) => {
+  const res = serveStatic(c, 'works-with.html');
+  if (res) return res;
+  return c.text('Not found', 404);
+});
+
+// SITE-PM packet 13 rev 2 (BUILD-READY): /connect, on the same static-file
+// pattern as /about above (Tyler: nav CTAs should link to a page, not an
+// anchor — this is that page).
+app.get('/connect', (c) => {
+  const res = serveStatic(c, 'connect.html');
+  if (res) return res;
+  return c.text('Not found', 404);
+});
+
 app.get('/writing', (c) => {
   const res = serveStatic(c, 'writing/index.html');
   if (res) return res;
@@ -12258,10 +12286,27 @@ function renderLiveCatalogStats(html) {
     // Hero-row live count (SITE-PM ruling, /for-builders hero stat row): the
     // hero's live-count span is filled from the SAME `count` computed above
     // for the strip's live-count span — one derivation, two call sites on
-    // the same page, same fail-open static value ("226") on the catch path
-    // below. (Do not spell either span's id as a literal attribute here —
-    // see the HTML-side comment for why.)
+    // the same page. LEDGER-FAIL-OPEN-FB fix (2026-09-06): both cells used
+    // to fail OPEN to a static "226" literal shipped in the markup on the
+    // catch path below — a stale claim that survived a render failure.
+    // Both are now marker-wrapped (LC-LEARNINGS-CELL / LC-LEARNINGS-HERO-
+    // CELL), fail-closed like the LC-PRICE-RANGE-CELL tile below: reaching
+    // this line means `visible` derived without throwing, so the markers
+    // are unconditionally dropped and the spans filled — see the catch
+    // block below for the fail path, which strips the whole cells instead.
+    // (Do not spell either span's id as a literal attribute here — see the
+    // HTML-side comment for why.)
     let out = html
+      .replace(/<!--LC-LEARNINGS-HERO-CELL-->/g, '')
+      .replace(/<!--\/LC-LEARNINGS-HERO-CELL-->/g, '')
+      .replace(/<!--LC-LEARNINGS-CELL-->/g, '')
+      .replace(/<!--\/LC-LEARNINGS-CELL-->/g, '')
+      // AD strings packet 15 rev 3a §2 (/pricing live ledger tile, moved
+      // from the retired /earnings route): markers only, stripped on the
+      // success path here; the whole tile is stripped instead in the catch
+      // block below when the derivation itself fails.
+      .replace(/<!--LC-PRICING-LEDGER-TILE-->/g, '')
+      .replace(/<!--\/LC-PRICING-LEDGER-TILE-->/g, '')
       .replace(/(id="lc-learnings"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${count}<`)
       .replace(/(id="lc-learnings-hero"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${count}<`)
       .replace(/(id="lc-categories"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${cats}<`)
@@ -12313,7 +12358,21 @@ function renderLiveCatalogStats(html) {
     return out;
   } catch (e) {
     console.error('[live-stats] render failed, serving static values:', e.message);
-    return html;
+    // LEDGER-FAIL-OPEN-FB fix (2026-09-06): this used to return `html`
+    // completely untouched, so if `visibleLearningsList()` itself threw
+    // (before the fill lines above ever ran), the lc-learnings /
+    // lc-learnings-hero markup — a stale static digit in earlier builds,
+    // now an empty span between LC-LEARNINGS-CELL / LC-LEARNINGS-HERO-CELL
+    // markers — would ship as authored. Strip both marker-wrapped cells
+    // here too so the fail path is fail-closed on every route into this
+    // catch, not only the range-is-empty branch above.
+    return html
+      .replace(/<!--LC-LEARNINGS-HERO-CELL-->[\s\S]*?<!--\/LC-LEARNINGS-HERO-CELL-->/g, '')
+      .replace(/<!--LC-LEARNINGS-CELL-->[\s\S]*?<!--\/LC-LEARNINGS-CELL-->/g, '')
+      // AD strings packet 15 rev 3a §2 (/pricing live ledger tile): the
+      // whole tile is removed here too, not just its own value spans, so no
+      // stranded caption/label ships without a live number behind it.
+      .replace(/<!--LC-PRICING-LEDGER-TILE-->[\s\S]*?<!--\/LC-PRICING-LEDGER-TILE-->/g, '');
   }
 }
 
@@ -12361,43 +12420,14 @@ function serveHtmlWithLiveData(c, file) {
   return null;
 }
 
-app.get('/earnings', (c) => {
-  // Server-render the three live-ledger numbers into the raw HTML so non-JS
-  // crawlers see real values (not em-dashes) on the page that says "the numbers
-  // below are live". Uses the SAME visibility predicate as GET /knowledge/stats
-  // AND the same derivation (catalogStatsTruth): the unlock count comes from
-  // the per-unlock ledger, never the retired per-learning counter, so this
-  // cell and /knowledge/stats total_unlocks are one number. When the ledger is
-  // unreadable the cell keeps the static "…" (no digit), mirroring the stats
-  // handler omitting the field. The client-side fetch('/knowledge/stats')
-  // stays as a freshness upgrade.
-  try {
-    const filePath = path.join(PUBLIC_DIR, 'earnings.html');
-    if (fs.existsSync(filePath)) {
-      let html = fs.readFileSync(filePath, 'utf8');
-      const visibleLearnings = visibleCatalog(); // Wave 2b: shared predicate
-      const truth = catalogStatsTruth(visibleLearnings);
-      const llLearnings  = visibleLearnings.length.toLocaleString('en-US');
-      const llUnlocks    = truth.unlocks ? truth.unlocks.total.toLocaleString('en-US') : null; // null ⇒ keep "…"
-      const llCategories = new Set(visibleLearnings.map(l => l.category)).size.toLocaleString('en-US');
-      html = html
-        .replace(/(id="ll-learnings"[^>]*>)[^<]*</,  `$1${llLearnings}<`)
-        .replace(/(id="ll-categories"[^>]*>)[^<]*</, `$1${llCategories}<`);
-      if (llUnlocks !== null) {
-        html = html.replace(/(id="ll-unlocks"[^>]*>)[^<]*</, `$1${llUnlocks}<`);
-      }
-      c.header('Content-Type', 'text/html; charset=utf-8');
-      c.header('Cache-Control', 'public, max-age=3600');
-      // Quiet phase: no-op while ANALYTICS_DOMAIN is unset (returns html as is).
-      return c.body(injectAnalytics(html, ANALYTICS_DOMAIN));
-    }
-  } catch (e) {
-    console.error('[earnings] server-render failed, falling back to static:', e.message);
-  }
-  const res = serveStatic(c, 'earnings.html');
-  if (res) return res;
-  return c.text('Earnings page not found', 404);
-});
+// AD strings packet 15 rev 3a (PRICING-EARNINGS-MERGE, 2026-09-06): /earnings
+// folds into /pricing. The bespoke SSR handler that used to server-render the
+// three live-ledger numbers into earnings.html is retired along with the
+// page — those cells now live on /pricing's #platform-economics (The
+// Numbers), rendered by renderLiveCatalogStats via serveHtmlWithLiveData like
+// every other live-data page. This is a permanent redirect with no fragment
+// (Tyler: links go to pages, never anchors).
+app.get('/earnings', (c) => c.redirect('/pricing', 301));
 
 // ─── Account dashboard ────────────────────────────────────────────────
 // Serves the browser-based account dashboard (magic-link login, earnings,
@@ -12601,12 +12631,13 @@ function serveLegalPage(c, filename, title, seo) {
   </style>
 </head>
 <body>
-  <nav id="main-nav" aria-label="Main navigation">
+<nav id="main-nav" aria-label="Main navigation">
+  <div class="nav-row">
     <a href="/" class="nav-logo" id="nav-logo">
       <!-- Angular A mark -->
       <svg class="logo-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <polygon points="16,2 30,28 2,28" fill="none" stroke="#C9A84C" stroke-width="2.2" stroke-linejoin="round"/>
-        <line x1="16" y1="17" x2="30" y2="17" stroke="#C9A84C" stroke-width="1.8"/>
+        <polygon points="16,2 30,28 2,28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
+        <line x1="16" y1="17" x2="30" y2="17" stroke="currentColor" stroke-width="1.8"/>
       </svg>
       <span class="wordmark">auxilo</span>
     </a>
@@ -12614,16 +12645,18 @@ function serveLegalPage(c, filename, title, seo) {
       <li><a href="/for-builders" id="nav-builders">For Builders</a></li>
       <li><a href="/for-agents" id="nav-agents">For Agents</a></li>
       <li><a href="/how-it-works" id="nav-how">How It Works</a></li>
+      <li><a href="/works-with" id="nav-works-with">Works With</a></li>
       <li><a href="/pricing" id="nav-pricing">Pricing</a></li>
-      <li><a href="/earnings" id="nav-earnings">Earnings</a></li>
-      <li><a href="/api" id="nav-api">API</a></li>
-      <li><a href="/dashboard" id="nav-dashboard">Sign in</a></li>
-      <li><a href="/#install" id="nav-cta-access" class="nav-cta">Connect your agent</a></li>
+      <li><a href="/connect" id="nav-cta-access" class="nav-cta">Connect Your Agent</a></li>
     </ul>
     <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
       <span></span><span></span><span></span>
     </button>
-  </nav>
+  </div>
+  <div class="nav-strip">
+    <a href="/dashboard" id="nav-dashboard">Sign in</a>
+  </div>
+</nav>
   <div class="legal-wrap">
     <a href="/" class="legal-back">← Back to Auxilo</a>
     ${body}
@@ -12641,6 +12674,7 @@ function serveLegalPage(c, filename, title, seo) {
     </a>
     <p class="footer-meta">
       Your agent already solved this. Auxilo remembers. ·
+      <a href="/api">API</a> ·
       <a href="/about">About</a> ·
       <a href="/writing">Writing</a> ·
       <a href="/status">Status</a> ·
@@ -12880,7 +12914,7 @@ app.post('/pipeline/upload', requireSession, async (c) => {
     // and the CI-7 system-fact litmus.
     const extractionPrompt = `Extract discrete, actionable operational learnings from this ${format} conversation.
 
-HARD SCOPE RULE — TECHNICAL LEARNINGS ONLY (the marketplace accepts nothing else): extract ONLY technical/operational learnings — APIs, developer tools, code, infrastructure, data pipelines, monitoring/observability, payment/crypto TECHNOLOGY, debugging. NEVER extract interpersonal or communication strategy, copywriting/content/marketing insights, business or negotiation strategy, personal matters, or creative-writing technique — DROP such candidates entirely, do not relabel them.
+HARD SCOPE RULE — TECHNICAL LEARNINGS ONLY (the Auxilo marketplace accepts nothing else): extract ONLY technical/operational learnings — APIs, developer tools, code, infrastructure, data pipelines, monitoring/observability, payment/crypto TECHNOLOGY, debugging. NEVER extract interpersonal or communication strategy, copywriting/content/marketing insights, business or negotiation strategy, personal matters, or creative-writing technique — DROP such candidates entirely, do not relabel them.
 
 SYSTEM-FACT TEST: Extract ONLY when a system and a symptom are at the core — an error, an undocumented limitation, a reproducible behavior of an external tool/API/OS. If the candidate is advice about how to work (process, workflow, methodology, decision practice), do NOT extract it.
 
