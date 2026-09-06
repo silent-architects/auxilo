@@ -119,7 +119,7 @@
     }
     .trust-table td:last-child { color: var(--ash); }
 
-    /* ── §3b / §9b prose ── */
+    /* ── §3b / §4 / §1b / §9b prose ── */
     .trust-prose p {
       max-width: 720px;
       color: var(--ash);
@@ -127,6 +127,54 @@
       margin-bottom: 20px;
     }
     .trust-prose p:last-child { margin-bottom: 0; }
+    /* Empty content slots (this build pass) collapse rather than leaving a
+       visible gap — margin only applies once a slot has text. */
+    .trust-prose p:empty { margin-bottom: 0; }
+
+    /* ── §6 — bordered callout, same treatment as §0 (finding 9) ── */
+    .callout-bordered {
+      max-width: 720px;
+      border: 1px solid rgba(201,168,76,0.2);
+      background: rgba(201,168,76,0.04);
+      border-radius: 8px;
+      padding: 28px 32px;
+    }
+    .callout-bordered h2 { margin-top: 0; }
+    .callout-bordered .trust-prose p:empty { display: none; }
+
+    /* ── §7 — bounded card (finding 2) ── */
+    .ledger-card {
+      max-width: 720px;
+      border: 1px solid rgba(229,229,227,0.13);
+      border-radius: 8px;
+      padding: 28px 32px;
+    }
+    .ledger-card h2 { margin-top: 0; }
+    .ledger-card-stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 32px;
+      margin-top: 20px;
+    }
+    .ledger-card-stat { min-width: 160px; }
+    .ledger-card-value {
+      display: block;
+      font-family: var(--mono, monospace);
+      font-size: 1.8rem;
+      /* 500 — the weight actually shipped for IBM Plex Mono (styles.css
+         @font-face carries 400 and 500 only). No PlexMono500 <link
+         rel=preload> is added for this figure: §7 sits below the fold
+         (H1 -> §2b -> §3b -> §4 -> §1b -> §6 -> §7 -> §9b), so it is not on
+         the critical rendering path — see build report item 6. */
+      font-weight: 500;
+      color: var(--aurum, #C9A84C);
+    }
+    .ledger-card-label {
+      display: block;
+      color: var(--slate-text);
+      font-size: 0.85rem;
+      margin-top: 4px;
+    }
   </style>
 </head>
 <body>
@@ -228,6 +276,117 @@
       <p>Before anything publishes, the server screens it. A duplicate check, which refuses an exact match and holds a near match. The secret filter again, which refuses a learning outright if it still finds a secret. A pattern screen for instructions aimed at the reader. And one call to Anthropic, which acts as Auxilo's subprocessor for this and returns three verdicts on the learning text, whether it looks confidential, whether it is a fact about a system rather than advice about how to work, and whether it carries malicious instructions. Most flags hold the learning in your own queue for your decision. A malicious-content verdict is one you cannot release yourself. Public submissions are accepted in six technical categories only, and the API refuses public submissions outside them.</p>
       <p>A new account's first public learning is also held for an Auxilo operator to review, so a new account cannot publish unreviewed. After that the decision is yours. Published learnings can be retracted for seven days.</p>
       <p>The screens and the first-publication review are for safety, scope and duplication. Auxilo does not check a learning for accuracy and does not vouch for its content.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ━━━ §4 — Accountability (spec finding 5, preconditions 6/7/8/11;
+     conditional render, server-injected — see server.js
+     renderTrustPagePartition). ALL prose in this section is Tyler-gated
+     content and is NOT built this pass (TRUST-PAGE-2 build report) — every
+     <p> below is an empty named slot. The only load-bearing piece this pass
+     ships is the render mechanism: an empty container between the
+     SSR:PARTITION-STATE markers, and the data-partition-state attribute the
+     server sets to "a" / "b" from lib/partition-guard.js computePartition,
+     never "none" on a healthy render (finding 13's render contract — the
+     static default IS "none" with an empty container, so any derivation
+     failure that falls through to the untouched static file already serves
+     the fail-closed "neither branch" state). The raw HTML never carries
+     both branches — only ever the one string the server injects, or
+     nothing. ━━━ -->
+<section aria-labelledby="accountability-heading">
+  <div class="container">
+    <h2 id="accountability-heading">Accountability</h2>
+    <div class="trust-prose">
+      <!-- Static asymmetry echo — content slot, not built this pass. -->
+      <p id="s4-asymmetry"></p>
+      <!-- Static invariant ("Auxilo's own learnings sit under two
+           accounts...") — content slot, not built this pass. -->
+      <p id="s4-invariant"></p>
+      <!-- Server-injected container (finding 13 render contract). Content
+           slot empty this pass; data-partition-state is the one part this
+           build wires live. -->
+      <p id="s4-partition-state" data-partition-state="none"><!-- SSR:PARTITION-STATE --><!-- /SSR:PARTITION-STATE --></p>
+      <!-- Static closing sentence ("Every learning carries provenance.") —
+           content slot, not built this pass. Placed here, always in the
+           static file regardless of which branch renders, per finding 13's
+           block-order guard (never appended only when a branch renders). -->
+      <p id="s4-provenance"></p>
+    </div>
+  </div>
+</section>
+
+<!-- ━━━ §1b — Earnings and withdrawals, for builders (relocated per spec
+     finding 8). Content is Tyler-gated and NOT built this pass except the
+     one piece precondition 2 requires now: the withdrawals sentence's
+     `/status` anchor. The surrounding sentence stays an empty slot. ━━━ -->
+<section aria-labelledby="earnings-heading">
+  <div class="container">
+    <h2 id="earnings-heading">Earnings and withdrawals, for builders</h2>
+    <div class="trust-prose">
+      <!-- Content slot, not built this pass. -->
+      <p id="s1b-earnings-sentence"></p>
+      <!-- Precondition 2: the withdrawals sentence's `/status` link. Anchor
+           markup wired now; its surrounding sentence text is a content slot
+           left empty this pass. -->
+      <p id="s1b-withdrawals-sentence"><a id="s1b-withdrawals-link" href="/status"></a></p>
+    </div>
+  </div>
+</section>
+
+<!-- ━━━ §6 — Limits (bordered callout, spec finding 9 — same treatment as
+     §0). Content is Tyler-gated and NOT built this pass. R-13 LIMITS SLOT
+     (precondition 1): the verbatim D2-record sentence could not be
+     conclusively identified as a single unambiguous string — see the build
+     report for what was searched (R13-COPY-FIX-DRAFT-2026-08-29.md and its
+     shipped for-builders.html descendant) and why it was left empty rather
+     than guessed. ━━━ -->
+<section aria-labelledby="limits-heading">
+  <div class="container">
+    <div class="callout-bordered">
+      <h2 id="limits-heading">Limits</h2>
+      <!-- Content slot, not built this pass ("We do not claim complete
+           defenses. Nobody honestly can."). -->
+      <p id="s6-defenses-sentence"></p>
+      <!-- R-13 LIMITS SLOT, precondition 1 — NOT FOUND verbatim this pass;
+           left empty. Adjacency to s6-defenses-sentence above is per the
+           spec's assembly requirement ("next to `We do not claim complete
+           defenses.`"). -->
+      <p id="s6-r13-slot" data-slot="r13-limits"></p>
+      <!-- Content slot, not built this pass. -->
+      <p id="s6-review-sentence"></p>
+      <!-- Content slot, not built this pass. -->
+      <p id="s6-hold-sentence"></p>
+    </div>
+  </div>
+</section>
+
+<!-- ━━━ §7 — The live catalog count (bounded card, spec finding 10; NOT
+     omittable, precondition 3). SSR-wired to the same truth source GET
+     /knowledge/stats uses (server.js catalogStatsTruth / lib/stats-truth.js)
+     at request time — see server.js renderTrustPageLiveCounts. The framing
+     sentence and the two stat labels are Tyler-gated content slots, empty
+     this pass; the two numbers are the one thing this pass renders live.
+     Static default "…" on both counts, fail-closed — never a stale or
+     hardcoded digit, matching the existing lc-unlocks/ll-unlocks
+     convention. ━━━ -->
+<section aria-labelledby="live-count-heading">
+  <div class="container">
+    <div class="ledger-card">
+      <h2 id="live-count-heading">The live catalog count</h2>
+      <!-- Content slot, not built this pass ("The counts in this section
+           are live, read from the ledger each time the page loads."). -->
+      <p id="s7-framing-sentence"></p>
+      <div class="ledger-card-stats">
+        <div class="ledger-card-stat">
+          <span id="s7-learnings-count" class="ledger-card-value">…</span>
+          <span id="s7-learnings-label" class="ledger-card-label"></span>
+        </div>
+        <div class="ledger-card-stat">
+          <span id="s7-unlocks-count" class="ledger-card-value">…</span>
+          <span id="s7-unlocks-label" class="ledger-card-label"></span>
+        </div>
+      </div>
     </div>
   </div>
 </section>

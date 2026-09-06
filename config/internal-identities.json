@@ -1,0 +1,6 @@
+{
+  "_comment": "TRACKED, public-safe internal-identity register (TRUST-PAGE-BUILD-SPEC-2026-09-02.md rev 3g, finding 5 binding (c), rev 3d precision). Wallet addresses and account ids ONLY -- no secrets, no keys. Additive with env INTERNAL_IDENTITIES_EXTRA_WALLETS / INTERNAL_IDENTITIES_EXTRA_ACCOUNT_IDS (comma-separated), never replaced by them. The platform identity (PLATFORM_WALLETS / PLATFORM_ACCOUNT_IDS, server.js / lib/accounts.js) is already covered by isPlatformContributor and does NOT need to be repeated here -- this file is for the SEPARATE 'account of the builder behind Auxilo' (the operator identity the spec's §4 invariant names as the second internal account) and any other identity that must register as internal before use (REGISTER-BEFORE-USE, rev 3d: 'the 08-30 R13 probe proved the allowlist is open-ended').",
+  "_status": "UNPOPULATED as of this build (TRUST-PAGE-2 pass, 2026-09-06). No operator wallet or account id is recorded anywhere in server.js / lib/ for this build to cite verbatim, so nothing is entered here rather than guess a value on a page whose entire argument is that it can be checked. See the build report for what was searched. Populate before the operator's own account/wallet appears as a contributor_wallet or contributor_account_id on a visible catalog row, per REGISTER-BEFORE-USE.",
+  "wallets": [],
+  "account_ids": []
+}

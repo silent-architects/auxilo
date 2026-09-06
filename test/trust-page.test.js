@@ -169,4 +169,193 @@ describe('Trust page: route, redirects, head tags, h1, forbidden strings', { tim
       );
     }
   });
+
+  it('§1b: the /status anchor is present in the withdrawals-sentence slot template', () => {
+    const s1bStart = TRUST_HTML.indexOf('id="earnings-heading"');
+    const s1bEnd = TRUST_HTML.indexOf('id="limits-heading"');
+    assert.ok(s1bStart > 0 && s1bEnd > s1bStart, '§1b section located');
+    const s1b = TRUST_HTML.slice(s1bStart, s1bEnd);
+    assert.ok(
+      /<a id="s1b-withdrawals-link" href="\/status">/.test(s1b),
+      '§1b carries the /status anchor (precondition 2)'
+    );
+  });
+});
+
+// ─── TRUST-PAGE-SSR fixtures (module scope — CH-7 guard: no assert-bearing
+// helper may be defined or called inside a describe() body) ────────────────
+//
+// §4's conditional accountability block and §7's live catalog count, spec
+// rev 3g findings 5/13, preconditions 3/6/7/8/11. Same fixture-catalog +
+// controllable-ledger staged-server pattern as test/earnings-ssr-truth.test.js
+// (whose withStagedServer is likewise module-scope, not describe-scope).
+
+// The staged-server harness rewrites the WALLET const to this fixed
+// test-derived address (helpers/staged-server.js WALLET_STAGED, matching
+// the boot's WALLET_PRIVATE_KEY) — NOT the literal in server.js source.
+// Using the source literal here would make a legitimately-platform row
+// read as external under test.
+const TP_PLATFORM_WALLET = '0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A';
+const TP_EXTERNAL_WALLET = '0xAbCdEf0123456789aBcDeF0123456789AbCdEf02';
+const TP_EXTERNAL_ACCOUNT = 'acc_trust_ext_1';
+
+function tpSeedBase() {
+  const seed = JSON.parse(fs.readFileSync(path.join(REPO, 'seed-knowledge.json'), 'utf-8'));
+  const base = Array.isArray(seed) ? seed[0] : seed.learnings[0];
+  assert.ok(base, 'seed-knowledge.json must contain at least one learning');
+  return base;
+}
+
+function tpRow(overrides) {
+  const l = JSON.parse(JSON.stringify(tpSeedBase()));
+  l.status = 'approved';
+  delete l.visibility;
+  l.contributor_account_id = null;
+  l.contributor_wallet = null;
+  l.quality = { ...(l.quality || {}), unlocks: 0, ratings: 0, avg_helpfulness: 0 };
+  return Object.assign(l, overrides);
+}
+
+// ALL-INTERNAL catalog: one null/null (platform default) row plus one row
+// explicitly on the platform wallet — both must resolve internal, so §4's
+// partition state is "a" (no outside builder has published).
+function tpAllInternalCatalog() {
+  return [
+    tpRow({ id: 'tp_int_a', title: 'internal a', category: 'code-execution' }),
+    tpRow({ id: 'tp_int_b', title: 'internal b', category: 'code-execution', contributor_wallet: TP_PLATFORM_WALLET }),
+  ];
+}
+
+// Adds one row with an unregistered external account id and an unregistered
+// external wallet — neither isPlatformContributor nor the (empty, this
+// build) operator register recognizes it, so it must resolve external and
+// flip §4 to state "b".
+function tpWithExternalCatalog() {
+  return [
+    ...tpAllInternalCatalog(),
+    tpRow({ id: 'tp_ext_1', title: 'external', category: 'web-interaction',
+      contributor_account_id: TP_EXTERNAL_ACCOUNT, contributor_wallet: TP_EXTERNAL_WALLET }),
+  ];
+}
+
+function tpLedgerLine(id, learning_id) {
+  return JSON.stringify({
+    id, ts: '2026-09-06T00:00:00.000Z', learning_id, amount_paid_usd: 0.05,
+    funding_source: 'credit_pack', contributor_account_id: null, contributor_wallet: null, settled_onchain: false,
+  });
+}
+
+function tpPartitionState(html) {
+  const m = html.match(/id="s4-partition-state" data-partition-state="([^"]*)"/);
+  assert.ok(m, 's4-partition-state marker present in the served HTML');
+  return m[1];
+}
+function tpCell(html, id) {
+  const m = html.match(new RegExp(`id="${id}"[^>]*>([^<]*)<`));
+  assert.ok(m, `${id} cell present`);
+  return m[1];
+}
+
+async function withTrustPageStagedServer(t, { catalog, ledger }, body) {
+  let nodeModulesDir;
+  try {
+    const honoEntry = require.resolve('hono', { paths: [REPO] });
+    nodeModulesDir = honoEntry.slice(0, honoEntry.lastIndexOf(`${path.sep}node_modules${path.sep}`) + '/node_modules'.length);
+  } catch {
+    t.skip('hono not resolvable from repo root — skipping real boot');
+    return;
+  }
+  const reservation = await reservePort();
+  if (reservation.skipReason) { t.skip(reservation.skipReason); return; }
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'auxilo-trust-page-ssr-'));
+  let child = null;
+  try {
+    stageServer({
+      repoRoot: REPO,
+      tmpDir,
+      nodeModulesDir,
+      port: reservation.port,
+      rootFiles: ['server.js', 'seed-knowledge.json', 'skills.json', 'openapi.json', 'package.json', 'model_config.json'],
+      linkDirs: ['lib', 'public', 'prompts', 'config'],
+      replacements: [],
+    });
+    const dataDir = path.join(tmpDir, 'data');
+    fs.writeFileSync(path.join(dataDir, 'learnings.json'), JSON.stringify(catalog, null, 2));
+    fs.writeFileSync(path.join(dataDir, 'earnings.json'), JSON.stringify({}, null, 2));
+    fs.writeFileSync(path.join(dataDir, 'accounts.json'), JSON.stringify({}, null, 2));
+    const ledgerPath = path.join(dataDir, 'unlock-events.jsonl');
+    if (ledger === 'unreadable') fs.mkdirSync(ledgerPath); // EISDIR on read — not ENOENT
+    else fs.writeFileSync(ledgerPath, ledger || '');
+
+    const boot = await bootServer({
+      tmpDir,
+      port: reservation.port,
+      env: {
+        NODE_ENV: 'test',
+        WALLET_PRIVATE_KEY: '0x' + '11'.repeat(32),
+        LLM_SENSITIVITY_ENABLED: 'false',
+        AUXILO_DATA_DIR: dataDir,
+        AUXILO_ACCOUNTS_FILE: path.join(dataDir, 'accounts.json'),
+      },
+      timeoutMs: 60_000,
+      maxAttempts: 4,
+    });
+    if (boot.skipReason) { t.skip(boot.skipReason); return; }
+    child = boot.child;
+    const pageRes = await fetch(`${boot.baseUrl}/how-submissions-work`);
+    assert.equal(pageRes.status, 200);
+    assert.match(pageRes.headers.get('content-type') || '', /text\/html/);
+    const html = await pageRes.text();
+    const statsRes = await fetch(`${boot.baseUrl}/knowledge/stats`);
+    assert.equal(statsRes.status, 200);
+    await body(html, pageRes, await statsRes.json(), boot);
+  } finally {
+    if (child) await stopServer(child);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+describe('TRUST-PAGE-SSR: §4 partition render + §7 live counts + no-store', { timeout: 300_000 }, () => {
+  it('§4: all-internal catalog (null/null row + platform-wallet row) → data-partition-state="a"', { timeout: 240_000 }, async (t) => {
+    await withTrustPageStagedServer(t, { catalog: tpAllInternalCatalog(), ledger: '' }, async (html) => {
+      assert.equal(tpPartitionState(html), 'a', 'state a when the external count is zero');
+    });
+  });
+
+  it('§4: catalog with one unregistered external row → data-partition-state="b"', { timeout: 240_000 }, async (t) => {
+    await withTrustPageStagedServer(t, { catalog: tpWithExternalCatalog(), ledger: '' }, async (html) => {
+      assert.equal(tpPartitionState(html), 'b', 'state b once an external contributor is present');
+    });
+  });
+
+  it('§4: the served page never carries both branch states — the marker is a single attribute value', { timeout: 240_000 }, async (t) => {
+    await withTrustPageStagedServer(t, { catalog: tpWithExternalCatalog(), ledger: '' }, async (html) => {
+      const matches = html.match(/data-partition-state="[^"]*"/g) || [];
+      assert.equal(matches.length, 1, 'exactly one data-partition-state marker on the page');
+    });
+  });
+
+  it('§7: counts are SSR\'d and equal GET /knowledge/stats (catalogStatsTruth)', { timeout: 240_000 }, async (t) => {
+    const twoRowLedger = [tpLedgerLine('wal_tp_1', 'tp_int_a'), tpLedgerLine('wal_tp_2', 'tp_int_b')].join('\n') + '\n';
+    await withTrustPageStagedServer(t, { catalog: tpAllInternalCatalog(), ledger: twoRowLedger }, async (html, _res, stats) => {
+      assert.equal(tpCell(html, 's7-learnings-count'), String(stats.learnings_count), 'learnings count matches /knowledge/stats');
+      assert.equal(tpCell(html, 's7-unlocks-count'), String(stats.total_unlocks), 'unlocks count matches /knowledge/stats (catalogStatsTruth)');
+      assert.equal(stats.total_unlocks, 2);
+    });
+  });
+
+  it('§7: unreadable ledger → unlocks cell keeps the static "…" placeholder (fail-closed), learnings count still renders', { timeout: 240_000 }, async (t) => {
+    await withTrustPageStagedServer(t, { catalog: tpAllInternalCatalog(), ledger: 'unreadable' }, async (html, _res, stats) => {
+      assert.equal(tpCell(html, 's7-unlocks-count'), '…', 'fail-closed placeholder, never a digit');
+      assert.equal(Object.hasOwn(stats, 'total_unlocks'), false, 'stats also omits total_unlocks — one derivation, one failure mode');
+      assert.equal(tpCell(html, 's7-learnings-count'), String(stats.learnings_count), 'learnings count is unaffected by the ledger failure');
+    });
+  });
+
+  it('GET /how-submissions-work sends Cache-Control: no-store', { timeout: 240_000 }, async (t) => {
+    await withTrustPageStagedServer(t, { catalog: tpAllInternalCatalog(), ledger: '' }, async (_html, res) => {
+      assert.equal(res.headers.get('cache-control'), 'no-store');
+    });
+  });
 });

@@ -1552,6 +1552,12 @@ const { recordPurchase, hasPurchase } = require('./lib/purchase-ledger.js');
 // identities, money from attributable ledger entries, unlocks from the
 // per-unlock event ledger (fail closed: unreadable ledger ⇒ fields omitted).
 const { computeStatsTruth } = require('./lib/stats-truth.js');
+// PARTITION-GUARD: the trust page's §4 internal/external split (spec finding
+// 5, build binding (c), precondition 11 — internal-wallet allowlist check
+// DOMINATES a null-account-equals-external rule; see lib/partition-guard.js
+// header for the full precedence rationale).
+const { loadInternalIdentitiesRegister, computePartition } = require('./lib/partition-guard.js');
+const INTERNAL_IDENTITIES_FILE = path.join(__dirname, 'config', 'internal-identities.json');
 
 // ─── Phase 0.4: Stripe Integration (SPEC-P0.4) ─────────────────────────────
 const {
@@ -11873,14 +11879,99 @@ app.get('/writing', (c) => {
   return c.text('Not found', 404);
 });
 
-// TRUST-PAGE (PUNCH-LIST TRUST-PAGE row; spec rev 3g,
-// TRUST-PAGE-BUILD-SPEC-2026-09-02.md §1): engineering half only — route,
-// shell, redirects. Content = SITE-PM §2b/§3b (sections file rev 6) + §9b
-// (rev 3a). Same serveStatic pattern as /about; no live-data render
-// contract in this build (§4/§7's server-side partition guard and ledger
-// fetch are out of scope — see build report).
+// TRUST-PAGE SSR (PUNCH-LIST TRUST-PAGE row; spec rev 3g,
+// TRUST-PAGE-BUILD-SPEC-2026-09-02.md §1/§4, findings 5/13, preconditions
+// 3/6/7/8/11): §4's conditional accountability block and §7's live catalog
+// count. Both marker containers start EMPTY in the static file; the
+// content strings themselves (asymmetry echo, invariant, provenance, the
+// R-13 limits slot, the §7 labels) are Tyler-gated and NOT populated in
+// this build pass — see the build report for exactly what is still a
+// marker vs. wired.
+//
+// §4 render contract (finding 13 — the shipped live-data pattern fails
+// OPEN, same as renderLiveCatalogStats: catch -> return html unmodified).
+// For THIS block that fail-open behavior is the CORRECT fail-closed
+// outcome by construction: the static container's default is
+// data-partition-state="none" with nothing inside it, so returning the
+// html untouched on any derivation failure already serves "neither
+// branch," never a stale A or B. Precedence (precondition 11, GTM F-2):
+// computePartition (lib/partition-guard.js) checks the internal-identity
+// allowlist FIRST via isPlatformContributor OR the operator register —
+// there is no separate "null-account => external" rule run ahead of or
+// instead of that check.
+function renderTrustPagePartition(html) {
+  try {
+    const visible = visibleCatalog();
+    const register = loadInternalIdentitiesRegister(INTERNAL_IDENTITIES_FILE);
+    const partition = computePartition(visible, {
+      platformWallets: PLATFORM_WALLETS,
+      register,
+      isPlatformContributorFn: isPlatformContributor,
+    });
+    if (!partition) return html; // non-array catalog: treat as derivation failure, neither branch
+    // Content is Tyler-gated and stays empty this pass — only the render
+    // state marker moves. A future content pass fills the container
+    // between the SSR:PARTITION-STATE comments per `partition.state`.
+    return html.replace(
+      /(<[a-z]+ id="s4-partition-state" data-partition-state=")none("[^>]*>)/,
+      (_m, pre, post) => `${pre}${partition.state}${post}`
+    );
+  } catch (e) {
+    console.error('[trust-page] §4 partition render failed, serving fail-closed (neither branch):', e.message);
+    return html;
+  }
+}
+
+// §7 live catalog count — same truth source GET /knowledge/stats uses
+// (catalogStatsTruth, one derivation, shared with /earnings' SSR), read at
+// SSR time, never client-fetched. learnings_count is always computable
+// (in-memory catalog, cannot be "unreadable"); total_unlocks fails closed
+// to the static "…" placeholder when the unlock-event ledger is
+// unreadable — same convention as the existing lc-unlocks/ll-unlocks
+// honest-zero cells (never a stale or hardcoded digit).
+function renderTrustPageLiveCounts(html) {
+  try {
+    const visibleRows = visibleCatalog();
+    const truth = catalogStatsTruth(visibleRows);
+    const learnings = visibleRows.length.toLocaleString('en-US');
+    let out = html.replace(/(id="s7-learnings-count"[^>]*>)[^<]*</, (_m, tag) => `${tag}${learnings}<`);
+    if (truth.unlocks) {
+      const unlocks = truth.unlocks.total.toLocaleString('en-US');
+      out = out.replace(/(id="s7-unlocks-count"[^>]*>)[^<]*</, (_m, tag) => `${tag}${unlocks}<`);
+    }
+    // else: static "…" placeholder stays — fail-closed, never a false 0.
+    return out;
+  } catch (e) {
+    console.error('[trust-page] §7 live-count render failed, serving static placeholders:', e.message);
+    return html;
+  }
+}
+
+// TRUST-PAGE route (PUNCH-LIST TRUST-PAGE row; spec rev 3g §1). Content =
+// SITE-PM §2b/§3b (sections file rev 6) + §9b (rev 3a); §4/§7's SSR is this
+// pass's addition. CACHE (precondition, finding 13's cache bind): this
+// route sends `Cache-Control: no-store` on every path (including the
+// serveStatic fallback below), NOT the property's `public, max-age=3600` —
+// the render is a state-dependent truth claim over an in-memory filter, and
+// the property default was written for static copy. No `Vary` header: the
+// render depends only on server-side state (the catalog + the unlock
+// ledger), never on a request header, cookie, or negotiated content type,
+// so there is nothing for `Vary` to name.
 app.get('/how-submissions-work', (c) => {
-  const res = serveStatic(c, 'how-submissions-work.html');
+  try {
+    const filePath = path.join(PUBLIC_DIR, 'how-submissions-work.html');
+    if (fs.existsSync(filePath)) {
+      let html = fs.readFileSync(filePath, 'utf8');
+      html = renderTrustPagePartition(html);
+      html = renderTrustPageLiveCounts(html);
+      c.header('Content-Type', 'text/html; charset=utf-8');
+      c.header('Cache-Control', 'no-store');
+      return c.body(injectAnalytics(html, ANALYTICS_DOMAIN));
+    }
+  } catch (e) {
+    console.error('[trust-page] server-render failed, falling back to static:', e.message);
+  }
+  const res = serveStatic(c, 'how-submissions-work.html', 'no-store');
   if (res) return res;
   return c.text('Not found', 404);
 });
