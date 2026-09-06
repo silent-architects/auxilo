@@ -14,7 +14,7 @@
  *      except (a) which of the 5 labels carries class="active", (b) the
  *      Sign in / Dashboard auth-state slot (packet 11 §4: "an auth state,
  *      not a label difference; the component is one"), and (c) the
- *      "Connect your agent" CTA, which is public-pages-only per packet 11
+ *      "Connect Your Agent" CTA, which is public-pages-only per packet 11
  *      §4 ("stays as the nav's one CTA on public pages") — dashboard.html
  *      drops it (already connected) the same way it always had.
  *      API left the top nav entirely; it stays in the footer.
@@ -69,11 +69,15 @@ const PUBLIC_DIR = path.join(REPO, 'public');
 
 // The ruled label set, packet 11 §4 interim window (Search / How submissions
 // work stay out until their routes ship — no dead links, no placeholder
-// labels). Sentence case throughout, per packet 11 §4's amendment to IA rev
-// 3 §11. This array is the single point of change if the label set is ever
-// extended (Search / How submissions work / Works with) — everything below
-// derives from it rather than re-typing labels.
-const NAV_LABELS = ['How it works', 'For agents', 'For builders', 'Pricing', 'Earnings'];
+// labels). Title Case throughout, per Tyler's 2026-09-06 night casing
+// ruling ("Yes title case for nav menus and headlines that do not end in a
+// period"), which supersedes packet 11 §4's sentence-case amendment to IA
+// rev 3 §11 for nav labels. Order is unchanged from the interim window
+// (NAV-WAVE amendment: casing only, order untouched). This array is the
+// single point of change if the label set is ever extended (Search / How
+// submissions work / Works with) — everything below derives from it rather
+// than re-typing labels.
+const NAV_LABELS = ['How It Works', 'For Agents', 'For Builders', 'Pricing', 'Earnings'];
 
 // Enumerate every tracked public HTML page from git itself (not a hand-typed
 // list that can drift) — the NAV-WAVE build spec's own instruction.
@@ -92,9 +96,9 @@ const ALL_PUBLIC_HTML = gitTrackedPublicHtmlFiles();
 // describe "byte-identical except the active link" for the pages that DO
 // map onto one of the 5): reported as a SITE-PM call in the delivery report.
 const ACTIVE_LABEL_BY_FILE = {
-  'public/how-it-works.html': 'How it works',
-  'public/for-agents.html': 'For agents',
-  'public/for-builders.html': 'For builders',
+  'public/how-it-works.html': 'How It Works',
+  'public/for-agents.html': 'For Agents',
+  'public/for-builders.html': 'For Builders',
   'public/pricing.html': 'Pricing',
   'public/earnings.html': 'Earnings',
 };
@@ -134,7 +138,7 @@ function navLinkEntries(navBlock) {
 
 // Verifies one page's nav (given its full HTML + a label for error messages)
 // against the ruled shared component. `expectedActive` is a label string or
-// null. `expectCta` controls whether "Connect your agent" must be present
+// null. `expectCta` controls whether "Connect Your Agent" must be present
 // (true on public pages, false on dashboard.html).
 function assertSharedNav(html, pageLabel, expectedActive, expectCta) {
   const blocks = extractNavBlocks(html);
@@ -173,8 +177,8 @@ function assertSharedNav(html, pageLabel, expectedActive, expectCta) {
 
   const ctaEntry = entries.find((e) => e.href === '/#install');
   if (expectCta) {
-    assert.ok(ctaEntry, `${pageLabel}: public nav must carry the "Connect your agent" CTA`);
-    assert.equal(ctaEntry.text, 'Connect your agent');
+    assert.ok(ctaEntry, `${pageLabel}: public nav must carry the "Connect Your Agent" CTA`);
+    assert.equal(ctaEntry.text, 'Connect Your Agent');
   } else {
     assert.equal(ctaEntry, undefined, `${pageLabel}: dashboard nav must not carry the public CTA`);
   }
@@ -256,8 +260,11 @@ describe('NAV-WAVE A: every tracked public HTML page carries the shared #main-na
         .replace(/ id="nav-builders"(?: class="active")?/, ' id="nav-builders"')
         .replace(/ id="nav-pricing"(?: class="active")?/, ' id="nav-pricing"')
         .replace(/ id="nav-earnings"(?: class="active")?/, ' id="nav-earnings"')
-        .replace(/<li><a href="\/dashboard" id="nav-dashboard"[^>]*>(Sign in|Dashboard)<\/a><\/li>\s*/, '')
-        .replace(/<li><a href="\/#install"[^>]*>Connect your agent<\/a><\/li>\s*/, '');
+        // NAV-WAVE amendment (sign-in utility strip): the auth-slot link
+        // moved out of a <li> inside .nav-links into <a> inside
+        // .nav-strip (no <li> wrapper there — the strip isn't a list).
+        .replace(/<a href="\/dashboard" id="nav-dashboard"[^>]*>(Sign in|Dashboard)<\/a>\s*/, '')
+        .replace(/<li><a href="\/#install"[^>]*>Connect Your Agent<\/a><\/li>\s*/, '');
     }
     const normalized = ALL_PUBLIC_HTML.map((rel) => normalize(extractNavBlocks(readFile(rel))[0]));
     const [first, ...rest] = normalized;
@@ -427,6 +434,70 @@ describe('NAV-WAVE C: no bare "marketplace" outside the ruled/held allow-list', 
     for (const { file, text } of ALLOWED_BARE_LINES) {
       const content = fs.readFileSync(path.join(REPO, file), 'utf8');
       assert.ok(content.includes(text), `${file} should still contain ${JSON.stringify(text)}`);
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// D. The wordmark's triangle stroke is currentColor (AD nav re-rule sheet,
+//    2026-09-06 §2/§6): "The wordmark's triangle stroke goes from #C9A84C
+//    to currentColor so .nav-logo's ivory carries it and the mark reads as
+//    one lockup. The band then paints exactly one gold element, the CTA."
+//    Supersedes the earlier Wave E P2.10 post-deploy check that pinned the
+//    wordmark stroke itself as the nav's one gold element.
+// ═══════════════════════════════════════════════════════════════════════
+
+describe('NAV-WAVE D: the wordmark stroke is currentColor, not a fixed gold — the CTA is the nav band\'s one gold element', () => {
+  const WORDMARK_POLYGON = '<polygon points="16,2 30,28 2,28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>';
+  const WORDMARK_LINE = '<line x1="16" y1="17" x2="30" y2="17" stroke="currentColor" stroke-width="1.8"/>';
+  const WORDMARK_POLYGON_GOLD = '<polygon points="16,2 30,28 2,28" fill="none" stroke="#C9A84C" stroke-width="2.2" stroke-linejoin="round"/>';
+  const WORDMARK_LINE_GOLD = '<line x1="16" y1="17" x2="30" y2="17" stroke="#C9A84C" stroke-width="1.8"/>';
+
+  for (const rel of ALL_PUBLIC_HTML) {
+    it(`${rel}: the nav-logo wordmark's triangle stroke is currentColor, never the fixed gold hex`, () => {
+      const html = readFile(rel);
+      assert.ok(html.includes(WORDMARK_POLYGON), `${rel}: nav-logo polygon stroke must be currentColor`);
+      assert.ok(html.includes(WORDMARK_LINE), `${rel}: nav-logo line stroke must be currentColor`);
+      assert.doesNotMatch(html, /class="logo-mark"[\s\S]{0,200}?#C9A84C/, `${rel}: no logo-mark SVG may still carry the fixed gold hex`);
+    });
+  }
+
+  it('server.js legal shell: the nav-logo wordmark\'s triangle stroke is currentColor', () => {
+    const src = fs.readFileSync(path.join(REPO, 'server.js'), 'utf8');
+    assert.ok(src.includes(WORDMARK_POLYGON), 'server.js legal-shell nav-logo polygon stroke must be currentColor');
+    assert.ok(src.includes(WORDMARK_LINE), 'server.js legal-shell nav-logo line stroke must be currentColor');
+  });
+
+  it('dashboard.html: the login-logo (sign-in header) wordmark also moved to currentColor, same shape reused outside the nav', () => {
+    const html = readFile('public/dashboard.html');
+    const loginLogoStart = html.indexOf('<div class="login-logo">');
+    assert.ok(loginLogoStart > 0, 'dashboard.html must carry the .login-logo block');
+    const loginLogoSlice = html.slice(loginLogoStart, loginLogoStart + 400);
+    assert.ok(loginLogoSlice.includes(WORDMARK_POLYGON), 'login-logo polygon stroke must be currentColor');
+    assert.ok(loginLogoSlice.includes(WORDMARK_LINE), 'login-logo line stroke must be currentColor');
+  });
+
+  it('no page or the legal shell ships the retired fixed-gold wordmark pair anywhere', () => {
+    const scopeFiles = [...ALL_PUBLIC_HTML, 'server.js'];
+    for (const rel of scopeFiles) {
+      const content = fs.readFileSync(path.join(REPO, rel), 'utf8');
+      assert.doesNotMatch(content, new RegExp(WORDMARK_POLYGON_GOLD.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+        `${rel}: the retired fixed-gold wordmark polygon must be gone`);
+      assert.doesNotMatch(content, new RegExp(WORDMARK_LINE_GOLD.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+        `${rel}: the retired fixed-gold wordmark line must be gone`);
+    }
+  });
+
+  it('within the nav band markup, the CTA is the only element carrying a gold-painting class — the wordmark and the five labels carry none', () => {
+    for (const rel of ALL_PUBLIC_HTML) {
+      const html = readFile(rel);
+      const nav = extractNavBlocks(html)[0];
+      assert.ok(nav, `${rel}: nav block found`);
+      // The wordmark's own SVG no longer hardcodes a gold stroke (checked
+      // above); here confirm the nav-links anchors carry no inline gold
+      // styling either — the only sanctioned gold element in the band is
+      // class="nav-cta", styled entirely from styles.css, never inline.
+      assert.doesNotMatch(nav, /style="[^"]*#C9A84C/, `${rel}: no inline gold styling anywhere in #main-nav`);
     }
   });
 });

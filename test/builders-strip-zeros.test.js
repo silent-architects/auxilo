@@ -184,12 +184,25 @@ describe('BUILDERS-STRIP-ZEROS: /for-builders honest-zero cells are server-rende
     });
   });
 
-  it('(2) renderer catch forced → both cells stay at the static "…" placeholder, "Supply is ahead of demand." still present, failure logged', { timeout: 240_000 }, async (t) => {
+  it('(2) renderer catch forced → lc-unlocks/lc-paid stay at the static "…" placeholder, LEDGER-FAIL-OPEN-FB: the learnings-count cells hide entirely (fail-closed, not fail-open to "226"), "Supply is ahead of demand." still present, failure logged', { timeout: 240_000 }, async (t) => {
     await withStagedServer(t, { replacements: [RENDERER_THROW] }, async (html, boot) => {
       assert.equal(cellText(html, 'lc-unlocks'), '…', 'lc-unlocks stays at the static "…" placeholder on the fail path — never a static digit');
       assert.equal(cellText(html, 'lc-paid'), '…', 'lc-paid stays at the static "…" placeholder on the fail path — never a static digit');
       assert.equal(countSupplyLine(html), 1, 'the fail path leaves the sentence in place — an asserted zero is worse than the vaguer line');
-      assert.equal(cellText(html, 'lc-learnings-hero'), '226', 'the hero cell falls open to the static value, same as the strip cell');
+      // LEDGER-FAIL-OPEN-FB (2026-09-06): the hero and strip learnings-count
+      // cells used to fall open to a static "226" here — a stale claim
+      // surviving a render failure. They are now marker-wrapped and
+      // fail-closed like lc-price-range: the whole cell (count span +
+      // caption, and on the strip cell the as-of span too) is stripped on
+      // this path, never just the digit.
+      assert.doesNotMatch(html, /id="lc-learnings-hero"/, 'the hero cell is gone entirely on the fail path, not just emptied');
+      assert.doesNotMatch(html, /id="lc-learnings"[^-]/, 'the strip learnings-count cell is gone entirely on the fail path (negative lookahead excludes lc-learnings-hero)');
+      assert.doesNotMatch(html, /226/, 'no stale "226" literal survives the fail path anywhere on the page');
+      // "no stranded caption": the cell's OWN "learnings in the catalog"
+      // caption must not survive without its value — count how many times
+      // it appears versus the known-surviving non-stripped constants (70%,
+      // under 1 minute) to confirm the whole cell, caption included, is gone.
+      assert.doesNotMatch(html, /learnings in the catalog/, 'the "learnings in the catalog" caption does not strand without its value cell');
       await new Promise((r) => setTimeout(r, 200));
       assert.match(boot.getOutput(), /\[live-stats\] render failed, serving static values: BUILDERS-STRIP-ZEROS forced renderer failure/);
     });
@@ -269,8 +282,15 @@ describe('BUILDERS-STRIP-ZEROS: static file and source pins', () => {
     assert.match(fn, /if \(truth\.unlocks\)\s*\{/, 'the three substitutions are gated on the ledger being readable (truth.unlocks non-null)');
     assert.doesNotMatch(fn, /quality\.unlocks/, 'the cell derivation never reads the retired quality.unlocks counter');
     const catchBody = fn.slice(catchIdx);
-    assert.match(catchBody, /return html;/, 'the catch returns the html untouched — both cells stay at their static placeholder and the sentence stays');
-    assert.doesNotMatch(catchBody, /lc-unlocks|lc-paid|Supply is ahead/, 'the catch writes no cell value and does not touch the sentence');
+    // LEDGER-FAIL-OPEN-FB (2026-09-06): the catch no longer returns `html`
+    // bare — it now also strips the LC-LEARNINGS-CELL/LC-LEARNINGS-HERO-CELL
+    // marker blocks (see the dedicated builders-strip-zeros test below), so
+    // this is `return html\n  .replace(...)...;` rather than a standalone
+    // `return html;` statement. lc-unlocks/lc-paid/Supply are untouched
+    // either way — neither of those two new .replace() calls references
+    // them, which is what this assertion actually needs to hold.
+    assert.match(catchBody, /return html\s*\n?\s*(?:\.replace\([\s\S]*?\)\s*)*;/, 'the catch still returns (a transform of) html — no cell/sentence value is computed or written');
+    assert.doesNotMatch(catchBody, /lc-unlocks|lc-paid|Supply is ahead/, 'the catch writes no lc-unlocks/lc-paid cell value and does not touch the sentence');
   });
 
   it('server.js S2: catalogStatsTruth (the ledger read) is called at most once per render, and never when the page has no lc-unlocks cell', () => {
@@ -281,9 +301,11 @@ describe('BUILDERS-STRIP-ZEROS: static file and source pins', () => {
     assert.match(fn, /if \(html\.includes\('id="lc-unlocks"'\)\)\s*\{/, 'the ledger read sits behind an explicit html.includes(\'id="lc-unlocks"\') gate');
   });
 
-  it('public/for-builders.html: hero stat row ships the live-count cell in gold, the two constants at caption tier, and no $0.05 / minimum-unlock-price cell', () => {
+  it('public/for-builders.html: hero stat row ships the live-count cell EMPTY and marker-wrapped (LEDGER-FAIL-OPEN-FB, fail-closed — no static 226), the two constants at caption tier, and no $0.05 / minimum-unlock-price cell', () => {
     assert.equal((STATIC_HTML.match(/id="lc-learnings-hero"/g) || []).length, 1, 'lc-learnings-hero id appears exactly once');
-    assert.match(STATIC_HTML, /<span class="stat-num pull-stat-num" id="lc-learnings-hero">226<\/span>/, 'hero cell ships the static 226, gold tier (pull-stat-num)');
+    assert.match(STATIC_HTML, /<span class="stat-num pull-stat-num" id="lc-learnings-hero"><\/span>/, 'hero cell ships EMPTY, gold tier (pull-stat-num) — no static 226 literal');
+    assert.doesNotMatch(STATIC_HTML, /id="lc-learnings-hero">226/, 'the retired static 226 literal must not survive in the static file');
+    assert.match(STATIC_HTML, /<!--LC-LEARNINGS-HERO-CELL-->[\s\S]*?id="lc-learnings-hero">[\s\S]*?<!--\/LC-LEARNINGS-HERO-CELL-->/, 'the hero cell is wrapped in LC-LEARNINGS-HERO-CELL markers, same fail-closed pattern as lc-price-range');
     assert.match(STATIC_HTML, /<span class="stat-num pull-stat-caption">70%<\/span>\s*<span class="stat-label pull-stat-caption">direct share \(60% via discovery\)<\/span>/, '70% drops to caption tier, existing caption unchanged');
     assert.match(STATIC_HTML, /<span class="stat-num pull-stat-caption">under 1 minute<\/span>\s*<span class="stat-label pull-stat-caption">time to connect<\/span>/, '<1 min becomes the words "under 1 minute", also caption tier');
 
@@ -295,20 +317,42 @@ describe('BUILDERS-STRIP-ZEROS: static file and source pins', () => {
     const heroEnd = STATIC_HTML.indexOf('</section>', heroStart);
     assert.ok(heroStart > 0 && heroEnd > heroStart, 'the builders-hero section is located');
     const heroSection = STATIC_HTML.slice(heroStart, heroEnd);
-    assert.equal((heroSection.match(/class="builders-hero-stat"/g) || []).length, 3, 'exactly three stat cells in the hero row (226 / 70% / under 1 minute — the $0.05 cell is gone, not just re-tiered)');
+    assert.equal((heroSection.match(/class="builders-hero-stat"/g) || []).length, 3, 'exactly three stat cells in the hero row (the live-count cell / 70% / under 1 minute — the $0.05 cell is gone, not just re-tiered)');
     assert.doesNotMatch(heroSection, /\$0\.05/, 'the $0.05 hero figure is gone');
     assert.doesNotMatch(heroSection, /minimum unlock price/, 'the "minimum unlock price" caption is gone from the hero — the whole cell was removed');
     assert.doesNotMatch(heroSection, /pull-stat-secondary/, 'no cell in the hero row is left at the old $0.05/<1 min secondary tier');
     assert.doesNotMatch(heroSection, /&lt;1 min/, 'the old "<1 min" digit-form text is gone, replaced by the words "under 1 minute"');
 
     // Same regex-injection hazard the other live-stat suites guard against.
+    // The marker comments themselves (LC-LEARNINGS-HERO-CELL) carry no
+    // "id=" attribute text at all, so they're inert against the renderer's
+    // substitution regex the same way LC-PRICE-RANGE-CELL is.
     for (const m of STATIC_HTML.matchAll(/<!--[\s\S]*?-->/g)) {
       assert.doesNotMatch(m[0], /id="lc-learnings-hero"/,
         'no renderer-targeted id attribute inside an HTML comment');
     }
   });
 
-  it('server.js: the lc-learnings-hero substitution reuses the SAME `count` as lc-learnings, inside renderLiveCatalogStats\' try, immediately after the strip substitution', () => {
+  it('public/for-builders.html: the strip live-count cell (id="lc-learnings") also ships EMPTY and marker-wrapped, no static 226, no stranded caption', () => {
+    assert.equal((STATIC_HTML.match(/id="lc-learnings"[^-]/g) || []).length, 1, 'lc-learnings id (excluding the -hero variant) appears exactly once');
+    assert.match(STATIC_HTML, /<span class="stat-num pull-stat-num" id="lc-learnings"><\/span>/, 'strip cell ships EMPTY — no static 226 literal');
+    assert.match(STATIC_HTML, /<!--LC-LEARNINGS-CELL-->[\s\S]*?id="lc-learnings">[\s\S]*?learnings in the catalog[\s\S]*?<!--\/LC-LEARNINGS-CELL-->/, 'the count span + its OWN caption are wrapped in LC-LEARNINGS-CELL markers — no stranded caption for that pair on the fail path');
+    // id="lc-asof" is DELIBERATELY outside the LC-LEARNINGS-CELL markers —
+    // it's a separate, already-correct fail-closed cell (test/strip-date-
+    // hook.test.js owns it): ships empty, stays empty on the fail path,
+    // independent of the count. Bundling it into this marker pair would
+    // regress that suite's "span present and EMPTY" fail-path assertion
+    // into "span absent entirely".
+    const learningsCellMatch = STATIC_HTML.match(/<!--LC-LEARNINGS-CELL-->[\s\S]*?<!--\/LC-LEARNINGS-CELL-->/);
+    assert.ok(learningsCellMatch, 'LC-LEARNINGS-CELL marker pair found');
+    assert.doesNotMatch(learningsCellMatch[0], /id="lc-asof"/, 'id="lc-asof" is not inside the LC-LEARNINGS-CELL markers');
+    for (const m of STATIC_HTML.matchAll(/<!--[\s\S]*?-->/g)) {
+      assert.doesNotMatch(m[0], /id="lc-learnings"[^-]/,
+        'no renderer-targeted id="lc-learnings" attribute text inside an HTML comment (the LC-LEARNINGS-CELL marker itself carries no id= text)');
+    }
+  });
+
+  it('server.js: the lc-learnings-hero substitution reuses the SAME `count` as lc-learnings, inside renderLiveCatalogStats\' try, immediately after the strip substitution — markers strip on both success and the catch (LEDGER-FAIL-OPEN-FB, fail-closed)', () => {
     const start = SERVER_SRC.indexOf('function renderLiveCatalogStats(html) {');
     assert.ok(start > 0, 'renderer located');
     const end = SERVER_SRC.indexOf('\n}\n', start);
@@ -327,7 +371,17 @@ describe('BUILDERS-STRIP-ZEROS: static file and source pins', () => {
     assert.match(learningsCall, /\$\{count\}/, 'lc-learnings interpolates the `count` local');
     assert.match(heroCall, /\$\{count\}/, 'lc-learnings-hero interpolates the SAME `count` local, not a new one');
     assert.equal((fn.match(/const count = /g) || []).length, 1, 'only one `count` is ever derived in this function');
+    // LEDGER-FAIL-OPEN-FB (2026-09-06): the success path unconditionally
+    // strips both marker pairs before filling (reaching this point means
+    // `visible` derived without throwing); the marker removal must precede
+    // the id-based fill lines for each cell.
+    const heroMarkerStripIdx = fn.indexOf('LC-LEARNINGS-HERO-CELL');
+    const stripMarkerStripIdx = fn.indexOf('LC-LEARNINGS-CELL', tryIdx);
+    assert.ok(heroMarkerStripIdx > tryIdx && heroMarkerStripIdx < heroIdx, 'the LC-LEARNINGS-HERO-CELL markers are stripped before the hero cell is filled, inside the try');
+    assert.ok(stripMarkerStripIdx > tryIdx && stripMarkerStripIdx < learningsIdx, 'the LC-LEARNINGS-CELL markers are stripped before the strip cell is filled, inside the try');
     const catchBody = fn.slice(catchIdx);
-    assert.doesNotMatch(catchBody, /lc-learnings-hero/, 'the catch writes no hero-cell value — it stays at the static 226 shipped in the file');
+    assert.match(catchBody, /LC-LEARNINGS-HERO-CELL/, 'the catch ALSO strips the hero cell\'s marker-wrapped block — fail-closed on every route into this catch, not only when `visible` derives successfully');
+    assert.match(catchBody, /LC-LEARNINGS-CELL/, 'the catch ALSO strips the strip cell\'s marker-wrapped block');
+    assert.doesNotMatch(catchBody, /226/, 'the catch never writes or references the retired static 226 value');
   });
 });

@@ -26,13 +26,24 @@
   --aurum: #C9A84C;
   --aurum-dim: rgba(201, 168, 76, 0.15);
   --aurum-border: rgba(201, 168, 76, 0.35);
+  /* AD nav re-rule sheet 2026-09-06 §2: the nav CTA's hover ground —
+     "an ash-filled button on obsidian is a louder event than a gold-filled
+     one. P2.10 was correct for an outlined ghost button and wrong for a
+     filled one." Used only by .nav-cta:hover. */
+  --aurum-hi: #D8B95F;
   --slate: #8B929A;
   --slate-text: #8B929A;
   --ash: #E5E5E3;
-  /* Wave E2 item 10: one accent event per screen — the nav's active-link
-     gold and .nav-cta's gold border/text move to ash (the wordmark
-     triangle stroke, inline SVG in each page, keeps gold and is untouched
-     here); this token mirrors --aurum-border's alpha (0.35) on ash. */
+  /* Wave E2 item 10 sent the nav's active-link gold and .nav-cta's gold
+     border/text to ash. The AD nav re-rule sheet (2026-09-06 §2/§4)
+     supersedes the .nav-cta half of that call (back to a filled gold
+     button, --aurum-hi above); the active-link half is untouched by this
+     pass — see .nav-links a.active below. This token mirrors
+     --aurum-border's alpha (0.35) on ash and is still used there. The
+     wordmark triangle stroke (inline SVG in each page) is no longer a
+     fixed gold — the NAV-WAVE amendment moved it to currentColor, so
+     .nav-logo's ivory carries it and the CTA is the band's one gold
+     element. */
   --ash-border: rgba(229, 229, 227, 0.35);
   --code-bg: #111111;
   --section-pad: 120px 24px;
@@ -154,16 +165,24 @@ section h2 {
 }
 
 /* ── Navigation ────────────────────────────────────────────────────────────── */
+/* AD nav re-rule sheet 2026-09-06 §1: #main-nav is now the fixed HEADER
+   BLOCK holding two stacked children — .nav-strip (the sign-in utility
+   line) and .nav-row (the existing logo/links/hamburger row). One glass
+   ground (::before below) and one bottom rule for the whole block; neither
+   child gets its own. flex-direction:column stacks them in DOM order, but
+   .nav-strip carries order:-1 so it always renders above .nav-row
+   regardless of source order (kept second in source so the byte-order the
+   existing nav tests read — the 5 labels, then the CTA — is unaffected by
+   this restructuring; the auth-slot link simply moved out of .nav-links
+   into .nav-strip, which itself sits after .nav-row in the HTML). */
 #main-nav {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 100;
-  padding: 20px 24px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
   border-bottom: 1px solid rgba(229, 229, 227, 0.08);
 }
 
@@ -182,6 +201,51 @@ section h2 {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   pointer-events: none;
+}
+
+/* AD nav re-rule sheet §1: the sign-in utility strip. Height 26px, right
+   aligned on the nav's own 24px gutter (same horizontal padding as
+   .nav-row, so the strip word and the CTA share one right margin), 12px
+   IBM Plex Mono / weight 400 / letter-spacing 0.06em, sentence case,
+   vertically centered. Colour at rest var(--slate), hover var(--ash) —
+   never ivory, never gold. Holds "Sign in" or "Dashboard" only, same href
+   (/dashboard) both states — the label swaps per served page, not the
+   link. Part of the fixed band (inside #main-nav), so it never scrolls
+   away, and it does not collapse at any width — unlike .nav-row's links,
+   it never merges into the hamburger menu. order:-1 (see #main-nav above)
+   renders it above .nav-row. */
+.nav-strip {
+  order: -1;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 24px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+}
+
+.nav-strip a {
+  color: var(--slate);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.nav-strip a:hover {
+  color: var(--ash);
+}
+
+/* AD nav re-rule sheet §1: height is paid for out of the nav row, not the
+   page. Vertical padding drops from 20px to 14px so the header block lands
+   at the sheet's target height net of the 26px strip added above (net
+   cost 14px over the pre-strip 20px×2 nav alone). */
+.nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
 }
 
 /* Wave E2 item 12: 44px tap target (was 28.8px, AD-STEP4-FINAL P3.19). */
@@ -228,14 +292,19 @@ section h2 {
 
 /* AD sheet 9: nav CTA >= 36px tall (measured 35px live).
    Wave E2 item 12: raised to 44px (measured 40.4px live, AD-STEP4-FINAL
-   P3.18). Wave E2 item 10: gold border/text -> ash; hover moves to a
-   neutral highlight (matching .btn-secondary's hover treatment) instead of
-   the old gold-tinted --aurum-dim, so hovering doesn't reintroduce gold. */
+   P3.18). Wave E2 item 10 sent this to an ash ghost button ("one accent
+   event per screen"); the AD nav re-rule sheet (2026-09-06 §2/§6)
+   supersedes that call for a FILLED button: "The CTA is the property's one
+   filled button... The band then paints exactly one gold element, the
+   CTA." Ground var(--aurum), text var(--obsidian) (8.66:1 contrast per the
+   sheet), border recolored to var(--aurum) so the 1px box math is
+   unchanged. Hover raises the ground to --aurum-hi, text stays obsidian. */
 .nav-cta {
   font-size: 14px !important;
   font-weight: 500 !important;
-  color: var(--ash) !important;
-  border: 1px solid var(--ash-border);
+  color: var(--obsidian) !important;
+  background: var(--aurum);
+  border: 1px solid var(--aurum);
   padding: 8px 18px;
   border-radius: 4px;
   min-height: 44px;
@@ -246,8 +315,15 @@ section h2 {
 }
 
 .nav-cta:hover {
-  background: rgba(255, 255, 255, 0.06) !important;
-  color: var(--ash) !important;
+  background: var(--aurum-hi) !important;
+  color: var(--obsidian) !important;
+}
+
+/* AD sheet §2: "Focus ring 2px var(--ivory) at 2px offset, because a gold
+   ring dies on a gold ground." */
+.nav-cta:focus-visible {
+  outline: 2px solid var(--ivory);
+  outline-offset: 2px;
 }
 
 /* ── Hero ──────────────────────────────────────────────────────────────────── */
@@ -1337,20 +1413,27 @@ footer {
   transform: rotate(-45deg) translate(5px, -5px);
 }
 
-/* ── Responsive: nav (Wave E2 item 1) ─────────────────────────────────────
-   901-959px rendered the desktop nav squeezed with no hamburger fallback
-   (AD-STEP4-FINAL-2026-09-06.md §1.1: wordmark/first-link collision through
-   959px even net of the type swap, and the ruled seven-label reorder needs
-   1057 on one line). Per the wave sheet this moves to 1057, not the AD
-   pass's own 960. This is the ONLY media query gating the desktop-nav-vs-
-   hamburger switch (confirmed: no other .hamburger/.nav-links rule exists
-   in this sheet, and every per-page 900px query elsewhere in the codebase
-   gates unrelated grids, not this switch) — split out from the general
-   900px responsive block below so those unrelated breakpoints don't move
-   with it. Wave E2 item 12: the open-menu background goes from 0.97 to
-   full opacity (var(--obsidian)) so the hero/gold copy button stop reading
-   through it. */
-@media (max-width: 1057px) {
+/* ── Responsive: nav (Wave E2 item 1, reverted by AD nav re-rule sheet
+   2026-09-06 correction 1) ────────────────────────────────────────────────
+   Wave E2 moved this to 1057px for a wordmark/first-link collision that
+   depended on a seven-label reorder including "Search" and "How submissions
+   work" (158.4px, the widest label the nav would ever have carried). Both
+   labels are gone from the ruled set and 1057 was computed for them, so the
+   AD nav re-rule sheet (correction 1) voids that number: "Live and main
+   still collapse the nav at max-width: 900px. 1057 is wave E P1.1, built
+   but not live... Wave E P1.1 should be dropped, not merged, once the
+   six-label set lands." This NAV-WAVE amendment reverts the breakpoint to
+   900, matching the AD sheet's own arithmetic for the current 5-label
+   interim set (minimum one-line width well under 900). This is the ONLY
+   media query gating the desktop-nav-vs-hamburger switch (confirmed: no
+   other .hamburger/.nav-links rule exists in this sheet, and every other
+   900px query elsewhere in the codebase gates unrelated grids, not this
+   switch) — kept split out from the general-layout 900px block below (that
+   block's unrelated grids/section-pad rules are untouched) rather than
+   merged into it, so the two remain independently editable. Wave E2 item
+   12: the open-menu background stays full opacity (var(--obsidian)) so the
+   hero/gold copy button don't read through it. */
+@media (max-width: 900px) {
   .hamburger {
     display: flex;
   }

@@ -12019,10 +12019,21 @@ function renderLiveCatalogStats(html) {
     // Hero-row live count (SITE-PM ruling, /for-builders hero stat row): the
     // hero's live-count span is filled from the SAME `count` computed above
     // for the strip's live-count span — one derivation, two call sites on
-    // the same page, same fail-open static value ("226") on the catch path
-    // below. (Do not spell either span's id as a literal attribute here —
-    // see the HTML-side comment for why.)
+    // the same page. LEDGER-FAIL-OPEN-FB fix (2026-09-06): both cells used
+    // to fail OPEN to a static "226" literal shipped in the markup on the
+    // catch path below — a stale claim that survived a render failure.
+    // Both are now marker-wrapped (LC-LEARNINGS-CELL / LC-LEARNINGS-HERO-
+    // CELL), fail-closed like the LC-PRICE-RANGE-CELL tile below: reaching
+    // this line means `visible` derived without throwing, so the markers
+    // are unconditionally dropped and the spans filled — see the catch
+    // block below for the fail path, which strips the whole cells instead.
+    // (Do not spell either span's id as a literal attribute here — see the
+    // HTML-side comment for why.)
     let out = html
+      .replace(/<!--LC-LEARNINGS-HERO-CELL-->/g, '')
+      .replace(/<!--\/LC-LEARNINGS-HERO-CELL-->/g, '')
+      .replace(/<!--LC-LEARNINGS-CELL-->/g, '')
+      .replace(/<!--\/LC-LEARNINGS-CELL-->/g, '')
       .replace(/(id="lc-learnings"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${count}<`)
       .replace(/(id="lc-learnings-hero"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${count}<`)
       .replace(/(id="lc-categories"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${cats}<`)
@@ -12074,7 +12085,17 @@ function renderLiveCatalogStats(html) {
     return out;
   } catch (e) {
     console.error('[live-stats] render failed, serving static values:', e.message);
-    return html;
+    // LEDGER-FAIL-OPEN-FB fix (2026-09-06): this used to return `html`
+    // completely untouched, so if `visibleLearningsList()` itself threw
+    // (before the fill lines above ever ran), the lc-learnings /
+    // lc-learnings-hero markup — a stale static digit in earlier builds,
+    // now an empty span between LC-LEARNINGS-CELL / LC-LEARNINGS-HERO-CELL
+    // markers — would ship as authored. Strip both marker-wrapped cells
+    // here too so the fail path is fail-closed on every route into this
+    // catch, not only the range-is-empty branch above.
+    return html
+      .replace(/<!--LC-LEARNINGS-HERO-CELL-->[\s\S]*?<!--\/LC-LEARNINGS-HERO-CELL-->/g, '')
+      .replace(/<!--LC-LEARNINGS-CELL-->[\s\S]*?<!--\/LC-LEARNINGS-CELL-->/g, '');
   }
 }
 
@@ -12309,26 +12330,30 @@ function serveLegalPage(c, filename, title, seo) {
 </head>
 <body>
 <nav id="main-nav" aria-label="Main navigation">
-  <a href="/" class="nav-logo" id="nav-logo">
-    <!-- Angular A mark -->
-    <svg class="logo-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <polygon points="16,2 30,28 2,28" fill="none" stroke="#C9A84C" stroke-width="2.2" stroke-linejoin="round"/>
-      <line x1="16" y1="17" x2="30" y2="17" stroke="#C9A84C" stroke-width="1.8"/>
-    </svg>
-    <span class="wordmark">auxilo</span>
-  </a>
-  <ul class="nav-links" role="list">
-    <li><a href="/how-it-works" id="nav-how">How it works</a></li>
-    <li><a href="/for-agents" id="nav-agents">For agents</a></li>
-    <li><a href="/for-builders" id="nav-builders">For builders</a></li>
-    <li><a href="/pricing" id="nav-pricing">Pricing</a></li>
-    <li><a href="/earnings" id="nav-earnings">Earnings</a></li>
-    <li><a href="/dashboard" id="nav-dashboard">Sign in</a></li>
-    <li><a href="/#install" id="nav-cta-access" class="nav-cta">Connect your agent</a></li>
-  </ul>
-  <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
-    <span></span><span></span><span></span>
-  </button>
+  <div class="nav-row">
+    <a href="/" class="nav-logo" id="nav-logo">
+      <!-- Angular A mark -->
+      <svg class="logo-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <polygon points="16,2 30,28 2,28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
+        <line x1="16" y1="17" x2="30" y2="17" stroke="currentColor" stroke-width="1.8"/>
+      </svg>
+      <span class="wordmark">auxilo</span>
+    </a>
+    <ul class="nav-links" role="list">
+      <li><a href="/how-it-works" id="nav-how">How It Works</a></li>
+      <li><a href="/for-agents" id="nav-agents">For Agents</a></li>
+      <li><a href="/for-builders" id="nav-builders">For Builders</a></li>
+      <li><a href="/pricing" id="nav-pricing">Pricing</a></li>
+      <li><a href="/earnings" id="nav-earnings">Earnings</a></li>
+      <li><a href="/#install" id="nav-cta-access" class="nav-cta">Connect Your Agent</a></li>
+    </ul>
+    <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+  <div class="nav-strip">
+    <a href="/dashboard" id="nav-dashboard">Sign in</a>
+  </div>
 </nav>
   <div class="legal-wrap">
     <a href="/" class="legal-back">← Back to Auxilo</a>

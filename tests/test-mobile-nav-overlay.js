@@ -88,16 +88,22 @@ const NAV_PAGES = [
 const DYNAMIC_PAGES = NAV_PAGES;
 
 // Expected .nav-links link count per dynamic page. NAV-WAVE (2026-09-06):
-// the shared nav carries 5 labels (How it works / For agents / For builders
-// / Pricing / Earnings -- API removed to the footer) + the Sign in/Dashboard
-// auth slot + the "Connect your agent" CTA = 7 links on the public marketing
-// pages; dashboard.html is a distinct authenticated shell that drops the
-// CTA (already connected) and shows "Dashboard" (active) in the auth slot
-// instead of "Sign in" = 6 links -- confirmed against the real DOM, not a
-// guess.
-const EXPECTED_LINK_COUNT = { 'dashboard.html': 6 };
+// the shared nav carries 5 labels (How It Works / For Agents / For Builders
+// / Pricing / Earnings -- API removed to the footer) + the "Connect Your
+// Agent" CTA = 6 links on the public marketing pages; dashboard.html is a
+// distinct authenticated shell that drops the CTA (already connected) = 5
+// links -- confirmed against the real DOM, not a guess.
+//
+// NAV-WAVE amendment (2026-09-06, AD nav re-rule sheet §1): the sign-in
+// utility strip moved the Sign in/Dashboard auth slot OUT of .nav-links
+// entirely, into its own always-visible <div class="nav-strip"> above the
+// hamburger-collapsible nav row -- "it does not collapse and it does not
+// merge into the menu." So the auth slot no longer counts toward
+// .nav-links' link total on either page type; the counts above (6 / 5) are
+// one lower than the pre-amendment 7 / 6.
+const EXPECTED_LINK_COUNT = { 'dashboard.html': 5 };
 function expectedLinkCount(page) {
-    return EXPECTED_LINK_COUNT[page] || 7;
+    return EXPECTED_LINK_COUNT[page] || 6;
 }
 
 let passed = 0;
