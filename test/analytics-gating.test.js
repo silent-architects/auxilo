@@ -184,7 +184,10 @@ describe('server.js analytics wiring', () => {
   });
 
   it('the legal-page renderer goes through the same helper', () => {
-    const h = sliceAt('function serveLegalPage(', 8000);
+    // Wave E3 item 3 added the shared #main-nav markup + hamburger toggle
+    // script to serveLegalPage, pushing injectAnalytics() past the old
+    // 8000-char window (now ~9600 chars in) -- widened, not narrowed.
+    const h = sliceAt('function serveLegalPage(', 11000);
     assert.ok(h.includes('injectAnalytics(html, ANALYTICS_DOMAIN)'));
   });
 });
