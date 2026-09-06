@@ -698,4 +698,4 @@ Section headings are for convenience and reference only and shall not affect the
 
 ---
 
-*These Terms of Service were last updated on September 5, 2026 (descriptive corrections to Sections 4.1, 4.3, 5.5, 5.6, 5.9.3 and 5.10.4 so the text matches the Platform as operated; no new obligations). Current amendment: 2026-07-04-payee-agency-a1.*
+*These Terms of Service were last updated on September 6, 2026 (four Non-Material amendments — 2026-09-06-clean-lane-b1, 2026-09-06-dark-path-b2, 2026-09-06-byo-provider-c1 and 2026-09-06-credit-disclosure-c1 — to Sections 4.1, 5.8, 5.9, 5.9.3, 5.9.4(a) and 7.1, plus Privacy Policy Section 7.6; no new obligations, no change to the acceptance version). Current amendment: 2026-07-04-payee-agency-a1.*
