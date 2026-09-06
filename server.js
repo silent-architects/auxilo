@@ -12557,7 +12557,7 @@ function serveLegalPage(c, filename, title, seo) {
       // CREDITS-CONTROL PART 1 (GOV-2 D8): the served /terms page carried no
       // section anchors at all, so a "jump to §7" link had nothing to target.
       // Generic rule for every ## heading: a leading "N. " gets id="section-N"
-      // (matches the D8 link target /terms#section-7); anything else falls
+      // (links point at /terms; the ids remain for direct navigation); anything else falls
       // back to a slugified id. Applies to every legal page through this
       // shared renderer (/terms, /privacy), not just Payment Terms.
       .replace(/^## (.+)$/gm, (_m, text) => {
