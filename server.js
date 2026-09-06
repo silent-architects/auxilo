@@ -12733,7 +12733,7 @@ function serveLegalPage(c, filename, title, seo) {
 
 app.get('/terms', (c) => serveLegalPage(c, 'TERMS-OF-SERVICE.md', 'Terms of Service', {
   path: '/terms',
-  description: 'Auxilo terms of service covering accounts, payments, and the knowledge marketplace.',
+  description: 'Auxilo terms of service covering accounts, payments, and the Auxilo marketplace.',
 }));
 app.get('/privacy', (c) => serveLegalPage(c, 'PRIVACY-POLICY.md', 'Privacy Policy', {
   path: '/privacy',

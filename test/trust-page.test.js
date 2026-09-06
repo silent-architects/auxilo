@@ -49,7 +49,7 @@ const TRUST_HTML = fs.readFileSync(path.join(REPO, 'public', 'how-submissions-wo
 const TITLE = 'What Stands Between a Submission and the Public Catalog | Auxilo';
 const DESCRIPTION = "Auxilo is a marketplace for what agents learn. What every new submission passes before it reaches the public catalog, what Auxilo does not claim, and where the catalog stands today.";
 const CANONICAL = 'https://auxilo.io/how-submissions-work';
-const H1 = 'What stands between a submission and the public catalog';
+const H1 = 'What Stands Between a Submission and the Public Catalog';
 const LLMS_LINE = '- How submissions reach the catalog: https://auxilo.io/how-submissions-work';
 const REDIRECT_SOURCES = ['/trust', '/governance', '/for-platforms', '/platforms'];
 
@@ -228,12 +228,12 @@ describe('Trust page: route, redirects, head tags, h1, forbidden strings', { tim
   });
 
   it('§0 (operator callout): byte-equal to the ship-rev string', () => {
-    assert.ok(TRUST_HTML.includes(`<h2 id="operator-callout-heading">If you run agents that will consume this catalog</h2>`), '§0 heading');
+    assert.ok(TRUST_HTML.includes(`<h2 id="operator-callout-heading">If You Run Agents That Will Consume This Catalog</h2>`), '§0 heading');
     assert.ok(TRUST_HTML.includes(`<p>${S0_CALLOUT}</p>`), '§0 body verbatim');
   });
 
   it('§1 (What Auxilo is): byte-equal to the ship-rev E2 string', () => {
-    assert.ok(TRUST_HTML.includes(`<h2 id="what-auxilo-is-heading">What Auxilo is</h2>`), '§1 heading');
+    assert.ok(TRUST_HTML.includes(`<h2 id="what-auxilo-is-heading">What Auxilo Is</h2>`), '§1 heading');
     assert.ok(TRUST_HTML.includes(`<p>${S1_BODY}</p>`), '§1 body verbatim (E2)');
   });
 
@@ -249,13 +249,13 @@ describe('Trust page: route, redirects, head tags, h1, forbidden strings', { tim
   });
 
   it('§2 (Where learnings come from): byte-equal to the ship-rev E4/E5 strings', () => {
-    assert.ok(TRUST_HTML.includes(`<h2 id="learnings-source-heading">Where learnings come from</h2>`), '§2 heading');
+    assert.ok(TRUST_HTML.includes(`<h2 id="learnings-source-heading">Where Learnings Come From</h2>`), '§2 heading');
     assert.ok(TRUST_HTML.includes(S2_PARA1), '§2 paragraph 1 verbatim (E4)');
     assert.ok(TRUST_HTML.includes(S2_PARA2), '§2 paragraph 2 verbatim (E5)');
   });
 
   it('§3 (The submission path): byte-equal to the ship-rev strings, all four blocks', () => {
-    assert.ok(TRUST_HTML.includes(`<h2 id="submission-path-heading">The submission path</h2>`), '§3 heading');
+    assert.ok(TRUST_HTML.includes(`<h2 id="submission-path-heading">The Submission Path</h2>`), '§3 heading');
     for (const p of [S3_PARA1, S3_PARA2, S3_PARA3, S3_PARA4]) {
       assert.ok(TRUST_HTML.includes(`<p>${p}</p>`), `§3 block verbatim: "${p.slice(0, 40)}..."`);
     }
