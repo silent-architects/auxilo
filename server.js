@@ -12018,19 +12018,28 @@ function renderLiveCatalogStats(html) {
     // ledger truth as /knowledge/stats and the /earnings SSR
     // (catalogStatsTruth — one derivation, three call sites). truth.unlocks
     // is null when the unlock-event ledger is unreadable: both cells then
-    // stay EMPTY here (never a static digit) and the abstraction sentence
-    // below the strip is left untouched (a false zero is worse than the
-    // vaguer sentence). When the ledger IS readable, both cells render and
-    // the sentence comes out via the same substitution pass — a visible
-    // zero replaces the abstraction. Never the retired per-learning counter.
-    const truth = catalogStatsTruth(visible);
-    if (truth.unlocks) {
-      const unlocks = String(truth.unlocks.total);
-      const paid = `$${truth.total_earnings_usd.toFixed(2)}`;
-      out = out
-        .replace(/(id="lc-unlocks"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${unlocks}<`)
-        .replace(/(id="lc-paid"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${paid}<`)
-        .replace(/<p[^>]*\bid="lc-supply-line"[^>]*>[\s\S]*?<\/p>\s*/, '');
+    // stay at the static "…" placeholder here (never a static digit) and the
+    // abstraction sentence below the strip is left untouched (a false zero
+    // is worse than the vaguer sentence). When the ledger IS readable, both
+    // cells render and the sentence comes out via the same substitution pass
+    // — a visible zero replaces the abstraction. Never the retired
+    // per-learning counter.
+    //
+    // Wave B S2 (Gate-A 2026-09-06): catalogStatsTruth does a synchronous
+    // ledger read (data/unlock-events.jsonl). /for-builders is the only page
+    // that renders the cells it feeds — gate the read on that page's own
+    // markup (id="lc-unlocks") so /how-it-works, /for-agents, and /pricing
+    // never pay for a read whose result they'd discard.
+    if (html.includes('id="lc-unlocks"')) {
+      const truth = catalogStatsTruth(visible);
+      if (truth.unlocks) {
+        const unlocks = String(truth.unlocks.total);
+        const paid = `$${truth.total_earnings_usd.toFixed(2)}`;
+        out = out
+          .replace(/(id="lc-unlocks"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${unlocks}<`)
+          .replace(/(id="lc-paid"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${paid}<`)
+          .replace(/<p[^>]*\bid="lc-supply-line"[^>]*>[\s\S]*?<\/p>\s*/, '');
+      }
     }
     return out;
   } catch (e) {
