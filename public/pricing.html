@@ -151,15 +151,6 @@
       text-align: center;
       padding: 140px 24px 88px;
     }
-    /* AD sheet 5 item 4: the hero's own .container was double-indented by the
-       shared .container's 24px side padding on top of this section's own
-       symmetric 24px padding, landing hero content at a 194px left edge
-       instead of the 170px every other page's hero renders at 1440px. Only
-       the hero container is affected — every other section on this page still
-       uses the shared .container unmodified. */
-    #pricing-hero .container {
-      padding: 0;
-    }
     .pricing-page-header .page-eyebrow {
       font-size: 11px;
       font-weight: 400;
@@ -997,7 +988,8 @@
       </div>
       <div class="econ-card">
         <p class="econ-label">Max Price</p>
-        <p class="econ-value" id="lc-price-range">$0.05 to $50.00</p>
+        <p class="econ-value">$50.00</p>
+        <p class="econ-desc">The ceiling, reserved for architectural breakthroughs with proven demand.</p>
       </div>
       <div class="econ-card">
         <p class="econ-label">Builder Cut</p>

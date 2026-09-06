@@ -5,13 +5,13 @@
  * (2026-09-06 build).
  *
  * Item 1: `/pricing` moves onto the `serveHtmlWithLiveData` path (the same
- * one `/how-it-works`, `/for-builders`, `/for-agents` already use), so the
- * `$50.00` econ-value tile ("Max Price") is replaced by the live observed
- * price range — the same `id="lc-price-range"` substitution `renderLiveCatalogStats`
- * already performs on those three pages. The static fallback baked into
- * public/pricing.html ("$0.05 to $50.00") is the same bound the page ships
- * elsewhere (title, JSON-LD, the "How Pricing Works" callout) and matches
- * renderLiveCatalogStats' own hardcoded fallback — never a fabricated number.
+ * one `/how-it-works`, `/for-builders`, `/for-agents` already use). The
+ * Gate-A B1 ruling (2026-09-06) reverted the "Max Price" econ tile back to
+ * its static `$50.00` form — the `id="lc-price-range"` observed-range
+ * promotion on this tile waits on SITE-PM's label — so this file no longer
+ * asserts anything about `lc-price-range` on /pricing. It still asserts the
+ * page renders through the live-data route (the route itself was not
+ * reverted).
  *
  * Item 2: the Value Tiers table's persuasive `EXAMPLE` column (four
  * fabricated listings) comes out entirely — narrowing the table to three
@@ -21,12 +21,10 @@
  * Two guards, matching repo convention (test/pricing-visibility.test.js,
  * test/ad-routes.test.js):
  *   1. Structural — server.js source: GET /pricing calls serveHtmlWithLiveData,
- *      and public/pricing.html carries the lc-price-range element and zero
- *      EXAMPLE-column markup.
- *   2. Behavioral — boot the real server against a fixture catalog with two
- *      distinctly-priced approved learnings and assert GET /pricing renders
- *      the live-computed range (not the static fallback) and no example-text
- *      cells / Example header.
+ *      and public/pricing.html carries zero EXAMPLE-column markup.
+ *   2. Behavioral — boot the real server and assert GET /pricing renders
+ *      successfully off the live-data path with no example-text cells /
+ *      Example header.
  *
  * Runner: node --test test/pricing-live-range.test.js
  */
@@ -43,12 +41,10 @@ const {
   stopServer,
   BOOT_SANDBOX_SKIP_REASON,
 } = require('./helpers/staged-server');
-const pricingEngine = require('../lib/pricing.js');
 
 const REPO_ROOT = path.join(__dirname, '..');
 const SERVER_SRC = fs.readFileSync(path.join(REPO_ROOT, 'server.js'), 'utf8');
 const PRICING_HTML = fs.readFileSync(path.join(REPO_ROOT, 'public', 'pricing.html'), 'utf8');
-const DEFAULT_UNLOCK_PRICE = 0.08; // server.js's own fallback (mirrored here, not imported)
 
 function routeSlice(marker) {
   const start = SERVER_SRC.indexOf(marker);
@@ -69,22 +65,11 @@ describe('structural: /pricing on the live-data path; EXAMPLE column gone from t
       '/pricing must still fall back to serveStatic on a failed live render');
   });
 
-  it('public/pricing.html carries id="lc-price-range" on the former $50.00 tile, with the page\'s own static bound as fallback', () => {
-    const m = PRICING_HTML.match(/<p class="econ-value" id="lc-price-range">([^<]*)<\/p>/);
-    assert.ok(m, 'the Max Price tile must carry id="lc-price-range" for the SSR regex to fill');
-    assert.equal(m[1], '$0.05 to $50.00',
-      'the static fallback must be the bound already shipped elsewhere on this page, never a fabricated number');
-    assert.ok(!/<p class="econ-value">\$50\.00<\/p>/.test(PRICING_HTML),
-      'the raw static $50.00 tile (no id) must be gone — it must not coexist with the live element');
-  });
-
-  it('the "$0.05 to $50.00" fallback matches renderLiveCatalogStats\' own hardcoded default', () => {
-    const rlcs = SERVER_SRC.slice(
-      SERVER_SRC.indexOf('function renderLiveCatalogStats'),
-      SERVER_SRC.indexOf('function serveHtmlWithLiveData')
-    );
-    assert.ok(rlcs.includes("let range = '$0.05 to $50.00'"),
-      'renderLiveCatalogStats default range must still be $0.05 to $50.00 (the value this test pins as the page\'s static fallback)');
+  it('public/pricing.html carries the reverted Max Price tile ($50.00, no lc-price-range id, econ-desc present)', () => {
+    assert.ok(PRICING_HTML.includes('<p class="econ-value">$50.00</p>'),
+      'the Max Price tile must be the static $50.00 value (B1 revert, pending SITE-PM label)');
+    assert.ok(!PRICING_HTML.includes('id="lc-price-range"'),
+      'lc-price-range must not appear on /pricing — the observed-range promotion waits on SITE-PM\'s label');
   });
 
   it('the Value Tiers EXAMPLE column is gone: no <th>Example</th>, no example-text cells, tier rows kept byte-identical otherwise', () => {
@@ -139,20 +124,8 @@ function fixtureCatalog() {
   ];
 }
 
-// Mirrors server.js's displayPrice() exactly (server.js ~11889), so the
-// expected range is DERIVED the same way the server derives it, rather than
-// hand-computed — the pricing algorithm's demand/freshness multipliers are
-// exercised for real, not approximated.
-function expectedDisplayPrice(learning, catalog) {
-  const p = (learning.pricing && learning.pricing.current_price)
-    || pricingEngine.getCurrentPrice(learning, catalog)
-    || learning.unlock_price
-    || DEFAULT_UNLOCK_PRICE;
-  return Math.min(50, Math.max(0.05, Number(p) || DEFAULT_UNLOCK_PRICE));
-}
-
-describe('behavioral: GET /pricing renders the live price range, no EXAMPLE column', () => {
-  it('renders id="lc-price-range" with the live-computed min/max, and zero example-text cells', { timeout: 90_000 }, async (t) => {
+describe('behavioral: GET /pricing renders through the live-data path, no EXAMPLE column', () => {
+  it('renders 200 off serveHtmlWithLiveData, with zero example-text cells', { timeout: 90_000 }, async (t) => {
     let nodeModulesDir;
     try {
       const honoEntry = require.resolve('hono', { paths: [REPO_ROOT] });
@@ -206,18 +179,6 @@ describe('behavioral: GET /pricing renders the live price range, no EXAMPLE colu
       assert.equal(res.status, 200);
       assert.match(res.headers.get('content-type') || '', /^text\/html/);
       const html = await res.text();
-
-      // Expected range: derived the SAME way displayPrice() derives it,
-      // against the exact fixture catalog that was staged.
-      const prices = catalog.map((l) => expectedDisplayPrice(l, catalog));
-      const expectedRange = `$${Math.min(...prices).toFixed(2)} to $${Math.max(...prices).toFixed(2)}`;
-
-      const m = html.match(/id="lc-price-range"[^>]*>([^<]*)</);
-      assert.ok(m, 'lc-price-range element must be present in the rendered HTML');
-      assert.equal(m[1], expectedRange,
-        `live price range must reflect the fixture catalog (expected ${expectedRange}), not the static fallback`);
-      assert.notEqual(m[1], '$0.05 to $50.00',
-        'a two-learning fixture at $0.20/$5.00 must not render the untouched static fallback');
 
       // Item 2: EXAMPLE column absent from the live-rendered page too.
       assert.ok(!html.includes('example-text'), 'no example-text cells in the served HTML');

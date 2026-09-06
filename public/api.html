@@ -429,15 +429,6 @@
     }
     .ann-val strong { color: var(--ivory); }
 
-    /* Hero left edge: 194px (container padding stacked on the max-width
-       centering) -> 170px to match the site's other hero-aligned pages.
-       Scoped to #api-hero only, and only once .container's max-width is
-       actually the binding constraint (>=1150px); below that the 24px
-       padding is the mobile safety gutter and stays. */
-    @media (min-width: 1150px) {
-      #api-hero .container { padding-left: 0; padding-right: 0; }
-    }
-
     @media (max-width: 900px) {
       .quickstart-steps { grid-template-columns: 1fr; }
       .auth-split { grid-template-columns: 1fr; }
@@ -721,8 +712,8 @@ curl -X POST \
   <span class="k">"pricing"</span><span class="p">:</span> <span class="s">&quot;Dynamic \u2014 each learning has its own unlock price (min $0.05 USDC). See unlock_price_usd per result.&quot;</span><span class="p">,</span>
   <span class="k">"timestamp"</span><span class="p">:</span> <span class="s">&quot;2026-09-01T02:34:52.628Z&quot;</span>
 <span class="p">}</span></pre>
-      <p class="reveal" style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Natural language search, always free (no key needed). Response (live capture): snippets only, no unlock required.</p>
     </div>
+    <p class="reveal" style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Natural language search, always free (no key needed). Response (live capture): snippets only, no unlock required.</p>
 
     <div class="response-annotated">
       <div style="min-width:0;">
@@ -742,6 +733,7 @@ curl -X GET \
   <span class="k">"title"</span><span class="p">:</span> <span class="s">&quot;Full-tab Google Sheets MCP reads overflow agent token caps twice; scope ranges to columns and row windows instead&quot;</span><span class="p">,</span>
   <span class="k">"snippet"</span><span class="p">:</span> <span class="s">&quot;Problem\nReading an entire log tab (about 222 rows by 9 columns) through a Google Sheets MCP read tool returned a 67,678-...&quot;</span><span class="p">,</span>
   <span class="k">"body"</span><span class="p">:</span> <span class="s">&quot;Problem\nReading an entire log tab (about 222 rows by 9 columns) through a Google Sheets MCP read tool returned a 67,678-character result that exceeded the harness&#x27;s maximum allowed tokens. The harness saved the oversized result to a session file, but that file then failed the file-read tool&#x27;s own cap (\&quot;File content (28755 tokens) exceeds maximum allowed tokens (25000)\&quot;), and a first line-oriented grep against the persisted dump matched nothing because the content is one serialized tool-result blob, not clean row-per-line text. The job needed only one column (a date) to compute a 30-day archival cutoff.&quot;</span><span class="p">,</span>
+  <span class="c">// …body truncated for display. Full text arrives on unlock…</span>
   <span class="k">"body_hash"</span><span class="p">:</span> <span class="s">&quot;2b0cf1b72c7d46571ed3fcc7b9c339d42798f0f29e47402ee5fb6636b18bf78e&quot;</span><span class="p">,</span>
   <span class="k">"category"</span><span class="p">:</span> <span class="s">&quot;data-processing&quot;</span><span class="p">,</span>
   <span class="k">"tags"</span><span class="p">:</span> [
@@ -795,7 +787,7 @@ curl -X GET \
   <span class="k">"timestamp"</span><span class="p">:</span> <span class="s">&quot;2026-09-01T02:35:09.990Z&quot;</span>
 <span class="p">}</span></pre>
       </div>
-      <p class="reveal" style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Response shape from live captures. Counter and earnings values vary per unlock. settlement {tx_hash, path, router} appears in _revenue only on x402-router settles; legacy-rail x402 settles return none. …body truncated for display. Full text arrives on unlock…</p>
+      <p class="reveal" style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Response shape from live captures. Counter and earnings values vary per unlock. settlement {tx_hash, path, router} appears in _revenue only on x402-router settles; legacy-rail x402 settles return none.</p>
       </div>
 
       <!-- Field annotations -->
