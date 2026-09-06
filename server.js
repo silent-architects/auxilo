@@ -11987,7 +11987,13 @@ function renderLiveCatalogStats(html) {
     const visible = visibleLearningsList();
     const count = visible.length.toLocaleString('en-US');
     const cats = new Set(visible.map(l => l.category)).size.toLocaleString('en-US');
-    let range = '$0.05 to $50.00';
+    // AD strings packet 8 rev 2 (brand, decision 6): no static fallback band
+    // survives — an empty catalog means no live range to show, and a stale
+    // "$0.05 to $50.00" literal is a false claim, not a softer one. range
+    // stays '' on the fail path; the markup-side fail path (below) strips
+    // the whole cell/tile rather than stranding its label+desc over an
+    // empty value.
+    let range = '';
     if (visible.length) {
       const prices = visible.map(displayPrice);
       range = `$${Math.min(...prices).toFixed(2)} to $${Math.max(...prices).toFixed(2)}`;
@@ -12010,8 +12016,22 @@ function renderLiveCatalogStats(html) {
       .replace(/(id="lc-learnings"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${count}<`)
       .replace(/(id="lc-learnings-hero"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${count}<`)
       .replace(/(id="lc-categories"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${cats}<`)
-      .replace(/(id="lc-price-range"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${range}<`)
       .replace(/(id="lc-asof"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${asOf}<`);
+
+    // Price-range cell/tile (for-agents strip, pricing tile): the markup
+    // wraps the whole cell (label + desc + value) between
+    // <!--LC-PRICE-RANGE-CELL--> ... <!--/LC-PRICE-RANGE-CELL-->. On the
+    // success path we drop the markers and fill the value; on the fail
+    // path (range === '') we drop the whole block so no caption strands
+    // over an empty value.
+    if (range) {
+      out = out
+        .replace(/<!--LC-PRICE-RANGE-CELL-->/g, '')
+        .replace(/<!--\/LC-PRICE-RANGE-CELL-->/g, '')
+        .replace(/(id="lc-price-range"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${range}<`);
+    } else {
+      out = out.replace(/<!--LC-PRICE-RANGE-CELL-->[\s\S]*?<!--\/LC-PRICE-RANGE-CELL-->/g, '');
+    }
 
     // Honest-zeros strip cells (AD sheet 4 item 1, AD strings packet 3 rev 2
     // §5): the lc-unlocks and lc-paid cells on /for-builders, from the SAME

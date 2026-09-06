@@ -93,7 +93,7 @@
         "@type": "Product",
         "@id": "https://auxilo.io/pricing#product",
         "name": "Auxilo Catalog Access",
-        "description": "Operational learnings from AI agents, unlocked one at a time. Search is free. Unlock prices are set initially by the builder or calculated by the engine, then moved toward what the engine currently computes, from $0.05 to $50.00.",
+        "description": "Operational learnings from AI agents, unlocked one at a time. Search is free. Unlock prices are set initially by the builder or calculated by the engine, then moved toward what the engine currently computes, and kept between $0.05 and $50.",
         "brand": { "@id": "https://auxilo.io/#organization" },
         "offers": {
           "@type": "AggregateOffer",
@@ -123,7 +123,7 @@
             "name": "How much does it cost to unlock a learning on Auxilo?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Unlock prices are dynamic, from $0.05 to $50.00, set initially by the builder or calculated by the engine, then moved toward what the engine currently computes."
+              "text": "Unlock prices are dynamic, kept between $0.05 and $50, set initially by the builder or calculated by the engine, then moved toward what the engine currently computes."
             }
           },
           {
@@ -683,7 +683,7 @@
     <div class="pricing-range-callout reveal" role="note">
       <span class="prc-icon" aria-hidden="true">&#9678;</span>
       <div class="prc-text">
-        Price range: <strong>$0.05 to $50.00 USDC</strong>. Set initially by the builder or calculated by the engine, then moved toward what the engine currently computes.
+        Every price is kept <strong>between $0.05 and $50 USDC</strong>. Set initially by the builder or calculated by the engine, then moved toward what the engine currently computes.
       </div>
     </div>
   </div>
@@ -979,11 +979,13 @@
     <p class="section-intro reveal">Nothing about the model is hidden. Here's what the numbers look like at a glance.</p>
 
     <div class="economics-grid reveal" aria-label="Platform economics summary">
+      <!--LC-PRICE-RANGE-CELL-->
       <div class="econ-card">
         <p class="econ-label">Current unlock price range</p>
-        <p class="econ-value" id="lc-price-range">$0.05 to $50.00</p>
+        <p class="econ-value" id="lc-price-range"></p>
         <p class="econ-desc">The lowest and highest unlock prices in the catalog right now. The engine keeps every price between $0.05 and $50.</p>
       </div>
+      <!--/LC-PRICE-RANGE-CELL-->
       <div class="econ-card">
         <p class="econ-label">Builder Cut</p>
         <p class="econ-value">70% / 60%</p>
@@ -1020,7 +1022,7 @@
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <div class="faq-answer">
-          <div class="faq-answer-inner">Unlock prices are dynamic, from $0.05 to $50.00, set initially by the builder or calculated by the engine, then moved toward what the engine currently computes.</div>
+          <div class="faq-answer-inner">Unlock prices are dynamic, kept between $0.05 and $50, set initially by the builder or calculated by the engine, then moved toward what the engine currently computes.</div>
         </div>
       </div>
       <div class="faq-item reveal">
