@@ -335,18 +335,40 @@ describe('providers/index.js — resolveProvider selection', () => {
     assert.match(resolved.reason, /claude-code, codex-cli, byo-key/);
   });
 
-  it('codex-cli and byo-key degrade to clean "not installed yet" stubs (no throw) until PART B/C add files', async () => {
-    const codexResult = await providers.PROVIDERS_STATE_PATH; // sanity: module loaded without throwing
-    assert.equal(typeof codexResult, 'string');
+  it('byo-key still degrades to a clean "not installed yet" stub (no throw) until PART C adds it', async () => {
+    const statePath = await providers.PROVIDERS_STATE_PATH; // sanity: module loaded without throwing
+    assert.equal(typeof statePath, 'string');
     const resolved = await providers.resolveProvider({
-      env: { AUXILO_EXTRACTION_PROVIDER: 'codex-cli' },
+      env: { AUXILO_EXTRACTION_PROVIDER: 'byo-key' },
       providerCache: {},
     });
     assert.equal(resolved.ok, true); // selection succeeds (override wins)
     const runResult = await resolved.module.runModel({});
     assert.equal(runResult.ok, false);
     assert.equal(runResult.reasonCode, 'provider-not-installed');
-    assert.match(runResult.reason, /codex-cli/);
+    assert.match(runResult.reason, /byo-key/);
+  });
+
+  // codex-cli's stub window closed in PART B (scripts/providers/codex-cli.js
+  // now exists — see test/codex-cli-provider.test.js for its real behavior
+  // coverage). This case now proves the opposite of the above: selection
+  // resolves to the REAL module (not a stub), and that module never throws
+  // and never silently spawns anything real under injected opts that give it
+  // no way to authenticate.
+  it('codex-cli resolves to its real module (no longer a stub) and degrades cleanly, without spawning, when unauthenticated', async () => {
+    const resolved = await providers.resolveProvider({
+      env: { AUXILO_EXTRACTION_PROVIDER: 'codex-cli' },
+      providerCache: {},
+    });
+    assert.equal(resolved.ok, true);
+    let spawnCalls = 0;
+    const runResult = await resolved.module.runModel({
+      homeDir: '/fixture/home-with-no-codex-auth-json',
+      spawnSyncImpl: () => { spawnCalls += 1; throw new Error('must not spawn — no auth.json in this fixture home'); },
+    });
+    assert.equal(runResult.ok, false);
+    assert.equal(runResult.reasonCode, 'cli-unauthenticated');
+    assert.equal(spawnCalls, 0);
   });
 });
 

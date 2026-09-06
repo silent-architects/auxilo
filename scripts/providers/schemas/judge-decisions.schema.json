@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$comment": "EXTRACT-PER-CLIENT W1 PART B — passed to `codex exec --output-schema` for mode:'judge'. Mirrors scripts/extract-local.js's parseJudgeDecisions (line 447): one decision object per candidate, keyed by candidate_index, matched_index_id only meaningful when duplicate:true. The 'required id must be inside the candidate's own top-K rankings list' rule and the 'exactly one decision per candidate, no duplicate indices' rule are enforced by parseJudgeDecisions itself, not expressible in JSON Schema — a schema-conformant response can still fail the parser. This file is a HINT to codex; parseJudgeDecisions remains the source of truth.",
+  "type": "object",
+  "properties": {
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "candidate_index": { "type": "integer", "minimum": 0 },
+          "duplicate": { "type": "boolean" },
+          "matched_index_id": { "type": "string" }
+        },
+        "required": ["candidate_index", "duplicate"]
+      }
+    }
+  },
+  "required": ["decisions"]
+}
