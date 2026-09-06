@@ -608,14 +608,21 @@ function extractionProviderLine(resolution) {
  * EXTRACT-PER-CLIENT W1 PART C — the companion conditional line PART A left
  * unimplemented (see its report): printed ONLY when the last recorded
  * extraction skip reasonCode (runner.js's normalizeExtractionSkipState,
- * last_reason_code field, added in this part) is one of the three the spec
- * names; null (nothing printed) for every other state, including "no state
- * file yet" and "last outcome was a real success."
+ * last_reason_code field, added in this part) is one of the names below;
+ * null (nothing printed) for every other state, including "no state file
+ * yet" and "last outcome was a real success."
+ *
+ * 'no-usable-provider' added in the W1 P1 fix (PUNCH-LIST): distinct from
+ * 'no-model-provider-available' (nothing even LOOKED usable at the detect()
+ * stage) — this is the selection-fall-through exhaustion code from
+ * scripts/providers/index.js's runModel(), where every provider in
+ * PROVIDER_ORDER was actually tried and each failed for its own reason.
  */
 const STATUS_WORTHY_SKIP_REASON_CODES = Object.freeze([
   'cli-billing-helper-configured',
   'cli-unauthenticated',
   'no-model-provider-available',
+  'no-usable-provider',
 ]);
 
 /** Pure render, mirroring runnerSkewLine(skew) above — the caller loads the

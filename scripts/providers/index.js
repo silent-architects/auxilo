@@ -1,13 +1,29 @@
 'use strict';
 /*
  * scripts/providers/index.js — provider registry + selection
- * (EXTRACT-PER-CLIENT W1 PART A).
+ * (EXTRACT-PER-CLIENT W1 PART A; selection fall-through added in the W1 P1
+ * fix — PUNCH-LIST).
  *
- * Selection order: AUXILO_EXTRACTION_PROVIDER env override (wins unconditionally,
- * never persisted — "wins, never writes") → else the first provider whose
- * detect() is true, in fixed order (claude-code → codex-cli → byo-key) → else
- * null, with a reason naming every provider tried (the PART A slice of "loud
- * terminal state"; full enumeration completes with PART B/C).
+ * resolveProvider(): which ONE provider to try first. Selection order:
+ * AUXILO_EXTRACTION_PROVIDER env override (wins unconditionally, never
+ * persisted — "wins, never writes") → else the persisted `selected` choice
+ * from ~/.auxilo/providers.json if it is STILL usable (re-verified via its
+ * own detect() every call, never trusted blindly — a stale persisted choice
+ * falls through to a full re-scan rather than failing) → else the first
+ * provider whose detect() is true, in fixed order (claude-code → codex-cli →
+ * byo-key) → else ok:false, with a reason naming every provider tried.
+ *
+ * runModel(): resolves via resolveProvider(), then actually RUNS it. A
+ * non-override resolution that fails with a reasonCode meaning "this
+ * provider cannot run at all" (NON_RETRYABLE_FOR_THIS_PROVIDER — e.g.
+ * unauthenticated, not installed, a billing helper is configured) falls
+ * through to the next provider in PROVIDER_ORDER rather than reporting a
+ * hard failure; a working provider that merely failed once (timeout, model
+ * error) does not fall through — that is still the builder's chosen
+ * provider having a bad run, not a reason to switch under them. An explicit
+ * env override never falls through, honoring the operator's explicit
+ * choice. Every provider exhausted → reasonCode 'no-usable-provider' with
+ * every attempt's reason summarized in `reason`.
  *
  * codex-cli.js and byo-key.js don't exist yet (PART B/C). loadOptionalProvider()
  * degrades a missing module into a "not installed yet" stub so this file — and
@@ -124,6 +140,36 @@ async function resolveProvider(opts = {}) {
   const cache = opts.providerCache || defaultCache;
   if (cache.resolved) return cache.resolved;
 
+  // Fast path (EXTRACT-PER-CLIENT W1 FIX, PUNCH-LIST P1, item 3): the
+  // persisted `selected` choice — written by a prior successful resolution,
+  // possibly in an earlier process — skips re-probing every provider ahead
+  // of it in PROVIDER_ORDER when it is STILL usable (the common
+  // steady-state case: same builder, same login, repeated extraction
+  // calls). "Usable" is re-verified via that provider's own detect() every
+  // time, never trusted blindly from the file alone. A stale persisted
+  // choice does NOT fail — it logs one line and falls through to the full
+  // ordered scan below, which re-detects from scratch and persists (and
+  // caches) whatever wins.
+  const statePath = opts.providersStatePath || PROVIDERS_STATE_PATH;
+  const persistedState = readProvidersState(statePath);
+  const persistedId = persistedState.selected;
+  if (typeof persistedId === 'string' && Object.prototype.hasOwnProperty.call(PROVIDERS, persistedId)) {
+    const persistedMod = PROVIDERS[persistedId];
+    let stillUsable = false;
+    try {
+      stillUsable = await persistedMod.detect(opts);
+    } catch {
+      stillUsable = false;
+    }
+    if (stillUsable) {
+      const resolved = { ok: true, id: persistedId, module: persistedMod };
+      cache.resolved = resolved;
+      return resolved;
+    }
+    const log = typeof opts.log === 'function' ? opts.log : console.error;
+    log(`[providers] persisted selection "${persistedId}" is no longer usable; re-detecting`);
+  }
+
   const tried = [];
   for (const id of PROVIDER_ORDER) {
     const mod = PROVIDERS[id];
@@ -144,20 +190,95 @@ async function resolveProvider(opts = {}) {
   return { ok: false, reason: `no extraction model provider available — tried: ${tried.join(', ')}` };
 }
 
-/** runModel(opts) — resolve a provider, then delegate. Never throws. */
+/**
+ * reasonCodes meaning "this provider cannot run at all right now" — safe to
+ * try the NEXT provider in PROVIDER_ORDER rather than reporting a hard
+ * failure (EXTRACT-PER-CLIENT W1 FIX, PUNCH-LIST P1, item 2). Everything
+ * else (timeouts, model errors, malformed output, rate limits) means the
+ * chosen provider DID run and failed on THIS call — that is not a signal to
+ * silently switch providers out from under the builder, so those propagate
+ * as-is (a working provider that failed once is still the builder's chosen
+ * provider).
+ */
+const NON_RETRYABLE_FOR_THIS_PROVIDER = new Set([
+  'cli-unauthenticated',
+  'cli-not-installed',
+  'cli-billing-helper-configured',
+  'provider-not-configured',
+  'providers-file-mode-unsafe',
+]);
+
+/**
+ * runModel(opts) — resolve a starting provider via resolveProvider(), then
+ * walk PROVIDER_ORDER from there, calling each candidate's OWN runModel()
+ * (never a separate detect() pre-check — a provider's runModel() already
+ * performs the equivalent authoritative check internally and returns a
+ * specific, accurate reason, so a second detect() call would only add a
+ * redundant probe without adding information). Falls through to the next
+ * provider when the current one's failure reasonCode is in
+ * NON_RETRYABLE_FOR_THIS_PROVIDER; when resolveProvider itself found no
+ * usable provider at all, the walk starts at PROVIDER_ORDER's beginning so
+ * every provider still gets an actual runModel() call and contributes its
+ * own reason (not just a single generic "no provider available"). An
+ * explicit AUXILO_EXTRACTION_PROVIDER override never falls through — it is
+ * the operator's explicit choice, so its own failure reason is reported
+ * as-is. When every provider tried is exhausted, returns reasonCode
+ * 'no-usable-provider' with a bounded summary of every provider's reason in
+ * `reason` (no secrets — each provider's own reason string is already
+ * secret-free by contract). Never throws.
+ */
 async function runModel(opts = {}) {
-  const resolved = await resolveProvider(opts);
-  if (!resolved.ok) {
-    return {
-      ok: false,
-      text: '',
-      usage: null,
-      reasonCode: 'no-model-provider-available',
-      reason: resolved.reason,
-      authStatus: 'unknown',
-    };
+  const mode = opts.mode === 'judge' ? 'judge' : 'extract';
+  const env = opts.env || process.env;
+  const override = env.AUXILO_EXTRACTION_PROVIDER;
+
+  if (override) {
+    const resolved = await resolveProvider(opts);
+    if (!resolved.ok) {
+      return {
+        ok: false,
+        text: '',
+        usage: null,
+        reasonCode: 'no-model-provider-available',
+        reason: resolved.reason,
+        authStatus: 'unknown',
+      };
+    }
+    return resolved.module.runModel({ ...opts, mode });
   }
-  return resolved.module.runModel({ ...opts, mode: opts.mode === 'judge' ? 'judge' : 'extract' });
+
+  const log = typeof opts.log === 'function' ? opts.log : console.error;
+  const resolved = await resolveProvider(opts);
+  const startIdx = resolved.ok ? PROVIDER_ORDER.indexOf(resolved.id) : -1;
+  const order = startIdx === -1 ? PROVIDER_ORDER.slice() : PROVIDER_ORDER.slice(startIdx);
+
+  const attempts = [];
+  for (const id of order) {
+    const mod = PROVIDERS[id];
+    // eslint-disable-next-line no-await-in-loop
+    const result = await mod.runModel({ ...opts, mode });
+    if (result.ok) return result;
+    attempts.push({ id, reasonCode: result.reasonCode, reason: result.reason });
+    if (!NON_RETRYABLE_FOR_THIS_PROVIDER.has(result.reasonCode)) {
+      return result;
+    }
+    log(`[providers] ${id} unusable (${result.reasonCode}); trying next provider`);
+  }
+
+  const summary = attempts
+    .map((a) => `${a.id}=${a.reasonCode || 'unknown'}`)
+    .join('; ')
+    .slice(0, 480);
+  const lastAttempt = attempts[attempts.length - 1];
+  const lastReason = (lastAttempt && lastAttempt.reason) || resolved.reason || 'no provider available';
+  return {
+    ok: false,
+    text: '',
+    usage: null,
+    reasonCode: 'no-usable-provider',
+    reason: `${lastReason} (tried: ${summary})`.slice(0, 600),
+    authStatus: 'unknown',
+  };
 }
 
 module.exports = {
@@ -165,4 +286,5 @@ module.exports = {
   resolveProvider,
   PROVIDER_ORDER,
   PROVIDERS_STATE_PATH,
+  NON_RETRYABLE_FOR_THIS_PROVIDER,
 };

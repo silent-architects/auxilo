@@ -133,13 +133,17 @@ describe('bin/auxilo-cli.js: extractionSkipReasonLine (PART C, last_reason_code 
     assert.equal(cli.extractionSkipReasonLine({ last_reason_code: 'unknown' }), null);
   });
 
-  it('prints the named line for each of the three status-worthy reasonCodes', () => {
+  it('prints the named line for each of the four status-worthy reasonCodes', () => {
     for (const code of cli.STATUS_WORTHY_SKIP_REASON_CODES) {
       const line = cli.extractionSkipReasonLine({ last_reason_code: code });
       assert.match(line, new RegExp(code.replace(/[-]/g, '\\-')));
     }
+    // EXTRACT-PER-CLIENT W1 P1 fix (PUNCH-LIST): 'no-usable-provider' added —
+    // the selection-fall-through exhaustion code (every provider in
+    // PROVIDER_ORDER was actually tried), distinct from
+    // 'no-model-provider-available' (nothing even looked usable at detect()).
     assert.deepEqual(cli.STATUS_WORTHY_SKIP_REASON_CODES, [
-      'cli-billing-helper-configured', 'cli-unauthenticated', 'no-model-provider-available',
+      'cli-billing-helper-configured', 'cli-unauthenticated', 'no-model-provider-available', 'no-usable-provider',
     ]);
   });
 });

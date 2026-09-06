@@ -170,6 +170,111 @@ describe('byo-key.js: detect()', () => {
       cleanupTempDirs();
     }
   });
+
+  // EXTRACT-PER-CLIENT W1 P1 fix (PUNCH-LIST): "configured once" is not
+  // "usable now" — a complete config on a widened-permissions file must not
+  // detect true.
+  it('a complete config on a group/world-readable file (0644) is NOT usable — detect() reads false', () => {
+    const dir = tempDir('auxilo-byo-detect-modeunsafe-');
+    try {
+      const statePath = statePathIn(dir);
+      byoKey.writeByoConfig({ provider: 'openai', model: 'gpt-4o-mini', api_key: 'k' }, { providersStatePath: statePath });
+      assert.equal(byoKey.detect({ providersStatePath: statePath }), true, 'sanity: usable before the chmod');
+      fs.chmodSync(statePath, 0o644);
+      assert.equal(byoKey.detect({ providersStatePath: statePath }), false);
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+});
+
+// ─── isProvidersFileModeUnsafe() (EXTRACT-PER-CLIENT W1 P1 fix) ────────────
+//
+// The runtime twin of bin/auxilo-cli.js's providersFileModeUnsafe (which
+// only ever ran once, interactively, before `provider set` first wrote the
+// file). Same owner-read-only predicate, duplicated rather than imported —
+// see the module comment on isProvidersFileModeUnsafe for why.
+describe('byo-key.js: isProvidersFileModeUnsafe()', () => {
+  it('no file on disk is NOT unsafe (writeByoConfig always writes 0600 itself)', () => {
+    const dir = tempDir('auxilo-byo-modecheck-absent-');
+    try {
+      assert.equal(byoKey.isProvidersFileModeUnsafe({ providersStatePath: statePathIn(dir) }), false);
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('a 0600 file is NOT unsafe', () => {
+    const dir = tempDir('auxilo-byo-modecheck-0600-');
+    try {
+      const statePath = statePathIn(dir);
+      fs.writeFileSync(statePath, '{}', { mode: 0o600 });
+      assert.equal(byoKey.isProvidersFileModeUnsafe({ providersStatePath: statePath }), false);
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('a group/world-readable file (0644) IS unsafe', () => {
+    const dir = tempDir('auxilo-byo-modecheck-0644-');
+    try {
+      const statePath = statePathIn(dir);
+      fs.writeFileSync(statePath, '{}', { mode: 0o644 });
+      assert.equal(byoKey.isProvidersFileModeUnsafe({ providersStatePath: statePath }), true);
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('a group-writable file (0660) IS unsafe', () => {
+    const dir = tempDir('auxilo-byo-modecheck-0660-');
+    try {
+      const statePath = statePathIn(dir);
+      fs.writeFileSync(statePath, '{}', { mode: 0o660 });
+      assert.equal(byoKey.isProvidersFileModeUnsafe({ providersStatePath: statePath }), true);
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('a stat error other than ENOENT fails CLOSED (treated as unsafe), never throws', () => {
+    const boom = () => { const err = new Error('EACCES: permission denied'); err.code = 'EACCES'; throw err; };
+    assert.doesNotThrow(() => byoKey.isProvidersFileModeUnsafe({ providersStatePath: '/irrelevant', statSyncImpl: boom }));
+    assert.equal(byoKey.isProvidersFileModeUnsafe({ providersStatePath: '/irrelevant', statSyncImpl: boom }), true);
+  });
+});
+
+describe('byo-key.js: runModel refuses a widened-permissions providers.json (reasonCode providers-file-mode-unsafe)', () => {
+  it('checked BEFORE config completeness — even a fully complete config on an unsafe file is refused', async () => {
+    const dir = tempDir('auxilo-byo-runmodel-modeunsafe-');
+    try {
+      const statePath = statePathIn(dir);
+      byoKey.writeByoConfig({ provider: 'openai', model: 'gpt-4o-mini', api_key: 'sk-should-not-be-used' }, { providersStatePath: statePath });
+      fs.chmodSync(statePath, 0o644);
+      let fetchCalls = 0;
+      const fetchImpl = async () => { fetchCalls += 1; throw new Error('must not fetch — providers.json is unsafe'); };
+      const result = await byoKey.runModel({ providersStatePath: statePath, prompt: 'p', fetchImpl });
+      assert.equal(result.ok, false);
+      assert.equal(result.reasonCode, 'providers-file-mode-unsafe');
+      assert.match(result.reason, /owner-read-only/);
+      assert.equal(fetchCalls, 0, 'a provider whose config file is unsafe must never make the outbound call');
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('a safe (0600) file with a complete config is unaffected — runModel proceeds normally', async () => {
+    const dir = tempDir('auxilo-byo-runmodel-modesafe-');
+    try {
+      const statePath = statePathIn(dir);
+      byoKey.writeByoConfig({ provider: 'openai', model: 'gpt-4o-mini', api_key: 'sk-ok' }, { providersStatePath: statePath });
+      const fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) });
+      const result = await byoKey.runModel({ providersStatePath: statePath, prompt: 'p', fetchImpl });
+      assert.equal(result.ok, true);
+    } finally {
+      cleanupTempDirs();
+    }
+  });
 });
 
 // ─── runModel: vendor routing + payload shape + text extraction ────────────
