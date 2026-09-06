@@ -188,6 +188,7 @@
   </style>
 </head>
 <body>
+<a href="#main" class="skip-to-content">Skip to content</a>
 
 <nav id="main-nav" aria-label="Main navigation">
   <a href="/" class="nav-logo" id="nav-logo">
@@ -370,8 +371,9 @@
      empty, matching the untouched-on-failure fail-closed contract (finding
      13). State B's additive "magnitude" second sentence (ship-rev §4 —
      the numeral pair naming the catalog total and the external count) is
-     Tyler-gated (ship-rev §9 item 1, not yet ruled) and is deliberately NOT
-     injected — State B ships base-only. The raw HTML
+     Tyler-gated (ship-rev §9 item 1 — RULED YES 2026-09-06) and is now
+     appended after the base sentence, both numbers SSR'd from the same
+     computePartition() call. The raw HTML
      never carries both branches — only ever the one string the server
      injects, or nothing. ━━━ -->
 <section aria-labelledby="accountability-heading">
@@ -392,22 +394,20 @@
 
 <!-- ━━━ §6 — Limits (bordered callout, spec finding 9 — same treatment as
      §0). TRUST-PAGE-3 content pass fills three of the four slots verbatim
-     from the ship-rev file. R-13 LIMITS SLOT (precondition 1) STAYS EMPTY —
-     the verbatim D2-record sentence still could not be conclusively
-     identified as a single unambiguous string (see the TRUST-PAGE-2 build
-     report for what was searched) and the ship-rev file explicitly leaves
-     it to TECH-PM to insert once sourced; guessing it is worse than an
-     empty slot on a page whose subject is honesty about limits. ━━━ -->
+     from the ship-rev file. R-13 LIMITS SLOT (precondition 1) is now
+     filled, verbatim from TRUST-PAGE-R13-LIMITS-SLOT-2026-09-06.md rev 2
+     (SITE-PM; composed sentence, both gates PASSED — see that file for
+     why it had to be composed rather than quoted from the D2 record). ━━━ -->
 <section aria-labelledby="limits-heading">
   <div class="container">
     <div class="callout-bordered">
       <h2 id="limits-heading">Limits</h2>
       <p id="s6-defenses-sentence">We do not claim complete defenses. Nobody honestly can.</p>
-      <!-- R-13 LIMITS SLOT, precondition 1 — LEFT EMPTY, string pending
-           from SITE-PM. Adjacency to s6-defenses-sentence above is per the
-           spec's assembly requirement ("next to `We do not claim complete
-           defenses.`"). -->
-      <p id="s6-r13-slot" data-slot="r13-limits"></p>
+      <!-- R-13 LIMITS SLOT, precondition 1 — filled verbatim from
+           TRUST-PAGE-R13-LIMITS-SLOT-2026-09-06.md rev 2. Adjacency to
+           s6-defenses-sentence above is per the spec's assembly
+           requirement ("next to `We do not claim complete defenses.`"). -->
+      <p id="s6-r13-slot" data-slot="r13-limits">Each screen is a pattern, a similarity threshold, or a model verdict. A pattern finds only what it was written to find, a threshold catches only what crosses it, and a model verdict can be wrong in either direction. What the screens miss can publish.</p>
       <p id="s6-review-sentence">Nor is every learning human-approved. A person at Auxilo reviews each account's first published learning. Once. From then on, the checks on Auxilo's side are the screens.</p>
       <p id="s6-hold-sentence">When the safety screen cannot clear a submission, the submission holds rather than publishes.</p>
     </div>

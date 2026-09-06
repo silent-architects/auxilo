@@ -75,6 +75,10 @@ const S4_PROVENANCE = "Every learning carries provenance.";
 const S4_STATE_A = 'Today the catalog holds nothing else. No outside builder has published here yet.';
 const S4_STATE_B_BASE = 'An outside builder has published here.';
 const S6_DEFENSES = "We do not claim complete defenses. Nobody honestly can.";
+// Verbatim from ~/.auxilo/handoffs/TRUST-PAGE-R13-LIMITS-SLOT-2026-09-06.md
+// rev 2 (SITE-PM; both gates PASSED — see that file for why it had to be
+// composed rather than quoted from the D2 record).
+const S6_R13_LIMITS = "Each screen is a pattern, a similarity threshold, or a model verdict. A pattern finds only what it was written to find, a threshold catches only what crosses it, and a model verdict can be wrong in either direction. What the screens miss can publish.";
 const S6_REVIEW = "Nor is every learning human-approved. A person at Auxilo reviews each account's first published learning. Once. From then on, the checks on Auxilo's side are the screens.";
 const S6_HOLD = "When the safety screen cannot clear a submission, the submission holds rather than publishes.";
 const S7_FRAMING = "The counts in this section are live, read from the ledger each time the page loads.";
@@ -263,9 +267,10 @@ describe('Trust page: route, redirects, head tags, h1, forbidden strings', { tim
     assert.equal(tpStaticCell(TRUST_HTML, 's4-provenance'), S4_PROVENANCE, 's4-provenance verbatim');
   });
 
-  it('§6 (Limits) is present and its three filled slots are byte-equal to the ship-rev strings', () => {
+  it('§6 (Limits) is present and its four filled slots are byte-equal to the ship-rev / R-13 strings', () => {
     assert.ok(TRUST_HTML.includes('<h2 id="limits-heading">Limits</h2>'), '§6 heading renders — §6 present');
     assert.equal(tpStaticCell(TRUST_HTML, 's6-defenses-sentence'), S6_DEFENSES, 's6-defenses-sentence verbatim');
+    assert.equal(tpStaticCell(TRUST_HTML, 's6-r13-slot'), S6_R13_LIMITS, 's6-r13-slot verbatim (TRUST-PAGE-R13-LIMITS-SLOT-2026-09-06.md rev 2)');
     assert.equal(tpStaticCell(TRUST_HTML, 's6-review-sentence'), S6_REVIEW, 's6-review-sentence verbatim');
     assert.equal(tpStaticCell(TRUST_HTML, 's6-hold-sentence'), S6_HOLD, 's6-hold-sentence verbatim');
   });
@@ -287,9 +292,13 @@ describe('Trust page: route, redirects, head tags, h1, forbidden strings', { tim
     assert.equal(sectionIds[s1Index + 1], 'earnings-heading', '§1b is the very next <section> after §1');
   });
 
-  it('Tyler-gated slots stay empty: §4 magnitude sentence, §6 R-13 slot, the cut adversarial sentence (ship-rev §9)', () => {
-    assert.ok(!TRUST_HTML.includes("Of the catalog's"), 'the State B magnitude sentence template never appears statically (§9 item 1, not ruled)');
-    assert.ok(/<p id="s6-r13-slot" data-slot="r13-limits"><\/p>/.test(TRUST_HTML), 's6-r13-slot renders as an empty <p> (§9/precondition 1, string still not sourced)');
+  it('the cut adversarial sentence stays cut, and the §4 magnitude sentence never appears in the static file (ship-rev §9)', () => {
+    // §9 item 1 was RULED YES 2026-09-06 (State B carries the magnitude
+    // sentence) but the sentence is server-injected with SSR'd numbers
+    // (renderTrustPagePartition) — it must never appear in the STATIC file,
+    // which has no numbers to inject. See the TRUST-PAGE-SSR describe block
+    // below for the live-rendered assertion.
+    assert.ok(!TRUST_HTML.includes("Of the catalog's"), 'the State B magnitude sentence template never appears in the static file (it is server-injected only)');
     assert.ok(!TRUST_HTML.includes('adversarial submissions are expected'), 'the cut adversarial sentence (§9 item 3) stays cut');
   });
 });
@@ -455,10 +464,14 @@ describe('TRUST-PAGE-SSR: §4 partition render + §7 live counts + no-store', { 
     });
   });
 
-  it('§4: state B renders the base sentence ONLY, byte-equal to the ship-rev string — the magnitude sentence stays Tyler-gated and unrendered', { timeout: 240_000 }, async (t) => {
+  it('§4: state B renders the base sentence plus the magnitude sentence, SSR\'d numbers equal to computePartition (ship-rev §9 item 1, RULED YES 2026-09-06)', { timeout: 240_000 }, async (t) => {
+    // tpWithExternalCatalog() = tpAllInternalCatalog()'s 2 internal rows
+    // (tp_int_a, tp_int_b) plus 1 unregistered external row (tp_ext_1):
+    // total_n = 3, external_n = 1 — the same computePartition() the state
+    // marker itself is derived from, not a second/independent count.
     await withTrustPageStagedServer(t, { catalog: tpWithExternalCatalog(), ledger: '' }, async (html) => {
-      assert.equal(tpPartitionStateText(html), S4_STATE_B_BASE, 'state B base text verbatim, no magnitude sentence appended');
-      assert.ok(!html.includes("Of the catalog's"), 'the magnitude sentence template never renders live either');
+      const expected = `${S4_STATE_B_BASE} Of the catalog's 3 learnings, Auxilo published all but 1.`;
+      assert.equal(tpPartitionStateText(html), expected, 'state B base + magnitude sentence verbatim, numbers = computePartition(total_n=3, external_n=1)');
     });
   });
 

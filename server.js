@@ -11903,10 +11903,21 @@ app.get('/writing', (c) => {
 // rev 1a, §4 "State A" / "State B base"): the two state strings injected
 // between the SSR:PARTITION-STATE markers. State B's additive "magnitude"
 // second sentence (the numeral pair naming the catalog total and the
-// external count) is Tyler-gated per §9 item 1 and is deliberately NOT
-// injected here — State B ships base-only until that ruling lands.
+// external count) is Tyler-gated per §9 item 1 — RULED YES 2026-09-06, so
+// State B now carries the base sentence plus the magnitude sentence, both
+// numbers SSR'd from the SAME computePartition() call this function already
+// makes (partition.total_n, partition.external_n — no second derivation).
 const TRUST_PAGE_PARTITION_STATE_A = 'Today the catalog holds nothing else. No outside builder has published here yet.';
 const TRUST_PAGE_PARTITION_STATE_B_BASE = 'An outside builder has published here.';
+
+// ship-rev §4 "State B magnitude": `Of the catalog's {total_n} learnings,
+// Auxilo published all but {external_n}.` — {total_n} is partition.total_n
+// (every visible row), {external_n} is partition.external_n (rows failing
+// both the platform-wallet/account check and the operator register), both
+// already computed by computePartition() before this is called.
+function trustPageMagnitudeSentence(partition) {
+  return `Of the catalog's ${partition.total_n} learnings, Auxilo published all but ${partition.external_n}.`;
+}
 
 function renderTrustPagePartition(html) {
   try {
@@ -11925,7 +11936,9 @@ function renderTrustPagePartition(html) {
       /(<[a-z]+ id="s4-partition-state" data-partition-state=")none("[^>]*>)/,
       (_m, pre, post) => `${pre}${partition.state}${post}`
     );
-    const stateText = partition.state === 'a' ? TRUST_PAGE_PARTITION_STATE_A : TRUST_PAGE_PARTITION_STATE_B_BASE;
+    const stateText = partition.state === 'a'
+      ? TRUST_PAGE_PARTITION_STATE_A
+      : `${TRUST_PAGE_PARTITION_STATE_B_BASE} ${trustPageMagnitudeSentence(partition)}`;
     out = out.replace(
       /(<!-- SSR:PARTITION-STATE -->)[\s\S]*?(<!-- \/SSR:PARTITION-STATE -->)/,
       (_m, open, close) => `${open}${stateText}${close}`
