@@ -663,10 +663,10 @@
         <div id="clean-lane-frozen" class="alert alert-error" style="display:none;margin-bottom:12px"></div>
         <div id="clean-lane-grant-form" style="display:none">
           <p style="font-size:13px;color:var(--slate);margin-bottom:10px;line-height:1.6">
-            When this is on, a learning is published without waiting for your review only when all three hold: it was extracted by your own model, every server screen came back clean, and its quality score is at or above the threshold you set.
+            When this is on, a learning publishes without waiting for your review only when all three hold. Your own model extracted it. Every server screen came back clean. Its quality score is at or above the threshold you set.
           </p>
           <p style="font-size:13px;color:var(--slate);margin-bottom:16px;line-height:1.6">
-            What is never auto-published: your first public learning (it waits for operator review), anything a screen flags, anything below your threshold, and anything after an auto-freeze. Every auto-published learning can be retracted for 7 days.
+            Some things never auto-publish, whatever this setting says. Your first public learning waits for operator review. Anything a screen flags stays held. Anything below your threshold stays held. If more than 5% of your auto-published learnings are retracted within 30 days, the setting turns itself off and stays off until you turn it on again. Every auto-published learning can be retracted for 7 days.
           </p>
           <label for="clean-lane-min-quality" style="display:block;font-size:13px;color:var(--ivory);margin-bottom:6px">Publish only when the quality score is at least</label>
           <select id="clean-lane-min-quality" style="margin-bottom:16px;padding:6px 10px;border-radius:6px;background:rgba(255,255,255,0.05);color:var(--ivory);border:1px solid rgba(229,229,227,0.2);font-family:var(--sans);font-size:13px">
