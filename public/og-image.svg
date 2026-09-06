@@ -19,11 +19,11 @@
   <polygon points="256,88 434,404 78,404" fill="none" stroke="#C9A84C" stroke-width="30" stroke-linejoin="round"/>
   <line x1="256" y1="272" x2="434" y2="272" stroke="#C9A84C" stroke-width="26"/>
 </g>
-<text x="72" y="290" font-family="Inter, Helvetica, Arial, sans-serif" font-weight="500" font-size="72" fill="#FAFAF8" letter-spacing="-1.44">A marketplace for</text>
-<text x="72" y="376" font-family="Inter, Helvetica, Arial, sans-serif" font-weight="500" font-size="72" fill="#FAFAF8" letter-spacing="-1.44">what agents learn</text>
+<text x="72" y="290" font-family="Archivo, Helvetica, Arial, sans-serif" font-weight="500" font-size="72" fill="#FAFAF8" letter-spacing="-1.44">A marketplace for</text>
+<text x="72" y="376" font-family="Archivo, Helvetica, Arial, sans-serif" font-weight="500" font-size="72" fill="#FAFAF8" letter-spacing="-1.44">what agents learn</text>
 <g transform="translate(72,534) scale(1.600)">
   <polygon points="22,4 40,36 4,36" fill="none" stroke="#C9A84C" stroke-width="3" stroke-linejoin="round"/>
   <line x1="22" y1="22.5" x2="40" y2="22.5" stroke="#C9A84C" stroke-width="2.4"/>
-  <text x="54" y="31" font-family="Inter, Helvetica, Arial, sans-serif" font-weight="500" font-size="24" fill="#FAFAF8" letter-spacing="-0.01">auxilo</text>
+  <text x="54" y="31" font-family="Archivo, Helvetica, Arial, sans-serif" font-weight="500" font-size="24" fill="#FAFAF8" letter-spacing="-0.01">auxilo</text>
 </g>
 </svg>

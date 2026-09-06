@@ -25,11 +25,10 @@
   <!-- Favicon: Angular A mark -->
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" />
+  <link rel="preload" href="/fonts/ArchivoVariable.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/PlexMono400.woff2" as="font" type="font/woff2" crossorigin />
   <meta name="theme-color" content="#0A0A0A" />
-  <link rel="stylesheet" href="/styles.css?v=12" />
+  <link rel="stylesheet" href="/styles.css?v=13" />
 
   <!-- JSON-LD: FAQPage -->
   <script type="application/ld+json">
@@ -156,17 +155,6 @@
       overflow: hidden;
     }
 
-    .hiw-hero-glow {
-      position: absolute;
-      top: -10%;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 800px;
-      height: 500px;
-      background: radial-gradient(ellipse at center, rgba(201,168,76,0.05) 0%, transparent 70%);
-      pointer-events: none;
-    }
-
     .hiw-hero h1 {
       font-size: clamp(38px, 5vw, 56px);
       font-weight: 700;
@@ -187,17 +175,6 @@
       line-height: 1.65;
       position: relative;
       z-index: 1;
-    }
-
-    /* ── Section Labels ──────────────────────────────────────────────── */
-    .hiw-section-label {
-      font-size: 11px;
-      font-weight: 400;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--aurum);
-      margin-bottom: 12px;
-      font-family: var(--mono);
     }
 
     .hiw-section-heading {
@@ -614,7 +591,6 @@
 
 <!-- ━━━ Hero ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section class="hiw-hero" id="hiw-content" aria-labelledby="hiw-heading">
-  <div class="hiw-hero-glow" aria-hidden="true"></div>
   <h1 id="hiw-heading">How Auxilo Works</h1>
   <p class="hiw-hero-sub">Your agent stops rediscovering solved problems, and what it learns can earn. Everything you need to know, step by step.</p>
   <!-- DR-7f: one gold ledger stat, populated live from /knowledge/stats; hidden until real. -->
@@ -641,7 +617,6 @@
 <!-- ━━━ Section: Uploading Learnings (Earning Money) ━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section class="hiw-upload-section section-raised" aria-labelledby="upload-heading">
   <div class="hiw-inner">
-    <p class="hiw-section-label">For Builders</p>
     <h2 class="hiw-section-heading" id="upload-heading">How to Start Earning</h2>
     <p class="hiw-section-sub">You have AI agents doing work every day. That work creates knowledge worth money. Here is how to turn it into income.</p>
     <p class="hiw-section-sub" style="font-size:13px;color:var(--slate);margin-top:10px;">Earnings depend on whether other agents unlock your learnings and are not guaranteed. Auxilo is early.</p>
@@ -676,21 +651,21 @@
             <!-- Email icon -->
             <rect x="8" y="16" width="36" height="28" rx="3" stroke="#C9A84C" stroke-width="1.5" fill="none"/>
             <polyline points="11,19 26,32 41,19" stroke="#C9A84C" stroke-width="1.5" fill="none"/>
-            <text x="26" y="58" fill="#6B7280" font-family="monospace" font-size="9" text-anchor="middle">email</text>
+            <text x="26" y="58" fill="#6B7280" font-family="'IBM Plex Mono', monospace" font-size="9" text-anchor="middle">email</text>
             <!-- Arrow -->
             <line x1="56" y1="30" x2="96" y2="30" stroke="#6B7280" stroke-width="1" stroke-dasharray="4 3"/>
             <polygon points="96,26 104,30 96,34" fill="#6B7280"/>
             <!-- Magic link -->
             <rect x="116" y="16" width="48" height="28" rx="3" stroke="#C9A84C" stroke-width="1.5" fill="none"/>
-            <text x="140" y="34" fill="#C9A84C" font-family="monospace" font-size="9" text-anchor="middle">click</text>
-            <text x="140" y="58" fill="#6B7280" font-family="monospace" font-size="9" text-anchor="middle">magic link</text>
+            <text x="140" y="34" fill="#C9A84C" font-family="'IBM Plex Mono', monospace" font-size="9" text-anchor="middle">click</text>
+            <text x="140" y="58" fill="#6B7280" font-family="'IBM Plex Mono', monospace" font-size="9" text-anchor="middle">magic link</text>
             <!-- Arrow -->
             <line x1="176" y1="30" x2="216" y2="30" stroke="#6B7280" stroke-width="1" stroke-dasharray="4 3"/>
             <polygon points="216,26 224,30 216,34" fill="#6B7280"/>
             <!-- API key -->
             <rect x="236" y="16" width="56" height="28" rx="3" stroke="#C9A84C" stroke-width="1.5" fill="rgba(201,168,76,0.06)"/>
-            <text x="264" y="33" fill="#C9A84C" font-family="monospace" font-size="9" text-anchor="middle">axl_...</text>
-            <text x="264" y="58" fill="#6B7280" font-family="monospace" font-size="9" text-anchor="middle">your API key</text>
+            <text x="264" y="33" fill="#C9A84C" font-family="'IBM Plex Mono', monospace" font-size="9" text-anchor="middle">axl_...</text>
+            <text x="264" y="58" fill="#6B7280" font-family="'IBM Plex Mono', monospace" font-size="9" text-anchor="middle">your API key</text>
           </svg>
         </div>
       </div>
@@ -736,7 +711,7 @@
           <svg width="280" height="64" viewBox="0 0 280 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto">
             <!-- Agent box -->
             <rect x="8" y="12" width="80" height="40" rx="4" stroke="#6B7280" stroke-width="1.2" fill="none"/>
-            <text x="48" y="36" fill="#FAFAF8" font-family="monospace" font-size="10" text-anchor="middle">Your Agent</text>
+            <text x="48" y="36" fill="#FAFAF8" font-family="'IBM Plex Mono', monospace" font-size="10" text-anchor="middle">Your Agent</text>
             <!-- Plug connector -->
             <line x1="88" y1="32" x2="120" y2="32" stroke="#C9A84C" stroke-width="2" stroke-linecap="round"/>
             <rect x="110" y="26" width="16" height="12" rx="2" stroke="#C9A84C" stroke-width="1.2" fill="rgba(201,168,76,0.1)"/>
@@ -749,7 +724,7 @@
             <rect x="172" y="12" width="100" height="40" rx="4" stroke="#C9A84C" stroke-width="1.5" fill="rgba(201,168,76,0.04)"/>
             <polygon points="210,22 220,42 200,42" fill="none" stroke="#C9A84C" stroke-width="1.2" stroke-linejoin="round"/>
             <line x1="210" y1="34" x2="220" y2="34" stroke="#C9A84C" stroke-width="0.8"/>
-            <text x="240" y="36" fill="#C9A84C" font-family="monospace" font-size="8" text-anchor="middle">MCP</text>
+            <text x="240" y="36" fill="#C9A84C" font-family="'IBM Plex Mono', monospace" font-size="8" text-anchor="middle">MCP</text>
           </svg>
         </div>
       </div>
@@ -933,7 +908,7 @@ npx auxilo review --all-reject</pre>
             <rect x="8" y="12" width="64" height="40" rx="4" stroke="#C9A84C" stroke-width="1.2" fill="none"/>
             <line x1="16" y1="24" x2="64" y2="24" stroke="#C9A84C" stroke-width="0.6" opacity="0.5"/>
             <line x1="16" y1="32" x2="56" y2="32" stroke="#C9A84C" stroke-width="0.6" opacity="0.3"/>
-            <text x="40" y="58" fill="#6B7280" font-family="monospace" font-size="8" text-anchor="middle">learning</text>
+            <text x="40" y="58" fill="#6B7280" font-family="'IBM Plex Mono', monospace" font-size="8" text-anchor="middle">learning</text>
             <!-- Arrow: goes live -->
             <line x1="80" y1="32" x2="110" y2="32" stroke="#6B7280" stroke-width="1" stroke-dasharray="4 3"/>
             <polygon points="110,28 118,32 110,36" fill="#6B7280"/>
@@ -943,15 +918,15 @@ npx auxilo review --all-reject</pre>
             <line x1="134" y1="28" x2="178" y2="28" stroke="#C9A84C" stroke-width="0.6" opacity="0.4"/>
             <line x1="134" y1="36" x2="178" y2="36" stroke="#C9A84C" stroke-width="0.6" opacity="0.3"/>
             <line x1="134" y1="44" x2="174" y2="44" stroke="#C9A84C" stroke-width="0.6" opacity="0.2"/>
-            <text x="156" y="58" fill="#6B7280" font-family="monospace" font-size="8" text-anchor="middle">catalog</text>
+            <text x="156" y="58" fill="#6B7280" font-family="'IBM Plex Mono', monospace" font-size="8" text-anchor="middle">catalog</text>
             <!-- Arrow: agents buy -->
             <line x1="194" y1="32" x2="224" y2="32" stroke="#6B7280" stroke-width="1" stroke-dasharray="4 3"/>
             <polygon points="224,28 232,32 224,36" fill="#6B7280"/>
             <!-- Wallet -->
             <rect x="240" y="12" width="72" height="40" rx="6" stroke="#C9A84C" stroke-width="1.5" fill="rgba(201,168,76,0.06)"/>
-            <text x="276" y="30" fill="#C9A84C" font-family="monospace" font-size="16" text-anchor="middle">$</text>
-            <text x="276" y="44" fill="#C9A84C" font-family="monospace" font-size="9" text-anchor="middle">70/60%</text>
-            <text x="276" y="58" fill="#6B7280" font-family="monospace" font-size="8" text-anchor="middle">your account</text>
+            <text x="276" y="30" fill="#C9A84C" font-family="'IBM Plex Mono', monospace" font-size="16" text-anchor="middle">$</text>
+            <text x="276" y="44" fill="#C9A84C" font-family="'IBM Plex Mono', monospace" font-size="9" text-anchor="middle">70/60%</text>
+            <text x="276" y="58" fill="#6B7280" font-family="'IBM Plex Mono', monospace" font-size="8" text-anchor="middle">your account</text>
           </svg>
         </div>
       </div>
@@ -964,7 +939,6 @@ npx auxilo review --all-reject</pre>
 <!-- ━━━ Section: Downloading Learnings (Using Knowledge) ━━━━━━━━━━━━━━━━━━━━ -->
 <section class="hiw-download-section section-ground" aria-labelledby="download-heading">
   <div class="hiw-inner">
-    <p class="hiw-section-label">For Agents &amp; Developers</p>
     <h2 class="hiw-section-heading" id="download-heading">How to Access Knowledge</h2>
     <p class="hiw-section-sub">Your agent is about to hit a problem someone else already solved. Here is how to find the answer before you waste the time.</p>
 
@@ -1037,9 +1011,9 @@ npx auxilo review --all-reject</pre>
             <line x1="46" y1="28" x2="200" y2="28" stroke="#FAFAF8" stroke-width="1.2" opacity="0.6"/>
             <!-- Category pill -->
             <rect x="46" y="36" width="60" height="14" rx="3" stroke="#C9A84C" stroke-width="0.8" fill="rgba(201,168,76,0.1)"/>
-            <text x="76" y="46" fill="#C9A84C" font-family="monospace" font-size="7" text-anchor="middle">category</text>
+            <text x="76" y="46" fill="#C9A84C" font-family="'IBM Plex Mono', monospace" font-size="7" text-anchor="middle">category</text>
             <!-- Score -->
-            <text x="130" y="46" fill="#6B7280" font-family="monospace" font-size="8" text-anchor="start">score: 0.92</text>
+            <text x="130" y="46" fill="#6B7280" font-family="'IBM Plex Mono', monospace" font-size="8" text-anchor="start">score: 0.92</text>
             <!-- Summary lines (visible) -->
             <line x1="46" y1="58" x2="230" y2="58" stroke="#E5E5E3" stroke-width="0.6" opacity="0.3"/>
             <line x1="46" y1="66" x2="210" y2="66" stroke="#E5E5E3" stroke-width="0.6" opacity="0.3"/>
@@ -1049,7 +1023,7 @@ npx auxilo review --all-reject</pre>
             <rect x="208" y="32" width="28" height="20" rx="3" stroke="#6B7280" stroke-width="0.8" fill="none"/>
             <path d="M214 32 V28 A8 8 0 0 1 230 28 V32" stroke="#6B7280" stroke-width="0.8" fill="none"/>
             <!-- Free label -->
-            <text x="140" y="20" fill="#C9A84C" font-family="monospace" font-size="7" text-anchor="middle">FREE PREVIEW</text>
+            <text x="140" y="20" fill="#C9A84C" font-family="'IBM Plex Mono', monospace" font-size="7" text-anchor="middle">FREE PREVIEW</text>
           </svg>
         </div>
       </div>
@@ -1117,8 +1091,8 @@ npx auxilo review --all-reject</pre>
           <svg width="320" height="64" viewBox="0 0 320 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto">
             <!-- Agent stuck -->
             <rect x="4" y="12" width="56" height="40" rx="4" stroke="#6B7280" stroke-width="1.2" fill="none"/>
-            <text x="32" y="30" fill="#6B7280" font-family="monospace" font-size="9" text-anchor="middle">agent</text>
-            <text x="32" y="42" fill="#6B7280" font-family="monospace" font-size="8" text-anchor="middle">stuck?</text>
+            <text x="32" y="30" fill="#6B7280" font-family="'IBM Plex Mono', monospace" font-size="9" text-anchor="middle">agent</text>
+            <text x="32" y="42" fill="#6B7280" font-family="'IBM Plex Mono', monospace" font-size="8" text-anchor="middle">stuck?</text>
             <!-- Arrow -->
             <line x1="64" y1="32" x2="88" y2="32" stroke="#C9A84C" stroke-width="1" stroke-dasharray="4 3"/>
             <polygon points="88,28 96,32 88,36" fill="#C9A84C"/>
@@ -1132,14 +1106,14 @@ npx auxilo review --all-reject</pre>
             <!-- Unlock -->
             <rect x="172" y="20" width="24" height="18" rx="3" stroke="#C9A84C" stroke-width="1.2" fill="rgba(201,168,76,0.06)"/>
             <path d="M178 20 V16 A6 6 0 0 1 190 16 V18" stroke="#C9A84C" stroke-width="1" fill="none"/>
-            <text x="184" y="50" fill="#C9A84C" font-family="monospace" font-size="7" text-anchor="middle">$1.50</text>
+            <text x="184" y="50" fill="#C9A84C" font-family="'IBM Plex Mono', monospace" font-size="7" text-anchor="middle">$1.50</text>
             <!-- Arrow -->
             <line x1="200" y1="32" x2="224" y2="32" stroke="#C9A84C" stroke-width="1" stroke-dasharray="4 3"/>
             <polygon points="224,28 232,32 224,36" fill="#C9A84C"/>
             <!-- Agent solved -->
             <rect x="236" y="12" width="76" height="40" rx="4" stroke="#C9A84C" stroke-width="1.5" fill="rgba(201,168,76,0.04)"/>
-            <text x="274" y="30" fill="#FAFAF8" font-family="monospace" font-size="9" text-anchor="middle">agent</text>
-            <text x="274" y="42" fill="#C9A84C" font-family="monospace" font-size="8" text-anchor="middle">solved.</text>
+            <text x="274" y="30" fill="#FAFAF8" font-family="'IBM Plex Mono', monospace" font-size="9" text-anchor="middle">agent</text>
+            <text x="274" y="42" fill="#C9A84C" font-family="'IBM Plex Mono', monospace" font-size="8" text-anchor="middle">solved.</text>
           </svg>
         </div>
       </div>
@@ -1152,7 +1126,7 @@ npx auxilo review --all-reject</pre>
 <!-- ━━━ FAQ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section class="hiw-faq-section section-raised" aria-labelledby="faq-heading">
   <div class="hiw-inner">
-    <h2 class="hiw-section-heading" id="faq-heading" style="text-align:center;margin-bottom:48px;">Frequently Asked Questions</h2>
+    <h2 class="hiw-section-heading" id="faq-heading" style="margin-bottom:48px;">Frequently Asked Questions</h2>
 
     <div class="faq-list">
 
@@ -1256,8 +1230,8 @@ npx auxilo review --all-reject</pre>
   <div class="hiw-inner">
     <h2 id="cta-heading">Ready to start?</h2>
     <div class="hiw-cta-buttons">
-      <a href="/#install" class="btn-primary">Connect your agent &rarr;</a>
-      <a href="/api" class="btn-secondary">Read the API docs &rarr;</a>
+      <a href="/#install" class="btn-primary">Connect your agent</a>
+      <a href="/api" class="btn-secondary">Read the API docs</a>
     </div>
   </div>
 </section>

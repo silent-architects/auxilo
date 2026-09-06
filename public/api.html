@@ -25,10 +25,9 @@
   <!-- Favicon: Angular A mark -->
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" />
-  <link rel="stylesheet" href="/styles.css?v=12" />
+  <link rel="preload" href="/fonts/ArchivoVariable.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/PlexMono400.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/styles.css?v=13" />
   <!-- DR-4: reveal failsafe. Hide .reveal (via html.js-reveal) only when JS +
        IntersectionObserver exist; a low-cost watchdog force-reveals any element
        that sits unrevealed INSIDE the viewport for two consecutive ticks, i.e.
@@ -38,7 +37,6 @@
   <script>
     (function () {
       if (!('IntersectionObserver' in window)) return;
-      document.documentElement.className += ' js-reveal';
       var pending = new WeakMap();
       window.setInterval(function () {
         var els = document.querySelectorAll('.reveal:not(.visible)');
@@ -121,7 +119,6 @@
       text-align: left;
       padding: 140px 0 88px;
     }
-    .api-page-header .section-label { margin-bottom: 16px; }
     .api-page-header h1 {
       font-size: clamp(38px, 5vw, 56px);
       font-weight: 700;
@@ -141,8 +138,6 @@
     .api-section {
       padding: var(--section-pad);
       background-color: var(--obsidian);
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cpolygon points='60,10 100,90 20,90' fill='none' stroke='%23C9A84C' stroke-opacity='0.018' stroke-width='1.5'/%3E%3Cline x1='60' y1='50' x2='115' y2='50' stroke='%23C9A84C' stroke-opacity='0.018' stroke-width='1'/%3E%3C/svg%3E");
-      background-size: 120px 120px;
     }
     .api-section.alt-bg {
       background: rgba(255,255,255,0.05);
@@ -501,7 +496,6 @@
 <div id="api-hero" style="background:var(--obsidian);border-bottom:1px solid rgba(229,229,227,0.06);">
   <div class="container">
     <div class="api-page-header">
-      <p class="section-label">Developer Reference</p>
       <h1>API &amp; Integration</h1>
       <p>Everything you need to connect your agents to the Auxilo catalog. The REST API supports protocol-level micropayments or a traditional API key. The MCP server works with Claude, Cursor, and any compatible client. A full OpenAPI 3.0 spec is included.</p>
     </div>
@@ -511,13 +505,6 @@
 <!-- ━━━ Quick Start ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section class="api-section" aria-labelledby="quickstart-heading">
   <div class="container">
-    <div class="section-divider" aria-hidden="true">
-      <svg class="mark" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <polygon points="10,1 19,18 1,18" fill="none" stroke="#C9A84C" stroke-width="1.5" stroke-linejoin="round"/>
-        <line x1="10" y1="11" x2="19" y2="11" stroke="#C9A84C" stroke-width="1.2"/>
-      </svg>
-      <div class="line"></div>
-    </div>
 
     <h2 id="quickstart-heading" class="reveal">Quick Start</h2>
     <p class="api-section-intro reveal">Start with a free search. Add an API key when you want to unlock with credits, or pay per request with x402.</p>
@@ -667,7 +654,7 @@ curl -X POST \
 
     <p class="reveal" style="font-size:14px;color:var(--slate);">
       Full endpoint reference including request/response schemas, error codes, and rate limits:
-      <a href="https://auxilo.io/openapi.json" style="color:var(--aurum);text-decoration:none;margin-left:6px;" target="_blank" rel="noopener">openapi.json →</a>
+      <a href="https://auxilo.io/openapi.json" style="color:var(--aurum);text-decoration:none;margin-left:6px;" target="_blank" rel="noopener">openapi.json</a>
     </p>
 
     <!-- Live search example code block -->
@@ -1075,7 +1062,7 @@ AUXILO_API_KEY=axl_… auxilo-mcp</pre>
 
     <p class="reveal" style="font-size:14px;color:var(--slate);">
       Published on npm:
-      <a href="https://www.npmjs.com/package/auxilo-mcp" style="color:var(--aurum);text-decoration:none;margin-left:4px;" target="_blank" rel="noopener">npmjs.com/package/auxilo-mcp →</a>
+      <a href="https://www.npmjs.com/package/auxilo-mcp" style="color:var(--aurum);text-decoration:none;margin-left:4px;" target="_blank" rel="noopener">npmjs.com/package/auxilo-mcp</a>
     </p>
   </div>
 </section>
@@ -1097,7 +1084,7 @@ AUXILO_API_KEY=axl_… auxilo-mcp</pre>
       <div class="a2a-body">
         <h3>Agent Card: a machine-readable capability declaration</h3>
         <p>It declares Auxilo's endpoints, authentication methods, pricing, and available skills in the A2A standard format, so any A2A orchestrator can discover Auxilo and route to it on its own.</p>
-        <a href="https://auxilo.io/.well-known/agent.json" target="_blank" rel="noopener">/.well-known/agent.json →</a>
+        <a href="https://auxilo.io/.well-known/agent.json" target="_blank" rel="noopener">/.well-known/agent.json</a>
       </div>
     </div>
 
@@ -1118,13 +1105,6 @@ curl https://auxilo.io/.well-known/agent.json
 <!-- ━━━ Section: FAQ (mirrors the FAQPage JSON-LD in the head) ━━━━━━━━━━━━ -->
 <section id="faq" class="section-ground" aria-labelledby="faq-heading">
   <div class="container">
-    <div class="section-divider" aria-hidden="true">
-      <svg class="mark" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <polygon points="10,1 19,18 1,18" fill="none" stroke="#C9A84C" stroke-width="1.5" stroke-linejoin="round"/>
-        <line x1="10" y1="11" x2="19" y2="11" stroke="#C9A84C" stroke-width="1.2"/>
-      </svg>
-      <div class="line"></div>
-    </div>
 
     <h2 id="faq-heading" class="reveal">Common Questions</h2>
 
@@ -1154,17 +1134,11 @@ curl https://auxilo.io/.well-known/agent.json
 <!-- ━━━ CTA ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section class="api-cta-section" aria-labelledby="api-cta-heading" style="background:var(--obsidian);border-top:1px solid rgba(229,229,227,0.06);">
   <div class="container">
-    <div class="section-divider" aria-hidden="true" style="justify-content:center;margin-bottom:48px;">
-      <svg class="mark" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <polygon points="10,1 19,18 1,18" fill="none" stroke="#C9A84C" stroke-width="1.5" stroke-linejoin="round"/>
-        <line x1="10" y1="11" x2="19" y2="11" stroke="#C9A84C" stroke-width="1.2"/>
-      </svg>
-    </div>
     <h2 id="api-cta-heading" class="reveal">Start Building</h2>
     <p class="reveal">Get your API key, add the MCP server to your agent config, and you are connected to the catalog within minutes.</p>
     <div class="api-cta-btns reveal">
-      <a href="/dashboard" class="btn-primary">Start Building →</a>
-      <a href="https://auxilo.io/openapi.json" class="btn-secondary" target="_blank" rel="noopener">View OpenAPI Spec →</a>
+      <a href="/dashboard" class="btn-primary">Start Building</a>
+      <a href="https://auxilo.io/openapi.json" class="btn-secondary" target="_blank" rel="noopener">View OpenAPI Spec</a>
     </div>
     <p class="reveal" style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Sign in with your email. Generate your key from the CLI (npx auxilo setup) or a POST to /account/api-keys.</p>
   </div>
