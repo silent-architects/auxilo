@@ -11804,8 +11804,37 @@ app.get('/how-it-works', (c) => {
   return c.text('How It Works page not found', 404);
 });
 
-// S24-4: /status — static status page
+// AD sheet 7 (2026-09-06): /status server-renders the running package
+// version into the footer badge and the OpenAPI card — the same substitution
+// pattern as renderLiveCatalogStats, so the two `v0.9.4` literals can't drift
+// again. Both spans are empty in the static file; if the render throws, the
+// catch falls through to plain serveStatic and the spans stay blank rather
+// than showing a stale version number.
+function renderLiveStatusVersion(html) {
+  try {
+    return html
+      .replace(/(id="app-version"[^>]*>)[^<]*</, (_m, tag) => `${tag}${VERSION}<`)
+      .replace(/(id="openapi-version"[^>]*>)[^<]*</, (_m, tag) => `${tag}${VERSION}<`);
+  } catch (e) {
+    console.error('[status-version] render failed, serving blank:', e.message);
+    return html;
+  }
+}
+
+// S24-4: /status — status page, version-rendered (see renderLiveStatusVersion).
 app.get('/status', (c) => {
+  try {
+    const filePath = path.join(PUBLIC_DIR, 'status.html');
+    if (fs.existsSync(filePath)) {
+      let html = fs.readFileSync(filePath, 'utf8');
+      html = renderLiveStatusVersion(html);
+      c.header('Content-Type', 'text/html; charset=utf-8');
+      c.header('Cache-Control', 'public, max-age=3600');
+      return c.body(injectAnalytics(html, ANALYTICS_DOMAIN));
+    }
+  } catch (e) {
+    console.error('[status] server-render failed, falling back:', e.message);
+  }
   const res = serveStatic(c, 'status.html');
   if (res) return res;
   return c.text('Status page not found', 404);

@@ -111,7 +111,10 @@
     }
 
     .page-title {
-      font-size: 1.75rem;
+      /* AD sheet 7: page-hero spec size (the clamp(38px, 5vw, 56px) rule
+         shared by .page-hero h1 / #builders-hero h1 / .pricing-page-header h1
+         / .api-page-header h1 / .hiw-hero h1) replaces the old fixed 28px. */
+      font-size: clamp(38px, 5vw, 56px);
       font-weight: 700;
       letter-spacing: -0.03em;
       margin-bottom: 0.5rem;
@@ -225,11 +228,17 @@
     }
 
     /* ── Section ───────────────────────────────────────────────── */
-    h2 {
-      font-size: 0.75rem;
-      font-weight: 600;
+    /* AD sheet 7: these four were <h2> (a heading level with no page
+       structure behind it); they are component labels, not headings. Same
+       words, same look — the site's slate label style (public/styles.css
+       .section-label: 11px / 0.16em / uppercase / 400) rendered with this
+       page's own dim-ivory token in place of --slate (status.html carries no
+       styles.css import; DR-6 keeps its palette self-contained). */
+    .component-label {
+      font-size: 11px;
+      font-weight: 400;
       text-transform: uppercase;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.16em;
       color: var(--ivory-dim);
       margin-bottom: 0.75rem;
     }
@@ -538,7 +547,7 @@
       <span class="status-sub" id="status-time">Checking…</span>
     </div>
 
-    <h2>Service Components</h2>
+    <p class="component-label">Service Components</p>
     <div class="components">
       <div class="component-row">
         <span class="component-name">API Server</span>
@@ -576,7 +585,7 @@
       </div>
     </div>
 
-    <h2>Quick Links</h2>
+    <p class="component-label">Quick Links</p>
     <div class="links-grid">
       <a class="link-card" href="/health">
         <span class="link-card-label">Health Endpoint</span>
@@ -588,8 +597,11 @@
       </a>
       <a class="link-card" href="/openapi.json">
         <span class="link-card-label">OpenAPI Spec</span>
-        <!-- DR-6: openapi.json spec version — keep in sync with openapi.json "version" at each release cut -->
-        <span class="link-card-desc">GET /openapi.json: full spec v0.9.4</span>
+        <!-- AD sheet 7: the hardcoded v0.9.4 is now server-rendered from the
+             running package version (server.js renderLiveStatusVersion),
+             same derivation as the footer badge below; empty here on disk,
+             never a stale literal if the render ever fails. -->
+        <span class="link-card-desc">GET /openapi.json: full spec v<span id="openapi-version"></span></span>
       </a>
       <a class="link-card" href="https://github.com/silent-architects/auxilo/issues" target="_blank" rel="noopener">
         <span class="link-card-label">Report a Bug</span>
@@ -597,14 +609,14 @@
       </a>
     </div>
 
-    <h2>Live Health Check</h2>
+    <p class="component-label">Live Health Check</p>
     <div class="health-block">
       <div class="health-endpoint">GET /health</div>
       <div class="health-response" id="health-json">Loading…</div>
       <div id="live-health"></div>
     </div>
 
-    <h2>Contact &amp; Support</h2>
+    <p class="component-label">Contact &amp; Support</p>
     <div class="contact-block">
       <p>
         For general support, email <a href="mailto:support@auxilo.io">support@auxilo.io</a>. Response target: &lt;72 hours.<br>
@@ -615,9 +627,13 @@
   </main>
 
   <footer>
-    <!-- DR-6: version self-heals from GET /version (the running build's package.json
-         version) so it can't silently drift; the hardcoded value is the fallback. -->
-    <span>Auxilo v<span id="app-version">0.9.4</span> &middot; <a href="/">auxilo.io</a> &middot; <a href="/for-builders">builders</a> &middot; <a href="/for-agents">agents</a> &middot; <a href="/pricing">pricing</a> &middot; <a href="/api">api</a> &middot; <a href="/how-it-works">how it works</a> &middot; <a href="/.well-known/security.txt">security.txt</a></span>
+    <!-- AD sheet 7: link set copied from /about's footer byte-for-byte, plus
+         /terms + /privacy (named in the sheet); /about and /writing are a
+         separate packet's addition and stay out. Version is now server-
+         rendered from the running package version (server.js
+         renderLiveStatusVersion, same derivation as the OpenAPI card above);
+         empty here on disk, never the old hardcoded literal. -->
+    <span>Auxilo v<span id="app-version"></span> &middot; <a href="/">auxilo.io</a> &middot; <a href="/for-builders">builders</a> &middot; <a href="/for-agents">agents</a> &middot; <a href="/pricing">pricing</a> &middot; <a href="/api">api</a> &middot; <a href="/how-it-works">how it works</a> &middot; <a href="/status">status</a> &middot; <a href="/terms">terms</a> &middot; <a href="/privacy">privacy</a> &middot; <a href="/.well-known/security.txt">security.txt</a></span>
   </footer>
 
   <script>
@@ -657,15 +673,6 @@
         overall.style.borderColor  = 'rgba(234,179,8,0.2)';
         timeEl.textContent = 'Last checked: ' + new Date().toLocaleTimeString();
       }
-
-      // DR-6: self-heal the footer version from the running build (falls back to
-      // the hardcoded value if /version is unreachable).
-      try {
-        const vres = await fetch('/version');
-        const vdata = await vres.json();
-        const vEl = document.getElementById('app-version');
-        if (vEl && vdata && vdata.version) vEl.textContent = vdata.version;
-      } catch (e) { /* keep the hardcoded fallback */ }
     })();
   </script>
 
