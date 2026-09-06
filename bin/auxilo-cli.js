@@ -493,12 +493,27 @@ async function cmdStatus() {
   console.log(`Account mode: ${s.accountMode}`);
   console.log(`Kill-switch sentinel: ${s.sentinel ? 'present (extraction enabled)' : 'absent (extraction disabled)'}`);
   console.log(`Runner installed: ${s.runnerInstalled ? 'yes (~/.auxilo/bin)' : 'no'}`);
+  if (s.runnerInstalled) {
+    const line = runnerSkewLine(installer.runnerVersionSkew(HOME));
+    if (line) console.log(line);
+  }
   console.log(`SessionEnd hook: ${s.hookInstalled ? 'installed' : 'not installed'}${s.hookRegistered ? ', registered in Claude Code settings' : ''}`);
   for (const c of s.clients.filter((c) => c.captureHook)) {
     console.log(`Capture hooks: ${c.name} (${c.captureEvent}, ${c.captureRegistered ? 'registered' : 'not registered'})`);
   }
   console.log(`Last extraction sweep: ${s.lastSweep || 'never'}`);
   console.log(`Pending upload queue: ${s.pendingCount} file(s)\n`);
+}
+
+/**
+ * CLEAN-LANE-FLIP Phase B: ONE line when ~/.auxilo/bin/VERSION is missing or
+ * differs from this CLI's package version; null when the stack is current.
+ * `setup` is idempotent and re-copies the stack, so that is the remedy.
+ */
+function runnerSkewLine(skew) {
+  if (!skew || !skew.skew) return null;
+  const installed = skew.installed ? `v${skew.installed}` : 'unstamped (pre-0.9.12)';
+  return `  ⚠ Installed runner is ${installed} (package v${skew.package}) — run: npx auxilo setup`;
 }
 
 // ─── auxilo disable ─────────────────────────────────────────────────────────
@@ -1231,6 +1246,7 @@ if (require.main === module) {
 
 module.exports = {
   parseFlags,
+  runnerSkewLine,
   resolveBaseUrl,
   shortFlags,
   groupSummaryRows,
