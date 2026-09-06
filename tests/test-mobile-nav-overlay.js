@@ -73,6 +73,10 @@ const NAV_PAGES = [
     'index.html', 'how-it-works.html', 'for-agents.html', 'for-builders.html',
     'pricing.html', 'earnings.html', 'api.html', 'dashboard.html',
     'writing-agents-message-board.html',
+    // Wave E3 item 3: about.html and writing/index.html moved off the
+    // legacy .status-nav (zero height at 375, no hamburger) onto the shared
+    // #main-nav, same as the rest of this list.
+    'about.html', 'writing/index.html',
 ];
 
 // All 8 shared-nav pages are driven through the browser for the dynamic

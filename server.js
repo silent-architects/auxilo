@@ -12196,6 +12196,11 @@ function serveLegalPage(c, filename, title, seo) {
       .replace(/^### (.+)$/gm, '<h3>$1</h3>')
       .replace(/^## (.+)$/gm, '<h2>$1</h2>')
       .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+      // Wave E3 item 4: a line that is exactly a markdown rule (---) becomes
+      // an <hr>, not a literal "---" paragraph. Matched before the catch-all
+      // paragraph-wrap rule below; the wrap rule's `(?!<[hul])` lookahead
+      // already skips lines starting with <h, so <hr> passes through untouched.
+      .replace(/^---$/gm, '<hr>')
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.+?)\*/g, '<em>$1</em>')
       // Inline links [text](url) → <a>. Before list/paragraph wrapping so links
@@ -12260,12 +12265,36 @@ function serveLegalPage(c, filename, title, seo) {
     .legal-wrap li{margin-bottom:6px;line-height:1.6}
     .legal-wrap strong{color:#FAFAF8}
     .legal-wrap a{color:#C9A84C}
+    .legal-wrap hr{border:none;border-top:1px solid rgba(229,229,227,0.12);margin:24px 0}
     .legal-wrap pre.legal-pre{background:#111;border:1px solid rgba(229,229,227,0.12);border-radius:6px;padding:16px;margin-bottom:16px;overflow-x:auto;white-space:pre-wrap;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;line-height:1.6;color:#E5E5E3}
     .legal-back{display:inline-block;margin-bottom:32px;color:#C9A84C;text-decoration:none;font-size:14px}
     .legal-back:hover{text-decoration:underline}
   </style>
 </head>
 <body>
+  <nav id="main-nav" aria-label="Main navigation">
+    <a href="/" class="nav-logo" id="nav-logo">
+      <!-- Angular A mark -->
+      <svg class="logo-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <polygon points="16,2 30,28 2,28" fill="none" stroke="#C9A84C" stroke-width="2.2" stroke-linejoin="round"/>
+        <line x1="16" y1="17" x2="30" y2="17" stroke="#C9A84C" stroke-width="1.8"/>
+      </svg>
+      <span class="wordmark">auxilo</span>
+    </a>
+    <ul class="nav-links" role="list">
+      <li><a href="/for-builders" id="nav-builders">For Builders</a></li>
+      <li><a href="/for-agents" id="nav-agents">For Agents</a></li>
+      <li><a href="/how-it-works" id="nav-how">How It Works</a></li>
+      <li><a href="/pricing" id="nav-pricing">Pricing</a></li>
+      <li><a href="/earnings" id="nav-earnings">Earnings</a></li>
+      <li><a href="/api" id="nav-api">API</a></li>
+      <li><a href="/dashboard" id="nav-dashboard">Sign in</a></li>
+      <li><a href="/#install" id="nav-cta-access" class="nav-cta">Connect your agent</a></li>
+    </ul>
+    <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
   <div class="legal-wrap">
     <a href="/" class="legal-back">← Back to Auxilo</a>
     ${body}
@@ -12294,6 +12323,40 @@ function serveLegalPage(c, filename, title, seo) {
     </p>
   </div>
 </footer>
+<script>
+  // ── Hamburger nav toggle ───────────────────────────────────────────
+  function toggleNav() {
+    const nav = document.querySelector('.nav-links');
+    const btn = document.getElementById('hamburger');
+    const expanded = btn.getAttribute('aria-expanded') === 'true';
+    btn.setAttribute('aria-expanded', !expanded);
+    nav.classList.toggle('nav-open');
+  }
+
+  // Close mobile nav on link click
+  document.querySelectorAll('.nav-links a').forEach(a => {
+    a.addEventListener('click', () => {
+      const nav = document.querySelector('.nav-links');
+      const btn = document.getElementById('hamburger');
+      if (nav.classList.contains('nav-open')) {
+        nav.classList.remove('nav-open');
+        btn.setAttribute('aria-expanded', 'false');
+      }
+    });
+  });
+
+  // Close mobile nav on Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const nav = document.querySelector('.nav-links');
+      const btn = document.getElementById('hamburger');
+      if (nav && nav.classList.contains('nav-open')) {
+        nav.classList.remove('nav-open');
+        btn.setAttribute('aria-expanded', 'false');
+      }
+    }
+  });
+</script>
 </body>
 </html>`;
     c.header('Content-Type', 'text/html; charset=utf-8');

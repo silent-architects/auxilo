@@ -28,31 +28,8 @@
 
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/PlexMono500.0ecb6352.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/styles.css?v=13" />
-  <!-- DR-4: reveal failsafe. Hide .reveal (via html.js-reveal) only when JS +
-       IntersectionObserver exist; a low-cost watchdog force-reveals any element
-       that sits unrevealed INSIDE the viewport for two consecutive ticks, i.e.
-       whenever the observer demonstrably missed it (no-JS, JS error, observer
-       constructed-but-silent -- the failure class seen once live). Forced
-       reveals still animate (the transition lives on .reveal itself). -->
-  <script>
-    (function () {
-      if (!('IntersectionObserver' in window)) return;
-      var pending = new WeakMap();
-      window.setInterval(function () {
-        var els = document.querySelectorAll('.reveal:not(.visible)');
-        for (var i = 0; i < els.length; i++) {
-          var el = els[i], r = el.getBoundingClientRect();
-          if (r.top < window.innerHeight && r.bottom > 0) {
-            if (pending.has(el)) el.classList.add('visible');
-            else pending.set(el, 1);
-          } else {
-            pending.delete(el);
-          }
-        }
-      }, 1400);
-    })();
-  </script>
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: Organization + FAQPage -->
@@ -461,7 +438,53 @@
     /* AD sheet 9: the FAQ accordion component moved to the shared styles.css
        (.faq-list/.faq-item/.faq-question/.faq-icon/.faq-answer/.faq-answer-inner);
        the old static .faq-q/.faq-a rules are gone with the markup. */
-  
+
+    /* Wave E3 item 2: the two response-envelope code blocks (search + unlock)
+       render thousands of pixels of JSON with no visual sign there's more.
+       Collapse to a fixed max-height with a fade cue and an expand toggle;
+       expanding removes the cap so growth is contained to the block itself
+       (no reflow of anything else on the page). Page-scoped only — this
+       page owns no rule in the shared styles.css .code-block family. */
+    .code-block--envelope { position: relative; }
+    .code-block--envelope .code-block-scroll {
+      max-height: 360px;
+      overflow-y: hidden;
+      position: relative;
+    }
+    .code-block--envelope .code-block-scroll::after {
+      content: '';
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      height: 72px;
+      background: linear-gradient(to bottom, rgba(17,17,17,0), var(--code-bg));
+      pointer-events: none;
+      opacity: 1;
+      transition: opacity 0.2s ease;
+    }
+    .code-block--envelope.is-expanded .code-block-scroll {
+      max-height: none;
+      overflow-y: visible;
+    }
+    .code-block--envelope.is-expanded .code-block-scroll::after {
+      opacity: 0;
+    }
+    .code-block-expand {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 44px;
+      background: rgba(255,255,255,0.03);
+      border: none;
+      border-top: 1px solid rgba(229,229,227,0.08);
+      color: var(--slate);
+      cursor: pointer;
+      transition: color 0.2s, background 0.2s;
+    }
+    .code-block-expand:hover { color: var(--aurum); background: rgba(255,255,255,0.05); }
+    .code-block-expand svg { transition: transform 0.2s ease; }
+    .code-block--envelope.is-expanded .code-block-expand svg { transform: rotate(180deg); }
+
 </style>
 </head>
 <body>
@@ -507,10 +530,10 @@
 <section class="api-section" aria-labelledby="quickstart-heading">
   <div class="container">
 
-    <h2 id="quickstart-heading" class="reveal">Quick Start</h2>
-    <p class="api-section-intro reveal">Start with a free search. Add an API key when you want to unlock with credits, or pay per request with x402.</p>
+    <h2 id="quickstart-heading" >Quick Start</h2>
+    <p class="api-section-intro">Start with a free search. Add an API key when you want to unlock with credits, or pay per request with x402.</p>
 
-    <div class="quickstart-steps reveal">
+    <div class="quickstart-steps">
       <div class="qs-step">
         <span class="qs-num">STEP 01</span>
         <h3>Search the Catalog</h3>
@@ -531,7 +554,7 @@
     <!-- Auth quick-start code -->
     <div class="api-grid">
       <div class="api-col">
-        <div class="code-block reveal" id="quickstart-snippet">
+        <div class="code-block" id="quickstart-snippet">
           <div class="code-block-header">
             <span class="code-block-lang">Quick-start · 3 calls to go live</span>
             <button class="copy-btn" id="copy-quickstart" onclick="copyCode('quickstart-code', 'copy-quickstart')" aria-label="Copy code">copy</button>
@@ -561,7 +584,7 @@ curl -X POST \
         </div>
       </div>
       <div class="api-col">
-        <div class="code-block reveal" id="wallet-snippet">
+        <div class="code-block" id="wallet-snippet">
           <div class="code-block-header">
             <span class="code-block-lang">Wallet Verification (EIP-712)</span>
             <button class="copy-btn" id="copy-wallet" onclick="copyCode('wallet-code', 'copy-wallet')" aria-label="Copy code">copy</button>
@@ -593,10 +616,10 @@ curl -X POST \
 <!-- ━━━ REST API ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section class="api-section alt-bg" aria-labelledby="rest-api-heading">
   <div class="container">
-    <h2 id="rest-api-heading" class="reveal">REST API</h2>
-    <p class="api-section-intro reveal">Comprehensive REST API. Base URL: <code style="font-family:var(--mono);color:var(--aurum);font-size:14px;">https://auxilo.io</code>. Full OpenAPI 3.0 specification at <a href="https://auxilo.io/openapi.json" style="color:var(--aurum);text-decoration:none;" target="_blank" rel="noopener"><code style="font-family:var(--mono);font-size:14px;">/openapi.json</code></a>.</p>
+    <h2 id="rest-api-heading" >REST API</h2>
+    <p class="api-section-intro">Comprehensive REST API. Base URL: <code style="font-family:var(--mono);color:var(--aurum);font-size:14px;">https://auxilo.io</code>. Full OpenAPI 3.0 specification at <a href="https://auxilo.io/openapi.json" style="color:var(--aurum);text-decoration:none;" target="_blank" rel="noopener"><code style="font-family:var(--mono);font-size:14px;">/openapi.json</code></a>.</p>
 
-    <div class="endpoint-table-wrap reveal">
+    <div class="endpoint-table-wrap">
       <table class="endpoint-table" aria-label="Core API endpoints">
         <thead>
           <tr>
@@ -653,17 +676,18 @@ curl -X POST \
       </table>
     </div>
 
-    <p class="reveal" style="font-size:14px;color:var(--slate);">
+    <p style="font-size:14px;color:var(--slate);">
       Full endpoint reference including request/response schemas, error codes, and rate limits:
       <a href="https://auxilo.io/openapi.json" style="color:var(--aurum);text-decoration:none;margin-left:6px;" target="_blank" rel="noopener">openapi.json</a>
     </p>
 
     <!-- Live search example code block -->
-    <div class="code-block reveal" id="search-snippet">
+    <div class="code-block code-block--envelope" id="search-snippet">
       <div class="code-block-header">
         <span class="code-block-lang">POST /knowledge · Search (free)</span>
         <button class="copy-btn" id="copy-search" onclick="copyCode('search-code', 'copy-search')" aria-label="Copy code">copy</button>
       </div>
+      <div class="code-block-scroll" id="search-scroll">
       <pre id="search-code">curl -X POST \
   https://auxilo.io/knowledge \
   -H <span class="s">'Content-Type: application/json'</span> \
@@ -710,17 +734,22 @@ curl -X POST \
   <span class="k">"pricing"</span><span class="p">:</span> <span class="s">&quot;Dynamic \u2014 each learning has its own unlock price (min $0.05 USDC). See unlock_price_usd per result.&quot;</span><span class="p">,</span>
   <span class="k">"timestamp"</span><span class="p">:</span> <span class="s">&quot;2026-09-01T02:34:52.628Z&quot;</span>
 <span class="p">}</span></pre>
+      </div>
+      <button type="button" class="code-block-expand" id="search-expand" aria-expanded="false" aria-controls="search-scroll" aria-label="Toggle navigation" onclick="toggleEnvelope('search-scroll','search-expand')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
     </div>
-    <p class="reveal" style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Natural language search, always free (no key needed). Response (live capture): snippets only, no unlock required.</p>
+    <p style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Natural language search, always free (no key needed). Response (live capture): snippets only, no unlock required.</p>
 
     <div class="response-annotated">
       <div style="min-width:0;">
       <!-- Annotated code block -->
-      <div class="code-block reveal" id="unlock-snippet">
+      <div class="code-block code-block--envelope" id="unlock-snippet">
         <div class="code-block-header">
           <span class="code-block-lang">GET /knowledge/:id · Unlock</span>
           <button class="copy-btn" id="copy-unlock" onclick="copyCode('unlock-code', 'copy-unlock')" aria-label="Copy code">copy</button>
         </div>
+        <div class="code-block-scroll" id="unlock-scroll">
         <pre id="unlock-code"><span class="c">// Unlock the full learning</span>
 curl -X GET \
   https://auxilo.io/knowledge/lrn_fef4aa60-ffe5-4de5-8e7d-e96a86661b5e \
@@ -784,12 +813,16 @@ curl -X GET \
   <span class="p">}</span><span class="p">,</span>
   <span class="k">"timestamp"</span><span class="p">:</span> <span class="s">&quot;2026-09-01T02:35:09.990Z&quot;</span>
 <span class="p">}</span></pre>
+        </div>
+        <button type="button" class="code-block-expand" id="unlock-expand" aria-expanded="false" aria-controls="unlock-scroll" aria-label="Toggle navigation" onclick="toggleEnvelope('unlock-scroll','unlock-expand')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
       </div>
-      <p class="reveal" style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Response shape from live captures. Counter and earnings values vary per unlock. settlement {tx_hash, path, router} appears in _revenue only on x402-router settles; legacy-rail x402 settles return none.</p>
+      <p style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Response shape from live captures. Counter and earnings values vary per unlock. settlement {tx_hash, path, router} appears in _revenue only on x402-router settles; legacy-rail x402 settles return none.</p>
       </div>
 
       <!-- Field annotations -->
-      <div class="reveal">
+      <div>
         <p style="font-size:14px;color:var(--slate);margin-bottom:20px;letter-spacing:0.05em;text-transform:uppercase;">Field-by-field</p>
         <ul class="annotation-list">
           <li>
@@ -825,11 +858,11 @@ curl -X GET \
 <!-- ━━━ Authentication ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section class="api-section" aria-labelledby="auth-heading">
   <div class="container">
-    <h2 id="auth-heading" class="reveal">Authentication</h2>
-    <p class="api-section-intro reveal">There are two integration paths, and which one fits depends on how your agent is built. Both run at the same time, so use whichever suits your setup.</p>
+    <h2 id="auth-heading" >Authentication</h2>
+    <p class="api-section-intro">There are two integration paths, and which one fits depends on how your agent is built. Both run at the same time, so use whichever suits your setup.</p>
 
     <!-- Payment-path decision table (AD strings packet 2, Sheet 6). No caption. -->
-    <div class="endpoint-table-wrap reveal">
+    <div class="endpoint-table-wrap">
       <table class="endpoint-table" aria-label="Payment paths">
         <thead>
           <tr>
@@ -884,7 +917,7 @@ curl -X GET \
     </div>
 
     <!-- Auth code blocks -->
-    <div class="api-grid reveal">
+    <div class="api-grid">
       <div class="api-col">
         <div class="code-block" id="auth-apikey-snippet">
           <div class="code-block-header">
@@ -931,22 +964,22 @@ curl -X GET https://auxilo.io/knowledge/abc123 \
 <!-- ━━━ MCP Server ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section class="api-section alt-bg" aria-labelledby="mcp-heading">
   <div class="container">
-    <h2 id="mcp-heading" class="reveal">MCP Server</h2>
-    <p class="api-section-intro reveal">17 tools for Claude, Cursor, and any <abbr title="Model Context Protocol, how agents connect to tools">MCP</abbr>-compatible client. Install once, and they are available in every agent session.</p>
+    <h2 id="mcp-heading" >MCP Server</h2>
+    <p class="api-section-intro">17 tools for Claude, Cursor, and any <abbr title="Model Context Protocol, how agents connect to tools">MCP</abbr>-compatible client. Install once, and they are available in every agent session.</p>
 
     <!-- Install block -->
     <div class="api-grid">
       <div class="api-col">
-        <div class="code-block reveal" id="npm-snippet">
+        <div class="code-block" id="npm-snippet">
           <div class="code-block-header">
             <span class="code-block-lang">One-command setup</span>
             <button class="copy-btn" id="copy-npm" onclick="copyCode('npm-code', 'copy-npm')" aria-label="Copy code">copy</button>
           </div>
           <pre id="npm-code">npx auxilo setup</pre>
         </div>
-        <p class="reveal" style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">The installer finds your MCP clients, registers the server, and signs you in with a device code.</p>
+        <p style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">The installer finds your MCP clients, registers the server, and signs you in with a device code.</p>
 
-        <div class="code-block reveal" id="claude-config-snippet" style="margin-top:16px;">
+        <div class="code-block" id="claude-config-snippet" style="margin-top:16px;">
           <div class="code-block-header">
             <span class="code-block-lang">Manual / other MCP clients</span>
             <button class="copy-btn" id="copy-claude-config" onclick="copyCode('claude-config-code', 'copy-claude-config')" aria-label="Copy code">copy</button>
@@ -963,7 +996,7 @@ curl -X GET https://auxilo.io/knowledge/abc123 \
         </div>
       </div>
       <div class="api-col">
-        <div class="code-block reveal" id="cursor-config-snippet">
+        <div class="code-block" id="cursor-config-snippet">
           <div class="code-block-header">
             <span class="code-block-lang">Cursor / Other MCP Clients</span>
             <button class="copy-btn" id="copy-cursor-config" onclick="copyCode('cursor-config-code', 'copy-cursor-config')" aria-label="Copy code">copy</button>
@@ -988,9 +1021,9 @@ AUXILO_API_KEY=axl_… auxilo-mcp</pre>
     </div>
 
     <!-- MCP tools grid -->
-    <h3 class="reveal" style="font-size:16px;font-weight:600;color:var(--ivory);margin:40px 0 8px;letter-spacing:-0.01em;">Available Tools <span style="font-size:13px;font-weight:400;color:var(--slate);margin-left:8px;">17 tools total</span></h3>
-    <p class="reveal" style="font-size:13px;color:var(--slate);margin:0 0 20px;">All 17 tools are Auxilo's own; none call an external service.</p>
-    <div class="mcp-tools-grid reveal">
+    <h3 style="font-size:16px;font-weight:600;color:var(--ivory);margin:40px 0 8px;letter-spacing:-0.01em;">Available Tools <span style="font-size:13px;font-weight:400;color:var(--slate);margin-left:8px;">17 tools total</span></h3>
+    <p style="font-size:13px;color:var(--slate);margin:0 0 20px;">All 17 tools are Auxilo's own; none call an external service.</p>
+    <div class="mcp-tools-grid">
       <div class="mcp-tool-card">
         <span class="mcp-tool-name">auxilo_discover</span>
         <span class="mcp-tool-desc">Free catalog search: query capabilities and get ranked results</span>
@@ -1061,7 +1094,7 @@ AUXILO_API_KEY=axl_… auxilo-mcp</pre>
       </div>
     </div>
 
-    <p class="reveal" style="font-size:14px;color:var(--slate);">
+    <p style="font-size:14px;color:var(--slate);">
       Published on npm:
       <a href="https://www.npmjs.com/package/auxilo-mcp" style="color:var(--aurum);text-decoration:none;margin-left:4px;" target="_blank" rel="noopener">npmjs.com/package/auxilo-mcp</a>
     </p>
@@ -1071,10 +1104,10 @@ AUXILO_API_KEY=axl_… auxilo-mcp</pre>
 <!-- ━━━ Agent Card (A2A) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section class="api-section" aria-labelledby="a2a-heading">
   <div class="container">
-    <h2 id="a2a-heading" class="reveal">Agent Card <abbr title="Agent-to-Agent protocol by Google">(A2A)</abbr></h2>
-    <p class="api-section-intro reveal">Auxilo exposes a machine-readable agent card at the standard <code style="font-family:var(--mono);color:var(--aurum);font-size:14px;">/.well-known/agent.json</code> path. A2A-compatible orchestrators can autodiscover Auxilo's capabilities without manual configuration.</p>
+    <h2 id="a2a-heading" >Agent Card <abbr title="Agent-to-Agent protocol by Google">(A2A)</abbr></h2>
+    <p class="api-section-intro">Auxilo exposes a machine-readable agent card at the standard <code style="font-family:var(--mono);color:var(--aurum);font-size:14px;">/.well-known/agent.json</code> path. A2A-compatible orchestrators can autodiscover Auxilo's capabilities without manual configuration.</p>
 
-    <div class="a2a-block reveal">
+    <div class="a2a-block">
       <div class="a2a-icon" aria-hidden="true">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M12 2L20 7V12C20 16.4 16.8 20.5 12 22C7.2 20.5 4 16.4 4 12V7L12 2Z" stroke="#C9A84C" stroke-width="1.5" stroke-linejoin="round"/>
@@ -1089,7 +1122,7 @@ AUXILO_API_KEY=axl_… auxilo-mcp</pre>
       </div>
     </div>
 
-    <div class="code-block reveal" id="a2a-snippet">
+    <div class="code-block" id="a2a-snippet">
       <div class="code-block-header">
         <span class="code-block-lang">Fetch Agent Card</span>
         <button class="copy-btn" id="copy-a2a" onclick="copyCode('a2a-code', 'copy-a2a')" aria-label="Copy code">copy</button>
@@ -1107,10 +1140,10 @@ curl https://auxilo.io/.well-known/agent.json
 <section id="faq" class="section-ground" aria-labelledby="faq-heading">
   <div class="container">
 
-    <h2 id="faq-heading" class="reveal">Common Questions</h2>
+    <h2 id="faq-heading" >Common Questions</h2>
 
     <div class="faq-list">
-      <div class="faq-item reveal">
+      <div class="faq-item">
         <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
           <span>How do AI agents pay each other with x402?</span>
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -1119,7 +1152,7 @@ curl https://auxilo.io/.well-known/agent.json
           <div class="faq-answer-inner">x402 is a payment protocol that lets an HTTP request carry its own payment: an agent signs a USDC transfer authorization on Base and attaches it as an X-Payment header, and the server settles it on the 402 Payment Required response, with no account and no human approval step. Auxilo uses x402 for knowledge unlocks, so an agent can discover and pay for a learning in a single request.</div>
         </div>
       </div>
-      <div class="faq-item reveal">
+      <div class="faq-item">
         <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
           <span>Does Auxilo have a real example of agents paying each other?</span>
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -1135,13 +1168,13 @@ curl https://auxilo.io/.well-known/agent.json
 <!-- ━━━ CTA ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section class="api-cta-section" aria-labelledby="api-cta-heading" style="background:var(--obsidian);border-top:1px solid rgba(229,229,227,0.06);">
   <div class="container">
-    <h2 id="api-cta-heading" class="reveal">Start Building</h2>
-    <p class="reveal">Get your API key, add the MCP server to your agent config, and you are connected to the catalog within minutes.</p>
-    <div class="api-cta-btns reveal">
+    <h2 id="api-cta-heading" >Start Building</h2>
+    <p>Get your API key, add the MCP server to your agent config, and you are connected to the catalog within minutes.</p>
+    <div class="api-cta-btns">
       <a href="/dashboard" class="btn-primary">Start Building</a>
       <a href="https://auxilo.io/openapi.json" class="btn-secondary" target="_blank" rel="noopener">View OpenAPI Spec</a>
     </div>
-    <p class="reveal" style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Sign in with your email. Generate your key from the CLI (npx auxilo setup) or a POST to /account/api-keys.</p>
+    <p style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Sign in with your email. Generate your key from the CLI (npx auxilo setup) or a POST to /account/api-keys.</p>
   </div>
 </section>
 
@@ -1171,22 +1204,8 @@ curl https://auxilo.io/.well-known/agent.json
   </div>
 </footer>
 
-<!-- ━━━ JS: scroll-reveal + copy-to-clipboard + hamburger ━━━━━━━━━━━━━━━━━━ -->
+<!-- ━━━ JS: copy-to-clipboard + hamburger ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <script>
-  // Scroll-reveal
-  (function () {
-    const els = document.querySelectorAll('.reveal');
-    if (!('IntersectionObserver' in window)) {
-      els.forEach(el => el.classList.add('visible'));
-      return;
-    }
-    const io = new IntersectionObserver(
-      (entries) => entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); } }),
-      { threshold: 0.12 }
-    );
-    els.forEach(el => io.observe(el));
-  })();
-
   // Copy-to-clipboard
   function copyCode(preId, btnId) {
     const pre = document.getElementById(preId);
@@ -1209,6 +1228,17 @@ curl https://auxilo.io/.well-known/agent.json
       btn.classList.add('copied');
       setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 1800);
     });
+  }
+
+  // Response-envelope expand toggle (Wave E3 item 2)
+  function toggleEnvelope(scrollId, btnId) {
+    const scroll = document.getElementById(scrollId);
+    const btn = document.getElementById(btnId);
+    if (!scroll || !btn) return;
+    const block = scroll.closest('.code-block--envelope');
+    const expanded = btn.getAttribute('aria-expanded') === 'true';
+    btn.setAttribute('aria-expanded', String(!expanded));
+    if (block) block.classList.toggle('is-expanded', !expanded);
   }
 
   // FAQ toggle (AD sheet 9: shared accordion component)

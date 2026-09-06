@@ -127,7 +127,10 @@ describe('B1 (static, SUPERSEDED by the wave D1 AD design-tells sweep): .moat-ca
   it('/for-builders renders .moat-grid/.moat-card but never .moat-icon', () => {
     const html = readPublic('for-builders.html');
     assert.match(html, /<div class="moat-grid">/);
-    assert.match(html, /<div class="moat-card reveal">/);
+    // Wave E3 item 7 removed the dead scroll-reveal system (and every
+    // class="reveal" attribute) from for-builders.html, so .moat-card no
+    // longer carries a trailing " reveal".
+    assert.match(html, /<div class="moat-card">/);
     assert.doesNotMatch(html, /class="moat-icon"/, '.moat-icon markup is gone from /for-builders');
   });
 });
