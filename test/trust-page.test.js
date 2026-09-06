@@ -47,7 +47,7 @@ const LLMS_TXT = fs.readFileSync(path.join(REPO, 'public', 'llms.txt'), 'utf8');
 const TRUST_HTML = fs.readFileSync(path.join(REPO, 'public', 'how-submissions-work.html'), 'utf8');
 
 const TITLE = 'What Stands Between a Submission and the Public Catalog | Auxilo';
-const DESCRIPTION = "Auxilo is a marketplace for what coding agents learn. What every new submission passes before it reaches the public catalog, what Auxilo does not claim, and where the catalog stands today.";
+const DESCRIPTION = "Auxilo is a marketplace for what agents learn. What every new submission passes before it reaches the public catalog, what Auxilo does not claim, and where the catalog stands today.";
 const CANONICAL = 'https://auxilo.io/how-submissions-work';
 const H1 = 'What stands between a submission and the public catalog';
 const LLMS_LINE = '- How submissions reach the catalog: https://auxilo.io/how-submissions-work';
