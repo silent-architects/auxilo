@@ -52,6 +52,8 @@ const BAND_EYEBROW = 'works with the client you already run';
 const STEP01_NEW = 'On the clients that support capture';
 const STEP01_OLD = 'On Claude Code and Codex';
 const OPENCLAW_NOTE = "NOT locally verified; reads the legacy sessions/*.jsonl layout";
+const OPENCODE_NOTE = '(plugin planned)';
+const OPENHANDS_NOTE = '(best-effort adapter planned)';
 
 describe('WORKS-WITH: structural — public/works-with.html, public/index.html band, logos, matrix, sitemap', () => {
   it('public/works-with.html carries the exact title and og/twitter title', () => {
@@ -270,6 +272,22 @@ describe('WORKS-WITH: live routes', { timeout: 180_000 }, () => {
     const body = await res.text();
     assert.ok(body.includes(TITLE), 'served body carries the title');
     assert.ok(body.includes(HONEST_LINE), 'served body carries the honest line');
+  });
+
+  it('GET /works-with → served opencode and OpenHands cells carry the matrix parentheticals verbatim in their note lines', async (t) => {
+    if (bootSkipReason) { t.skip(bootSkipReason); return; }
+    const res = await fetch(`${baseUrl}/works-with`);
+    const body = await res.text();
+
+    const opencodeStart = body.indexOf('>opencode<');
+    assert.ok(opencodeStart > -1, 'opencode cell present in served body');
+    const opencodeBlock = body.slice(opencodeStart, opencodeStart + 400);
+    assert.ok(opencodeBlock.includes(OPENCODE_NOTE), 'opencode cell note line carries "(plugin planned)" verbatim');
+
+    const openhandsStart = body.indexOf('>OpenHands<');
+    assert.ok(openhandsStart > -1, 'OpenHands cell present in served body');
+    const openhandsBlock = body.slice(openhandsStart, openhandsStart + 400);
+    assert.ok(openhandsBlock.includes(OPENHANDS_NOTE), 'OpenHands cell note line carries "(best-effort adapter planned)" verbatim');
   });
 
   it('GET /logos/<file>.svg → 200 image/svg+xml for every sourced logo', async (t) => {
