@@ -282,7 +282,7 @@ The auxilo.io website loads its display fonts from Google Fonts (`fonts.googleap
 
 ### 7.6 LLM Providers (Autonomous Extraction)
 
-When Builders enable Autonomous Extraction (ToS §5.9.3), the extraction inference step runs on the Builder's side, not ours. The Builder's own model client processes the locally scrubbed session transcript under the Builder's own agreement with their model provider, the same way it processes the Builder's normal agent sessions. Our servers do not receive session transcripts, raw or scrubbed, and no transcript passes through an LLM subprocessor engaged by Auxilo. The only extraction output transmitted to Auxilo is the finished Learning draft (title, body, category, tags, task context, and outcome).
+When Builders enable Autonomous Extraction (ToS §5.9.3), the extraction inference step runs on the Builder's side, not ours. The Builder's own model client processes the locally scrubbed session transcript under the Builder's own agreement with their model provider, whether that model client is the Builder's coding-client integration or a provider connection the Builder configured directly with their own API key (stored locally, never transmitted to Auxilo). Our servers do not receive session transcripts, raw or scrubbed, and no transcript passes through an LLM subprocessor engaged by Auxilo. The only extraction output transmitted to Auxilo is the finished Learning draft (title, body, category, tags, task context, and outcome).
 
 Our software also contains an optional server-side extraction path. It is disabled by default and is not currently active. If we ever activate it, session transcripts would be processed by an LLM subprocessor on our behalf, and we will update this policy and the sub-processor list in Section 3.8 before doing so. For the current subprocessor list, see §3.8 and https://auxilo.io/legal/subprocessors.
 
@@ -408,4 +408,4 @@ We aim to respond to all privacy-related inquiries within 30 days.
 
 ---
 
-*This Privacy Policy was last updated on September 5, 2026.*
+*This Privacy Policy was last updated on September 6, 2026.*
