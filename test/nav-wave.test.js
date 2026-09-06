@@ -77,7 +77,13 @@ const PUBLIC_DIR = path.join(REPO, 'public');
 // single point of change if the label set is ever extended (Search / How
 // submissions work / Works with) — everything below derives from it rather
 // than re-typing labels.
-const NAV_LABELS = ['How It Works', 'For Agents', 'For Builders', 'Pricing', 'Earnings'];
+// v97 assembly (2026-09-06): supersedes the interim window above. The AD nav
+// re-rule sheet (~/.auxilo/handoffs/AD-NAV-RERULE-SHEET-2026-09-06.md §2)
+// rules the FINAL six-label nav, Tyler's order: For Builders, For Agents,
+// How It Works, Works With, Pricing, plus the "Connect Your Agent" CTA as
+// the sixth (gold-filled) element. Earnings is retired from the nav (AD
+// strings packet 15 rev 3a folds /earnings into /pricing the same wave).
+const NAV_LABELS = ['For Builders', 'For Agents', 'How It Works', 'Works With', 'Pricing'];
 
 // Enumerate every tracked public HTML page from git itself (not a hand-typed
 // list that can drift) — the NAV-WAVE build spec's own instruction.
@@ -100,7 +106,7 @@ const ACTIVE_LABEL_BY_FILE = {
   'public/for-agents.html': 'For Agents',
   'public/for-builders.html': 'For Builders',
   'public/pricing.html': 'Pricing',
-  'public/earnings.html': 'Earnings',
+  'public/works-with.html': 'Works With',
 };
 
 function readFile(relOrAbs) {
@@ -138,9 +144,11 @@ function navLinkEntries(navBlock) {
 
 // Verifies one page's nav (given its full HTML + a label for error messages)
 // against the ruled shared component. `expectedActive` is a label string or
-// null. `expectCta` controls whether "Connect Your Agent" must be present
-// (true on public pages, false on dashboard.html).
-function assertSharedNav(html, pageLabel, expectedActive, expectCta) {
+// null. Per the AD nav re-rule sheet §3 ("Dashboard nav ... Same component,
+// same six items, same CTA, same order"), the CTA is present on EVERY page
+// now, dashboard.html included — v97 assembly drops the earlier
+// public-pages-only CTA rule.
+function assertSharedNav(html, pageLabel, expectedActive) {
   const blocks = extractNavBlocks(html);
   assert.equal(blocks.length, 1, `${pageLabel}: expected exactly one #main-nav, found ${blocks.length}`);
   const nav = blocks[0];
@@ -175,13 +183,9 @@ function assertSharedNav(html, pageLabel, expectedActive, expectCta) {
       `${pageLabel}: active label should be "${expectedActive}", got "${activeEntries[0].text}"`);
   }
 
-  const ctaEntry = entries.find((e) => e.href === '/#install');
-  if (expectCta) {
-    assert.ok(ctaEntry, `${pageLabel}: public nav must carry the "Connect Your Agent" CTA`);
-    assert.equal(ctaEntry.text, 'Connect Your Agent');
-  } else {
-    assert.equal(ctaEntry, undefined, `${pageLabel}: dashboard nav must not carry the public CTA`);
-  }
+  const ctaEntry = entries.find((e) => e.href === '/connect');
+  assert.ok(ctaEntry, `${pageLabel}: nav must carry the "Connect Your Agent" CTA linking /connect`);
+  assert.equal(ctaEntry.text, 'Connect Your Agent');
 
   // Footer /api link present somewhere OUTSIDE the nav (API "stays in the
   // footer" per packet 11 §4).
@@ -194,20 +198,22 @@ function assertSharedNav(html, pageLabel, expectedActive, expectCta) {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe('NAV-WAVE A: every tracked public HTML page carries the shared #main-nav', () => {
-  it('git ls-files public/ enumerates all 12 pages this suite expects (no drift)', () => {
+  it('git ls-files public/ enumerates all 14 pages this suite expects (no drift)', () => {
     assert.deepEqual(
       ALL_PUBLIC_HTML,
       [
         'public/about.html',
         'public/api.html',
+        'public/connect.html',
         'public/dashboard.html',
-        'public/earnings.html',
         'public/for-agents.html',
         'public/for-builders.html',
         'public/how-it-works.html',
+        'public/how-submissions-work.html',
         'public/index.html',
         'public/pricing.html',
         'public/status.html',
+        'public/works-with.html',
         'public/writing-agents-message-board.html',
         'public/writing/index.html',
       ].sort(),
@@ -215,12 +221,11 @@ describe('NAV-WAVE A: every tracked public HTML page carries the shared #main-na
   });
 
   for (const rel of ALL_PUBLIC_HTML) {
-    const isDashboard = rel === 'public/dashboard.html';
     const expectedActive = ACTIVE_LABEL_BY_FILE[rel] || null;
 
-    it(`${rel} carries the shared nav (active: ${expectedActive || 'none'}, CTA: ${!isDashboard})`, () => {
+    it(`${rel} carries the shared nav (active: ${expectedActive || 'none'})`, () => {
       const html = readFile(rel);
-      assertSharedNav(html, rel, expectedActive, !isDashboard);
+      assertSharedNav(html, rel, expectedActive);
     });
   }
 
@@ -246,9 +251,9 @@ describe('NAV-WAVE A: every tracked public HTML page carries the shared #main-na
     });
   }
 
-  it('the shared nav markup is byte-identical across all 12 pages once normalized to a common indent and the 3 documented variations (active label, auth slot, CTA presence)', () => {
+  it('the shared nav markup is byte-identical across all 14 pages once normalized to a common indent and the 2 documented variations (active label, auth slot — the CTA is now identical everywhere, dashboard included)', () => {
     // Normalizes each nav block's indentation to a fixed baseline and masks
-    // the 3 documented per-page variations so what's left can be compared
+    // the 2 documented per-page variations so what's left can be compared
     // byte-for-byte.
     function normalize(navBlock) {
       return navBlock
@@ -259,12 +264,11 @@ describe('NAV-WAVE A: every tracked public HTML page carries the shared #main-na
         .replace(/ id="nav-agents"(?: class="active")?/, ' id="nav-agents"')
         .replace(/ id="nav-builders"(?: class="active")?/, ' id="nav-builders"')
         .replace(/ id="nav-pricing"(?: class="active")?/, ' id="nav-pricing"')
-        .replace(/ id="nav-earnings"(?: class="active")?/, ' id="nav-earnings"')
+        .replace(/ id="nav-works-with"(?: class="active")?/, ' id="nav-works-with"')
         // NAV-WAVE amendment (sign-in utility strip): the auth-slot link
         // moved out of a <li> inside .nav-links into <a> inside
         // .nav-strip (no <li> wrapper there — the strip isn't a list).
-        .replace(/<a href="\/dashboard" id="nav-dashboard"[^>]*>(Sign in|Dashboard)<\/a>\s*/, '')
-        .replace(/<li><a href="\/#install"[^>]*>Connect Your Agent<\/a><\/li>\s*/, '');
+        .replace(/<a href="\/dashboard" id="nav-dashboard"[^>]*>(Sign in|Dashboard)<\/a>\s*/, '');
     }
     const normalized = ALL_PUBLIC_HTML.map((rel) => normalize(extractNavBlocks(readFile(rel))[0]));
     const [first, ...rest] = normalized;
@@ -345,16 +349,16 @@ describe('NAV-WAVE B: legal shell routes + /dashboard render the shared nav', { 
       const res = await fetch(`${baseUrl}${route}`);
       assert.equal(res.status, 200);
       const body = await res.text();
-      assertSharedNav(body, route, null, true);
+      assertSharedNav(body, route, null);
     });
   }
 
-  it('GET /dashboard carries the shared nav with "Dashboard" active, no CTA, footer /api present', async (t) => {
+  it('GET /dashboard carries the shared nav with "Dashboard" active, the CTA (AD nav re-rule sheet §3: same six items, same CTA), footer /api present', async (t) => {
     if (bootSkipReason) { t.skip(bootSkipReason); return; }
     const res = await fetch(`${baseUrl}/dashboard`);
     assert.equal(res.status, 200);
     const body = await res.text();
-    assertSharedNav(body, '/dashboard', null, false);
+    assertSharedNav(body, '/dashboard', null);
     const nav = extractNavBlocks(body)[0];
     const authSlot = navLinkEntries(nav).find((e) => e.id === 'nav-dashboard');
     assert.equal(authSlot.text, 'Dashboard');
@@ -399,6 +403,11 @@ describe('NAV-WAVE C: no bare "marketplace" outside the ruled/held allow-list', 
     { file: 'public/index.html', text: '"name": "What makes a shared agent marketplace different from private agent memory?",' },
     { file: 'public/index.html', text: '<span>What is a knowledge marketplace for AI agents?</span>' },
     { file: 'public/index.html', text: '<span>What makes a shared agent marketplace different from private agent memory?</span>' },
+    // Pre-existing gap surfaced by v97 assembly's own scope widening
+    // (public/logos/SOURCES.md was already on this tree via the works-with
+    // build, d38527d — "VS Code marketplace" names a third-party product's
+    // own listing, not Auxilo's).
+    { file: 'public/logos/SOURCES.md', text: 'VS Code marketplace listing only' },
   ];
 
   function allPublicFiles() {

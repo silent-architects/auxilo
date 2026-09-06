@@ -12,8 +12,10 @@
  *   4. public/sitemap.xml carries no <lastmod> anywhere (dropped per the
  *      baseline's "automated or dropped" ruling — this build drops).
  *
- * /earnings is explicitly HELD by the same baseline (no 301, no sitemap/nav
- * removal) — this suite makes no assertion about it.
+ * /earnings was HELD by the baseline at the time this suite was written (no
+ * 301, no sitemap/nav removal) — it has since been retired under AD strings
+ * packet 15 rev 3a (folded into /pricing, v97 assembly, 2026-09-06); this
+ * suite still makes no assertion about it and earnings.html is gone.
  *
  * Wave E1 (AD-STRINGS-PACKET-10-SEO-FINAL-2026-09-06) adds:
  *   5. No meta description on any tracked public/*.html page contains a colon.
@@ -69,7 +71,7 @@ function countMeta(html, property) {
 // (noindex/nofollow, carries no description or any og: tags at all — out of the
 // packet's og:site_name/description scope, see wave-e1 build report).
 const TRACKED_HTML_PAGES = [
-  'about.html', 'api.html', 'earnings.html', 'for-agents.html', 'for-builders.html',
+  'about.html', 'api.html', 'for-agents.html', 'for-builders.html',
   'how-it-works.html', 'index.html', 'pricing.html', 'status.html',
   'writing-agents-message-board.html', path.join('writing', 'index.html'),
 ];

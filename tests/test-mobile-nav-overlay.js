@@ -73,7 +73,7 @@ const PUBLIC_DIR = path.join(ROOT, 'public');
 // how-it-works.html, so it joins the enumerated set too.
 const NAV_PAGES = [
     'index.html', 'how-it-works.html', 'for-agents.html', 'for-builders.html',
-    'pricing.html', 'earnings.html', 'api.html', 'dashboard.html',
+    'pricing.html', 'api.html', 'dashboard.html',
     'writing-agents-message-board.html', 'how-submissions-work.html',
     // Wave E3 item 3: about.html and writing/index.html moved off the
     // legacy .status-nav (zero height at 375, no hamburger) onto the shared
@@ -96,21 +96,21 @@ const NAV_PAGES = [
 // PUNCH-LIST §31 DR-1).
 const DYNAMIC_PAGES = NAV_PAGES;
 
-// Expected .nav-links link count per dynamic page. NAV-WAVE (2026-09-06):
-// the shared nav carries 5 labels (How It Works / For Agents / For Builders
-// / Pricing / Earnings -- API removed to the footer) + the "Connect Your
-// Agent" CTA = 6 links on the public marketing pages; dashboard.html is a
-// distinct authenticated shell that drops the CTA (already connected) = 5
-// links -- confirmed against the real DOM, not a guess.
+// Expected .nav-links link count per dynamic page. AD nav re-rule sheet
+// (2026-09-06): the shared nav carries 5 labels (For Builders / For Agents /
+// How It Works / Works With / Pricing) + the "Connect Your Agent" CTA = 6
+// links, and per the sheet's §3 ("Dashboard nav ... Same component, same six
+// items, same CTA, same order. The only difference is the strip word reading
+// Dashboard.") dashboard.html carries the identical 6, not a reduced set --
+// confirmed against the real DOM, not a guess.
 //
 // NAV-WAVE amendment (2026-09-06, AD nav re-rule sheet §1): the sign-in
 // utility strip moved the Sign in/Dashboard auth slot OUT of .nav-links
 // entirely, into its own always-visible <div class="nav-strip"> above the
 // hamburger-collapsible nav row -- "it does not collapse and it does not
-// merge into the menu." So the auth slot no longer counts toward
-// .nav-links' link total on either page type; the counts above (6 / 5) are
-// one lower than the pre-amendment 7 / 6.
-const EXPECTED_LINK_COUNT = { 'dashboard.html': 5 };
+// merge into the menu." So the auth slot never counts toward .nav-links'
+// link total on any page type.
+const EXPECTED_LINK_COUNT = {};
 function expectedLinkCount(page) {
     return EXPECTED_LINK_COUNT[page] || 6;
 }

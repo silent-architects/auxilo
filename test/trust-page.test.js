@@ -83,7 +83,7 @@ const S6_REVIEW = "Nor is every learning human-approved. A person at Auxilo revi
 const S6_HOLD = "When the safety screen cannot clear a submission, the submission holds rather than publishes.";
 const S7_FRAMING = "The counts in this section are live, read from the ledger each time the page loads.";
 const S7_LEARNINGS_LABEL = "learnings live in the catalog";
-const S7_UNLOCKS_LABEL = "unlocks, all time";
+const S7_UNLOCKS_LABEL = "unlocks recorded"; // packet 15 rev 3a caption change (v97 assembly): the unlock counter began with the event log, so "all time" overclaims; the same label change lands on /pricing and /for-builders in the same wave
 
 function tpStaticCell(html, id) {
   const m = html.match(new RegExp(`id="${id}"[^>]*>([^<]*)<`));

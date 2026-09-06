@@ -13,8 +13,10 @@
  * Two layers, matching the repo's conventions:
  *   A) Behavioral unit tests of the pure helpers in lib/analytics.js.
  *   B) Structural tests that server.js wires the helpers at every HTML
- *      choke point (serveStatic, the /earnings server-render, the legal-page
- *      renderer) and builds the CSP through the same gate. Mirrors
+ *      choke point (serveStatic, the live-data render path
+ *      (serveHtmlWithLiveData — /pricing since the packet-15 earnings
+ *      merge), the legal-page renderer) and builds the CSP through the same
+ *      gate. Mirrors
  *      test/geo-embargo.test.js, which analyzes server.js source rather than
  *      booting the whole app.
  *
@@ -178,9 +180,14 @@ describe('server.js analytics wiring', () => {
     assert.ok(h.includes('injectAnalytics('), 'injection must go through the shared helper');
   });
 
-  it('the /earnings server-render path goes through the same helper', () => {
-    const h = sliceAt("app.get('/earnings'", 2400);
+  it('the live-data render path (serveHtmlWithLiveData, which now includes /pricing after the packet-15 earnings merge) goes through the same helper', () => {
+    const h = sliceAt('function serveHtmlWithLiveData(', 2400);
     assert.ok(h.includes('injectAnalytics(html, ANALYTICS_DOMAIN)'));
+  });
+
+  it('/earnings is a plain redirect to /pricing, not a render path (AD strings packet 15 rev 3a)', () => {
+    const h = sliceAt("app.get('/earnings'", 200);
+    assert.ok(h.includes("c.redirect('/pricing', 301)"));
   });
 
   it('the legal-page renderer goes through the same helper', () => {

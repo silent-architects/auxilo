@@ -230,10 +230,10 @@ describe('/connect: SITE-PM packet 13 rev 2', { timeout: 180_000 }, () => {
     assert.ok(CONNECT_HTML.includes('not guaranteed'), 'not-guaranteed clause');
   });
 
-  it('step 2\'s fallback link is pinned to exactly /legal/supported-clients (swap to /works-with is a one-line change here when it ships)', () => {
+  it('step 2\'s fallback link is repointed to /works-with now that the page ships on this tree (v97 assembly)', () => {
     assert.ok(
-      CONNECT_HTML.includes('<a href="/legal/supported-clients">See what Auxilo captures on each client</a>'),
-      'fallback href pinned to /legal/supported-clients with the exact packet link text'
+      CONNECT_HTML.includes('<a href="/works-with">See what Auxilo captures on each client</a>'),
+      'fallback href repointed to /works-with with the exact packet link text'
     );
   });
 
@@ -242,7 +242,7 @@ describe('/connect: SITE-PM packet 13 rev 2', { timeout: 180_000 }, () => {
   });
 
   it('the nav CTA on /connect itself points at /connect (self-link, same treatment as every other page)', () => {
-    assert.ok(CONNECT_HTML.includes('<a href="/connect" id="nav-cta-access" class="nav-cta">Connect your agent</a>'));
+    assert.ok(CONNECT_HTML.includes('<a href="/connect" id="nav-cta-access" class="nav-cta">Connect Your Agent</a>'));
   });
 
   it('no served page or server.js legal-page template still links href="/#install", href="#connect", or href="/for-builders#connect"', () => {
@@ -268,8 +268,8 @@ describe('/connect: SITE-PM packet 13 rev 2', { timeout: 180_000 }, () => {
       const html = fs.readFileSync(path.join(REPO, relFile), 'utf8');
       // dashboard.html and writing/index.html-adjacent pages without the
       // shared nav-cta pattern are out of scope for this specific check;
-      // only pages that ship the shared "Connect your agent" CTA text count.
-      if (html.includes('Connect your agent') && !html.includes('href="/connect"')) {
+      // only pages that ship the shared "Connect Your Agent" CTA text count.
+      if (html.includes('Connect Your Agent') && !html.includes('href="/connect"')) {
         missing.push(relFile);
       }
     }

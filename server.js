@@ -12202,6 +12202,12 @@ function renderLiveCatalogStats(html) {
       .replace(/<!--\/LC-LEARNINGS-HERO-CELL-->/g, '')
       .replace(/<!--LC-LEARNINGS-CELL-->/g, '')
       .replace(/<!--\/LC-LEARNINGS-CELL-->/g, '')
+      // AD strings packet 15 rev 3a §2 (/pricing live ledger tile, moved
+      // from the retired /earnings route): markers only, stripped on the
+      // success path here; the whole tile is stripped instead in the catch
+      // block below when the derivation itself fails.
+      .replace(/<!--LC-PRICING-LEDGER-TILE-->/g, '')
+      .replace(/<!--\/LC-PRICING-LEDGER-TILE-->/g, '')
       .replace(/(id="lc-learnings"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${count}<`)
       .replace(/(id="lc-learnings-hero"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${count}<`)
       .replace(/(id="lc-categories"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${cats}<`)
@@ -12263,7 +12269,11 @@ function renderLiveCatalogStats(html) {
     // catch, not only the range-is-empty branch above.
     return html
       .replace(/<!--LC-LEARNINGS-HERO-CELL-->[\s\S]*?<!--\/LC-LEARNINGS-HERO-CELL-->/g, '')
-      .replace(/<!--LC-LEARNINGS-CELL-->[\s\S]*?<!--\/LC-LEARNINGS-CELL-->/g, '');
+      .replace(/<!--LC-LEARNINGS-CELL-->[\s\S]*?<!--\/LC-LEARNINGS-CELL-->/g, '')
+      // AD strings packet 15 rev 3a §2 (/pricing live ledger tile): the
+      // whole tile is removed here too, not just its own value spans, so no
+      // stranded caption/label ships without a live number behind it.
+      .replace(/<!--LC-PRICING-LEDGER-TILE-->[\s\S]*?<!--\/LC-PRICING-LEDGER-TILE-->/g, '');
   }
 }
 
@@ -12285,43 +12295,14 @@ function serveHtmlWithLiveData(c, file) {
   return null;
 }
 
-app.get('/earnings', (c) => {
-  // Server-render the three live-ledger numbers into the raw HTML so non-JS
-  // crawlers see real values (not em-dashes) on the page that says "the numbers
-  // below are live". Uses the SAME visibility predicate as GET /knowledge/stats
-  // AND the same derivation (catalogStatsTruth): the unlock count comes from
-  // the per-unlock ledger, never the retired per-learning counter, so this
-  // cell and /knowledge/stats total_unlocks are one number. When the ledger is
-  // unreadable the cell keeps the static "…" (no digit), mirroring the stats
-  // handler omitting the field. The client-side fetch('/knowledge/stats')
-  // stays as a freshness upgrade.
-  try {
-    const filePath = path.join(PUBLIC_DIR, 'earnings.html');
-    if (fs.existsSync(filePath)) {
-      let html = fs.readFileSync(filePath, 'utf8');
-      const visibleLearnings = visibleCatalog(); // Wave 2b: shared predicate
-      const truth = catalogStatsTruth(visibleLearnings);
-      const llLearnings  = visibleLearnings.length.toLocaleString('en-US');
-      const llUnlocks    = truth.unlocks ? truth.unlocks.total.toLocaleString('en-US') : null; // null ⇒ keep "…"
-      const llCategories = new Set(visibleLearnings.map(l => l.category)).size.toLocaleString('en-US');
-      html = html
-        .replace(/(id="ll-learnings"[^>]*>)[^<]*</,  `$1${llLearnings}<`)
-        .replace(/(id="ll-categories"[^>]*>)[^<]*</, `$1${llCategories}<`);
-      if (llUnlocks !== null) {
-        html = html.replace(/(id="ll-unlocks"[^>]*>)[^<]*</, `$1${llUnlocks}<`);
-      }
-      c.header('Content-Type', 'text/html; charset=utf-8');
-      c.header('Cache-Control', 'public, max-age=3600');
-      // Quiet phase: no-op while ANALYTICS_DOMAIN is unset (returns html as is).
-      return c.body(injectAnalytics(html, ANALYTICS_DOMAIN));
-    }
-  } catch (e) {
-    console.error('[earnings] server-render failed, falling back to static:', e.message);
-  }
-  const res = serveStatic(c, 'earnings.html');
-  if (res) return res;
-  return c.text('Earnings page not found', 404);
-});
+// AD strings packet 15 rev 3a (PRICING-EARNINGS-MERGE, 2026-09-06): /earnings
+// folds into /pricing. The bespoke SSR handler that used to server-render the
+// three live-ledger numbers into earnings.html is retired along with the
+// page — those cells now live on /pricing's #platform-economics (The
+// Numbers), rendered by renderLiveCatalogStats via serveHtmlWithLiveData like
+// every other live-data page. This is a permanent redirect with no fragment
+// (Tyler: links go to pages, never anchors).
+app.get('/earnings', (c) => c.redirect('/pricing', 301));
 
 // ─── Account dashboard ────────────────────────────────────────────────
 // Serves the browser-based account dashboard (magic-link login, earnings,
@@ -12508,11 +12489,11 @@ function serveLegalPage(c, filename, title, seo) {
       <span class="wordmark">auxilo</span>
     </a>
     <ul class="nav-links" role="list">
-      <li><a href="/how-it-works" id="nav-how">How It Works</a></li>
-      <li><a href="/for-agents" id="nav-agents">For Agents</a></li>
       <li><a href="/for-builders" id="nav-builders">For Builders</a></li>
+      <li><a href="/for-agents" id="nav-agents">For Agents</a></li>
+      <li><a href="/how-it-works" id="nav-how">How It Works</a></li>
+      <li><a href="/works-with" id="nav-works-with">Works With</a></li>
       <li><a href="/pricing" id="nav-pricing">Pricing</a></li>
-      <li><a href="/earnings" id="nav-earnings">Earnings</a></li>
       <li><a href="/connect" id="nav-cta-access" class="nav-cta">Connect Your Agent</a></li>
     </ul>
     <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
