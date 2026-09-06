@@ -20,10 +20,9 @@
        template Organization block would carry its description to a new machine
        surface without a copy gate. -->
   <meta name="theme-color" content="#0A0A0A" />
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=12" />
+  <link rel="preload" href="/fonts/ArchivoVariable.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/PlexMono400.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/styles.css?v=13" />
   <style>
     /* N3: this page now links the shared stylesheet like every other page.
        DR-6 ruling still applies to what's left below: near-miss token values
@@ -58,7 +57,7 @@
     body {
       background: var(--obsidian);
       color: var(--ivory);
-      font-family: 'Inter', 'Geist', system-ui, sans-serif; /* DR-6: canonical sans stack */
+      font-family: var(--sans); /* DR-6: canonical sans stack */
       min-height: 100vh;
       display: flex;
       flex-direction: column;
@@ -329,14 +328,14 @@
     }
 
     .health-endpoint {
-      font-family: 'JetBrains Mono', 'Geist Mono', 'Fira Mono', monospace; /* DR-6: canonical mono stack */
+      font-family: var(--mono); /* DR-6: canonical mono stack */
       font-size: 0.82rem;
       color: var(--aurum);
       margin-bottom: 0.75rem;
     }
 
     .health-response {
-      font-family: 'JetBrains Mono', 'Geist Mono', 'Fira Mono', monospace; /* DR-6: canonical mono stack */
+      font-family: var(--mono); /* DR-6: canonical mono stack */
       font-size: 0.78rem;
       color: var(--ivory-dim);
       background: var(--obsidian-3);
