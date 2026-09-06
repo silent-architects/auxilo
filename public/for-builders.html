@@ -471,8 +471,11 @@
     .waitlist-msg.ok  { display: block; color: var(--aurum); }
     .waitlist-msg.err { display: block; color: #e74c3c; }
 
-    /* ── Active nav link ── */
-    #nav-builders-page { color: var(--aurum) !important; }
+    /* ── Active nav link (Wave E fix, F4) ── #nav-builders-page's
+       !important aurum override is deleted so E2's shared
+       .nav-links a.active { color: var(--ash) } rule applies instead —
+       this page's current-page link now carries class="active" for that
+       rule to key on (it previously relied on this ID override alone). */
 
     /* ── Responsive ── */
     @media (max-width: 900px) {
@@ -526,7 +529,7 @@
     <span class="wordmark">auxilo</span>
   </a>
   <ul class="nav-links" role="list">
-    <li><a href="/for-builders" id="nav-builders-page">For Builders</a></li>
+    <li><a href="/for-builders" id="nav-builders-page" class="active">For Builders</a></li>
     <li><a href="/for-agents" id="nav-agents-page">For Agents</a></li>
     <li><a href="/how-it-works" id="nav-how-page">How It Works</a></li>
     <li><a href="/pricing" id="nav-pricing-page">Pricing</a></li>

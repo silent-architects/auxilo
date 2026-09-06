@@ -374,8 +374,10 @@
       flex-wrap: wrap;
     }
 
-    /* Active nav link */
-    #nav-api-page { color: var(--aurum) !important; }
+    /* Wave E fix (F4): the #nav-api-page !important override that
+       painted the active nav link aurum is deleted — E2's shared
+       .nav-links a.active { color: var(--ash) } rule (styles.css:227)
+       applies now that this link's own class="active" is unshadowed. */
 
     /* Annotated response card (moved from for-agents.html, AD sheet 3 item 3) */
     .response-annotated {

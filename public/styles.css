@@ -2227,12 +2227,15 @@ span.pull-stat-range.pull-stat-range, .pull-stat-range.pull-stat-range.pull-stat
    caption, 226 alone at 88px gold). for-builders.html is out of this
    builder's file ownership so the class can't be renamed in markup; this
    promotes just those two spans to the pull-stat-secondary treatment.
-   :not(.reveal) scopes to the TOP hero row only — the page's second,
-   lower "Supply is ahead of demand" stats strip reuses the identical
-   .builders-hero-stat/.stat-num classes but is already correct
-   (pull-stat-num / pull-stat-secondary) and carries the .reveal class this
-   sheet's own comment already treats as a marker for that second strip. */
-.builders-hero-stats:not(.reveal) .builders-hero-stat .stat-num.pull-stat-caption {
+   Wave E fix (F2): the original `:not(.reveal)` scope relied on the second,
+   lower "Supply is ahead of demand" stats strip carrying a `.reveal`
+   class to stay excluded. Wave E3 (item 7) stripped every `.reveal` class
+   from this page, so `:not(.reveal)` started matching both strips and the
+   min-height rule below forced dead space above the second strip's
+   `.pull-stat-secondary` numbers. Scoped to `#builders-hero` (the top hero
+   section — the second strip lives in `#earnings-projection`) instead,
+   which doesn't depend on a class either wave might remove next. */
+#builders-hero .builders-hero-stats .builders-hero-stat .stat-num.pull-stat-caption {
   font-size: clamp(28px, 4vw, 40px);
   font-weight: 500;
   font-family: var(--mono);
@@ -2245,7 +2248,7 @@ span.pull-stat-range.pull-stat-range, .pull-stat-range.pull-stat-range.pull-stat
    (the 226 cell's own clamp) under every stat-num regardless of its own
    font-size, bottom-aligning the number so the caption beneath always
    starts at the same y. Fixes the 59.2px label-top break AD measured. */
-.builders-hero-stats:not(.reveal) .builders-hero-stat .stat-num {
+#builders-hero .builders-hero-stats .builders-hero-stat .stat-num {
   min-height: clamp(48px, 7vw, 88px);
   display: flex;
   align-items: flex-end;

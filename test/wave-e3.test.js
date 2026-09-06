@@ -218,13 +218,17 @@ describe('WAVE-E3 item 3: /about and /writing/index.html moved onto the shared #
     });
   }
 
-  it('about.html and writing/index.html own <style> blocks are untouched (CSS builder\'s file)', () => {
-    // Structural proxy: the legacy .status-nav CSS rules are still present
-    // (dead now that the markup moved) because this wave was scoped to
-    // markup only, per the build sheet's file-ownership rule.
+  it('about.html and writing/index.html carry no orphaned legacy nav CSS (Wave E fix, F1)', () => {
+    // Superseded by the Wave E fix pass: the dead .status-nav/.hamburger/
+    // header rules named above (once left in place deliberately, "dead now
+    // that the markup moved") were found to actually override the shared
+    // #main-nav .hamburger rule in styles.css by source order, hiding the
+    // nav affordance from 721-1057px. F1 deleted them; see
+    // test/wave-e-fix.test.js for the full assertion.
     for (const page of ['about.html', path.join('writing', 'index.html')]) {
       const html = readPublic(page);
-      assert.match(html, /\.status-nav\s*\{/, `${page}'s <style> block should still define the now-dead .status-nav rules (untouched)`);
+      const styleBlocks = (html.match(/<style>[\s\S]*?<\/style>/g) || []).join('\n');
+      assert.doesNotMatch(styleBlocks, /\.status-nav\s*\{/, `${page}'s <style> block should no longer define .status-nav`);
     }
   });
 });

@@ -75,14 +75,6 @@
       flex-direction: column;
     }
 
-    header {
-      border-bottom: 1px solid var(--border);
-      padding: 1.25rem 2rem;
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-    }
-
     .logo {
       font-weight: 700;
       font-size: 1.2rem;
@@ -91,15 +83,6 @@
     }
 
     .logo span { color: var(--ivory); }
-
-    header a {
-      margin-left: auto;
-      color: var(--ivory-dim);
-      text-decoration: none;
-      font-size: 0.85rem;
-      transition: color 0.2s;
-    }
-    header a:hover { color: var(--aurum); }
 
     main {
       max-width: 760px;
@@ -120,66 +103,6 @@
       line-height: 1.1;
       letter-spacing: -0.02em;
       margin-bottom: 0.5rem;
-    }
-
-    /* Respect a reduced-motion preference: stop the hamburger transitions
-       for users who ask for less motion. */
-    @media (prefers-reduced-motion: reduce) {
-      .hamburger span { transition: none; }
-    }
-
-    /* ── Mobile hamburger nav (parity with the other pages) ────────── */
-    .status-nav {
-      display: flex;
-      align-items: center;
-      gap: 1.25rem;
-      margin-left: auto;
-    }
-    .hamburger {
-      display: none;
-      flex-direction: column;
-      justify-content: center;
-      gap: 4px;
-      width: 34px;
-      height: 34px;
-      margin-left: auto;
-      padding: 5px;
-      background: none;
-      border: none;
-      cursor: pointer;
-    }
-    .hamburger span {
-      display: block;
-      width: 22px;
-      height: 2px;
-      background: var(--ivory);
-      border-radius: 2px;
-      transition: transform 0.25s ease, opacity 0.25s ease;
-    }
-    .hamburger[aria-expanded="true"] span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
-    .hamburger[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
-    .hamburger[aria-expanded="true"] span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
-
-    @media (max-width: 720px) {
-      header { position: relative; flex-wrap: wrap; }
-      .hamburger { display: flex; }
-      .status-nav {
-        display: none;
-        position: absolute;
-        top: 100%;
-        left: 0;
-        right: 0;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0;
-        margin-left: 0;
-        padding: 0.5rem 2rem 1rem;
-        background: var(--obsidian-2);
-        border-bottom: 1px solid var(--border);
-        z-index: 50;
-      }
-      .status-nav.nav-open { display: flex; }
-      .status-nav a { margin-left: 0; padding: 0.65rem 0; width: 100%; font-size: 0.95rem; }
     }
 
     /* ── Component Table ───────────────────────────────────────── */
@@ -219,23 +142,7 @@
 
     /* ── Mobile ─────────────────────────────────────────────────── */
     @media (max-width: 640px) {
-      header {
-        padding: 1rem 1.25rem;
-        flex-wrap: wrap;
-        gap: 0.5rem 1rem;
-      }
       main { padding: 2rem 1.25rem; }
-
-      /* The header nav holds six links in one row that overflow a phone.
-         Let them wrap and shrink so they stay within the viewport. */
-      header nav {
-        flex-wrap: wrap;
-        gap: 0.5rem 1rem !important;
-        row-gap: 0.5rem;
-        min-width: 0;
-        margin-left: 0 !important;
-        font-size: 0.85rem;
-      }
 
       /* Component rows stack so name + desc + badge don't push wide. */
       .component-row {

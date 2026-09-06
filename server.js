@@ -12191,7 +12191,40 @@ function serveLegalPage(c, filename, title, seo) {
       codeBlocks.push(`<pre class="legal-pre">${esc}</pre>`);
       return ` CODE${codeBlocks.length - 1} `;
     });
-    let body = protectedMd
+    // Wave E fix (F7): minimal GitHub-flavoured table support. A table
+    // (header row, separator row, contiguous body rows, all "| a | b |")
+    // is pulled out into an HTML placeholder BEFORE the line-based
+    // heading/list/paragraph transforms below, the same way fenced code
+    // blocks are protected above -- otherwise the catch-all paragraph-wrap
+    // regex (which only skips lines already starting with <h, <u, or <l)
+    // would wrap every table row in its own stray <p>. Restored at the
+    // very end, alongside the code-block restoration.
+    const inlineMd = (text) => text
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, linkText, url) =>
+        /^(https?:|mailto:|\/|#)/i.test(url) ? `<a href="${url.replace(/"/g, '&quot;')}">${linkText}</a>` : linkText);
+    const splitTableRow = (line) => {
+      let row = line.trim();
+      if (row.startsWith('|')) row = row.slice(1);
+      if (row.endsWith('|')) row = row.slice(0, -1);
+      return row.split('|').map((cell) => cell.trim());
+    };
+    const tables = [];
+    const protectedMd2 = protectedMd.replace(
+      /^(\|.*\|)[ \t]*\r?\n(\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)+\|?)[ \t]*\r?\n((?:\|.*\|[ \t]*\r?\n?)*)/gm,
+      (_m, headerLine, _sepLine, bodyBlock) => {
+        const headHtml = splitTableRow(headerLine).map((cell) => `<th>${inlineMd(cell)}</th>`).join('');
+        const bodyRows = bodyBlock.split(/\r?\n/).filter((line) => line.trim().length > 0);
+        const bodyHtml = bodyRows.map((row) => {
+          const cells = splitTableRow(row).map((cell) => `<td>${inlineMd(cell)}</td>`).join('');
+          return `<tr>${cells}</tr>`;
+        }).join('');
+        tables.push(`<table><thead><tr>${headHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`);
+        return `\n TABLE${tables.length - 1} \n`;
+      }
+    );
+    let body = protectedMd2
       .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
       .replace(/^### (.+)$/gm, '<h3>$1</h3>')
       .replace(/^## (.+)$/gm, '<h2>$1</h2>')
@@ -12214,6 +12247,9 @@ function serveLegalPage(c, filename, title, seo) {
     // Restore protected code blocks, unwrapping any <p> the paragraph rule added.
     body = body.replace(/<p> CODE(\d+) <\/p>| CODE(\d+) /g,
       (_m, a, b) => codeBlocks[a !== undefined ? a : b]);
+    // Restore protected tables, unwrapping any <p> the paragraph rule added.
+    body = body.replace(/<p> TABLE(\d+) <\/p>| TABLE(\d+) /g,
+      (_m, a, b) => tables[a !== undefined ? a : b]);
     // SEO-BASELINE-2026-09-06: canonical + og/twitter block, /terms and /privacy only
     // (routes below pass `seo`; other serveLegalPage callers pass nothing and get no tags).
     // AD-STRINGS-PACKET-10-SEO-FINAL-2026-09-06: `seo.full` gives a page the full
@@ -12376,14 +12412,23 @@ app.get('/privacy', (c) => serveLegalPage(c, 'PRIVACY-POLICY.md', 'Privacy Polic
   path: '/privacy',
   description: 'Auxilo privacy policy covering data collection, use, and retention.',
 }));
-app.get('/legal/subprocessors', (c) => serveLegalPage(c, 'SUBPROCESSORS.md', 'Sub-Processors'));
+// Wave E fix (F6): minimal seo object (canonical + og:type + og:url +
+// og:site_name via the reduced, no-description branch) — no description,
+// no title change.
+app.get('/legal/subprocessors', (c) => serveLegalPage(c, 'SUBPROCESSORS.md', 'Sub-Processors', {
+  path: '/legal/subprocessors',
+}));
 app.get('/legal/supported-clients', (c) => serveLegalPage(c, 'SUPPORTED-CLIENTS.md', 'Supported clients', {
   path: '/legal/supported-clients',
   description: 'Which coding clients the local runner can capture learnings from once you opt in, by tier, with the caveat for each.',
   full: true,
 }));
 // FB-1: /dmca is incorporated into the Terms (§5.9.4(b)) and must resolve, not 404.
-app.get('/dmca', (c) => serveLegalPage(c, 'DMCA-POLICY.md', 'DMCA Copyright Policy'));
+// Wave E fix (F6): minimal seo object, same reduced/no-description shape as
+// /legal/subprocessors above.
+app.get('/dmca', (c) => serveLegalPage(c, 'DMCA-POLICY.md', 'DMCA Copyright Policy', {
+  path: '/dmca',
+}));
 
 // ── OpenClaw Adapter Routes ──────────────────────────────────────────────────
 // S9-1: All OpenClaw endpoints require admin auth (S-3 audit finding)
