@@ -536,9 +536,13 @@ describe('CAT-1 (b): unlock counters credited only for real unlocks', () => {
     const score = slice('function computeScore(', 'const KNOWLEDGE_QUERY_MAX_CHARS');
     assert.ok(score.includes('q.unlocks ||') && !score.includes('unlocks_total'),
       'computeScore uses the credited counter');
+    // STATS-TRUTH: the public stats surface no longer reads ANY stored unlock
+    // counter — credited or raw — it derives total_unlocks + top_learnings[]
+    // .unlocks from the per-unlock event ledger (lib/stats-truth.js).
     const stats = slice("app.get('/knowledge/stats'", "app.get('/knowledge/:id'");
-    assert.ok(stats.includes('l.quality.unlocks') && !stats.includes('unlocks_total'),
-      'total_unlocks + top_learnings use the credited counter');
+    assert.ok(stats.includes('computeStatsTruth(') &&
+      !stats.includes('l.quality.unlocks') && !stats.includes('unlocks_total'),
+      'total_unlocks + top_learnings derive from the unlock ledger, never a stored counter');
     // Search projection constructs its quality object explicitly — credited only.
     assert.ok(SERVER_SRC.includes('quality: { score: computeScore(r), unlocks: r.quality.unlocks,'),
       'search projection field list excludes unlocks_total');

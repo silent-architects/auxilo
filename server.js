@@ -1548,6 +1548,10 @@ const { deductCredit, refundCredit, getCreditStatus } = require('./lib/credits.j
 const { isAccrualCapped, recordAccrual, unrecordAccrual } = require('./lib/unlock-attribution.js');
 // LW-7: durable purchaser ledger — rating eligibility (proof of prior unlock).
 const { recordPurchase, hasPurchase } = require('./lib/purchase-ledger.js');
+// STATS-TRUTH: /knowledge/stats derivations — contributors as distinct
+// identities, money from attributable ledger entries, unlocks from the
+// per-unlock event ledger (fail closed: unreadable ledger ⇒ fields omitted).
+const { computeStatsTruth } = require('./lib/stats-truth.js');
 
 // ─── Phase 0.4: Stripe Integration (SPEC-P0.4) ─────────────────────────────
 const {
@@ -8654,31 +8658,61 @@ function serializeByLearningMoney(byLearning) {
 }
 
 // Knowledge marketplace stats (FREE) — must be registered BEFORE /knowledge/:id
+//
+// STATS-TRUTH: this surface is machine-read (agents, the trust page, GTM's
+// register) and FAILS CLOSED — every number derives from the visible catalog
+// and a ledger, never from a stored counter (lib/stats-truth.js):
+//   total_contributors  distinct contributor IDENTITIES over visibleCatalog()
+//                       (account id, else lowercased wallet; null/null = the
+//                       platform identity) — the CONTRIB-STAT casing +
+//                       wallet-blindness fix, one shared helper;
+//   total_earnings_usd  Σ total_gross over earnings entries whose KEY is an
+//                       identity present in the visible catalog — fixture
+//                       entries owning no visible learning contribute nothing;
+//   total_unlocks +     counts from the per-unlock event ledger
+//   top_learnings[]     (UNLOCK_EVENTS_FILE, deduped on the WAL id), filtered
+//     .unlocks          to visible ids; when the ledger is UNREADABLE both are
+//                       OMITTED (logged once) rather than served from
+//                       quality.unlocks. The stored counter is untouched —
+//                       computeScore still ranks on it.
+//   total_ratings       unchanged (the ratings JSONL is a re-rating event log
+//                       whose pre-CH-6 rows carry no rater id, so it is not
+//                       trivially countable per visible id).
+let statsLedgerUnreadableLogged = false;
 app.get('/knowledge/stats', (c) => {
-  // SPEC-P0.5: filter __wallet_index and other metadata keys from earnings totals
-  const earningsEntries = Object.entries(earnings).filter(([k]) => !k.startsWith('__'));
-  const totalEarnings = earningsEntries.reduce((sum, [, w]) => sum + (w.total_gross || 0), 0);
-
   // LW-QA fix: public stats must reflect only publicly-visible learnings —
   // the shared visibleCatalog() predicate (same as search + /knowledge/:id).
   // Without this, learnings_count reported the raw array length (e.g. 922)
   // instead of the ~dozens actually servable — a 10x-inflated headline.
   const visibleLearnings = visibleCatalog();
 
-  // PD-1 fix: count unique contributor wallets from learnings, not earnings entries
-  const contributorWallets = new Set(visibleLearnings.map(l => l.contributor_wallet).filter(Boolean));
-  const totalContributors = contributorWallets.size;
+  const truth = computeStatsTruth({
+    visibleRows: visibleLearnings,
+    earnings,
+    unlockEventsFile: UNLOCK_EVENTS_FILE,
+  });
+  if (!truth.ledger_readable && !statsLedgerUnreadableLogged) {
+    statsLedgerUnreadableLogged = true;
+    console.error('[STATS-TRUTH] unlock ledger unreadable — /knowledge/stats omits total_unlocks ' +
+      'and top_learnings[].unlocks until it is readable:', truth.ledger_error);
+  }
+  const ledgerUnlocks = truth.unlocks; // null ⇒ unreadable ⇒ omit
 
   return c.json({
     content_advisory: UNTRUSTED_PREVIEW_ADVISORY,
     learnings_count: visibleLearnings.length,
     categories: [...new Set(visibleLearnings.map(l => l.category))],
-    total_unlocks: visibleLearnings.reduce((sum, l) => sum + (l.quality.unlocks || 0), 0),
+    ...(ledgerUnlocks ? { total_unlocks: ledgerUnlocks.total } : {}),
     total_ratings: visibleLearnings.reduce((sum, l) => sum + (l.quality.ratings || 0), 0),
-    total_earnings_usd: totalEarnings,
-    total_contributors: totalContributors,
+    total_earnings_usd: truth.total_earnings_usd,
+    total_contributors: truth.total_contributors,
     top_learnings: visibleLearnings
-      .map(l => ({ id: l.id, title: l.title, score: computeScore(l), unlocks: l.quality.unlocks || 0 }))
+      .map(l => ({
+        id: l.id,
+        title: l.title,
+        score: computeScore(l),
+        ...(ledgerUnlocks ? { unlocks: ledgerUnlocks.byId.get(l.id) || 0 } : {}),
+      }))
       .sort((a, b) => b.score - a.score)
       .slice(0, 5),
     timestamp: new Date().toISOString()
