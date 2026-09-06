@@ -251,3 +251,124 @@ describe('SEO baseline (markup): /terms + /privacy canonical/og, sitemap /status
     assert.equal(metaContent(privacyBody, 'og:site_name'), 'Auxilo');
   });
 });
+
+// ─── AD-STRINGS-PACKET-12 rev 3a (hero wave, 2026-09-06): H1 B + sub B + the
+// "what a learning is" block + Tyler's title variant. Static file checks
+// only, no server boot — matches the packet's own §7 post-deploy checks.
+describe('Hero wave (AD-STRINGS-PACKET-12 rev 3a): H1 B, title/og/twitter, meta description, recall account condition, "your AI" scarcity', () => {
+  const INDEX_HTML = fs.readFileSync(path.join(REPO, 'public', 'index.html'), 'utf8');
+  const HERO_TITLE = 'Marketplace for what AI agents learn | Auxilo';
+  const HERO_DESC =
+    'Auxilo is a marketplace for what agents learn. Agents search free and pay to unlock what other agents already figured out rather than solve it twice.';
+  const HERO_H1 = 'You have watched your AI work out the same fix before.';
+
+  // All public/**/*.html files actually shipped (excludes node_modules).
+  function allPublicHtmlFiles() {
+    const out = [];
+    (function walk(dir) {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else if (entry.isFile() && entry.name.endsWith('.html')) out.push(full);
+      }
+    })(path.join(REPO, 'public'));
+    return out;
+  }
+
+  it('title, og:title, twitter:title on index.html equal Tyler\'s ruled variant', () => {
+    assert.ok(INDEX_HTML.includes(`<title>${HERO_TITLE}</title>`), 'title tag');
+    assert.equal(metaContent(INDEX_HTML, 'og:title'), HERO_TITLE);
+    assert.equal(metaContent(INDEX_HTML, 'twitter:title'), HERO_TITLE);
+  });
+
+  it('meta description on index.html is verbatim (and og:description/twitter:description match it)', () => {
+    assert.equal(metaContent(INDEX_HTML, 'description'), HERO_DESC);
+    assert.equal(metaContent(INDEX_HTML, 'og:description'), HERO_DESC);
+    assert.equal(metaContent(INDEX_HTML, 'twitter:description'), HERO_DESC);
+  });
+
+  it('H1 = candidate B, ending in a period (not Title Case)', () => {
+    const m = INDEX_HTML.match(/<h1 id="hero-heading">([\s\S]*?)<\/h1>/);
+    assert.ok(m, 'hero-heading H1 found');
+    assert.equal(m[1], HERO_H1);
+    assert.ok(HERO_H1.endsWith('.'), 'H1 ends in a period');
+  });
+
+  it('#hero-heading contains no "remembers" (packet §7.1)', () => {
+    const m = INDEX_HTML.match(/<h1 id="hero-heading">([\s\S]*?)<\/h1>/);
+    assert.ok(m);
+    assert.ok(!/remembers/i.test(m[1]), 'no "remembers" in the H1');
+  });
+
+  it('hero sub carries "asks Auxilo", "signed in to your account", "the answer you published"; the new block carries "ask Auxilo" (packet §7.2)', () => {
+    const subMatch = INDEX_HTML.match(/<p class="hero-sub">([\s\S]*?)<\/p>/);
+    assert.ok(subMatch, 'hero-sub paragraph found');
+    const sub = subMatch[1];
+    assert.ok(sub.includes('asks Auxilo'), 'sub has "asks Auxilo"');
+    assert.ok(sub.includes('signed in to your account'), 'sub has the account condition');
+    assert.ok(sub.includes('the answer you published'), 'sub has "the answer you published"');
+
+    const blockMatch = INDEX_HTML.match(/<h2 id="learning-explainer-heading">[\s\S]*?<\/section>/);
+    assert.ok(blockMatch, 'learning-explainer block found');
+    assert.ok(blockMatch[0].includes('ask Auxilo'), 'new block has "ask Auxilo"');
+  });
+
+  it('fixed-string "your AI" (case-insensitive) across every served public/**/*.html page returns exactly 1, inside #hero-heading (packet §7.3)', () => {
+    const files = allPublicHtmlFiles();
+    let total = 0;
+    let hits = [];
+    for (const file of files) {
+      const html = fs.readFileSync(file, 'utf8');
+      const matches = html.match(/your ai/gi) || [];
+      total += matches.length;
+      if (matches.length) hits.push(path.relative(REPO, file));
+    }
+    assert.equal(total, 1, `"your AI" should appear exactly once across public/**/*.html, found ${total} in ${hits.join(', ')}`);
+    const m = INDEX_HTML.match(/<h1 id="hero-heading">([\s\S]*?)<\/h1>/);
+    assert.ok(m && /your ai/i.test(m[1]), 'the one "your AI" occurrence is inside #hero-heading');
+  });
+
+  it('the single-player recall paragraph carries the account condition (packet §7.4, "index:394")', () => {
+    assert.ok(
+      INDEX_HTML.includes(
+        'When your agent asks Auxilo the same question in a later session, signed in to your account, the answer you published comes back at no cost.'
+      ),
+      'recall paragraph carries "signed in to your account"'
+    );
+  });
+
+  it('the new "what a learning is" h2 has no eyebrow immediately above it and no inline size override (section h2 size, packet §7.5)', () => {
+    const sectionMatch = INDEX_HTML.match(
+      /<section id="learning-explainer"[\s\S]*?<\/section>/
+    );
+    assert.ok(sectionMatch, 'learning-explainer section found');
+    const section = sectionMatch[0];
+    assert.ok(!/class="[^"]*eyebrow[^"]*"/.test(section), 'no eyebrow-classed element in the section');
+    const h2Match = section.match(/<h2[^>]*>/);
+    assert.ok(h2Match, 'h2 found');
+    assert.ok(!/style=/.test(h2Match[0]), 'h2 carries no inline style (uses the default section h2 size)');
+    assert.ok(
+      section.includes('<h2 id="learning-explainer-heading">What a learning is, and why another agent would use it</h2>'),
+      'h2 text verbatim'
+    );
+  });
+
+  it('bullet 351 (packet 11): hero-trust bullet reads "every Auxilo tool still works"', () => {
+    assert.ok(
+      INDEX_HTML.includes('Extraction defaults to off. Decline it and every Auxilo tool still works.'),
+      'naming-sweep fix for the hero-trust bullet is applied'
+    );
+  });
+
+  it('step 01 already reads "On the clients that support capture"', () => {
+    assert.ok(
+      INDEX_HTML.includes('On the clients that support capture it can also extract learnings in the background'),
+      'step 01 capture-clients line present'
+    );
+  });
+
+  it('the footer signature still carries the retired H1 line (packet: "it stays as the footer line")', () => {
+    const count = (INDEX_HTML.match(/Your agent already solved this\. Auxilo remembers\./g) || []).length;
+    assert.equal(count, 1, 'retired H1 line survives exactly once, in the footer');
+  });
+});
