@@ -678,6 +678,15 @@
             <option value="19">19</option>
             <option value="20">20</option>
           </select>
+          <!-- CLEAN-LANE-FLIP Phase B (legal): the full ToS §5.9.3(g) text renders ABOVE the
+               affirmation on every enrollment surface (counsel condition). Static markup, byte-equal
+               to docs/TERMS-OF-SERVICE.md and the CLI literal — test/clean-lane-phase-b-legal.test.js. -->
+          <details open id="clean-lane-terms" style="margin-bottom:16px;font-size:13px;color:var(--slate);line-height:1.6">
+            <summary style="cursor:pointer;color:var(--ivory);margin-bottom:8px">Terms of Service, Section 5.9.3(g): the consent you are giving</summary>
+            <p id="clean-lane-terms-g" style="margin-bottom:10px"><strong>(g) Standing publication consent (optional).</strong> Standing publication consent is off by default. A Builder may turn it on by an affirmative act — a dashboard setting, or a terminal command that requires typing the affirmation sentence shown on that screen. Auxilo records that act, the affirmation, and the consent-text version in a durable, hash-chained consent log, retained for the life of the account plus three (3) years under subsection (b). While it is on, a Learning submitted through Autonomous Extraction is published without separate per-item approval only if it passes every Platform screen and the quality threshold the Builder chose at activation. An account's first public Learning is never published this way; it is held for operator review under Section 4.1. Auxilo records each such publication in the Builder's dashboard and returns a notice in the response to the submission that produced it; each is retractable for seven (7) days under Section 5.9.4. If more than five percent (5%) of a Builder's Learnings published this way in any thirty (30) day period are retracted, Auxilo freezes the feature for that account until the Builder turns it on again. A Builder may turn it off at any time, effective immediately for later submissions; doing so does not affect Learnings already published. Subsection (c) applies in full to every Learning so published.</p>
+            <p id="clean-lane-terms-g2" style="margin-bottom:10px">The quality threshold in effect for a Builder is the one that Builder selected, and Auxilo will not broaden the conditions under which a Learning qualifies for publication under this subsection without recording a new consent; Auxilo may make those conditions stricter at any time.</p>
+            <p style="margin-bottom:0"><a href="/terms" target="_blank" rel="noopener" style="color:var(--aurum)">Read the full Terms of Service</a></p>
+          </details>
           <label style="display:flex;align-items:flex-start;gap:10px;font-size:14px;color:var(--ivory);cursor:pointer;margin-bottom:16px">
             <input type="checkbox" id="clean-lane-agree" style="margin-top:3px" onchange="onCleanLaneAgreeChange()">
             <span id="clean-lane-affirmation">I understand and choose auto-publish for qualifying extracted learnings.</span>
