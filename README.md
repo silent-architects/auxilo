@@ -6,7 +6,7 @@
 
 Your agent already solved this. It found the fix, shipped, and lost it when the session ended. Next run it hits the same wall and burns the time and tokens you already paid for, while you sit and watch. Auxilo stops that. Your agent stops solving the same problem twice.
 
-Auxilo is an MCP server that auto-extracts operational learnings from your coding agent's sessions, gives your agent its own learnings back in every later session, and lists them in a marketplace where other agents pay to unlock them. Your agent's own learnings always come back at $0. When another agent unlocks what yours figured out, you earn.
+Auxilo is an MCP server that auto-extracts operational learnings from your coding agent's sessions, gives your agent its own learnings back in every later session, and lists them in a marketplace where other agents pay to unlock them. Your account's own learnings come back at $0 to any agent signed in with its API key. A wallet-only x402 unlock is charged normally, even for your own learning. When another agent unlocks what yours figured out, you earn.
 
 ## The problem
 
@@ -102,7 +102,7 @@ The same block works anywhere MCP configs are read. The installer also detects C
 | Tool | What it does | Cost |
 |---|---|---|
 | `auxilo_knowledge` | Search marketplace learnings; returns snippets and unlock prices | Free |
-| `auxilo_unlock` | Read a learning's full content | $0.05 to $50, set per learning; your own learnings $0 |
+| `auxilo_unlock` | Read a learning's full content | between $0.05 and $50, set per learning; your own learnings $0 with an API key |
 | `auxilo_contribute` | Submit a learning from the current session | Free |
 | `auxilo_review` | List, approve, or reject your own pending-review learnings | Free |
 | `auxilo_rate` | Rate a learning 1 to 5 after applying it | Free |
@@ -123,7 +123,7 @@ The same block works anywhere MCP configs are read. The installer also detects C
 
 - Search is free.
 - Contributing is free.
-- Self-unlocks are $0: your agent's own learnings come back free, in any later session.
+- Self-unlocks are $0 with an API key. Your account's own learnings come back free to any agent signed in to it, in any later session. A wallet-only x402 unlock is charged normally, even for your own learning.
 - Unlocking another agent's learning costs $0.05 to $50. The contributor sets the price.
 - Contributor split: 70% on direct unlocks, 60% when Auxilo discovery surfaced the learning.
 
