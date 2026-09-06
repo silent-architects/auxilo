@@ -257,29 +257,65 @@ describe('claude-code.js — runModel short-circuits on a billing-helper hit', (
 // ─── detect() ────────────────────────────────────────────────────────────
 
 describe('claude-code.js — detect()', () => {
-  it('true when a filesystem candidate resolves, without needing an auth spawn', () => {
+  // EXTRACT-PER-CLIENT W1 P1 fix (PUNCH-LIST): detect() used to short-circuit
+  // to `true` the instant a filesystem candidate resolved, with NO auth
+  // check at all — a stale, logged-out install still "detected". The auth
+  // check now ALWAYS runs, regardless of how the binary was found.
+  it('a resolvable filesystem candidate alone is NOT enough — the auth check always runs now', () => {
     let spawnCalls = 0;
     const result = claudeCode.detect({
       homeDir: '/fixture/home',
+      cwd: '/fixture/home',
       existsSync: (candidate) => candidate === '/opt/homebrew/bin/claude',
       spawnSyncImpl: () => { spawnCalls += 1; return authJson(true); },
     });
     assert.equal(result, true);
-    assert.equal(spawnCalls, 0);
+    assert.equal(spawnCalls, 1, 'the auth check must run even when a filesystem candidate resolves');
   });
 
-  it('falls through to checkAuthStatus() when no candidate resolves; true unless unknown', () => {
-    const stub = spawnQueue([authJson(true)]);
-    const trueResult = claudeCode.detect({
-      homeDir: '/fixture/home', existsSync: () => false, spawnSyncImpl: stub.spawnSyncImpl,
-    });
-    assert.equal(trueResult, true);
+  // EXTRACT-PER-CLIENT W1 P1 fix: the OLD formula (`status !== 'unknown'`)
+  // was backwards — it read 'logged-out' as usable and only 'unknown' as
+  // not. The correct "usable now" formula is 'logged-in' OR 'unknown' (an
+  // undetermined status cannot PROVE the builder is logged out — the real
+  // run is the classifier of record); only a DEFINITE 'logged-out' means not
+  // usable.
+  it('logged-in -> true; unknown -> true (cannot prove logged-out); logged-out -> false', () => {
+    const loggedIn = spawnQueue([authJson(true)]);
+    assert.equal(claudeCode.detect({
+      homeDir: '/fixture/home', cwd: '/fixture/home', existsSync: () => false, spawnSyncImpl: loggedIn.spawnSyncImpl,
+    }), true);
 
-    const unknownStub = spawnQueue([{ status: 1, stdout: '', stderr: 'boom' }]);
-    const falseResult = claudeCode.detect({
-      homeDir: '/fixture/home', existsSync: () => false, spawnSyncImpl: unknownStub.spawnSyncImpl,
-    });
-    assert.equal(falseResult, false);
+    const unknown = spawnQueue([{ status: 1, stdout: '', stderr: 'boom' }]);
+    assert.equal(claudeCode.detect({
+      homeDir: '/fixture/home', cwd: '/fixture/home', existsSync: () => false, spawnSyncImpl: unknown.spawnSyncImpl,
+    }), true, "'unknown' auth status must read as usable — the flip half of the W1 P1 fix");
+
+    const loggedOut = spawnQueue([authJson(false)]);
+    assert.equal(claudeCode.detect({
+      homeDir: '/fixture/home', cwd: '/fixture/home', existsSync: () => false, spawnSyncImpl: loggedOut.spawnSyncImpl,
+    }), false, "a definite 'logged-out' status is the one detect() can act on with confidence");
+  });
+
+  // EXTRACT-PER-CLIENT W1 P1 fix: a billing-helper hit is a skip, not a
+  // usable provider — detect() must say so BEFORE the equally-usable-looking
+  // binary+auth checks below it ever get a chance to say otherwise.
+  it('a foreign-billing CLI helper configured makes detect() false even with a resolvable, logged-in binary', () => {
+    const home = tempDir('auxilo-detect-billing-home-');
+    fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(home, '.claude', 'settings.json'), JSON.stringify({ apiKeyHelper: '/bin/get-key' }));
+    try {
+      let spawnCalls = 0;
+      const result = claudeCode.detect({
+        homeDir: home,
+        cwd: home,
+        existsSync: (c) => c === '/opt/homebrew/bin/claude',
+        spawnSyncImpl: () => { spawnCalls += 1; return authJson(true); },
+      });
+      assert.equal(result, false);
+      assert.equal(spawnCalls, 0, 'the billing-helper check must short-circuit before any auth spawn');
+    } finally {
+      cleanupTempDirs();
+    }
   });
 });
 
@@ -317,7 +353,12 @@ describe('providers/index.js — resolveProvider selection', () => {
       env: {},
       providerCache: {},
       homeDir: '/fixture/home',
+      cwd: '/fixture/home', // billing-helper check walk starts here — nonexistent, safely reads as "no helper"
+      providersStatePath: '/fixture/home/.auxilo/providers-fixed-order-test.json', // never touch the real ~/.auxilo/providers.json
       existsSync: (c) => c === '/opt/homebrew/bin/claude', // claude-code detects true
+      // detect() now ALWAYS runs the auth check (W1 P1 fix) — inject it rather
+      // than letting the default fall through to a REAL `claude auth status`.
+      spawnSyncImpl: () => authJson(true),
     });
     assert.equal(resolved.ok, true);
     assert.equal(resolved.id, 'claude-code');
@@ -328,8 +369,13 @@ describe('providers/index.js — resolveProvider selection', () => {
       env: {},
       providerCache: {},
       homeDir: '/fixture/home',
+      cwd: '/fixture/home',
+      providersStatePath: '/fixture/home/.auxilo/providers-all-false-test.json',
       existsSync: () => false,
-      spawnSyncImpl: () => ({ status: 1, stdout: '', stderr: '' }), // checkAuthStatus -> unknown
+      // A DEFINITE 'logged-out' response — under the W1 P1 fix, an ambiguous
+      // 'unknown' response (the old `{status:1}` fixture here) would now read
+      // as USABLE, breaking this test's "all false" premise.
+      spawnSyncImpl: () => authJson(false),
     });
     assert.equal(resolved.ok, false);
     assert.match(resolved.reason, /claude-code, codex-cli, byo-key/);
@@ -390,10 +436,14 @@ describe('providers/index.js — resolveProvider caches the resolved auto-detect
       env: {},
       providerCache: cache,
       homeDir: '/fixture/home',
+      cwd: '/fixture/home',
+      providersStatePath: '/fixture/home/.auxilo/providers-cache-test-1.json',
       existsSync: (c) => {
         detectCalls += 1;
         return c === '/opt/homebrew/bin/claude';
       },
+      // detect() now always runs the auth check (W1 P1 fix) — inject it.
+      spawnSyncImpl: () => authJson(true),
     };
     const first = await providers.resolveProvider(opts);
     const second = await providers.resolveProvider(opts);
@@ -410,13 +460,23 @@ describe('providers/index.js — resolveProvider caches the resolved auto-detect
   it('a fresh providerCache (or none — the module default) re-detects independently', async () => {
     let detectCallsA = 0;
     const resolvedA = await providers.resolveProvider({
-      env: {}, providerCache: {}, homeDir: '/fixture/home',
+      env: {},
+      providerCache: {},
+      homeDir: '/fixture/home',
+      cwd: '/fixture/home',
+      providersStatePath: '/fixture/home/.auxilo/providers-cache-test-a.json',
       existsSync: () => { detectCallsA += 1; return true; },
+      spawnSyncImpl: () => authJson(true),
     });
     let detectCallsB = 0;
     const resolvedB = await providers.resolveProvider({
-      env: {}, providerCache: {}, homeDir: '/fixture/home',
+      env: {},
+      providerCache: {},
+      homeDir: '/fixture/home',
+      cwd: '/fixture/home',
+      providersStatePath: '/fixture/home/.auxilo/providers-cache-test-b.json',
       existsSync: () => { detectCallsB += 1; return true; },
+      spawnSyncImpl: () => authJson(true),
     });
     assert.equal(resolvedA.id, 'claude-code');
     assert.equal(resolvedB.id, 'claude-code');

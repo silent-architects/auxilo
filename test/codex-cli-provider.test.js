@@ -645,11 +645,15 @@ describe('providers/index.js — e2e: claude unavailable, codex-cli available �
     // Shared spawnSyncImpl: only claude-code.detect()'s checkAuthStatus probe
     // (`claude auth status`) reaches a spawn in this scenario — codex-cli's
     // detect() short-circuits on the explicit filesystem candidate above and
-    // never spawns. Any `claude auth status` call reports a failure so
-    // claude-code.detect() reads 'unknown' → false.
+    // never spawns. The `claude auth status` call reports a DEFINITE
+    // loggedIn:false so claude-code.detect() reads 'logged-out' -> false.
+    // (EXTRACT-PER-CLIENT W1 P1 fix: an AMBIGUOUS failure here would now read
+    // 'unknown' -> USABLE, which would break this "claude unavailable" e2e
+    // premise — see claude-code-provider.test.js's detect() describe block
+    // for that flip.)
     const spawnSyncImpl = (bin, args) => {
       if (bin === 'claude' && args[0] === 'auth') {
-        return { status: 1, stdout: '', stderr: 'not found' };
+        return { status: 0, stdout: JSON.stringify({ loggedIn: false }), stderr: '' };
       }
       throw new Error(`unexpected spawn in e2e test: ${bin} ${args.join(' ')}`);
     };
@@ -659,6 +663,8 @@ describe('providers/index.js — e2e: claude unavailable, codex-cli available �
         env: {},
         providerCache: {},
         homeDir: home,
+        cwd: home,
+        providersStatePath: path.join(home, '.auxilo', 'providers.json'),
         existsSync,
         spawnSyncImpl,
       });

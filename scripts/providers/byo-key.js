@@ -168,9 +168,37 @@ function baseUrlFor(vendor, configured) {
   return VENDOR_DEFAULT_BASE_URL[vendor];
 }
 
-/** detect(): true iff a complete BYO config is on disk. Never throws. */
+/**
+ * "Owner-read-only" predicate (EXTRACT-PER-CLIENT W1 FIX, PUNCH-LIST P1) —
+ * the runtime twin of bin/auxilo-cli.js's `providersFileModeUnsafe`, which
+ * only ever ran once, interactively, before `provider set` first wrote the
+ * file. That left a gap: if providers.json widens (a stray `chmod`, a
+ * umask surprise, manual editing) AFTER setup, detect()/runModel() would
+ * still call it "installed" and hand the builder's key to a spawn/fetch
+ * under insecure permissions. Duplicated (not imported) for the same reason
+ * DEFAULT_PROVIDERS_STATE_PATH above is duplicated — avoids a circular
+ * require, since bin/auxilo-cli.js requires this module, not the reverse.
+ * No file yet is not unsafe (writeByoConfig always writes 0600 itself); any
+ * OTHER stat failure (e.g. EACCES) fails CLOSED (treated as unsafe) rather
+ * than silently trusting a permission state it could not verify. Never
+ * throws.
+ */
+function isProvidersFileModeUnsafe(opts = {}) {
+  const statSyncImpl = typeof opts.statSyncImpl === 'function' ? opts.statSyncImpl : fs.statSync;
+  let stat;
+  try {
+    stat = statSyncImpl(statePath(opts));
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return false;
+    return true; // cannot verify permissions — fail closed, not open
+  }
+  return (stat.mode & 0o077) !== 0;
+}
+
+/** detect(): true iff a complete BYO config is on disk AND its file is
+ * actually owner-read-only — "usable now", not merely "configured once". */
 function detect(opts = {}) {
-  return readByoConfig(opts) !== null;
+  return readByoConfig(opts) !== null && !isProvidersFileModeUnsafe(opts);
 }
 
 /** BYO has no meaningful local-auth concept — the key IS the auth. */
@@ -281,6 +309,21 @@ function extractUsage(vendor, data) {
  * console or log call in this file's source can carry it.
  */
 async function runModel(opts = {}) {
+  // Checked BEFORE config completeness — a widened-permissions file is
+  // refused even if it happens to hold a complete config; defense in depth
+  // alongside detect()'s own gate above (this module's runModel may also be
+  // reached directly via an AUXILO_EXTRACTION_PROVIDER override, which never
+  // calls detect() at all).
+  if (isProvidersFileModeUnsafe(opts)) {
+    return {
+      ok: false,
+      text: '',
+      usage: null,
+      reason: '~/.auxilo/providers.json is not owner-read-only; refusing to use the stored key until its permissions are fixed (chmod 600 ~/.auxilo/providers.json) or the file is removed (`auxilo provider clear`)',
+      reasonCode: 'providers-file-mode-unsafe',
+      authStatus: 'unknown',
+    };
+  }
   const config = readByoConfig(opts);
   if (!config) {
     return {
@@ -383,4 +426,6 @@ module.exports = {
   clearProvidersFile,
   resolveVendor,
   DEFAULT_PROVIDERS_STATE_PATH,
+  // Exported for direct unit coverage (test/byo-key-provider.test.js).
+  isProvidersFileModeUnsafe,
 };

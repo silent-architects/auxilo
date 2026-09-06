@@ -184,12 +184,28 @@ function checkAuthStatus(opts = {}) {
   }
 }
 
-/** detect(): true iff a candidate binary resolves on disk, or auth status is knowable. */
+/**
+ * detect(): "usable now", not merely "installed" (EXTRACT-PER-CLIENT W1 FIX,
+ * PUNCH-LIST P1). Two bugs fixed here:
+ *   1. A resolved filesystem candidate used to short-circuit straight to
+ *      `true` with NO auth check at all — a stale, logged-out install still
+ *      "detected". Now the auth check ALWAYS runs, regardless of how the
+ *      binary was found.
+ *   2. The PATH-fallback branch returned `status !== 'unknown'`, which is
+ *      true for BOTH 'logged-in' AND 'logged-out' — only 'unknown' (auth
+ *      state could not be determined) read as unusable. That is backwards:
+ *      'unknown' cannot PROVE the builder is logged out, so the real call is
+ *      the classifier of record (see runExtractMode's own pre-spawn check);
+ *      'logged-out' is the one status detect() can act on with confidence.
+ * true iff: the billing-helper detector does NOT fire (a foreign-billing
+ * helper is a skip, not a usable provider — see detectBillingHelperConfigured
+ * above) AND auth status is 'logged-in' or 'unknown' (never 'logged-out').
+ */
 function detect(opts = {}) {
+  if (detectBillingHelperConfigured(opts)) return false;
   const bin = resolveClaudeBin(opts);
-  if (bin !== 'claude') return true; // an explicit filesystem candidate existed
   const status = checkAuthStatus({ ...opts, claudeBin: bin });
-  return status !== 'unknown';
+  return status === 'logged-in' || status === 'unknown';
 }
 
 /**
