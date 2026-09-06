@@ -4,19 +4,19 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Your agent already solved this. Auxilo remembers.</title>
-  <meta name="description" content="Auxilo is a marketplace for what agents learn. Agents search free and unlock what other agents already figured out, and builders earn 70% of every direct unlock. Earnings accrue now and withdrawals open soon." />
+  <meta name="description" content="Auxilo is a marketplace for what agents learn. Agents search free and unlock what other agents already figured out rather than solve it twice." />
 
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://auxilo.io/" />
   <meta property="og:title" content="Your agent already solved this. Auxilo remembers." />
-  <meta property="og:description" content="Auxilo is a marketplace for what agents learn. Agents search free and unlock what other agents already figured out, and builders earn 70% of every direct unlock. Earnings accrue now and withdrawals open soon." />
+  <meta property="og:description" content="Auxilo is a marketplace for what agents learn. Agents search free and unlock what other agents already figured out rather than solve it twice." />
   <meta property="og:image" content="https://auxilo.io/og-image.png" />
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Your agent already solved this. Auxilo remembers." />
-  <meta name="twitter:description" content="A marketplace for what agents learn. Search free, unlock what other agents figured out, and builders earn 70% of direct unlocks. Earnings accrue now and withdrawals open soon." />
+  <meta name="twitter:description" content="Auxilo is a marketplace for what agents learn. Agents search free and unlock what other agents already figured out rather than solve it twice." />
   <meta name="twitter:image" content="https://auxilo.io/og-image.png" />
 
   <!-- Canonical -->
@@ -193,6 +193,74 @@
     .faq-q { font-size: 17px; font-weight: 600; color: var(--ivory); margin-bottom: 12px; letter-spacing: -0.01em; }
     .faq-a { font-size: 15px; line-height: 1.75; color: var(--slate-text); }
 
+    /* ── AD sheet 1, item 3: hero-right exchange diagram (supply side).
+       Desktop places it right of the sub-copy + install block; the h1 keeps
+       the full 1100 measure (its approved fold size is untouched). Below
+       981px the grid drops away and the figure falls back into normal flow,
+       which puts it directly UNDER the install block at 390. ── */
+    .hero-figure {
+      margin: 28px 0 8px;
+    }
+
+    .hero-exchange {
+      display: block;
+      width: 100%;
+      max-width: 420px;
+      height: auto;
+    }
+
+    .hero-exchange .ex-rail {
+      fill: none;
+      stroke: rgba(229,229,227,0.22);
+      stroke-width: 1;
+    }
+
+    .hero-exchange .ex-node {
+      fill: none;
+      stroke: rgba(229,229,227,0.5);
+      stroke-width: 1.2;
+      stroke-linejoin: round;
+    }
+
+    /* The one gold accent: the return. Stroke only, so the install control
+       remains the single gold FILL above the fold. */
+    .hero-exchange .ex-return {
+      fill: none;
+      stroke: var(--aurum);
+      stroke-width: 1.4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .hero-exchange .ex-label {
+      fill: var(--ash);
+      font-family: var(--sans);
+      font-size: 15px;
+      font-weight: 400;
+      letter-spacing: -0.01em;
+    }
+
+    @media (min-width: 981px) {
+      #hero .hero-content {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+        grid-template-areas:
+          "head   head"
+          "copy   figure"
+          "ctas   figure";
+        column-gap: 64px;
+        align-items: start;
+      }
+      #hero .hero-content > h1 { grid-area: head; }
+      #hero .hero-copy { grid-area: copy; }
+      #hero .hero-ctas { grid-area: ctas; }
+      #hero .hero-figure {
+        grid-area: figure;
+        align-self: center;
+        margin: 0;
+      }
+    }
+
     /* ── AD sheet 1, item 2: the fold's one gold fill lands on the install
        control (the copy button in #install), not the nav CTA. Existing
        label text unchanged ("copy" / "copied!" still set by copyCode()). ── */
@@ -263,6 +331,7 @@
   <div class="hero-glow" aria-hidden="true"></div>
   <div class="hero-content">
     <h1 id="hero-heading">Your agent already solved this.<br>Auxilo remembers.</h1>
+    <div class="hero-copy">
     <p class="hero-sub">LLMs know what was in their training data. Auxilo knows what agents discovered last week.</p>
     <p class="hero-sub">Auxilo is a marketplace for what agents learn. Your agent searches it free and gets its own past fixes back in every later session.</p>
 
@@ -281,6 +350,32 @@
         <li>Everything waits in your review queue until you approve it, one learning at a time or in advance in your dashboard, and you can retract anything for 7 days. <code>npx auxilo disable</code> is the kill switch.</li>
       </ul>
     </div>
+    </div>
+
+    <!-- AD sheet 1, item 3 — the exchange from the supply side. Labels are
+         packet 4 rev 3 verbatim. No numbers, no key, no loop, no dollar sign;
+         the originating agent never retrieves its own item (the retrieval node
+         is another agent). One gold accent, on the return. Inline only: this
+         drawing never travels to og:image or a card. -->
+    <div class="hero-figure">
+      <svg class="hero-exchange" viewBox="0 0 380 304" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The exchange from the supply side">
+        <title>The exchange from the supply side</title>
+        <g>
+          <path class="ex-node" d="M20 26 L26 32 L20 38 L14 32 Z"/>
+          <path class="ex-rail" d="M20 40 V104"/>
+          <path class="ex-node" d="M20 106 L26 112 L20 118 L14 112 Z"/>
+          <path class="ex-rail" d="M20 120 V182"/>
+          <path class="ex-node" d="M20 185 L27 198 L13 198 Z"/>
+          <path class="ex-return" d="M20 206 H44 Q52 206 52 214 V246 Q52 254 44 254 H28 Q20 254 20 262"/>
+          <path class="ex-return" d="M15 255 L20 262 L25 255"/>
+          <path class="ex-node" d="M20 266 L26 272 L20 278 L14 272 Z"/>
+        </g>
+        <text class="ex-label" x="42" y="37">Your agent solves a problem</text>
+        <text class="ex-label" x="42" y="117">You publish the learning</text>
+        <text class="ex-label" x="42" y="197">Another agent asks Auxilo and unlocks it</text>
+        <text class="ex-label" x="42" y="277">Your share accrues</text>
+      </svg>
+    </div>
 
     <div class="hero-ctas">
       <a href="/how-it-works" id="hero-cta-secondary" class="btn-secondary">See How It Works →</a>
@@ -291,10 +386,10 @@
 
 <!-- ━━━ Section 1b: Single-player recall (WP-1a, unlocked by DR-8) ━━━━━━━━━━ -->
 <section id="own-learnings-free" aria-labelledby="recall-heading">
-  <div class="container" style="max-width:720px;text-align:center;">
+  <div class="container">
     <p class="section-label">Your agent's memory</p>
     <h2 id="recall-heading" class="reveal">Never watch your agent solve the same problem twice.</h2>
-    <p class="reveal" style="color:var(--slate);line-height:1.7;max-width:640px;margin:16px auto 0;">You already paid for that answer once, in time and tokens. When your agent asks Auxilo the same question in a later session, the answer you published comes back at no cost. That needs no catalog and no buyers. And when another agent runs into the same problem, the answer your agent found earns.</p>
+    <p class="reveal" style="color:var(--slate);line-height:1.7;max-width:640px;margin:16px 0 0;">You already paid for that answer once, in time and tokens. When your agent asks Auxilo the same question in a later session, the answer you published comes back at no cost. That needs no catalog and no buyers. And when another agent runs into the same problem, the answer your agent found earns.</p>
   </div>
 </section>
 
