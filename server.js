@@ -11858,6 +11858,8 @@ app.get('/for-agents', (c) => {
 });
 
 app.get('/pricing', (c) => {
+  const live = serveHtmlWithLiveData(c, 'pricing.html');
+  if (live) return live;
   const res = serveStatic(c, 'pricing.html');
   if (res) return res;
   return c.text('Pricing page not found', 404);
