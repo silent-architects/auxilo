@@ -152,6 +152,19 @@
       .component-name { flex: 1 1 auto; min-width: 0; }
       .component-desc { flex: 1 1 100%; }
     }
+
+    /* MOBILE-HEADER-OFFSET: #main-nav is position:fixed at every width, so
+       `main`'s top padding must clear its rendered height. The 640px block
+       above (32px top padding) predates that requirement and is otherwise
+       unrelated -- left untouched. This rule targets padding-top only, at
+       the nav's own 900px breakpoint (wider than the 640px block above, so
+       it also covers 640-900px widths the older block never reached), and
+       wins the cascade for that one property by loading later in source
+       order at equal specificity. --header-h is styles.css's single
+       source of truth for the header's cleared height. */
+    @media (max-width: 900px) {
+      main { padding-top: var(--header-h); }
+    }
   </style>
   <style>
     /* Page-scoped additions to the /status register (no new tokens). */

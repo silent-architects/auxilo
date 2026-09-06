@@ -1571,6 +1571,9 @@ const {
     createConnectAccountLink,
     createTransferToConnect,
     getConnectAccountStatus,
+    getStripeStatus,
+    initStripeStatusProbing,
+    notifyStripeCheckoutAttempt,
 } = require('./lib/stripe.js');
 const { addPurchasedCredits } = require('./lib/credits.js');
 const { loadCredits } = require('./lib/credits.js'); // AC-2: referee novelty check
@@ -2440,6 +2443,13 @@ Promise.all([
 });
 
 console.log(`[startup] Startup time to server-ready: ${Date.now() - _startupBegin}ms`);
+
+// CREDITS-CONFIG-USABLE: non-blocking boot probe of Stripe usability (format
+// check is synchronous/instant; the live balance-retrieve probe, if the
+// format passes, runs in the background) + a 10-minute reprobe interval.
+// /health and the checkout route read the cached result only — no network
+// call ever sits on a request path.
+initStripeStatusProbing();
 
 setInterval(() => resolveStuckSettlements().catch((err) => {
   // Non-critical: periodic daemon tick failed. Will retry on next interval.
@@ -4527,6 +4537,22 @@ app.post('/checkout/session', requireAuth, async (c) => {
         }, 400);
     }
 
+    // CREDITS-CONFIG-USABLE: the dark-safe invariant is "usable", not
+    // "present" — a malformed/placeholder secret must fail closed here with
+    // the same reason code /health exposes. This also arms an immediate
+    // out-of-cycle reprobe if the cached status is currently a transient
+    // failure (or still pending), so a real fix on prod is picked up on the
+    // next attempt rather than waiting out the full 10-minute interval.
+    notifyStripeCheckoutAttempt();
+    const stripeStatus = getStripeStatus();
+    if (!stripeStatus.configured) {
+        return c.json({
+            error: 'Payment system unavailable',
+            code: 'stripe_unusable',
+            reason: stripeStatus.reason,
+        }, 503);
+    }
+
     const baseUrl = process.env.BASE_URL || `https://${c.req.header('host')}`;
 
     try {
@@ -4535,7 +4561,7 @@ app.post('/checkout/session', requireAuth, async (c) => {
     } catch (err) {
         console.error('[stripe] Checkout session error:', err.message);
         if (err.message === 'Stripe not configured') {
-            return c.json({ error: 'Payment system unavailable' }, 503);
+            return c.json({ error: 'Payment system unavailable', code: 'stripe_unusable', reason: 'not-configured' }, 503);
         }
         return c.json({ error: 'Failed to create checkout session' }, 500);
     }
@@ -4842,9 +4868,13 @@ app.post('/account/connect-stripe', requireAuth, async (c) => {
     }, 503);
   }
 
-  // Check if Stripe is configured (cheap, no account read, do before taking the lock)
-  const { getStripe } = require('./lib/stripe.js');
-  if (!getStripe()) return c.json({ error: 'Stripe not configured' }, 503);
+  // Check if Stripe is USABLE, not merely present (CREDITS-CONFIG-USABLE) —
+  // cheap, no account read, do before taking the lock.
+  const { getStripeStatus: _getStripeStatusConnect } = require('./lib/stripe.js');
+  const connectStripeStatus = _getStripeStatusConnect();
+  if (!connectStripeStatus.configured) {
+    return c.json({ error: 'Stripe not configured', code: 'stripe_unusable', reason: connectStripeStatus.reason }, 503);
+  }
 
   // Serialize read-modify-write on this account so a concurrent settings/link-wallet
   // mutation cannot clobber the stripe_connect_id we are about to persist.
@@ -4924,8 +4954,12 @@ app.post('/withdraw/stripe', requireAuth, async (c) => {
   // R-01 P0-3: withdrawal requires current-Terms acceptance (§5.10 payee-agency).
   if (!hasAcceptedCurrentTos(account)) return termsNotAcceptedResponse(c);
 
-  const { getStripe } = require('./lib/stripe.js');
-  if (!getStripe()) return c.json({ error: 'Stripe not configured' }, 503);
+  // CREDITS-CONFIG-USABLE: usability, not presence.
+  const { getStripeStatus: _getStripeStatusWithdraw } = require('./lib/stripe.js');
+  const withdrawStripeStatus = _getStripeStatusWithdraw();
+  if (!withdrawStripeStatus.configured) {
+    return c.json({ error: 'Stripe not configured', code: 'stripe_unusable', reason: withdrawStripeStatus.reason }, 503);
+  }
 
   if (!account.stripe_connect_id) {
     return c.json({ error: 'No Stripe account linked. Call POST /account/connect-stripe first.' }, 400);
@@ -5666,6 +5700,10 @@ app.get('/api/info', (c) => {
 });
 
 app.get('/health', (c) => {
+  // CREDITS-CONFIG-USABLE: stripe_configured now means probe-validated
+  // usable, not merely present — see lib/stripe.js getStripeStatus(). A
+  // cached read, no network call on the request path.
+  const stripeStatus = getStripeStatus();
   return c.json({
     status: 'ok',
     uptime: process.uptime(),
@@ -5683,13 +5721,17 @@ app.get('/health', (c) => {
     // Wave 2b: effective global payment-switch state (observability — an
     // operator or monitor can see the pause without probing a paid endpoint).
     payments_enabled: paymentsEnabled(),
-    // CREDITS-CONTROL PART 1 (SPEC-1 A3): whether Stripe is actually
-    // provisioned, independent of the payments kill switch above. The
-    // purchase control on /pricing and the dashboard renders no Buy button
-    // unless BOTH payments_enabled and stripe_configured are true — the
-    // dark-safe invariant this build ships under (no STRIPE_SECRET_KEY on
-    // prod yet).
-    stripe_configured: !!process.env.STRIPE_SECRET_KEY,
+    // CREDITS-CONTROL PART 1 (SPEC-1 A3) / CREDITS-CONFIG-USABLE: whether
+    // Stripe is actually usable — secret key + webhook secret pass format
+    // validation AND a live authenticated probe succeeded — independent of
+    // the payments kill switch above. The purchase control on /pricing and
+    // the dashboard renders no Buy button unless BOTH payments_enabled and
+    // stripe_configured are true. stripe_reason carries the machine-readable
+    // cause when false (never key material); stripe_mode is 'test'/'live'/null
+    // from the key prefix (safe — no secret material).
+    stripe_configured: stripeStatus.configured,
+    stripe_reason: stripeStatus.reason,
+    stripe_mode: stripeStatus.mode,
     timestamp: new Date().toISOString()
   });
 });
@@ -12482,6 +12524,22 @@ app.get('/llms.txt', (c) => {
   }
 });
 
+// SEARCH-CONSOLE-VERIFY (2026-09-06): Google Search Console site-ownership
+// verification for https://auxilo.io/. Google's HTML-verification method
+// requires the exact filename it issues to be reachable at that same path
+// (google319f7b1ffb42b07d.html -> /google319f7b1ffb42b07d.html), served
+// verbatim, not redirected. The generic static catch-all a few hundred lines
+// up only matches css|js|png|jpg|jpeg|gif|svg|ico|webp|woff|woff2|ttf|txt|xml
+// (no html), and every existing HTML page is served at a route with the
+// .html suffix stripped (e.g. /about -> about.html) — so without this exact-
+// path route the verification file would 404. Deliberately excluded from
+// sitemap.xml, llms.txt, and the nav; it is not a page. Keep this route
+// permanently — GSC re-checks ownership periodically.
+app.get('/google319f7b1ffb42b07d.html', (c) => {
+  const res = serveStatic(c, 'google319f7b1ffb42b07d.html');
+  return res || c.text('Not found', 404);
+});
+
 // ─── Legal pages (terms, privacy) ────────────────────────────────────
 
 function serveLegalPage(c, filename, title, seo) {
@@ -12541,7 +12599,7 @@ function serveLegalPage(c, filename, title, seo) {
       // CREDITS-CONTROL PART 1 (GOV-2 D8): the served /terms page carried no
       // section anchors at all, so a "jump to §7" link had nothing to target.
       // Generic rule for every ## heading: a leading "N. " gets id="section-N"
-      // (matches the D8 link target /terms#section-7); anything else falls
+      // (links point at /terms; the ids remain for direct navigation); anything else falls
       // back to a slugified id. Applies to every legal page through this
       // shared renderer (/terms, /privacy), not just Payment Terms.
       .replace(/^## (.+)$/gm, (_m, text) => {

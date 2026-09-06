@@ -187,6 +187,20 @@
       .ww-size-medium { flex-basis: 159px; min-height: 88px; }
       .ww-size-small  { flex-basis: 103px; min-height: 68px; }
     }
+
+    /* MOBILE-HEADER-OFFSET: #main-nav is position:fixed at every width, so
+       `.ww-main`'s top padding must clear its rendered height. The 640px
+       block above (64px top padding) predates that requirement and is
+       otherwise unrelated -- left untouched. This rule targets padding-top
+       only, at the nav's own 900px breakpoint (wider than the 640px block
+       above, so it also covers 640-900px widths the older block never
+       reached), and wins the cascade for that one property by loading
+       later in source order at equal specificity. --header-h is
+       styles.css's single source of truth for the header's cleared
+       height. */
+    @media (max-width: 900px) {
+      .ww-main { padding-top: var(--header-h); }
+    }
   </style>
 </head>
 <body>

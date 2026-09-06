@@ -196,12 +196,17 @@ describe('T4 dark-safe rendering: no purchase button/disclosures without stripe_
   });
 });
 
-// ─── 5. /health stripe_configured (spec §7 test 5) ──────────────────────────
+// ─── 5. /health stripe_configured (spec §7 test 5; superseded by
+// CREDITS-CONFIG-USABLE — stripe_configured now means probe-validated
+// usable, not merely present. See test/credits-config-usable.test.js for
+// the full usability-gate suite; this test just pins the /health wiring.) ──
 
 describe('T5 /health: stripe_configured field', () => {
-  it('is present, derived from STRIPE_SECRET_KEY presence, boolean-coerced', () => {
-    const h = sliceAt(SERVER_SRC, "app.get('/health', (c) => {", 1500);
-    assert.ok(h.includes('stripe_configured: !!process.env.STRIPE_SECRET_KEY,'));
+  it('is derived from getStripeStatus() (usability, not bare presence), plus reason + mode', () => {
+    const h = sliceAt(SERVER_SRC, "app.get('/health', (c) => {", 2200);
+    assert.ok(h.includes('stripe_configured: stripeStatus.configured,'));
+    assert.ok(h.includes('stripe_reason: stripeStatus.reason,'));
+    assert.ok(h.includes('stripe_mode: stripeStatus.mode,'));
     assert.ok(h.includes('payments_enabled: paymentsEnabled(),'));
   });
 });
@@ -209,22 +214,23 @@ describe('T5 /health: stripe_configured field', () => {
 // ─── 6. /account/connect-stripe gated behind CUSTODIAL_WITHDRAW_ENABLED ─────
 // (spec §7 test 6; the money-paths requireAuth pin for this route already
 // exists at test/wave34-scoped-keys.test.js — "money paths remain
-// session-only" — not duplicated here.)
+// session-only" — not duplicated here. Stripe-gate literal updated for
+// CREDITS-CONFIG-USABLE: usability, not getStripe() presence.)
 
 describe('T6 /account/connect-stripe: same paused-rail 503 shape as /withdraw/stripe', () => {
-  it('gates on CUSTODIAL_WITHDRAW_ENABLED in addition to (not replacing) getStripe()', () => {
-    const h = sliceAt(SERVER_SRC, "app.post('/account/connect-stripe', requireAuth", 1200);
+  it('gates on CUSTODIAL_WITHDRAW_ENABLED in addition to (not replacing) the Stripe usability check', () => {
+    const h = sliceAt(SERVER_SRC, "app.post('/account/connect-stripe', requireAuth", 1400);
     const custodialIdx = h.indexOf("process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true'");
-    const stripeIdx = h.indexOf('if (!getStripe())');
+    const stripeIdx = h.indexOf('if (!connectStripeStatus.configured)');
     assert.notEqual(custodialIdx, -1, 'connect-stripe must check CUSTODIAL_WITHDRAW_ENABLED');
-    assert.notEqual(stripeIdx, -1, 'connect-stripe must still check getStripe() (in addition to, not instead of)');
+    assert.notEqual(stripeIdx, -1, 'connect-stripe must still check Stripe usability (in addition to, not instead of)');
     assert.ok(h.includes("code: 'withdraw_paused_noncustodial_migration',"),
       'must return the SAME machine-readable code as /withdraw/stripe');
     assert.ok(h.includes("error: 'Withdrawals temporarily paused during non-custodial migration',"));
   });
   it('the 503 body text is identical to the /withdraw/stripe rail sentinel', () => {
-    const withdrawShape = sliceAt(SERVER_SRC, "app.post('/withdraw/stripe', requireAuth", 1500);
-    const connectShape = sliceAt(SERVER_SRC, "app.post('/account/connect-stripe', requireAuth", 1200);
+    const withdrawShape = sliceAt(SERVER_SRC, "app.post('/withdraw/stripe', requireAuth", 2200);
+    const connectShape = sliceAt(SERVER_SRC, "app.post('/account/connect-stripe', requireAuth", 1400);
     const extractBody = (h) => {
       const m = h.match(/error: 'Withdrawals temporarily paused during non-custodial migration',\s*\n\s*code: 'withdraw_paused_noncustodial_migration',/);
       assert.ok(m, 'expected shape not found');
@@ -238,7 +244,7 @@ describe('T6 /account/connect-stripe: same paused-rail 503 shape as /withdraw/st
 
 describe('T7 /checkout/session: current-Terms-acceptance gate', () => {
   it('gates on hasAcceptedCurrentTos before pack validation / session creation, after paymentsEnabled', () => {
-    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 1800);
+    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 2500);
     const paymentsIdx = h.indexOf('if (!paymentsEnabled())');
     const termsIdx = h.indexOf('if (!hasAcceptedCurrentTos(checkoutAccount))');
     const packIdx = h.indexOf('const { pack } = body');
@@ -249,6 +255,17 @@ describe('T7 /checkout/session: current-Terms-acceptance gate', () => {
     assert.ok(termsIdx < packIdx, 'Terms gate must precede pack validation');
     assert.ok(packIdx < createIdx);
     assert.ok(h.includes('return termsNotAcceptedResponse(c);'));
+  });
+  it('gates on Stripe usability (CREDITS-CONFIG-USABLE) after pack validation, before session creation', () => {
+    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 2500);
+    const packIdx = h.indexOf('const { pack } = body');
+    const stripeIdx = h.indexOf('if (!stripeStatus.configured)');
+    const createIdx = h.indexOf('createCheckoutSession(');
+    assert.notEqual(stripeIdx, -1, 'checkout/session must gate on Stripe usability, not presence');
+    assert.ok(packIdx < stripeIdx && stripeIdx < createIdx,
+      'usability check must run after pack validation and before session creation');
+    assert.ok(h.includes("code: 'stripe_unusable',"));
+    assert.ok(h.includes('reason: stripeStatus.reason,'));
   });
 });
 
