@@ -735,7 +735,7 @@ curl -X POST \
   <span class="k">"timestamp"</span><span class="p">:</span> <span class="s">&quot;2026-09-01T02:34:52.628Z&quot;</span>
 <span class="p">}</span></pre>
       </div>
-      <button type="button" class="code-block-expand" id="search-expand" aria-expanded="false" aria-controls="search-scroll" aria-label="Toggle navigation" onclick="toggleEnvelope('search-scroll','search-expand')">
+      <button type="button" class="code-block-expand" id="search-expand" aria-expanded="false" aria-controls="search-scroll" aria-label="Show the full response" onclick="toggleEnvelope('search-scroll','search-expand')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
     </div>
@@ -814,7 +814,7 @@ curl -X GET \
   <span class="k">"timestamp"</span><span class="p">:</span> <span class="s">&quot;2026-09-01T02:35:09.990Z&quot;</span>
 <span class="p">}</span></pre>
         </div>
-        <button type="button" class="code-block-expand" id="unlock-expand" aria-expanded="false" aria-controls="unlock-scroll" aria-label="Toggle navigation" onclick="toggleEnvelope('unlock-scroll','unlock-expand')">
+        <button type="button" class="code-block-expand" id="unlock-expand" aria-expanded="false" aria-controls="unlock-scroll" aria-label="Show the full response" onclick="toggleEnvelope('unlock-scroll','unlock-expand')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
       </div>
@@ -1238,6 +1238,7 @@ curl https://auxilo.io/.well-known/agent.json
     const block = scroll.closest('.code-block--envelope');
     const expanded = btn.getAttribute('aria-expanded') === 'true';
     btn.setAttribute('aria-expanded', String(!expanded));
+    btn.setAttribute('aria-label', expanded ? 'Show the full response' : 'Show less of the response');
     if (block) block.classList.toggle('is-expanded', !expanded);
   }
 

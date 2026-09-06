@@ -60,7 +60,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
 
 # ─── THE PIN — bump this in the same commit that adds/removes tests ─────────
-EXPECTED_TEST_COUNT=1925
+EXPECTED_TEST_COUNT=1931
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
