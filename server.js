@@ -4522,7 +4522,6 @@ app.post('/checkout/session', requireAuth, async (c) => {
             valid_packs: Object.keys(PACKS).map(k => ({
                 id: k,
                 price_usd: PACKS[k].price_usd,
-                queries: PACKS[k].queries,
                 unlocks: PACKS[k].unlocks,
             })),
         }, 400);

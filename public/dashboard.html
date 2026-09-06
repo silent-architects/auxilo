@@ -2534,6 +2534,18 @@
           return;
         }
         if (btn) { btn.disabled = false; btn.textContent = 'Buy credits'; }
+        // CREDITS-CONTROL PART 1 micro-fix (should-fix 2): a TERMS_NOT_ACCEPTED
+        // 403 has a real route to resolution on this page — the existing
+        // #terms-gate clickwrap card — so surface that instead of a dead-end
+        // alert with no way to accept.
+        if (res.data && res.data.code === 'TERMS_NOT_ACCEPTED') {
+          show('terms-gate');
+          var gateEl = document.getElementById('terms-gate');
+          if (gateEl && gateEl.scrollIntoView) gateEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          var checkEl = document.getElementById('terms-agree-check');
+          if (checkEl && checkEl.focus) checkEl.focus();
+          return;
+        }
         showAlert('dash-alert', (res.data && res.data.error) || 'Could not start checkout. Please try again.', 'error');
       })
       .catch(function () {

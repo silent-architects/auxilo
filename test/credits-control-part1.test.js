@@ -510,6 +510,23 @@ describe('T14 behavioral: real server boot', () => {
       const noTermsBody = await noTermsRes.json();
       assert.equal(noTermsBody.code, 'TERMS_NOT_ACCEPTED');
 
+      // ── POST /checkout/session: invalid pack, Terms-accepted account → 400, valid_packs[] carries no "queries" (micro-fix should-fix 1) ──
+      const badPackRes = await fetch(`${baseUrl}/checkout/session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokenAccepted}` },
+        body: JSON.stringify({ pack: 'not-a-real-pack' }),
+      });
+      assert.equal(badPackRes.status, 400);
+      const badPackBody = await badPackRes.json();
+      assert.equal(badPackBody.error, 'Invalid pack');
+      assert.ok(Array.isArray(badPackBody.valid_packs) && badPackBody.valid_packs.length > 0);
+      for (const p of badPackBody.valid_packs) {
+        assert.ok(!Object.prototype.hasOwnProperty.call(p, 'queries'), `valid_packs[] entry must not carry "queries": ${JSON.stringify(p)}`);
+        assert.ok(Object.prototype.hasOwnProperty.call(p, 'id'));
+        assert.ok(Object.prototype.hasOwnProperty.call(p, 'unlocks'));
+        assert.ok(Object.prototype.hasOwnProperty.call(p, 'price_usd'));
+      }
+
       // ── POST /checkout/session: Terms-accepted account, Stripe unconfigured → 503 dark-safe ──
       const acceptedRes = await fetch(`${baseUrl}/checkout/session`, {
         method: 'POST',
@@ -539,5 +556,44 @@ describe('T14 behavioral: real server boot', () => {
       if (child) await stopServer(child);
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
+  });
+});
+
+// ─── 15. auxiloBuyCredits: TERMS_NOT_ACCEPTED routes to the terms gate, not
+// a dead-end alert (micro-fix should-fix 2, source-level — inline <script>
+// functions with no module export, same constraint noted in the file header) ─
+
+describe('T15 auxiloBuyCredits: TERMS_NOT_ACCEPTED 403 routes to the terms-gate clickwrap', () => {
+  it('dashboard.html: reveals #terms-gate and focuses its checkbox before falling through to the generic alert', () => {
+    const h = sliceAt(DASHBOARD_HTML, 'window.auxiloBuyCredits = function (packId, btn) {', 1600);
+    const codeCheckIdx = h.indexOf("res.data.code === 'TERMS_NOT_ACCEPTED'");
+    const showGateIdx = h.indexOf("show('terms-gate')");
+    const focusIdx = h.indexOf("getElementById('terms-agree-check')");
+    const returnIdx = h.indexOf('return;', focusIdx);
+    const genericAlertIdx = h.indexOf("showAlert('dash-alert', (res.data && res.data.error)");
+    assert.notEqual(codeCheckIdx, -1, 'handler must branch on the TERMS_NOT_ACCEPTED code');
+    assert.notEqual(showGateIdx, -1, 'handler must reveal #terms-gate');
+    assert.notEqual(focusIdx, -1, 'handler must focus the terms-gate checkbox');
+    assert.ok(codeCheckIdx < showGateIdx && showGateIdx < focusIdx, 'code check must precede reveal must precede focus');
+    assert.notEqual(returnIdx, -1, 'the TERMS_NOT_ACCEPTED branch must return before falling through');
+    assert.ok(genericAlertIdx === -1 || returnIdx < genericAlertIdx, 'a TERMS_NOT_ACCEPTED response must never reach the generic dash-alert');
+  });
+
+  it('pricing.html: redirects to /dashboard#terms-gate instead of calling window.alert on TERMS_NOT_ACCEPTED', () => {
+    const h = sliceAt(PRICING_HTML, 'window.auxiloBuyCredits = function (packId) {', 1600);
+    const codeCheckIdx = h.indexOf("res.data.code === 'TERMS_NOT_ACCEPTED'");
+    const redirectIdx = h.indexOf("window.location = '/dashboard#terms-gate'");
+    const returnIdx = h.indexOf('return;', redirectIdx);
+    const genericAlertIdx = h.indexOf('window.alert((res.data && res.data.error)');
+    assert.notEqual(codeCheckIdx, -1, 'handler must branch on the TERMS_NOT_ACCEPTED code');
+    assert.notEqual(redirectIdx, -1, 'handler must redirect to the dashboard terms gate (no new strings)');
+    assert.ok(codeCheckIdx < redirectIdx);
+    assert.notEqual(returnIdx, -1, 'the TERMS_NOT_ACCEPTED branch must return before falling through');
+    assert.ok(genericAlertIdx === -1 || returnIdx < genericAlertIdx, 'a TERMS_NOT_ACCEPTED response must never reach window.alert');
+  });
+
+  it('the dashboard #terms-gate card (~:673) still exists with the checkbox this handler focuses', () => {
+    assert.ok(DASHBOARD_HTML.includes('id="terms-gate"'));
+    assert.ok(DASHBOARD_HTML.includes('id="terms-agree-check"'));
   });
 });

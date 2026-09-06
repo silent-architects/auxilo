@@ -1098,6 +1098,13 @@
           return;
         }
         if (btn) { btn.disabled = false; btn.textContent = 'Buy credits'; }
+        // CREDITS-CONTROL PART 1 micro-fix (should-fix 2): the Terms clickwrap
+        // gate lives on the dashboard, not here — route there instead of a
+        // dead-end alert with no way to accept (no new strings).
+        if (res.data && res.data.code === 'TERMS_NOT_ACCEPTED') {
+          window.location = '/dashboard#terms-gate';
+          return;
+        }
         window.alert((res.data && res.data.error) || 'Could not start checkout. Please try again.');
       })
       .catch(function () {
