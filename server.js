@@ -8030,9 +8030,8 @@ app.get('/account/clean-lane', async (c) => {
     clean_lane_active: cleanLaneActive(state),
     consent_version_current: CLEAN_LANE_CONSENT_VERSION,
     standing_consent_ack_at: standingConsentAckAt,
-    unacknowledged_publications: countUnacknowledgedStandingConsentPublications(
-      learnings, auth.accountId, standingConsentAckAt
-    ),
+    // G1_RAW_READ_ALLOW:37 — helper filters by the caller's own account and clean-lane stamp.
+    unacknowledged_publications: countUnacknowledgedStandingConsentPublications(learnings, auth.accountId, standingConsentAckAt),
     ...(state && {
       last_action: state.action,
       last_action_at: state.timestamp,
@@ -8115,6 +8114,9 @@ app.post('/account/clean-lane/grant', async (c) => {
       // under ('none' when the account never accepted) — activation policy is
       // counsel's, the record is ours.
       tosVersionAtGrant: account.tos_version || 'none',
+      // Gate-A 2026-09-06 (S2): the exact affirmation text received (verified
+      // byte-equal to CLEAN_LANE_AFFIRMATION above) is recorded as a sha256.
+      affirmation,
       ipRedacted: redactIp(getClientIp(c)),
       userAgent: c.req.header('user-agent') || 'unknown',
       acceptPath: c.req.header('X-API-Key') ? 'cli-api' : 'web',
@@ -8350,7 +8352,11 @@ app.patch('/account/settings', requireAuth, async (c) => {
         return c.json({ error: 'standing_consent_ack_at cannot be in the future' }, 400);
       }
       const oldAck = typeof account.standing_consent_ack_at === 'string' ? account.standing_consent_ack_at : null;
-      const newAck = new Date(parsed).toISOString();
+      // Gate-A 2026-09-06 (S3): inside the skew allowance, a stamp ahead of the
+      // server clock is clamped to the server's now — a fast client clock can
+      // never push the cursor into the future (which would hide publishes
+      // created between the client's now and the server's).
+      const newAck = new Date(Math.min(parsed, Date.now())).toISOString();
       account.standing_consent_ack_at = newAck;
       changes.standing_consent_ack_at = { from: oldAck, to: newAck };
     }
