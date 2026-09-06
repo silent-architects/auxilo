@@ -111,7 +111,10 @@
     }
 
     .page-title {
-      font-size: 1.75rem;
+      /* AD sheet 7: page-hero spec size (the clamp(38px, 5vw, 56px) rule
+         shared by .page-hero h1 / #builders-hero h1 / .pricing-page-header h1
+         / .api-page-header h1 / .hiw-hero h1) replaces the old fixed 28px. */
+      font-size: clamp(38px, 5vw, 56px);
       font-weight: 700;
       letter-spacing: -0.03em;
       margin-bottom: 0.5rem;
@@ -155,7 +158,6 @@
     @media (prefers-reduced-motion: reduce) {
       .status-dot { animation: none; }
       .hamburger span { transition: none; }
-      .waitlist-input, .waitlist-btn { transition: none; }
     }
 
     /* ── Mobile hamburger nav (parity with the other pages) ────────── */
@@ -225,11 +227,17 @@
     }
 
     /* ── Section ───────────────────────────────────────────────── */
-    h2 {
-      font-size: 0.75rem;
-      font-weight: 600;
+    /* AD sheet 7: these four were <h2> (a heading level with no page
+       structure behind it); they are component labels, not headings. Same
+       words, same look — the site's slate label style (public/styles.css
+       .section-label: 11px / 0.16em / uppercase / 400) rendered with this
+       page's own dim-ivory token in place of --slate (status.html carries no
+       styles.css import; DR-6 keeps its palette self-contained). */
+    .component-label {
+      font-size: 11px;
+      font-weight: 400;
       text-transform: uppercase;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.16em;
       color: var(--ivory-dim);
       margin-bottom: 0.75rem;
     }
@@ -289,78 +297,6 @@
       background: var(--red-bg);
       color: var(--red);
       border: 1px solid rgba(239,68,68,0.25);
-    }
-
-    /* ── Payout Waitlist (quiet phase) ─────────────────────────── */
-    .waitlist-row {
-      padding: 1rem 1.25rem 1.15rem;
-      border-bottom: 1px solid var(--border);
-      background: var(--obsidian-3);
-    }
-
-    .waitlist-heading {
-      font-size: 0.9rem;
-      font-weight: 600;
-      color: var(--ivory);
-      margin-bottom: 0.35rem;
-    }
-
-    .waitlist-body {
-      font-size: 0.8rem;
-      color: var(--ivory-dim);
-      line-height: 1.5;
-      margin-bottom: 0.75rem;
-    }
-
-    .waitlist-form {
-      display: flex;
-      gap: 0.5rem;
-      max-width: 420px;
-    }
-
-    .waitlist-input {
-      flex: 1;
-      min-width: 0;
-      padding: 0.55rem 0.75rem;
-      font-family: inherit;
-      font-size: 0.85rem;
-      color: var(--ivory);
-      background: var(--obsidian);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-
-    .waitlist-input::placeholder { color: var(--ivory-dim); }
-    .waitlist-input:focus { border-color: var(--aurum); }
-    .waitlist-input.input-error { border-color: var(--red); background: var(--red-bg); }
-
-    .waitlist-btn {
-      flex-shrink: 0;
-      padding: 0.55rem 1rem;
-      font-family: inherit;
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--obsidian);
-      background: var(--aurum);
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: opacity 0.2s;
-    }
-
-    .waitlist-btn:hover { opacity: 0.9; }
-    .waitlist-btn:disabled { opacity: 0.6; cursor: default; }
-
-    .waitlist-msg { font-size: 0.8rem; margin-top: 0.6rem; display: none; }
-    .waitlist-msg.ok  { display: block; color: var(--green); }
-    .waitlist-msg.err { display: block; color: var(--red); }
-
-    @media (max-width: 480px) {
-      .waitlist-form { flex-direction: column; }
-      .waitlist-btn { width: 100%; }
-      .waitlist-input { font-size: 16px; }
     }
 
     /* ── Quick Links ────────────────────────────────────────────── */
@@ -538,7 +474,7 @@
       <span class="status-sub" id="status-time">Checking…</span>
     </div>
 
-    <h2>Service Components</h2>
+    <p class="component-label">Service Components</p>
     <div class="components">
       <div class="component-row">
         <span class="component-name">API Server</span>
@@ -560,15 +496,6 @@
         <span class="component-desc">Contributor withdrawals (both USDC on Base and Stripe-to-bank) are migrating to our non-custodial rail and paused meanwhile. Earnings still accrue and buyer payments are unaffected.</span>
         <span class="badge degraded">Migrating</span>
       </div>
-      <div class="waitlist-row" id="payout-waitlist">
-        <h3 class="waitlist-heading">Get notified when withdrawals open</h3>
-        <p class="waitlist-body">Earnings accrue to your account now. Drop your email and we'll tell you the day withdrawals go live.</p>
-        <form class="waitlist-form" id="waitlist-form" novalidate>
-          <input class="waitlist-input" id="waitlist-email" type="email" name="email" placeholder="you@example.com" autocomplete="email" aria-label="Email address" required>
-          <button class="waitlist-btn" type="submit">Notify me</button>
-        </form>
-        <p class="waitlist-msg" id="waitlist-msg" role="status" aria-live="polite"></p>
-      </div>
       <div class="component-row">
         <span class="component-name">MCP Server</span>
         <span class="component-desc">auxilo-mcp, npx-installable Claude Desktop integration</span>
@@ -576,7 +503,7 @@
       </div>
     </div>
 
-    <h2>Quick Links</h2>
+    <p class="component-label">Quick Links</p>
     <div class="links-grid">
       <a class="link-card" href="/health">
         <span class="link-card-label">Health Endpoint</span>
@@ -588,8 +515,11 @@
       </a>
       <a class="link-card" href="/openapi.json">
         <span class="link-card-label">OpenAPI Spec</span>
-        <!-- DR-6: openapi.json spec version — keep in sync with openapi.json "version" at each release cut -->
-        <span class="link-card-desc">GET /openapi.json: full spec v0.9.4</span>
+        <!-- AD sheet 7: the hardcoded v0.9.4 is now server-rendered from the
+             running package version (server.js renderLiveStatusVersion),
+             same derivation as the footer badge below; empty here on disk,
+             never a stale literal if the render ever fails. -->
+        <span class="link-card-desc">GET /openapi.json: full spec v<span id="openapi-version"></span></span>
       </a>
       <a class="link-card" href="https://github.com/silent-architects/auxilo/issues" target="_blank" rel="noopener">
         <span class="link-card-label">Report a Bug</span>
@@ -597,14 +527,14 @@
       </a>
     </div>
 
-    <h2>Live Health Check</h2>
+    <p class="component-label">Live Health Check</p>
     <div class="health-block">
       <div class="health-endpoint">GET /health</div>
       <div class="health-response" id="health-json">Loading…</div>
       <div id="live-health"></div>
     </div>
 
-    <h2>Contact &amp; Support</h2>
+    <p class="component-label">Contact &amp; Support</p>
     <div class="contact-block">
       <p>
         For general support, email <a href="mailto:support@auxilo.io">support@auxilo.io</a>. Response target: &lt;72 hours.<br>
@@ -615,9 +545,13 @@
   </main>
 
   <footer>
-    <!-- DR-6: version self-heals from GET /version (the running build's package.json
-         version) so it can't silently drift; the hardcoded value is the fallback. -->
-    <span>Auxilo v<span id="app-version">0.9.4</span> &middot; <a href="/">auxilo.io</a> &middot; <a href="/for-builders">builders</a> &middot; <a href="/for-agents">agents</a> &middot; <a href="/pricing">pricing</a> &middot; <a href="/api">api</a> &middot; <a href="/how-it-works">how it works</a> &middot; <a href="/.well-known/security.txt">security.txt</a></span>
+    <!-- AD sheet 7: link set copied from /about's footer byte-for-byte, plus
+         /terms + /privacy (named in the sheet); /about and /writing are a
+         separate packet's addition and stay out. Version is now server-
+         rendered from the running package version (server.js
+         renderLiveStatusVersion, same derivation as the OpenAPI card above);
+         empty here on disk, never the old hardcoded literal. -->
+    <span>Auxilo v<span id="app-version"></span> &middot; <a href="/">auxilo.io</a> &middot; <a href="/for-builders">builders</a> &middot; <a href="/for-agents">agents</a> &middot; <a href="/pricing">pricing</a> &middot; <a href="/api">api</a> &middot; <a href="/how-it-works">how it works</a> &middot; <a href="/terms">terms</a> &middot; <a href="/privacy">privacy</a> &middot; <a href="/.well-known/security.txt">security.txt</a></span>
   </footer>
 
   <script>
@@ -657,15 +591,6 @@
         overall.style.borderColor  = 'rgba(234,179,8,0.2)';
         timeEl.textContent = 'Last checked: ' + new Date().toLocaleTimeString();
       }
-
-      // DR-6: self-heal the footer version from the running build (falls back to
-      // the hardcoded value if /version is unreachable).
-      try {
-        const vres = await fetch('/version');
-        const vdata = await vres.json();
-        const vEl = document.getElementById('app-version');
-        if (vEl && vdata && vdata.version) vEl.textContent = vdata.version;
-      } catch (e) { /* keep the hardcoded fallback */ }
     })();
   </script>
 
@@ -691,54 +616,6 @@
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') closeNav();
     });
-  </script>
-
-  <script>
-    // Payout waitlist capture (quiet phase). POSTs to /waitlist; the server
-    // stores only { email, ts, source } and answers duplicates identically.
-    (function () {
-      var form  = document.getElementById('waitlist-form');
-      if (!form) return;
-      var input = document.getElementById('waitlist-email');
-      var btn   = form.querySelector('button');
-      var msg   = document.getElementById('waitlist-msg');
-      var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-      function show(text, cls) {
-        msg.textContent = text;
-        msg.className = 'waitlist-msg ' + cls;
-      }
-
-      form.addEventListener('submit', async function (e) {
-        e.preventDefault();
-        var email = (input.value || '').trim();
-        if (!EMAIL_RE.test(email)) {
-          input.classList.add('input-error');
-          show("That email didn't look right. Try again.", 'err');
-          return;
-        }
-        input.classList.remove('input-error');
-        btn.disabled = true;
-        try {
-          var res = await fetch('/waitlist', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email, source: 'status' })
-          });
-          if (res.ok) {
-            form.style.display = 'none';
-            show("You're on the list.", 'ok');
-          } else {
-            input.classList.add('input-error');
-            show("That email didn't look right. Try again.", 'err');
-          }
-        } catch (err) {
-          show("That email didn't look right. Try again.", 'err');
-        } finally {
-          btn.disabled = false;
-        }
-      });
-    })();
   </script>
 </body>
 </html>

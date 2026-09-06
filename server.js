@@ -11804,8 +11804,37 @@ app.get('/how-it-works', (c) => {
   return c.text('How It Works page not found', 404);
 });
 
-// S24-4: /status — static status page
+// AD sheet 7 (2026-09-06): /status server-renders the running package
+// version into the footer badge and the OpenAPI card — the same substitution
+// pattern as renderLiveCatalogStats, so the two `v0.9.4` literals can't drift
+// again. Both spans are empty in the static file; if the render throws, the
+// catch falls through to plain serveStatic and the spans stay blank rather
+// than showing a stale version number.
+function renderLiveStatusVersion(html) {
+  try {
+    return html
+      .replace(/(id="app-version"[^>]*>)[^<]*</, (_m, tag) => `${tag}${VERSION}<`)
+      .replace(/(id="openapi-version"[^>]*>)[^<]*</, (_m, tag) => `${tag}${VERSION}<`);
+  } catch (e) {
+    console.error('[status-version] render failed, serving blank:', e.message);
+    return html;
+  }
+}
+
+// S24-4: /status — status page, version-rendered (see renderLiveStatusVersion).
 app.get('/status', (c) => {
+  try {
+    const filePath = path.join(PUBLIC_DIR, 'status.html');
+    if (fs.existsSync(filePath)) {
+      let html = fs.readFileSync(filePath, 'utf8');
+      html = renderLiveStatusVersion(html);
+      c.header('Content-Type', 'text/html; charset=utf-8');
+      c.header('Cache-Control', 'public, max-age=3600');
+      return c.body(injectAnalytics(html, ANALYTICS_DOMAIN));
+    }
+  } catch (e) {
+    console.error('[status] server-render failed, falling back:', e.message);
+  }
   const res = serveStatic(c, 'status.html');
   if (res) return res;
   return c.text('Status page not found', 404);
@@ -11858,6 +11887,8 @@ app.get('/for-agents', (c) => {
 });
 
 app.get('/pricing', (c) => {
+  const live = serveHtmlWithLiveData(c, 'pricing.html');
+  if (live) return live;
   const res = serveStatic(c, 'pricing.html');
   if (res) return res;
   return c.text('Pricing page not found', 404);
@@ -11940,6 +11971,17 @@ function renderRecentLearnings(html) {
   }
 }
 
+// "as of September 6, 2026 UTC" (AD strings packet 3 §4): English month name,
+// day without a leading zero, four-digit year, literal UTC. Throws on an
+// invalid date so the caller's fail path (span left EMPTY) is the only
+// alternative to a true date — never a default or placeholder date.
+const AS_OF_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+function formatAsOfUtc(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) throw new Error('as-of: invalid date');
+  return `as of ${AS_OF_MONTHS[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()} UTC`;
+}
+
 function renderLiveCatalogStats(html) {
   try {
     const visible = visibleLearningsList();
@@ -11950,10 +11992,19 @@ function renderLiveCatalogStats(html) {
       const prices = visible.map(displayPrice);
       range = `$${Math.min(...prices).toFixed(2)} to $${Math.max(...prices).toFixed(2)}`;
     }
+    // As-of line for the /for-builders strip (id="lc-asof"): the stats above
+    // are computed at render time, so the as-of is the same construction GET
+    // /knowledge/stats carries (`timestamp: new Date().toISOString()` at
+    // computation time — the renderer holds no stored timestamp). It sits
+    // inside this try on purpose: any derivation failure returns the html
+    // untouched and the span stays empty. A stale count is a soft error; an
+    // asserted stale date is a positive false claim.
+    const asOf = formatAsOfUtc(new Date());
     return html
       .replace(/(id="lc-learnings"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${count}<`)
       .replace(/(id="lc-categories"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${cats}<`)
-      .replace(/(id="lc-price-range"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${range}<`);
+      .replace(/(id="lc-price-range"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${range}<`)
+      .replace(/(id="lc-asof"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${asOf}<`);
   } catch (e) {
     console.error('[live-stats] render failed, serving static values:', e.message);
     return html;
@@ -12055,7 +12106,7 @@ app.get('/llms.txt', (c) => {
 
 // ─── Legal pages (terms, privacy) ────────────────────────────────────
 
-function serveLegalPage(c, filename, title) {
+function serveLegalPage(c, filename, title, seo) {
   try {
     const md = fs.readFileSync(path.join(__dirname, 'docs', filename), 'utf8');
     // Minimal markdown-to-HTML: headings, paragraphs, bold, italic, lists,
@@ -12091,12 +12142,27 @@ function serveLegalPage(c, filename, title) {
     // Restore protected code blocks, unwrapping any <p> the paragraph rule added.
     body = body.replace(/<p> CODE(\d+) <\/p>| CODE(\d+) /g,
       (_m, a, b) => codeBlocks[a !== undefined ? a : b]);
+    // SEO-BASELINE-2026-09-06: canonical + og/twitter block, /terms and /privacy only
+    // (routes below pass `seo`; other serveLegalPage callers pass nothing and get no tags).
+    const seoTags = seo ? [
+      `<link rel="canonical" href="https://auxilo.io${seo.path}"/>`,
+      `<meta property="og:type" content="website"/>`,
+      `<meta property="og:url" content="https://auxilo.io${seo.path}"/>`,
+      `<meta property="og:title" content="${title} | Auxilo"/>`,
+      `<meta name="twitter:card" content="summary"/>`,
+      ...(seo.description ? [
+        `<meta name="description" content="${seo.description}"/>`,
+        `<meta property="og:description" content="${seo.description}"/>`,
+        `<meta name="twitter:description" content="${seo.description}"/>`,
+      ] : []),
+    ].join('\n  ') : '';
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>${title} | Auxilo</title>
+  ${seoTags}
   <link rel="stylesheet" href="/styles.css?v=2"/>
   <style>
     .legal-wrap{max-width:720px;margin:0 auto;padding:120px 24px 80px;color:#E5E5E3}
@@ -12129,8 +12195,14 @@ function serveLegalPage(c, filename, title) {
   }
 }
 
-app.get('/terms', (c) => serveLegalPage(c, 'TERMS-OF-SERVICE.md', 'Terms of Service'));
-app.get('/privacy', (c) => serveLegalPage(c, 'PRIVACY-POLICY.md', 'Privacy Policy'));
+app.get('/terms', (c) => serveLegalPage(c, 'TERMS-OF-SERVICE.md', 'Terms of Service', {
+  path: '/terms',
+  description: 'Auxilo terms of service covering accounts, payments, and the knowledge marketplace.',
+}));
+app.get('/privacy', (c) => serveLegalPage(c, 'PRIVACY-POLICY.md', 'Privacy Policy', {
+  path: '/privacy',
+  description: 'Auxilo privacy policy covering data collection, use, and retention.',
+}));
 app.get('/legal/subprocessors', (c) => serveLegalPage(c, 'SUBPROCESSORS.md', 'Sub-Processors'));
 app.get('/legal/supported-clients', (c) => serveLegalPage(c, 'SUPPORTED-CLIENTS.md', 'Supported Clients'));
 // FB-1: /dmca is incorporated into the Terms (§5.9.4(b)) and must resolve, not 404.

@@ -163,6 +163,18 @@
   <style>
     /* ── For Builders Page · page-specific overrides ── */
 
+    /* AD sheet 4 item 2: this page rendered three .btn-primary heights
+       (54 / 52 / 49) depending on nested markup (plain link vs. link with
+       a nested <code> vs. a <button> element, each computing line-height
+       differently). Pin to the site's normalized primary height (54px,
+       already the computed height on /, /how-it-works, /for-agents,
+       /pricing, /api) so this page cannot render three. min-height, not
+       height, so a wrapped two-line label on narrow viewports still grows
+       instead of clipping. */
+    .btn-primary {
+      min-height: 54px;
+    }
+
     /* Hero section for this page */
     #builders-hero {
       padding: 140px 24px 88px;
@@ -558,6 +570,17 @@
       margin-top: 20px;
     }
 
+    /* AD sheet 4 item 3: the form's own markup moved byte-identical; this
+       placement rule is new (the block now sits in #footer-cta, a
+       text-align:center section, instead of inside a left-aligned FAQ
+       answer) so the block centers itself while its own contents (the
+       lead line, the input+button row) stay left-aligned as authored. */
+    #footer-cta .waitlist-capture {
+      max-width: 440px;
+      margin: 0 auto 48px;
+      text-align: left;
+    }
+
     .waitlist-line {
       font-size: 15px;
       font-weight: 500;
@@ -739,11 +762,17 @@
     <!-- Ledger strip (AD strings packet 1, Sheet 4). Ships COUNT-ONLY until
          TECH-PM reconciles the store: the contributors, unlocks, and money cells
          are HELD. The count renders live at serve time via renderLiveCatalogStats
-         (id="lc-learnings", fails open to the static value below). -->
+         (the lc-learnings span, fails open to the static value below). The as-of
+         line (the lc-asof span, AD strings packet 3 §4) is server-rendered from the
+         same stats computation; it ships EMPTY here and stays empty on the
+         renderer's fail path — never a baked or default date. Do not write a
+         literal id="lc-…" attribute inside this comment: the renderer's regex
+         would match the comment and inject the value as stray page text. -->
     <div class="builders-hero-stats reveal" style="justify-content:center;margin-bottom:24px;">
       <div class="builders-hero-stat" style="align-items:center;text-align:center;">
         <span class="stat-num pull-stat-num" id="lc-learnings">226</span>
         <span class="stat-label pull-stat-caption">learnings in the catalog</span>
+        <span id="lc-asof"></span>
       </div>
     </div>
     <p class="reveal" style="text-align:center;color:var(--slate);line-height:1.7;">Supply is ahead of demand.</p>
@@ -834,20 +863,19 @@
             <button class="copy-btn" id="copy-openclaw" onclick="copyCode('openclaw-code', 'copy-openclaw')" aria-label="Copy code">copy</button>
           </div>
           <pre id="openclaw-code"><span class="c"># Connect your agent in one command</span>
-<span class="c"># Detects clients, registers MCP, device-code login,</span>
-<span class="c"># installs the extraction runner, then asks consent (default: No)</span>
 npx auxilo setup
 
-<span class="c"># Approve what goes live, one learning at a time</span>
 npx auxilo review
 
 <span class="c"># Check state any time, or turn extraction off</span>
 npx auxilo status
-npx auxilo disable
-
-<span class="c"># Earnings accrue to your Auxilo account.</span>
-<span class="c"># Withdrawals (Stripe-to-bank and USDC on Base) are opening soon.</span></pre>
+npx auxilo disable</pre>
         </div>
+        <!-- AD sheet 4 item 4 / AD-1: the consent and payment-state disclosures
+             that lived as code comments above (clipped at 375px, 293/492px =
+             60% visible) moved here as prose, existing words only, comment
+             markers stripped. -->
+        <p style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:10px;">Detects clients, registers MCP, device-code login, installs the extraction runner, then asks consent (default: No). Approve what goes live, one learning at a time. Earnings accrue to your Auxilo account. Withdrawals (Stripe-to-bank and USDC on Base) are opening soon.</p>
 
         <!-- Submit a learning snippet -->
         <div class="code-block" id="learn-snippet" style="margin-top:16px">
@@ -881,10 +909,11 @@ curl -X POST \
 <span class="c"># 2. Sign + verify to start earning</span>
 curl -X POST \
   https://auxilo.io/wallet/verify \
-  -d <span class="s">'{"wallet": "0x…", "signature": "0x…"}'</span>
-
-<span class="c"># Earnings accumulate in your Auxilo account. Withdrawals (Stripe or USDC on Base) are opening soon.</span></pre>
+  -d <span class="s">'{"wallet": "0x…", "signature": "0x…"}'</span></pre>
         </div>
+        <!-- AD sheet 4 item 4 / AD-1: payment-state disclosure moved out of
+             the code comment into prose, existing words only. -->
+        <p style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:10px;">Earnings accumulate in your Auxilo account. Withdrawals (Stripe or USDC on Base) are opening soon.</p>
       </div>
     </div>
   </div>
@@ -969,14 +998,6 @@ curl -X POST \
       <div class="faq-item reveal">
         <p class="faq-q">How does the revenue share work?</p>
         <p class="faq-a">When a buyer unlocks one of your learnings directly, 70% of the unlock price gets credited to your account. When Auxilo's search surfaces your learning to a buyer instead, the split is 60% to you and 40% to the platform, which reflects the distribution value. Earnings accrue to your account now and remain payable to you under the Terms, with no lock-up periods. Withdrawals (Stripe-to-bank and USDC on Base) open soon as we finish our non-custodial migration. Stripe bank payouts carry a $0.50 minimum and a flat $0.25 fee.</p>
-        <div class="waitlist-capture" id="payout-waitlist">
-          <p class="waitlist-line">Get notified when withdrawals open.</p>
-          <form class="hero-email-capture waitlist-form" id="waitlist-form" novalidate>
-            <input class="email-input" id="waitlist-email" type="email" name="email" placeholder="you@example.com" autocomplete="email" aria-label="Email address" required>
-            <button class="btn-primary" type="submit">Notify me</button>
-          </form>
-          <p class="waitlist-msg" id="waitlist-msg" role="status" aria-live="polite"></p>
-        </div>
       </div>
       <div class="faq-item reveal">
         <p class="faq-q">What's the minimum to start earning?</p>
@@ -1033,6 +1054,21 @@ curl -X POST \
         <pre id="footer-setup-code">npx auxilo setup</pre>
       </div>
       <p class="footer-cta-note">Detects your client, registers you, signs you in. Nothing publishes until you run <code style="font-family:var(--mono);">npx auxilo review</code>.</p>
+    </div>
+
+    <!-- AD sheet 4 item 3: notify-me form lifted from FAQ depth (was 74% down
+         the page, inside the "How does the revenue share work?" answer) to
+         this standing block directly above the site footer. Markup moved
+         byte-identical; also the sole surviving copy of this form (sheet 7:
+         status.html's waitlist form posted to the same /waitlist endpoint
+         with the same ids and was removed there rather than duplicated). -->
+    <div class="waitlist-capture" id="payout-waitlist">
+      <p class="waitlist-line">Get notified when withdrawals open.</p>
+      <form class="hero-email-capture waitlist-form" id="waitlist-form" novalidate>
+        <input class="email-input" id="waitlist-email" type="email" name="email" placeholder="you@example.com" autocomplete="email" aria-label="Email address" required>
+        <button class="btn-primary" type="submit">Notify me</button>
+      </form>
+      <p class="waitlist-msg" id="waitlist-msg" role="status" aria-live="polite"></p>
     </div>
 
     <nav class="footer-links reveal" aria-label="Footer links">
