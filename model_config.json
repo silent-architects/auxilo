@@ -1,6 +1,7 @@
 {
   "extraction": {
     "_note": "P2.1a \u00a76.3 \u2014 Autonomous extraction provider config. Model is a config value, never hardcoded.",
+    "_deprecated": "P2.1a server-side /extract path is 410'd (runner.js:581-583). Not sanction for server-side extraction \u2014 see EXTRACT-PER-CLIENT scoping \u00a74c. Untouched by this wave; kept for the sensitivity-screen resolver only.",
     "primary": {
       "provider": "anthropic",
       "model": "claude-haiku-4-5"
