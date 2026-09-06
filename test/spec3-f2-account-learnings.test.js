@@ -70,6 +70,12 @@ function fixtureCatalog() {
       contributor_account_id: OTHER_ACCOUNT_ID,
       status: 'approved',
     }),
+    // N2: another account's retracted row — status=retracted must stay
+    // owner-scoped exactly like every other status value.
+    fixtureLearning('lrn_other_retracted', {
+      contributor_account_id: OTHER_ACCOUNT_ID,
+      status: 'retracted',
+    }),
   ];
 }
 
@@ -382,11 +388,43 @@ describe('SPEC3-F2 GET /account/learnings', { timeout: 180_000 }, () => {
       'pending_review',
     ]);
 
-    const invalid = await fetch(
+    // CLEAN-LANE-FLIP Phase B (N2): `retracted` is an accepted EXPLICIT value.
+    // Owner-scoped: the other account's retracted row never appears.
+    const retracted = await fetch(
+      `${baseUrl}/account/learnings?status=retracted`,
+      { headers }
+    );
+    assert.equal(retracted.status, 200);
+    const retractedPayload = await retracted.json();
+    assert.equal(retractedPayload.total, 1);
+    assert.deepEqual(retractedPayload.learnings.map((row) => row.id), ['lrn_retracted']);
+    assert.ok(retractedPayload.learnings.every((row) => row.status === 'retracted'));
+    assert.ok(!retractedPayload.learnings.some((row) => row.id === 'lrn_other_retracted'),
+      'status=retracted is owner-scoped');
+    // It composes with the comma-list like any other value.
+    const mixed = await fetch(
       `${baseUrl}/account/learnings?status=approved,retracted`,
       { headers }
     );
+    assert.equal(mixed.status, 200);
+    assert.deepEqual((await mixed.json()).learnings.map((row) => row.id),
+      ['lrn_approved', 'lrn_legacy_approved', 'lrn_retracted']);
+    // The default set is unchanged (pinned above: no status → no retracted row).
+    // A value outside the allow-list is still refused with the updated string.
+    const invalid = await fetch(
+      `${baseUrl}/account/learnings?status=bogus`,
+      { headers }
+    );
     assert.equal(invalid.status, 400);
+    assert.deepEqual(await invalid.json(), {
+      error: 'status must be a comma-list containing only approved,rejected,pending_review,retracted',
+    });
+    const statusParam = OPENAPI.paths['/account/learnings'].get.parameters.find((p) => p.name === 'status');
+    assert.equal(statusParam.schema.default, 'approved,rejected,pending_review', 'default set unchanged');
+    assert.match(statusParam.description, /retracted/, 'openapi documents the explicit retracted value');
+    const statusSchema = OPENAPI.paths['/account/learnings'].get.responses['200']
+      .content['application/json'].schema.properties.learnings.items.properties.status;
+    assert.deepEqual(statusSchema.enum, ['approved', 'rejected', 'pending_review', 'retracted']);
 
     const privateOnly = await fetch(
       `${baseUrl}/account/learnings?visibility=private`,

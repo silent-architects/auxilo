@@ -8173,17 +8173,24 @@ app.post('/account/clean-lane/revoke', async (c) => {
 // authenticated caller's accountId.
 app.get('/account/learnings', requireSessionOrApiKey('read'), (c) => {
   const accountId = c.get('accountId');
-  const allowedStatuses = new Set(['approved', 'rejected', 'pending_review']);
+  // CLEAN-LANE-FLIP Phase B (N2): `retracted` is an accepted EXPLICIT status
+  // value so the standing-consent card can list the caller's own retracted
+  // rows. It is deliberately NOT in the default set — a request without
+  // `status` returns exactly what it returned before (approved, rejected,
+  // pending_review). Owner-scoped like every other status: the account
+  // filter below applies before the status filter.
+  const defaultStatuses = ['approved', 'rejected', 'pending_review'];
+  const allowedStatuses = new Set([...defaultStatuses, 'retracted']);
   const url = new URL(c.req.url, 'http://localhost');
   const rawStatus = url.searchParams.get('status');
   const rawVisibility = url.searchParams.get('visibility');
   const statuses = rawStatus === null
-    ? [...allowedStatuses]
+    ? defaultStatuses.slice()
     : [...new Set(rawStatus.split(',').map((value) => value.trim()).filter(Boolean))];
 
   if (statuses.length === 0 || statuses.some((status) => !allowedStatuses.has(status))) {
     return c.json({
-      error: 'status must be a comma-list containing only approved,rejected,pending_review',
+      error: 'status must be a comma-list containing only approved,rejected,pending_review,retracted',
     }, 400);
   }
   if (rawVisibility !== null && rawVisibility !== 'public' && rawVisibility !== 'private') {
