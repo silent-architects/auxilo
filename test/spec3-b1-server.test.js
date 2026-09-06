@@ -589,9 +589,17 @@ describe('openapi.json documents the B1 contract', () => {
     assert.ok(OPENAPI_SRC.includes('ready_to_publish'));
     assert.ok(OPENAPI_SRC.includes('submission_channel'));
   });
-  it('the DARK clean-lane routes are NOT advertised while dark', () => {
-    assert.ok(!OPENAPI_SRC.includes('/account/clean-lane'),
-      'dark consent routes must not be published in openapi until C1 activation');
+  // CLEAN-LANE-FLIP Phase B (2026-09-05): the C1 activation wave publishes the
+  // three consent routes. This inverts the former dark pin ("NOT advertised
+  // while dark") — the routes are advertised now, with the flag-gate note.
+  it('CLEAN-LANE-FLIP Phase B: the three clean-lane consent routes ARE advertised', () => {
+    const spec = JSON.parse(OPENAPI_SRC);
+    assert.ok(spec.paths['/account/clean-lane'] && spec.paths['/account/clean-lane'].get,
+      'GET /account/clean-lane must be published at activation');
+    assert.ok(spec.paths['/account/clean-lane/grant'] && spec.paths['/account/clean-lane/grant'].post,
+      'POST /account/clean-lane/grant must be published at activation');
+    assert.ok(spec.paths['/account/clean-lane/revoke'] && spec.paths['/account/clean-lane/revoke'].post,
+      'POST /account/clean-lane/revoke must be published at activation');
   });
 });
 

@@ -1187,6 +1187,26 @@
                     "contributor_wallet": {
                       "type": "string"
                     },
+                    "published_via": {
+                      "type": "string",
+                      "enum": [
+                        "clean_lane_standing_consent"
+                      ],
+                      "description": "Optional. Present only when this submission auto-published under the account's clean-lane standing consent (SPEC3-C1; status 'approved', submission_channel 'extraction')."
+                    },
+                    "standing_consent_version": {
+                      "type": "string",
+                      "description": "Optional. Present only on a clean-lane standing-consent publish: the consent version in force at publish time (clients persist it in the local extraction index)."
+                    },
+                    "retractable_until": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "Optional. Present only on a clean-lane standing-consent publish: the end of the 7-day retraction window (DELETE /learn/{id}?reason=retract, `auxilo review`, or the dashboard)."
+                    },
+                    "standing_consent_notice": {
+                      "type": "string",
+                      "description": "Optional. Present only on a clean-lane standing-consent publish: the in-band per-publish notice line for the human (consent version, retraction deadline, and how to retract)."
+                    },
                     "timestamp": {
                       "type": "string",
                       "format": "date-time"
@@ -4986,6 +5006,295 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/account/clean-lane": {
+      "get": {
+        "summary": "Clean-lane standing-consent status for this account",
+        "description": "SPEC3-C1: whether the authenticated account's standing consent to auto-publish qualifying extracted learnings is active, the CURRENT consent version (the only version POST /account/clean-lane/grant will bind to), and the last recorded consent action. The lane governs ONLY submission_channel 'extraction' items that pass every screen and the quality floor; while inactive those items hold with review_reason standing_consent_off (lane ready_to_publish). An enrolled account's FIRST public learning still holds for operator review (untrusted_account) until publication trust is stamped. Accepts a web session (Bearer) OR an account API key (read scope). Enrollment is dashboard/CLI-only and never agent-enrollable (no MCP tool exists for these routes). The verbatim-affirmation layer is EVIDENTIARY, not preventive: it prevents accidental enrollment and creates a hash-chained record of a deliberate act by the credential holder. Gated by EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED (set exactly 'true' to arm; CLEAN-LANE-FLIP Phase B, 2026-09-05): while the flag is unset the route answers the catch-all 404 before authentication.",
+        "operationId": "getCleanLaneStatus",
+        "tags": [
+          "Account"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Consent status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "account_id",
+                    "clean_lane_active",
+                    "consent_version_current"
+                  ],
+                  "properties": {
+                    "account_id": {
+                      "type": "string"
+                    },
+                    "clean_lane_active": {
+                      "type": "boolean",
+                      "description": "true only when the latest recorded action is a grant at the CURRENT consent version (a revoke or freeze deactivates; a grant at a superseded version is inactive)."
+                    },
+                    "consent_version_current": {
+                      "type": "string",
+                      "description": "The consent version the server currently accepts (e.g. 2026-07-19-clean-lane-a1). Send it back verbatim in POST /account/clean-lane/grant."
+                    },
+                    "last_action": {
+                      "type": "string",
+                      "enum": [
+                        "grant",
+                        "revoke",
+                        "freeze"
+                      ],
+                      "description": "Present when any consent row exists for the account."
+                    },
+                    "last_action_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "Present with last_action."
+                    },
+                    "consent_version_recorded": {
+                      "type": "string",
+                      "description": "Present with last_action: the consent version the last row was recorded under."
+                    },
+                    "min_auto_publish_quality": {
+                      "type": "integer",
+                      "minimum": 14,
+                      "maximum": 20,
+                      "description": "Present only when last_action is grant: the account's auto-publish threshold (quality total must be >= this; default 16)."
+                    },
+                    "tos_version_at_grant": {
+                      "type": "string",
+                      "description": "Present only when last_action is grant: the Terms version the account had accepted when it granted ('none' if it never accepted)."
+                    },
+                    "freeze_reason": {
+                      "type": "string",
+                      "nullable": true,
+                      "enum": [
+                        "retraction_rate",
+                        "notice_undeliverable"
+                      ],
+                      "description": "Present only when last_action is freeze. retraction_rate = more than 5% of the account's clean-lane publishes were retracted within 30 days; reactivation requires an explicit human re-grant."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "404": {
+            "description": "Feature not enabled (EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED unset) - the catch-all 404 body, returned before authentication."
+          }
+        }
+      }
+    },
+    "/account/clean-lane/grant": {
+      "post": {
+        "summary": "Grant clean-lane standing consent (strengthened versioned clickwrap)",
+        "description": "SPEC3-C1: records the account's standing consent to auto-publish qualifying extracted learnings (submission_channel 'extraction', every screen clean, quality total >= min_auto_publish_quality). The body MUST carry the CURRENT consent_version (from GET /account/clean-lane), agree:true, and the affirmation sentence transmitted VERBATIM from the enrollment surface (dashboard card or `auxilo clean-lane grant`); the server refuses a non-current version (409, code CONSENT_VERSION_MISMATCH), a missing/false agree (400, code AFFIRMATION_REQUIRED), and any affirmation that is not byte-exact (400, code AFFIRMATION_TEXT_MISMATCH - the error deliberately does not echo the expected sentence). The server stamps the timestamp, redacted IP, user-agent, accept path and tos_version_at_grant itself into a hash-chained consent record. Re-granting is how a frozen lane is reactivated. Each auto-publish under this consent stamps published_via / standing_consent_version / retractable_until (7 days) and returns a standing_consent_notice line; DELETE /learn/{id}?reason=retract is the remedy. Accepts a web session (Bearer) OR an account API key (contribute scope). Enrollment is dashboard/CLI-only and never agent-enrollable (no MCP tool exists for these routes). The verbatim-affirmation layer is EVIDENTIARY, not preventive: it prevents accidental enrollment and creates a hash-chained record of a deliberate act by the credential holder. Gated by EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED (set exactly 'true' to arm; CLEAN-LANE-FLIP Phase B, 2026-09-05): while the flag is unset the route answers the catch-all 404 before authentication.",
+        "operationId": "grantCleanLaneConsent",
+        "tags": [
+          "Account"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "consent_version",
+                  "agree",
+                  "affirmation"
+                ],
+                "properties": {
+                  "consent_version": {
+                    "type": "string",
+                    "description": "Must equal consent_version_current from GET /account/clean-lane. A stale/unknown version is refused with 409 CONSENT_VERSION_MISMATCH (the body carries current_consent_version)."
+                  },
+                  "agree": {
+                    "type": "boolean",
+                    "description": "Must be exactly true - an explicit, transmitted affirmation. Anything else is refused (400, AFFIRMATION_REQUIRED)."
+                  },
+                  "affirmation": {
+                    "type": "string",
+                    "description": "The human affirmation sentence exactly as displayed on the enrollment surface (the dashboard checkbox label / the sentence the CLI asks you to type), byte-for-byte. Any difference is refused (400, AFFIRMATION_TEXT_MISMATCH). The API does not publish the sentence; enrollment surfaces carry it."
+                  },
+                  "min_auto_publish_quality": {
+                    "type": "integer",
+                    "minimum": 14,
+                    "maximum": 20,
+                    "default": 16,
+                    "description": "Optional per-grant auto-publish threshold on the 20-point quality self-assessment total. Integer 14-20; default 16. Items under it hold with review_reason below_auto_publish_threshold."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Standing consent recorded (the lane is active)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "clean_lane_active": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "consent_version": {
+                      "type": "string"
+                    },
+                    "min_auto_publish_quality": {
+                      "type": "integer",
+                      "minimum": 14,
+                      "maximum": 20
+                    },
+                    "tos_version_at_grant": {
+                      "type": "string"
+                    },
+                    "granted_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body; agree is not exactly true (code AFFIRMATION_REQUIRED); the affirmation is not byte-exact (code AFFIRMATION_TEXT_MISMATCH); or min_auto_publish_quality is not an integer 14-20.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "AFFIRMATION_REQUIRED",
+                        "AFFIRMATION_TEXT_MISMATCH"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required, or the account no longer exists"
+          },
+          "403": {
+            "description": "Account suspended"
+          },
+          "404": {
+            "description": "Feature not enabled (EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED unset) - the catch-all 404 body, returned before authentication."
+          },
+          "409": {
+            "description": "consent_version is not the current clean-lane consent version - cannot bind to a stale/unknown version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "CONSENT_VERSION_MISMATCH"
+                      ]
+                    },
+                    "current_consent_version": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/account/clean-lane/revoke": {
+      "post": {
+        "summary": "Revoke clean-lane standing consent (one call, immediate)",
+        "description": "SPEC3-C1: records a revoke row. Immediate for future submissions - extraction-channel items hold with review_reason standing_consent_off from the next /learn onward; learnings already published under the consent keep their 7-day retraction remedy (DELETE /learn/{id}?reason=retract). No body required. Accepts a web session (Bearer) OR an account API key (contribute scope). Gated by EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED (set exactly 'true' to arm; CLEAN-LANE-FLIP Phase B, 2026-09-05): while the flag is unset the route answers the catch-all 404 before authentication.",
+        "operationId": "revokeCleanLaneConsent",
+        "tags": [
+          "Account"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Standing consent revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "clean_lane_active": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ]
+                    },
+                    "revoked_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "404": {
+            "description": "Feature not enabled (EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED unset) - the catch-all 404 body, returned before authentication."
           }
         }
       }

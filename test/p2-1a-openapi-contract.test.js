@@ -158,6 +158,67 @@ describe('B10: /extract/consent endpoint', () => {
 
 // ─── No stale /extract/review paths ─────────────────────────────────────────
 
+// ─── CLEAN-LANE-FLIP Phase B: the three consent routes + /learn 201 stamps ──
+
+describe('CLEAN-LANE-FLIP Phase B: /account/clean-lane* contract', () => {
+  it('GET /account/clean-lane exists with the status shape (active flag, current version, min quality, freeze reason)', () => {
+    const get = spec.paths['/account/clean-lane'] && spec.paths['/account/clean-lane'].get;
+    assert.ok(get, 'GET /account/clean-lane must exist');
+    const props = get.responses['200'].content['application/json'].schema.properties;
+    for (const k of ['account_id', 'clean_lane_active', 'consent_version_current', 'last_action',
+      'min_auto_publish_quality', 'tos_version_at_grant', 'freeze_reason']) {
+      assert.ok(props[k], `status response must document ${k}`);
+    }
+    assert.equal(props.clean_lane_active.type, 'boolean');
+    assert.deepEqual(props.last_action.enum, ['grant', 'revoke', 'freeze']);
+    assert.equal(props.min_auto_publish_quality.minimum, 14);
+    assert.equal(props.min_auto_publish_quality.maximum, 20);
+    assert.ok(get.responses['404'], 'the flag-dark 404 must be documented');
+    assert.match(get.description, /EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED/);
+    assert.match(get.description, /never agent-enrollable/i);
+    assert.match(get.description, /evidentiary/i);
+  });
+
+  it('POST /account/clean-lane/grant requires consent_version + agree + the verbatim affirmation; documents 400/409 codes and the 14-20 threshold (default 16)', () => {
+    const post = spec.paths['/account/clean-lane/grant'] && spec.paths['/account/clean-lane/grant'].post;
+    assert.ok(post, 'POST /account/clean-lane/grant must exist');
+    const schema = post.requestBody.content['application/json'].schema;
+    assert.deepEqual(schema.required, ['consent_version', 'agree', 'affirmation']);
+    assert.match(schema.properties.affirmation.description, /verbatim|byte-for-byte/i);
+    assert.equal(schema.properties.min_auto_publish_quality.minimum, 14);
+    assert.equal(schema.properties.min_auto_publish_quality.maximum, 20);
+    assert.equal(schema.properties.min_auto_publish_quality.default, 16);
+    const codes400 = post.responses['400'].content['application/json'].schema.properties.code.enum;
+    assert.deepEqual(codes400, ['AFFIRMATION_REQUIRED', 'AFFIRMATION_TEXT_MISMATCH']);
+    const codes409 = post.responses['409'].content['application/json'].schema.properties.code.enum;
+    assert.deepEqual(codes409, ['CONSENT_VERSION_MISMATCH']);
+    assert.ok(post.responses['404'], 'the flag-dark 404 must be documented');
+    // Gate-A F3 (fcf606b): the API must not teach callers the sentence.
+    assert.ok(!JSON.stringify(post).includes('I understand and choose auto-publish'),
+      'openapi must not carry the affirmation sentence itself');
+    // Both auth modes: session (bearer) or API key with contribute scope.
+    assert.deepEqual(post.security, [{ bearerAuth: [] }, { apiKeyAuth: [] }]);
+    assert.match(post.description, /contribute scope/);
+  });
+
+  it('POST /account/clean-lane/revoke exists; 200 returns clean_lane_active:false + revoked_at', () => {
+    const post = spec.paths['/account/clean-lane/revoke'] && spec.paths['/account/clean-lane/revoke'].post;
+    assert.ok(post, 'POST /account/clean-lane/revoke must exist');
+    const props = post.responses['200'].content['application/json'].schema.properties;
+    assert.deepEqual(props.clean_lane_active.enum, [false]);
+    assert.ok(props.revoked_at);
+    assert.ok(post.responses['404'], 'the flag-dark 404 must be documented');
+  });
+
+  it('POST /learn 201 documents the standing-consent stamps (WAVE-0905-RESIDUALS 4)', () => {
+    const props = spec.paths['/learn'].post.responses['201'].content['application/json'].schema.properties;
+    assert.deepEqual(props.published_via.enum, ['clean_lane_standing_consent']);
+    assert.ok(props.standing_consent_version);
+    assert.equal(props.retractable_until.format, 'date-time');
+    assert.ok(props.standing_consent_notice);
+  });
+});
+
 describe('B10: No stale /extract/review paths (A6 crosscheck)', () => {
   it('no /extract/review paths exist', () => {
     const reviewPaths = Object.keys(spec.paths).filter(p =>

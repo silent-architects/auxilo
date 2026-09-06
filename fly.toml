@@ -24,6 +24,11 @@ kill_timeout  = "30s"
   NODE_ENV  = "production"
   # LW-2: moderation is default-on in code; set explicitly (belt-and-suspenders).
   CONTENT_MODERATION_ENABLED = "true"
+  # CLEAN-LANE-FLIP Phase B (SPEC3-C1 activation, Tyler-directed 2026-09-05):
+  # arms the per-account clean-lane standing consent (dashboard/CLI opt-in).
+  # A config value, not a secret. Only 'true' (exact) arms it; anything else
+  # keeps the routes 404 and every extraction-channel item held.
+  EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED = "true"
   # LW-1: RESEND_API_KEY is a SECRET — `flyctl secrets set RESEND_API_KEY=...`,
   # never in this file. EMAIL_FROM defaults to 'Auxilo <login@auxilo.io>'.
   # EMAIL_FROM = "Auxilo <login@auxilo.io>"
