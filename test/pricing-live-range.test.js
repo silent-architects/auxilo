@@ -74,11 +74,11 @@ describe('structural: /pricing on the live-data path; EXAMPLE column gone from t
       '/pricing must still fall back to serveStatic on a failed live render');
   });
 
-  it('public/pricing.html carries id="lc-price-range" under the gated label, with the page\'s own static bound as fallback', () => {
+  it('public/pricing.html carries id="lc-price-range" under the gated label, with no static bound literal (AD strings packet 8 rev 2: the fail path hides the whole tile instead of a fabricated fallback)', () => {
     const m = PRICING_HTML.match(/<p class="econ-value" id="lc-price-range">([^<]*)<\/p>/);
     assert.ok(m, 'the observed-range tile must carry id="lc-price-range" for the SSR regex to fill');
-    assert.equal(m[1], '$0.05 to $50.00',
-      'the static fallback must be the bound already shipped elsewhere on this page, never a fabricated number');
+    assert.equal(m[1], '',
+      'the literal fallback is empty; the fail path hides the whole tile server-side rather than shipping a fabricated number');
     assert.ok(!/<p class="econ-value">\$50\.00<\/p>/.test(PRICING_HTML),
       'the old static $50.00 / Max Price tile must be gone — it must not coexist with the live element');
     assert.ok(!PRICING_HTML.includes('Max Price'),
@@ -94,13 +94,15 @@ describe('structural: /pricing on the live-data path; EXAMPLE column gone from t
       'the label must sit directly on the tile that carries the live-filled value');
   });
 
-  it('the "$0.05 to $50.00" fallback matches renderLiveCatalogStats\' own hardcoded default', () => {
+  it('renderLiveCatalogStats\' default range is empty, and the fail path strips the whole LC-PRICE-RANGE-CELL block', () => {
     const rlcs = SERVER_SRC.slice(
       SERVER_SRC.indexOf('function renderLiveCatalogStats'),
       SERVER_SRC.indexOf('function serveHtmlWithLiveData')
     );
-    assert.ok(rlcs.includes("let range = '$0.05 to $50.00'"),
-      'renderLiveCatalogStats default range must still be $0.05 to $50.00 (the value this test pins as the page\'s static fallback)');
+    assert.ok(rlcs.includes("let range = ''"),
+      'renderLiveCatalogStats default range must be empty (AD strings packet 8 rev 2: no fabricated fallback band)');
+    assert.ok(rlcs.includes('LC-PRICE-RANGE-CELL'),
+      'the fail path must strip the whole marker-wrapped cell/tile when range is empty');
   });
 
   it('the Value Tiers EXAMPLE column is gone: no <th>Example</th>, no example-text cells, tier rows kept byte-identical otherwise', () => {
