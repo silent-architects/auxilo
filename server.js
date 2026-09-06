@@ -8686,16 +8686,7 @@ app.get('/knowledge/stats', (c) => {
   // instead of the ~dozens actually servable — a 10x-inflated headline.
   const visibleLearnings = visibleCatalog();
 
-  const truth = computeStatsTruth({
-    visibleRows: visibleLearnings,
-    earnings,
-    unlockEventsFile: UNLOCK_EVENTS_FILE,
-  });
-  if (!truth.ledger_readable && !statsLedgerUnreadableLogged) {
-    statsLedgerUnreadableLogged = true;
-    console.error('[STATS-TRUTH] unlock ledger unreadable — /knowledge/stats omits total_unlocks ' +
-      'and top_learnings[].unlocks until it is readable:', truth.ledger_error);
-  }
+  const truth = catalogStatsTruth(visibleLearnings); // the ONE derivation (shared with /earnings SSR)
   const ledgerUnlocks = truth.unlocks; // null ⇒ unreadable ⇒ omit
 
   return c.json({
@@ -8718,6 +8709,29 @@ app.get('/knowledge/stats', (c) => {
     timestamp: new Date().toISOString()
   });
 });
+
+// STATS-TRUTH shared derivation — the ONE place a public catalog number is
+// derived from the ledgers. GET /knowledge/stats and the GET /earnings
+// server-render both call this with the same visibleCatalog() input, so the
+// unlock count on the wire and the unlock count in the HTML cannot fork
+// (before this helper, /earnings summed the retired quality.unlocks counter
+// and served 6 where /knowledge/stats served the ledger's 0). Callers treat
+// `truth.unlocks === null` as UNREADABLE: stats omits the fields, /earnings
+// keeps the static "…" cell. Logged once per process, on the seat.
+function catalogStatsTruth(visibleLearnings) {
+  const truth = computeStatsTruth({
+    visibleRows: visibleLearnings,
+    earnings,
+    unlockEventsFile: UNLOCK_EVENTS_FILE,
+  });
+  if (!truth.ledger_readable && !statsLedgerUnreadableLogged) {
+    statsLedgerUnreadableLogged = true;
+    console.error('[STATS-TRUTH] unlock ledger unreadable — /knowledge/stats omits total_unlocks ' +
+      'and top_learnings[].unlocks (and /earnings keeps its static unlock cell) until it is readable:',
+      truth.ledger_error);
+  }
+  return truth;
+}
 
 // Unlock full learning (PAID for buyers — dynamic price set by contributor;
 // FREE for the learning's own contributor, DR-8 owner short-circuit below)
@@ -11967,20 +11981,28 @@ function serveHtmlWithLiveData(c, file) {
 app.get('/earnings', (c) => {
   // Server-render the three live-ledger numbers into the raw HTML so non-JS
   // crawlers see real values (not em-dashes) on the page that says "the numbers
-  // below are live". Uses the SAME visibility predicate as GET /knowledge/stats.
-  // The client-side fetch('/knowledge/stats') stays as a freshness upgrade.
+  // below are live". Uses the SAME visibility predicate as GET /knowledge/stats
+  // AND the same derivation (catalogStatsTruth): the unlock count comes from
+  // the per-unlock ledger, never the retired per-learning counter, so this
+  // cell and /knowledge/stats total_unlocks are one number. When the ledger is
+  // unreadable the cell keeps the static "…" (no digit), mirroring the stats
+  // handler omitting the field. The client-side fetch('/knowledge/stats')
+  // stays as a freshness upgrade.
   try {
     const filePath = path.join(PUBLIC_DIR, 'earnings.html');
     if (fs.existsSync(filePath)) {
       let html = fs.readFileSync(filePath, 'utf8');
       const visibleLearnings = visibleCatalog(); // Wave 2b: shared predicate
+      const truth = catalogStatsTruth(visibleLearnings);
       const llLearnings  = visibleLearnings.length.toLocaleString('en-US');
-      const llUnlocks    = visibleLearnings.reduce((s, l) => s + (l.quality?.unlocks || 0), 0).toLocaleString('en-US');
+      const llUnlocks    = truth.unlocks ? truth.unlocks.total.toLocaleString('en-US') : null; // null ⇒ keep "…"
       const llCategories = new Set(visibleLearnings.map(l => l.category)).size.toLocaleString('en-US');
       html = html
         .replace(/(id="ll-learnings"[^>]*>)[^<]*</,  `$1${llLearnings}<`)
-        .replace(/(id="ll-unlocks"[^>]*>)[^<]*</,    `$1${llUnlocks}<`)
         .replace(/(id="ll-categories"[^>]*>)[^<]*</, `$1${llCategories}<`);
+      if (llUnlocks !== null) {
+        html = html.replace(/(id="ll-unlocks"[^>]*>)[^<]*</, `$1${llUnlocks}<`);
+      }
       c.header('Content-Type', 'text/html; charset=utf-8');
       c.header('Cache-Control', 'public, max-age=3600');
       // Quiet phase: no-op while ANALYTICS_DOMAIN is unset (returns html as is).
