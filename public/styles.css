@@ -71,7 +71,24 @@
      has its own hardcoded clamp(30px,4vw,52px) in earnings.html, a file
      outside this builder's ownership — not reachable from here. */
   --h2-cta: clamp(28px, 3.5vw, 42px);
-  --hero-pad-mobile: 100px 16px 60px;
+  /* MOBILE-HEADER-OFFSET (PUNCH-LIST, SITE-PM v102 find): #main-nav is
+     `position: fixed` at every width (see the Navigation section below), so
+     the first section on every page must reserve at least the header's
+     rendered height or its content renders underneath it. --header-h is the
+     single source of truth for that clearance, derived from THIS sheet's own
+     declared box values for #main-nav's children rather than a bare guess:
+     .nav-row's 14px+14px vertical padding + its tallest child's 44px
+     min-height (.nav-logo / .nav-cta) = 72px, + .nav-strip's explicit 26px
+     height = 98px, + #main-nav's 1px border-bottom = 99px declared-box sum.
+     Live Chrome at 375px (the SITE-PM MOBILE-HEADER-OFFSET measurement)
+     rendered the same header at 113.8px -- 14.8px taller than that sum, from
+     real font/line-height metrics the min-height floor doesn't capture. The
+     +31px on top of the 99px sum covers that 14.8px gap, the 8px minimum
+     clearance every consumer below must hold (h1.top >= header.bottom + 8),
+     and headroom for other engines/OSes, so --header-h clears the header on
+     any browser, not just the one that produced the 99px estimate. */
+  --header-h: calc(44px + 28px + 26px + 1px + 31px);
+  --hero-pad-mobile: var(--header-h) 16px 60px;
 
   /* Wave C.3b: one label-size token for the three inline drawings' SVG text
      (index hero exchange, how-it-works approval fork, for-agents demand
@@ -1480,6 +1497,23 @@ footer {
   .auth-options { grid-template-columns: 1fr; }
 
   .footer-inner { flex-direction: column; align-items: center; text-align: center; }
+
+  /* MOBILE-HEADER-OFFSET: index.html's hero is the one page whose top
+     offset lives in this shared sheet unconditionally (`.hero-content`
+     above, `padding-top: 100px`, no per-page inline override -- confirmed
+     by grepping every tracked page's own <style> block for a hero padding
+     override; index.html has none). #hero centers its content vertically
+     within 100vh, which is enough slack to keep the header clear on tall
+     desktop viewports at the old 100px, but not on an 812px-tall phone
+     (the v102 defect this fix closes). --header-h clears it at any height
+     this breakpoint covers, using the same source-of-truth token every
+     other consumer below uses. */
+  .hero-content { padding-top: var(--header-h); }
+
+  /* Anchor jumps (in-page # links) must land below the fixed header too --
+     same token, same breakpoint the header itself uses for the
+     hamburger/nav-links switch (see the Navigation section above). */
+  html { scroll-padding-top: var(--header-h); }
 }
 
 @media (max-width: 600px) {

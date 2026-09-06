@@ -87,9 +87,25 @@ const NAV_LABELS = ['For Builders', 'For Agents', 'How It Works', 'Works With', 
 
 // Enumerate every tracked public HTML page from git itself (not a hand-typed
 // list that can drift) — the NAV-WAVE build spec's own instruction.
+// google<hex>.html (e.g. public/google319f7b1ffb42b07d.html, cc04063) is a
+// Google Search Console verification token: a bare one-line file with no
+// <html>, no nav, no shared-component markup at all — it is not a "page"
+// this suite's shared-nav invariant applies to. Excluded by an explicit,
+// documented name pattern (not a one-off hardcoded skip) so any future
+// verification-token file (Bing, etc.) added the same way is excluded the
+// same way. Real pages are never named this way, so the pattern can't
+// accidentally swallow one. Mirrors test/mobile-header-offset.test.js's
+// identical rule (that suite defines its own copy — no shared helper module
+// exists between the two files).
+const GSC_VERIFICATION_FILE_RE = /^google[0-9a-f]+\.html$/;
+
 function gitTrackedPublicHtmlFiles() {
   const out = execFileSync('git', ['ls-files', 'public/'], { cwd: REPO, encoding: 'utf8' });
-  return out.split('\n').filter((f) => f.endsWith('.html')).sort();
+  return out
+    .split('\n')
+    .filter((f) => f.endsWith('.html'))
+    .filter((f) => !GSC_VERIFICATION_FILE_RE.test(path.basename(f)))
+    .sort();
 }
 
 const ALL_PUBLIC_HTML = gitTrackedPublicHtmlFiles();
