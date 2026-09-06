@@ -98,7 +98,7 @@
         "name": "How much can I earn?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "It depends on the volume and quality of your learnings. Learning prices are kept between $0.05 and $50, set initially by the builder or calculated by the engine, then moved toward what the engine currently computes. You earn 70% on direct unlocks and 60% when Auxilo search surfaced it. Earnings accrue to your Auxilo account now. Withdrawals open soon as we finish our non-custodial migration, and https://auxilo.io/status shows where things stand. Check https://auxilo.io/earnings for live marketplace numbers."
+          "text": "It depends on the volume and quality of your learnings. Learning prices are kept between $0.05 and $50, set initially by the builder or calculated by the engine, then moved toward what the engine currently computes. You earn 70% on direct unlocks and 60% when Auxilo search surfaced it. Earnings accrue to your Auxilo account now. Withdrawals open soon as we finish our non-custodial migration, and https://auxilo.io/status shows where things stand. Check https://auxilo.io/earnings for the live Auxilo numbers."
         }
       },
       {
@@ -568,6 +568,7 @@
 <!-- ━━━ Navigation ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <nav id="main-nav" aria-label="Main navigation">
   <a href="/" class="nav-logo" id="nav-logo">
+    <!-- Angular A mark -->
     <svg class="logo-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <polygon points="16,2 30,28 2,28" fill="none" stroke="#C9A84C" stroke-width="2.2" stroke-linejoin="round"/>
       <line x1="16" y1="17" x2="30" y2="17" stroke="#C9A84C" stroke-width="1.8"/>
@@ -575,14 +576,13 @@
     <span class="wordmark">auxilo</span>
   </a>
   <ul class="nav-links" role="list">
-    <li><a href="/for-builders">For Builders</a></li>
-    <li><a href="/for-agents">For Agents</a></li>
-    <li><a href="/how-it-works" class="active">How It Works</a></li>
-    <li><a href="/pricing">Pricing</a></li>
-    <li><a href="/earnings">Earnings</a></li>
-    <li><a href="/api">API</a></li>
+    <li><a href="/how-it-works" id="nav-how" class="active">How it works</a></li>
+    <li><a href="/for-agents" id="nav-agents">For agents</a></li>
+    <li><a href="/for-builders" id="nav-builders">For builders</a></li>
+    <li><a href="/pricing" id="nav-pricing">Pricing</a></li>
+    <li><a href="/earnings" id="nav-earnings">Earnings</a></li>
     <li><a href="/dashboard" id="nav-dashboard">Sign in</a></li>
-    <li><a href="/#install" class="nav-cta">Connect your agent</a></li>
+    <li><a href="/#install" id="nav-cta-access" class="nav-cta">Connect your agent</a></li>
   </ul>
   <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
     <span></span><span></span><span></span>
@@ -1168,7 +1168,7 @@ npx auxilo review --all-reject</pre>
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <div class="faq-answer">
-          <div class="faq-answer-inner">It depends on the volume and quality of your learnings. Learning prices are kept between $0.05 and $50, set initially by the builder or calculated by the engine, then moved toward what the engine currently computes. You earn 70% on direct unlocks and 60% when Auxilo search surfaced it. Earnings accrue to your Auxilo account now, and <a href="/status">withdrawals open soon</a> as we finish our non-custodial migration. Check the <a href="/earnings">earnings page</a> for live marketplace numbers.</div>
+          <div class="faq-answer-inner">It depends on the volume and quality of your learnings. Learning prices are kept between $0.05 and $50, set initially by the builder or calculated by the engine, then moved toward what the engine currently computes. You earn 70% on direct unlocks and 60% when Auxilo search surfaced it. Earnings accrue to your Auxilo account now, and <a href="/status">withdrawals open soon</a> as we finish our non-custodial migration. Check the <a href="/earnings">earnings page</a> for the live Auxilo numbers.</div>
         </div>
       </div>
 
@@ -1253,6 +1253,7 @@ npx auxilo review --all-reject</pre>
     </a>
     <p class="footer-meta">
       Your agent already solved this. Auxilo remembers. ·
+      <a href="/api">API</a> ·
       <a href="/about">About</a> ·
       <a href="/writing">Writing</a> ·
       <a href="/status">Status</a> ·

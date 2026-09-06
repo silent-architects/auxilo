@@ -64,8 +64,7 @@ const ROOT = path.join(__dirname, '..');
 const CSS_PATH = path.join(ROOT, 'public', 'styles.css');
 const PUBLIC_DIR = path.join(ROOT, 'public');
 
-// The pages documented as sharing #main-nav. /status.html has its own
-// .status-nav/#status-nav and is intentionally excluded.
+// The pages documented as sharing #main-nav.
 // Wave C.3 (SITE-PM sheet 7 / build sheet C.3 item 3): the essay
 // (writing-agents-message-board.html) gained the shared #main-nav +
 // hamburger, so it joins the enumerated set here too.
@@ -77,6 +76,10 @@ const NAV_PAGES = [
     // legacy .status-nav (zero height at 375, no hamburger) onto the shared
     // #main-nav, same as the rest of this list.
     'about.html', 'writing/index.html',
+    // NAV-WAVE (2026-09-06): status.html also carries the shared #main-nav
+    // component -- confirmed structurally, so it belongs in this enumerated
+    // set alongside the rest rather than being carved out.
+    'status.html',
 ];
 
 // All 8 shared-nav pages are driven through the browser for the dynamic
@@ -84,14 +87,17 @@ const NAV_PAGES = [
 // PUNCH-LIST §31 DR-1).
 const DYNAMIC_PAGES = NAV_PAGES;
 
-// Expected .nav-links link count per dynamic page. The 7 marketing pages
-// share the full 8-link nav; dashboard.html is a distinct authenticated
-// shell with a shorter 5-link nav (no How It Works / Earnings, a Dashboard
-// CTA in place of Get Started) -- confirmed against the real DOM, not a
+// Expected .nav-links link count per dynamic page. NAV-WAVE (2026-09-06):
+// the shared nav carries 5 labels (How it works / For agents / For builders
+// / Pricing / Earnings -- API removed to the footer) + the Sign in/Dashboard
+// auth slot + the "Connect your agent" CTA = 7 links on the public marketing
+// pages; dashboard.html is a distinct authenticated shell that drops the
+// CTA (already connected) and shows "Dashboard" (active) in the auth slot
+// instead of "Sign in" = 6 links -- confirmed against the real DOM, not a
 // guess.
-const EXPECTED_LINK_COUNT = { 'dashboard.html': 5 };
+const EXPECTED_LINK_COUNT = { 'dashboard.html': 6 };
 function expectedLinkCount(page) {
-    return EXPECTED_LINK_COUNT[page] || 8;
+    return EXPECTED_LINK_COUNT[page] || 7;
 }
 
 let passed = 0;

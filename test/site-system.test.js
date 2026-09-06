@@ -150,8 +150,9 @@ describe('SITE-SYSTEM item 2: the footer link set is byte-identical across every
     }
   });
 
-  it('the footer set is exactly packet 3 rev 2\'s links (the trust-page slot omitted: no /how-submissions-work route exists yet)', () => {
+  it('the footer set is exactly packet 3 rev 2\'s links plus NAV-WAVE\'s /api addition (the trust-page slot omitted: no /how-submissions-work route exists yet)', () => {
     const expected = [
+      '/api::API',
       '/about::About',
       '/writing::Writing',
       '/status::Status',

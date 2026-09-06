@@ -171,10 +171,13 @@ describe('Wave E fix F3: how-it-works.html "your API key" label stays inside its
 // ═══════════════════════════════════════════════════════════════════════
 
 describe('Wave E fix F4: #nav-<page>-page !important overrides removed; class="active" carries the accent', () => {
+  // NAV-WAVE (2026-09-06): the shared #main-nav component standardized
+  // every link id (no more per-page "-page" suffix) and API left the top
+  // nav entirely (footer-only now), so api.html no longer has any active
+  // link to check here -- that case is dropped rather than renamed.
   const CASES = [
-    { file: 'api.html', id: 'nav-api-page' },
-    { file: 'for-agents.html', id: 'nav-agents-page' },
-    { file: 'for-builders.html', id: 'nav-builders-page' },
+    { file: 'for-agents.html', id: 'nav-agents' },
+    { file: 'for-builders.html', id: 'nav-builders' },
   ];
 
   for (const { file, id } of CASES) {
