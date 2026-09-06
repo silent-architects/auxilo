@@ -860,6 +860,198 @@ async function cmdReview(flags) {
   console.log(`\nReview complete: approved ${approved}, kept private ${keptPrivate}, rejected ${rejected}, skipped ${skipped} of ${ordered.length}.`);
 }
 
+// ─── auxilo clean-lane (SPEC3-C1 standing consent; CLEAN-LANE-FLIP Phase A) ──
+//
+// GOV-3 (ratified language, Gate-A 2026-09-05): `grant` runs ONLY on a TTY and
+// requires the human to TYPE the affirmation sentence verbatim — no --yes, no
+// flag. The TTY gate + verbatim affirmation prevent ACCIDENTAL enrollment and
+// create a hash-chained record of a DELIBERATE act by the credential holder.
+// That record is EVIDENTIARY, not preventive: it is not a defense against a
+// holder of the account's contribute-scoped key, who can reach the same routes
+// directly. `status` / `revoke` are non-interactive.
+// While the server flag is off the routes answer the catch-all 404 and every
+// subcommand prints "not yet available" (exit 0).
+//
+// The sentence below MIRRORS lib/clean-lane.js CLEAN_LANE_AFFIRMATION. It is
+// a literal here only because lib/clean-lane.js is server-side and not in the
+// published package's files[]; test/clean-lane-phase-a.test.js pins the two
+// byte-equal. The consent VERSION is never a client literal — it always comes
+// from GET /account/clean-lane (consent_version_current).
+const CLEAN_LANE_AFFIRMATION = 'I understand and choose auto-publish for qualifying extracted learnings.';
+const CLEAN_LANE_UNAVAILABLE = 'Auto-publish for clean learnings is not yet available on this account.';
+const CLEAN_LANE_MIN_QUALITY_MIN = 14;
+const CLEAN_LANE_MIN_QUALITY_MAX = 20;
+const CLEAN_LANE_MIN_QUALITY_DEFAULT = 16;
+
+const CLEAN_LANE_EXPLAINER = `
+Auto-publish clean learnings
+
+When this is on, a learning is published without waiting for your review
+only when all three hold: it was extracted by your own model, every server
+screen came back clean, and its quality score is at or above the threshold
+you set.
+
+What is never auto-published: your first public learning (it waits for
+operator review), anything a screen flags, anything below your threshold,
+and anything after an auto-freeze. Every auto-published learning can be
+retracted for 7 days (\`npx auxilo review\` or your dashboard).
+`;
+
+async function cleanLaneRequest({ apiKey, baseUrl, method, route, body }) {
+  const url = `${String(baseUrl).replace(/\/+$/, '')}${route}`;
+  const headers = { 'X-API-Key': apiKey };
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const res = await fetch(url, {
+    method,
+    headers,
+    ...(body !== undefined && { body: JSON.stringify(body) }),
+  });
+  let data = {};
+  try { data = await res.json(); } catch { /* non-JSON body */ }
+  return { status: res.status, ok: res.ok, data: data || {} };
+}
+
+function printCleanLaneStatus(data) {
+  const active = data.clean_lane_active === true;
+  console.log(`Auto-publish clean learnings: ${active ? 'ON' : 'OFF'}`);
+  if (active) {
+    console.log(`  since:            ${data.last_action_at || 'unknown'}`);
+    console.log(`  quality at least: ${data.min_auto_publish_quality}`);
+    console.log(`  consent version:  ${data.consent_version_recorded || data.consent_version_current}`);
+  } else if (data.last_action === 'freeze') {
+    console.log(`  FROZEN: ${data.freeze_reason || 'unknown reason'} (${data.last_action_at || 'unknown time'})`);
+    console.log('  Nothing auto-publishes until you grant consent again: npx auxilo clean-lane grant');
+  } else if (data.last_action === 'revoke') {
+    console.log(`  revoked at: ${data.last_action_at || 'unknown'}`);
+  } else if (data.last_action === 'grant') {
+    console.log(`  a grant exists under consent version ${data.consent_version_recorded} but the current version is ${data.consent_version_current}; re-grant to re-activate.`);
+  }
+  console.log(`  current consent version: ${data.consent_version_current}`);
+}
+
+async function cmdCleanLane(flags) {
+  const sub = process.argv[3];
+  if (!['status', 'grant', 'revoke'].includes(sub)) {
+    if (sub) console.error(`Unknown clean-lane subcommand: ${sub}`);
+    usage('clean-lane');
+    process.exit(sub ? 1 : 0);
+  }
+
+  // The TTY gate runs BEFORE credentials and BEFORE any network call: a
+  // piped or scripted stdin can never reach the grant.
+  if (sub === 'grant' && !process.stdin.isTTY) {
+    console.error('auxilo clean-lane grant must be run by a person in an interactive terminal. It does not accept piped input, and there is no flag that skips typing the consent sentence.');
+    process.exit(1);
+  }
+
+  const creds = installer.readCredentials(HOME);
+  if (!creds || !creds.api_key) {
+    console.error('Not logged in. Run `npx auxilo setup` first.');
+    process.exit(1);
+  }
+  const baseUrl = resolveBaseUrl(flags);
+  const apiKey = creds.api_key;
+
+  let status;
+  try {
+    status = await cleanLaneRequest({ apiKey, baseUrl, method: 'GET', route: '/account/clean-lane' });
+  } catch (err) {
+    console.error(`Could not reach the server: ${err.message}`);
+    process.exit(1);
+  }
+  if (status.status === 404) {
+    console.log(CLEAN_LANE_UNAVAILABLE);
+    return;
+  }
+  if (!status.ok) {
+    console.error(`Could not read auto-publish status (HTTP ${status.status}): ${status.data.error || 'unknown error'}`);
+    process.exit(1);
+  }
+
+  if (sub === 'status') {
+    printCleanLaneStatus(status.data);
+    return;
+  }
+
+  if (sub === 'revoke') {
+    let res;
+    try {
+      res = await cleanLaneRequest({ apiKey, baseUrl, method: 'POST', route: '/account/clean-lane/revoke', body: {} });
+    } catch (err) {
+      console.error(`Could not reach the server: ${err.message}`);
+      process.exit(1);
+    }
+    if (res.status === 404) { console.log(CLEAN_LANE_UNAVAILABLE); return; }
+    if (!res.ok) {
+      console.error(`Revoke failed (HTTP ${res.status}): ${res.data.error || 'unknown error'}`);
+      process.exit(1);
+    }
+    console.log(res.data.message || 'Auto-publish is now OFF.');
+    return;
+  }
+
+  // ── grant: explainer → threshold → the sentence, typed verbatim ──────────
+  console.log(CLEAN_LANE_EXPLAINER);
+  if (status.data.clean_lane_active === true) {
+    console.log(`Auto-publish is already ON (quality at least ${status.data.min_auto_publish_quality}, since ${status.data.last_action_at}). Granting again records a fresh consent row with the threshold you choose now.\n`);
+  } else if (status.data.last_action === 'freeze') {
+    console.log(`Auto-publish is FROZEN: ${status.data.freeze_reason || 'unknown reason'}. Granting again re-activates it.\n`);
+  }
+
+  let minQuality = CLEAN_LANE_MIN_QUALITY_DEFAULT;
+  for (;;) {
+    const answer = await ask(`Publish only when the quality score is at least [${CLEAN_LANE_MIN_QUALITY_MIN}-${CLEAN_LANE_MIN_QUALITY_MAX}, default ${CLEAN_LANE_MIN_QUALITY_DEFAULT}]: `);
+    if (answer === '') break;
+    const n = parseInt(answer, 10);
+    if (Number.isInteger(n) && String(n) === answer && n >= CLEAN_LANE_MIN_QUALITY_MIN && n <= CLEAN_LANE_MIN_QUALITY_MAX) {
+      minQuality = n;
+      break;
+    }
+    if (readlineEnded) { console.log('Aborted. Nothing changed.'); return; }
+    console.log(`Enter a whole number from ${CLEAN_LANE_MIN_QUALITY_MIN} to ${CLEAN_LANE_MIN_QUALITY_MAX}.`);
+  }
+
+  console.log('\nTo turn on auto-publish, type this sentence exactly as written, then press Enter:');
+  console.log(`\n  ${CLEAN_LANE_AFFIRMATION}\n`);
+  const typed = await ask('> ');
+  if (typed !== CLEAN_LANE_AFFIRMATION) {
+    console.log('The sentence did not match. Aborted. Nothing changed.');
+    return;
+  }
+
+  let res;
+  try {
+    res = await cleanLaneRequest({
+      apiKey,
+      baseUrl,
+      method: 'POST',
+      route: '/account/clean-lane/grant',
+      body: {
+        consent_version: status.data.consent_version_current,
+        agree: true,
+        affirmation: typed, // what the human typed, transmitted verbatim
+        min_auto_publish_quality: minQuality,
+      },
+    });
+  } catch (err) {
+    console.error(`Could not reach the server: ${err.message}`);
+    process.exit(1);
+  }
+  if (res.status === 404) { console.log(CLEAN_LANE_UNAVAILABLE); return; }
+  if (res.status === 409) {
+    console.error('The consent version changed on the server while you were reading. Run `npx auxilo clean-lane grant` again.');
+    process.exit(1);
+  }
+  if (!res.ok) {
+    console.error(`Grant failed (HTTP ${res.status}): ${res.data.error || 'unknown error'}`);
+    process.exit(1);
+  }
+  console.log(`\n${res.data.message || 'Auto-publish is now ON.'}`);
+  console.log(`  quality at least: ${res.data.min_auto_publish_quality}`);
+  console.log(`  consent version:  ${res.data.consent_version}`);
+  console.log('  Turn it off any time: npx auxilo clean-lane revoke');
+}
+
 // ─── Entry point ────────────────────────────────────────────────────────────
 
 function usage(command) {
@@ -903,6 +1095,18 @@ them private or sanitize-promote a corrected replacement.`,
     disable: `Usage: auxilo disable [--base-url <url>]
 
 Disable background extraction locally and optionally revoke server consent.`,
+    'clean-lane': `Usage: auxilo clean-lane <status|grant|revoke> [--base-url <url>]
+
+Auto-publish clean learnings (standing consent). While the feature is not yet
+available on your account every subcommand says so and changes nothing.
+
+  status   Show whether auto-publish is on, the quality threshold, and the
+           consent version.
+  grant    Turn it on. Interactive ONLY: you choose the threshold and then
+           TYPE the consent sentence exactly. No flag or piped input can do
+           this for you.
+  revoke   Turn it off (one step, no confirmation). Already-published
+           learnings keep their 7-day retraction window.`,
   };
   if (command && blocks[command]) {
     console.log(`\n${blocks[command]}\n`);
@@ -951,6 +1155,9 @@ Commands:
             skips that step.
   disable   Turn off background extraction (local kill-switch; optional
             server-side consent revoke).
+  clean-lane <status|grant|revoke>
+            Auto-publish clean learnings (standing consent). grant is
+            interactive only: you type the consent sentence yourself.
 
 Docs: https://auxilo.io · API: ${installer.DEFAULT_BASE_URL}
 `);
@@ -959,7 +1166,7 @@ Docs: https://auxilo.io · API: ${installer.DEFAULT_BASE_URL}
 async function main() {
   const cmd = process.argv[2];
   const subcommandHelp = ['help', '--help', '-h'].includes(process.argv[3]);
-  if (['setup', 'init', 'status', 'review', 'disable'].includes(cmd) && subcommandHelp) {
+  if (['setup', 'init', 'status', 'review', 'disable', 'clean-lane'].includes(cmd) && subcommandHelp) {
     return usage(cmd);
   }
   const flags = parseFlags(process.argv);
@@ -969,6 +1176,7 @@ async function main() {
     case 'status': return cmdStatus(flags);
     case 'review': return cmdReview(flags);
     case 'disable': return cmdDisable(flags);
+    case 'clean-lane': return cmdCleanLane(flags);
     case 'help': case '--help': case '-h': case undefined: return usage();
     default:
       console.error(`Unknown command: ${cmd}`);
@@ -1002,4 +1210,6 @@ module.exports = {
   printSummaryTable,
   usage,
   run,
+  CLEAN_LANE_AFFIRMATION,
+  CLEAN_LANE_UNAVAILABLE,
 };

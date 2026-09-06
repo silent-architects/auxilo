@@ -24,6 +24,7 @@ const {
   classifySensitivityLLM,
   combineSensitivity,
   isLlmSensitivityEnabled,
+  resolveModelConfig, // SCREEN-MODEL-CONFIG: shared model_config.json resolver (dormant extraction pins)
 } = require('./lib/content-sensitivity-llm.js'); // LW-16 content-sensitivity gate (LLM semantic layer)
 const {
   findNearDuplicate,
@@ -2898,6 +2899,9 @@ async function runOpenClawDaemon() {
   console.log('[openclaw-daemon] Starting run...');
   try {
     const llmCall = async (prompt) => {
+      // Gate-A 2026-09-05: surface a missing extraction block (resolver fell
+      // through to the hardcoded default) — the model choice is unchanged.
+      if (resolveModelConfig('extraction').source === 'default') console.warn('[model-config] extraction block missing; using default model');
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -2906,7 +2910,8 @@ async function runOpenClawDaemon() {
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          // SCREEN-MODEL-CONFIG / MODEL-PIN (b-2): config read, no dated pin.
+          model: resolveModelConfig('extraction').model,
           max_tokens: 4096,
           messages: [{ role: 'user', content: prompt }],
         }),
@@ -2937,7 +2942,9 @@ async function runOpenClawDaemon() {
   }
 }
 
-if (process.env.ANTHROPIC_API_KEY) {
+// SCREEN-MODEL-CONFIG (ii): gate the timer on the extraction flag, not on the
+// deployed API-key secret — prod no longer schedules an hourly no-op tick.
+if (SERVER_SIDE_EXTRACTION_ENABLED && process.env.ANTHROPIC_API_KEY) {
   runOpenClawDaemon().catch(err => console.error('[openclaw-daemon] Startup error:', err.message));
   setInterval(() => runOpenClawDaemon().catch(err => console.error('[openclaw-daemon] Interval error:', err.message)), OPENCLAW_DAEMON_INTERVAL_MS);
 }
@@ -6755,6 +6762,9 @@ app.post('/learn', async (c) => {
     // wave; this response line is the in-band half.)
     ...(cleanLanePublish && {
       published_via: PUBLISHED_VIA_CLEAN_LANE,
+      // Gate-A 2026-09-05: the version rides the response too, so the client's
+      // local index (lib/extraction-index.js localIndexRow) persists it.
+      standing_consent_version: cleanLanePublish.consent_version,
       retractable_until: learning.retractable_until,
       standing_consent_notice: `Published under your standing consent (${cleanLanePublish.consent_version}). ` +
         `Retractable until ${learning.retractable_until}: DELETE /learn/${learning.id}?reason=retract, ` +
@@ -7503,6 +7513,11 @@ app.post('/extract', async (c) => {
     }
   }
 
+  // Gate-A 2026-09-05: surface a missing extraction block (resolver fell
+  // through to the hardcoded default) before the audit row records the model
+  // — the model choice itself is unchanged. (Placed ABOVE the Step 17 marker:
+  // test/p2-1a-*.test.js slice fixed windows from that marker.)
+  if (resolveModelConfig('extraction').source === 'default') console.warn('[model-config] extraction block missing; using default model');
   // ── Step 17: Audit log FIRST, then catalog mutation (§9.1) ────────────
   // ITEM-1 (Phase 8): audit-before-mutate on publish path.
   // Same invariant as the retraction path (CORRECTION 1.5):
@@ -7534,7 +7549,7 @@ app.post('/extract', async (c) => {
       client_scrub_matches: validatedPatterns,
       server_scrub_matches: [],
       provider: 'anthropic',
-      model: extractionConfig.primary?.model || 'claude-haiku-4-5',
+      model: extractionConfig.primary?.model || resolveModelConfig('extraction').model, // SCREEN-MODEL-CONFIG: no dated pin
       usage: { input_tokens: totalInputTokens, output_tokens: totalOutputTokens },
       cost_usd: totalCostUsd,
       quality_pass_count: published.length + (accountMode !== 'automatic' ? candidates.length - rejected.length : 0),
@@ -7619,6 +7634,22 @@ app.delete('/learn/:id', async (c) => {
   const learningId = c.req.param('id');
   const reason = (new URL(c.req.url, 'http://localhost')).searchParams.get('reason');
 
+  // CLEAN-LANE-FLIP Phase A2: the dashboard's Retract button calls this route
+  // with its session JWT (public/dashboard-clean-lane.js). A Bearer credential
+  // that is not an `axl_` API key (validateApiKey rejects every other prefix)
+  // resolves through the same session-or-key resolver the self-review routes
+  // use (resolveSelfReviewAccount → lib/accounts.js resolveAccountFromRequest:
+  // contribute scope, suspended accounts refused). Everything else takes the
+  // pre-existing API-key path below, unchanged. Ownership below is the same
+  // contributor_account_id check for both paths.
+  let accountId = null;
+  const sessionAuthHeader = c.req.header('Authorization') || '';
+  const sessionBearer = sessionAuthHeader.startsWith('Bearer ') ? sessionAuthHeader.slice(7) : null;
+  if (!c.req.header('X-API-Key') && sessionBearer && !sessionBearer.startsWith('axl_')) {
+    const sessionAuth = await resolveSelfReviewAccount(c, 'contribute');
+    if (!sessionAuth.accountId) return c.json({ error: sessionAuth.error }, sessionAuth.status);
+    accountId = sessionAuth.accountId;
+  } else {
   // Auth: API key required
   let apiKey = c.req.header('X-API-Key');
   if (!apiKey) {
@@ -7635,7 +7666,8 @@ app.delete('/learn/:id', async (c) => {
     return c.json({ error: `API key scope '${keyResult.scope}' is insufficient (requires contribute)` }, 403);
   }
 
-  const accountId = keyResult.accountId;
+  accountId = keyResult.accountId;
+  }
 
   // GOV-3: suspended accounts cannot retract (this route uses neither middleware).
   const retractAccount = loadAccounts()[accountId];
@@ -8162,6 +8194,18 @@ app.get('/account/learnings', requireSessionOrApiKey('read'), (c) => {
       status: learning.status || 'approved',
       visibility: learning.visibility === 'private' ? 'private' : 'public',
       created_at: learning.created_at || null,
+      // CLEAN-LANE-FLIP Phase A2: the SPEC3 C1 standing-consent publish stamps
+      // (server.js /learn: published_via / standing_consent_version /
+      // retractable_until), exposed ONLY when present on the row so the
+      // dashboard card can list "published under standing consent" items and
+      // their retraction deadline. Still metadata-only: no body, no
+      // screen/ops fields (platform_hold_reasons, sensitivity_*,
+      // injection_flags, ...) — the projection stays an explicit allow-list.
+      ...(learning.published_via != null && { published_via: learning.published_via }),
+      ...(learning.standing_consent_version != null && {
+        standing_consent_version: learning.standing_consent_version,
+      }),
+      ...(learning.retractable_until != null && { retractable_until: learning.retractable_until }),
     }));
 
   return c.json({
@@ -11930,6 +11974,7 @@ app.get('/dmca', (c) => serveLegalPage(c, 'DMCA-POLICY.md', 'DMCA Copyright Poli
 // ── OpenClaw Adapter Routes ──────────────────────────────────────────────────
 // S9-1: All OpenClaw endpoints require admin auth (S-3 audit finding)
 app.get('/openclaw/status', adminAuth('read'), (c) => {
+  if (!SERVER_SIDE_EXTRACTION_ENABLED) return c.json(EXTRACTION_DEPRECATED, 410);
   return c.json({
     daemon_running: openclawDaemonRunning,
     last_run: openclawLastRun,
@@ -11941,6 +11986,7 @@ app.get('/openclaw/status', adminAuth('read'), (c) => {
 });
 
 app.post('/openclaw/trigger', adminAuth('admin'), async (c) => {
+  if (!SERVER_SIDE_EXTRACTION_ENABLED) return c.json(EXTRACTION_DEPRECATED, 410);
   if (openclawDaemonRunning) {
     return c.json({ error: 'Daemon already running' }, 409);
   }
@@ -11950,6 +11996,7 @@ app.post('/openclaw/trigger', adminAuth('admin'), async (c) => {
 });
 
 app.post('/openclaw/config', adminAuth('admin'), async (c) => {
+  if (!SERVER_SIDE_EXTRACTION_ENABLED) return c.json(EXTRACTION_DEPRECATED, 410);
   try {
     const body = await c.req.json();
     const allowed = ['glob_pattern', 'max_depth', 'max_file_size', 'max_files_per_run', 'min_file_size', 'delay_between_files_ms', 'auto_publish'];
@@ -11967,6 +12014,7 @@ app.post('/openclaw/config', adminAuth('admin'), async (c) => {
 });
 
 app.get('/openclaw/state', adminAuth('read'), async (c) => {
+  if (!SERVER_SIDE_EXTRACTION_ENABLED) return c.json(EXTRACTION_DEPRECATED, 410);
   try {
     const { AdapterState } = require('./lib/openclaw-adapter.js');
     const state = new AdapterState(openclawRuntimeConfig.state_file);
@@ -12097,6 +12145,9 @@ Filter out: opinions, greetings, meta-discussion, anything with credentials/PII.
 Conversation:
 ${conversation.substring(0, 100000)}`;
 
+    // Gate-A 2026-09-05: surface a missing extraction block (resolver fell
+    // through to the hardcoded default) — the model choice is unchanged.
+    if (resolveModelConfig('extraction').source === 'default') console.warn('[model-config] extraction block missing; using default model');
     const extractionResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -12105,7 +12156,8 @@ ${conversation.substring(0, 100000)}`;
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        // SCREEN-MODEL-CONFIG / MODEL-PIN (b-2): config read, no dated pin.
+        model: resolveModelConfig('extraction').model,
         max_tokens: 4096,
         messages: [{ role: 'user', content: extractionPrompt }],
       }),

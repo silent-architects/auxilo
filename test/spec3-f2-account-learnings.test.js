@@ -332,7 +332,22 @@ describe('SPEC3-F2 GET /account/learnings', { timeout: 180_000 }, () => {
     const schema = OPENAPI.paths['/account/learnings'].get.responses['200']
       .content['application/json'].schema.properties.learnings.items;
     assert.equal(schema.additionalProperties, false);
+    // Seven required keys + three OPTIONAL clean-lane stamps (Gate-A
+    // 2026-09-05): published_via / standing_consent_version / retractable_until
+    // appear only on learnings published under standing consent.
     assert.deepEqual(Object.keys(schema.properties).sort(), [
+      'category',
+      'created_at',
+      'id',
+      'published_via',
+      'retractable_until',
+      'standing_consent_version',
+      'status',
+      'tags',
+      'title',
+      'visibility',
+    ]);
+    assert.deepEqual([...schema.required].sort(), [
       'category',
       'created_at',
       'id',
@@ -340,7 +355,12 @@ describe('SPEC3-F2 GET /account/learnings', { timeout: 180_000 }, () => {
       'tags',
       'title',
       'visibility',
-    ]);
+    ], 'the three clean-lane stamps are optional, never required');
+    for (const optional of ['published_via', 'standing_consent_version', 'retractable_until']) {
+      assert.equal(schema.properties[optional].type, 'string');
+      assert.match(schema.properties[optional].description, /clean-lane standing consent/);
+    }
+    assert.equal(schema.properties.retractable_until.format, 'date-time');
     assert.equal(Object.hasOwn(schema.properties, 'body'), false);
   });
 
