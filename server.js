@@ -12000,11 +12000,48 @@ function renderLiveCatalogStats(html) {
     // untouched and the span stays empty. A stale count is a soft error; an
     // asserted stale date is a positive false claim.
     const asOf = formatAsOfUtc(new Date());
-    return html
+    // Hero-row live count (SITE-PM ruling, /for-builders hero stat row): the
+    // hero's live-count span is filled from the SAME `count` computed above
+    // for the strip's live-count span — one derivation, two call sites on
+    // the same page, same fail-open static value ("226") on the catch path
+    // below. (Do not spell either span's id as a literal attribute here —
+    // see the HTML-side comment for why.)
+    let out = html
       .replace(/(id="lc-learnings"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${count}<`)
+      .replace(/(id="lc-learnings-hero"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${count}<`)
       .replace(/(id="lc-categories"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${cats}<`)
       .replace(/(id="lc-price-range"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${range}<`)
       .replace(/(id="lc-asof"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${asOf}<`);
+
+    // Honest-zeros strip cells (AD sheet 4 item 1, AD strings packet 3 rev 2
+    // §5): the lc-unlocks and lc-paid cells on /for-builders, from the SAME
+    // ledger truth as /knowledge/stats and the /earnings SSR
+    // (catalogStatsTruth — one derivation, three call sites). truth.unlocks
+    // is null when the unlock-event ledger is unreadable: both cells then
+    // stay at the static "…" placeholder here (never a static digit) and the
+    // abstraction sentence below the strip is left untouched (a false zero
+    // is worse than the vaguer sentence). When the ledger IS readable, both
+    // cells render and the sentence comes out via the same substitution pass
+    // — a visible zero replaces the abstraction. Never the retired
+    // per-learning counter.
+    //
+    // Wave B S2 (Gate-A 2026-09-06): catalogStatsTruth does a synchronous
+    // ledger read (data/unlock-events.jsonl). /for-builders is the only page
+    // that renders the cells it feeds — gate the read on that page's own
+    // markup (id="lc-unlocks") so /how-it-works, /for-agents, and /pricing
+    // never pay for a read whose result they'd discard.
+    if (html.includes('id="lc-unlocks"')) {
+      const truth = catalogStatsTruth(visible);
+      if (truth.unlocks) {
+        const unlocks = String(truth.unlocks.total);
+        const paid = `$${truth.total_earnings_usd.toFixed(2)}`;
+        out = out
+          .replace(/(id="lc-unlocks"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${unlocks}<`)
+          .replace(/(id="lc-paid"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${paid}<`)
+          .replace(/<p[^>]*\bid="lc-supply-line"[^>]*>[\s\S]*?<\/p>\s*/, '');
+      }
+    }
+    return out;
   } catch (e) {
     console.error('[live-stats] render failed, serving static values:', e.message);
     return html;

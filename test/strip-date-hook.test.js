@@ -174,13 +174,13 @@ describe('STRIP-DATE-HOOK: /for-builders strip as-of line is server-rendered fro
 });
 
 describe('STRIP-DATE-HOOK: static file and source pins', () => {
-  it('public/for-builders.html ships `<span id="lc-asof"></span>` once, empty, directly after the strip caption, and contains no `as of`', () => {
-    const spans = STATIC_HTML.match(/<span id="lc-asof"><\/span>/g) || [];
-    assert.equal(spans.length, 1, 'exactly one empty lc-asof span');
+  it('public/for-builders.html ships `<span class="stat-label pull-stat-caption" id="lc-asof"></span>` once, empty, directly after the strip caption, and contains no `as of`', () => {
+    const spans = STATIC_HTML.match(/<span class="stat-label pull-stat-caption" id="lc-asof"><\/span>/g) || [];
+    assert.equal(spans.length, 1, 'exactly one empty lc-asof span, carrying the caption class');
     assert.equal((STATIC_HTML.match(/id="lc-asof"/g) || []).length, 1, 'the id appears exactly once');
     assert.equal(countAsOf(STATIC_HTML), 0, 'no baked as-of text in the static file');
     assert.match(STATIC_HTML,
-      /<span class="stat-label pull-stat-caption">learnings in the catalog<\/span>\s*<span id="lc-asof"><\/span>/,
+      /<span class="stat-label pull-stat-caption">learnings in the catalog<\/span>\s*<span class="stat-label pull-stat-caption" id="lc-asof"><\/span>/,
       'the span sits directly after the strip caption line');
     // The renderer's substitution regexes are `id="lc-<name>"[^>]*>[^<]*<` —
     // a literal id="lc-…" attribute inside an HTML comment matches too and
