@@ -29,7 +29,21 @@
        are min-heights, not fixed -- a cell whose matrix Notes text is long
        (OpenClaw, the three sweep clients) grows the row rather than
        clipping, which is a deliberate adaptation of the sheet's fixed
-       dimensions (a note line was not sized in the sheet's own cell boxes). */
+       dimensions (a note line was not sized in the sheet's own cell boxes).
+
+       SITE-PM ruling (2026-09-06): the sheet's three tiers are ONE flat
+       UL of clients now, not three ARIA lists under visually-hidden H2
+       tier headings -- a screen reader hears a single list of clients, not
+       three interrupted ones. The visual size-tiering survives as a class
+       per LI (ww-size-large/medium/small) driving a single flex-wrap
+       layout: item widths + the shared gap are sized so each same-size run
+       (large first, then medium, then small, matching DOM order) wraps at
+       the sheet's original per-row counts (4 / 5 / 6 desktop, 2 / 2 / 3
+       mobile) without a grid boundary per tier. The extra vertical
+       breathing room the sheet gave between tiers (48px desktop / 36px
+       mobile, vs. the 32px / 24px row gap within a tier) is restored with a
+       margin-top bump on the first item of each new tier (nth-child(5),
+       nth-child(11) -- 4 large then 6 medium then 9 small). */
     .ww-main { padding: 96px 0 120px; }
     .ww-wrap { max-width: 1057px; margin: 0 auto; padding: 0 40px; }
 
@@ -53,11 +67,21 @@
       margin: 32px 0 72px;
     }
 
-    .ww-tier { display: grid; gap: 32px 24px; margin-bottom: 48px; }
-    .ww-tier:last-of-type { margin-bottom: 0; }
-    .ww-tier--large  { grid-template-columns: repeat(4, 226px); }
-    .ww-tier--medium { grid-template-columns: repeat(5, 176px); }
-    .ww-tier--small  { grid-template-columns: repeat(6, 142px); }
+    .ww-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 32px 24px;
+      margin: 0 0 48px;
+      padding: 0;
+      list-style: none;
+    }
+
+    /* Tier boundaries within the one flat list: 4 large (index 1-4), then
+       6 medium (5-10), then 9 small (11-19) -- see the ww-size-* widths
+       below. The sheet's extra between-tier breathing room is restored
+       here rather than via a second container. */
+    .ww-list li:nth-child(5),
+    .ww-list li:nth-child(11) { margin-top: 16px; }
 
     .ww-cell {
       display: flex;
@@ -65,28 +89,26 @@
       justify-content: flex-start;
       gap: 8px;
     }
-    .ww-tier--large .ww-cell  { min-height: 120px; }
-    .ww-tier--medium .ww-cell { min-height: 96px; }
-    .ww-tier--small .ww-cell  { min-height: 76px; }
+    .ww-size-large  { flex: 0 0 226px; min-height: 120px; }
+    .ww-size-medium { flex: 0 0 176px; min-height: 96px; }
+    .ww-size-small  { flex: 0 0 142px; min-height: 76px; }
 
     .ww-logo-box {
       display: flex;
       align-items: flex-end;
       color: var(--ivory);
     }
-    .ww-tier--large .ww-logo-box  { max-height: 48px; max-width: 135.6px; }
-    .ww-tier--medium .ww-logo-box { max-height: 34.56px; max-width: 105.6px; }
-    .ww-tier--small .ww-logo-box  { max-height: 24.32px; max-width: 90.88px; }
+    .ww-size-large .ww-logo-box  { max-height: 48px; max-width: 135.6px; }
+    .ww-size-medium .ww-logo-box { max-height: 34.56px; max-width: 105.6px; }
+    .ww-size-small .ww-logo-box  { max-height: 24.32px; max-width: 90.88px; }
     .ww-logo-box img { height: 100%; width: auto; max-width: 100%; display: block; }
 
     .ww-client-name {
       font-family: var(--sans);
       font-weight: 500;
+      font-size: 17px;
       color: var(--ivory);
     }
-    .ww-tier--large .ww-client-name,
-    .ww-tier--medium .ww-client-name { font-size: 17px; }
-    .ww-tier--small .ww-client-name { font-size: 17px; }
 
     .ww-client-label {
       font-family: var(--mono);
@@ -102,18 +124,6 @@
       font-size: 11px;
       line-height: 1.5;
       color: var(--slate);
-    }
-
-    /* AD sheet: "no numerals in any SVG"; tier step numbers here are DOM
-       text on a visually-hidden heading, never drawn geometry. */
-    .ww-tier-heading {
-      position: absolute;
-      width: 1px; height: 1px;
-      padding: 0; margin: -1px;
-      overflow: hidden;
-      clip: rect(0, 0, 0, 0);
-      white-space: nowrap;
-      border: 0;
     }
 
     .ww-key {
@@ -164,14 +174,18 @@
       .ww-h1 { font-size: 40px; }
       .ww-honest { font-size: 17px; margin: 24px 0 48px; }
 
-      .ww-tier { gap: 24px 16px; margin-bottom: 36px; }
-      .ww-tier--large  { grid-template-columns: repeat(2, 159px); }
-      .ww-tier--medium { grid-template-columns: repeat(2, 159px); }
-      .ww-tier--small  { grid-template-columns: repeat(3, 103px); gap: 24px 12px; }
+      /* Single shared column-gap (12px) rather than the sheet's per-tier
+         16px/12px split -- a single flex container has one gap, and 12px
+         is the value both the 2-column (159px) and 3-column (103px) runs
+         need to keep their sheet-specified per-row counts at 335px content
+         width. Row gap 24px matches the sheet for every tier. */
+      .ww-list { gap: 24px 12px; margin-bottom: 36px; }
+      .ww-list li:nth-child(5),
+      .ww-list li:nth-child(11) { margin-top: 12px; }
 
-      .ww-tier--large .ww-cell  { min-height: 104px; }
-      .ww-tier--medium .ww-cell { min-height: 88px; }
-      .ww-tier--small .ww-cell  { min-height: 68px; }
+      .ww-size-large  { flex-basis: 159px; min-height: 104px; }
+      .ww-size-medium { flex-basis: 159px; min-height: 88px; }
+      .ww-size-small  { flex-basis: 103px; min-height: 68px; }
     }
   </style>
 </head>
@@ -205,131 +219,122 @@
       <h1 class="ww-h1">Works with the client you already run</h1>
       <p class="ww-honest">Auxilo works with every client below. Once you turn extraction on, it captures sessions on the clients marked for capture, and the label on each cell says which. Drafting still runs through a single model client on your machine, not through the client a session came from. Per-client extraction is being built.</p>
 
-      <h2 class="ww-tier-heading">Widely used clients</h2>
-      <div class="ww-tier ww-tier--large" role="list">
-        <div class="ww-cell" role="listitem">
+      <ul class="ww-list">
+        <li class="ww-cell ww-size-large">
           <div class="ww-logo-box"><img src="/logos/claude-code.svg" alt="Claude Code"></div>
           <div class="ww-client-name">Claude Code</div>
           <div class="ww-client-label">supported, hook capture</div>
           <div class="ww-client-note"></div>
-        </div>
-        <div class="ww-cell" role="listitem">
+        </li>
+        <li class="ww-cell ww-size-large">
           <div class="ww-logo-box"><img src="/logos/cursor.svg" alt="Cursor"></div>
           <div class="ww-client-name">Cursor</div>
           <div class="ww-client-label">supported, hook capture</div>
           <div class="ww-client-note"></div>
-        </div>
-        <div class="ww-cell" role="listitem">
+        </li>
+        <li class="ww-cell ww-size-large">
           <div class="ww-logo-box"><img src="/logos/github-copilot.svg" alt="GitHub Copilot"></div>
           <div class="ww-client-name">GitHub Copilot</div>
           <div class="ww-client-label">supported, hook capture</div>
           <div class="ww-client-note">hooks are a VS Code Preview feature</div>
-        </div>
-        <div class="ww-cell" role="listitem">
+        </li>
+        <li class="ww-cell ww-size-large">
           <div class="ww-logo-box"><img src="/logos/gemini-cli.svg" alt="Gemini CLI"></div>
           <div class="ww-client-name">Gemini CLI</div>
           <div class="ww-client-label">supported, hook capture</div>
           <div class="ww-client-note"></div>
-        </div>
-      </div>
-
-      <h2 class="ww-tier-heading">Moderately used clients</h2>
-      <div class="ww-tier ww-tier--medium" role="list">
-        <div class="ww-cell" role="listitem">
+        </li>
+        <li class="ww-cell ww-size-medium">
           <div class="ww-logo-box"></div>
           <div class="ww-client-name">Codex</div>
           <div class="ww-client-label">supported, hook capture (CLI) &middot; best-effort, sweep capture (Desktop)</div>
           <div class="ww-client-note">Desktop app currently does not execute hooks (upstream openai/codex#21639); sweep covers it.</div>
-        </div>
-        <div class="ww-cell" role="listitem">
+        </li>
+        <li class="ww-cell ww-size-medium">
           <div class="ww-logo-box"><img src="/logos/windsurf.svg" alt="Windsurf"></div>
           <div class="ww-client-name">Windsurf</div>
           <div class="ww-client-label">supported, hook capture</div>
           <div class="ww-client-note"></div>
-        </div>
-        <div class="ww-cell" role="listitem">
+        </li>
+        <li class="ww-cell ww-size-medium">
           <div class="ww-logo-box"><img src="/logos/claude-desktop.svg" alt="Claude Desktop"></div>
           <div class="ww-client-name">Claude Desktop</div>
           <div class="ww-client-label">probabilistic, no capture, MCP only</div>
           <div class="ww-client-note">no extraction surface exists</div>
-        </div>
-        <div class="ww-cell" role="listitem">
+        </li>
+        <li class="ww-cell ww-size-medium">
           <div class="ww-logo-box"><img src="/logos/cline.svg" alt="Cline"></div>
           <div class="ww-client-name">Cline</div>
           <div class="ww-client-label">best-effort, sweep capture</div>
           <div class="ww-client-note">NOT locally verified; strict format probe fails silent on storage-shape drift</div>
-        </div>
-        <div class="ww-cell" role="listitem">
+        </li>
+        <li class="ww-cell ww-size-medium">
           <div class="ww-logo-box"></div>
           <div class="ww-client-name">Continue.dev</div>
           <div class="ww-client-label">best-effort, sweep capture</div>
           <div class="ww-client-note">NOT locally verified; strict format probe fails silent on storage-shape drift</div>
-        </div>
-        <div class="ww-cell" role="listitem">
+        </li>
+        <li class="ww-cell ww-size-medium">
           <div class="ww-logo-box"></div>
           <div class="ww-client-name">Roo Code</div>
           <div class="ww-client-label">best-effort, sweep capture</div>
           <div class="ww-client-note">NOT locally verified; strict format probe fails silent on storage-shape drift</div>
-        </div>
-      </div>
-
-      <h2 class="ww-tier-heading">Smaller and emerging clients</h2>
-      <div class="ww-tier ww-tier--small" role="list">
-        <div class="ww-cell" role="listitem">
+        </li>
+        <li class="ww-cell ww-size-small">
           <div class="ww-logo-box"></div>
           <div class="ww-client-name">Antigravity</div>
           <div class="ww-client-label">supported early, hook capture</div>
           <div class="ww-client-note">hook schema young; verified against live install</div>
-        </div>
-        <div class="ww-cell" role="listitem">
+        </li>
+        <li class="ww-cell ww-size-small">
           <div class="ww-logo-box"></div>
           <div class="ww-client-name">Amp</div>
           <div class="ww-client-label">probabilistic, no capture, MCP only</div>
           <div class="ww-client-note">threads are server-side</div>
-        </div>
-        <div class="ww-cell" role="listitem">
+        </li>
+        <li class="ww-cell ww-size-small">
           <div class="ww-logo-box"></div>
           <div class="ww-client-name">Factory droid</div>
           <div class="ww-client-label">supported, hook capture</div>
           <div class="ww-client-note">applies to new sessions after setup</div>
-        </div>
-        <div class="ww-cell" role="listitem">
+        </li>
+        <li class="ww-cell ww-size-small">
           <div class="ww-logo-box"><img src="/logos/jetbrains-junie.svg" alt="JetBrains Junie"></div>
           <div class="ww-client-name">JetBrains Junie</div>
           <div class="ww-client-label">probabilistic, no capture, MCP only</div>
           <div class="ww-client-note"></div>
-        </div>
-        <div class="ww-cell" role="listitem">
+        </li>
+        <li class="ww-cell ww-size-small">
           <div class="ww-logo-box"></div>
           <div class="ww-client-name">Kiro</div>
           <div class="ww-client-label">probabilistic, no capture, MCP only</div>
           <div class="ww-client-note"></div>
-        </div>
-        <div class="ww-cell" role="listitem">
+        </li>
+        <li class="ww-cell ww-size-small">
           <div class="ww-logo-box"></div>
           <div class="ww-client-name">OpenHands</div>
           <div class="ww-client-label">probabilistic, no capture, MCP only</div>
           <div class="ww-client-note"></div>
-        </div>
-        <div class="ww-cell" role="listitem">
+        </li>
+        <li class="ww-cell ww-size-small">
           <div class="ww-logo-box"><img src="/logos/opencode.svg" alt="opencode"></div>
           <div class="ww-client-name">opencode</div>
           <div class="ww-client-label">probabilistic, no capture, MCP only</div>
           <div class="ww-client-note"></div>
-        </div>
-        <div class="ww-cell" role="listitem">
+        </li>
+        <li class="ww-cell ww-size-small">
           <div class="ww-logo-box"></div>
           <div class="ww-client-name">OpenClaw</div>
           <div class="ww-client-label">best-effort, sweep paused</div>
           <div class="ww-client-note">NOT locally verified; reads the legacy sessions/*.jsonl layout &mdash; current OpenClaw builds keep transcripts in a per-agent SQLite store, so capture is paused until the adapter is re-pointed; dedicated plugin + clawhub listing planned</div>
-        </div>
-        <div class="ww-cell" role="listitem">
+        </li>
+        <li class="ww-cell ww-size-small">
           <div class="ww-logo-box"></div>
           <div class="ww-client-name">Other MCP clients</div>
           <div class="ww-client-label">probabilistic, no capture, MCP only</div>
           <div class="ww-client-note"></div>
-        </div>
-      </div>
+        </li>
+      </ul>
 
       <p class="ww-key ww-key-lead">Supported, best-effort and probabilistic are the client matrix's own words.</p>
       <dl class="ww-key">

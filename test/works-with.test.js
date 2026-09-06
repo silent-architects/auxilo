@@ -77,6 +77,43 @@ describe('WORKS-WITH: structural — public/works-with.html, public/index.html b
     assert.ok(WORKS_WITH_HTML.includes('Any provider may ask us to remove its mark by writing to'));
   });
 
+  it('public/works-with.html renders the client grid as one flat list, no tier <h2>s (SITE-PM ruling 2026-09-06)', () => {
+    const h1Count = (WORKS_WITH_HTML.match(/<h1[\s>]/g) || []).length;
+    const h2Count = (WORKS_WITH_HTML.match(/<h2[\s>]/g) || []).length;
+    assert.equal(h1Count, 1, 'exactly one <h1>');
+    assert.equal(h2Count, 0, 'zero <h2> (the three visually-hidden tier headings are gone)');
+
+    const listOpen = (WORKS_WITH_HTML.match(/<ul class="ww-list">/g) || []).length;
+    assert.equal(listOpen, 1, 'exactly one client <ul class="ww-list">');
+
+    const start = WORKS_WITH_HTML.indexOf('<ul class="ww-list">');
+    const end = WORKS_WITH_HTML.indexOf('</ul>', start);
+    assert.ok(start > -1 && end > start, 'ww-list has a matching </ul>');
+    const listBlock = WORKS_WITH_HTML.slice(start, end);
+
+    const liTags = [...listBlock.matchAll(/<li class="([^"]*)"/g)];
+    assert.equal(liTags.length, 19, 'ww-list carries exactly 19 <li> (18 named clients + "Other MCP clients")');
+
+    let large = 0, medium = 0, small = 0;
+    for (const [, classAttr] of liTags) {
+      assert.ok(/\bww-cell\b/.test(classAttr), `every <li> carries ww-cell: "${classAttr}"`);
+      const sizeMatches = classAttr.match(/\bww-size-(large|medium|small)\b/g) || [];
+      assert.equal(sizeMatches.length, 1, `every <li> carries exactly one tier size class: "${classAttr}"`);
+      if (classAttr.includes('ww-size-large')) large++;
+      else if (classAttr.includes('ww-size-medium')) medium++;
+      else if (classAttr.includes('ww-size-small')) small++;
+    }
+    assert.equal(large, 4, '4 large-tier clients');
+    assert.equal(medium, 6, '6 medium-tier clients');
+    assert.equal(small, 9, '9 small-tier clients (includes "Other MCP clients")');
+
+    assert.ok(listBlock.includes('>Other MCP clients<'), '"Other MCP clients" item present in the list');
+
+    const basisCount = (WORKS_WITH_HTML.match(/Ordered and sized by how widely each client is used, not by anything we measure\./g) || []).length;
+    assert.equal(basisCount, 1, 'basis line appears exactly once');
+    assert.ok(end < WORKS_WITH_HTML.indexOf('Ordered and sized by how widely each client is used, not by anything we measure.'), 'basis line follows the client list');
+  });
+
   it('public/works-with.html has no Title Case body copy markers and no #main-nav "Works with" link (nav wave owns that)', () => {
     // The nav wave adds the nav entry; this build must not pre-empt it.
     const navBlock = WORKS_WITH_HTML.slice(WORKS_WITH_HTML.indexOf('<nav id="main-nav"'), WORKS_WITH_HTML.indexOf('</nav>'));
