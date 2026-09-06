@@ -289,3 +289,38 @@ describe('AD strings packet 5 (SEO): /pricing title carries the colon-free repla
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. Wave B copy pass (packet 6 rev 3 / SITE-PM rulings, 2026-09-06):
+//    the "Min Price" econ card comes out, the range tile gets an econ-desc
+//    paragraph, and description/og:description/twitter:description collapse
+//    to one string.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('wave B copy pass: Min Price card removed, range tile desc added, one description string', () => {
+  it('the "Min Price" econ card is gone entirely', () => {
+    assert.equal(PRICING_HTML.split('Min Price').length - 1, 0,
+      'the retired Min Price card must not remain anywhere on the page');
+  });
+
+  it('the range tile carries its own econ-desc paragraph, present exactly once', () => {
+    const DESC = 'The lowest and highest unlock prices in the catalog right now. The engine keeps every price between $0.05 and $50.';
+    assert.equal(PRICING_HTML.split(DESC).length - 1, 1,
+      'the range tile econ-desc text must appear exactly once');
+    const valueIdx = PRICING_HTML.indexOf('<p class="econ-value" id="lc-price-range">');
+    assert.ok(valueIdx !== -1, 'lc-price-range tile must exist');
+    const after = PRICING_HTML.slice(valueIdx, valueIdx + 300);
+    assert.ok(after.includes(DESC), 'the econ-desc paragraph must sit directly after the range value, matching sibling card markup');
+  });
+
+  it('description, og:description, and twitter:description are one identical string', () => {
+    const desc = PRICING_HTML.match(/<meta name="description" content="([^"]*)" \/>/);
+    const og = PRICING_HTML.match(/<meta property="og:description" content="([^"]*)" \/>/);
+    const tw = PRICING_HTML.match(/<meta name="twitter:description" content="([^"]*)" \/>/);
+    assert.ok(desc, 'meta description must exist');
+    assert.ok(og, 'og:description must exist');
+    assert.ok(tw, 'twitter:description must exist');
+    assert.equal(desc[1], og[1], 'description and og:description must be identical');
+    assert.equal(og[1], tw[1], 'og:description and twitter:description must be identical');
+    assert.equal(desc[1], 'Dynamic pricing on Auxilo, a marketplace for what agents learn. Search is free and unlocking is the only thing that costs. Each learning carries its own price, set by the engine and shown live on this page.');
+  });
+});
