@@ -27,6 +27,13 @@
  *     or as-of derivations, which can succeed independently), so a ledger
  *     read failure cannot leave a static digit behind.
  *
+ * Also covers the SITE-PM hero-stat-row ruling: the /for-builders hero row's
+ * id="lc-learnings-hero" cell is filled by the SAME `count` derivation as the
+ * strip's id="lc-learnings" (one live number leads the hero, in gold), the
+ * former 70%/$0.05/<1 min trio drops to two constants at caption tier
+ * (70% and "under 1 minute"), and the $0.05 / "minimum unlock price" cell is
+ * gone entirely.
+ *
  * Runner: node --test test/builders-strip-zeros.test.js
  */
 
@@ -155,6 +162,8 @@ describe('BUILDERS-STRIP-ZEROS: /for-builders honest-zero cells are server-rende
       assert.equal(cellText(html, 'lc-paid'), '$0.00', 'lc-paid renders the attributable ledger money, formatted to cents');
       assert.equal(countSupplyLine(html), 0, 'the abstraction comes out once the zeros actually render');
       assert.ok(html.includes('id="lc-learnings">2<'), 'the count from the same computation rendered alongside it');
+      assert.equal(cellText(html, 'lc-learnings-hero'), '2', 'the hero cell renders from the same live count as the strip');
+      assert.equal(cellText(html, 'lc-learnings-hero'), cellText(html, 'lc-learnings'), 'hero and strip counts are the SAME derivation, never independently computed');
     });
   });
 
@@ -163,6 +172,7 @@ describe('BUILDERS-STRIP-ZEROS: /for-builders honest-zero cells are server-rende
       assert.equal(cellText(html, 'lc-unlocks'), '', 'lc-unlocks stays empty on the fail path — never a static digit');
       assert.equal(cellText(html, 'lc-paid'), '', 'lc-paid stays empty on the fail path — never a static digit');
       assert.equal(countSupplyLine(html), 1, 'the fail path leaves the sentence in place — an asserted zero is worse than the vaguer line');
+      assert.equal(cellText(html, 'lc-learnings-hero'), '226', 'the hero cell falls open to the static value, same as the strip cell');
       await new Promise((r) => setTimeout(r, 200));
       assert.match(boot.getOutput(), /\[live-stats\] render failed, serving static values: BUILDERS-STRIP-ZEROS forced renderer failure/);
     });
@@ -208,5 +218,55 @@ describe('BUILDERS-STRIP-ZEROS: static file and source pins', () => {
     const catchBody = fn.slice(catchIdx);
     assert.match(catchBody, /return html;/, 'the catch returns the html untouched — both cells stay empty and the sentence stays');
     assert.doesNotMatch(catchBody, /lc-unlocks|lc-paid|Supply is ahead/, 'the catch writes no cell value and does not touch the sentence');
+  });
+
+  it('public/for-builders.html: hero stat row ships the live-count cell in gold, the two constants at caption tier, and no $0.05 / minimum-unlock-price cell', () => {
+    assert.equal((STATIC_HTML.match(/id="lc-learnings-hero"/g) || []).length, 1, 'lc-learnings-hero id appears exactly once');
+    assert.match(STATIC_HTML, /<span class="stat-num pull-stat-num" id="lc-learnings-hero">226<\/span>/, 'hero cell ships the static 226, gold tier (pull-stat-num)');
+    assert.match(STATIC_HTML, /<span class="stat-num pull-stat-caption">70%<\/span>\s*<span class="stat-label pull-stat-caption">direct share \(60% via discovery\)<\/span>/, '70% drops to caption tier, existing caption unchanged');
+    assert.match(STATIC_HTML, /<span class="stat-num pull-stat-caption">under 1 minute<\/span>\s*<span class="stat-label pull-stat-caption">time to connect<\/span>/, '<1 min becomes the words "under 1 minute", also caption tier');
+
+    // Scope the "$0.05 cell is gone" checks to the hero section itself — the
+    // string "$0.05" and the phrase "minimum unlock price" legitimately
+    // remain elsewhere on the page (body copy, JSON-LD); only the HERO cell
+    // is ruled out.
+    const heroStart = STATIC_HTML.indexOf('<section id="builders-hero"');
+    const heroEnd = STATIC_HTML.indexOf('</section>', heroStart);
+    assert.ok(heroStart > 0 && heroEnd > heroStart, 'the builders-hero section is located');
+    const heroSection = STATIC_HTML.slice(heroStart, heroEnd);
+    assert.equal((heroSection.match(/class="builders-hero-stat"/g) || []).length, 3, 'exactly three stat cells in the hero row (226 / 70% / under 1 minute — the $0.05 cell is gone, not just re-tiered)');
+    assert.doesNotMatch(heroSection, /\$0\.05/, 'the $0.05 hero figure is gone');
+    assert.doesNotMatch(heroSection, /minimum unlock price/, 'the "minimum unlock price" caption is gone from the hero — the whole cell was removed');
+    assert.doesNotMatch(heroSection, /pull-stat-secondary/, 'no cell in the hero row is left at the old $0.05/<1 min secondary tier');
+    assert.doesNotMatch(heroSection, /&lt;1 min/, 'the old "<1 min" digit-form text is gone, replaced by the words "under 1 minute"');
+
+    // Same regex-injection hazard the other live-stat suites guard against.
+    for (const m of STATIC_HTML.matchAll(/<!--[\s\S]*?-->/g)) {
+      assert.doesNotMatch(m[0], /id="lc-learnings-hero"/,
+        'no renderer-targeted id attribute inside an HTML comment');
+    }
+  });
+
+  it('server.js: the lc-learnings-hero substitution reuses the SAME `count` as lc-learnings, inside renderLiveCatalogStats\' try, immediately after the strip substitution', () => {
+    const start = SERVER_SRC.indexOf('function renderLiveCatalogStats(html) {');
+    assert.ok(start > 0, 'renderer located');
+    const end = SERVER_SRC.indexOf('\n}\n', start);
+    const fn = SERVER_SRC.slice(start, end);
+    const tryIdx = fn.indexOf('try {');
+    const catchIdx = fn.indexOf('} catch (e) {');
+    const learningsIdx = fn.indexOf('id="lc-learnings"');
+    const heroIdx = fn.indexOf('id="lc-learnings-hero"');
+    assert.ok(tryIdx > 0 && catchIdx > tryIdx, 'try/catch shape intact');
+    assert.ok(learningsIdx > tryIdx && learningsIdx < catchIdx, 'the lc-learnings substitution is inside the try');
+    assert.ok(heroIdx > learningsIdx && heroIdx < catchIdx, 'the lc-learnings-hero substitution follows it, still inside the try');
+    // Isolate the two replace() calls and confirm both interpolate the
+    // exact same `${count}` local, never a second/independent derivation.
+    const learningsCall = fn.slice(learningsIdx - 40, learningsIdx + 80);
+    const heroCall = fn.slice(heroIdx - 40, heroIdx + 80);
+    assert.match(learningsCall, /\$\{count\}/, 'lc-learnings interpolates the `count` local');
+    assert.match(heroCall, /\$\{count\}/, 'lc-learnings-hero interpolates the SAME `count` local, not a new one');
+    assert.equal((fn.match(/const count = /g) || []).length, 1, 'only one `count` is ever derived in this function');
+    const catchBody = fn.slice(catchIdx);
+    assert.doesNotMatch(catchBody, /lc-learnings-hero/, 'the catch writes no hero-cell value — it stays at the static 226 shipped in the file');
   });
 });

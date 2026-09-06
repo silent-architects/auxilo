@@ -12000,8 +12000,15 @@ function renderLiveCatalogStats(html) {
     // untouched and the span stays empty. A stale count is a soft error; an
     // asserted stale date is a positive false claim.
     const asOf = formatAsOfUtc(new Date());
+    // Hero-row live count (SITE-PM ruling, /for-builders hero stat row): the
+    // hero's live-count span is filled from the SAME `count` computed above
+    // for the strip's live-count span — one derivation, two call sites on
+    // the same page, same fail-open static value ("226") on the catch path
+    // below. (Do not spell either span's id as a literal attribute here —
+    // see the HTML-side comment for why.)
     let out = html
       .replace(/(id="lc-learnings"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${count}<`)
+      .replace(/(id="lc-learnings-hero"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${count}<`)
       .replace(/(id="lc-categories"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${cats}<`)
       .replace(/(id="lc-price-range"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${range}<`)
       .replace(/(id="lc-asof"[^>]*>)[^<]*</g, (_m, tag) => `${tag}${asOf}<`);
