@@ -162,11 +162,18 @@ describe('STRIP-DATE-HOOK: /for-builders strip as-of line is server-rendered fro
     });
   });
 
-  it('(2) renderer catch forced → ZERO `as of` on the page, lc-asof span present and EMPTY, count falls open to the static value, failure logged', { timeout: 240_000 }, async (t) => {
+  it('(2) renderer catch forced → ZERO `as of` on the page, lc-asof span present and EMPTY; LEDGER-FAIL-OPEN-FB: the count cell (span + its own caption) is gone entirely, fail-closed, not falling open to a static value; failure logged', { timeout: 240_000 }, async (t) => {
     await withStagedServer(t, { replacements: [RENDERER_THROW] }, async (html, _dates, boot) => {
       assert.equal(countAsOf(html), 0, 'the fail path emits no date at all');
-      assert.equal(asOfSpan(html), '', 'the span is present and empty — never a stale or default date');
-      assert.ok(html.includes('id="lc-learnings">226<'), 'count fails open to the static value, as before');
+      assert.equal(asOfSpan(html), '', 'the span is present and empty — never a stale or default date, and independent of the (now fail-closed) count cell beside it');
+      // LEDGER-FAIL-OPEN-FB (2026-09-06): id="lc-learnings" used to fall
+      // open to a static "226" here. It's now marker-wrapped
+      // (LC-LEARNINGS-CELL) and fail-closed like lc-price-range: the whole
+      // cell (count span + its own caption) is stripped on this path.
+      // lc-asof is a SEPARATE sibling span, deliberately outside those
+      // markers, and stays present+empty as asserted above.
+      assert.doesNotMatch(html, /id="lc-learnings"[^-]/, 'the strip learnings-count cell is gone entirely on the fail path (negative lookahead excludes lc-learnings-hero)');
+      assert.doesNotMatch(html, /226/, 'no stale "226" literal survives the fail path anywhere on the page');
       await new Promise((r) => setTimeout(r, 200));
       assert.match(boot.getOutput(), /\[live-stats\] render failed, serving static values: STRIP-DATE-HOOK forced renderer failure/);
     });
@@ -174,14 +181,19 @@ describe('STRIP-DATE-HOOK: /for-builders strip as-of line is server-rendered fro
 });
 
 describe('STRIP-DATE-HOOK: static file and source pins', () => {
-  it('public/for-builders.html ships `<span class="stat-label pull-stat-caption" id="lc-asof"></span>` once, empty, directly after the strip caption, and contains no `as of`', () => {
+  it('public/for-builders.html ships `<span class="stat-label pull-stat-caption" id="lc-asof"></span>` once, empty, sitting right after the (now marker-wrapped) strip caption, and contains no `as of`', () => {
     const spans = STATIC_HTML.match(/<span class="stat-label pull-stat-caption" id="lc-asof"><\/span>/g) || [];
     assert.equal(spans.length, 1, 'exactly one empty lc-asof span, carrying the caption class');
     assert.equal((STATIC_HTML.match(/id="lc-asof"/g) || []).length, 1, 'the id appears exactly once');
     assert.equal(countAsOf(STATIC_HTML), 0, 'no baked as-of text in the static file');
+    // LEDGER-FAIL-OPEN-FB (2026-09-06): the caption is now immediately
+    // followed by the LC-LEARNINGS-CELL close marker, THEN the lc-asof
+    // span — still directly adjacent modulo that one marker comment (the
+    // count span + its caption are what the marker wraps; lc-asof is
+    // deliberately outside it, see test/builders-strip-zeros.test.js).
     assert.match(STATIC_HTML,
-      /<span class="stat-label pull-stat-caption">learnings in the catalog<\/span>\s*<span class="stat-label pull-stat-caption" id="lc-asof"><\/span>/,
-      'the span sits directly after the strip caption line');
+      /<span class="stat-label pull-stat-caption">learnings in the catalog<\/span>\s*<!--\/LC-LEARNINGS-CELL-->\s*<span class="stat-label pull-stat-caption" id="lc-asof"><\/span>/,
+      'the span sits directly after the strip caption line (and the LC-LEARNINGS-CELL close marker)');
     // The renderer's substitution regexes are `id="lc-<name>"[^>]*>[^<]*<` —
     // a literal id="lc-…" attribute inside an HTML comment matches too and
     // injects the live value as stray page text after the `-->`. (The
@@ -209,7 +221,13 @@ describe('STRIP-DATE-HOOK: static file and source pins', () => {
     assert.equal((SERVER_SRC.match(/const visible = visibleLearningsList\(\);/g) || []).length, 1,
       'the forced-catch replacement target is unique in server.js');
     const catchBody = fn.slice(catchIdx);
-    assert.match(catchBody, /return html;/, 'the catch returns the html untouched — the span stays empty');
+    // LEDGER-FAIL-OPEN-FB (2026-09-06): the catch no longer returns `html`
+    // bare — it also strips the unrelated LC-LEARNINGS-CELL/LC-LEARNINGS-
+    // HERO-CELL marker blocks (test/builders-strip-zeros.test.js owns that
+    // behavior), so this is `return html\n  .replace(...)...;` now. Neither
+    // of those two .replace() calls touches lc-asof or writes a date —
+    // that's what this assertion actually needs to hold.
+    assert.match(catchBody, /return html\s*\n?\s*(?:\.replace\([\s\S]*?\)\s*)*;/, 'the catch still returns (a transform of) html — no date is computed or written');
     assert.doesNotMatch(catchBody, /lc-asof|as of/, 'the catch writes no date');
 
     const fmtStart = SERVER_SRC.indexOf('function formatAsOfUtc(date) {');

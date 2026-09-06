@@ -155,6 +155,7 @@ describe('SITE-SYSTEM item 2: the footer link set is byte-identical across every
 
   it('the footer set is exactly packet 3 rev 2\'s links (the trust-page slot still omitted: TRUST-PAGE shipped the route 2026-09-06, but the footer nav slot for it is a later, separate build — PUNCH-LIST TRUST-PAGE row)', () => {
     const expected = [
+      '/api::API',
       '/about::About',
       '/writing::Writing',
       '/status::Status',

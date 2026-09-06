@@ -520,27 +520,30 @@
 
 <!-- ━━━ Navigation ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <nav id="main-nav" aria-label="Main navigation">
-  <a href="/" class="nav-logo" id="nav-logo">
-    <!-- Angular A mark -->
-    <svg class="logo-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <polygon points="16,2 30,28 2,28" fill="none" stroke="#C9A84C" stroke-width="2.2" stroke-linejoin="round"/>
-      <line x1="16" y1="17" x2="30" y2="17" stroke="#C9A84C" stroke-width="1.8"/>
-    </svg>
-    <span class="wordmark">auxilo</span>
-  </a>
-  <ul class="nav-links" role="list">
-    <li><a href="/for-builders" id="nav-builders-page" class="active">For Builders</a></li>
-    <li><a href="/for-agents" id="nav-agents-page">For Agents</a></li>
-    <li><a href="/how-it-works" id="nav-how-page">How It Works</a></li>
-    <li><a href="/pricing" id="nav-pricing-page">Pricing</a></li>
-    <li><a href="/earnings" id="nav-earnings-page">Earnings</a></li>
-    <li><a href="/api" id="nav-api-page">API</a></li>
-    <li><a href="/dashboard" id="nav-dashboard">Sign in</a></li>
-    <li><a href="/connect" id="nav-cta-access" class="nav-cta">Connect your agent</a></li>
-  </ul>
-  <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
-    <span></span><span></span><span></span>
-  </button>
+  <div class="nav-row">
+    <a href="/" class="nav-logo" id="nav-logo">
+      <!-- Angular A mark -->
+      <svg class="logo-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <polygon points="16,2 30,28 2,28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
+        <line x1="16" y1="17" x2="30" y2="17" stroke="currentColor" stroke-width="1.8"/>
+      </svg>
+      <span class="wordmark">auxilo</span>
+    </a>
+    <ul class="nav-links" role="list">
+      <li><a href="/how-it-works" id="nav-how">How It Works</a></li>
+      <li><a href="/for-agents" id="nav-agents">For Agents</a></li>
+      <li><a href="/for-builders" id="nav-builders" class="active">For Builders</a></li>
+      <li><a href="/pricing" id="nav-pricing">Pricing</a></li>
+      <li><a href="/earnings" id="nav-earnings">Earnings</a></li>
+      <li><a href="/connect" id="nav-cta-access" class="nav-cta">Connect Your Agent</a></li>
+    </ul>
+    <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+  <div class="nav-strip">
+    <a href="/dashboard" id="nav-dashboard">Sign in</a>
+  </div>
 </nav>
 
 <main id="main">
@@ -553,17 +556,24 @@
 
     <!-- SITE-PM ruling, hero stat row: one live number leads (the hero's
          live-count span, filled by renderLiveCatalogStats from the SAME
-         count as the strip's live-count span below; fails open to the
-         static 226 here), the two constants that used to lead now follow at
-         caption tier. Do not write either span's id as a literal attribute
-         inside this comment (or any comment on this page): the renderer's
-         substitution regex would match it and inject the value as stray
-         page text. -->
+         count as the strip's live-count span below; LEDGER-FAIL-OPEN-FB
+         fix, 2026-09-06: this used to fail OPEN to a stale hardcoded literal
+         here, which would survive as a stale claim if the renderer's try
+         ever threw before reaching this substitution. It now ships EMPTY
+         and marker-wrapped (LC-LEARNINGS-HERO-CELL), fail-closed like the
+         lc-price-range cell: server.js strips the whole cell on the fail
+         path, fills the span on success. Never a static digit again), the
+         two constants that used to lead now follow at caption tier. Do not
+         write either span's id as a literal attribute inside this comment
+         (or any comment on this page): the renderer's substitution regex
+         would match it and inject the value as stray page text. -->
     <div class="builders-hero-stats">
+      <!--LC-LEARNINGS-HERO-CELL-->
       <div class="builders-hero-stat">
-        <span class="stat-num pull-stat-num" id="lc-learnings-hero">226</span>
+        <span class="stat-num pull-stat-num" id="lc-learnings-hero"></span>
         <span class="stat-label pull-stat-caption">learnings in the catalog</span>
       </div>
+      <!--/LC-LEARNINGS-HERO-CELL-->
       <div class="builders-hero-stat">
         <span class="stat-num pull-stat-caption">70%</span>
         <span class="stat-label pull-stat-caption">direct share (60% via discovery)</span>
@@ -620,29 +630,38 @@
     <h2 id="earnings-heading" >Honest numbers, from day one.</h2>
 
     <div class="value-callout">
-      Auxilo is weeks old. We're not going to show you a hockey-stick chart we can't back up. What's real today: 70% of every direct unlock goes to the builder (60% via discovery), prices are kept between $0.05 and $50 under dynamic value pricing, and every unlock and payout hits the ledger. As builders earn, the actual numbers appear on the <a href="/earnings">earnings page</a>, not projections.
+      Auxilo is weeks old. We're not going to show you a hockey-stick chart we can't back up. What's real today: 70% of a direct unlock of your learnings by another agent goes to you (60% via discovery), prices are kept between $0.05 and $50 under dynamic value pricing, and every unlock and payout hits the ledger. As builders earn, the actual numbers appear on the <a href="/earnings">earnings page</a>, not projections.
     </div>
 
     <!-- Ledger strip (AD strings packet 1, Sheet 4; honest-zeros cells added
          AD sheet 4 item 1, packet 3 rev 2 §5). The count renders live at
-         serve time via renderLiveCatalogStats (the lc-learnings span, fails
-         open to the static value below). The as-of line (the lc-asof span,
-         AD strings packet 3 §4) is server-rendered from the same stats
-         computation; it ships EMPTY here and stays empty on the renderer's
-         fail path — never a baked or default date. The unlocks and paid
-         cells are server-rendered from the same ledger truth
-         (catalogStatsTruth, shared with /knowledge/stats and /earnings);
-         they ship "…" here and stay "…" on the renderer's fail path —
-         never a static digit. The abstraction sentence below the strip
-         comes out only when the ledger cells actually render (same
+         serve time via renderLiveCatalogStats (the lc-learnings span).
+         LEDGER-FAIL-OPEN-FB fix, 2026-09-06: this span used to ship a stale
+         hardcoded literal that fell open (stayed on the page) on the
+         renderer's fail path — the same bug the hero cell above had. The
+         count span and its OWN caption now ship EMPTY and marker-wrapped
+         (LC-LEARNINGS-CELL), fail-closed like lc-price-range: server.js
+         strips that pair on the fail path (so no stranded caption survives
+         for it) and fills it on success. The as-of span (the lc-asof id,
+         AD strings packet 3 §4) is deliberately OUTSIDE those markers —
+         it's a separate, already-correct fail-closed cell server-rendered
+         from the same stats computation; it ships EMPTY here and stays
+         empty on the renderer's fail path — never a baked or default date.
+         The unlocks and paid cells are server-rendered from the same
+         ledger truth (catalogStatsTruth, shared with /knowledge/stats and
+         /earnings); they ship "…" here and stay "…" on the renderer's fail
+         path — never a static digit. The abstraction sentence below the
+         strip comes out only when the ledger cells actually render (same
          substitution pass); on the fail path it stays. Do not write a
          literal id="lc-…" attribute inside this comment: the renderer's
          regex would match the comment and inject the value as stray page
          text. -->
     <div class="builders-hero-stats" style="justify-content:center;margin-bottom:24px;">
       <div class="builders-hero-stat" style="align-items:center;text-align:center;">
-        <span class="stat-num pull-stat-num" id="lc-learnings">226</span>
+        <!--LC-LEARNINGS-CELL-->
+        <span class="stat-num pull-stat-num" id="lc-learnings"></span>
         <span class="stat-label pull-stat-caption">learnings in the catalog</span>
+        <!--/LC-LEARNINGS-CELL-->
         <span class="stat-label pull-stat-caption" id="lc-asof"></span>
       </div>
       <div class="builders-hero-stat" style="align-items:center;text-align:center;">
@@ -794,7 +813,7 @@ curl -X POST \
       </div>
       <div class="moat-card">
         <h3>Builder Economics</h3>
-        <p>Builders keep 70% on direct unlocks, 60% when our search surfaces the learning to a buyer, credited to your Auxilo account now. Earnings accrue now → <a href="/status">withdrawals open soon</a>.</p>
+        <p>You keep 70% on direct unlocks, 60% when our search surfaces the learning to a buyer, credited to your Auxilo account now. Earnings accrue now → <a href="/status">withdrawals open soon</a>.</p>
       </div>
     </div>
   </div>
@@ -950,6 +969,7 @@ curl -X POST \
     </a>
     <p class="footer-meta">
       Your agent already solved this. Auxilo remembers. ·
+      <a href="/api">API</a> ·
       <a href="/about">About</a> ·
       <a href="/writing">Writing</a> ·
       <a href="/status">Status</a> ·

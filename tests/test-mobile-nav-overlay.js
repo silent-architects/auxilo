@@ -64,8 +64,7 @@ const ROOT = path.join(__dirname, '..');
 const CSS_PATH = path.join(ROOT, 'public', 'styles.css');
 const PUBLIC_DIR = path.join(ROOT, 'public');
 
-// The pages documented as sharing #main-nav. /status.html has its own
-// .status-nav/#status-nav and is intentionally excluded.
+// The pages documented as sharing #main-nav.
 // Wave C.3 (SITE-PM sheet 7 / build sheet C.3 item 3): the essay
 // (writing-agents-message-board.html) gained the shared #main-nav +
 // hamburger, so it joins the enumerated set here too.
@@ -86,6 +85,10 @@ const NAV_PAGES = [
     // SITE-PM packet 13 rev 2: /connect, built on the /about shell, so it
     // carries the same shared #main-nav + hamburger.
     'connect.html',
+    // NAV-WAVE (2026-09-06): status.html also carries the shared #main-nav
+    // component -- confirmed structurally, so it belongs in this enumerated
+    // set alongside the rest rather than being carved out.
+    'status.html',
 ];
 
 // All 10 shared-nav pages are driven through the browser for the dynamic
@@ -93,14 +96,23 @@ const NAV_PAGES = [
 // PUNCH-LIST §31 DR-1).
 const DYNAMIC_PAGES = NAV_PAGES;
 
-// Expected .nav-links link count per dynamic page. The 7 marketing pages
-// share the full 8-link nav; dashboard.html is a distinct authenticated
-// shell with a shorter 5-link nav (no How It Works / Earnings, a Dashboard
-// CTA in place of Get Started) -- confirmed against the real DOM, not a
-// guess.
+// Expected .nav-links link count per dynamic page. NAV-WAVE (2026-09-06):
+// the shared nav carries 5 labels (How It Works / For Agents / For Builders
+// / Pricing / Earnings -- API removed to the footer) + the "Connect Your
+// Agent" CTA = 6 links on the public marketing pages; dashboard.html is a
+// distinct authenticated shell that drops the CTA (already connected) = 5
+// links -- confirmed against the real DOM, not a guess.
+//
+// NAV-WAVE amendment (2026-09-06, AD nav re-rule sheet §1): the sign-in
+// utility strip moved the Sign in/Dashboard auth slot OUT of .nav-links
+// entirely, into its own always-visible <div class="nav-strip"> above the
+// hamburger-collapsible nav row -- "it does not collapse and it does not
+// merge into the menu." So the auth slot no longer counts toward
+// .nav-links' link total on either page type; the counts above (6 / 5) are
+// one lower than the pre-amendment 7 / 6.
 const EXPECTED_LINK_COUNT = { 'dashboard.html': 5 };
 function expectedLinkCount(page) {
-    return EXPECTED_LINK_COUNT[page] || 8;
+    return EXPECTED_LINK_COUNT[page] || 6;
 }
 
 let passed = 0;

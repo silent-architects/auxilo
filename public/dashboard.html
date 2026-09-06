@@ -543,31 +543,37 @@
 
 <!-- Navigation -->
 <nav id="main-nav" aria-label="Main navigation">
-  <a href="/" class="nav-logo" id="nav-logo">
-    <svg class="logo-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <polygon points="16,2 30,28 2,28" fill="none" stroke="#C9A84C" stroke-width="2.2" stroke-linejoin="round"/>
-      <line x1="16" y1="17" x2="30" y2="17" stroke="#C9A84C" stroke-width="1.8"/>
-    </svg>
-    <span class="wordmark">auxilo</span>
-  </a>
-  <ul class="nav-links" role="list">
-    <li><a href="/for-builders" id="nav-builders">For Builders</a></li>
-    <li><a href="/for-agents" id="nav-agents">For Agents</a></li>
-    <li><a href="/pricing" id="nav-pricing">Pricing</a></li>
-    <li><a href="/api" id="nav-api">API</a></li>
-    <li><a href="/dashboard" id="nav-dashboard" class="nav-cta active">Dashboard</a></li>
-  </ul>
-  <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
-    <span></span><span></span><span></span>
-  </button>
+  <div class="nav-row">
+    <a href="/" class="nav-logo" id="nav-logo">
+      <!-- Angular A mark -->
+      <svg class="logo-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <polygon points="16,2 30,28 2,28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
+        <line x1="16" y1="17" x2="30" y2="17" stroke="currentColor" stroke-width="1.8"/>
+      </svg>
+      <span class="wordmark">auxilo</span>
+    </a>
+    <ul class="nav-links" role="list">
+      <li><a href="/how-it-works" id="nav-how">How It Works</a></li>
+      <li><a href="/for-agents" id="nav-agents">For Agents</a></li>
+      <li><a href="/for-builders" id="nav-builders">For Builders</a></li>
+      <li><a href="/pricing" id="nav-pricing">Pricing</a></li>
+      <li><a href="/earnings" id="nav-earnings">Earnings</a></li>
+    </ul>
+    <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+  <div class="nav-strip">
+    <a href="/dashboard" id="nav-dashboard" class="active">Dashboard</a>
+  </div>
 </nav>
 
 <!-- ── Login view (shown when no session) ──────────────────────────── -->
 <div id="login-view" style="display:none">
   <div class="login-logo">
     <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <polygon points="16,2 30,28 2,28" fill="none" stroke="#C9A84C" stroke-width="2.2" stroke-linejoin="round"/>
-      <line x1="16" y1="17" x2="30" y2="17" stroke="#C9A84C" stroke-width="1.8"/>
+      <polygon points="16,2 30,28 2,28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
+      <line x1="16" y1="17" x2="30" y2="17" stroke="currentColor" stroke-width="1.8"/>
     </svg>
     <span style="font-size:18px;font-weight:500;color:var(--ivory)">auxilo</span>
   </div>
@@ -756,6 +762,7 @@
       <span class="wordmark">auxilo</span>
     </a>
     <p class="footer-meta">
+      <a href="/api">API</a> ·
       <a href="/about">About</a> ·
       <a href="/writing">Writing</a> ·
       <a href="/status">Status</a> ·
@@ -2191,7 +2198,7 @@
     if (ids.length === 0) return;
 
     var confirmMsg = decision === 'approve'
-      ? ('Approve ' + ids.length + ' learning(s)?\n\nEach one will be published to the public marketplace immediately. This confirmation is your approval of every item in the selection.')
+      ? ('Approve ' + ids.length + ' learning(s)?\n\nUntil Auxilo has cleared your account to publish, approval is declined and the item stays in your queue for operator review. Once your account is cleared, approving publishes each one to the public catalog unless a screen has it held. This confirmation is your approval of every item in the selection.')
       : decision === 'keep_private'
         ? ('Keep ' + ids.length + ' learning(s) private?\n\nThey stay yours with owner-only recall at $0 and are never published.')
         : ('Reject ' + ids.length + ' learning(s)?\n\nThey will not be published.');

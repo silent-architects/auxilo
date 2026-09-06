@@ -388,7 +388,12 @@ describe('B2: POST /account/pending/reject-by-signal (structural)', () => {
 
 describe('B3: POST /account/pending/:id/sanitize (structural)', () => {
   let h;
-  before(() => { h = sliceAt(SERVER_SRC, "app.post('/account/pending/:id/sanitize'", 17000); });
+  // NAV-WAVE (2026-09-06): the marketplace-moderation error string inside
+  // this route's slice window gained "Auxilo " (server.js Auxilo-naming
+  // sweep), pushing 'releaseLearningsLock();' 8 chars past the old 17000
+  // boundary. Bumped with margin rather than to the exact new byte count,
+  // so the next small copy edit in this window doesn't retrip the same pin.
+  before(() => { h = sliceAt(SERVER_SRC, "app.post('/account/pending/:id/sanitize'", 17300); });
 
   it('contribute scope; ownership checked BEFORE status (M-6); pending|rejected source only', () => {
     assert.ok(h.includes("resolveSelfReviewAccount(c, 'contribute')"));
