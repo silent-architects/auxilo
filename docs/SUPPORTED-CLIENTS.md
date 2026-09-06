@@ -1,4 +1,4 @@
-# Auxilo — Supported Client Integrations
+# Supported clients
 
 *Last updated: 2026-09-05 (EXT-GATE: local extraction opened to every capture source; OpenClaw row qualified)*
 

@@ -12211,9 +12211,28 @@ function serveLegalPage(c, filename, title, seo) {
       (_m, a, b) => codeBlocks[a !== undefined ? a : b]);
     // SEO-BASELINE-2026-09-06: canonical + og/twitter block, /terms and /privacy only
     // (routes below pass `seo`; other serveLegalPage callers pass nothing and get no tags).
-    const seoTags = seo ? [
+    // AD-STRINGS-PACKET-10-SEO-FINAL-2026-09-06: `seo.full` gives a page the full
+    // head public HTML pages carry (see public/about.html) — description, og:image,
+    // twitter:card summary_large_image, twitter:title, twitter:image, same tag order.
+    // /terms and /privacy keep their original reduced shape (twitter:card summary,
+    // no og:image/twitter:title/twitter:image) — only og:site_name is added to them.
+    const seoTags = seo ? (seo.full ? [
+      `<meta name="description" content="${seo.description}"/>`,
+      `<meta property="og:type" content="website"/>`,
+      `<meta property="og:site_name" content="Auxilo"/>`,
+      `<meta property="og:url" content="https://auxilo.io${seo.path}"/>`,
+      `<meta property="og:title" content="${title} | Auxilo"/>`,
+      `<meta property="og:description" content="${seo.description}"/>`,
+      `<meta property="og:image" content="https://auxilo.io/og-image.png"/>`,
+      `<meta name="twitter:card" content="summary_large_image"/>`,
+      `<meta name="twitter:title" content="${title} | Auxilo"/>`,
+      `<meta name="twitter:description" content="${seo.description}"/>`,
+      `<meta name="twitter:image" content="https://auxilo.io/og-image.png"/>`,
+      `<link rel="canonical" href="https://auxilo.io${seo.path}"/>`,
+    ] : [
       `<link rel="canonical" href="https://auxilo.io${seo.path}"/>`,
       `<meta property="og:type" content="website"/>`,
+      `<meta property="og:site_name" content="Auxilo"/>`,
       `<meta property="og:url" content="https://auxilo.io${seo.path}"/>`,
       `<meta property="og:title" content="${title} | Auxilo"/>`,
       `<meta name="twitter:card" content="summary"/>`,
@@ -12222,7 +12241,7 @@ function serveLegalPage(c, filename, title, seo) {
         `<meta property="og:description" content="${seo.description}"/>`,
         `<meta name="twitter:description" content="${seo.description}"/>`,
       ] : []),
-    ].join('\n  ') : '';
+    ]).join('\n  ') : '';
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -12295,7 +12314,11 @@ app.get('/privacy', (c) => serveLegalPage(c, 'PRIVACY-POLICY.md', 'Privacy Polic
   description: 'Auxilo privacy policy covering data collection, use, and retention.',
 }));
 app.get('/legal/subprocessors', (c) => serveLegalPage(c, 'SUBPROCESSORS.md', 'Sub-Processors'));
-app.get('/legal/supported-clients', (c) => serveLegalPage(c, 'SUPPORTED-CLIENTS.md', 'Supported Clients'));
+app.get('/legal/supported-clients', (c) => serveLegalPage(c, 'SUPPORTED-CLIENTS.md', 'Supported clients', {
+  path: '/legal/supported-clients',
+  description: 'Which coding clients the local runner can capture learnings from once you opt in, by tier, with the caveat for each.',
+  full: true,
+}));
 // FB-1: /dmca is incorporated into the Terms (§5.9.4(b)) and must resolve, not 404.
 app.get('/dmca', (c) => serveLegalPage(c, 'DMCA-POLICY.md', 'DMCA Copyright Policy'));
 
