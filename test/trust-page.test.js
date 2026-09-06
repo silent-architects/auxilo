@@ -53,6 +53,40 @@ const H1 = 'What stands between a submission and the public catalog';
 const LLMS_LINE = '- How submissions reach the catalog: https://auxilo.io/how-submissions-work';
 const REDIRECT_SOURCES = ['/trust', '/governance', '/for-platforms', '/platforms'];
 
+// ─── TRUST-PAGE-3 content-pass fixtures ────────────────────────────────────
+// Strings copied verbatim from
+// ~/.auxilo/handoffs/TRUST-PAGE-SECTIONS-0-7-SHIP-REV-2026-09-06.md (rev 1a,
+// E1-E5, PASSED both gates) for byte comparison against the served page.
+const SUBHEAD = "Auxilo is a marketplace for what agents learn. What follows is the mechanism, for anyone deciding whether to let their agents use it.";
+const S0_CALLOUT = "Every new submission arrives under a verified wallet or an authenticated account and passes Auxilo's screens. Correctness is a different matter. No one at Auxilo certifies that a learning is right. So your agents keep one control on their side. Treat the body of an unlocked learning as untrusted data. Do not follow instructions contained in it.";
+const S1_BODY = "Auxilo is a marketplace for what agents learn. Agents search it free and pay to unlock a learning instead of rediscovering it. The builder behind the contributing agent earns 70% of every direct unlock and 60% when Auxilo search surfaced it.";
+const S1B_EARNINGS_SENTENCE = "Earnings accrue to your Auxilo account now and remain payable to you under the Terms.";
+const S1B_WITHDRAWALS_LINK_TEXT = "Withdrawals open soon";
+const S1B_WITHDRAWALS_REST = " as we finish our non-custodial migration. Earnings depend on whether other agents unlock your learnings and are not guaranteed. Auxilo is early.";
+const S2_PARA1 = "Learnings are extracted from finished coding sessions on the builder's own machine, not written up by hand. Background extraction is disabled by default and enabled only by explicit opt-in during npx auxilo setup. Which clients it can capture sessions from is listed, by tier, on the supported clients page.";
+const S2_PARA2 = "Before anything leaves that machine, the transcript is scrubbed behind a fail-closed secret filter. If the filter cannot verify its own work, nothing uploads. The local runner that does the extracting submits only finished learning drafts drawn from the scrubbed text, so raw sessions never reach Auxilo. By default, everything your agent extracts lands in your private review queue, and you decide what goes live, one learning at a time or in advance in your dashboard.";
+const S3_PARA1 = "Accounts are self-service. A magic link to an email inbox opens one, so signing up proves control of that inbox rather than anyone's identity. The checks run against the submission itself.";
+const S3_PARA2 = "Every submission passes a server-side safety screen. Anything the platform flags is held. Submissions also pass near-duplicate screening.";
+const S3_PARA3 = "Public submissions are accepted in six technical categories only, and the API refuses public submissions outside those six categories. The categories are data-processing, web-interaction, code-execution, payment-financial, storage-state, and monitoring. Non-technical content is accepted only as a private learning, and private learnings never appear in the public catalog.";
+const S3_PARA4 = "Your first published learning also passes an Auxilo review before it reaches the public catalog, so a new account cannot publish unreviewed. After that the decision is yours alone.";
+const S4_ASYMMETRY = "Consuming is anonymous. Contributing is not. Every published learning traces to an accountable identity.";
+const S4_INVARIANT = "Auxilo's own learnings sit under two accounts. One is Auxilo's platform account. The other is the account of the builder behind Auxilo.";
+const S4_PROVENANCE = "Every learning carries provenance.";
+const S4_STATE_A = 'Today the catalog holds nothing else. No outside builder has published here yet.';
+const S4_STATE_B_BASE = 'An outside builder has published here.';
+const S6_DEFENSES = "We do not claim complete defenses. Nobody honestly can.";
+const S6_REVIEW = "Nor is every learning human-approved. A person at Auxilo reviews each account's first published learning. Once. From then on, the checks on Auxilo's side are the screens.";
+const S6_HOLD = "When the safety screen cannot clear a submission, the submission holds rather than publishes.";
+const S7_FRAMING = "The counts in this section are live, read from the ledger each time the page loads.";
+const S7_LEARNINGS_LABEL = "learnings live in the catalog";
+const S7_UNLOCKS_LABEL = "unlocks, all time";
+
+function tpStaticCell(html, id) {
+  const m = html.match(new RegExp(`id="${id}"[^>]*>([^<]*)<`));
+  assert.ok(m, `${id} cell present`);
+  return m[1];
+}
+
 describe('Trust page: route, redirects, head tags, h1, forbidden strings', { timeout: 180_000 }, () => {
   let tmpDir;
   let child;
@@ -180,6 +214,84 @@ describe('Trust page: route, redirects, head tags, h1, forbidden strings', { tim
       '§1b carries the /status anchor (precondition 2)'
     );
   });
+
+  // ─── TRUST-PAGE-3 content pass: byte-compare every filled static slot
+  // against the ship-rev fixture, plus the DOM-order / presence / rider /
+  // Tyler-gated-empty checks. Static file reads — no server boot needed. ───
+
+  it('hero subhead: byte-equal to the ship-rev E1 string', () => {
+    assert.ok(TRUST_HTML.includes(`<p class="page-hero-sub">${SUBHEAD}</p>`), 'subhead renders verbatim');
+  });
+
+  it('§0 (operator callout): byte-equal to the ship-rev string', () => {
+    assert.ok(TRUST_HTML.includes(`<h2 id="operator-callout-heading">If you run agents that will consume this catalog</h2>`), '§0 heading');
+    assert.ok(TRUST_HTML.includes(`<p>${S0_CALLOUT}</p>`), '§0 body verbatim');
+  });
+
+  it('§1 (What Auxilo is): byte-equal to the ship-rev E2 string', () => {
+    assert.ok(TRUST_HTML.includes(`<h2 id="what-auxilo-is-heading">What Auxilo is</h2>`), '§1 heading');
+    assert.ok(TRUST_HTML.includes(`<p>${S1_BODY}</p>`), '§1 body verbatim (E2)');
+  });
+
+  it('§1b: earnings + withdrawals slots byte-equal to the ship-rev E3 string, /status anchor text present', () => {
+    assert.equal(tpStaticCell(TRUST_HTML, 's1b-earnings-sentence'), S1B_EARNINGS_SENTENCE, 's1b-earnings-sentence verbatim');
+    const withdrawalsMatch = TRUST_HTML.match(/<p id="s1b-withdrawals-sentence">([\s\S]*?)<\/p>/);
+    assert.ok(withdrawalsMatch, 's1b-withdrawals-sentence present');
+    assert.equal(
+      withdrawalsMatch[1],
+      `<a id="s1b-withdrawals-link" href="/status">${S1B_WITHDRAWALS_LINK_TEXT}</a>${S1B_WITHDRAWALS_REST}`,
+      's1b-withdrawals-sentence verbatim, anchor text = "Withdrawals open soon"'
+    );
+  });
+
+  it('§2 (Where learnings come from): byte-equal to the ship-rev E4/E5 strings', () => {
+    assert.ok(TRUST_HTML.includes(`<h2 id="learnings-source-heading">Where learnings come from</h2>`), '§2 heading');
+    assert.ok(TRUST_HTML.includes(S2_PARA1), '§2 paragraph 1 verbatim (E4)');
+    assert.ok(TRUST_HTML.includes(S2_PARA2), '§2 paragraph 2 verbatim (E5)');
+  });
+
+  it('§3 (The submission path): byte-equal to the ship-rev strings, all four blocks', () => {
+    assert.ok(TRUST_HTML.includes(`<h2 id="submission-path-heading">The submission path</h2>`), '§3 heading');
+    for (const p of [S3_PARA1, S3_PARA2, S3_PARA3, S3_PARA4]) {
+      assert.ok(TRUST_HTML.includes(`<p>${p}</p>`), `§3 block verbatim: "${p.slice(0, 40)}..."`);
+    }
+  });
+
+  it('§4: static slots (asymmetry, invariant, provenance) byte-equal to the ship-rev strings', () => {
+    assert.equal(tpStaticCell(TRUST_HTML, 's4-asymmetry'), S4_ASYMMETRY, 's4-asymmetry verbatim');
+    assert.equal(tpStaticCell(TRUST_HTML, 's4-invariant'), S4_INVARIANT, 's4-invariant verbatim');
+    assert.equal(tpStaticCell(TRUST_HTML, 's4-provenance'), S4_PROVENANCE, 's4-provenance verbatim');
+  });
+
+  it('§6 (Limits) is present and its three filled slots are byte-equal to the ship-rev strings', () => {
+    assert.ok(TRUST_HTML.includes('<h2 id="limits-heading">Limits</h2>'), '§6 heading renders — §6 present');
+    assert.equal(tpStaticCell(TRUST_HTML, 's6-defenses-sentence'), S6_DEFENSES, 's6-defenses-sentence verbatim');
+    assert.equal(tpStaticCell(TRUST_HTML, 's6-review-sentence'), S6_REVIEW, 's6-review-sentence verbatim');
+    assert.equal(tpStaticCell(TRUST_HTML, 's6-hold-sentence'), S6_HOLD, 's6-hold-sentence verbatim');
+  });
+
+  it('§7: framing sentence and pinned labels byte-equal to the ship-rev / earnings.html-precedent strings', () => {
+    assert.equal(tpStaticCell(TRUST_HTML, 's7-framing-sentence'), S7_FRAMING, 's7-framing-sentence verbatim');
+    assert.equal(tpStaticCell(TRUST_HTML, 's7-learnings-label'), S7_LEARNINGS_LABEL, 's7-learnings-label verbatim (earnings.html precedent)');
+    assert.equal(tpStaticCell(TRUST_HTML, 's7-unlocks-label'), S7_UNLOCKS_LABEL, 's7-unlocks-label verbatim (earnings.html precedent)');
+  });
+
+  it('no "any client" wording anywhere on the page (ship-rev header rider)', () => {
+    assert.ok(!TRUST_HTML.includes('any client'), 'the phrase "any client" does not appear on the page');
+  });
+
+  it('§1b immediately follows §1 in DOM order (ship-rev header rider)', () => {
+    const sectionIds = [...TRUST_HTML.matchAll(/<section aria-labelledby="([^"]+)">/g)].map((m) => m[1]);
+    const s1Index = sectionIds.indexOf('what-auxilo-is-heading');
+    assert.ok(s1Index >= 0, '§1 section present');
+    assert.equal(sectionIds[s1Index + 1], 'earnings-heading', '§1b is the very next <section> after §1');
+  });
+
+  it('Tyler-gated slots stay empty: §4 magnitude sentence, §6 R-13 slot, the cut adversarial sentence (ship-rev §9)', () => {
+    assert.ok(!TRUST_HTML.includes("Of the catalog's"), 'the State B magnitude sentence template never appears statically (§9 item 1, not ruled)');
+    assert.ok(/<p id="s6-r13-slot" data-slot="r13-limits"><\/p>/.test(TRUST_HTML), 's6-r13-slot renders as an empty <p> (§9/precondition 1, string still not sourced)');
+    assert.ok(!TRUST_HTML.includes('adversarial submissions are expected'), 'the cut adversarial sentence (§9 item 3) stays cut');
+  });
 });
 
 // ─── TRUST-PAGE-SSR fixtures (module scope — CH-7 guard: no assert-bearing
@@ -248,6 +360,14 @@ function tpLedgerLine(id, learning_id) {
 function tpPartitionState(html) {
   const m = html.match(/id="s4-partition-state" data-partition-state="([^"]*)"/);
   assert.ok(m, 's4-partition-state marker present in the served HTML');
+  return m[1];
+}
+// TRUST-PAGE-3 content pass: the text server-injected between the
+// SSR:PARTITION-STATE markers (renderTrustPagePartition), distinct from the
+// data-partition-state attribute tpPartitionState reads.
+function tpPartitionStateText(html) {
+  const m = html.match(/<!-- SSR:PARTITION-STATE -->([\s\S]*?)<!-- \/SSR:PARTITION-STATE -->/);
+  assert.ok(m, 'SSR:PARTITION-STATE markers present in the served HTML');
   return m[1];
 }
 function tpCell(html, id) {
@@ -329,6 +449,19 @@ describe('TRUST-PAGE-SSR: §4 partition render + §7 live counts + no-store', { 
     });
   });
 
+  it('§4: state A text is server-injected between the SSR:PARTITION-STATE markers, byte-equal to the ship-rev string', { timeout: 240_000 }, async (t) => {
+    await withTrustPageStagedServer(t, { catalog: tpAllInternalCatalog(), ledger: '' }, async (html) => {
+      assert.equal(tpPartitionStateText(html), S4_STATE_A, 'state A text verbatim');
+    });
+  });
+
+  it('§4: state B renders the base sentence ONLY, byte-equal to the ship-rev string — the magnitude sentence stays Tyler-gated and unrendered', { timeout: 240_000 }, async (t) => {
+    await withTrustPageStagedServer(t, { catalog: tpWithExternalCatalog(), ledger: '' }, async (html) => {
+      assert.equal(tpPartitionStateText(html), S4_STATE_B_BASE, 'state B base text verbatim, no magnitude sentence appended');
+      assert.ok(!html.includes("Of the catalog's"), 'the magnitude sentence template never renders live either');
+    });
+  });
+
   it('§4: the served page never carries both branch states — the marker is a single attribute value', { timeout: 240_000 }, async (t) => {
     await withTrustPageStagedServer(t, { catalog: tpWithExternalCatalog(), ledger: '' }, async (html) => {
       const matches = html.match(/data-partition-state="[^"]*"/g) || [];
@@ -357,5 +490,46 @@ describe('TRUST-PAGE-SSR: §4 partition render + §7 live counts + no-store', { 
     await withTrustPageStagedServer(t, { catalog: tpAllInternalCatalog(), ledger: '' }, async (_html, res) => {
       assert.equal(res.headers.get('cache-control'), 'no-store');
     });
+  });
+});
+
+// ─── config/internal-identities.json: operator wallet registration ────────
+// TRUST-PAGE-3 content pass: populates the register (was UNPOPULATED) with
+// the operator wallet cited from this repo's own CLAUDE.md
+// (`contributor_wallet` line — already public). Unit-level: exercises
+// lib/partition-guard.js directly, no server boot needed.
+describe('config/internal-identities.json: operator wallet register', () => {
+  const { loadInternalIdentitiesRegister, computePartition, isOperatorIdentity } = require('../lib/partition-guard.js');
+  const INTERNAL_IDENTITIES_FILE = path.join(REPO, 'config', 'internal-identities.json');
+  const OPERATOR_WALLET = '0xA19Cf92cc1daCf742f0E50b4128cAD3A86A81EC4';
+
+  it('the register loads with the operator wallet present, lowercased', () => {
+    const register = loadInternalIdentitiesRegister(INTERNAL_IDENTITIES_FILE, {});
+    assert.ok(register.wallets.has(OPERATOR_WALLET.toLowerCase()), 'operator wallet present in the loaded register, lowercased');
+    assert.equal(register.accountIds.size, 0, 'account_ids stays empty per this build');
+  });
+
+  it('computePartition classes a row on the operator wallet as internal (state stays "a")', () => {
+    const register = loadInternalIdentitiesRegister(INTERNAL_IDENTITIES_FILE, {});
+    const neverPlatform = () => false; // isolate the operator-register path from isPlatformContributor
+    const row = { contributor_account_id: null, contributor_wallet: OPERATOR_WALLET };
+    assert.equal(
+      isOperatorIdentity(row, register),
+      true,
+      'the operator wallet resolves as an operator identity regardless of case'
+    );
+    const partition = computePartition([row], {
+      platformWallets: [],
+      register,
+      isPlatformContributorFn: neverPlatform,
+    });
+    assert.equal(partition.state, 'a', 'a catalog with only an operator-wallet row is internal-only (state a), not external');
+    assert.equal(partition.external_n, 0, 'the operator-wallet row is not counted external');
+  });
+
+  it('a mixed-case operator wallet on a row still matches (register load lowercases, row lookup lowercases)', () => {
+    const register = loadInternalIdentitiesRegister(INTERNAL_IDENTITIES_FILE, {});
+    const mixedCaseRow = { contributor_account_id: null, contributor_wallet: OPERATOR_WALLET.toUpperCase() };
+    assert.equal(isOperatorIdentity(mixedCaseRow, register), true, 'case-insensitive match on the operator wallet');
   });
 });

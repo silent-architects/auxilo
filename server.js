@@ -11899,6 +11899,15 @@ app.get('/writing', (c) => {
 // allowlist FIRST via isPlatformContributor OR the operator register —
 // there is no separate "null-account => external" rule run ahead of or
 // instead of that check.
+// TRUST-PAGE-3 content pass (TRUST-PAGE-SECTIONS-0-7-SHIP-REV-2026-09-06.md
+// rev 1a, §4 "State A" / "State B base"): the two state strings injected
+// between the SSR:PARTITION-STATE markers. State B's additive "magnitude"
+// second sentence (the numeral pair naming the catalog total and the
+// external count) is Tyler-gated per §9 item 1 and is deliberately NOT
+// injected here — State B ships base-only until that ruling lands.
+const TRUST_PAGE_PARTITION_STATE_A = 'Today the catalog holds nothing else. No outside builder has published here yet.';
+const TRUST_PAGE_PARTITION_STATE_B_BASE = 'An outside builder has published here.';
+
 function renderTrustPagePartition(html) {
   try {
     const visible = visibleCatalog();
@@ -11909,13 +11918,19 @@ function renderTrustPagePartition(html) {
       isPlatformContributorFn: isPlatformContributor,
     });
     if (!partition) return html; // non-array catalog: treat as derivation failure, neither branch
-    // Content is Tyler-gated and stays empty this pass — only the render
-    // state marker moves. A future content pass fills the container
-    // between the SSR:PARTITION-STATE comments per `partition.state`.
-    return html.replace(
+    // The state marker moves, and (this pass) the container between the
+    // SSR:PARTITION-STATE comments fills with the matching state string —
+    // never both, per finding 13's render contract.
+    let out = html.replace(
       /(<[a-z]+ id="s4-partition-state" data-partition-state=")none("[^>]*>)/,
       (_m, pre, post) => `${pre}${partition.state}${post}`
     );
+    const stateText = partition.state === 'a' ? TRUST_PAGE_PARTITION_STATE_A : TRUST_PAGE_PARTITION_STATE_B_BASE;
+    out = out.replace(
+      /(<!-- SSR:PARTITION-STATE -->)[\s\S]*?(<!-- \/SSR:PARTITION-STATE -->)/,
+      (_m, open, close) => `${open}${stateText}${close}`
+    );
+    return out;
   } catch (e) {
     console.error('[trust-page] §4 partition render failed, serving fail-closed (neither branch):', e.message);
     return html;

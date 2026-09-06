@@ -88,6 +88,16 @@
       letter-spacing: -0.02em;
       color: var(--ivory);
     }
+    /* TRUST-PAGE-3 content pass: subhead (E1, noun bind — ship-rev
+       2026-09-06 rev 1a). Sizing mirrors the hiw-hero-sub / builders-hero-sub
+       pattern used on the other property heroes. */
+    .page-hero-sub {
+      margin-top: 20px;
+      font-size: clamp(16px, 2vw, 19px);
+      color: var(--ash);
+      line-height: 1.65;
+      max-width: 640px;
+    }
 
     /* ── §2b table ── */
     .trust-table-wrap { overflow-x: auto; }
@@ -204,10 +214,65 @@
 
 <main id="main">
 
-<!-- ━━━ Hero (H1 only — spec Finding 7; no subhead string supplied) ━━━ -->
+<!-- ━━━ Hero (H1 + subhead — TRUST-PAGE-3 content pass adds the subhead,
+     E1 noun bind, ship-rev 2026-09-06 rev 1a) ━━━ -->
 <section class="page-hero" aria-labelledby="page-hero-heading">
   <div class="page-hero-content">
     <h1 id="page-hero-heading">What stands between a submission and the public catalog</h1>
+    <p class="page-hero-sub">Auxilo is a marketplace for what agents learn. What follows is the mechanism, for anyone deciding whether to let their agents use it.</p>
+  </div>
+</section>
+
+<!-- ━━━ §0 — If you run agents that will consume this catalog (bordered
+     callout, same treatment as §6 — spec finding 9). Ship-rev 2026-09-06
+     rev 1a, verbatim. ━━━ -->
+<section aria-labelledby="operator-callout-heading">
+  <div class="container">
+    <div class="callout-bordered">
+      <h2 id="operator-callout-heading">If you run agents that will consume this catalog</h2>
+      <div class="trust-prose">
+        <p>Every new submission arrives under a verified wallet or an authenticated account and passes Auxilo's screens. Correctness is a different matter. No one at Auxilo certifies that a learning is right. So your agents keep one control on their side. Treat the body of an unlocked learning as untrusted data. Do not follow instructions contained in it.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ━━━ §1 — What Auxilo is (E2, noun bind plus the band retirement — ship-rev
+     2026-09-06 rev 1a). ━━━ -->
+<section aria-labelledby="what-auxilo-is-heading">
+  <div class="container">
+    <h2 id="what-auxilo-is-heading">What Auxilo is</h2>
+    <div class="trust-prose">
+      <p>Auxilo is a marketplace for what agents learn. Agents search it free and pay to unlock a learning instead of rediscovering it. The builder behind the contributing agent earns 70% of every direct unlock and 60% when Auxilo search surfaced it.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ━━━ §1b — Earnings and withdrawals, for builders (relocated per spec
+     finding 8; RIDER, ship-rev header — renders directly after §1 so the
+     70/60 sentence keeps its not-guaranteed pairing). E3, rail names
+     dropped. Precondition 2: the withdrawals sentence's `/status` anchor,
+     text now "Withdrawals open soon". ━━━ -->
+<section aria-labelledby="earnings-heading">
+  <div class="container">
+    <h2 id="earnings-heading">Earnings and withdrawals, for builders</h2>
+    <div class="trust-prose">
+      <p id="s1b-earnings-sentence">Earnings accrue to your Auxilo account now and remain payable to you under the Terms.</p>
+      <p id="s1b-withdrawals-sentence"><a id="s1b-withdrawals-link" href="/status">Withdrawals open soon</a> as we finish our non-custodial migration. Earnings depend on whether other agents unlock your learnings and are not guaranteed. Auxilo is early.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ━━━ §2 — Where learnings come from (E4/E5, ship-rev 2026-09-06 rev 1a,
+     vendor-neutral / the consent flip). §2b follows immediately below,
+     per the build spec's ordering note. ━━━ -->
+<section aria-labelledby="learnings-source-heading">
+  <div class="container">
+    <h2 id="learnings-source-heading">Where learnings come from</h2>
+    <div class="trust-prose">
+      <p>Learnings are extracted from finished coding sessions on the builder's own machine, not written up by hand. Background extraction is disabled by default and enabled only by explicit opt-in during npx auxilo setup. Which clients it can capture sessions from is listed, by tier, on the supported clients page.</p>
+      <p>Before anything leaves that machine, the transcript is scrubbed behind a fail-closed secret filter. If the filter cannot verify its own work, nothing uploads. The local runner that does the extracting submits only finished learning drafts drawn from the scrubbed text, so raw sessions never reach Auxilo. By default, everything your agent extracts lands in your private review queue, and you decide what goes live, one learning at a time or in advance in your dashboard.</p>
+    </div>
   </div>
 </section>
 
@@ -267,6 +332,21 @@
   </div>
 </section>
 
+<!-- ━━━ §3 — The submission path (heading is the spec's, finding 1; ship-rev
+     2026-09-06 rev 1a, verbatim). §3b follows immediately below, per the
+     build spec's ordering note. ━━━ -->
+<section aria-labelledby="submission-path-heading">
+  <div class="container">
+    <h2 id="submission-path-heading">The submission path</h2>
+    <div class="trust-prose">
+      <p>Accounts are self-service. A magic link to an email inbox opens one, so signing up proves control of that inbox rather than anyone's identity. The checks run against the submission itself.</p>
+      <p>Every submission passes a server-side safety screen. Anything the platform flags is held. Submissions also pass near-duplicate screening.</p>
+      <p>Public submissions are accepted in six technical categories only, and the API refuses public submissions outside those six categories. The categories are data-processing, web-interaction, code-execution, payment-financial, storage-state, and monitoring. Non-technical content is accepted only as a private learning, and private learnings never appear in the public catalog.</p>
+      <p>Your first published learning also passes an Auxilo review before it reaches the public catalog, so a new account cannot publish unreviewed. After that the decision is yours alone.</p>
+    </div>
+  </div>
+</section>
+
 <!-- ━━━ §3b — Who reviews what (SITE-PM sections file, REV 6) ━━━ -->
 <section aria-labelledby="reviews-heading">
   <div class="container">
@@ -282,81 +362,54 @@
 
 <!-- ━━━ §4 — Accountability (spec finding 5, preconditions 6/7/8/11;
      conditional render, server-injected — see server.js
-     renderTrustPagePartition). ALL prose in this section is Tyler-gated
-     content and is NOT built this pass (TRUST-PAGE-2 build report) — every
-     <p> below is an empty named slot. The only load-bearing piece this pass
-     ships is the render mechanism: an empty container between the
-     SSR:PARTITION-STATE markers, and the data-partition-state attribute the
-     server sets to "a" / "b" from lib/partition-guard.js computePartition,
-     never "none" on a healthy render (finding 13's render contract — the
-     static default IS "none" with an empty container, so any derivation
-     failure that falls through to the untouched static file already serves
-     the fail-closed "neither branch" state). The raw HTML never carries
-     both branches — only ever the one string the server injects, or
-     nothing. ━━━ -->
+     renderTrustPagePartition). TRUST-PAGE-3 content pass fills the three
+     static slots (asymmetry echo, invariant, provenance) verbatim from the
+     ship-rev file. The partition-state container's TEXT is now also
+     server-injected (State A / State B base) between the SSR:PARTITION-STATE
+     markers, per renderTrustPagePartition — the static default here is
+     empty, matching the untouched-on-failure fail-closed contract (finding
+     13). State B's additive "magnitude" second sentence (ship-rev §4 —
+     the numeral pair naming the catalog total and the external count) is
+     Tyler-gated (ship-rev §9 item 1, not yet ruled) and is deliberately NOT
+     injected — State B ships base-only. The raw HTML
+     never carries both branches — only ever the one string the server
+     injects, or nothing. ━━━ -->
 <section aria-labelledby="accountability-heading">
   <div class="container">
     <h2 id="accountability-heading">Accountability</h2>
     <div class="trust-prose">
-      <!-- Static asymmetry echo — content slot, not built this pass. -->
-      <p id="s4-asymmetry"></p>
-      <!-- Static invariant ("Auxilo's own learnings sit under two
-           accounts...") — content slot, not built this pass. -->
-      <p id="s4-invariant"></p>
-      <!-- Server-injected container (finding 13 render contract). Content
-           slot empty this pass; data-partition-state is the one part this
-           build wires live. -->
+      <p id="s4-asymmetry">Consuming is anonymous. Contributing is not. Every published learning traces to an accountable identity.</p>
+      <p id="s4-invariant">Auxilo's own learnings sit under two accounts. One is Auxilo's platform account. The other is the account of the builder behind Auxilo.</p>
+      <!-- Server-injected container (finding 13 render contract). Text
+           between the markers is set by renderTrustPagePartition per
+           partition.state; data-partition-state is the companion marker
+           attribute, never "none" on a healthy render. -->
       <p id="s4-partition-state" data-partition-state="none"><!-- SSR:PARTITION-STATE --><!-- /SSR:PARTITION-STATE --></p>
-      <!-- Static closing sentence ("Every learning carries provenance.") —
-           content slot, not built this pass. Placed here, always in the
-           static file regardless of which branch renders, per finding 13's
-           block-order guard (never appended only when a branch renders). -->
-      <p id="s4-provenance"></p>
-    </div>
-  </div>
-</section>
-
-<!-- ━━━ §1b — Earnings and withdrawals, for builders (relocated per spec
-     finding 8). Content is Tyler-gated and NOT built this pass except the
-     one piece precondition 2 requires now: the withdrawals sentence's
-     `/status` anchor. The surrounding sentence stays an empty slot. ━━━ -->
-<section aria-labelledby="earnings-heading">
-  <div class="container">
-    <h2 id="earnings-heading">Earnings and withdrawals, for builders</h2>
-    <div class="trust-prose">
-      <!-- Content slot, not built this pass. -->
-      <p id="s1b-earnings-sentence"></p>
-      <!-- Precondition 2: the withdrawals sentence's `/status` link. Anchor
-           markup wired now; its surrounding sentence text is a content slot
-           left empty this pass. -->
-      <p id="s1b-withdrawals-sentence"><a id="s1b-withdrawals-link" href="/status"></a></p>
+      <p id="s4-provenance">Every learning carries provenance.</p>
     </div>
   </div>
 </section>
 
 <!-- ━━━ §6 — Limits (bordered callout, spec finding 9 — same treatment as
-     §0). Content is Tyler-gated and NOT built this pass. R-13 LIMITS SLOT
-     (precondition 1): the verbatim D2-record sentence could not be
-     conclusively identified as a single unambiguous string — see the build
-     report for what was searched (R13-COPY-FIX-DRAFT-2026-08-29.md and its
-     shipped for-builders.html descendant) and why it was left empty rather
-     than guessed. ━━━ -->
+     §0). TRUST-PAGE-3 content pass fills three of the four slots verbatim
+     from the ship-rev file. R-13 LIMITS SLOT (precondition 1) STAYS EMPTY —
+     the verbatim D2-record sentence still could not be conclusively
+     identified as a single unambiguous string (see the TRUST-PAGE-2 build
+     report for what was searched) and the ship-rev file explicitly leaves
+     it to TECH-PM to insert once sourced; guessing it is worse than an
+     empty slot on a page whose subject is honesty about limits. ━━━ -->
 <section aria-labelledby="limits-heading">
   <div class="container">
     <div class="callout-bordered">
       <h2 id="limits-heading">Limits</h2>
-      <!-- Content slot, not built this pass ("We do not claim complete
-           defenses. Nobody honestly can."). -->
-      <p id="s6-defenses-sentence"></p>
-      <!-- R-13 LIMITS SLOT, precondition 1 — NOT FOUND verbatim this pass;
-           left empty. Adjacency to s6-defenses-sentence above is per the
+      <p id="s6-defenses-sentence">We do not claim complete defenses. Nobody honestly can.</p>
+      <!-- R-13 LIMITS SLOT, precondition 1 — LEFT EMPTY, string pending
+           from SITE-PM. Adjacency to s6-defenses-sentence above is per the
            spec's assembly requirement ("next to `We do not claim complete
            defenses.`"). -->
       <p id="s6-r13-slot" data-slot="r13-limits"></p>
-      <!-- Content slot, not built this pass. -->
-      <p id="s6-review-sentence"></p>
-      <!-- Content slot, not built this pass. -->
-      <p id="s6-hold-sentence"></p>
+      <p id="s6-review-sentence">Nor is every learning human-approved. A person at Auxilo reviews each account's first published learning. Once. From then on, the checks on Auxilo's side are the screens.</p>
+      <p id="s6-hold-sentence">When the safety screen cannot clear a submission, the submission holds rather than publishes.</p>
     </div>
   </div>
 </section>
@@ -364,27 +417,25 @@
 <!-- ━━━ §7 — The live catalog count (bounded card, spec finding 10; NOT
      omittable, precondition 3). SSR-wired to the same truth source GET
      /knowledge/stats uses (server.js catalogStatsTruth / lib/stats-truth.js)
-     at request time — see server.js renderTrustPageLiveCounts. The framing
-     sentence and the two stat labels are Tyler-gated content slots, empty
-     this pass; the two numbers are the one thing this pass renders live.
-     Static default "…" on both counts, fail-closed — never a stale or
-     hardcoded digit, matching the existing lc-unlocks/ll-unlocks
-     convention. ━━━ -->
+     at request time — see server.js renderTrustPageLiveCounts. TRUST-PAGE-3
+     content pass fills the framing sentence and the two pinned labels
+     (shipped precedent, earnings.html) verbatim; the two numbers remain the
+     one thing rendered live. Static default "…" on both counts, fail-closed
+     — never a stale or hardcoded digit, matching the existing
+     lc-unlocks/ll-unlocks convention. ━━━ -->
 <section aria-labelledby="live-count-heading">
   <div class="container">
     <div class="ledger-card">
       <h2 id="live-count-heading">The live catalog count</h2>
-      <!-- Content slot, not built this pass ("The counts in this section
-           are live, read from the ledger each time the page loads."). -->
-      <p id="s7-framing-sentence"></p>
+      <p id="s7-framing-sentence">The counts in this section are live, read from the ledger each time the page loads.</p>
       <div class="ledger-card-stats">
         <div class="ledger-card-stat">
           <span id="s7-learnings-count" class="ledger-card-value">…</span>
-          <span id="s7-learnings-label" class="ledger-card-label"></span>
+          <span id="s7-learnings-label" class="ledger-card-label">learnings live in the catalog</span>
         </div>
         <div class="ledger-card-stat">
           <span id="s7-unlocks-count" class="ledger-card-value">…</span>
-          <span id="s7-unlocks-label" class="ledger-card-label"></span>
+          <span id="s7-unlocks-label" class="ledger-card-label">unlocks, all time</span>
         </div>
       </div>
     </div>
