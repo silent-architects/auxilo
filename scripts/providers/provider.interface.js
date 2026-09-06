@@ -65,6 +65,18 @@
  * @property {string|null} [reason] - Human-readable reason, present when !ok.
  * @property {string} [authStatus] - 'logged-in' | 'logged-out' | 'unknown', when
  *   the provider has a meaningful concept of local auth state.
+ * @property {object} [identity] - {provider, model, version, vendor} — which
+ *   provider/model actually ran this call, for the extraction_model stamp
+ *   (scripts/extract-local.js's resolveExtractionModelIdentity reads THIS
+ *   field, not any other name). byo-key.js always sets it (full identity,
+ *   read from its stored config). codex-cli.js sets it (provider/version;
+ *   model/vendor null — codex exposes no per-call model id without --json).
+ *   claude-code.js does not set one yet; resolveExtractionModelIdentity
+ *   falls back to the resolved provider id alone when absent (EXTRACT-PER-
+ *   CLIENT W1 FIX GATE-A item (a) — codex-cli.js used to export this same
+ *   data under the field name `extraction_model`, which nothing here ever
+ *   read, so its real version silently never reached the stamp; that field
+ *   name survives one more release as a deprecated alias of `identity`).
  */
 
 /**

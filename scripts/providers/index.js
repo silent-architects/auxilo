@@ -96,16 +96,24 @@ function readProvidersState(statePath) {
  * called for an env-override selection (item 7: "env override always wins,
  * never writes"). Persisting is a convenience for `auxilo status`, not a
  * correctness requirement — failure here is swallowed.
+ *
+ * Routes through byo-key.js's writeProvidersStateAtomic — GOV-3 item 1's
+ * "ONE writer" for every providers.json write, so this call gets the exact
+ * same tmp+wx+rename+POST-RENAME-chmod discipline byo-key.js's own writers
+ * use, instead of a second, independently-drifted copy that (as found)
+ * omitted the post-rename chmod. It merges only the `selected` field — the
+ * `byo` object (and anything else already in the file) is read back and
+ * passed through UNCHANGED, never reconstructed or re-derived here, so this
+ * function cannot corrupt or partially rewrite credential fields it did not
+ * itself validate.
  */
 function persistSelected(providerId, opts) {
   const statePath = opts.providersStatePath || PROVIDERS_STATE_PATH;
   try {
+    if (typeof byoKey.writeProvidersStateAtomic !== 'function') return; // PART C not installed yet
     const state = readProvidersState(statePath);
-    state.selected = providerId;
-    fs.mkdirSync(path.dirname(statePath), { recursive: true, mode: 0o700 });
-    const tmp = `${statePath}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(state, null, 2), { encoding: 'utf8', mode: 0o600 });
-    fs.renameSync(tmp, statePath);
+    state.selected = providerId; // merge only this field — `byo` (if present) passes through as-read
+    byoKey.writeProvidersStateAtomic(state, opts);
   } catch {
     // Best-effort — selection still works in-process even if the write fails.
   }
@@ -150,6 +158,25 @@ async function resolveProvider(opts = {}) {
   // choice does NOT fail — it logs one line and falls through to the full
   // ordered scan below, which re-detects from scratch and persists (and
   // caches) whatever wins.
+  //
+  // GOV-3 item 2 ("checked on WRITE only, never on READ") is satisfied HERE
+  // by delegation, not by a duplicate check: `persistedMod.detect(opts)`
+  // below, when the persisted choice is 'byo-key', IS byo-key.js's own
+  // detect() — which (post-fix) checks isProvidersFileModeUnsafe before
+  // trusting anything on disk and returns false on an unsafe file. That
+  // reads as "no longer usable" through the EXACT SAME stale-selection path
+  // already below (log one line, fall through to the full ordered scan,
+  // where byo-key's own detect() applies the identical check again on its
+  // turn). A second, generic mode check gated on the `selected` string
+  // alone was tried and reverted here — it broke the legitimate steady-state
+  // fast path for claude-code/codex-cli selections (neither of which reads
+  // this file's contents at all, so an insecure-mode providers.json is not
+  // their concern) whenever the fixture file wasn't deliberately chmod'd
+  // 0600 (e.g. a plain `fs.writeFileSync` at the OS umask). Gating strictly
+  // on "is the persisted provider byo-key" would be correct but is also a
+  // no-op — byo-key.detect() already returns false in that case, which is
+  // exactly what the fast path's existing fallthrough handles.
+  const log = typeof opts.log === 'function' ? opts.log : console.error;
   const statePath = opts.providersStatePath || PROVIDERS_STATE_PATH;
   const persistedState = readProvidersState(statePath);
   const persistedId = persistedState.selected;
@@ -166,7 +193,6 @@ async function resolveProvider(opts = {}) {
       cache.resolved = resolved;
       return resolved;
     }
-    const log = typeof opts.log === 'function' ? opts.log : console.error;
     log(`[providers] persisted selection "${persistedId}" is no longer usable; re-detecting`);
   }
 

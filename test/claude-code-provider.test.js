@@ -97,14 +97,14 @@ describe('claude-code.js — claudeChildEnv() scrub completeness + preservation'
 // ─── (2)+(3) Extraction argv gains --tools '', judge argv unchanged ────────
 
 describe('claude-code.js — runModel argv per mode', () => {
-  it("mode:'extract' spawns [bin, '-p', '--tools', ''] (the new hardening)", async () => {
+  it("mode:'extract' spawns [bin, '-p', '--no-session-persistence', '--tools', ''] (EXTRACT-TOOLS-LOCK + the W1 FIX GIVENS: matches the judge spawn's --no-session-persistence)", async () => {
     const stub = spawnQueue([authJson(true), { status: 0, stdout: '{"learnings":[]}', stderr: '' }]);
     const result = await claudeCode.runModel({
       prompt: 'PROMPT', input: 'TRANSCRIPT', mode: 'extract',
       spawnSyncImpl: stub.spawnSyncImpl, claudeBin: 'claude',
     });
     assert.equal(result.ok, true);
-    assert.deepEqual(stub.calls[1].args, ['-p', '--tools', '']);
+    assert.deepEqual(stub.calls[1].args, ['-p', '--no-session-persistence', '--tools', '']);
   });
 
   it("mode:'judge' spawns byte-identical argv to pre-move: ['-p','--output-format','json','--no-session-persistence','--tools','']", async () => {

@@ -130,17 +130,75 @@ function findNearestProjectClaudeDir(startDir, existsSyncImpl) {
   }
 }
 
+// Enterprise/organization "managed settings" (EXTRACT-PER-CLIENT W1 FIX
+// GOV-3 item 6). These outrank every one of ~/.claude/settings.json and the
+// project settings.json/settings.local.json above, AND are loaded by
+// headless (`-p`) sessions — the exact case this detector exists for. A
+// managed apiKeyHelper would bill a foreign account while the detector
+// reported "no helper" if these paths were never checked. Paths verified
+// live against the Claude Code SME + official docs:
+//   https://code.claude.com/docs/en/managed-settings#choose-a-delivery-mechanism
+// ("File-based: managed-settings.json ... in the system directory:
+// /Library/Application Support/ClaudeCode/ on macOS, /etc/claude-code/ on
+// Linux and WSL, and C:\Program Files\ClaudeCode\ on Windows.")
+const MANAGED_SETTINGS_PATH_BY_PLATFORM = Object.freeze({
+  darwin: '/Library/Application Support/ClaudeCode/managed-settings.json',
+  win32: 'C:\\Program Files\\ClaudeCode\\managed-settings.json',
+  // linux, and everything else this repo runs tests on (WSL is a Linux
+  // filesystem for this purpose per the doc above) — the Linux path.
+  linux: '/etc/claude-code/managed-settings.json',
+});
+
+function managedSettingsPathForPlatform(opts) {
+  // opts.managedSettingsPath is a direct test-injection seam (this path
+  // otherwise names a fixed, real, OS-level location no test should touch).
+  if (typeof opts.managedSettingsPath === 'string') return opts.managedSettingsPath;
+  const platform = typeof opts.platform === 'string' ? opts.platform : process.platform;
+  return MANAGED_SETTINGS_PATH_BY_PLATFORM[platform] || MANAGED_SETTINGS_PATH_BY_PLATFORM.linux;
+}
+
 /**
- * true iff `~/.claude/settings.json` OR the nearest project
- * `.claude/settings.json`/`.claude/settings.local.json` upward from cwd has a
- * truthy apiKeyHelper/awsAuthRefresh/awsCredentialExport/gcpAuthRefresh. Never
- * throws — missing/malformed files are treated as "no helper configured".
+ * Managed settings get a STRICTER read than the user/project files below:
+ * present-but-unreadable (EACCES, a policy file this account can't open) or
+ * present-but-unparseable is NOT treated as "no helper" — it fails CLOSED
+ * (helper-configured = true), because we cannot verify a policy file we know
+ * exists. (User/project settings.json stay fail-open on malformed content —
+ * see the module's "malformed settings.json is treated as no helper" note;
+ * that matches Claude Code's own behavior for those files, which this
+ * managed path does not share.)
+ */
+function managedSettingsBlocksOrUnverifiable(filePath, existsSyncImpl, readFileSyncImpl) {
+  let exists;
+  try {
+    exists = existsSyncImpl(filePath);
+  } catch {
+    exists = false;
+  }
+  if (!exists) return false;
+  const parsed = readJsonSafe(filePath, readFileSyncImpl);
+  if (parsed === null) return true; // present but unreadable/unparseable — fail closed
+  return settingsHasBillingHelper(parsed);
+}
+
+/**
+ * true iff `~/.claude/settings.json`, the nearest project
+ * `.claude/settings.json`/`.claude/settings.local.json` upward from cwd, OR
+ * this platform's managed-settings.json (see above) has a truthy
+ * apiKeyHelper/awsAuthRefresh/awsCredentialExport/gcpAuthRefresh — or the
+ * managed file exists but could not be verified. Never throws —
+ * missing/malformed USER/PROJECT files are treated as "no helper configured"
+ * (matches the CLI's own fail-open behavior there); an unreadable/malformed
+ * MANAGED file is NOT — see managedSettingsBlocksOrUnverifiable above.
  */
 function detectBillingHelperConfigured(opts = {}) {
   const readFileSyncImpl = typeof opts.readFileSyncImpl === 'function' ? opts.readFileSyncImpl : fs.readFileSync;
   const existsSyncImpl = typeof opts.existsSyncImpl === 'function' ? opts.existsSyncImpl : fs.existsSync;
   const homeDir = typeof opts.homeDir === 'string' ? opts.homeDir : os.homedir();
   const cwd = typeof opts.cwd === 'string' ? opts.cwd : process.cwd();
+
+  if (managedSettingsBlocksOrUnverifiable(managedSettingsPathForPlatform(opts), existsSyncImpl, readFileSyncImpl)) {
+    return true;
+  }
 
   const filesToCheck = [path.join(homeDir, '.claude', 'settings.json')];
   const projectClaudeDir = findNearestProjectClaudeDir(cwd, existsSyncImpl);
@@ -231,7 +289,9 @@ function runExtractMode(opts) {
   const stdin = prompt + String(opts.input || '').slice(0, 200000);
   let res;
   try {
-    res = spawnSyncImpl(bin, ['-p', '--tools', ''], {
+    // --no-session-persistence (EXTRACT-PER-CLIENT W1 FIX GIVENS): matches the
+    // judge spawn below — an extraction run leaves no session file behind either.
+    res = spawnSyncImpl(bin, ['-p', '--no-session-persistence', '--tools', ''], {
       input: stdin,
       encoding: 'utf-8',
       env: claudeChildEnv(),
@@ -411,4 +471,7 @@ module.exports = {
   claudeChildEnv,
   SCRUBBED_CLIENT_ENV_VARS,
   detectBillingHelperConfigured,
+  // Exported for direct unit coverage (test/extract-w1-fix2.test.js, GOV-3 item 6).
+  managedSettingsPathForPlatform,
+  MANAGED_SETTINGS_PATH_BY_PLATFORM,
 };

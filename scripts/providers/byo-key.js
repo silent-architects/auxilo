@@ -53,6 +53,68 @@ function statePath(opts = {}) {
   return opts.providersStatePath || DEFAULT_PROVIDERS_STATE_PATH;
 }
 
+/**
+ * true iff `target` did not resolve to an absolute path (EXTRACT-PER-CLIENT
+ * W1 FIX GOV-3 item 13). `os.homedir()` can — rarely — return `''` (HOME/
+ * USERPROFILE unset and the OS lookup fails); DEFAULT_PROVIDERS_STATE_PATH
+ * is a plain `path.join(os.homedir(), ...)` module constant, so that failure
+ * mode silently turns it into a RELATIVE path under the process's cwd — in
+ * this repo, a public git tree. Every entry point that touches
+ * providers.json (read, write, or clear) checks this first and refuses
+ * rather than guess a location, with reasonCode 'provider-home-unresolved'.
+ * A caller-supplied `opts.providersStatePath` (every test in this repo, and
+ * any future explicit override) is never subject to this — the caller
+ * chose that path deliberately.
+ */
+function isHomeUnresolved(target) {
+  return typeof target !== 'string' || !target || !path.isAbsolute(target);
+}
+
+/**
+ * ONE writer for every providers.json write (EXTRACT-PER-CLIENT W1 FIX
+ * GOV-3 item 1 + should-fix item 9) — writeByoConfig, clearProvidersFile,
+ * AND scripts/providers/index.js's persistSelected all route through this,
+ * so there is exactly one place that gets the tmp+rename+chmod discipline
+ * right instead of three independent (and, before this fix, drifted) copies
+ * of it. Discipline, in order:
+ *   1. mkdir the parent dir 0700 (idempotent).
+ *   2. If a file already sits at `target`, chmod it 0600 BEFORE the
+ *      rename lands (belt-and-suspenders — the post-rename chmod below is
+ *      the one that actually matters for a stale `.tmp`).
+ *   3. Unlink any leftover `${target}.tmp` first (a crashed prior run, or a
+ *      planted symlink), THEN create it fresh with `flag:'wx'` (O_EXCL) —
+ *      refuses to silently reuse or follow anything already at that path.
+ *   4. Atomic rename tmp -> target.
+ *   5. chmodSync(target, 0o600) AFTER the rename. This is the literal fix
+ *      for GOV-3 finding 1: writeFileSync's `mode` option only applies on
+ *      CREATION, so a stale `.tmp` that survived a crash at 0644 would
+ *      rename onto `target` and KEEP 0644, silently falsifying the
+ *      "readable only by your user account" consent promise. The old
+ *      `persistSelected` (scripts/providers/index.js) had this exact gap;
+ *      this writer closes it everywhere at once.
+ * Throws (does not swallow) when the home directory could not be resolved
+ * (isHomeUnresolved) — callers decide how to surface that; see
+ * writeByoConfig/clearProvidersFile below and cmdProvider in
+ * bin/auxilo-cli.js, which catches this rather than let a raw stack out
+ * (should-fix item 10).
+ */
+function writeProvidersStateAtomic(state, opts = {}) {
+  const target = statePath(opts);
+  if (isHomeUnresolved(target)) {
+    const err = new Error('cannot resolve ~/.auxilo/providers.json — the home directory did not resolve to an absolute path');
+    err.reasonCode = 'provider-home-unresolved';
+    throw err;
+  }
+  fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
+  if (fs.existsSync(target)) fs.chmodSync(target, 0o600);
+  const tmp = `${target}.tmp`;
+  try { fs.unlinkSync(tmp); } catch { /* nothing there, or already gone — fine either way */ }
+  fs.writeFileSync(tmp, JSON.stringify(state, null, 2), { mode: 0o600, flag: 'wx' });
+  fs.renameSync(tmp, target);
+  fs.chmodSync(target, 0o600); // the fix: applies even when the rename source was a stale, wider-mode tmp.
+  return target;
+}
+
 /** Read ~/.auxilo/providers.json. Never throws; missing/malformed -> {}. */
 function readProvidersState(opts = {}) {
   try {
@@ -91,8 +153,6 @@ function readByoConfig(opts = {}) {
  * @param {{provider:string, base_url?:string|null, model:string, api_key:string}} byoConfig
  */
 function writeByoConfig(byoConfig, opts = {}) {
-  const target = statePath(opts);
-  fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
   const state = readProvidersState(opts);
   state.byo = {
     provider: byoConfig.provider,
@@ -100,12 +160,7 @@ function writeByoConfig(byoConfig, opts = {}) {
     model: byoConfig.model,
     api_key: byoConfig.api_key,
   };
-  if (fs.existsSync(target)) fs.chmodSync(target, 0o600);
-  const tmp = `${target}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(state, null, 2), { mode: 0o600 });
-  fs.renameSync(tmp, target);
-  fs.chmodSync(target, 0o600);
-  return target;
+  return writeProvidersStateAtomic(state, opts);
 }
 
 /**
@@ -122,17 +177,26 @@ function writeByoConfig(byoConfig, opts = {}) {
  * rewritten with `byo` gone via the same 0600 tmp+rename discipline as
  * writeByoConfig. Never throws.
  *
- * @returns {'removed-file'|'removed-byo'|'noop'} 'noop' covers both "no
- *   file" and "a file with no `byo` key to clear".
+ * `target` is checked for home-dir resolution before anything else
+ * (GOV-3 item 13) — an unresolved home directory returns 'unresolved'
+ * rather than guess a location to read/write. A stat/read failure other
+ * than ENOENT (e.g. EACCES) returns 'unreadable' rather than rethrow — this
+ * function's contract really is "never throws" now (should-fix item 10; the
+ * old rethrow on non-ENOENT contradicted this same docblock).
+ *
+ * @returns {'removed-file'|'removed-byo'|'noop'|'unreadable'|'unresolved'}
+ *   'noop' covers both "no file" and "a file with no `byo` key to clear".
  */
 function clearProvidersFile(opts = {}) {
   const target = statePath(opts);
+  if (isHomeUnresolved(target)) return 'unresolved';
+  const readFileSyncImpl = typeof opts.readFileSyncImpl === 'function' ? opts.readFileSyncImpl : fs.readFileSync;
   let raw;
   try {
-    raw = fs.readFileSync(target, 'utf8');
+    raw = readFileSyncImpl(target, 'utf8');
   } catch (err) {
     if (err && err.code === 'ENOENT') return 'noop';
-    throw err;
+    return 'unreadable'; // e.g. EACCES — cannot verify contents; never throws (contract)
   }
   let state;
   try {
@@ -148,11 +212,7 @@ function clearProvidersFile(opts = {}) {
     fs.unlinkSync(target);
     return 'removed-file';
   }
-  if (fs.existsSync(target)) fs.chmodSync(target, 0o600);
-  const tmp = `${target}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(state, null, 2), { mode: 0o600 });
-  fs.renameSync(tmp, target);
-  fs.chmodSync(target, 0o600);
+  writeProvidersStateAtomic(state, opts);
   return 'removed-byo';
 }
 
@@ -184,10 +244,12 @@ function baseUrlFor(vendor, configured) {
  * throws.
  */
 function isProvidersFileModeUnsafe(opts = {}) {
+  const target = statePath(opts);
+  if (isHomeUnresolved(target)) return true; // can't even name the file — fail closed
   const statSyncImpl = typeof opts.statSyncImpl === 'function' ? opts.statSyncImpl : fs.statSync;
   let stat;
   try {
-    stat = statSyncImpl(statePath(opts));
+    stat = statSyncImpl(target);
   } catch (err) {
     if (err && err.code === 'ENOENT') return false;
     return true; // cannot verify permissions — fail closed, not open
@@ -195,10 +257,28 @@ function isProvidersFileModeUnsafe(opts = {}) {
   return (stat.mode & 0o077) !== 0;
 }
 
-/** detect(): true iff a complete BYO config is on disk AND its file is
- * actually owner-read-only — "usable now", not merely "configured once". */
+/** true iff the configured base_url is present and is NOT https:// (GOV-3
+ * item 3 — a plaintext endpoint would send the transcript, and for two of
+ * the three vendors the key itself, in cleartext). An absent base_url is
+ * fine — the vendor default is always https (VENDOR_DEFAULT_BASE_URL). */
+function isBaseUrlInsecure(baseUrl) {
+  if (!baseUrl) return false;
+  try {
+    return new URL(baseUrl).protocol !== 'https:';
+  } catch {
+    return true; // unparseable — treat as insecure, not as "no opinion"
+  }
+}
+
+/** detect(): true iff a complete BYO config is on disk, its file is
+ * actually owner-read-only, the home directory resolved, and any configured
+ * base_url is https:// — "usable now", not merely "configured once". */
 function detect(opts = {}) {
-  return readByoConfig(opts) !== null && !isProvidersFileModeUnsafe(opts);
+  if (isHomeUnresolved(statePath(opts))) return false;
+  if (isProvidersFileModeUnsafe(opts)) return false;
+  const config = readByoConfig(opts);
+  if (!config) return false;
+  return !isBaseUrlInsecure(config.base_url);
 }
 
 /** BYO has no meaningful local-auth concept — the key IS the auth. */
@@ -224,9 +304,12 @@ function buildRequest(vendor, config, text, opts) {
     };
   }
   if (vendor === 'gemini') {
+    // GOV-3 item 5: the key rides the `x-goog-api-key` header, never the URL
+    // query string — credentials in URLs land in proxy logs, server access
+    // logs, and any future error path that echoes `request.url`.
     return {
-      url: `${baseUrl}/models/${encodeURIComponent(config.model)}:generateContent?key=${encodeURIComponent(config.api_key)}`,
-      headers: { 'Content-Type': 'application/json' },
+      url: `${baseUrl}/models/${encodeURIComponent(config.model)}:generateContent`,
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': config.api_key },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text }] }],
       }),
@@ -294,6 +377,64 @@ function extractUsage(vendor, data) {
   return null;
 }
 
+// GOV-3 should-fix item 8: cap the response body at 2MB, in both directions
+// — a Content-Length that already exceeds the cap is rejected without
+// reading a byte, and a body with no (or a lying) Content-Length is read in
+// chunks with a running byte count, aborted the moment it crosses the cap.
+// Without this, a stalling or oversized endpoint hangs or OOMs an
+// unattended session-end hook.
+const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+const RESPONSE_TOO_LARGE = Symbol('provider-response-too-large');
+
+function headerContentLength(res) {
+  try {
+    if (res && res.headers && typeof res.headers.get === 'function') {
+      const raw = res.headers.get('content-length');
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : null;
+    }
+  } catch { /* no headers on this response — fall through to the byte-counted read */ }
+  return null;
+}
+
+/**
+ * Read `res` as JSON with the 2MB cap enforced. Prefers a byte-counted
+ * streaming read (undici's real fetch Response always exposes `res.body` as
+ * a ReadableStream) so a body with no/lying Content-Length is still capped;
+ * falls back to `res.json()` when the response has no stream body at all —
+ * covers this repo's test fixtures, which hand back a plain
+ * `{ok,status,json}` object, not a real Response.
+ */
+async function readBoundedJson(res) {
+  const declaredLength = headerContentLength(res);
+  if (declaredLength !== null && declaredLength > MAX_RESPONSE_BYTES) {
+    const err = new Error(`response Content-Length ${declaredLength} exceeds the ${MAX_RESPONSE_BYTES}-byte cap`);
+    err[RESPONSE_TOO_LARGE] = true;
+    throw err;
+  }
+  if (!res || !res.body || typeof res.body.getReader !== 'function') {
+    return res.json();
+  }
+  const reader = res.body.getReader();
+  let total = 0;
+  const chunks = [];
+  for (;;) {
+    // eslint-disable-next-line no-await-in-loop
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value ? value.byteLength : 0;
+    if (total > MAX_RESPONSE_BYTES) {
+      try { await reader.cancel(); } catch { /* best-effort */ }
+      const err = new Error(`response body exceeded the ${MAX_RESPONSE_BYTES}-byte cap (byte-counted read)`);
+      err[RESPONSE_TOO_LARGE] = true;
+      throw err;
+    }
+    if (value) chunks.push(value);
+  }
+  const text = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString('utf8');
+  return JSON.parse(text);
+}
+
 /**
  * runModel(opts) — the provider.interface.js contract. `prompt`/`input`
  * combine exactly like every other provider (`prompt + (input || '')`, the
@@ -302,13 +443,30 @@ function extractUsage(vendor, data) {
  * provider as a skip, never as something to hammer.
  *
  * The key is READ from disk and used in exactly two places: the
- * Authorization/x-api-key header and, for Gemini only, a URL query
- * parameter (Gemini's own wire contract — no header alternative). It is
- * never interpolated into any log/console call in this module — a
- * build-time grep test (test/byo-key-provider.test.js) asserts that no
- * console or log call in this file's source can carry it.
+ * Authorization/x-api-key/x-goog-api-key header — Gemini moved off the URL
+ * query string, GOV-3 item 5, so ALL three vendors now carry the key in a
+ * header only. It is never interpolated into any log/console call in this
+ * module — a build-time grep test (test/byo-key-provider.test.js) asserts
+ * that no console or log call in this file's source can carry it.
+ *
+ * The abort timer is kept alive through the ENTIRE call, including the body
+ * read — GOV-3 should-fix item 8's other half: the old code cleared it in
+ * the `finally` of the fetch await, which resolves at headers, leaving
+ * `res.json()` unbounded in time. `clearTimer()` below runs on every exit
+ * path via the outer try/finally.
  */
 async function runModel(opts = {}) {
+  const target = statePath(opts);
+  if (isHomeUnresolved(target)) {
+    return {
+      ok: false,
+      text: '',
+      usage: null,
+      reason: 'cannot resolve ~/.auxilo/providers.json — the home directory did not resolve to an absolute path',
+      reasonCode: 'provider-home-unresolved',
+      authStatus: 'unknown',
+    };
+  }
   // Checked BEFORE config completeness — a widened-permissions file is
   // refused even if it happens to hold a complete config; defense in depth
   // alongside detect()'s own gate above (this module's runModel may also be
@@ -335,6 +493,20 @@ async function runModel(opts = {}) {
       authStatus: 'unknown',
     };
   }
+  // GOV-3 item 3: same override the CLI enforces at `set` time, re-checked
+  // here at read time — this module's runModel can be reached directly
+  // (AUXILO_EXTRACTION_PROVIDER override) without ever going through
+  // detect(), and a config could have been hand-edited on disk since `set`.
+  if (isBaseUrlInsecure(config.base_url)) {
+    return {
+      ok: false,
+      text: '',
+      usage: null,
+      reason: `configured base_url "${config.base_url}" is not https:// — refusing to send the transcript or the key over an insecure connection`,
+      reasonCode: 'provider-base-url-insecure',
+      authStatus: 'unknown',
+    };
+  }
   const vendor = resolveVendor(config.provider);
   const prompt = typeof opts.prompt === 'string' ? opts.prompt : '';
   const text = prompt + String(opts.input || '');
@@ -346,74 +518,93 @@ async function runModel(opts = {}) {
 
   const controller = typeof AbortController === 'function' ? new AbortController() : null;
   const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
-  let res;
+  const clearTimer = () => { if (timer) clearTimeout(timer); };
+
   try {
-    res = await fetchImpl(request.url, {
-      method: 'POST',
-      headers: request.headers,
-      body: request.body,
-      ...(controller && { signal: controller.signal }),
-    });
-  } catch (error) {
+    let res;
+    try {
+      res = await fetchImpl(request.url, {
+        method: 'POST',
+        headers: request.headers,
+        body: request.body,
+        // GOV-3 item 4: a cross-host redirect would re-send the transcript
+        // (and, for two of three vendors, the key) to whatever the redirect
+        // target is, and accept its reply as the model's answer. One line.
+        redirect: 'error',
+        ...(controller && { signal: controller.signal }),
+      });
+    } catch (error) {
+      return {
+        ok: false,
+        text: '',
+        usage: null,
+        reason: `BYO provider request failed: ${error.message}`,
+        reasonCode: 'provider-error',
+        authStatus: 'unknown',
+        identity,
+      };
+    }
+
+    if (res.status === 429) {
+      return {
+        ok: false,
+        text: '',
+        usage: null,
+        reason: 'BYO provider rate-limited the request (HTTP 429)',
+        reasonCode: 'provider-rate-limited',
+        authStatus: 'unknown',
+        identity,
+      };
+    }
+    if (!res.ok) {
+      return {
+        ok: false,
+        text: '',
+        usage: null,
+        reason: `BYO provider returned HTTP ${res.status}`,
+        reasonCode: 'provider-error',
+        authStatus: 'unknown',
+        identity,
+      };
+    }
+
+    let data;
+    try {
+      data = await readBoundedJson(res);
+    } catch (error) {
+      if (error && error[RESPONSE_TOO_LARGE]) {
+        return {
+          ok: false,
+          text: '',
+          usage: null,
+          reason: `BYO provider response exceeded the ${MAX_RESPONSE_BYTES}-byte cap`,
+          reasonCode: 'provider-response-too-large',
+          authStatus: 'unknown',
+          identity,
+        };
+      }
+      return {
+        ok: false,
+        text: '',
+        usage: null,
+        reason: `BYO provider returned a non-JSON body: ${error.message}`,
+        reasonCode: 'provider-error',
+        authStatus: 'unknown',
+        identity,
+      };
+    }
+
     return {
-      ok: false,
-      text: '',
-      usage: null,
-      reason: `BYO provider request failed: ${error.message}`,
-      reasonCode: 'provider-error',
+      ok: true,
+      text: extractText(vendor, data),
+      usage: extractUsage(vendor, data),
+      reason: null,
       authStatus: 'unknown',
       identity,
     };
   } finally {
-    if (timer) clearTimeout(timer);
+    clearTimer();
   }
-
-  if (res.status === 429) {
-    return {
-      ok: false,
-      text: '',
-      usage: null,
-      reason: 'BYO provider rate-limited the request (HTTP 429)',
-      reasonCode: 'provider-rate-limited',
-      authStatus: 'unknown',
-      identity,
-    };
-  }
-  if (!res.ok) {
-    return {
-      ok: false,
-      text: '',
-      usage: null,
-      reason: `BYO provider returned HTTP ${res.status}`,
-      reasonCode: 'provider-error',
-      authStatus: 'unknown',
-      identity,
-    };
-  }
-
-  let data;
-  try {
-    data = await res.json();
-  } catch (error) {
-    return {
-      ok: false,
-      text: '',
-      usage: null,
-      reason: `BYO provider returned a non-JSON body: ${error.message}`,
-      reasonCode: 'provider-error',
-      authStatus: 'unknown',
-      identity,
-    };
-  }
-
-  return {
-    ok: true,
-    text: extractText(vendor, data),
-    usage: extractUsage(vendor, data),
-    reason: null,
-    authStatus: 'unknown',
-    identity,
-  };
 }
 
 module.exports = {
@@ -426,6 +617,15 @@ module.exports = {
   clearProvidersFile,
   resolveVendor,
   DEFAULT_PROVIDERS_STATE_PATH,
-  // Exported for direct unit coverage (test/byo-key-provider.test.js).
+  // Exported for direct unit coverage (test/byo-key-provider.test.js,
+  // test/extract-w1-fix2.test.js) AND for scripts/providers/index.js, which
+  // routes persistSelected's write through writeProvidersStateAtomic (ONE
+  // writer for every providers.json write, GOV-3 item 1) and checks
+  // isProvidersFileModeUnsafe before trusting a persisted `selected` value
+  // it reads (GOV-3 item 2, "read too, not just write").
   isProvidersFileModeUnsafe,
+  isHomeUnresolved,
+  isBaseUrlInsecure,
+  writeProvidersStateAtomic,
+  MAX_RESPONSE_BYTES,
 };
