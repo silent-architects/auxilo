@@ -1,4 +1,4 @@
-# Auxilo — Supported Client Integrations
+# Supported clients
 
 *Last updated: 2026-09-05 (EXT-GATE: local extraction opened to every capture source; OpenClaw row qualified)*
 
@@ -65,10 +65,12 @@ Registration entry written by the installer (JSON-config MCP clients):
 
 When a Builder enables Autonomous Extraction and has a supported client installed:
 
+Today the runner drafts learnings for every client it captures through the Claude Code CLI signed in on your machine. Without it, captured sessions are held and nothing is submitted. Per-client model paths are being built.
+
 1. **Session completes**: The client fires its session-end hook (Supported tier) or writes session data to local storage (Best-effort tier).
 2. **Capture fires**: The hook hands the transcript path to the local capture core, or the runner discovers new sessions via a source adapter.
 3. **Client-side scrub**: Sensitive patterns (credentials, PII) are redacted before any data leaves the machine.
-4. **Local extraction**: Your own model client (your local claude CLI, on your own subscription) drafts learnings from the scrubbed text, the same way your normal sessions run. The transcript, raw or scrubbed, is never sent to Auxilo.
+4. **Local extraction**: Your own model client (your local claude CLI) drafts learnings from the scrubbed text, the same way your normal sessions run. The transcript, raw or scrubbed, is never sent to Auxilo.
 5. **Draft submission**: Only the finished learning drafts (title, body, category, tags, task context, outcome) are sent to Auxilo's `POST /learn` endpoint, tagged with their source client. The server's quality and sensitivity gates screen each draft. Everything your agent extracts lands in your private review queue, and you decide what goes live (`npx auxilo review`).
 
 ---
