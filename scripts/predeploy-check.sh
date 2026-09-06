@@ -126,10 +126,25 @@ else
 fi
 
 echo ""
+echo "── predeploy-check: asset cache-bust (?v= hashes current) ──"
+# ASSET-CACHE-BUST: styles.css and the other ?v=N-referenced static assets are
+# served with an immutable long-lived cache-control (server.js). A content
+# change that doesn't also bump the ?v= value ships silently — returning
+# visitors keep the stale bytes for up to a year. scripts/asset-versions.js
+# --check compares every ?v= reference in tracked public/ HTML against its
+# asset's current sha256 content hash and exits 1 on any mismatch.
+if node "${SCRIPT_DIR}/asset-versions.js" --check; then
+  echo "  ✅ all ?v= references match their asset's current content hash"
+else
+  FAILED=1
+  echo "  ❌ stale asset ?v= reference(s) detected (see output above) — run: node scripts/asset-versions.js --write"
+fi
+
+echo ""
 if [ "${FAILED}" -ne 0 ]; then
   echo "🛑 predeploy-check FAILED — do NOT deploy. Resolve the items above first."
   exit 1
 fi
 
-echo "✅ predeploy-check PASSED — no [[ fill-blanks, ToS version in sync, surfaces agree."
+echo "✅ predeploy-check PASSED — no [[ fill-blanks, ToS version in sync, surfaces agree, asset hashes current."
 exit 0

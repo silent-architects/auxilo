@@ -178,7 +178,7 @@ describe('dashboard card: Auto-publish clean learnings', () => {
     assert.ok(!/confirm\(/.test(revoke), 'revoke must be ONE click — no confirm dialog');
     assert.match(DASHBOARD_HTML, /loadCleanLane\(\);\s*\/\/ standing-consent card/, 'loaded on dashboard boot like the pending badge');
     assert.doesNotMatch(DASHBOARD_HTML, /\.innerHTML\s*=/);
-    assert.ok(DASHBOARD_HTML.includes('<script src="/dashboard-clean-lane.js?v=3"></script>'));
+    assert.match(DASHBOARD_HTML, /<script src="\/dashboard-clean-lane\.js\?v=[0-9a-f]{8}"><\/script>/);
   });
 
   it('dark state renders the one plain line, never an error or a control', () => {
