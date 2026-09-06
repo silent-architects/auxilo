@@ -15,6 +15,7 @@
  * Supersedes `auxilo-mcp setup` and `auxilo-mcp login` (Change 3/4).
  */
 
+const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const readline = require('readline');
@@ -170,13 +171,13 @@ const CONSENT_TEXT = `
       only by your own model provider the same way your normal sessions
       are, and is never sent to Auxilo, raw or scrubbed.
     • UPLOADS only the finished learning drafts (title, body, category,
-      tags, task context, outcome) to Auxilo (${'POST /learn'}). A draft
-      that passes every screen publishes to the marketplace immediately
-      under your account, and you can retract it for 7 days. A draft that
-      any screen flags (sensitive, duplicate, uncertain quality) waits in
-      your private queue for \`auxilo review\`. Manual mode (approve first,
-      for everything) is available in your account settings. You earn 70%
-      of sales.
+      tags, task context, outcome) to Auxilo (${'POST /learn'}). Everything
+      waits in your review queue until you approve it, one learning at a
+      time or in advance in your dashboard. Your first public learning
+      waits for operator review. A draft that any screen flags (sensitive,
+      duplicate, uncertain quality) waits in your private queue for
+      \`auxilo review\`. Manual mode (approve first, for everything) is
+      available in your account settings. You earn 70% of sales.
   You can stop any time with \`auxilo disable\` (local kill-switch) and review
   every run in ~/.auxilo/extract.log. Saying No installs the MCP server only —
   no session-end capture hook is written into any client config unless you say
@@ -1004,15 +1005,20 @@ const CLEAN_LANE_AFFIRMATION = 'I understand and choose auto-publish for qualify
 
 /**
  * EXTRACT-PER-CLIENT W1 PART C — `auxilo provider set`'s consent sentence.
- * A SITE-PM string slot: this build ships it EMPTY on purpose.
- * `cmdProvider('set')` refuses to run at all (reasonCode
- * 'consent-sentence-missing') while it is empty — see the test asserting
- * that refusal. When SITE-PM writes the real sentence it must state, at
- * minimum: this is the builder's OWN key, Auxilo never bills it, and name
- * the file written (~/.auxilo/providers.json) and which outside provider
- * gets called with it. Not drafted here — see the build report.
+ * SITE-PM-authored, verbatim. States: this is the builder's OWN key; where
+ * it lives on disk and at what permission (~/.auxilo/providers.json, owner-
+ * read-only); that Auxilo never receives it; what it is used for (drafting
+ * learnings from the builder's own scrubbed sessions); that drafting sends
+ * sessions to the builder's chosen provider under the builder's own account,
+ * billed to that account and never to Auxilo; and how to remove it
+ * (`auxilo provider clear`). `cmdProvider('set')` refuses to run at all
+ * (reasonCode 'consent-sentence-missing') were this ever empty again — see
+ * the test asserting that refusal — and, before ever printing this sentence
+ * or storing anything, verifies any existing providers.json is actually
+ * owner-read-only (reasonCode 'providers-file-mode-unsafe' if not), so the
+ * "readable only by your user account" claim below is never printed false.
  */
-const PROVIDER_KEY_CONSENT_SENTENCE = '';
+const PROVIDER_KEY_CONSENT_SENTENCE = 'This key is yours. It stays on this machine in ~/.auxilo/providers.json, readable only by your user account, and Auxilo never receives it. It is used for one thing, drafting learnings from your own scrubbed sessions. Drafting sends those sessions to that provider under your own account, and any use is charged to that account, never to Auxilo. Run auxilo provider clear to remove it.';
 const CLEAN_LANE_UNAVAILABLE = 'Auto-publish for clean learnings is not yet available on this account.';
 // CLEAN-LANE-FLIP Phase B (legal; DRAFT pending Tyler): the full text of ToS
 // §5.9.3(g) (plus its ratchet paragraph) prints ABOVE the affirmation prompt —
@@ -1243,6 +1249,27 @@ async function cmdCleanLane(flags) {
 // silent placeholder sentence nobody actually reviewed.
 const PROVIDER_VENDORS = ['openai', 'anthropic', 'gemini'];
 
+/**
+ * PROVIDER_KEY_CONSENT_SENTENCE promises the stored key is "readable only
+ * by your user account." Before `set` ever prints that sentence, or stores
+ * anything, verify the promise is actually true of any providers.json
+ * already on disk. Owner-read-only means no group/other bits at all
+ * (mode & 0o077 === 0); a file that fails this predates this discipline
+ * (e.g. survived an umask that widened it) and must be fixed or removed
+ * before `set` is allowed to run — never fail open on a false claim.
+ * No file yet is not unsafe: writeByoConfig always writes 0600 itself.
+ */
+function providersFileModeUnsafe(target) {
+  let stat;
+  try {
+    stat = fs.statSync(target);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return false;
+    throw err;
+  }
+  return (stat.mode & 0o077) !== 0;
+}
+
 async function cmdProvider(flags) {
   const sub = process.argv[3];
   if (!['status', 'set', 'clear'].includes(sub)) {
@@ -1262,16 +1289,28 @@ async function cmdProvider(flags) {
   }
 
   if (sub === 'clear') {
-    const removed = byoKeyProvider.clearProvidersFile();
-    console.log(removed
-      ? '✓ ~/.auxilo/providers.json removed.'
-      : '✓ Nothing to remove (no providers.json present).');
+    const result = byoKeyProvider.clearProvidersFile();
+    if (result === 'removed-file') {
+      console.log('✓ ~/.auxilo/providers.json removed (nothing left to keep).');
+    } else if (result === 'removed-byo') {
+      console.log('✓ BYO provider key cleared. providers.json kept (your auto-detected provider selection, if any, is unchanged).');
+    } else {
+      console.log('✓ Nothing to remove (no BYO provider key configured).');
+    }
     return;
   }
 
   // sub === 'set' below.
   if (PROVIDER_KEY_CONSENT_SENTENCE === '') {
     console.error('auxilo provider set is not available yet: the operator has not configured the consent sentence for this build (reasonCode: consent-sentence-missing).');
+    process.exit(1);
+  }
+
+  // Fail closed BEFORE printing the sentence or storing anything: an
+  // existing providers.json that is not owner-read-only would make the
+  // sentence's "readable only by your user account" claim false.
+  if (providersFileModeUnsafe(byoKeyProvider.DEFAULT_PROVIDERS_STATE_PATH)) {
+    console.error('auxilo provider set refuses to continue: ~/.auxilo/providers.json exists and is not owner-read-only, so this build cannot truthfully make the consent promise (reasonCode: providers-file-mode-unsafe). Fix its permissions (chmod 600 ~/.auxilo/providers.json) or remove the file, then try again.');
     process.exit(1);
   }
 
@@ -1300,9 +1339,11 @@ async function cmdProvider(flags) {
     if (readlineEnded) { console.log('Aborted. Nothing changed.'); return; }
   }
 
-  console.log(`\n${PROVIDER_KEY_CONSENT_SENTENCE}\n`);
+  // Printed in FULL, word-wrapped to the terminal width — never truncated —
+  // before the (hidden) key prompt further below.
+  console.log(`\n${wrapForTerminal(PROVIDER_KEY_CONSENT_SENTENCE)}\n`);
   console.log('To continue, type this sentence exactly as written, then press Enter:');
-  console.log(`\n  ${PROVIDER_KEY_CONSENT_SENTENCE}\n`);
+  console.log(`\n${wrapForTerminal(PROVIDER_KEY_CONSENT_SENTENCE)}\n`);
   const typed = await ask('> ');
   if (typed !== PROVIDER_KEY_CONSENT_SENTENCE) {
     console.log('The sentence did not match. Aborted. Nothing changed.');
@@ -1511,4 +1552,5 @@ module.exports = {
   STATUS_WORTHY_SKIP_REASON_CODES,
   extractionSkipReasonLine,
   cmdProvider,
+  providersFileModeUnsafe,
 };

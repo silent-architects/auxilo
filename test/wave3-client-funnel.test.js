@@ -373,6 +373,35 @@ describe('LW-18(a) — SessionStart held-count notice', () => {
   });
 });
 
+// ─── COPY-18-CLI: CONSENT_TEXT no longer claims immediate publication ──────
+
+describe('COPY-18-CLI — CONSENT_TEXT', () => {
+  it('no longer claims a passing draft "publishes to the marketplace immediately"', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'bin', 'auxilo-cli.js'), 'utf-8');
+    assert.ok(!src.includes('publishes to the marketplace immediately'),
+      'the retired overclaim must be gone from CONSENT_TEXT');
+  });
+
+  it('carries SITE-PM\'s ruled review-queue sentence, verbatim', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'bin', 'auxilo-cli.js'), 'utf-8');
+    assert.ok(src.includes(
+      'Everything\n      waits in your review queue until you approve it, one learning at a\n      time or in advance in your dashboard.'
+    ), 'the ruled sentence must appear verbatim (template-literal line wraps intact)');
+  });
+
+  it('appends the first-public-learning operator-review fact as its own sentence, verbatim from the dashboard\'s shipped consent text, right after the ruled sentence', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'bin', 'auxilo-cli.js'), 'utf-8');
+    const dashboardSrc = fs.readFileSync(path.join(__dirname, '..', 'public', 'dashboard.html'), 'utf-8');
+    assert.ok(dashboardSrc.includes('Your first public learning waits for operator review.'),
+      'source sentence must actually exist in the dashboard shipped text (nothing to copy otherwise)');
+    const ruledIdx = src.indexOf('time or in advance in your dashboard.');
+    const operatorIdx = src.indexOf('Your first public learning\n      waits for operator review.');
+    assert.ok(ruledIdx > -1, 'ruled sentence not found');
+    assert.ok(operatorIdx > -1, 'operator-review sentence not found (verbatim, own sentence)');
+    assert.ok(operatorIdx > ruledIdx, 'operator-review sentence must come right after the ruled sentence');
+  });
+});
+
 // ─── UC-1a: consent ordering + cleanup ──────────────────────────────────────
 
 describe('UC-1a — consent-ordering fix', () => {
