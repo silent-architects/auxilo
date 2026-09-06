@@ -41,12 +41,12 @@ describe('SPEC3-G1 private learnings acceptance pins', () => {
   it('1. count-pins every retained audited raw-read path with stable allow markers', () => {
     const markers = [...SERVER.matchAll(/G1_RAW_READ_ALLOW:(\d+)/g)].map((m) => Number(m[1]));
     const retained = [1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 13, 14, 15, 16,
-      19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 32, 33, 34, 35, 36];
+      19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 32, 33, 34, 35, 36, 37];
     assert.deepEqual([...new Set(markers)].sort((a, b) => a - b), retained);
     assert.equal(markers.length, retained.length,
       'each retained semantic raw-read path has exactly one allow marker');
     const rawReadShape =
-      /\blearnings\.(?:findIndex|find|filter|some|map|slice|concat)\s*\(|\bfor\s*\([^\n]*\bof\s+learnings\s*\)|\b(?:migratePipelineOwners|migrateRetiredCategories|adoptWalletOrphans|computeCleanLaneRetractionStats|listOwnPending|applySelfDecision|applyBulkDecisions)\(learnings\b/g;
+      /\blearnings\.(?:findIndex|find|filter|some|map|slice|concat)\s*\(|\bfor\s*\([^\n]*\bof\s+learnings\s*\)|\b(?:migratePipelineOwners|migrateRetiredCategories|adoptWalletOrphans|computeCleanLaneRetractionStats|countUnacknowledgedStandingConsentPublications|listOwnPending|applySelfDecision|applyBulkDecisions)\(learnings\b/g;
     const canonicalStart = SERVER.indexOf('function visibleCatalog()');
     const canonicalEnd = SERVER.indexOf('function matchLearnings', canonicalStart);
     const rawCalls = [...SERVER.matchAll(rawReadShape)].filter((match) => {
@@ -54,7 +54,7 @@ describe('SPEC3-G1 private learnings acceptance pins', () => {
       const nestedProperty = SERVER[match.index - 1] === '.';
       return !insideCanonical && !nestedProperty;
     });
-    assert.equal(rawCalls.length, 30,
+    assert.equal(rawCalls.length, 31,
       'post-G1 retained raw-read call-site count drifted; audit and mark any new path');
   });
 

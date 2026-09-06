@@ -543,6 +543,22 @@ describe('CLEAN-LANE-FLIP Phase B notice hardening: ack cursor + unread count (s
     assert.equal(other.payload.unacknowledged_publications, 1);
   });
 
+  it('a stamp ahead of the server clock inside the skew allowance is accepted but stored clamped to the server now (Gate-A S3)', async (t) => {
+    if (bootSkipReason) { t.skip(bootSkipReason); return; }
+    const before = Date.now();
+    const fast = new Date(before + 3 * 60_000).toISOString();
+    const r = await patchSettings(ownerJwt, { standing_consent_ack_at: fast });
+    const after = Date.now();
+    assert.equal(r.status, 200, JSON.stringify(r.payload));
+    const stored = r.payload.current.standing_consent_ack_at;
+    assert.notEqual(stored, fast, 'the future stamp is not stored verbatim');
+    assert.ok(Date.parse(stored) >= before && Date.parse(stored) <= after,
+      `stored ${stored} must be the server now (between ${before} and ${after})`);
+    const s = await status({ 'X-API-Key': OWNER_READ_KEY });
+    assert.equal(s.payload.standing_consent_ack_at, stored);
+    assert.ok(Date.parse(s.payload.standing_consent_ack_at) <= Date.now(), 'GET never reports a future cursor');
+  });
+
   it('server.js: the cursor has exactly one writer (PATCH /account/settings) and the GET never writes', () => {
     const writes = SERVER_SRC.match(/account\.standing_consent_ack_at = /g) || [];
     assert.equal(writes.length, 1, 'exactly one assignment to the cursor in server.js');

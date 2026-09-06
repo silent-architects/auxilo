@@ -39,13 +39,16 @@
    * never walks an account's whole catalog from the oldest end
    * (WAVE-0905-RESIDUALS (1)/(2)). `pageLimit` is interpolated, never a
    * literal. selectStandingConsentItems stays as the defensive second filter.
+   * Gate-A 2026-09-06 (N2, badge vs list): no status filter — the badge counts
+   * stamped rows regardless of status, so the list shows every stamped row the
+   * server returns (its default status set), each with a status label.
    */
   function standingConsentListQuery(pageLimit, offset) {
     var limit = parseInt(pageLimit, 10);
     if (!Number.isInteger(limit) || limit < 1) limit = 500;
     var off = parseInt(offset, 10);
     if (!Number.isInteger(off) || off < 0) off = 0;
-    return '/account/learnings?status=approved&visibility=public' +
+    return '/account/learnings?visibility=public' +
       '&published_via=' + encodeURIComponent(PUBLISHED_VIA_CLEAN_LANE) +
       '&sort=desc&limit=' + limit + '&offset=' + off;
   }
@@ -158,6 +161,7 @@
       return {
         id: r.id,
         title: r.title || '(no title)',
+        status: typeof r.status === 'string' && r.status ? r.status : 'approved',
         created_at: r.created_at || null,
         standing_consent_version: r.standing_consent_version,
         retractable_until: r.retractable_until || null,

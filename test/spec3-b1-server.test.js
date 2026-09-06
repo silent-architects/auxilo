@@ -366,13 +366,16 @@ describe('clean-lane consent store: own JSONL, latest row wins', () => {
   });
 
   it('grant → revoke → grant: latest row wins; freeze deactivates; re-grant reactivates', () => {
-    cleanLane.appendCleanLaneRow({ accountId: ME, action: 'grant', minAutoPublishQuality: 17 });
+    cleanLane.appendCleanLaneRow({ accountId: ME, action: 'grant', minAutoPublishQuality: 17, affirmation: cleanLane.CLEAN_LANE_AFFIRMATION });
     let state = cleanLane.getCleanLaneState(ME, { forceReload: true });
     assert.equal(state.action, 'grant');
     assert.equal(state.min_auto_publish_quality, 17);
     assert.equal(state.mode, 'automatic');
     assert.equal(state.notify, 'per_publish');
     assert.equal(state.affirmed, true);
+    // Gate-A 2026-09-06 (S2): the affirmation itself is recorded as a sha256 of the exact text.
+    assert.equal(state.affirmation_sha256,
+      require('crypto').createHash('sha256').update(cleanLane.CLEAN_LANE_AFFIRMATION, 'utf8').digest('hex'));
     assert.equal(cleanLane.cleanLaneActive(state), true);
 
     cleanLane.appendCleanLaneRow({ accountId: ME, action: 'revoke' });

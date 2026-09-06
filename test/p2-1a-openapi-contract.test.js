@@ -174,8 +174,11 @@ describe('CLEAN-LANE-FLIP Phase B: /account/clean-lane* contract', () => {
     assert.equal(props.min_auto_publish_quality.minimum, 14);
     assert.equal(props.min_auto_publish_quality.maximum, 20);
     assert.ok(get.responses['404'], 'the flag-dark 404 must be documented');
+    assert.ok(get.responses['403'], 'Gate-A S9: 403 (suspended / scope) must be documented');
     assert.match(get.description, /EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED/);
-    assert.match(get.description, /never agent-enrollable/i);
+    assert.match(get.description, /the only advertised enrollment surfaces are the dashboard and the TTY CLI; no MCP tool exists for these routes/);
+    assert.doesNotMatch(get.description, /never agent-enrollable/i, 'Gate-A S5: the over-claim is gone');
+    assert.match(spec.paths['/account/clean-lane/grant'].post.description, /the only advertised enrollment surfaces are the dashboard and the TTY CLI; no MCP tool exists for these routes/);
     assert.match(get.description, /evidentiary/i);
   });
 
@@ -208,6 +211,9 @@ describe('CLEAN-LANE-FLIP Phase B: /account/clean-lane* contract', () => {
     assert.deepEqual(props.clean_lane_active.enum, [false]);
     assert.ok(props.revoked_at);
     assert.ok(post.responses['404'], 'the flag-dark 404 must be documented');
+    assert.ok(post.responses['403'], 'Gate-A S9: 403 (suspended / scope) must be documented');
+    assert.ok(spec.paths['/account/settings'].patch.responses['403'],
+      'Gate-A S9: PATCH /account/settings documents 403 (suspended / scope) — the ack cursor writer');
   });
 
   it('POST /learn 201 documents the standing-consent stamps (WAVE-0905-RESIDUALS 4)', () => {

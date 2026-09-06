@@ -38,6 +38,26 @@ const { reservePort, stageServer, bootServer, stopServer } = require('./helpers/
 
 const cleanLane = require('../lib/clean-lane.js');
 
+// Gate-A 2026-09-06 (N1): fly.toml ships the flip armed and moderation never
+// disabled. A source pin, not a staged server: the deploy config is the fact.
+describe('CLEAN-LANE-FLIP Phase B: fly.toml deploy config pins', () => {
+  it('fly.toml [env] sets EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED = "true" exactly and never sets CONTENT_MODERATION_ENABLED to "false"', () => {
+    const toml = fs.readFileSync(path.join(__dirname, '..', 'fly.toml'), 'utf8');
+    const lines = toml.split('\n');
+    const envStart = lines.findIndex((l) => /^\[env\]\s*$/.test(l));
+    assert.ok(envStart >= 0, 'fly.toml has an [env] block');
+    let envEnd = lines.findIndex((l, i) => i > envStart && /^\[/.test(l));
+    if (envEnd < 0) envEnd = lines.length;
+    const envBlock = lines.slice(envStart + 1, envEnd).map((l) => l.trim());
+    const armed = envBlock.filter((l) => /^EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED = "true"$/.test(l));
+    assert.equal(armed.length, 1, 'exactly one exact-"true" flag line inside [env]');
+    assert.equal(lines.filter((l) => /^\s*EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED\s*=/.test(l)).length, 1,
+      'the flag is set once in the whole file (no later override)');
+    assert.ok(!/^\s*CONTENT_MODERATION_ENABLED\s*=\s*"false"/m.test(toml),
+      'CONTENT_MODERATION_ENABLED is never set to "false" anywhere in fly.toml');
+  });
+});
+
 const REPO_ROOT = path.join(__dirname, '..');
 
 const TRUSTED_KEY = 'axl_' + 'b'.repeat(40);
@@ -255,6 +275,14 @@ describe('CLEAN-LANE-FLIP Phase B: activation e2e (flag explicitly on)', () => {
       assert.equal(s1.last_action, 'grant');
       assert.equal(s1.min_auto_publish_quality, 16);
       assert.equal(s1.consent_version_recorded, cleanLane.CLEAN_LANE_CONSENT_VERSION);
+      // Gate-A 2026-09-06 (S2): the persisted grant row records the affirmation
+      // as sha256(exact text received) — here byte-equal to CLEAN_LANE_AFFIRMATION.
+      const grantRows = fs.readFileSync(path.join(tmpDir, 'data', 'clean-lane-consent.jsonl'), 'utf8')
+        .split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((r) => r.action === 'grant');
+      assert.equal(grantRows.length, 1);
+      assert.equal(grantRows[0].affirmed, true);
+      assert.equal(grantRows[0].affirmation_sha256,
+        crypto.createHash('sha256').update(cleanLane.CLEAN_LANE_AFFIRMATION, 'utf8').digest('hex'));
 
       // (d) trusted account, clean, 16/20, extraction channel → AUTO-PUBLISHES.
       const r1 = await post('/learn', extractionPayload('publish', 16), TRUSTED_KEY, 201);

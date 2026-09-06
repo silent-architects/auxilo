@@ -3191,7 +3191,7 @@
                   "standing_consent_ack_at": {
                     "type": "string",
                     "format": "date-time",
-                    "description": "CLEAN-LANE-FLIP Phase B (notice hardening): the account's acknowledgement cursor for standing-consent publications. Set it to now from the dashboard's 'I've reviewed these' button; GET /account/clean-lane then counts only clean-lane publishes created after it (unacknowledged_publications). Must be an ISO 8601 date-time and not in the future (400 otherwise). This PATCH is the only thing that moves the cursor — nothing clears the unread count implicitly, and no email is sent."
+                    "description": "CLEAN-LANE-FLIP Phase B (notice hardening): the account's acknowledgement cursor for standing-consent publications. Set it to now from the dashboard's 'I've reviewed these' button; GET /account/clean-lane then counts only clean-lane publishes created after it (unacknowledged_publications). Must be an ISO 8601 date-time and not in the future (400 beyond a 5-minute clock-skew allowance); a value inside that allowance but ahead of the server clock is clamped to the server's now on store, so the cursor can never sit in the future. This PATCH is the only thing that moves the cursor — nothing clears the unread count implicitly, and no email is sent."
                   }
                 }
               }
@@ -3222,6 +3222,9 @@
           },
           "401": {
             "description": "Authorization required"
+          },
+          "403": {
+            "description": "Account suspended or key scope insufficient"
           }
         }
       }
@@ -5037,7 +5040,7 @@
     "/account/clean-lane": {
       "get": {
         "summary": "Clean-lane standing-consent status for this account",
-        "description": "SPEC3-C1: whether the authenticated account's standing consent to auto-publish qualifying extracted learnings is active, the CURRENT consent version (the only version POST /account/clean-lane/grant will bind to), and the last recorded consent action. The lane governs ONLY submission_channel 'extraction' items that pass every screen and the quality floor; while inactive those items hold with review_reason standing_consent_off (lane ready_to_publish). An enrolled account's FIRST public learning still holds for operator review (untrusted_account) until publication trust is stamped. Accepts a web session (Bearer) OR an account API key (read scope). Enrollment is dashboard/CLI-only and never agent-enrollable (no MCP tool exists for these routes). The verbatim-affirmation layer is EVIDENTIARY, not preventive: it prevents accidental enrollment and creates a hash-chained record of a deliberate act by the credential holder. Gated by EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED (set exactly 'true' to arm; CLEAN-LANE-FLIP Phase B, 2026-09-05): while the flag is unset the route answers the catch-all 404 before authentication.",
+        "description": "SPEC3-C1: whether the authenticated account's standing consent to auto-publish qualifying extracted learnings is active, the CURRENT consent version (the only version POST /account/clean-lane/grant will bind to), and the last recorded consent action. The lane governs ONLY submission_channel 'extraction' items that pass every screen and the quality floor; while inactive those items hold with review_reason standing_consent_off (lane ready_to_publish). An enrolled account's FIRST public learning still holds for operator review (untrusted_account) until publication trust is stamped. Accepts a web session (Bearer) OR an account API key (read scope). Enrollment is dashboard/CLI-only and the only advertised enrollment surfaces are the dashboard and the TTY CLI; no MCP tool exists for these routes. The verbatim-affirmation layer is EVIDENTIARY, not preventive: it prevents accidental enrollment and creates a hash-chained record of a deliberate act by the credential holder. Gated by EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED (set exactly 'true' to arm; CLEAN-LANE-FLIP Phase B, 2026-09-05): while the flag is unset the route answers the catch-all 404 before authentication.",
         "operationId": "getCleanLaneStatus",
         "tags": [
           "Account"
@@ -5130,6 +5133,9 @@
           "401": {
             "description": "Authentication required"
           },
+          "403": {
+            "description": "Account suspended or key scope insufficient"
+          },
           "404": {
             "description": "Feature not enabled (EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED unset) - the catch-all 404 body, returned before authentication."
           }
@@ -5139,7 +5145,7 @@
     "/account/clean-lane/grant": {
       "post": {
         "summary": "Grant clean-lane standing consent (strengthened versioned clickwrap)",
-        "description": "SPEC3-C1: records the account's standing consent to auto-publish qualifying extracted learnings (submission_channel 'extraction', every screen clean, quality total >= min_auto_publish_quality). The body MUST carry the CURRENT consent_version (from GET /account/clean-lane), agree:true, and the affirmation sentence transmitted VERBATIM from the enrollment surface (dashboard card or `auxilo clean-lane grant`); the server refuses a non-current version (409, code CONSENT_VERSION_MISMATCH), a missing/false agree (400, code AFFIRMATION_REQUIRED), and any affirmation that is not byte-exact (400, code AFFIRMATION_TEXT_MISMATCH - the error deliberately does not echo the expected sentence). The server stamps the timestamp, redacted IP, user-agent, accept path and tos_version_at_grant itself into a hash-chained consent record. Re-granting is how a frozen lane is reactivated. Each auto-publish under this consent stamps published_via / standing_consent_version / retractable_until (7 days) and returns a standing_consent_notice line; DELETE /learn/{id}?reason=retract is the remedy. Accepts a web session (Bearer) OR an account API key (contribute scope). Enrollment is dashboard/CLI-only and never agent-enrollable (no MCP tool exists for these routes). The verbatim-affirmation layer is EVIDENTIARY, not preventive: it prevents accidental enrollment and creates a hash-chained record of a deliberate act by the credential holder. Gated by EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED (set exactly 'true' to arm; CLEAN-LANE-FLIP Phase B, 2026-09-05): while the flag is unset the route answers the catch-all 404 before authentication.",
+        "description": "SPEC3-C1: records the account's standing consent to auto-publish qualifying extracted learnings (submission_channel 'extraction', every screen clean, quality total >= min_auto_publish_quality). The body MUST carry the CURRENT consent_version (from GET /account/clean-lane), agree:true, and the affirmation sentence transmitted VERBATIM from the enrollment surface (dashboard card or `auxilo clean-lane grant`); the server refuses a non-current version (409, code CONSENT_VERSION_MISMATCH), a missing/false agree (400, code AFFIRMATION_REQUIRED), and any affirmation that is not byte-exact (400, code AFFIRMATION_TEXT_MISMATCH - the error deliberately does not echo the expected sentence). The server stamps the timestamp, redacted IP, user-agent, accept path and tos_version_at_grant itself into a hash-chained consent record. Re-granting is how a frozen lane is reactivated. Each auto-publish under this consent stamps published_via / standing_consent_version / retractable_until (7 days) and returns a standing_consent_notice line; DELETE /learn/{id}?reason=retract is the remedy. Accepts a web session (Bearer) OR an account API key (contribute scope). Enrollment is dashboard/CLI-only and the only advertised enrollment surfaces are the dashboard and the TTY CLI; no MCP tool exists for these routes. The verbatim-affirmation layer is EVIDENTIARY, not preventive: it prevents accidental enrollment and creates a hash-chained record of a deliberate act by the credential holder. Gated by EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED (set exactly 'true' to arm; CLEAN-LANE-FLIP Phase B, 2026-09-05): while the flag is unset the route answers the catch-all 404 before authentication.",
         "operationId": "grantCleanLaneConsent",
         "tags": [
           "Account"
@@ -5327,6 +5333,9 @@
           },
           "401": {
             "description": "Authentication required"
+          },
+          "403": {
+            "description": "Account suspended or key scope insufficient"
           },
           "404": {
             "description": "Feature not enabled (EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED unset) - the catch-all 404 body, returned before authentication."

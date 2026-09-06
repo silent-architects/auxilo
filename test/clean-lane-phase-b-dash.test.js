@@ -84,7 +84,8 @@ function stamped(id, overrides = {}) {
 
 // Stored order: plain_mid, stamped_old, stamped_newest, plain_new, stamped_mid,
 // then rows the filters must drop (private stamped, pending stamped, other
-// account stamped, a different published_via value).
+// account stamped, a different published_via value). Gate-A N2: the dashboard
+// query carries no status filter, so the pending stamped row is IN there.
 function fixtureCatalog() {
   return [
     fixtureLearning('lrn_b_plain_mid', { created_at: T.mid }),
@@ -136,19 +137,21 @@ describe('dashboard-clean-lane.js standingConsentListQuery', () => {
   it('builds the filtered, newest-first request with limit and offset interpolated', () => {
     assert.equal(
       view.standingConsentListQuery(500, 0),
-      '/account/learnings?status=approved&visibility=public' +
+      '/account/learnings?visibility=public' +
         `&published_via=${PUBLISHED_VIA}&sort=desc&limit=500&offset=0`
     );
+    assert.ok(!/status=/.test(view.standingConsentListQuery(500, 0)),
+      'Gate-A N2: no status filter — every stamped row the server returns is listed, labelled');
     assert.equal(
       view.standingConsentListQuery(200, 400),
-      '/account/learnings?status=approved&visibility=public' +
+      '/account/learnings?visibility=public' +
         `&published_via=${PUBLISHED_VIA}&sort=desc&limit=200&offset=400`
     );
     assert.equal(view.PUBLISHED_VIA_CLEAN_LANE, PUBLISHED_VIA, 'stamp stays pinned to lib/clean-lane.js');
   });
 
   it('falls back to limit 500 / offset 0 on missing or invalid arguments', () => {
-    const expected = '/account/learnings?status=approved&visibility=public' +
+    const expected = '/account/learnings?visibility=public' +
       `&published_via=${PUBLISHED_VIA}&sort=desc&limit=500&offset=0`;
     assert.equal(view.standingConsentListQuery(), expected);
     assert.equal(view.standingConsentListQuery('x', -3), expected);
@@ -312,20 +315,25 @@ describe('CLEAN-LANE-FLIP Phase B: GET /account/learnings published_via + sort',
 
   it('filter + sort + limit/offset: the slice is taken AFTER filtering and ordering (the dashboard query)', async (t) => {
     if (bootSkipReason) { t.skip(bootSkipReason); return; }
+    // Gate-A N2: the dashboard query carries no status filter, so the stamped
+    // pending row is IN (badge and list agree); private and other-account rows
+    // stay out.
     const first = await listing(view.standingConsentListQuery(1, 0).replace('/account/learnings', ''));
     assert.equal(first.status, 200);
-    assert.equal(first.payload.total, 3);
+    assert.equal(first.payload.total, 4);
     assert.equal(first.payload.limit, 1);
     assert.equal(first.payload.offset, 0);
     assert.deepEqual(ids(first.payload), ['lrn_b_stamped_newest']);
 
     const second = await listing(view.standingConsentListQuery(1, 1).replace('/account/learnings', ''));
     assert.equal(second.status, 200);
-    assert.deepEqual(ids(second.payload), ['lrn_b_stamped_mid']);
+    assert.deepEqual(ids(second.payload), ['lrn_b_stamped_pending']);
 
     const page = await listing(view.standingConsentListQuery(500, 0).replace('/account/learnings', ''));
     assert.equal(page.status, 200);
-    assert.deepEqual(ids(page.payload), ['lrn_b_stamped_newest', 'lrn_b_stamped_mid', 'lrn_b_stamped_old']);
+    assert.deepEqual(ids(page.payload), ['lrn_b_stamped_newest', 'lrn_b_stamped_pending', 'lrn_b_stamped_mid', 'lrn_b_stamped_old']);
+    assert.deepEqual(page.payload.learnings.map((r) => r.status),
+      ['approved', 'pending_review', 'approved', 'approved'], 'status rides on every row for the label');
     // The projection is unchanged: the seven keys + the three optional stamps only.
     for (const row of page.payload.learnings) {
       assert.deepEqual(Object.keys(row).sort(), [
@@ -335,7 +343,8 @@ describe('CLEAN-LANE-FLIP Phase B: GET /account/learnings published_via + sort',
     }
     // The client-side second filter agrees with the server's set.
     const selected = view.selectStandingConsentItems(page.payload.learnings, Date.now());
-    assert.deepEqual(selected.map((item) => item.id), ['lrn_b_stamped_newest', 'lrn_b_stamped_mid', 'lrn_b_stamped_old']);
+    assert.deepEqual(selected.map((item) => item.id), ['lrn_b_stamped_newest', 'lrn_b_stamped_pending', 'lrn_b_stamped_mid', 'lrn_b_stamped_old']);
+    assert.deepEqual(selected.map((item) => item.status), ['approved', 'pending_review', 'approved', 'approved']);
   });
 
   it('rejects an empty published_via and any sort other than desc with 400', async (t) => {

@@ -707,6 +707,8 @@
             <span id="clean-lane-unread-badge" style="font-size:13px;color:var(--ivory);flex:1"></span>
             <button class="btn btn-ghost btn-sm" id="clean-lane-ack-btn" onclick="ackCleanLanePublications()">I've reviewed these</button>
           </div>
+          <!-- Gate-A 2026-09-06 (N4): static runner hint; plain text, no claim beyond it. -->
+          <p id="clean-lane-runner-hint" style="font-size:13px;color:var(--slate);margin-bottom:12px;line-height:1.6">If nothing is publishing, update your runner: run npx auxilo setup</p>
           <div style="font-size:13px;color:var(--ivory);margin-bottom:8px">Published under standing consent</div>
           <div id="clean-lane-published"></div>
         </div>
@@ -1592,6 +1594,13 @@
       var title = document.createElement('div');
       title.style.color = 'var(--ivory)';
       title.textContent = item.title;
+      // Gate-A 2026-09-06 (N2): a small status label per row (approved / retracted / other).
+      var statusLabel = document.createElement('span');
+      statusLabel.style.marginLeft = '8px';
+      statusLabel.style.fontSize = '11px';
+      statusLabel.style.color = item.status === 'retracted' ? 'var(--slate)' : 'var(--gold)';
+      statusLabel.textContent = item.status === 'approved' ? 'approved' : (item.status === 'retracted' ? 'retracted' : String(item.status));
+      title.appendChild(statusLabel);
       text.appendChild(title);
       var meta = document.createElement('div');
       meta.style.color = 'var(--slate)';
@@ -1601,7 +1610,7 @@
       text.appendChild(meta);
       row.appendChild(text);
 
-      if (item.retractable) {
+      if (item.retractable && item.status === 'approved') {
         var btn = document.createElement('button');
         btn.className = 'btn btn-danger btn-sm';
         btn.textContent = 'Retract';
