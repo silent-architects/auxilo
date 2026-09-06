@@ -60,6 +60,7 @@ const STYLESHEET_PAGES = [
   'dashboard.html',
   'earnings.html',
   'writing-agents-message-board.html',
+  'how-submissions-work.html',
 ];
 
 // Pages that ship the packet-3-rev-2 footer link set.
@@ -74,6 +75,7 @@ const FOOTER_PAGES = [
   'status.html',
   'about.html',
   path.join('writing', 'index.html'),
+  'how-submissions-work.html',
 ];
 
 // Pages carrying an Organization JSON-LD block.
@@ -86,6 +88,7 @@ const ORG_JSONLD_PAGES = [
   'api.html',
   'earnings.html',
   'status.html',
+  'how-submissions-work.html',
 ];
 
 const ALL_PUBLIC_HTML_FILES = [
@@ -150,7 +153,7 @@ describe('SITE-SYSTEM item 2: the footer link set is byte-identical across every
     }
   });
 
-  it('the footer set is exactly packet 3 rev 2\'s links (the trust-page slot omitted: no /how-submissions-work route exists yet)', () => {
+  it('the footer set is exactly packet 3 rev 2\'s links (the trust-page slot still omitted: TRUST-PAGE shipped the route 2026-09-06, but the footer nav slot for it is a later, separate build — PUNCH-LIST TRUST-PAGE row)', () => {
     const expected = [
       '/about::About',
       '/writing::Writing',
@@ -165,13 +168,14 @@ describe('SITE-SYSTEM item 2: the footer link set is byte-identical across every
     assert.deepEqual(footerLinkSequence(html), expected);
   });
 
-  it('no footer contains a /how-submissions-work link (the route does not exist in server.js)', () => {
+  it('no EXISTING page\'s footer contains a /how-submissions-work link (TRUST-PAGE shipped the route itself 2026-09-06 in server.js and on its own page; the footer nav slot on the other pages is a separate, later build)', () => {
     const serverSrc = fs.readFileSync(path.join(REPO_ROOT, 'server.js'), 'utf8');
-    assert.ok(!serverSrc.includes('how-submissions-work'),
-      'server.js has no how-submissions-work route yet — the slot stays omitted');
+    assert.ok(serverSrc.includes(`app.get('/how-submissions-work'`),
+      'server.js now carries the how-submissions-work route (TRUST-PAGE, 2026-09-06)');
     for (const page of FOOTER_PAGES) {
+      if (page === 'how-submissions-work.html') continue; // the page's own footer legitimately links itself via the wordmark, not this string
       const html = readPublic(page);
-      assert.ok(!html.includes('how-submissions-work'), `${page} footer must not link the unshipped route`);
+      assert.ok(!html.includes('how-submissions-work'), `${page} footer must not link the not-yet-navigated route`);
     }
   });
 

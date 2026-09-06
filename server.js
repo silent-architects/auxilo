@@ -1552,6 +1552,12 @@ const { recordPurchase, hasPurchase } = require('./lib/purchase-ledger.js');
 // identities, money from attributable ledger entries, unlocks from the
 // per-unlock event ledger (fail closed: unreadable ledger ⇒ fields omitted).
 const { computeStatsTruth } = require('./lib/stats-truth.js');
+// PARTITION-GUARD: the trust page's §4 internal/external split (spec finding
+// 5, build binding (c), precondition 11 — internal-wallet allowlist check
+// DOMINATES a null-account-equals-external rule; see lib/partition-guard.js
+// header for the full precedence rationale).
+const { loadInternalIdentitiesRegister, computePartition } = require('./lib/partition-guard.js');
+const INTERNAL_IDENTITIES_FILE = path.join(__dirname, 'config', 'internal-identities.json');
 
 // ─── Phase 0.4: Stripe Integration (SPEC-P0.4) ─────────────────────────────
 const {
@@ -11872,6 +11878,140 @@ app.get('/writing', (c) => {
   if (res) return res;
   return c.text('Not found', 404);
 });
+
+// TRUST-PAGE SSR (PUNCH-LIST TRUST-PAGE row; spec rev 3g,
+// TRUST-PAGE-BUILD-SPEC-2026-09-02.md §1/§4, findings 5/13, preconditions
+// 3/6/7/8/11): §4's conditional accountability block and §7's live catalog
+// count. Both marker containers start EMPTY in the static file; the
+// content strings themselves (asymmetry echo, invariant, provenance, the
+// R-13 limits slot, the §7 labels) are Tyler-gated and NOT populated in
+// this build pass — see the build report for exactly what is still a
+// marker vs. wired.
+//
+// §4 render contract (finding 13 — the shipped live-data pattern fails
+// OPEN, same as renderLiveCatalogStats: catch -> return html unmodified).
+// For THIS block that fail-open behavior is the CORRECT fail-closed
+// outcome by construction: the static container's default is
+// data-partition-state="none" with nothing inside it, so returning the
+// html untouched on any derivation failure already serves "neither
+// branch," never a stale A or B. Precedence (precondition 11, GTM F-2):
+// computePartition (lib/partition-guard.js) checks the internal-identity
+// allowlist FIRST via isPlatformContributor OR the operator register —
+// there is no separate "null-account => external" rule run ahead of or
+// instead of that check.
+// TRUST-PAGE-3 content pass (TRUST-PAGE-SECTIONS-0-7-SHIP-REV-2026-09-06.md
+// rev 1a, §4 "State A" / "State B base"): the two state strings injected
+// between the SSR:PARTITION-STATE markers. State B's additive "magnitude"
+// second sentence (the numeral pair naming the catalog total and the
+// external count) is Tyler-gated per §9 item 1 — RULED YES 2026-09-06, so
+// State B now carries the base sentence plus the magnitude sentence, both
+// numbers SSR'd from the SAME computePartition() call this function already
+// makes (partition.total_n, partition.external_n — no second derivation).
+const TRUST_PAGE_PARTITION_STATE_A = 'Today the catalog holds nothing else. No outside builder has published here yet.';
+const TRUST_PAGE_PARTITION_STATE_B_BASE = 'An outside builder has published here.';
+
+// ship-rev §4 "State B magnitude": `Of the catalog's {total_n} learnings,
+// Auxilo published all but {external_n}.` — {total_n} is partition.total_n
+// (every visible row), {external_n} is partition.external_n (rows failing
+// both the platform-wallet/account check and the operator register), both
+// already computed by computePartition() before this is called.
+function trustPageMagnitudeSentence(partition) {
+  return `Of the catalog's ${partition.total_n} learnings, Auxilo published all but ${partition.external_n}.`;
+}
+
+function renderTrustPagePartition(html) {
+  try {
+    const visible = visibleCatalog();
+    const register = loadInternalIdentitiesRegister(INTERNAL_IDENTITIES_FILE);
+    const partition = computePartition(visible, {
+      platformWallets: PLATFORM_WALLETS,
+      register,
+      isPlatformContributorFn: isPlatformContributor,
+    });
+    if (!partition) return html; // non-array catalog: treat as derivation failure, neither branch
+    // The state marker moves, and (this pass) the container between the
+    // SSR:PARTITION-STATE comments fills with the matching state string —
+    // never both, per finding 13's render contract.
+    let out = html.replace(
+      /(<[a-z]+ id="s4-partition-state" data-partition-state=")none("[^>]*>)/,
+      (_m, pre, post) => `${pre}${partition.state}${post}`
+    );
+    const stateText = partition.state === 'a'
+      ? TRUST_PAGE_PARTITION_STATE_A
+      : `${TRUST_PAGE_PARTITION_STATE_B_BASE} ${trustPageMagnitudeSentence(partition)}`;
+    out = out.replace(
+      /(<!-- SSR:PARTITION-STATE -->)[\s\S]*?(<!-- \/SSR:PARTITION-STATE -->)/,
+      (_m, open, close) => `${open}${stateText}${close}`
+    );
+    return out;
+  } catch (e) {
+    console.error('[trust-page] §4 partition render failed, serving fail-closed (neither branch):', e.message);
+    return html;
+  }
+}
+
+// §7 live catalog count — same truth source GET /knowledge/stats uses
+// (catalogStatsTruth, one derivation, shared with /earnings' SSR), read at
+// SSR time, never client-fetched. learnings_count is always computable
+// (in-memory catalog, cannot be "unreadable"); total_unlocks fails closed
+// to the static "…" placeholder when the unlock-event ledger is
+// unreadable — same convention as the existing lc-unlocks/ll-unlocks
+// honest-zero cells (never a stale or hardcoded digit).
+function renderTrustPageLiveCounts(html) {
+  try {
+    const visibleRows = visibleCatalog();
+    const truth = catalogStatsTruth(visibleRows);
+    const learnings = visibleRows.length.toLocaleString('en-US');
+    let out = html.replace(/(id="s7-learnings-count"[^>]*>)[^<]*</, (_m, tag) => `${tag}${learnings}<`);
+    if (truth.unlocks) {
+      const unlocks = truth.unlocks.total.toLocaleString('en-US');
+      out = out.replace(/(id="s7-unlocks-count"[^>]*>)[^<]*</, (_m, tag) => `${tag}${unlocks}<`);
+    }
+    // else: static "…" placeholder stays — fail-closed, never a false 0.
+    return out;
+  } catch (e) {
+    console.error('[trust-page] §7 live-count render failed, serving static placeholders:', e.message);
+    return html;
+  }
+}
+
+// TRUST-PAGE route (PUNCH-LIST TRUST-PAGE row; spec rev 3g §1). Content =
+// SITE-PM §2b/§3b (sections file rev 6) + §9b (rev 3a); §4/§7's SSR is this
+// pass's addition. CACHE (precondition, finding 13's cache bind): this
+// route sends `Cache-Control: no-store` on every path (including the
+// serveStatic fallback below), NOT the property's `public, max-age=3600` —
+// the render is a state-dependent truth claim over an in-memory filter, and
+// the property default was written for static copy. No `Vary` header: the
+// render depends only on server-side state (the catalog + the unlock
+// ledger), never on a request header, cookie, or negotiated content type,
+// so there is nothing for `Vary` to name.
+app.get('/how-submissions-work', (c) => {
+  try {
+    const filePath = path.join(PUBLIC_DIR, 'how-submissions-work.html');
+    if (fs.existsSync(filePath)) {
+      let html = fs.readFileSync(filePath, 'utf8');
+      html = renderTrustPagePartition(html);
+      html = renderTrustPageLiveCounts(html);
+      c.header('Content-Type', 'text/html; charset=utf-8');
+      c.header('Cache-Control', 'no-store');
+      return c.body(injectAnalytics(html, ANALYTICS_DOMAIN));
+    }
+  } catch (e) {
+    console.error('[trust-page] server-render failed, falling back to static:', e.message);
+  }
+  const res = serveStatic(c, 'how-submissions-work.html', 'no-store');
+  if (res) return res;
+  return c.text('Not found', 404);
+});
+
+// TRUST-REDIRECTS (PUNCH-LIST TRUST-REDIRECTS row; spec rev 3c): four
+// guessed paths 301 to the canonical route. Deliberately NOT /security
+// (means vulnerability disclosure; security.txt is already live there) and
+// NOT /about (a different page).
+app.get('/trust', (c) => c.redirect('/how-submissions-work', 301));
+app.get('/governance', (c) => c.redirect('/how-submissions-work', 301));
+app.get('/for-platforms', (c) => c.redirect('/how-submissions-work', 301));
+app.get('/platforms', (c) => c.redirect('/how-submissions-work', 301));
 
 // Hono routes strictly (/writing/ !== /writing); fold the trailing-slash form
 // onto the canonical path instead of 404ing.
