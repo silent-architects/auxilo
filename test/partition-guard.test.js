@@ -32,6 +32,9 @@
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const {
   loadInternalIdentitiesRegister,
@@ -295,5 +298,143 @@ describe('lib/partition-guard.js — TRUST-P0 fixtures', () => {
     const alwaysPlatform = () => true;
     const row = { contributor_account_id: EXTERNAL_ACCOUNT_ID, contributor_wallet: EXTERNAL_WALLET };
     assert.equal(isInternalRow(row, { platformWallets: [PLATFORM_WALLET], isPlatformContributorFn: alwaysPlatform, internalIdentities: identities }), true);
+  });
+});
+
+// ─── TRUST-P0 PASS 2 (2026-09-06, adversarial re-check) ────────────────────
+// Two more findings on top of the fixtures above:
+//   B1 — isInternalRow's row-level wallet fallback let a genuinely external
+//        account get flipped internal by ONE row carrying a registered
+//        wallet (address reuse / an out-of-band artifact), split-braining
+//        the identity. Fixed: classification is per identity only, and the
+//        one-hop link now requires every wallet-bearing row of an account
+//        to agree before the account is linked internal.
+//   B2 — loadInternalIdentitiesRegister silently degraded ANY read failure
+//        (not just ENOENT) to an empty register, indistinguishable from a
+//        legitimately empty one. Fixed: a non-ENOENT failure now returns a
+//        `{ error }` sentinel and computePartition refuses to serve either
+//        branch instead of under-registering silently.
+describe('lib/partition-guard.js — TRUST-P0 PASS 2 fixtures (B1, B2)', () => {
+  it('(B1) a genuinely external account whose ONLY row happens to carry the platform wallet is still external — state b, external_n 1, never a', () => {
+    const register = walletOnlyRegister();
+    const rows = [
+      makeRow({ id: 'p1' }), // platform default, internal
+      // The exact adversarial shape: an external account (never registered,
+      // never linked) whose single visible row's wallet field happens to
+      // equal the PLATFORM wallet — address reuse, a corrupted field, or an
+      // out-of-band artifact, not evidence the account is Auxilo's own.
+      makeRow({ id: 'ext_platform_wallet_row', contributor_account_id: EXTERNAL_ACCOUNT_ID, contributor_wallet: PLATFORM_WALLET }),
+    ];
+    const partition = computePartition(rows, basePartitionOpts(register));
+    assert.equal(partition.state, 'b', 'a row carrying the platform wallet must never flip an unrelated external account id internal');
+    assert.equal(partition.external_n, 1);
+    assert.equal(partition.total_n, 2);
+
+    const contract = partitionAgreesWithStatsTruth(rows, basePartitionOpts(register));
+    assert.equal(contract.agrees, true, 'no split-brain: the identity classifies consistently');
+    assert.equal(contract.conflictIdentities.size, 0);
+  });
+
+  it('(B1) the same external account with a SECOND row on its own real external wallet — both rows external, consistently, identity-level not row-level (the minimal.js repro shape)', () => {
+    const register = walletOnlyRegister();
+    const rows = [
+      makeRow({ id: 'ext_own_wallet', contributor_account_id: EXTERNAL_ACCOUNT_ID, contributor_wallet: EXTERNAL_WALLET }),
+      makeRow({ id: 'ext_platform_wallet_row', contributor_account_id: EXTERNAL_ACCOUNT_ID, contributor_wallet: PLATFORM_WALLET }),
+    ];
+    const partition = computePartition(rows, basePartitionOpts(register));
+    assert.equal(partition.state, 'b');
+    assert.equal(partition.external_n, 2, 'both rows of the one external identity classify the same way — never split');
+    assert.equal(partition.null_account_n, 0);
+
+    const contract = partitionAgreesWithStatsTruth(rows, basePartitionOpts(register));
+    assert.equal(contract.agrees, true);
+    assert.equal(contract.conflictIdentities.size, 0);
+    assert.ok(contract.externalIdentities.has(EXTERNAL_ACCOUNT_ID));
+  });
+
+  it('(B1) one-hop linking requires unanimity: an operator-account row with a CONFLICTING external wallet stops the whole account from linking, even though another row of the same account carries the registered wallet', () => {
+    const register = walletOnlyRegister();
+    const rows = [
+      makeRow({ id: 'op_registered_wallet', contributor_account_id: OPERATOR_ACCOUNT_ID, contributor_wallet: OPERATOR_WALLET }),
+      makeRow({ id: 'op_conflicting_wallet', contributor_account_id: OPERATOR_ACCOUNT_ID, contributor_wallet: EXTERNAL_WALLET }),
+    ];
+    const identities = buildInternalIdentitySet(rows, { platformWallets: [PLATFORM_WALLET], register });
+    assert.equal(identities.has(OPERATOR_ACCOUNT_ID), false, 'a conflicting wallet on even one row disqualifies the account from being linked');
+
+    const partition = computePartition(rows, basePartitionOpts(register));
+    assert.equal(partition.state, 'b', 'fails closed — never fabricates internal on conflicting evidence');
+    assert.equal(partition.external_n, 2);
+  });
+
+  it('(runtime contract) computePartition refuses (state null, identity-conflict) when the injected isPlatformContributorFn itself disagrees across rows of one identity', () => {
+    // Defense-in-depth: the fixes above make a real per-row disagreement
+    // unreachable through this module's own logic (contributorIdentity(row)
+    // is the same value for every row of an identity, so internalIdentities
+    // membership cannot itself vary). This exercises the runtime contract
+    // check directly by injecting a pathological isPlatformContributorFn
+    // that disagrees with itself for two rows sharing one identity —
+    // simulating a future regression upstream of this module.
+    const register = walletOnlyRegister();
+    const rows = [
+      makeRow({ id: 'row_1', contributor_account_id: EXTERNAL_ACCOUNT_ID, contributor_wallet: EXTERNAL_WALLET }),
+      makeRow({ id: 'row_2', contributor_account_id: EXTERNAL_ACCOUNT_ID, contributor_wallet: EXTERNAL_WALLET }),
+    ];
+    const flakyIsPlatformContributor = (row) => row.id === 'row_1'; // true for one row, false for its sibling
+    const partition = computePartition(rows, {
+      platformWallets: [PLATFORM_WALLET],
+      register,
+      isPlatformContributorFn: flakyIsPlatformContributor,
+    });
+    assert.equal(partition.state, null, 'a split-brained identity must never render either branch');
+    assert.equal(partition.reason, 'identity-conflict');
+    assert.deepEqual(partition.conflicts, [EXTERNAL_ACCOUNT_ID]);
+    assert.equal(partition.external_n, null, 'no external count is fabricated when the state itself is unresolved');
+    assert.equal(partition.total_n, 2, 'total_n stays reportable even when state cannot be picked');
+  });
+
+  it('(B2) a register file that exists but fails to parse returns an { error } sentinel, never a silently-empty register', () => {
+    const badPath = path.join(os.tmpdir(), `partition-guard-corrupt-${process.pid}-${Date.now()}.json`);
+    fs.writeFileSync(badPath, '{ this is not valid json ][');
+    try {
+      const corrupt = loadInternalIdentitiesRegister(badPath, {});
+      assert.ok(corrupt.error, 'a parse failure returns a truthy .error, not empty wallet/accountId sets');
+      assert.equal(corrupt.wallets, undefined, 'the sentinel carries no wallets set');
+      assert.equal(corrupt.accountIds, undefined, 'the sentinel carries no accountIds set');
+    } finally {
+      fs.rmSync(badPath, { force: true });
+    }
+  });
+
+  it('(B2) computePartition refuses (state null, register-error) on a corrupted register, even over a purely-internal catalog — never fabricates State B', () => {
+    const badPath = path.join(os.tmpdir(), `partition-guard-corrupt-${process.pid}-${Date.now()}-2.json`);
+    fs.writeFileSync(badPath, '{ this is not valid json ][');
+    try {
+      const corruptRegister = loadInternalIdentitiesRegister(badPath, {});
+      const rows = [
+        makeRow({ id: 'p1' }),
+        makeRow({ id: 'p2', contributor_account_id: OPERATOR_ACCOUNT_ID, contributor_wallet: OPERATOR_WALLET }),
+        makeRow({ id: 'p3', contributor_account_id: OPERATOR_ACCOUNT_ID }),
+      ];
+      const partition = computePartition(rows, {
+        platformWallets: [PLATFORM_WALLET],
+        register: corruptRegister,
+        isPlatformContributorFn: isPlatformContributor,
+      });
+      assert.equal(partition.state, null, 'register corruption must never silently degrade to a fabricated state — this catalog is pure-internal pre-corruption');
+      assert.equal(partition.reason, 'register-error');
+      assert.equal(partition.external_n, null);
+      assert.equal(partition.null_account_n, null);
+      assert.equal(partition.total_n, 3, 'total_n is still reportable — only the branch pick is refused');
+    } finally {
+      fs.rmSync(badPath, { force: true });
+    }
+  });
+
+  it('(B2) ENOENT is unaffected — a nonexistent path still degrades to an empty file layer, env additions still apply (unlike a corrupted-but-present file)', () => {
+    const register = loadInternalIdentitiesRegister('/definitely/does/not/exist.json', {
+      INTERNAL_IDENTITIES_EXTRA_WALLETS: OPERATOR_WALLET,
+    });
+    assert.equal(register.error, undefined, 'ENOENT is not treated as corruption');
+    assert.ok(register.wallets.has(OPERATOR_WALLET.toLowerCase()), 'env additions still apply on top of the empty file layer');
   });
 });

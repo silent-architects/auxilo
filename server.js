@@ -11929,6 +11929,15 @@ function renderTrustPagePartition(html) {
       isPlatformContributorFn: isPlatformContributor,
     });
     if (!partition) return html; // non-array catalog: treat as derivation failure, neither branch
+    if (partition.state === null) {
+      // TRUST-P0 pass 2: computePartition could not form an opinion
+      // (register-error or identity-conflict, lib/partition-guard.js) —
+      // serve neither branch. The static container's default
+      // data-partition-state="none" is left untouched.
+      console.error(`[trust-page] §4 partition unresolved (${partition.reason}), serving neither branch` +
+        (partition.reason === 'identity-conflict' ? ` (${partition.conflicts.length} identities split-brained)` : ''));
+      return html;
+    }
     // The state marker moves, and (this pass) the container between the
     // SSR:PARTITION-STATE comments fills with the matching state string —
     // never both, per finding 13's render contract.
