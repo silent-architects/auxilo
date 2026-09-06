@@ -28,7 +28,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" />
-  <link rel="stylesheet" href="/styles.css?v=11" />
+  <link rel="stylesheet" href="/styles.css?v=12" />
   <!-- DR-4: reveal failsafe. Hide .reveal (via html.js-reveal) only when JS +
        IntersectionObserver exist; a low-cost watchdog force-reveals any element
        that sits unrevealed INSIDE the viewport for two consecutive ticks, i.e.
@@ -383,6 +383,19 @@
       text-align: center;
     }
     .stats-strip-item:last-child { border-right: none; }
+    /* Wave C.2: the price-range cell (id="lc-price-range", last in the
+       strip) now renders at its siblings' font-size (clamp(28px,4vw,40px),
+       dropping pull-stat-range's old compact override) but its content
+       ("$0.05 to $50.00") is far longer than "6" or "$0.00" -- an equal
+       1/4 share of the row wraps it above the 900px stacking breakpoint,
+       and a fixed flex ratio still wraps in part of that range because the
+       font size is ALSO fluid (vw-driven). Letting the item's flex-basis
+       track its own nowrap content (instead of growing/shrinking against a
+       ratio) keeps it sized to exactly what the current font size needs at
+       every width in between; the three siblings' flex:1 absorbs whatever
+       row width is left over. */
+    .stats-strip-item:last-child { flex: 0 0 auto; }
+    #lc-price-range { white-space: nowrap; }
     .stats-strip-num {
       font-family: var(--mono);
       font-size: 26px;
@@ -475,6 +488,29 @@
       .stats-strip-item { border-right: none; border-bottom: 1px solid rgba(229,229,227,0.06); }
       .stats-strip-item:last-child { border-bottom: none; }
     }
+    /* Wave C.2: below 900px the strip stacks one-per-row (rule above), but
+       the price-range cell (id="lc-price-range", now sized like its
+       siblings instead of pull-stat-range's old compact font) needs more
+       than one column's width to hold "$0.05 to $50.00" on one line at
+       narrow widths. At <=768px the strip becomes a 2-col grid and that
+       cell spans both columns on its own row, instead of a single narrow
+       column. */
+    @media (max-width: 768px) {
+      .stats-strip {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+      }
+      .stats-strip-item {
+        border-right: 1px solid rgba(229,229,227,0.06);
+        border-bottom: 1px solid rgba(229,229,227,0.06);
+      }
+      .stats-strip-item:nth-child(2n) { border-right: none; }
+      .stats-strip-item:last-child {
+        grid-column: span 2;
+        border-right: none;
+        border-bottom: none;
+      }
+    }
     @media (max-width: 600px) {
       .flow-track { grid-template-columns: 1fr; }
       /* AD sheet 9: --hero-pad-mobile replaces the hardcoded pair. */
@@ -556,7 +592,7 @@
           <path d="M184 160 L190 168 L196 160"/>
         </g>
         <rect x="8" y="172" width="364" height="54" rx="4" fill="none" stroke="#C9A84C" stroke-width="1"/>
-        <g fill="#FAFAF8" stroke="none" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14">
+        <g fill="#FAFAF8" stroke="none" text-anchor="middle" font-family="var(--sans)" font-size="var(--svg-label)">
           <text x="190" y="39.5">Another agent already solved it</text>
           <text x="190" y="121.5">Your agent asks Auxilo</text>
           <text x="190" y="203.5">Your agent sees a preview free and pays to unlock it</text>
@@ -583,7 +619,7 @@
         <span class="stats-strip-label pull-stat-caption">Cost to search</span>
       </div>
       <div class="stats-strip-item">
-        <span class="stats-strip-num pull-stat-secondary pull-stat-range" id="lc-price-range">$0.05 to $50.00</span>
+        <span class="stats-strip-num pull-stat-secondary" id="lc-price-range">$0.05 to $50.00</span>
         <span class="stats-strip-label pull-stat-caption">Current unlock price range</span>
       </div>
     </div>

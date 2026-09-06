@@ -27,6 +27,15 @@
   --h2-section: clamp(28px, 3.5vw, 42px);
   --h2-cta: clamp(32px, 4.5vw, 56px);
   --hero-pad-mobile: 100px 16px 60px;
+
+  /* Wave C.2: one label-size token for the three inline drawings' SVG text
+     (index hero exchange, how-it-works approval fork, for-agents demand
+     exchange). Each drawing scales its viewBox down by a different factor
+     at a 375px viewport (fork 0.859, demand 0.86, index 0.861, per AD
+     sheet-9 measurement); 14px is the smallest whole value that keeps every
+     one of those effective on-screen sizes at or above 12px
+     (14 * 0.859 = 12.026, the tightest of the three). */
+  --svg-label: 14px;
 }
 
 html { scroll-behavior: smooth; }
