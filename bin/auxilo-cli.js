@@ -166,21 +166,29 @@ const CONSENT_TEXT = `
     • READS the session transcript on your machine,
     • SCRUBS it locally (sensitivity filter: API keys, tokens, emails, PII
       are redacted first),
-    • EXTRACTS reusable learnings locally using your own claude CLI (your
-      existing subscription). For this step your transcript is processed
-      only by your own model provider the same way your normal sessions
-      are, and is never sent to Auxilo, raw or scrubbed.
+    • EXTRACTS reusable learnings locally through the first model client you
+      have installed (Claude Code, then Codex) or, when neither is
+      available, a provider key you set yourself. For this step your
+      scrubbed transcript goes only to that provider, under your own
+      account with them, and any use is charged to that account, never to
+      Auxilo. It is never sent to Auxilo, raw or scrubbed.
     • UPLOADS only the finished learning drafts (title, body, category,
       tags, task context, outcome) to Auxilo (${'POST /learn'}). Everything
       waits in your review queue until you approve it, one learning at a
       time or in advance in your dashboard. Your first public learning
       waits for operator review. A draft that any screen flags (sensitive,
       duplicate, uncertain quality) waits in your private queue for
-      \`auxilo review\`. Manual mode (approve first, for everything) is
-      available in your account settings. You earn 70% of sales.
+      \`auxilo review\`. Auto-publish for learnings that pass every screen is
+      off unless you turn it on in your dashboard. Your share of a paid
+      unlock by another agent goes to your Auxilo account, 70% of what they
+      paid on a direct unlock and 60% via discovery. A repeat unlock by the
+      same buyer within 30 days earns nothing. Earnings depend on whether
+      other agents unlock your learnings and are not guaranteed. Earnings
+      accrue now. Withdrawals open soon, and auxilo.io/status shows where
+      things stand.
   You can stop any time with \`auxilo disable\` (local kill-switch) and review
-  every run in ~/.auxilo/extract.log. Saying No installs the MCP server only —
-  no session-end capture hook is written into any client config unless you say
+  every run in ~/.auxilo/extract.log. Saying No installs the MCP server only.
+  No session-end capture hook is written into any client config unless you say
   Yes, and any capture hooks left by an earlier install are removed.
 `;
 
@@ -1266,13 +1274,22 @@ const PROVIDER_VENDORS = ['openai', 'anthropic', 'gemini'];
  * before `set` is allowed to run — never fail open on a false claim.
  * No file yet is not unsafe: writeByoConfig always writes 0600 itself.
  */
+/**
+ * (EXTRACT-PER-CLIENT W1 FIX, GOV-3 should-fix item 10): a stat error other
+ * than ENOENT (e.g. EACCES) now fails CLOSED — returns true (unsafe) — the
+ * same "cannot verify, so don't trust it" discipline
+ * byo-key.js's own isProvidersFileModeUnsafe documents and follows. The old
+ * rethrow here let a raw fs error propagate out of cmdProvider uncaught,
+ * printing whatever bubbled to run()'s generic catch instead of a clean
+ * reason. Never throws now.
+ */
 function providersFileModeUnsafe(target) {
   let stat;
   try {
     stat = fs.statSync(target);
   } catch (err) {
     if (err && err.code === 'ENOENT') return false;
-    throw err;
+    return true; // cannot verify permissions — fail closed, not open
   }
   return (stat.mode & 0o077) !== 0;
 }
@@ -1296,11 +1313,20 @@ async function cmdProvider(flags) {
   }
 
   if (sub === 'clear') {
+    // clearProvidersFile() never throws (GOV-3 should-fix item 10) — every
+    // outcome is a plain string, handled explicitly below rather than
+    // falling into the generic success message for a case that isn't one.
     const result = byoKeyProvider.clearProvidersFile();
     if (result === 'removed-file') {
       console.log('✓ ~/.auxilo/providers.json removed (nothing left to keep).');
     } else if (result === 'removed-byo') {
       console.log('✓ BYO provider key cleared. providers.json kept (your auto-detected provider selection, if any, is unchanged).');
+    } else if (result === 'unreadable') {
+      console.error('auxilo provider clear could not read ~/.auxilo/providers.json (reasonCode: providers-file-unreadable). Check its permissions and try again.');
+      process.exit(1);
+    } else if (result === 'unresolved') {
+      console.error('auxilo provider clear could not resolve your home directory (reasonCode: provider-home-unresolved).');
+      process.exit(1);
     } else {
       console.log('✓ Nothing to remove (no BYO provider key configured).');
     }
@@ -1334,10 +1360,23 @@ async function cmdProvider(flags) {
     if (readlineEnded) { console.log('Aborted. Nothing changed.'); return; }
   }
 
+  // GOV-3 item 3: base_url must be https:// — a plaintext endpoint would
+  // send the transcript, and for two of the three vendors the key itself,
+  // in cleartext. Checked here (set time) AND again at read time inside
+  // byo-key.js's runModel/detect (reasonCode provider-base-url-insecure) —
+  // a hand-edited providers.json can't bypass either.
   let baseUrl = flags['base-url'] ? String(flags['base-url']) : '';
-  if (!baseUrl) {
-    baseUrl = await ask(`Base URL (optional — press Enter for the ${vendor} default): `);
-    if (readlineEnded) { console.log('Aborted. Nothing changed.'); return; }
+  if (baseUrl && byoKeyProvider.isBaseUrlInsecure(baseUrl)) {
+    console.error(`auxilo provider set refuses --base-url "${baseUrl}": it must be https:// (reasonCode: provider-base-url-insecure).`);
+    process.exit(1);
+  }
+  if (!flags['base-url']) {
+    for (;;) {
+      baseUrl = await ask(`Base URL (optional — press Enter for the ${vendor} default; must be https:// if given): `);
+      if (readlineEnded) { console.log('Aborted. Nothing changed.'); return; }
+      if (!baseUrl || !byoKeyProvider.isBaseUrlInsecure(baseUrl)) break;
+      console.log(`"${baseUrl}" is not https:// — try again, or press Enter for the ${vendor} default.`);
+    }
   }
 
   let model = flags.model ? String(flags.model) : '';
@@ -1363,12 +1402,25 @@ async function cmdProvider(flags) {
     return;
   }
 
-  const written = byoKeyProvider.writeByoConfig({
-    provider: vendor,
-    ...(baseUrl && { base_url: baseUrl }),
-    model,
-    api_key: apiKey,
-  });
+  // writeByoConfig throws ONLY on an unresolved home directory (GOV-3 item
+  // 13) — caught here so that reaches a clean reason + exit(1), never a raw
+  // stack (should-fix item 10), matching the fail-closed contract every
+  // other providers.json entry point in this file now follows.
+  let written;
+  try {
+    written = byoKeyProvider.writeByoConfig({
+      provider: vendor,
+      ...(baseUrl && { base_url: baseUrl }),
+      model,
+      api_key: apiKey,
+    });
+  } catch (err) {
+    if (err && err.reasonCode === 'provider-home-unresolved') {
+      console.error(`auxilo provider set could not resolve your home directory (reasonCode: provider-home-unresolved). ${err.message}`);
+      process.exit(1);
+    }
+    throw err;
+  }
   console.log(`\n✓ Saved to ${written} (mode 0600). This machine will use your own ${vendor} key for extraction when no earlier provider in the order is available.`);
 }
 
@@ -1437,7 +1489,9 @@ codex-cli) is available. Auxilo never sees or bills this key.
   set      Configure a vendor, model, and key. Interactive ONLY: the key is
            read from a hidden prompt (never a flag, never an env var), and
            you must type the consent sentence exactly. No flag skips this.
-  clear    Delete ~/.auxilo/providers.json.`,
+  clear    Remove your BYO key. Keeps your auto-detected provider selection
+           (\`selected\`), if any — only deletes the file outright when
+           nothing but the key was in it.`,
   };
   if (command && blocks[command]) {
     console.log(`\n${blocks[command]}\n`);

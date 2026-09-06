@@ -166,7 +166,9 @@ describe('EXT-0806b Claude auth and cause classification', () => {
     // EXTRACT-TOOLS-LOCK (PUNCH-LIST): the extraction spawn now carries
     // '--tools',''  — the same tool-lock the dedup judge always had — so the
     // stdin-fed model can't reach outside the transcript it was given.
-    assert.deepEqual(unknown.calls.map((call) => call.args), [['auth', 'status'], ['-p', '--tools', '']]);
+    // EXTRACT-PER-CLIENT W1 FIX GIVENS: it also carries
+    // '--no-session-persistence', matching the judge spawn.
+    assert.deepEqual(unknown.calls.map((call) => call.args), [['auth', 'status'], ['-p', '--no-session-persistence', '--tools', '']]);
   });
 
   it('maps auth regex, non-zero model exit, and spawn failure to the exact three reason codes', () => {

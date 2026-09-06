@@ -360,7 +360,7 @@ describe('byo-key.js: runModel — anthropic variant', () => {
 });
 
 describe('byo-key.js: runModel — gemini variant', () => {
-  it('POSTs {baseUrl}/models/{model}:generateContent?key=..., extracts candidates[0].content.parts[].text', async () => {
+  it('POSTs {baseUrl}/models/{model}:generateContent with the key in the x-goog-api-key header (GOV-3 item 5 — NEVER the URL query string), extracts candidates[0].content.parts[].text', async () => {
     const dir = tempDir('auxilo-byo-gemini-');
     try {
       const statePath = statePathIn(dir);
@@ -372,8 +372,10 @@ describe('byo-key.js: runModel — gemini variant', () => {
       assert.equal(result.ok, true);
       assert.equal(result.text, '{"learnings":[]}');
       assert.equal(result.identity.vendor, 'gemini');
-      assert.ok(calls[0].url.startsWith('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key='));
-      assert.ok(calls[0].url.includes('gk-test'), 'gemini has no header alternative to the key query param');
+      assert.equal(calls[0].url, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent');
+      assert.ok(!calls[0].url.includes('gk-test'), 'the key must never appear in the URL (proxy/access logs)');
+      assert.ok(!calls[0].url.includes('key='), 'no key query parameter at all');
+      assert.equal(calls[0].init.headers['x-goog-api-key'], 'gk-test');
       assert.equal(calls[0].init.headers.Authorization, undefined);
       assert.equal(calls[0].init.headers['x-api-key'], undefined);
     } finally {
@@ -482,7 +484,7 @@ describe('bin/auxilo-cli.js: PROVIDER_KEY_CONSENT_SENTENCE (SITE-PM string slot)
   it('structural: cmdProvider still refuses `set` were the sentence ever empty again, with reasonCode consent-sentence-missing, before the TTY gate', () => {
     const start = CLI_SRC.indexOf('async function cmdProvider');
     assert.ok(start > 0, 'cmdProvider not found');
-    const fn = CLI_SRC.slice(start, start + 5000);
+    const fn = CLI_SRC.slice(start, start + 8000);
     const consentCheckIdx = fn.indexOf("PROVIDER_KEY_CONSENT_SENTENCE === ''");
     const modeCheckIdx = fn.indexOf('providersFileModeUnsafe(');
     const ttyCheckIdx = fn.indexOf('!process.stdin.isTTY');
@@ -497,7 +499,7 @@ describe('bin/auxilo-cli.js: PROVIDER_KEY_CONSENT_SENTENCE (SITE-PM string slot)
 
   it('structural: the mode check and the sentence print both precede the API key prompt, and the mode check precedes storing', () => {
     const start = CLI_SRC.indexOf('async function cmdProvider');
-    const fn = CLI_SRC.slice(start, start + 5000);
+    const fn = CLI_SRC.slice(start, start + 8000);
     const modeCheckIdx = fn.indexOf('providersFileModeUnsafe(');
     const sentencePrintIdx = fn.indexOf('wrapForTerminal(PROVIDER_KEY_CONSENT_SENTENCE)');
     const keyPromptIdx = fn.indexOf("askHidden('API key");
@@ -511,7 +513,7 @@ describe('bin/auxilo-cli.js: PROVIDER_KEY_CONSENT_SENTENCE (SITE-PM string slot)
 
   it('structural: the sentence prints word-wrapped to the terminal width (never a raw unwrapped console.log of the constant)', () => {
     const start = CLI_SRC.indexOf('async function cmdProvider');
-    const fn = CLI_SRC.slice(start, start + 5000);
+    const fn = CLI_SRC.slice(start, start + 8000);
     assert.ok(!/console\.log\(`\\n\$\{PROVIDER_KEY_CONSENT_SENTENCE\}\\n`\)/.test(fn),
       'the sentence must not be printed raw/unwrapped');
     const wrapCount = (fn.match(/wrapForTerminal\(PROVIDER_KEY_CONSENT_SENTENCE\)/g) || []).length;
@@ -525,7 +527,7 @@ describe('bin/auxilo-cli.js: PROVIDER_KEY_CONSENT_SENTENCE (SITE-PM string slot)
 
   it('structural: no --yes/--force/env/argv path can supply the key — only askHidden', () => {
     const start = CLI_SRC.indexOf('async function cmdProvider');
-    const fn = CLI_SRC.slice(start, start + 5000);
+    const fn = CLI_SRC.slice(start, start + 8000);
     assert.ok(!/flags\.key|flags\['api-key'\]|flags\.apiKey|process\.env\.\w*KEY/.test(fn),
       'the key must never be readable from a flag or env var');
     assert.match(fn, /askHidden\(/, 'the key prompt must use the hidden-input helper');

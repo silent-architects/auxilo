@@ -141,10 +141,27 @@ function _resetVersionCacheForTests() {
   cachedVersion = undefined;
 }
 
-function makeOutputPath(opts, mode) {
-  if (typeof opts.outputPath === 'string') return opts.outputPath;
+/**
+ * Where the `-o` output file lives (GOV-3 should-fix item 11). The old
+ * default dropped it straight into `os.tmpdir()` — a WORLD-READABLE
+ * directory on every POSIX system — at codex's own umask, holding
+ * extracted-learning text (which may itself contain scrubbed-but-sensitive
+ * transcript fragments) until the best-effort unlink below runs. Now it
+ * lands in a PRIVATE 0700 subdirectory this process creates and owns,
+ * `auxilo-<pid>-<rand>/`, so nothing but this user can even list the
+ * directory to find the file, let alone read it before the chmod below
+ * lands. A caller-supplied `opts.outputPath` (every test in this repo)
+ * bypasses directory creation entirely — that path is the caller's to
+ * manage, and `cleanupDir` comes back null so invoke()'s finally block does
+ * not try to rmdir something it did not create.
+ */
+function makeOutputLocation(opts, mode) {
+  if (typeof opts.outputPath === 'string') return { outputPath: opts.outputPath, cleanupDir: null };
+  const mkdirSyncImpl = typeof opts.mkdirSyncImpl === 'function' ? opts.mkdirSyncImpl : fs.mkdirSync;
   const rand = crypto.randomBytes(6).toString('hex');
-  return path.join(os.tmpdir(), `auxilo-codex-${mode}-${process.pid}-${rand}.txt`);
+  const dir = path.join(os.tmpdir(), `auxilo-${process.pid}-${rand}`);
+  mkdirSyncImpl(dir, { recursive: true, mode: 0o700 });
+  return { outputPath: path.join(dir, `${mode}.txt`), cleanupDir: dir };
 }
 
 function classifySpawnError(error, bin) {
@@ -165,11 +182,20 @@ function classifySpawnError(error, bin) {
  * crash/timeout/schema-rejection path, so a defensive stdout fallback covers
  * the cases where no file ever landed; text as documented is the file's
  * content and stdout is treated as the exception path, never the default).
+ *
+ * The `-o` file's private-dir creation, 0600 chmod, and cleanup (GOV-3
+ * should-fix item 11) are handled by an outer try/finally so EVERY exit
+ * path — auth-not-configured, every spawn-error/timeout classification,
+ * non-zero exit, empty output, and the normal success path — cleans up the
+ * same way. `cleanupDir` is null (nothing to remove) when the caller
+ * supplied its own `opts.outputPath`.
  */
 function invoke(opts, mode) {
   const spawnSyncImpl = typeof opts.spawnSyncImpl === 'function' ? opts.spawnSyncImpl : spawnSync;
   const readFileSyncImpl = typeof opts.readFileSyncImpl === 'function' ? opts.readFileSyncImpl : fs.readFileSync;
   const unlinkSyncImpl = typeof opts.unlinkSyncImpl === 'function' ? opts.unlinkSyncImpl : fs.unlinkSync;
+  const rmdirSyncImpl = typeof opts.rmdirSyncImpl === 'function' ? opts.rmdirSyncImpl : fs.rmdirSync;
+  const chmodSyncImpl = typeof opts.chmodSyncImpl === 'function' ? opts.chmodSyncImpl : fs.chmodSync;
   const bin = typeof opts.codexBin === 'string' ? opts.codexBin : resolveCodexBin(opts);
 
   const authMode = readAuthMode(opts);
@@ -184,101 +210,130 @@ function invoke(opts, mode) {
     };
   }
 
-  const schemaFile = mode === 'judge' ? JUDGE_SCHEMA_PATH : EXTRACTION_SCHEMA_PATH;
-  const outputPath = makeOutputPath(opts, mode);
-  const prompt = typeof opts.prompt === 'string' ? opts.prompt : '';
-  const stdin = prompt + String(opts.input || '');
-  const args = [
-    'exec',
-    '-s', 'read-only',
-    '--skip-git-repo-check',
-    '--ephemeral',
-    '--ignore-user-config',
-    '--output-schema', schemaFile,
-    '-o', outputPath,
-    '-',
-  ];
-
-  let res;
+  const { outputPath, cleanupDir } = makeOutputLocation(opts, mode);
   try {
-    res = spawnSyncImpl(bin, args, {
-      input: stdin,
-      encoding: 'utf-8',
-      env: codexChildEnv(),
-      timeout: opts.timeoutMs || 120000,
-      maxBuffer: 20 * 1024 * 1024,
-    });
-  } catch (error) {
-    const classified = classifySpawnError(error, bin);
-    return { ok: false, text: '', usage: null, authStatus: 'unknown', ...classified };
-  }
-  if (!res) {
-    return { ok: false, text: '', usage: null, reason: `spawn failed (${bin}): no process result`, reasonCode: 'unknown', authStatus: 'unknown' };
-  }
-  if (res.error) {
-    const classified = classifySpawnError(res.error, bin);
-    return { ok: false, text: '', usage: null, authStatus: 'unknown', ...classified };
-  }
-  // spawnSync signals a timeout via `signal` (no `error`) when the child was
-  // killed for exceeding `timeout` and didn't set its own exit code.
-  if (res.signal && res.status === null) {
-    return { ok: false, text: '', usage: null, reason: `codex exec timed out (${bin}), signal ${res.signal}`, reasonCode: 'cli-timeout', authStatus: 'unknown' };
-  }
+    const schemaFile = mode === 'judge' ? JUDGE_SCHEMA_PATH : EXTRACTION_SCHEMA_PATH;
+    const prompt = typeof opts.prompt === 'string' ? opts.prompt : '';
+    const stdin = prompt + String(opts.input || '');
+    const args = [
+      'exec',
+      '-s', 'read-only',
+      '--skip-git-repo-check',
+      '--ephemeral',
+      '--ignore-user-config',
+      '--output-schema', schemaFile,
+      '-o', outputPath,
+      '-',
+    ];
 
-  const stdout = String(res.stdout || '');
-  if (/not authenticated|not logged in|codex login/i.test(stdout) || /not authenticated|not logged in|codex login/i.test(String(res.stderr || ''))) {
-    return { ok: false, text: '', usage: null, reason: 'codex CLI reported it is not authenticated', reasonCode: 'cli-unauthenticated', authStatus: 'unknown' };
-  }
-  if (res.status !== 0) {
-    return {
-      ok: false,
-      text: '',
-      usage: null,
-      reason: `codex exec exited ${res.status}: ${(stdout || String(res.stderr || '')).slice(0, 160)}`,
-      reasonCode: 'model-error',
-      authStatus: 'unknown',
-    };
-  }
+    let res;
+    try {
+      res = spawnSyncImpl(bin, args, {
+        input: stdin,
+        encoding: 'utf-8',
+        env: codexChildEnv(),
+        timeout: opts.timeoutMs || 120000,
+        maxBuffer: 20 * 1024 * 1024,
+      });
+    } catch (error) {
+      const classified = classifySpawnError(error, bin);
+      return { ok: false, text: '', usage: null, authStatus: 'unknown', ...classified };
+    }
+    if (!res) {
+      return { ok: false, text: '', usage: null, reason: `spawn failed (${bin}): no process result`, reasonCode: 'unknown', authStatus: 'unknown' };
+    }
+    if (res.error) {
+      const classified = classifySpawnError(res.error, bin);
+      return { ok: false, text: '', usage: null, authStatus: 'unknown', ...classified };
+    }
+    // spawnSync signals a timeout via `signal` (no `error`) when the child was
+    // killed for exceeding `timeout` and didn't set its own exit code.
+    if (res.signal && res.status === null) {
+      return { ok: false, text: '', usage: null, reason: `codex exec timed out (${bin}), signal ${res.signal}`, reasonCode: 'cli-timeout', authStatus: 'unknown' };
+    }
 
-  let text;
-  let usedStdoutFallback = false;
-  try {
-    text = String(readFileSyncImpl(outputPath, 'utf8'));
-  } catch {
-    // --output-last-message's own docs make no promise about a file existing
-    // outside a normal completion — fall back to stdout rather than
-    // reporting a false failure when codex exited 0 but the file is absent.
-    text = stdout;
-    usedStdoutFallback = true;
-  } finally {
-    try { unlinkSyncImpl(outputPath); } catch { /* best-effort cleanup only */ }
-  }
+    const stdout = String(res.stdout || '');
+    if (/not authenticated|not logged in|codex login/i.test(stdout) || /not authenticated|not logged in|codex login/i.test(String(res.stderr || ''))) {
+      return { ok: false, text: '', usage: null, reason: 'codex CLI reported it is not authenticated', reasonCode: 'cli-unauthenticated', authStatus: 'unknown' };
+    }
+    if (res.status !== 0) {
+      return {
+        ok: false,
+        text: '',
+        usage: null,
+        reason: `codex exec exited ${res.status}: ${(stdout || String(res.stderr || '')).slice(0, 160)}`,
+        reasonCode: 'model-error',
+        authStatus: 'unknown',
+      };
+    }
 
-  if (!text.trim()) {
-    return {
-      ok: false,
-      text: '',
-      usage: null,
-      reason: usedStdoutFallback
-        ? 'codex exec produced no output-last-message file and stdout was empty'
-        : 'codex exec produced an empty output-last-message file',
-      reasonCode: 'cli-bad-output',
-      authStatus: 'unknown',
-    };
-  }
+    // Force 0600 before reading — codex writes this file itself, under its
+    // own umask, which may not match. Best-effort: a file that doesn't
+    // exist (never written) or can't be chmod'd fails silently here and the
+    // read attempt right below reports the real failure.
+    try { chmodSyncImpl(outputPath, 0o600); } catch { /* best-effort only */ }
 
-  return {
-    ok: true,
-    text,
-    usage: null, // the -o file carries no token counts; caller estimates from text length
-    reason: null,
-    authStatus: 'unknown',
-    extraction_model: {
+    let text;
+    let usedStdoutFallback = false;
+    try {
+      text = String(readFileSyncImpl(outputPath, 'utf8'));
+    } catch {
+      // --output-last-message's own docs make no promise about a file existing
+      // outside a normal completion — fall back to stdout rather than
+      // reporting a false failure when codex exited 0 but the file is absent.
+      text = stdout;
+      usedStdoutFallback = true;
+    }
+
+    if (!text.trim()) {
+      return {
+        ok: false,
+        text: '',
+        usage: null,
+        reason: usedStdoutFallback
+          ? 'codex exec produced no output-last-message file and stdout was empty'
+          : 'codex exec produced an empty output-last-message file',
+        reasonCode: 'cli-bad-output',
+        authStatus: 'unknown',
+      };
+    }
+
+    // extraction_model kept as a DEPRECATED ALIAS of `identity` for one
+    // release (GATE-A item a) — resolveExtractionModelIdentity
+    // (scripts/extract-local.js) reads `identity`, per the
+    // provider.interface.js contract every other provider follows
+    // (byo-key.js always set `identity`; this field name mismatch was the
+    // bug — codex's real version never reached the stamp, falling back to
+    // the generic {provider,model:null,version:null,vendor:null} instead).
+    // test/codex-cli-provider.test.js still reads `.extraction_model`
+    // directly against this module's own runModel(), so the alias stays
+    // until that test (and any external consumer) moves to `.identity`.
+    const identity = {
       provider: 'codex-cli',
       model: null, // codex exposes no per-call model id without --json (not requested)
       version: getCodexVersion(opts),
-    },
-  };
+      vendor: null,
+    };
+    return {
+      ok: true,
+      text,
+      usage: null, // the -o file carries no token counts; caller estimates from text length
+      reason: null,
+      authStatus: 'unknown',
+      identity,
+      extraction_model: identity, // deprecated alias — remove after one release
+    };
+  } finally {
+    // Unlink the output file unconditionally (matches the pre-existing
+    // contract exercised by test/codex-cli-provider.test.js even for a
+    // caller-supplied opts.outputPath); rmdir the private directory ONLY
+    // when this call created it — a caller-supplied path is the caller's
+    // directory to manage, never ours to remove.
+    try { unlinkSyncImpl(outputPath); } catch { /* best-effort cleanup only */ }
+    if (cleanupDir) {
+      try { rmdirSyncImpl(cleanupDir); } catch { /* best-effort cleanup only */ }
+    }
+  }
 }
 
 /** runModel(opts) — the provider.interface.js contract. */
@@ -297,4 +352,7 @@ module.exports = {
   EXTRACTION_SCHEMA_PATH,
   JUDGE_SCHEMA_PATH,
   _resetVersionCacheForTests,
+  // Exported for direct unit coverage (test/extract-w1-fix2.test.js, GOV-3
+  // should-fix item 11 — private-dir + 0600 output file).
+  makeOutputLocation,
 };
