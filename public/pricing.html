@@ -154,6 +154,36 @@
       line-height: 1.65;
     }
 
+    /* ── Credit purchase control (CREDITS-CONTROL PART 1) ───────────
+       Hidden by default (dark-safe invariant); shown by JS only once
+       GET /health reports payments_enabled && stripe_configured. */
+    .pack-buy-btn { margin-top: 20px; width: 100%; justify-content: center; }
+    .purchase-disclosures {
+      max-width: 640px;
+      margin: 28px auto 0;
+      padding: 20px 24px;
+      border: 1px solid rgba(229,229,227,0.14);
+      border-radius: 10px;
+      font-size: 13px;
+      color: var(--slate-text);
+      line-height: 1.65;
+    }
+    .purchase-disclosures p { margin: 0 0 10px; }
+    .purchase-disclosures p:last-of-type { margin-bottom: 0; }
+    .purchase-disclosures a { color: var(--aurum); }
+    .purchase-legal {
+      margin: 0 0 10px;
+      padding: 12px 14px;
+      border-left: 2px solid rgba(229,229,227,0.25);
+      color: var(--slate-text);
+      font-style: normal;
+    }
+    .purchase-stripe-badge {
+      font-size: 12px;
+      color: var(--slate);
+      letter-spacing: 0.02em;
+    }
+
     /* ── How Pricing Works ───────────────────────────────────────── */
     .pricing-how-section {
       padding: var(--section-pad);
@@ -753,6 +783,7 @@
         <p class="pack-detail">
           80 unlocks. Enough to try the catalog and build a first integration.
         </p>
+        <button type="button" class="btn-primary pack-buy-btn" data-pack="starter" style="display:none" onclick="auxiloBuyCredits('starter')">Buy credits</button>
       </div>
       <div class="pack-card">
         <p class="pack-name">Growth</p>
@@ -760,6 +791,7 @@
         <p class="pack-detail">
           250 unlocks. For an agent in active development.
         </p>
+        <button type="button" class="btn-primary pack-buy-btn" data-pack="growth" style="display:none" onclick="auxiloBuyCredits('growth')">Buy credits</button>
       </div>
       <div class="pack-card">
         <p class="pack-name">Pro</p>
@@ -767,7 +799,18 @@
         <p class="pack-detail">
           1,000 unlocks. For an agent running in production.
         </p>
+        <button type="button" class="btn-primary pack-buy-btn" data-pack="pro" style="display:none" onclick="auxiloBuyCredits('pro')">Buy credits</button>
       </div>
+    </div>
+
+    <!-- CREDITS-CONTROL PART 1 (SITE-PM packet 9 rev 4, D5-D10). Hidden until
+         a Buy button is live (dark-safe invariant, spec STOP gate e). -->
+    <div id="purchase-disclosures" class="purchase-disclosures" style="display:none">
+      <p>By continuing, you agree to the <a href="/terms">Terms of Service</a>, including that credits are non-refundable and do not expire.</p>
+      <blockquote class="purchase-legal">Prepaid credits are non-refundable and non-transferable. Credits have no cash value outside the Platform and cannot be redeemed for currency. All transactions on the Platform are final.</blockquote>
+      <p>Questions about a purchase go to support@auxilo.io. <a href="/terms#section-7">Refund and dispute policy</a></p>
+      <p>Prices are in USD and exclude any applicable taxes.</p>
+      <p class="purchase-stripe-badge">Powered by Stripe</p>
     </div>
 
     <div class="free-tier" role="note">
@@ -1010,6 +1053,65 @@
       document.getElementById('hamburger').setAttribute('aria-expanded', 'false');
     });
   });
+
+  // ── Credit purchase control (CREDITS-CONTROL PART 1) ───────────────────
+  // Dark-safe invariant (spec STOP gate e): no Buy button, and no completed
+  // checkout POST, renders/fires while Stripe is unconfigured. window.__AUXILO_PACKS__
+  // is server-injected from lib/stripe.js PACKS (renderPackData) — unused on this
+  // page today (the pack-card copy is already SITE-PM's exact strings), kept for
+  // parity with the dashboard control and any future pack-driven markup here.
+  var AUXILO_SESSION_KEY = 'auxilo_session';
+  function auxiloGetToken() {
+    try { return localStorage.getItem(AUXILO_SESSION_KEY) || null; } catch (_) { return null; }
+  }
+
+  fetch('/health')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (data && data.payments_enabled === true && data.stripe_configured === true) {
+        document.querySelectorAll('.pack-buy-btn').forEach(function (btn) { btn.style.display = ''; });
+        var disclosures = document.getElementById('purchase-disclosures');
+        if (disclosures) disclosures.style.display = '';
+      }
+    })
+    .catch(function () { /* stays dark-safe: no button, no disclosures */ });
+
+  // Signed-out visitor: no redirect_to/return_to param (STOP gate b) — plain
+  // routing to /dashboard, no pack memory carried, per SPEC-1 A11.
+  window.auxiloBuyCredits = function (packId) {
+    var token = auxiloGetToken();
+    if (!token) {
+      window.location = '/dashboard';
+      return;
+    }
+    var btn = document.querySelector('.pack-buy-btn[data-pack="' + packId + '"]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Redirecting…'; }
+    fetch('/checkout/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ pack: packId }),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); })
+      .then(function (res) {
+        if (res.ok && res.data && res.data.url) {
+          window.location = res.data.url;
+          return;
+        }
+        if (btn) { btn.disabled = false; btn.textContent = 'Buy credits'; }
+        // CREDITS-CONTROL PART 1 micro-fix (should-fix 2): the Terms clickwrap
+        // gate lives on the dashboard, not here — route there instead of a
+        // dead-end alert with no way to accept (no new strings).
+        if (res.data && res.data.code === 'TERMS_NOT_ACCEPTED') {
+          window.location = '/dashboard#terms-gate';
+          return;
+        }
+        window.alert((res.data && res.data.error) || 'Could not start checkout. Please try again.');
+      })
+      .catch(function () {
+        if (btn) { btn.disabled = false; btn.textContent = 'Buy credits'; }
+        window.alert('Could not start checkout. Check your connection and try again.');
+      });
+  };
 </script>
 </body>
 </html>
