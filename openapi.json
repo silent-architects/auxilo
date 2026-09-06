@@ -3011,6 +3011,25 @@
               "minimum": 0
             },
             "description": "Zero-based page offset."
+          },
+          {
+            "name": "published_via",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional exact-match filter on the learning's published_via stamp (for example clean_lane_standing_consent), applied with the status and visibility filters before paging so total counts matching rows only. Rows without the stamp never match."
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "desc"
+              ]
+            },
+            "description": "Optional ordering. desc returns newest first by created_at. Omitted keeps the stored order."
           }
         ],
         "responses": {

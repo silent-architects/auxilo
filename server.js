@@ -8169,6 +8169,21 @@ app.get('/account/learnings', requireSessionOrApiKey('read'), (c) => {
   if (rawVisibility !== null && rawVisibility !== 'public' && rawVisibility !== 'private') {
     return c.json({ error: 'visibility must be one of: public,private' }, 400);
   }
+  // CLEAN-LANE-FLIP Phase B (dashboard): two additive query params so the
+  // standing-consent card can ask for exactly its rows in one request
+  // (WAVE-0905-RESIDUALS (1)). `published_via` is an exact-match filter on the
+  // row's stamp, applied with the account/status/visibility filters BEFORE the
+  // page slice (so `total` counts matching rows only); `sort=desc` orders
+  // newest-first by created_at. Both absent → existing order and behaviour,
+  // byte-identical for every current caller.
+  const rawPublishedVia = url.searchParams.get('published_via');
+  const rawSort = url.searchParams.get('sort');
+  if (rawPublishedVia !== null && rawPublishedVia.trim() === '') {
+    return c.json({ error: 'published_via must be a non-empty exact-match value' }, 400);
+  }
+  if (rawSort !== null && rawSort !== 'desc') {
+    return c.json({ error: 'sort must be one of: desc' }, 400);
+  }
 
   let limit = parseInt(url.searchParams.get('limit') || '200', 10);
   let offset = parseInt(url.searchParams.get('offset') || '0', 10);
@@ -8184,7 +8199,8 @@ app.get('/account/learnings', requireSessionOrApiKey('read'), (c) => {
       const status = learning.status || 'approved';
       const learningVisibility = learning.visibility === 'private' ? 'private' : 'public';
       return statusSet.has(status) &&
-        (rawVisibility === null || learningVisibility === rawVisibility);
+        (rawVisibility === null || learningVisibility === rawVisibility) &&
+        (rawPublishedVia === null || learning.published_via === rawPublishedVia);
     })
     .map((learning) => ({
       id: learning.id,
@@ -8207,6 +8223,19 @@ app.get('/account/learnings', requireSessionOrApiKey('read'), (c) => {
       }),
       ...(learning.retractable_until != null && { retractable_until: learning.retractable_until }),
     }));
+
+  if (rawSort === 'desc') {
+    // Stable newest-first; rows without a parseable created_at sink to the end
+    // in their original relative order.
+    const ts = (row) => {
+      const t = Date.parse(row.created_at);
+      return Number.isFinite(t) ? t : -Infinity;
+    };
+    own.sort((a, b) => {
+      const d = ts(b) - ts(a);
+      return Number.isNaN(d) ? 0 : d; // both unparseable → keep relative order
+    });
+  }
 
   return c.json({
     account_id: accountId,
