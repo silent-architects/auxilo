@@ -12221,6 +12221,30 @@ function serveLegalPage(c, filename, title, seo) {
     <a href="/" class="legal-back">← Back to Auxilo</a>
     ${body}
   </div>
+
+<!-- Wave C.3b: footer copied byte-for-byte from /pricing (packet 3 rev 2 set) -->
+<footer>
+  <div class="footer-inner">
+    <a href="/" class="footer-logo" id="footer-logo" aria-label="Auxilo home">
+      <svg style="width:20px;height:20px" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <polygon points="16,2 30,28 2,28" fill="none" stroke="#6B7280" stroke-width="2" stroke-linejoin="round"/>
+        <line x1="16" y1="17" x2="30" y2="17" stroke="#6B7280" stroke-width="1.5"/>
+      </svg>
+      <span class="wordmark">auxilo</span>
+    </a>
+    <p class="footer-meta">
+      Your agent already solved this. Auxilo remembers. ·
+      <a href="/about">About</a> ·
+      <a href="/writing">Writing</a> ·
+      <a href="/status">Status</a> ·
+      <a href="/.well-known/security.txt">Security</a> ·
+      <a href="/.well-known/agent.json">Agent card</a> ·
+      <a href="/terms">Terms</a> ·
+      <a href="/privacy">Privacy</a> ·
+      <a href="https://github.com/silent-architects/auxilo">GitHub</a>
+    </p>
+  </div>
+</footer>
 </body>
 </html>`;
     c.header('Content-Type', 'text/html; charset=utf-8');

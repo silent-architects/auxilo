@@ -592,7 +592,11 @@
           <path d="M184 160 L190 168 L196 160"/>
         </g>
         <rect x="8" y="172" width="364" height="54" rx="4" fill="none" stroke="#C9A84C" stroke-width="1"/>
-        <g fill="#FAFAF8" stroke="none" text-anchor="middle" font-family="var(--sans)" font-size="var(--svg-label)">
+        <!-- Wave C.3b: explicit 14 override, not var(--svg-label) (15). Measured live at
+             375px viewport: this drawing's widest label ("Your agent sees a preview free
+             and pays to unlock it") has a getBBox width of 345.8 of the 364-unit-wide
+             rect at 14; at the sitewide 15 it would be 370.7, overflowing the rect. -->
+        <g fill="#FAFAF8" stroke="none" text-anchor="middle" font-family="var(--sans)" font-size="14">
           <text x="190" y="39.5">Another agent already solved it</text>
           <text x="190" y="121.5">Your agent asks Auxilo</text>
           <text x="190" y="203.5">Your agent sees a preview free and pays to unlock it</text>
