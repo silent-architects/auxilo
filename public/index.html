@@ -276,6 +276,48 @@
       background: rgba(255,255,255,0.04) !important;
       color: var(--ash) !important;
     }
+
+    /* AD-CLIENTS-VISUAL-SHEET-2026-09-06 strings rev 3: the works-with
+       homepage band, directly under the hero's trust bullets. One size, no
+       per-cell labels (adding a capture verb here means the per-cell labels
+       come back with it -- deliberately left off). Eleven capture clients
+       plus the link cell land at exactly 6 across x 2 rows, so no overflow
+       handling is needed at this cell count. */
+    #works-with-band { padding: 96px 24px; }
+    #works-with-band .ww-band-wrap { max-width: 1057px; margin: 0 auto; }
+    #works-with-band .ww-band-eyebrow {
+      font-family: var(--mono);
+      font-size: 13px;
+      letter-spacing: 0.06em;
+      color: rgba(250,250,248,0.55);
+      margin: 0 0 32px;
+    }
+    #works-with-band .ww-band-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      column-gap: 24px;
+      row-gap: 32px;
+      align-items: center;
+    }
+    #works-with-band .ww-band-name {
+      font-family: var(--sans);
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--ivory);
+    }
+    #works-with-band .ww-band-link {
+      font-family: var(--sans);
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--ivory);
+      text-decoration: underline;
+    }
+    #works-with-band .ww-band-link:hover { color: var(--ash); }
+
+    @media (max-width: 640px) {
+      #works-with-band { padding: 56px 20px; }
+      #works-with-band .ww-band-grid { grid-template-columns: repeat(2, 1fr); row-gap: 20px; }
+    }
 </style>
 </head>
 <body>
@@ -365,6 +407,30 @@
   </div>
 </section>
 
+<!-- ━━━ Works with band (AD-CLIENTS-VISUAL-SHEET-2026-09-06 strings rev 3):
+     directly under the hero's trust bullets. Eleven capture clients (the
+     seven hook clients, Antigravity, and the three sweep clients), one size,
+     no per-cell labels; last cell is the link to /works-with. ━━━━━━━━━━━━━ -->
+<section id="works-with-band" aria-labelledby="works-with-band-heading">
+  <div class="ww-band-wrap">
+    <p class="ww-band-eyebrow" id="works-with-band-heading">works with the client you already run</p>
+    <div class="ww-band-grid">
+      <span class="ww-band-name">Claude Code</span>
+      <span class="ww-band-name">Cursor</span>
+      <span class="ww-band-name">Gemini CLI</span>
+      <span class="ww-band-name">Windsurf</span>
+      <span class="ww-band-name">GitHub Copilot</span>
+      <span class="ww-band-name">Codex</span>
+      <span class="ww-band-name">Factory droid</span>
+      <span class="ww-band-name">Antigravity</span>
+      <span class="ww-band-name">Cline</span>
+      <span class="ww-band-name">Roo Code</span>
+      <span class="ww-band-name">Continue.dev</span>
+      <a href="/works-with" class="ww-band-link">See what Auxilo captures on each client</a>
+    </div>
+  </div>
+</section>
+
 <!-- ━━━ Section 1b: Single-player recall (WP-1a, unlocked by DR-8) ━━━━━━━━━━ -->
 <section id="own-learnings-free" aria-labelledby="recall-heading">
   <div class="container">
@@ -389,7 +455,7 @@
           <!-- Connect icon: plug/link -->
         </div>
         <h3>Connect Your Agent</h3>
-        <p>One command: <code style="font-family:var(--mono);font-size:13px;color:var(--aurum);">npx auxilo setup</code>. It detects your client, registers Auxilo, and signs you in. On Claude Code and Codex it can also extract learnings in the background, and nothing you extract goes public until you approve it, one learning at a time or in advance in your dashboard. More clients are on the <a href="/legal/supported-clients">supported clients page</a>.</p>
+        <p>One command: <code style="font-family:var(--mono);font-size:13px;color:var(--aurum);">npx auxilo setup</code>. It detects your client, registers Auxilo, and signs you in. On the clients that support capture it can also extract learnings in the background, and nothing you extract goes public until you approve it, one learning at a time or in advance in your dashboard. More clients are on the <a href="/legal/supported-clients">supported clients page</a>.</p>
       </div>
       <div class="step">
         <div class="step-header">

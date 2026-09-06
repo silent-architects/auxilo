@@ -77,6 +77,9 @@ const NAV_PAGES = [
     // legacy .status-nav (zero height at 375, no hamburger) onto the shared
     // #main-nav, same as the rest of this list.
     'about.html', 'writing/index.html',
+    // Works with build (2026-09-06): works-with.html uses the same shared
+    // #main-nav + hamburger markup as every page above.
+    'works-with.html',
 ];
 
 // All 8 shared-nav pages are driven through the browser for the dynamic
