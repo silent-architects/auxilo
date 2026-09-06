@@ -401,13 +401,24 @@ function judgeUsage(usage, prompt, completion) {
 /**
  * PART C — resolve the extraction_model identity for a runModel result.
  * Prefers the additive `identity` field a provider's runModel result may
- * carry (byo-key.js always sets one: {provider:'byo-key', model, version,
- * vendor}). claude-code.js/codex-cli.js shipped (PART A/B) before this stamp
- * existed and don't set one — rather than touch those provider modules
- * (outside this part's disjoint file scope, AGENTS.md's one-build rule),
- * this falls back to the resolved provider id alone (model/version/vendor
- * null) so every provider gets SOME stamp, never silently none. Best-effort:
- * a resolution failure here must never block extraction itself.
+ * carry. Current state (post Gate-A item a): byo-key.js always sets one
+ * ({provider:'byo-key', model, version:null, vendor}); codex-cli.js sets one
+ * on success ({provider:'codex-cli', model:null, version:<codex --version>,
+ * vendor:null} — its result also carries the same object under the
+ * deprecated `extraction_model` alias, kept for one release only for
+ * test/codex-cli-provider.test.js). claude-code.js is the one provider that
+ * still sets no `identity` on its result — that's the case this function's
+ * fallback exists for: it re-resolves via providers.resolveProvider() and
+ * stamps {provider: resolved.id, model: null, version: null, vendor: null},
+ * so every provider gets SOME stamp, never silently none. That re-resolution
+ * walks scripts/providers/index.js's PROVIDER_ORDER (claude-code →
+ * codex-cli → byo-key); resolveProvider/runModel there fall through from one
+ * provider to the next only on a NON_RETRYABLE_FOR_THIS_PROVIDER reasonCode
+ * (unauthenticated, not installed, a billing helper configured, an
+ * unconfigured BYO key, or an unsafe providers.json mode) — a provider that
+ * merely failed once (a timeout, a model error) is not retried under a
+ * different one. Best-effort throughout: a resolution failure here must
+ * never block extraction itself.
  */
 async function resolveExtractionModelIdentity(runModelResult, opts) {
   if (runModelResult && runModelResult.identity && typeof runModelResult.identity === 'object') {

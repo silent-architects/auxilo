@@ -71,6 +71,33 @@ function isHomeUnresolved(target) {
 }
 
 /**
+ * true iff something already sits at `target` and it is NOT a plain regular
+ * file owned by this process's own uid (EXTRACTION-LOW-FOLLOWUPS item 4).
+ * Guards the pre-rename chmod below: chmod follows symlinks, so a planted
+ * symlink at `target` (pointing at, say, another account's file, or a
+ * device node) would previously get its chmod(0600) applied to whatever it
+ * points at, not to providers.json itself — same-uid threat model only
+ * (matches item 2's TOCTOU acceptance above), but a fail-closed lstat is a
+ * one-line guard against it. ENOENT (nothing there yet) is safe — the write
+ * below creates it fresh with O_EXCL. Any other stat failure, a non-file
+ * (symlink/dir/fifo/device), or a foreign owner all fail CLOSED (refuse),
+ * never silently proceed.
+ */
+function isUnsafeExistingTarget(target, opts = {}) {
+  const lstatSyncImpl = typeof opts.lstatSyncImpl === 'function' ? opts.lstatSyncImpl : fs.lstatSync;
+  let stat;
+  try {
+    stat = lstatSyncImpl(target);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return false; // nothing there — nothing to protect
+    return true; // cannot verify what's there — fail closed
+  }
+  if (!stat.isFile()) return true; // symlink, directory, fifo, device, … — never chmod/rename onto it
+  if (typeof process.getuid === 'function' && stat.uid !== process.getuid()) return true; // foreign owner
+  return false;
+}
+
+/**
  * ONE writer for every providers.json write (EXTRACT-PER-CLIENT W1 FIX
  * GOV-3 item 1 + should-fix item 9) — writeByoConfig, clearProvidersFile,
  * AND scripts/providers/index.js's persistSelected all route through this,
@@ -78,14 +105,19 @@ function isHomeUnresolved(target) {
  * right instead of three independent (and, before this fix, drifted) copies
  * of it. Discipline, in order:
  *   1. mkdir the parent dir 0700 (idempotent).
- *   2. If a file already sits at `target`, chmod it 0600 BEFORE the
+ *   2. lstat whatever already sits at `target` and refuse (reasonCode
+ *      'provider-state-target-unsafe') if it exists and is not a regular
+ *      file owned by this uid (EXTRACTION-LOW-FOLLOWUPS item 4) — checked
+ *      BEFORE the chmod below, which would otherwise follow a planted
+ *      symlink.
+ *   3. If a file already sits at `target`, chmod it 0600 BEFORE the
  *      rename lands (belt-and-suspenders — the post-rename chmod below is
  *      the one that actually matters for a stale `.tmp`).
- *   3. Unlink any leftover `${target}.tmp` first (a crashed prior run, or a
+ *   4. Unlink any leftover `${target}.tmp` first (a crashed prior run, or a
  *      planted symlink), THEN create it fresh with `flag:'wx'` (O_EXCL) —
  *      refuses to silently reuse or follow anything already at that path.
- *   4. Atomic rename tmp -> target.
- *   5. chmodSync(target, 0o600) AFTER the rename. This is the literal fix
+ *   5. Atomic rename tmp -> target.
+ *   6. chmodSync(target, 0o600) AFTER the rename. This is the literal fix
  *      for GOV-3 finding 1: writeFileSync's `mode` option only applies on
  *      CREATION, so a stale `.tmp` that survived a crash at 0644 would
  *      rename onto `target` and KEEP 0644, silently falsifying the
@@ -93,7 +125,8 @@ function isHomeUnresolved(target) {
  *      `persistSelected` (scripts/providers/index.js) had this exact gap;
  *      this writer closes it everywhere at once.
  * Throws (does not swallow) when the home directory could not be resolved
- * (isHomeUnresolved) — callers decide how to surface that; see
+ * (isHomeUnresolved) or the existing target is unsafe (reasonCode
+ * 'provider-state-target-unsafe') — callers decide how to surface that; see
  * writeByoConfig/clearProvidersFile below and cmdProvider in
  * bin/auxilo-cli.js, which catches this rather than let a raw stack out
  * (should-fix item 10).
@@ -106,6 +139,11 @@ function writeProvidersStateAtomic(state, opts = {}) {
     throw err;
   }
   fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
+  if (isUnsafeExistingTarget(target, opts)) {
+    const err = new Error('refusing to write ~/.auxilo/providers.json — an existing entry at that path is not a regular file owned by this account (possible symlink or foreign owner)');
+    err.reasonCode = 'provider-state-target-unsafe';
+    throw err;
+  }
   if (fs.existsSync(target)) fs.chmodSync(target, 0o600);
   const tmp = `${target}.tmp`;
   try { fs.unlinkSync(tmp); } catch { /* nothing there, or already gone — fine either way */ }
@@ -150,6 +188,12 @@ function readByoConfig(opts = {}) {
  * source discipline; the discipline itself — chmod-then-tmp-write-then-
  * rename, both 0600 — is copied, not the code).
  *
+ * Throws a tagged error (writeProvidersStateAtomic) on 'provider-home-
+ * unresolved' OR, since EXTRACTION-LOW-FOLLOWUPS item 4, on
+ * 'provider-state-target-unsafe' (an existing entry at the target path is
+ * a symlink or owned by a different uid) — cmdProvider in bin/auxilo-cli.js
+ * catches both rather than let a raw stack out.
+ *
  * @param {{provider:string, base_url?:string|null, model:string, api_key:string}} byoConfig
  */
 function writeByoConfig(byoConfig, opts = {}) {
@@ -182,7 +226,11 @@ function writeByoConfig(byoConfig, opts = {}) {
  * rather than guess a location to read/write. A stat/read failure other
  * than ENOENT (e.g. EACCES) returns 'unreadable' rather than rethrow — this
  * function's contract really is "never throws" now (should-fix item 10; the
- * old rethrow on non-ENOENT contradicted this same docblock).
+ * old rethrow on non-ENOENT contradicted this same docblock). The rewrite
+ * path below can now also throw (writeProvidersStateAtomic's
+ * 'provider-state-target-unsafe', EXTRACTION-LOW-FOLLOWUPS item 4) — caught
+ * here too, folded into 'unreadable', so this function's own "never throws"
+ * contract holds regardless of what writeProvidersStateAtomic does.
  *
  * @returns {'removed-file'|'removed-byo'|'noop'|'unreadable'|'unresolved'}
  *   'noop' covers both "no file" and "a file with no `byo` key to clear".
@@ -209,10 +257,18 @@ function clearProvidersFile(opts = {}) {
   }
   delete state.byo;
   if (Object.keys(state).length === 0) {
-    fs.unlinkSync(target);
+    try {
+      fs.unlinkSync(target);
+    } catch {
+      return 'unreadable'; // cannot remove it either — never throws (contract)
+    }
     return 'removed-file';
   }
-  writeProvidersStateAtomic(state, opts);
+  try {
+    writeProvidersStateAtomic(state, opts);
+  } catch {
+    return 'unreadable'; // e.g. provider-state-target-unsafe — never throws (contract)
+  }
   return 'removed-byo';
 }
 
@@ -244,6 +300,8 @@ function baseUrlFor(vendor, configured) {
  * throws.
  */
 function isProvidersFileModeUnsafe(opts = {}) {
+  // EXTRACTION-LOW-FOLLOWUPS item 2 (TOCTOU, accepted on the record): a
+  // window exists between this check and readByoConfig()'s read below; only the same uid could win that race, and that uid already owns the key on disk, so it is accepted rather than replaced with an fd-based check-then-read.
   const target = statePath(opts);
   if (isHomeUnresolved(target)) return true; // can't even name the file — fail closed
   const statSyncImpl = typeof opts.statSyncImpl === 'function' ? opts.statSyncImpl : fs.statSync;
@@ -627,5 +685,7 @@ module.exports = {
   isHomeUnresolved,
   isBaseUrlInsecure,
   writeProvidersStateAtomic,
+  // Exported for direct unit coverage (EXTRACTION-LOW-FOLLOWUPS item 4).
+  isUnsafeExistingTarget,
   MAX_RESPONSE_BYTES,
 };

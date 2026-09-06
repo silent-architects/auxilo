@@ -129,6 +129,143 @@ describe('GOV-3 should-fix item 9: tmp-file symlink guard', () => {
   });
 });
 
+// ─── EXTRACTION-LOW-FOLLOWUPS item 4: lstat the TARGET (not just the .tmp
+// path above) before the pre-rename chmod, refuse a symlink or foreign owner
+// ────────────────────────────────────────────────────────────────────────
+
+describe('EXTRACTION-LOW-FOLLOWUPS item 4: lstat target before the pre-rename chmod', () => {
+  it('isUnsafeExistingTarget: no file yet (ENOENT) is safe', () => {
+    const dir = tempDir('auxilo-w1fix4-none-');
+    try {
+      assert.equal(byoKey.isUnsafeExistingTarget(path.join(dir, 'providers.json')), false);
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('isUnsafeExistingTarget: an ordinary regular file owned by this uid is safe', () => {
+    const dir = tempDir('auxilo-w1fix4-regular-');
+    try {
+      const target = statePathIn(dir);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(target, '{}');
+      assert.equal(byoKey.isUnsafeExistingTarget(target), false);
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('isUnsafeExistingTarget: a SYMLINK at the target is unsafe, even when it points at a regular file this uid owns', () => {
+    const dir = tempDir('auxilo-w1fix4-symlink-target-');
+    try {
+      const real = path.join(dir, 'real-providers.json');
+      fs.writeFileSync(real, '{}');
+      const target = path.join(dir, 'providers.json');
+      fs.symlinkSync(real, target);
+      assert.equal(byoKey.isUnsafeExistingTarget(target), true);
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('isUnsafeExistingTarget: a directory at the target is unsafe (not a regular file)', () => {
+    const dir = tempDir('auxilo-w1fix4-dir-target-');
+    try {
+      const target = statePathIn(dir);
+      fs.mkdirSync(target, { recursive: true });
+      assert.equal(byoKey.isUnsafeExistingTarget(target), true);
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('isUnsafeExistingTarget: a foreign-owner regular file is unsafe (injected lstatSyncImpl — no real other-uid fixture needed)', () => {
+    const target = '/tmp/does-not-need-to-exist-providers.json';
+    const foreignStat = { isFile: () => true, uid: process.getuid ? process.getuid() + 1 : 1 };
+    const result = byoKey.isUnsafeExistingTarget(target, { lstatSyncImpl: () => foreignStat });
+    assert.equal(result, true);
+  });
+
+  it('isUnsafeExistingTarget: an lstat error other than ENOENT (e.g. EACCES) fails CLOSED (unsafe), not open', () => {
+    const target = '/tmp/does-not-need-to-exist-providers.json';
+    const lstatSyncImpl = () => { const e = new Error('EACCES'); e.code = 'EACCES'; throw e; };
+    assert.equal(byoKey.isUnsafeExistingTarget(target, { lstatSyncImpl }), true);
+  });
+
+  it('writeProvidersStateAtomic refuses (reasonCode provider-state-target-unsafe) and never chmods/writes through a symlinked target', () => {
+    const dir = tempDir('auxilo-w1fix4-writer-symlink-');
+    try {
+      const decoyTarget = path.join(dir, 'decoy-outside.json');
+      fs.writeFileSync(decoyTarget, '{"pwned":true}');
+      fs.chmodSync(decoyTarget, 0o644);
+      const statePath = statePathIn(dir);
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.symlinkSync(decoyTarget, statePath);
+
+      assert.throws(
+        () => byoKey.writeProvidersStateAtomic({ selected: 'byo-key' }, { providersStatePath: statePath }),
+        (err) => err && err.reasonCode === 'provider-state-target-unsafe',
+      );
+
+      const decoyStat = fs.statSync(decoyTarget);
+      assert.equal(decoyStat.mode & 0o777, 0o644, 'the symlinked-to file must never be chmodded through the guarded target');
+      assert.equal(fs.readFileSync(decoyTarget, 'utf8'), '{"pwned":true}', 'and never written through either');
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('writeByoConfig propagates the same reasonCode (not swallowed) when the target is unsafe', () => {
+    const dir = tempDir('auxilo-w1fix4-writebyo-symlink-');
+    try {
+      const decoyTarget = path.join(dir, 'decoy-outside.json');
+      fs.writeFileSync(decoyTarget, '{}');
+      const statePath = statePathIn(dir);
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.symlinkSync(decoyTarget, statePath);
+
+      assert.throws(
+        () => byoKey.writeByoConfig({ provider: 'openai', model: 'x', api_key: 'k' }, { providersStatePath: statePath }),
+        (err) => err && err.reasonCode === 'provider-state-target-unsafe',
+      );
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('clearProvidersFile still never throws when the rewrite path hits an unsafe target — returns "unreadable" instead', () => {
+    const dir = tempDir('auxilo-w1fix4-clear-symlink-');
+    try {
+      // A providers.json with BOTH `selected` and `byo` so clearing `byo`
+      // takes the rewrite branch (writeProvidersStateAtomic), not the
+      // delete-whole-file branch.
+      const statePath = statePathIn(dir);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(statePath, JSON.stringify({ selected: 'byo-key', byo: { provider: 'openai', model: 'x', api_key: 'y' } }));
+      const foreignStat = { isFile: () => true, uid: process.getuid ? process.getuid() + 1 : 1 };
+      let threw = false;
+      let result;
+      try {
+        result = byoKey.clearProvidersFile({ providersStatePath: statePath, lstatSyncImpl: () => foreignStat });
+      } catch {
+        threw = true;
+      }
+      assert.equal(threw, false, 'clearProvidersFile must never throw even when writeProvidersStateAtomic refuses');
+      assert.equal(result, 'unreadable');
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('cmdProvider (bin/auxilo-cli.js) has a clean-refusal branch for reasonCode provider-state-target-unsafe (no bare rethrow left uncaught)', () => {
+    assert.match(CLI_SRC, /provider-state-target-unsafe/);
+    const idx = CLI_SRC.indexOf("err.reasonCode === 'provider-state-target-unsafe'");
+    assert.ok(idx > -1);
+    const nearby = CLI_SRC.slice(idx, idx + 350);
+    assert.match(nearby, /process\.exit\(1\)/);
+  });
+});
+
 // ─── GOV-3 item 3: base_url must be https:// ───────────────────────────────
 
 describe('GOV-3 item 3: base_url must be https://', () => {
@@ -415,6 +552,104 @@ describe('GOV-3 item 6: managed-settings billing-helper detection', () => {
   });
 });
 
+// ─── EXTRACTION-LOW-FOLLOWUPS item 1: hasOwnProperty guard on the raw
+// platform-keyed object index (a prototype key must fail CLOSED to the
+// Linux default, not resolve to an Object.prototype value) ────────────────
+
+describe('EXTRACTION-LOW-FOLLOWUPS item 1: managedSettingsPathForPlatform hasOwnProperty guard', () => {
+  it('a prototype-chain key ("constructor") falls back to the Linux path rather than resolving to Object.prototype.constructor', () => {
+    const result = claudeCode.managedSettingsPathForPlatform({ platform: 'constructor' });
+    assert.equal(result, '/etc/claude-code/managed-settings.json');
+    assert.equal(typeof result, 'string');
+  });
+
+  it('other prototype-chain keys ("toString", "__proto__", "hasOwnProperty") all fall back to the Linux path', () => {
+    for (const key of ['toString', '__proto__', 'hasOwnProperty', 'valueOf']) {
+      assert.equal(
+        claudeCode.managedSettingsPathForPlatform({ platform: key }),
+        '/etc/claude-code/managed-settings.json',
+        `platform="${key}" must fail closed to the Linux default, not resolve a prototype value`,
+      );
+    }
+  });
+
+  it('the three real, own-property platforms still resolve correctly (no regression from the guard)', () => {
+    assert.equal(claudeCode.managedSettingsPathForPlatform({ platform: 'darwin' }), '/Library/Application Support/ClaudeCode/managed-settings.json');
+    assert.equal(claudeCode.managedSettingsPathForPlatform({ platform: 'linux' }), '/etc/claude-code/managed-settings.json');
+    assert.equal(claudeCode.managedSettingsPathForPlatform({ platform: 'win32' }), 'C:\\Program Files\\ClaudeCode\\managed-settings.json');
+  });
+
+  it('source uses Object.prototype.hasOwnProperty.call rather than a raw [platform] index', () => {
+    const src = fs.readFileSync(path.join(REPO, 'scripts', 'providers', 'claude-code.js'), 'utf8');
+    assert.match(src, /Object\.prototype\.hasOwnProperty\.call\(MANAGED_SETTINGS_PATH_BY_PLATFORM, platform\)/);
+  });
+});
+
+// ─── EXTRACTION-LOW-FOLLOWUPS item 3: one stderr log line, naming the
+// reason code, when an unverifiable managed-settings file silently switches
+// the builder away from claude-code — no file contents, no key material ───
+
+describe('EXTRACTION-LOW-FOLLOWUPS item 3: unverifiable managed-settings file logs one stderr line', () => {
+  it('logs exactly one line naming reasonCode cli-billing-helper-configured, and only that line', () => {
+    const dir = tempDir('auxilo-w1fix3-managed-log-');
+    try {
+      const managedPath = path.join(dir, 'managed-settings.json');
+      const homeDir = tempDir('auxilo-w1fix3-managed-log-home-');
+      const logLines = [];
+      const detected = claudeCode.detectBillingHelperConfigured({
+        homeDir, cwd: homeDir, managedSettingsPath: managedPath,
+        existsSyncImpl: (p) => (p === managedPath ? true : fs.existsSync(p)),
+        readFileSyncImpl: (p, enc) => {
+          if (p === managedPath) { const e = new Error('EACCES: permission denied'); e.code = 'EACCES'; throw e; }
+          return fs.readFileSync(p, enc);
+        },
+        log: (line) => logLines.push(line),
+      });
+      assert.equal(detected, true);
+      assert.equal(logLines.length, 1, 'exactly one log line, not zero and not one per check');
+      assert.match(logLines[0], /cli-billing-helper-configured/, 'the line must name the reason code');
+      assert.doesNotMatch(logLines[0], /EACCES|permission denied/i, 'no underlying file-read error detail (still not file contents, but keep the line generic)');
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('a REAL detected billing helper (not merely unverifiable) does not spuriously log the unverifiable-file line', () => {
+    const dir = tempDir('auxilo-w1fix3-real-helper-');
+    try {
+      const managedPath = path.join(dir, 'managed-settings.json');
+      fs.writeFileSync(managedPath, JSON.stringify({ apiKeyHelper: '/usr/local/bin/foreign-billing.sh' }));
+      const homeDir = tempDir('auxilo-w1fix3-real-helper-home-');
+      const logLines = [];
+      const detected = claudeCode.detectBillingHelperConfigured({
+        homeDir, cwd: homeDir, managedSettingsPath: managedPath,
+        existsSyncImpl: (p) => p === managedPath || fs.existsSync(p),
+        readFileSyncImpl: (p, enc) => (p === managedPath ? fs.readFileSync(managedPath, enc) : fs.readFileSync(p, enc)),
+        log: (line) => logLines.push(line),
+      });
+      assert.equal(detected, true);
+      assert.equal(logLines.length, 0, 'a real, readable, parsed helper is a normal detection — not the unverifiable-file case, no log line');
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('no log call at all when no managed-settings.json is present (the common case stays silent)', () => {
+    const dir = tempDir('auxilo-w1fix3-absent-');
+    try {
+      const logLines = [];
+      const detected = claudeCode.detectBillingHelperConfigured({
+        homeDir: dir, cwd: dir, managedSettingsPath: path.join(dir, 'nonexistent-managed-settings.json'),
+        log: (line) => logLines.push(line),
+      });
+      assert.equal(detected, false);
+      assert.equal(logLines.length, 0);
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+});
+
 // ─── GATE-A item (a): codex identity, deprecated extraction_model alias ───
 
 describe('GATE-A item (a): codex-cli identity field (resolveExtractionModelIdentity reads `identity`, not `extraction_model`)', () => {
@@ -691,7 +926,7 @@ describe('GOV-3 note item 13: os.homedir() must resolve to an absolute path', ()
 describe('STRINGS: bin/auxilo-cli.js CONSENT_TEXT — three gated replacements (byte-for-byte)', () => {
   const NEW_EXTRACTS_BULLET =
     '    • EXTRACTS reusable learnings locally through the first model client you\n' +
-    '      have installed (Claude Code, then Codex) or, when neither is\n' +
+    '      are signed in to (Claude Code, then Codex) or, when neither is\n' +
     '      available, a provider key you set yourself. For this step your\n' +
     '      scrubbed transcript goes only to that provider, under your own\n' +
     '      account with them, and any use is charged to that account, never to\n' +
@@ -744,5 +979,21 @@ describe('STRINGS: bin/auxilo-cli.js CONSENT_TEXT — three gated replacements (
 
   it('the retired "publishes to the marketplace immediately" overclaim is still absent (COPY-18, unrelated to this pass)', () => {
     assert.ok(!CLI_SRC.includes('publishes to the marketplace immediately'));
+  });
+});
+
+// ─── STRINGS: 0.9.14 CLI consent wording — "you have installed" → "you are
+// signed in to" (Tyler/SITE-PM ruling, now that detect() is auth-gated on
+// every provider) ────────────────────────────────────────────────────────
+
+describe('EXTRACTION-LOW-FOLLOWUPS item 6: CLI consent "you have installed" -> "you are signed in to"', () => {
+  it('the old "you have installed" phrasing is gone (was 1, across the hard-wrapped bullet)', () => {
+    assert.doesNotMatch(CLI_SRC, /you\s+have\s+installed/);
+  });
+
+  it('the new "you are signed in to" phrasing appears exactly once, in the EXTRACTS bullet', () => {
+    const count = (CLI_SRC.match(/you\s+are\s+signed\s+in\s+to/g) || []).length;
+    assert.equal(count, 1);
+    assert.match(CLI_SRC, /the first model client you\n {6}are signed in to \(Claude Code, then Codex\)/);
   });
 });
