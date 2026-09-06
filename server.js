@@ -66,6 +66,7 @@ const {
   evaluateExtractionPublish,
   computeCleanLaneRetractionStats,
   shouldFreezeCleanLane,
+  countUnacknowledgedStandingConsentPublications,
   getCleanLaneState,
   appendCleanLaneRow,
   CLEAN_LANE_CONSENT_VERSION,
@@ -8014,10 +8015,24 @@ app.get('/account/clean-lane', async (c) => {
   if (!auth.accountId) return c.json({ error: auth.error }, auth.status);
 
   const state = getCleanLaneState(auth.accountId, { forceReload: true });
+  // CLEAN-LANE-FLIP Phase B (notice hardening; GOV-2 counsel draft §6 read
+  // #2): the acknowledgement cursor and the unread count behind the
+  // dashboard's persistent "N auto-published since you last checked" badge.
+  // The cursor moves ONLY via PATCH /account/settings {standing_consent_ack_at}
+  // (the "I've reviewed these" button); reading this route never moves it, so
+  // the badge cannot clear itself. No email is sent — this is the dashboard
+  // half of the notice, made persistent and unread-counted.
+  const ackAccount = loadAccounts()[auth.accountId] || {};
+  const standingConsentAckAt = typeof ackAccount.standing_consent_ack_at === 'string'
+    ? ackAccount.standing_consent_ack_at : null;
   return c.json({
     account_id: auth.accountId,
     clean_lane_active: cleanLaneActive(state),
     consent_version_current: CLEAN_LANE_CONSENT_VERSION,
+    standing_consent_ack_at: standingConsentAckAt,
+    unacknowledged_publications: countUnacknowledgedStandingConsentPublications(
+      learnings, auth.accountId, standingConsentAckAt
+    ),
     ...(state && {
       last_action: state.action,
       last_action_at: state.timestamp,
@@ -8257,6 +8272,11 @@ app.get('/account/settings', requireSessionOrApiKey('read'), (c) => {
   }, 200);
 });
 
+// CLEAN-LANE-FLIP Phase B (notice hardening): shape + skew rules for the
+// standing_consent_ack_at cursor accepted by PATCH /account/settings.
+const STANDING_CONSENT_ACK_ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/;
+const STANDING_CONSENT_ACK_SKEW_MS = 5 * 60 * 1000;
+
 // ── PATCH /account/settings — Mode toggle + consent (§3.5) ──────────────────
 app.patch('/account/settings', requireAuth, async (c) => {
   const accountId = c.get('accountId');
@@ -8311,6 +8331,30 @@ app.patch('/account/settings', requireAuth, async (c) => {
       }
     }
 
+    // CLEAN-LANE-FLIP Phase B (notice hardening; GOV-2 counsel draft §6 read
+    // #2): the standing-consent acknowledgement cursor. The dashboard's
+    // "I've reviewed these" button PATCHes it to now; GET /account/clean-lane
+    // then counts only lane publishes created after it. This is the ONLY
+    // writer of the cursor — nothing clears the unread badge implicitly. Must
+    // be an ISO 8601 date-time and not in the future (a small clock-skew
+    // allowance so a client's `new Date().toISOString()` never 400s). Stored
+    // on the account record; no consent row is written (nothing here changes
+    // what the account consented to).
+    if (body.standing_consent_ack_at !== undefined) {
+      const raw = body.standing_consent_ack_at;
+      const parsed = typeof raw === 'string' ? Date.parse(raw) : NaN;
+      if (typeof raw !== 'string' || !STANDING_CONSENT_ACK_ISO_RE.test(raw) || !Number.isFinite(parsed)) {
+        return c.json({ error: 'standing_consent_ack_at must be an ISO 8601 date-time string (e.g. 2026-09-06T12:00:00.000Z)' }, 400);
+      }
+      if (parsed > Date.now() + STANDING_CONSENT_ACK_SKEW_MS) {
+        return c.json({ error: 'standing_consent_ack_at cannot be in the future' }, 400);
+      }
+      const oldAck = typeof account.standing_consent_ack_at === 'string' ? account.standing_consent_ack_at : null;
+      const newAck = new Date(parsed).toISOString();
+      account.standing_consent_ack_at = newAck;
+      changes.standing_consent_ack_at = { from: oldAck, to: newAck };
+    }
+
     saveAccounts(accounts);
 
     return c.json({
@@ -8318,6 +8362,7 @@ app.patch('/account/settings', requireAuth, async (c) => {
       changes,
       current: {
         autonomous_extraction_mode: account.autonomous_extraction_mode || 'off',
+        standing_consent_ack_at: typeof account.standing_consent_ack_at === 'string' ? account.standing_consent_ack_at : null,
       },
     }, 200);
   } finally {
