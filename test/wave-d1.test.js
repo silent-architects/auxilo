@@ -124,9 +124,13 @@ describe('WAVE-D1 type pairing: tokens + @font-face', () => {
   // (the font bytes changing) doesn't require touching this test.
   const HASH = '[0-9a-f]{8}';
 
-  it('three @font-face rules exist (Archivo variable 100-900, IBM Plex Mono 400 and 500 statics), each on a content-hashed woff2 URL', () => {
+  it('three real-font @font-face rules exist (Archivo variable 100-900, IBM Plex Mono 400 and 500 statics), each on a content-hashed woff2 URL, plus two size-adjust fallback faces (Wave E2 item 11)', () => {
     const faceBlocks = [...STYLES.matchAll(/@font-face\s*\{([^}]*)\}/g)].map((m) => m[1]);
-    assert.equal(faceBlocks.length, 3, `expected 3 @font-face rules, found ${faceBlocks.length}`);
+    // Wave E2 item 11: two synthetic local()-only fallback faces
+    // ('Archivo Fallback', 'IBM Plex Mono Fallback') were added alongside
+    // the original three, each carrying a size-adjust metric override —
+    // 5 total, not 3. The three real-font assertions below are unchanged.
+    assert.equal(faceBlocks.length, 5, `expected 5 @font-face rules (3 real fonts + 2 size-adjust fallbacks), found ${faceBlocks.length}`);
 
     const archivo = faceBlocks.find((b) => /font-family:\s*'Archivo'/.test(b));
     assert.ok(archivo, 'an Archivo @font-face rule exists');

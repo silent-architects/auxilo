@@ -287,11 +287,13 @@ describe('SITE-SYSTEM item 3: copy-btn is a 44px tap target at 13px type', () =>
     assert.match(m[1], /font-size:\s*13px/, '.copy-btn font-size is 13px');
   });
 
-  it('nav CTA is at least 36px tall', () => {
+  it('nav CTA is at least 44px tall', () => {
+    // Wave E2 item 12: raised from 36px to 44px (AD-STEP4-FINAL-2026-09-06.md
+    // P3.18 — measured 40.4px live, under the 44px tap-target floor).
     const styles = fs.readFileSync(path.join(PUBLIC_DIR, 'styles.css'), 'utf8');
     const m = styles.match(/^\.nav-cta\s*\{([^}]*)\}/m);
     assert.ok(m, '.nav-cta rule found');
-    assert.match(m[1], /min-height:\s*36px/, '.nav-cta min-height is >= 36px');
+    assert.match(m[1], /min-height:\s*44px/, '.nav-cta min-height is >= 44px');
   });
 });
 
