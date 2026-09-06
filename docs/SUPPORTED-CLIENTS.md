@@ -1,6 +1,6 @@
 # Supported clients
 
-*Last updated: 2026-09-05 (EXT-GATE: local extraction opened to every capture source; OpenClaw row qualified)*
+*Last updated: 2026-09-06 (Works with build, TECH-PM given: OpenClaw's status cell corrected to match its own Notes -- the checkmark is gone and the cell reads "Best-effort, paused" instead of claiming live capture)*
 
 This page lists the AI coding assistants and development environments currently supported by Auxilo, including the clients supported by the Autonomous Learning Extraction feature (ToS §5.9.3). Served at `/legal/supported-clients`. Updated in-place when new adapters are added.
 
@@ -39,7 +39,7 @@ The installer detects your clients, registers the MCP server in each, signs you 
 | **GitHub Copilot (VS Code agent / CLI)** | `~/.copilot/` | `~/.copilot/mcp-config.json` | ✅ **Supported** — `Stop` hook (`~/.copilot/hooks/auxilo.json`) | hooks are a VS Code Preview feature |
 | **Codex (CLI + Desktop)** | `~/.codex/` | `~/.codex/config.toml` | ✅ **Supported** — `Stop` hook (`~/.codex/hooks.json`, CLI; requires one-time `/hooks` trust) **+ poll sweep of `~/.codex/sessions/` rollouts (Desktop + CLI, best-effort)** | Desktop app currently does not execute hooks (upstream openai/codex#21639); sweep covers it. |
 | **Factory droid** | `~/.factory/` | `~/.factory/mcp.json` | ✅ **Supported** — `SessionEnd` hook (`~/.factory/hooks.json`) | applies to new sessions after setup |
-| **OpenClaw** | `~/.openclaw/` | — (plugin planned) | ✅ **Best-effort** — poll-based source adapter | NOT locally verified; reads the legacy sessions/*.jsonl layout — current OpenClaw builds keep transcripts in a per-agent SQLite store, so capture is paused until the adapter is re-pointed; dedicated plugin + clawhub listing planned |
+| **OpenClaw** | `~/.openclaw/` | — (plugin planned) | **Best-effort, paused** — poll-based source adapter | NOT locally verified; reads the legacy sessions/*.jsonl layout — current OpenClaw builds keep transcripts in a per-agent SQLite store, so capture is paused until the adapter is re-pointed; dedicated plugin + clawhub listing planned |
 | **Cline (VS Code)** | VS Code `globalStorage/saoudrizwan.claude-dev/` | — | ✅ **Best-effort** — poll-based source adapter | NOT locally verified; strict format probe fails silent on storage-shape drift |
 | **Roo Code (VS Code)** | VS Code `globalStorage/rooveterinaryinc.roo-{cline,code}/` | — | ✅ **Best-effort** — poll-based source adapter | NOT locally verified; strict format probe fails silent on storage-shape drift |
 | **Claude Desktop** | `~/Library/Application Support/Claude/` | `claude_desktop_config.json` | **Probabilistic** — rules/MCP contribution only | no extraction surface exists |

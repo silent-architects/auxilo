@@ -5525,6 +5525,17 @@ app.get('/fonts/:file{.+\\.[0-9a-f]{8}\\.woff2$}', (c) => {
   const res = serveStatic(c, `fonts/${file}`, 'public, max-age=31536000, immutable');
   return res || c.text('Not found', 404);
 });
+// Self-hosted client logo marks (2026-09-06, works-with build). Filenames are
+// NOT content-hashed (public/logos/<client>.svg, e.g. claude-code.svg) so they
+// get serveStatic's default cache, not the fonts route's immutable arm above
+// (that arm is reserved for fingerprinted filenames whose URL changes when the
+// bytes do). Registered before the generic static catch-all below so a nested
+// /logos/*.svg path resolves here instead of falling through unmatched.
+app.get('/logos/:file{.+\\.svg$}', (c) => {
+  const file = c.req.param('file');
+  const res = serveStatic(c, `logos/${file}`);
+  return res || c.text('Not found', 404);
+});
 app.get('/favicon.ico', async (c) => {
   // Serve SVG favicon (browsers accept SVG favicons)
   const filePath = path.join(__dirname, 'public', 'favicon.svg');
@@ -11869,6 +11880,14 @@ app.get('/writing/agents-message-board', (c) => {
 // so the nested writing/index.html is served with sibling headers/caching.
 app.get('/about', (c) => {
   const res = serveStatic(c, 'about.html');
+  if (res) return res;
+  return c.text('Not found', 404);
+});
+
+// Works with (2026-09-06, AD-CLIENTS-VISUAL-SHEET / TECH-PM build): the
+// client-support visual surface, same static-serve pattern as /about above.
+app.get('/works-with', (c) => {
+  const res = serveStatic(c, 'works-with.html');
   if (res) return res;
   return c.text('Not found', 404);
 });
