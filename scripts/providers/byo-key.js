@@ -109,20 +109,51 @@ function writeByoConfig(byoConfig, opts = {}) {
 }
 
 /**
- * `clear` deletes ~/.auxilo/providers.json outright (per this part's task
- * brief — a narrower behavior than leaving `selected` intact; flagged as a
- * deliberate deviation from the fuller spec draft in the build report).
- * Never throws; absent file is a no-op success.
+ * `clear` removes only the BYO credentials (the `byo` object) from
+ * providers.json — per spec, the `selected` field (written by
+ * scripts/providers/index.js's auto-detect path) is preserved, so clearing
+ * a BYO key never silently reverts or loses the account's auto-detected
+ * provider choice. (W1 integration: this replaces the narrower "delete the
+ * whole file" behavior PART C shipped as a flagged deviation.)
+ *
+ * If nothing is left after `byo` is removed (an empty object — no
+ * `selected` and nothing else was ever stored there), the file itself is
+ * removed rather than leaving an empty `{}` on disk. Otherwise the file is
+ * rewritten with `byo` gone via the same 0600 tmp+rename discipline as
+ * writeByoConfig. Never throws.
+ *
+ * @returns {'removed-file'|'removed-byo'|'noop'} 'noop' covers both "no
+ *   file" and "a file with no `byo` key to clear".
  */
 function clearProvidersFile(opts = {}) {
   const target = statePath(opts);
+  let raw;
   try {
-    fs.unlinkSync(target);
-    return true;
+    raw = fs.readFileSync(target, 'utf8');
   } catch (err) {
-    if (err && err.code === 'ENOENT') return false;
+    if (err && err.code === 'ENOENT') return 'noop';
     throw err;
   }
+  let state;
+  try {
+    state = JSON.parse(raw);
+  } catch {
+    return 'noop'; // malformed JSON — nothing safely parseable to preserve or clear
+  }
+  if (!state || typeof state !== 'object' || Array.isArray(state) || !('byo' in state)) {
+    return 'noop';
+  }
+  delete state.byo;
+  if (Object.keys(state).length === 0) {
+    fs.unlinkSync(target);
+    return 'removed-file';
+  }
+  if (fs.existsSync(target)) fs.chmodSync(target, 0o600);
+  const tmp = `${target}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(state, null, 2), { mode: 0o600 });
+  fs.renameSync(tmp, target);
+  fs.chmodSync(target, 0o600);
+  return 'removed-byo';
 }
 
 /** Routing: which wire vendor a stored `provider` label maps to. */

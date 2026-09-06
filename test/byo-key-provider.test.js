@@ -105,17 +105,51 @@ describe('byo-key.js: writeByoConfig / readByoConfig / clearProvidersFile', () =
     }
   });
 
-  it('clearProvidersFile deletes the whole file (this part\'s narrower behavior — see build report)', () => {
-    const dir = tempDir('auxilo-byo-clear-');
+  it('clearProvidersFile keeps `selected` and clears only `byo` (spec) — file kept, 0600, byo gone', () => {
+    const dir = tempDir('auxilo-byo-clear-keeps-selected-');
     try {
       const statePath = statePathIn(dir);
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(statePath, JSON.stringify({ selected: 'byo-key', byo: { provider: 'openai', model: 'x', api_key: 'y' } }));
-      const removed = byoKey.clearProvidersFile({ providersStatePath: statePath });
-      assert.equal(removed, true);
-      assert.ok(!fs.existsSync(statePath));
-      const removedAgain = byoKey.clearProvidersFile({ providersStatePath: statePath });
-      assert.equal(removedAgain, false, 'absent file is a no-op success, not a throw');
+      const result = byoKey.clearProvidersFile({ providersStatePath: statePath });
+      assert.equal(result, 'removed-byo');
+      assert.ok(fs.existsSync(statePath), 'the file must be kept, not deleted');
+      assert.ok(!fs.existsSync(`${statePath}.tmp`), 'no leftover .tmp file');
+      const mode = fs.statSync(statePath).mode & 0o777;
+      assert.equal(mode, 0o600);
+      const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+      assert.deepEqual(state, { selected: 'byo-key' }, 'selected preserved, byo gone, nothing else added');
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('clearProvidersFile removes the file outright when byo was the only content (nothing left to keep)', () => {
+    const dir = tempDir('auxilo-byo-clear-byo-only-');
+    try {
+      const statePath = statePathIn(dir);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(statePath, JSON.stringify({ byo: { provider: 'openai', model: 'x', api_key: 'y' } }));
+      const result = byoKey.clearProvidersFile({ providersStatePath: statePath });
+      assert.equal(result, 'removed-file');
+      assert.ok(!fs.existsSync(statePath), 'an empty {} must not be left on disk');
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('clearProvidersFile is a no-op (never throws) on an absent file, and on a file with no `byo` key', () => {
+    const dir = tempDir('auxilo-byo-clear-noop-');
+    try {
+      const statePath = statePathIn(dir);
+      assert.equal(byoKey.clearProvidersFile({ providersStatePath: statePath }), 'noop', 'absent file is a no-op');
+
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(statePath, JSON.stringify({ selected: 'claude-code' }));
+      const result = byoKey.clearProvidersFile({ providersStatePath: statePath });
+      assert.equal(result, 'noop', 'no byo key present is also a no-op');
+      const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+      assert.deepEqual(state, { selected: 'claude-code' }, 'untouched');
     } finally {
       cleanupTempDirs();
     }
@@ -332,26 +366,61 @@ describe('byo-key.js: the key is never logged', () => {
 
 // ─── bin/auxilo-cli.js: auxilo provider ─────────────────────────────────────
 
+const PROVIDER_KEY_CONSENT_SENTENCE_EXPECTED = 'This key is yours. It stays on this machine in ~/.auxilo/providers.json, readable only by your user account, and Auxilo never receives it. It is used for one thing, drafting learnings from your own scrubbed sessions. Drafting sends those sessions to that provider under your own account, and any use is charged to that account, never to Auxilo. Run auxilo provider clear to remove it.';
+
 describe('bin/auxilo-cli.js: PROVIDER_KEY_CONSENT_SENTENCE (SITE-PM string slot)', () => {
-  it('ships empty on this build', () => {
-    assert.equal(cli.PROVIDER_KEY_CONSENT_SENTENCE, '');
+  it('is non-empty and byte-equal to the ruled sentence', () => {
+    assert.ok(cli.PROVIDER_KEY_CONSENT_SENTENCE.length > 0, 'sentence must not be empty');
+    assert.equal(cli.PROVIDER_KEY_CONSENT_SENTENCE, PROVIDER_KEY_CONSENT_SENTENCE_EXPECTED);
   });
 
-  it('structural: cmdProvider refuses `set` while the sentence is empty, with reasonCode consent-sentence-missing, before the TTY gate', () => {
+  it('structural: cmdProvider still refuses `set` were the sentence ever empty again, with reasonCode consent-sentence-missing, before the TTY gate', () => {
     const start = CLI_SRC.indexOf('async function cmdProvider');
     assert.ok(start > 0, 'cmdProvider not found');
-    const fn = CLI_SRC.slice(start, start + 4000);
+    const fn = CLI_SRC.slice(start, start + 5000);
     const consentCheckIdx = fn.indexOf("PROVIDER_KEY_CONSENT_SENTENCE === ''");
+    const modeCheckIdx = fn.indexOf('providersFileModeUnsafe(');
     const ttyCheckIdx = fn.indexOf('!process.stdin.isTTY');
     assert.ok(consentCheckIdx > -1, 'empty-sentence refusal not found');
+    assert.ok(modeCheckIdx > -1, 'providers-file-mode-unsafe check not found');
     assert.ok(ttyCheckIdx > -1, 'TTY gate not found');
-    assert.ok(consentCheckIdx < ttyCheckIdx, 'the consent-sentence-missing check must run before the TTY gate');
+    assert.ok(consentCheckIdx < modeCheckIdx, 'the consent-sentence-missing check must run before the mode check');
+    assert.ok(modeCheckIdx < ttyCheckIdx, 'the providers-file-mode-unsafe check must run before the TTY gate');
     assert.match(fn, /reasonCode:\s*consent-sentence-missing/);
+    assert.match(fn, /reasonCode:\s*providers-file-mode-unsafe/);
+  });
+
+  it('structural: the mode check and the sentence print both precede the API key prompt, and the mode check precedes storing', () => {
+    const start = CLI_SRC.indexOf('async function cmdProvider');
+    const fn = CLI_SRC.slice(start, start + 5000);
+    const modeCheckIdx = fn.indexOf('providersFileModeUnsafe(');
+    const sentencePrintIdx = fn.indexOf('wrapForTerminal(PROVIDER_KEY_CONSENT_SENTENCE)');
+    const keyPromptIdx = fn.indexOf("askHidden('API key");
+    const writeIdx = fn.indexOf('byoKeyProvider.writeByoConfig(');
+    assert.ok(modeCheckIdx > -1 && sentencePrintIdx > -1 && keyPromptIdx > -1 && writeIdx > -1,
+      'one of the expected calls was not found in cmdProvider');
+    assert.ok(modeCheckIdx < sentencePrintIdx, 'the mode check must run before the sentence is ever printed');
+    assert.ok(sentencePrintIdx < keyPromptIdx, 'the sentence must print before the API key prompt');
+    assert.ok(modeCheckIdx < writeIdx, 'the mode check must run before providers.json is written');
+  });
+
+  it('structural: the sentence prints word-wrapped to the terminal width (never a raw unwrapped console.log of the constant)', () => {
+    const start = CLI_SRC.indexOf('async function cmdProvider');
+    const fn = CLI_SRC.slice(start, start + 5000);
+    assert.ok(!/console\.log\(`\\n\$\{PROVIDER_KEY_CONSENT_SENTENCE\}\\n`\)/.test(fn),
+      'the sentence must not be printed raw/unwrapped');
+    const wrapCount = (fn.match(/wrapForTerminal\(PROVIDER_KEY_CONSENT_SENTENCE\)/g) || []).length;
+    assert.ok(wrapCount >= 1, 'the sentence must be printed via wrapForTerminal');
+  });
+
+  it('structural: `provider set` and `provider clear` both exist (the sentence prints only when both do)', () => {
+    assert.match(CLI_SRC, /sub === 'set'/);
+    assert.match(CLI_SRC, /sub === 'clear'/);
   });
 
   it('structural: no --yes/--force/env/argv path can supply the key — only askHidden', () => {
     const start = CLI_SRC.indexOf('async function cmdProvider');
-    const fn = CLI_SRC.slice(start, start + 4000);
+    const fn = CLI_SRC.slice(start, start + 5000);
     assert.ok(!/flags\.key|flags\['api-key'\]|flags\.apiKey|process\.env\.\w*KEY/.test(fn),
       'the key must never be readable from a flag or env var');
     assert.match(fn, /askHidden\(/, 'the key prompt must use the hidden-input helper');
@@ -360,6 +429,53 @@ describe('bin/auxilo-cli.js: PROVIDER_KEY_CONSENT_SENTENCE (SITE-PM string slot)
   it('structural: askHidden is a distinct function from ask (echo-suppressing hook present)', () => {
     assert.match(CLI_SRC, /function askHidden\(question\)/);
     assert.match(CLI_SRC, /_writeToOutput/);
+  });
+});
+
+describe('bin/auxilo-cli.js: providersFileModeUnsafe (owner-read-only predicate)', () => {
+  it('no file on disk is NOT unsafe (writeByoConfig always writes 0600 itself)', () => {
+    const dir = tempDir('auxilo-mode-check-absent-');
+    try {
+      assert.equal(cli.providersFileModeUnsafe(statePathIn(dir)), false);
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('a 0600 file is NOT unsafe', () => {
+    const dir = tempDir('auxilo-mode-check-0600-');
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      const statePath = statePathIn(dir);
+      fs.writeFileSync(statePath, '{}', { mode: 0o600 });
+      assert.equal(cli.providersFileModeUnsafe(statePath), false);
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('a group/world-readable file (0644) IS unsafe', () => {
+    const dir = tempDir('auxilo-mode-check-0644-');
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      const statePath = statePathIn(dir);
+      fs.writeFileSync(statePath, '{}', { mode: 0o644 });
+      assert.equal(cli.providersFileModeUnsafe(statePath), true);
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('a group-writable file (0660) IS unsafe', () => {
+    const dir = tempDir('auxilo-mode-check-0660-');
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      const statePath = statePathIn(dir);
+      fs.writeFileSync(statePath, '{}', { mode: 0o660 });
+      assert.equal(cli.providersFileModeUnsafe(statePath), true);
+    } finally {
+      cleanupTempDirs();
+    }
   });
 });
 
@@ -387,14 +503,52 @@ function makeHome() {
 }
 
 describe('CLI: auxilo provider (real spawn, non-TTY piped stdio)', () => {
-  it('`provider set` refuses (exit 1) even with a full scripted answer stream, because the consent sentence is empty', async () => {
+  it('`provider set` refuses (exit 1) even with a full scripted answer stream — the sentence is filled now, so it refuses at the TTY gate instead', async () => {
     const home = makeHome();
     try {
       const res = await runCli(['provider', 'set'], { HOME: home },
         'openai\n\nsome-model\nI agree\nsk-would-be-a-real-key\n');
       assert.equal(res.code, 1);
-      assert.match(res.stderr, /consent-sentence-missing/);
+      assert.match(res.stderr, /interactive terminal/);
       assert.ok(!fs.existsSync(path.join(home, '.auxilo', 'providers.json')), 'nothing written');
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('`provider set` fails closed with reasonCode providers-file-mode-unsafe when an existing providers.json is group/world-readable, before the TTY gate and without touching the file', async () => {
+    const home = makeHome();
+    try {
+      const dir = path.join(home, '.auxilo');
+      fs.mkdirSync(dir, { recursive: true });
+      const statePath = path.join(dir, 'providers.json');
+      fs.writeFileSync(statePath, JSON.stringify({ selected: 'claude-code' }), { mode: 0o644 });
+      const res = await runCli(['provider', 'set'], { HOME: home },
+        'openai\n\nsome-model\nI agree\nsk-would-be-a-real-key\n');
+      assert.equal(res.code, 1);
+      assert.match(res.stderr, /providers-file-mode-unsafe/);
+      // fail-closed means untouched, not just unreadable-but-modified
+      const mode = fs.statSync(statePath).mode & 0o777;
+      assert.equal(mode, 0o644, 'the unsafe file must be left exactly as found, not silently rewritten');
+      const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+      assert.deepEqual(state, { selected: 'claude-code' }, 'content must be untouched');
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('`provider set` passes the mode check (reaches the TTY gate instead) when an existing providers.json is 0600', async () => {
+    const home = makeHome();
+    try {
+      const dir = path.join(home, '.auxilo');
+      fs.mkdirSync(dir, { recursive: true });
+      const statePath = path.join(dir, 'providers.json');
+      fs.writeFileSync(statePath, JSON.stringify({ selected: 'claude-code' }), { mode: 0o600 });
+      const res = await runCli(['provider', 'set'], { HOME: home },
+        'openai\n\nsome-model\nI agree\nsk-would-be-a-real-key\n');
+      assert.equal(res.code, 1);
+      assert.doesNotMatch(res.stderr, /providers-file-mode-unsafe/);
+      assert.match(res.stderr, /interactive terminal/);
     } finally {
       cleanupTempDirs();
     }
@@ -445,6 +599,24 @@ describe('CLI: auxilo provider (real spawn, non-TTY piped stdio)', () => {
       assert.equal(removed.code, 0);
       assert.match(removed.stdout, /removed/);
       assert.ok(!fs.existsSync(path.join(dir, 'providers.json')));
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('`provider clear` keeps `selected` and the file itself when other content remains', async () => {
+    const home = makeHome();
+    try {
+      const dir = path.join(home, '.auxilo');
+      fs.mkdirSync(dir, { recursive: true });
+      const statePath = path.join(dir, 'providers.json');
+      fs.writeFileSync(statePath, JSON.stringify({ selected: 'byo-key', byo: { provider: 'openai', model: 'x', api_key: 'y' } }));
+      const res = await runCli(['provider', 'clear'], { HOME: home });
+      assert.equal(res.code, 0);
+      assert.match(res.stdout, /cleared/);
+      assert.ok(fs.existsSync(statePath), 'providers.json must be kept');
+      const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+      assert.deepEqual(state, { selected: 'byo-key' });
     } finally {
       cleanupTempDirs();
     }

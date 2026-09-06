@@ -335,7 +335,13 @@ describe('providers/index.js — resolveProvider selection', () => {
     assert.match(resolved.reason, /claude-code, codex-cli, byo-key/);
   });
 
-  it('byo-key still degrades to a clean "not installed yet" stub (no throw) until PART C adds it', async () => {
+  // byo-key's stub window closed in PART C (scripts/providers/byo-key.js now
+  // exists — see test/byo-key-provider.test.js for its real behavior
+  // coverage). This case now proves the opposite of the old stub assertion:
+  // selection resolves to the REAL module, and with no providers.json config
+  // on disk it degrades cleanly to provider-not-configured (not a throw, and
+  // not the pre-PART-C stub's provider-not-installed).
+  it('byo-key resolves to its real module (no longer a stub) and degrades cleanly to provider-not-configured when unconfigured', async () => {
     const statePath = await providers.PROVIDERS_STATE_PATH; // sanity: module loaded without throwing
     assert.equal(typeof statePath, 'string');
     const resolved = await providers.resolveProvider({
@@ -343,10 +349,12 @@ describe('providers/index.js — resolveProvider selection', () => {
       providerCache: {},
     });
     assert.equal(resolved.ok, true); // selection succeeds (override wins)
-    const runResult = await resolved.module.runModel({});
+    const runResult = await resolved.module.runModel({
+      providersStatePath: '/fixture/home-with-no-providers-json/.auxilo/providers.json',
+    });
     assert.equal(runResult.ok, false);
-    assert.equal(runResult.reasonCode, 'provider-not-installed');
-    assert.match(runResult.reason, /byo-key/);
+    assert.equal(runResult.reasonCode, 'provider-not-configured');
+    assert.match(runResult.reason, /BYO provider key configured/);
   });
 
   // codex-cli's stub window closed in PART B (scripts/providers/codex-cli.js
