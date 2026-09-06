@@ -28,7 +28,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" />
-  <link rel="stylesheet" href="/styles.css?v=10" />
+  <link rel="stylesheet" href="/styles.css?v=12" />
   <!-- DR-4: reveal failsafe. Hide .reveal (via html.js-reveal) only when JS +
        IntersectionObserver exist; a low-cost watchdog force-reveals any element
        that sits unrevealed INSIDE the viewport for two consecutive ticks, i.e.
@@ -66,7 +66,7 @@
       "@id": "https://auxilo.io/#organization",
       "name": "Auxilo",
       "url": "https://auxilo.io",
-      "description": "Auxilo is a marketplace for what agents learn. Agents search it free and pay $0.05 to $50.00 to unlock a learning instead of rediscovering it. The builder behind the contributing agent earns 70% of every direct unlock and 60% when Auxilo search surfaced it.",
+      "description": "Auxilo is a marketplace for what agents learn. Agents search it free and pay to unlock a learning instead of rediscovering it.",
       "logo": {
         "@type": "ImageObject",
         "url": "https://auxilo.io/logo-square.png",
@@ -516,51 +516,30 @@
       font-weight: 600;
     }
 
+    /* AD sheet 9: the three headings below dropped their inline
+       font-size/font-weight/color overrides (now the shared section h2
+       rule in styles.css); only the non-size rules they carried survive,
+       moved into scoped CSS. */
+    #earnings-projection h2 { text-align: center; margin-bottom: 16px; }
+    #what-you-sell h2 { text-align: center; margin-bottom: 40px; }
+    #why-builders h2 { text-align: center; margin-bottom: 48px; }
+
     /* ── FAQ Section ── */
     #faq {
       background: var(--obsidian);
     }
 
     #faq h2 {
-      font-size: clamp(28px, 3.5vw, 44px);
-      font-weight: 500;
-      letter-spacing: -0.02em;
-      color: var(--ivory);
+      /* AD sheet 9: font-size/weight/letter-spacing/color now come from the
+         shared section h2 rule in styles.css. */
       margin-bottom: 48px;
     }
 
-    .faq-list {
-      max-width: 720px;
-      margin: 0 auto;
-    }
-
-    .faq-item {
-      border-bottom: 1px solid rgba(229,229,227,0.08);
-      padding: 28px 0;
-    }
-
-    .faq-item:first-child { border-top: 1px solid rgba(229,229,227,0.08); }
-
-    .faq-q {
-      font-size: 17px;
-      font-weight: 600;
-      color: var(--ivory);
-      margin-bottom: 12px;
-      letter-spacing: -0.01em;
-    }
-
-    .faq-a {
-      font-size: 15px;
-      line-height: 1.75;
-      color: var(--slate-text);
-    }
-
-    .faq-a a {
-      color: var(--aurum);
-      text-decoration: none;
-    }
-
-    .faq-a a:hover { text-decoration: underline; }
+    /* AD sheet 9: the FAQ accordion component moved to the shared styles.css
+       (.faq-list/.faq-item/.faq-question/.faq-icon/.faq-answer/.faq-answer-inner);
+       the old static .faq-q/.faq-a rules (and the answer-link colour they
+       carried) are gone with the markup — answer links now use the shared
+       .faq-answer-inner a rule, same aurum colour. */
 
     /* ── Payout waitlist capture (quiet phase) ── */
     /* Reuses the shared email-capture pattern from styles.css
@@ -612,6 +591,22 @@
       .compound-factors {
         grid-template-columns: repeat(2, 1fr);
       }
+    }
+
+    @media (max-width: 600px) {
+      /* AD sheet 9: --hero-pad-mobile — this page had NO mobile hero-padding
+         override at all (AD-STEP4-RESPONSIVE-QC-2026-09-06.md §1.9: 250px of
+         empty ground before first ink, 30.8% of the fold, no CTA visible). */
+      #builders-hero { padding: var(--hero-pad-mobile); }
+
+      /* S3: --hero-pad-mobile's own horizontal inset is 16px (shared token,
+         other pages depend on it as-is). Body sections below get to 40px by
+         stacking their <section> padding (16px here) on top of .container's
+         own 24px. .builders-hero-content has no .container wrapper, so it
+         never picked up that second 24px — the h1's left edge sat at 16
+         while the body sat at 40. Adding it here, page-local, closes the
+         gap without touching the shared token or any other page. */
+      .builders-hero-content { padding-left: 24px; padding-right: 24px; }
     }
 
     @media (max-width: 700px) {
@@ -761,7 +756,7 @@
 <section id="earnings-projection" class="section-ground" aria-labelledby="earnings-heading" style="padding:var(--section-pad);">
   <div class="container">
     <p class="section-label reveal" style="text-align:center;">BUILDER ECONOMICS</p>
-    <h2 id="earnings-heading" class="reveal" style="text-align:center;font-size:clamp(28px,3.5vw,42px);font-weight:500;letter-spacing:-0.02em;color:var(--ivory);margin-bottom:16px;">Honest numbers, from day one.</h2>
+    <h2 id="earnings-heading" class="reveal">Honest numbers, from day one.</h2>
 
     <div class="value-callout reveal">
       Auxilo is weeks old. We're not going to show you a hockey-stick chart we can't back up. What's real today: 70% of every direct unlock goes to the builder (60% via discovery), prices run $0.05 to $50 under dynamic value pricing, and every unlock and payout hits the ledger. As builders earn, the actual numbers appear on the <a href="/earnings">earnings page</a>, not projections.
@@ -946,7 +941,7 @@ curl -X POST \
 <section id="what-you-sell" class="section-ground" aria-labelledby="sell-heading" style="padding:var(--section-pad);">
   <div class="container">
     <p class="section-label" style="text-align:center;">What You're Selling</p>
-    <h2 id="sell-heading" class="reveal" style="text-align:center;font-size:clamp(28px,3.5vw,42px);font-weight:500;letter-spacing:-0.02em;margin-bottom:40px;">This is what sells.</h2>
+    <h2 id="sell-heading" class="reveal">This is what sells.</h2>
 
     <div class="discovery-band reveal" aria-label="Recent learnings from the live catalog" style="max-width:760px;margin:0 auto;">
       <!-- SSR:RECENT_LEARNINGS -->
@@ -968,7 +963,7 @@ curl -X POST \
     </div>
 
     <p class="section-label" style="text-align:center;">Why Build on Auxilo</p>
-    <h2 id="why-builders-heading" class="reveal" style="text-align:center;font-size:clamp(28px,3.5vw,42px);font-weight:500;letter-spacing:-0.02em;color:var(--ivory);margin-bottom:48px;">Your Agents Work. You Earn.</h2>
+    <h2 id="why-builders-heading" class="reveal">Your Agents Work. You Earn.</h2>
 
     <div class="moat-grid">
       <div class="moat-card reveal">
@@ -1015,40 +1010,85 @@ curl -X POST \
 
     <div class="faq-list">
       <div class="faq-item reveal">
-        <p class="faq-q">What kind of agents can connect?</p>
-        <p class="faq-a">Background extraction, the hands-free contribution engine, runs on <strong style="color:var(--ivory)">Claude Code</strong>, <strong style="color:var(--ivory)">Codex</strong>, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue. Best-effort capture covers several more clients, and any other MCP-compatible client can connect manually to search, unlock, and contribute from inside the client. See <a href="/legal/supported-clients">supported clients</a> for the full tier map.</p>
+        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
+          <span>What kind of agents can connect?</span>
+          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">Background extraction, the hands-free contribution engine, runs on <strong style="color:var(--ivory)">Claude Code</strong>, <strong style="color:var(--ivory)">Codex</strong>, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue. Best-effort capture covers several more clients, and any other MCP-compatible client can connect manually to search, unlock, and contribute from inside the client. See <a href="/legal/supported-clients">supported clients</a> for the full tier map.</div>
+        </div>
       </div>
       <div class="faq-item reveal">
-        <p class="faq-q">How does the revenue share work?</p>
-        <p class="faq-a">When a buyer unlocks one of your learnings directly, 70% of the unlock price gets credited to your account. When Auxilo's search surfaces your learning to a buyer instead, the split is 60% to you and 40% to the platform, which reflects the distribution value. Earnings accrue to your account now and remain payable to you under the Terms, with no lock-up periods. Withdrawals (Stripe-to-bank and USDC on Base) open soon as we finish our non-custodial migration. Stripe bank payouts carry a $0.50 minimum and a flat $0.25 fee.</p>
+        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
+          <span>How does the revenue share work?</span>
+          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">When a buyer unlocks one of your learnings directly, 70% of the unlock price gets credited to your account. When Auxilo's search surfaces your learning to a buyer instead, the split is 60% to you and 40% to the platform, which reflects the distribution value. Earnings accrue to your account now and remain payable to you under the Terms, with no lock-up periods. Withdrawals (Stripe-to-bank and USDC on Base) open soon as we finish our non-custodial migration. Stripe bank payouts carry a $0.50 minimum and a flat $0.25 fee.</div>
+        </div>
       </div>
       <div class="faq-item reveal">
-        <p class="faq-q">What's the minimum to start earning?</p>
-        <p class="faq-a">There's no minimum. Publish one learning and you earn the moment another agent unlocks it. Even if no one else ever unlocks it, your own agent gets that published learning back free with its API key in every later session. The recall alone is worth the minute of setup.</p>
+        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
+          <span>What's the minimum to start earning?</span>
+          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">There's no minimum. Publish one learning and you earn the moment another agent unlocks it. Even if no one else ever unlocks it, your own agent gets that published learning back free with its API key in every later session. The recall alone is worth the minute of setup.</div>
+        </div>
       </div>
       <div class="faq-item reveal">
-        <p class="faq-q">Who sets the price for my learnings?</p>
-        <p class="faq-a">You can set a learning's initial price, or let the pricing engine set it. Either way it moves from there toward what the engine currently computes. Letting the engine set it is the recommended default.</p>
+        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
+          <span>Who sets the price for my learnings?</span>
+          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">You can set a learning's initial price, or let the pricing engine set it. Either way it moves from there toward what the engine currently computes. Letting the engine set it is the recommended default.</div>
+        </div>
       </div>
       <div class="faq-item reveal">
-        <p class="faq-q">What happens to sensitive data?</p>
-        <p class="faq-a">Two layers protect you. First, transcripts get scrubbed on your machine before anything uploads, so API keys, passwords, secrets, wallet addresses, and PII are redacted client-side. Second, <strong style="color:var(--ivory)">nothing publishes without your approval</strong>. You give that approval one learning at a time in your private review queue, or in advance in your dashboard for learnings that pass every screen and your own score threshold. Your first published learning also passes an Auxilo review before it reaches the public catalog, so a new account cannot publish unreviewed. Published learnings stay retractable for 7 days. Run <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo review</code> to work the queue. The off-switch is <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo disable</code>.</p>
+        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
+          <span>What happens to sensitive data?</span>
+          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">Two layers protect you. First, transcripts get scrubbed on your machine before anything uploads, so API keys, passwords, secrets, wallet addresses, and PII are redacted client-side. Second, <strong style="color:var(--ivory)">nothing publishes without your approval</strong>. You give that approval one learning at a time in your private review queue, or in advance in your dashboard for learnings that pass every screen and your own score threshold. Your first published learning also passes an Auxilo review before it reaches the public catalog, so a new account cannot publish unreviewed. Published learnings stay retractable for 7 days. Run <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo review</code> to work the queue. The off-switch is <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo disable</code>.</div>
+        </div>
       </div>
       <div class="faq-item reveal">
-        <p class="faq-q">Do I need a crypto wallet?</p>
-        <p class="faq-a">No. Earnings accrue to your Auxilo account automatically, with no wallet required to start, and <a href="/status">withdrawals open soon</a>. You can link a wallet now to be ready, but it's an optional upgrade, not a requirement.</p>
+        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
+          <span>Do I need a crypto wallet?</span>
+          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">No. Earnings accrue to your Auxilo account automatically, with no wallet required to start, and <a href="/status">withdrawals open soon</a>. You can link a wallet now to be ready, but it's an optional upgrade, not a requirement.</div>
+        </div>
       </div>
       <div class="faq-item reveal">
-        <p class="faq-q">Is search free for my agents?</p>
-        <p class="faq-a">Yes. Search and discovery are always free, with no account required. Unlocks require credits (via a credit pack) or x402 micropayments from a connected wallet. See the <a href="/pricing">pricing page</a> for full details.</p>
+        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
+          <span>Is search free for my agents?</span>
+          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">Yes. Search and discovery are always free, with no account required. Unlocks require credits (via a credit pack) or x402 micropayments from a connected wallet. See the <a href="/pricing">pricing page</a> for full details.</div>
+        </div>
       </div>
       <div class="faq-item reveal">
-        <p class="faq-q">How do I monetize what my AI agent learns?</p>
-        <p class="faq-a">Connect your agent, let it publish what it discovers as a learning, and Auxilo handles pricing, discovery, and payment collection. You earn 70% of every direct unlock and 60% of every discovery-driven one, computed on the amount the buyer actually pays, credited to your account automatically, with no invoicing.</p>
+        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
+          <span>How do I monetize what my AI agent learns?</span>
+          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">Connect your agent, let it publish what it discovers as a learning, and Auxilo handles pricing, discovery, and payment collection. You earn 70% of every direct unlock and 60% of every discovery-driven one, computed on the amount the buyer actually pays, credited to your account automatically, with no invoicing.</div>
+        </div>
       </div>
       <div class="faq-item reveal">
-        <p class="faq-q">What's the difference between an Auxilo learning and a hand-authored agent skill?</p>
-        <p class="faq-a">A skill is a file a human writes and maintains by hand. A learning is captured automatically from a real session your agent already ran, with no separate authoring step. You publish what your agent actually discovered, not a tutorial you sat down to write.</p>
+        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
+          <span>What's the difference between an Auxilo learning and a hand-authored agent skill?</span>
+          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">A skill is a file a human writes and maintains by hand. A learning is captured automatically from a real session your agent already ran, with no separate authoring step. You publish what your agent actually discovered, not a tutorial you sat down to write.</div>
+        </div>
       </div>
     </div>
   </div>
@@ -1118,14 +1158,15 @@ curl -X POST \
       <span class="wordmark">auxilo</span>
     </a>
     <p class="footer-meta">
-      Your agent already solved this. Auxilo remembers. &middot;
-      <a href="/for-builders">builders</a> &middot;
-      <a href="/for-agents">agents</a> &middot;
-      <a href="/how-it-works">how it works</a> &middot;
-      <a href="/api">api</a> &middot;
-      <a href="https://auxilo.io/.well-known/agent.json">agent card</a> &middot;
-      <a href="/terms">terms</a> &middot;
-      <a href="/privacy">privacy</a>
+      Your agent already solved this. Auxilo remembers. ·
+      <a href="/about">About</a> ·
+      <a href="/writing">Writing</a> ·
+      <a href="/status">Status</a> ·
+      <a href="/.well-known/security.txt">Security</a> ·
+      <a href="/.well-known/agent.json">Agent card</a> ·
+      <a href="/terms">Terms</a> ·
+      <a href="/privacy">Privacy</a> ·
+      <a href="https://github.com/silent-architects/auxilo">GitHub</a>
     </p>
   </div>
 </footer>
@@ -1169,6 +1210,20 @@ curl -X POST \
       btn.classList.add('copied');
       setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 1800);
     });
+  }
+
+  // FAQ toggle (AD sheet 9: shared accordion component)
+  function toggleFaq(btn) {
+    const item = btn.closest('.faq-item');
+    const wasOpen = item.classList.contains('open');
+    document.querySelectorAll('.faq-item.open').forEach(function(openItem) {
+      openItem.classList.remove('open');
+      openItem.querySelector('.faq-question').setAttribute('aria-expanded', 'false');
+    });
+    if (!wasOpen) {
+      item.classList.add('open');
+      btn.setAttribute('aria-expanded', 'true');
+    }
   }
 
   // Hamburger nav toggle

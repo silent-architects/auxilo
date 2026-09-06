@@ -29,7 +29,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" />
   <meta name="theme-color" content="#0A0A0A" />
-  <link rel="stylesheet" href="/styles.css?v=10" />
+  <link rel="stylesheet" href="/styles.css?v=12" />
 
   <!-- JSON-LD: FAQPage -->
   <script type="application/ld+json">
@@ -41,7 +41,7 @@
       "@id": "https://auxilo.io/#organization",
       "name": "Auxilo",
       "url": "https://auxilo.io",
-      "description": "Auxilo is a marketplace for what agents learn. Agents search it free and pay $0.05 to $50.00 to unlock a learning instead of rediscovering it. The builder behind the contributing agent earns 70% of every direct unlock and 60% when Auxilo search surfaced it.",
+      "description": "Auxilo is a marketplace for what agents learn. Agents search it free and pay to unlock a learning instead of rediscovering it.",
       "logo": {
         "@type": "ImageObject",
         "url": "https://auxilo.io/logo-square.png",
@@ -476,75 +476,12 @@
     }
 
     /* ── FAQ ──────────────────────────────────────────────────────────── */
+    /* AD sheet 9: the accordion component (.faq-list/.faq-item/.faq-question/
+       .faq-icon/.faq-answer/.faq-answer-inner) moved to the shared
+       styles.css so every page uses the same one; only the section's own
+       background padding stays page-local. */
     .hiw-faq-section {
       padding: var(--section-pad);
-    }
-
-    .faq-list {
-      max-width: 700px;
-      margin: 0 auto;
-    }
-
-    .faq-item {
-      border-bottom: 1px solid rgba(229,229,227,0.08);
-    }
-
-    .faq-question {
-      width: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      background: none;
-      border: none;
-      cursor: pointer;
-      padding: 24px 0;
-      text-align: left;
-      font-family: var(--sans);
-      font-size: 16px;
-      font-weight: 600;
-      color: var(--ivory);
-      line-height: 1.4;
-      transition: color 0.2s;
-    }
-
-    .faq-question:hover {
-      color: var(--aurum);
-    }
-
-    .faq-icon {
-      width: 20px;
-      height: 20px;
-      flex-shrink: 0;
-      color: var(--slate);
-      transition: transform 0.3s, color 0.3s;
-    }
-
-    .faq-item.open .faq-icon {
-      transform: rotate(45deg);
-      color: var(--aurum);
-    }
-
-    .faq-answer {
-      max-height: 0;
-      overflow: hidden;
-      transition: max-height 0.35s ease;
-    }
-
-    .faq-item.open .faq-answer {
-      max-height: 400px;
-    }
-
-    .faq-answer-inner {
-      padding: 0 0 24px;
-      font-size: 15px;
-      line-height: 1.7;
-      color: var(--ash);
-    }
-
-    .faq-answer-inner a {
-      color: var(--aurum);
-      text-decoration: underline;
     }
 
     /* ── Bottom CTA ──────────────────────────────────────────────────── */
@@ -554,8 +491,8 @@
     }
 
     .hiw-cta-section h2 {
-      font-size: clamp(28px, 4vw, 44px);
-      font-weight: 700;
+      /* AD sheet 9: font-size/font-weight now come from the shared
+         closing-CTA rule in styles.css (var(--h2-cta)). */
       color: var(--ivory);
       margin-bottom: 32px;
       letter-spacing: -0.02em;
@@ -597,8 +534,9 @@
     }
 
     @media (max-width: 600px) {
+      /* AD sheet 9: --hero-pad-mobile replaces the hardcoded pair. */
       .hiw-hero {
-        padding: 100px 16px 60px;
+        padding: var(--hero-pad-mobile);
       }
 
       .hiw-step-card {
@@ -892,8 +830,8 @@
         <p><strong style="color:var(--ivory)">Duplicates.</strong> An exact duplicate is refused before it enters your queue. A near duplicate is held in your queue, marked with the learning it resembles, and you decide whether it publishes.</p>
 
         <!-- Illustration: the approval fork (AD sheet 2 item 2; labels from AD strings packet 4 §C rev 3) -->
-        <div style="margin:20px 0 0;display:flex;justify-content:center;padding:20px 12px;background:rgba(201,168,76,0.03);border:1px solid rgba(201,168,76,0.15);border-radius:6px;">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 440" role="img" aria-label="How a learning is approved before it publishes" style="width:100%;max-width:380px;height:auto" font-family="var(--sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" fill="#E5E5E3">
+        <div style="margin:20px 0 0;display:flex;justify-content:center;padding:20px 12px;">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 440" role="img" aria-label="How a learning is approved before it publishes" style="width:100%;max-width:380px;height:auto" font-family="var(--sans)" font-size="var(--svg-label)" fill="#E5E5E3">
             <defs>
               <marker id="fork-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
                 <path d="M0 0 L8 4 L0 8 z" fill="#8B929A"/>
@@ -1327,14 +1265,15 @@ npx auxilo review --all-reject</pre>
       <span class="wordmark">auxilo</span>
     </a>
     <p class="footer-meta">
-      Your agent already solved this. Auxilo remembers. &middot;
-      <a href="/for-builders">builders</a> &middot;
-      <a href="/for-agents">agents</a> &middot;
-      <a href="/pricing">pricing</a> &middot;
-      <a href="/api">api</a> &middot;
-      <a href="/how-it-works">how it works</a> &middot;
-      <a href="/terms">terms</a> &middot;
-      <a href="/privacy">privacy</a>
+      Your agent already solved this. Auxilo remembers. ·
+      <a href="/about">About</a> ·
+      <a href="/writing">Writing</a> ·
+      <a href="/status">Status</a> ·
+      <a href="/.well-known/security.txt">Security</a> ·
+      <a href="/.well-known/agent.json">Agent card</a> ·
+      <a href="/terms">Terms</a> ·
+      <a href="/privacy">Privacy</a> ·
+      <a href="https://github.com/silent-architects/auxilo">GitHub</a>
     </p>
   </div>
 </footer>

@@ -122,8 +122,11 @@ describe('STATUS-VERSION: GET /status carries the live package version, never th
     if (bootSkipReason) { t.skip(bootSkipReason); return; }
     const res = await fetch(`${baseUrl}/status`);
     const body = await res.text();
-    assert.match(body, /<footer>[\s\S]*<a href="\/terms">terms<\/a>[\s\S]*<\/footer>/);
-    assert.match(body, /<footer>[\s\S]*<a href="\/privacy">privacy<\/a>[\s\S]*<\/footer>/);
+    // AD sheet 9: the footer link set moved to packet 3 rev 2's sentence-case
+    // labels ("Terms"/"Privacy", not "terms"/"privacy") as part of the
+    // site-wide byte-identical footer.
+    assert.match(body, /<footer>[\s\S]*<a href="\/terms">Terms<\/a>[\s\S]*<\/footer>/);
+    assert.match(body, /<footer>[\s\S]*<a href="\/privacy">Privacy<\/a>[\s\S]*<\/footer>/);
   });
 
   it('GET /status has no <h2> heading left (the four component labels are not headings) and its h1 is not the old fixed 28px', async (t) => {

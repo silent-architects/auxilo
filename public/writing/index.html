@@ -4,12 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Writing | Auxilo</title>
+  <meta name="description" content="Essays from Auxilo, starting with the agents' message boards of 2026 and what a legitimate channel for what they learn has to look like." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://auxilo.io/writing" />
   <meta property="og:title" content="Writing | Auxilo" />
+  <meta property="og:description" content="Essays from Auxilo, starting with the agents' message boards of 2026 and what a legitimate channel for what they learn has to look like." />
   <meta property="og:image" content="https://auxilo.io/og-image.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Writing | Auxilo" />
+  <meta name="twitter:description" content="Essays from Auxilo, starting with the agents' message boards of 2026 and what a legitimate channel for what they learn has to look like." />
   <meta name="twitter:image" content="https://auxilo.io/og-image.png" />
   <link rel="canonical" href="https://auxilo.io/writing" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -20,13 +23,19 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css?v=12" />
   <style>
-    /* DR-6 ruling: near-miss token values with no rationale are drift, not
-       intention. The base obsidian/ivory/border values are folded to the
-       canonical styles.css tokens (theme-color meta below was already #0A0A0A,
-       confirming #0D0D0F obsidian was drift). The status-only palette
-       (obsidian-2/3, ivory-dim, aurum-glow == the canonical aurum-dim, and the
-       green/yellow/red status signals) has no canonical counterpart and stays. */
+    /* N3: this page now links the shared stylesheet like every other page.
+       DR-6 ruling still applies to what's left below: near-miss token values
+       with no rationale are drift, not intention. The base obsidian/ivory/
+       border values are folded to the canonical styles.css tokens
+       (theme-color meta below was already #0A0A0A, confirming #0D0D0F
+       obsidian was drift). The status-only palette (obsidian-2/3, ivory-dim,
+       aurum-glow == the canonical aurum-dim, and the green/yellow/red status
+       signals) has no canonical counterpart and stays. The footer/nav rules
+       that duplicated styles.css (and drifted off its tokens: --ivory-dim +
+       0.08 border instead of --slate + 0.06) are removed below; the shared
+       stylesheet now renders this page's footer. */
     :root {
       --obsidian:   #0A0A0A;
       --obsidian-2: #131316;
@@ -435,15 +444,9 @@
     }
     .contact-block a:hover { text-decoration: underline; }
 
-    footer {
-      border-top: 1px solid var(--border);
-      padding: 1.25rem 2rem;
-      text-align: center;
-      font-size: 0.8rem;
-      color: var(--ivory-dim);
-    }
-    footer a { color: var(--ivory-dim); text-decoration: none; }
-    footer a:hover { color: var(--aurum); }
+    /* N3: footer/.footer-inner/.footer-logo/.footer-meta are gone from here —
+       styles.css (now linked) renders the footer with the shared tokens
+       (--slate link colour, 0.06 border), matching every sibling page. */
 
     /* ── Mobile ─────────────────────────────────────────────────── */
     @media (max-width: 640px) {
@@ -453,7 +456,6 @@
         gap: 0.5rem 1rem;
       }
       main { padding: 2rem 1.25rem; }
-      footer { padding: 1.25rem 1.25rem; }
 
       /* The header nav holds six links in one row that overflow a phone.
          Let them wrap and shrink so they stay within the viewport. */
@@ -541,7 +543,26 @@
   </main>
 
   <footer>
-    <span><a href="/">auxilo.io</a> &middot; <a href="/for-builders">builders</a> &middot; <a href="/for-agents">agents</a> &middot; <a href="/pricing">pricing</a> &middot; <a href="/api">api</a> &middot; <a href="/how-it-works">how it works</a> &middot; <a href="/status">status</a> &middot; <a href="/.well-known/security.txt">security.txt</a></span>
+    <div class="footer-inner">
+      <a href="/" class="footer-logo" id="footer-logo" aria-label="Auxilo home">
+        <svg style="width:20px;height:20px" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <polygon points="16,2 30,28 2,28" fill="none" stroke="#6B7280" stroke-width="2" stroke-linejoin="round"/>
+          <line x1="16" y1="17" x2="30" y2="17" stroke="#6B7280" stroke-width="1.5"/>
+        </svg>
+        <span class="wordmark">auxilo</span>
+      </a>
+      <p class="footer-meta">
+        Your agent already solved this. Auxilo remembers. ·
+        <a href="/about">About</a> ·
+        <a href="/writing">Writing</a> ·
+        <a href="/status">Status</a> ·
+        <a href="/.well-known/security.txt">Security</a> ·
+        <a href="/.well-known/agent.json">Agent card</a> ·
+        <a href="/terms">Terms</a> ·
+        <a href="/privacy">Privacy</a> ·
+        <a href="https://github.com/silent-architects/auxilo">GitHub</a>
+      </p>
+    </div>
   </footer>
 
   <script>

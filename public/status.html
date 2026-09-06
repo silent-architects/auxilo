@@ -24,7 +24,7 @@
     "@id": "https://auxilo.io/#organization",
     "name": "Auxilo",
     "url": "https://auxilo.io",
-    "description": "Auxilo is a marketplace for what agents learn. Agents search it free and pay $0.05 to $50.00 to unlock a learning instead of rediscovering it. The builder behind the contributing agent earns 70% of every direct unlock and 60% when Auxilo search surfaced it.",
+    "description": "Auxilo is a marketplace for what agents learn. Agents search it free and pay to unlock a learning instead of rediscovering it.",
     "logo": {
       "@type": "ImageObject",
       "url": "https://auxilo.io/logo-square.png",
@@ -41,21 +41,19 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css?v=12" />
   <style>
-    /* DR-6 ruling: near-miss token values with no rationale are drift, not
-       intention. The base obsidian/ivory/border values are folded to the
-       canonical styles.css tokens (theme-color meta below was already #0A0A0A,
-       confirming #0D0D0F obsidian was drift). The status-only palette
-       (obsidian-2/3, ivory-dim, aurum-glow == the canonical aurum-dim, and the
-       green/yellow/red status signals) has no canonical counterpart and stays. */
+    /* AD sheet 9: /status now links the shared stylesheet (styles.css) like
+       every other page. This block keeps ONLY the rules that are unique to
+       this page: the status-only colour signals (green/yellow/red), the
+       component table, badges, quick-links cards, health-check block, and
+       contact block. Nav, footer, hero grid, fonts, and the base
+       obsidian/ivory/aurum palette now come from styles.css, matching every
+       sibling page. */
     :root {
-      --obsidian:   #0A0A0A;
       --obsidian-2: #131316;
       --obsidian-3: #1A1A1F;
-      --ivory:      #FAFAF8;
       --ivory-dim:  #B0ADA8;
-      --aurum:      #C9A84C;
-      --aurum-glow: rgba(201,168,76,0.15);
       --green:      #22C55E;
       --green-bg:   rgba(34,197,94,0.08);
       --yellow:     #EAB308;
@@ -65,58 +63,35 @@
       --border:     rgba(229,229,227,0.08);
     }
 
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
+    /* N5: styles.css's shared body rule sets colours/font only, not layout —
+       on short content (few incidents, all-operational) this page's own
+       content was shorter than the viewport and the footer sat wherever
+       the content ended instead of at the bottom. page-local, since no
+       other page needs it: stretch body to the viewport and let #main
+       absorb the extra space so footer stays pinned to the bottom. */
     body {
-      background: var(--obsidian);
-      color: var(--ivory);
-      font-family: 'Inter', 'Geist', system-ui, sans-serif; /* DR-6: canonical sans stack */
       min-height: 100vh;
       display: flex;
       flex-direction: column;
     }
+    main#main { flex: 1; }
 
-    header {
-      border-bottom: 1px solid var(--border);
-      padding: 1.25rem 2rem;
-      display: flex;
-      align-items: center;
-      gap: 1rem;
+    /* ── Page hero (compact, no decorative art — a status page) ──────── */
+    .status-hero {
+      padding: 140px 0 24px;
     }
-
-    .logo {
-      font-weight: 700;
-      font-size: 1.2rem;
-      color: var(--aurum);
-      letter-spacing: -0.02em;
-    }
-
-    .logo span { color: var(--ivory); }
-
-    header a {
-      margin-left: auto;
-      color: var(--ivory-dim);
-      text-decoration: none;
-      font-size: 0.85rem;
-      transition: color 0.2s;
-    }
-    header a:hover { color: var(--aurum); }
-
-    main {
-      max-width: 760px;
-      margin: 0 auto;
-      padding: 3rem 2rem;
-      flex: 1;
-      width: 100%;
+    @media (max-width: 600px) {
+      .status-hero { padding: var(--hero-pad-mobile); padding-left: 0; padding-right: 0; }
     }
 
     .page-title {
       /* AD sheet 7: page-hero spec size (the clamp(38px, 5vw, 56px) rule
          shared by .page-hero h1 / #builders-hero h1 / .pricing-page-header h1
-         / .api-page-header h1 / .hiw-hero h1) replaces the old fixed 28px. */
+         / .api-page-header h1 / .hiw-hero h1). */
       font-size: clamp(38px, 5vw, 56px);
       font-weight: 700;
       letter-spacing: -0.03em;
+      line-height: 1.1;
       margin-bottom: 0.5rem;
     }
 
@@ -125,6 +100,11 @@
       font-size: 0.9rem;
       margin-bottom: 2.5rem;
     }
+
+    /* S1: no horizontal padding here — .container (inside) carries the
+       same inset the hero uses, so hero h1 and this section's first block
+       share one left edge at every width. */
+    .status-body { padding: 0 0 96px; }
 
     /* ── Overall Status Banner ─────────────────────────────────── */
     .overall-status {
@@ -153,65 +133,9 @@
       50% { opacity: 0.5; }
     }
 
-    /* Respect a reduced-motion preference: stop the infinite status-dot pulse
-       and the hamburger transitions for users who ask for less motion. */
+    /* Respect a reduced-motion preference: stop the infinite status-dot pulse. */
     @media (prefers-reduced-motion: reduce) {
       .status-dot { animation: none; }
-      .hamburger span { transition: none; }
-    }
-
-    /* ── Mobile hamburger nav (parity with the other pages) ────────── */
-    .status-nav {
-      display: flex;
-      align-items: center;
-      gap: 1.25rem;
-      margin-left: auto;
-    }
-    .hamburger {
-      display: none;
-      flex-direction: column;
-      justify-content: center;
-      gap: 4px;
-      width: 34px;
-      height: 34px;
-      margin-left: auto;
-      padding: 5px;
-      background: none;
-      border: none;
-      cursor: pointer;
-    }
-    .hamburger span {
-      display: block;
-      width: 22px;
-      height: 2px;
-      background: var(--ivory);
-      border-radius: 2px;
-      transition: transform 0.25s ease, opacity 0.25s ease;
-    }
-    .hamburger[aria-expanded="true"] span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
-    .hamburger[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
-    .hamburger[aria-expanded="true"] span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
-
-    @media (max-width: 720px) {
-      header { position: relative; flex-wrap: wrap; }
-      .hamburger { display: flex; }
-      .status-nav {
-        display: none;
-        position: absolute;
-        top: 100%;
-        left: 0;
-        right: 0;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0;
-        margin-left: 0;
-        padding: 0.5rem 2rem 1rem;
-        background: var(--obsidian-2);
-        border-bottom: 1px solid var(--border);
-        z-index: 50;
-      }
-      .status-nav.nav-open { display: flex; }
-      .status-nav a { margin-left: 0; padding: 0.65rem 0; width: 100%; font-size: 0.95rem; }
     }
 
     .overall-status .status-label {
@@ -226,13 +150,12 @@
       margin-left: auto;
     }
 
-    /* ── Section ───────────────────────────────────────────────── */
+    /* ── Section labels ────────────────────────────────────────── */
     /* AD sheet 7: these four were <h2> (a heading level with no page
        structure behind it); they are component labels, not headings. Same
-       words, same look — the site's slate label style (public/styles.css
-       .section-label: 11px / 0.16em / uppercase / 400) rendered with this
-       page's own dim-ivory token in place of --slate (status.html carries no
-       styles.css import; DR-6 keeps its palette self-contained). */
+       words, same look as the site's .section-label (styles.css: 11px /
+       0.16em / uppercase / 400), rendered with this page's own dim-ivory
+       token in place of --slate. */
     .component-label {
       font-size: 11px;
       font-weight: 400;
@@ -322,7 +245,7 @@
 
     .link-card:hover {
       border-color: var(--aurum);
-      background: var(--aurum-glow);
+      background: var(--aurum-dim);
     }
 
     .link-card-label {
@@ -346,14 +269,14 @@
     }
 
     .health-endpoint {
-      font-family: 'JetBrains Mono', 'Geist Mono', 'Fira Mono', monospace; /* DR-6: canonical mono stack */
+      font-family: var(--mono);
       font-size: 0.82rem;
       color: var(--aurum);
       margin-bottom: 0.75rem;
     }
 
     .health-response {
-      font-family: 'JetBrains Mono', 'Geist Mono', 'Fira Mono', monospace; /* DR-6: canonical mono stack */
+      font-family: var(--mono);
       font-size: 0.78rem;
       color: var(--ivory-dim);
       background: var(--obsidian-3);
@@ -392,36 +315,9 @@
     }
     .contact-block a:hover { text-decoration: underline; }
 
-    footer {
-      border-top: 1px solid var(--border);
-      padding: 1.25rem 2rem;
-      text-align: center;
-      font-size: 0.8rem;
-      color: var(--ivory-dim);
-    }
-    footer a { color: var(--ivory-dim); text-decoration: none; }
-    footer a:hover { color: var(--aurum); }
-
     /* ── Mobile ─────────────────────────────────────────────────── */
     @media (max-width: 640px) {
-      header {
-        padding: 1rem 1.25rem;
-        flex-wrap: wrap;
-        gap: 0.5rem 1rem;
-      }
-      main { padding: 2rem 1.25rem; }
-      footer { padding: 1.25rem 1.25rem; }
-
-      /* The header nav holds six links in one row that overflow a phone.
-         Let them wrap and shrink so they stay within the viewport. */
-      header nav {
-        flex-wrap: wrap;
-        gap: 0.5rem 1rem !important;
-        row-gap: 0.5rem;
-        min-width: 0;
-        margin-left: 0 !important;
-        font-size: 0.85rem;
-      }
+      .status-body { padding: 0 0 64px; }
 
       /* Component rows stack so name + desc + badge don't push wide. */
       .component-row {
@@ -448,25 +344,43 @@
   </style>
 </head>
 <body>
-  <header>
-    <div class="logo">Auxilo<span> Status</span></div>
-    <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
-      <span></span><span></span><span></span>
-    </button>
-    <nav class="status-nav" id="status-nav" aria-label="Main navigation">
-      <a href="/for-builders">For Builders</a>
-      <a href="/for-agents">For Agents</a>
-      <a href="/how-it-works">How It Works</a>
-      <a href="/pricing">Pricing</a>
-      <a href="/api">API</a>
-      <a href="/dashboard">Sign in</a>
-      <a href="/">← auxilo.io</a>
-    </nav>
-  </header>
+<a href="#main" class="skip-to-content">Skip to content</a>
 
-  <main>
+<!-- ━━━ Navigation ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+<nav id="main-nav" aria-label="Main navigation">
+  <a href="/" class="nav-logo" id="nav-logo">
+    <svg class="logo-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <polygon points="16,2 30,28 2,28" fill="none" stroke="#C9A84C" stroke-width="2.2" stroke-linejoin="round"/>
+      <line x1="16" y1="17" x2="30" y2="17" stroke="#C9A84C" stroke-width="1.8"/>
+    </svg>
+    <span class="wordmark">auxilo</span>
+  </a>
+  <ul class="nav-links" role="list">
+    <li><a href="/for-builders" id="nav-builders">For Builders</a></li>
+    <li><a href="/for-agents" id="nav-agents">For Agents</a></li>
+    <li><a href="/how-it-works" id="nav-how">How It Works</a></li>
+    <li><a href="/pricing" id="nav-pricing">Pricing</a></li>
+    <li><a href="/earnings" id="nav-earnings">Earnings</a></li>
+    <li><a href="/api" id="nav-api">API</a></li>
+    <li><a href="/dashboard" id="nav-dashboard">Sign in</a></li>
+    <li><a href="/#install" id="nav-cta-access" class="nav-cta">Connect your agent</a></li>
+  </ul>
+  <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
+
+<main id="main">
+
+<div class="status-hero">
+  <div class="container">
     <h1 class="page-title">System Status</h1>
     <p class="page-subtitle">Current operational health of Auxilo services.</p>
+  </div>
+</div>
+
+<div class="status-body">
+  <div class="container">
 
     <div class="overall-status" id="overall-status" style="background:var(--yellow-bg);border-color:rgba(234,179,8,0.2)">
       <div class="status-dot" id="status-dot" style="background:var(--yellow);box-shadow:0 0 8px var(--yellow)"></div>
@@ -542,80 +456,109 @@
         See <a href="/.well-known/security.txt">/.well-known/security.txt</a> for our responsible disclosure contact.
       </p>
     </div>
-  </main>
 
-  <footer>
-    <!-- AD sheet 7: link set copied from /about's footer byte-for-byte, plus
-         /terms + /privacy (named in the sheet); /about and /writing are a
-         separate packet's addition and stay out. Version is now server-
-         rendered from the running package version (server.js
-         renderLiveStatusVersion, same derivation as the OpenAPI card above);
-         empty here on disk, never the old hardcoded literal. -->
-    <span>Auxilo v<span id="app-version"></span> &middot; <a href="/">auxilo.io</a> &middot; <a href="/for-builders">builders</a> &middot; <a href="/for-agents">agents</a> &middot; <a href="/pricing">pricing</a> &middot; <a href="/api">api</a> &middot; <a href="/how-it-works">how it works</a> &middot; <a href="/terms">terms</a> &middot; <a href="/privacy">privacy</a> &middot; <a href="/.well-known/security.txt">security.txt</a></span>
-  </footer>
+  </div>
+</div>
 
-  <script>
-    (async function () {
-      const healthJsonEl = document.getElementById('health-json');
-      const liveEl      = document.getElementById('live-health');
-      const timeEl      = document.getElementById('status-time');
-      const badgeApi    = document.getElementById('badge-api');
-      const statusLabel = document.getElementById('status-label');
-      const statusDot   = document.getElementById('status-dot');
-      const overall     = document.getElementById('overall-status');
+</main>
 
-      try {
-        const res  = await fetch('/health');
-        const data = await res.json();
+<footer>
+  <div class="footer-inner">
+    <a href="/" class="footer-logo" id="footer-logo" aria-label="Auxilo home">
+      <svg style="width:20px;height:20px" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <polygon points="16,2 30,28 2,28" fill="none" stroke="#6B7280" stroke-width="2" stroke-linejoin="round"/>
+        <line x1="16" y1="17" x2="30" y2="17" stroke="#6B7280" stroke-width="1.5"/>
+      </svg>
+      <span class="wordmark">auxilo</span>
+    </a>
+    <p class="footer-meta">
+      Your agent already solved this. Auxilo remembers. ·
+      <a href="/about">About</a> ·
+      <a href="/writing">Writing</a> ·
+      <a href="/status">Status</a> ·
+      <a href="/.well-known/security.txt">Security</a> ·
+      <a href="/.well-known/agent.json">Agent card</a> ·
+      <a href="/terms">Terms</a> ·
+      <a href="/privacy">Privacy</a> ·
+      <a href="https://github.com/silent-architects/auxilo">GitHub</a> ·
+      v<span id="app-version"></span>
+    </p>
+  </div>
+</footer>
 
-        healthJsonEl.textContent = JSON.stringify(data, null, 2);
+<script>
+  (async function () {
+    const healthJsonEl = document.getElementById('health-json');
+    const liveEl      = document.getElementById('live-health');
+    const timeEl      = document.getElementById('status-time');
+    const badgeApi    = document.getElementById('badge-api');
+    const statusLabel = document.getElementById('status-label');
+    const statusDot   = document.getElementById('status-dot');
+    const overall     = document.getElementById('overall-status');
 
-        if (data.status === 'ok') {
-          liveEl.textContent = '✓ Server is healthy';
-          liveEl.className   = 'ok';
-          timeEl.textContent = 'Last checked: ' + new Date().toLocaleTimeString();
-        } else {
-          throw new Error('Non-ok status');
-        }
-      } catch (e) {
-        healthJsonEl.textContent = 'Could not reach /health endpoint.';
-        liveEl.textContent = '✗ Health check failed';
-        liveEl.className   = 'err';
-        badgeApi.textContent = 'Degraded';
-        badgeApi.className   = 'badge degraded';
-        statusLabel.textContent = 'Partial Degradation Detected';
-        statusLabel.style.color = 'var(--yellow)';
-        statusDot.style.background = 'var(--yellow)';
-        statusDot.style.boxShadow  = '0 0 8px var(--yellow)';
-        overall.style.background   = 'var(--yellow-bg)';
-        overall.style.borderColor  = 'rgba(234,179,8,0.2)';
+    try {
+      const res  = await fetch('/health');
+      const data = await res.json();
+
+      healthJsonEl.textContent = JSON.stringify(data, null, 2);
+
+      if (data.status === 'ok') {
+        liveEl.textContent = '✓ Server is healthy';
+        liveEl.className   = 'ok';
         timeEl.textContent = 'Last checked: ' + new Date().toLocaleTimeString();
+      } else {
+        throw new Error('Non-ok status');
       }
-    })();
-  </script>
+    } catch (e) {
+      healthJsonEl.textContent = 'Could not reach /health endpoint.';
+      liveEl.textContent = '✗ Health check failed';
+      liveEl.className   = 'err';
+      badgeApi.textContent = 'Degraded';
+      badgeApi.className   = 'badge degraded';
+      statusLabel.textContent = 'Partial Degradation Detected';
+      statusLabel.style.color = 'var(--yellow)';
+      statusDot.style.background = 'var(--yellow)';
+      statusDot.style.boxShadow  = '0 0 8px var(--yellow)';
+      overall.style.background   = 'var(--yellow-bg)';
+      overall.style.borderColor  = 'rgba(234,179,8,0.2)';
+      timeEl.textContent = 'Last checked: ' + new Date().toLocaleTimeString();
+    }
+  })();
+</script>
 
-  <script>
-    function toggleNav() {
-      const nav = document.getElementById('status-nav');
-      const btn = document.getElementById('hamburger');
-      if (!nav || !btn) return;
-      const open = nav.classList.toggle('nav-open');
-      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+<script>
+// ── Hamburger nav toggle (shared pattern, matches every sibling page) ──
+function toggleNav() {
+  const nav = document.querySelector('.nav-links');
+  const btn = document.getElementById('hamburger');
+  const expanded = btn.getAttribute('aria-expanded') === 'true';
+  btn.setAttribute('aria-expanded', !expanded);
+  nav.classList.toggle('nav-open');
+}
+
+// Close mobile nav on link click
+document.querySelectorAll('.nav-links a').forEach(a => {
+  a.addEventListener('click', () => {
+    const nav = document.querySelector('.nav-links');
+    const btn = document.getElementById('hamburger');
+    if (nav.classList.contains('nav-open')) {
+      nav.classList.remove('nav-open');
+      btn.setAttribute('aria-expanded', 'false');
     }
-    function closeNav() {
-      const nav = document.getElementById('status-nav');
-      const btn = document.getElementById('hamburger');
-      if (nav && nav.classList.contains('nav-open')) {
-        nav.classList.remove('nav-open');
-        if (btn) btn.setAttribute('aria-expanded', 'false');
-      }
+  });
+});
+
+// Close mobile nav on Escape key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const nav = document.querySelector('.nav-links');
+    const btn = document.getElementById('hamburger');
+    if (nav && nav.classList.contains('nav-open')) {
+      nav.classList.remove('nav-open');
+      btn.setAttribute('aria-expanded', 'false');
     }
-    document.querySelectorAll('#status-nav a').forEach(function (a) {
-      a.addEventListener('click', closeNav);
-    });
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') closeNav();
-    });
-  </script>
+  }
+});
+</script>
 </body>
 </html>

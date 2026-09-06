@@ -64,11 +64,15 @@ const ROOT = path.join(__dirname, '..');
 const CSS_PATH = path.join(ROOT, 'public', 'styles.css');
 const PUBLIC_DIR = path.join(ROOT, 'public');
 
-// The 8 pages documented as sharing #main-nav. /status.html has its own
+// The pages documented as sharing #main-nav. /status.html has its own
 // .status-nav/#status-nav and is intentionally excluded.
+// Wave C.3 (SITE-PM sheet 7 / build sheet C.3 item 3): the essay
+// (writing-agents-message-board.html) gained the shared #main-nav +
+// hamburger, so it joins the enumerated set here too.
 const NAV_PAGES = [
     'index.html', 'how-it-works.html', 'for-agents.html', 'for-builders.html',
     'pricing.html', 'earnings.html', 'api.html', 'dashboard.html',
+    'writing-agents-message-board.html',
 ];
 
 // All 8 shared-nav pages are driven through the browser for the dynamic
