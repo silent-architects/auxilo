@@ -598,6 +598,15 @@
          override at all (AD-STEP4-RESPONSIVE-QC-2026-09-06.md §1.9: 250px of
          empty ground before first ink, 30.8% of the fold, no CTA visible). */
       #builders-hero { padding: var(--hero-pad-mobile); }
+
+      /* S3: --hero-pad-mobile's own horizontal inset is 16px (shared token,
+         other pages depend on it as-is). Body sections below get to 40px by
+         stacking their <section> padding (16px here) on top of .container's
+         own 24px. .builders-hero-content has no .container wrapper, so it
+         never picked up that second 24px — the h1's left edge sat at 16
+         while the body sat at 40. Adding it here, page-local, closes the
+         gap without touching the shared token or any other page. */
+      .builders-hero-content { padding-left: 24px; padding-right: 24px; }
     }
 
     @media (max-width: 700px) {
