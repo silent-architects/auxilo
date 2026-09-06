@@ -73,13 +73,23 @@ a { color: var(--aurum); text-decoration: underline; }
 /* AD sheet 9: a section already carries --section-pad's own 24px horizontal
    inset (below); .container's OWN 24px padding then stacks on top of it once
    the viewport is wide enough for .container's max-width + auto-margin
-   centering to be doing the centering work (>= 1150px), pushing content to
-   194px instead of the intended 170px (measured live: pricing and api hero
-   AND every .container-wrapped body section on every page). Dropping the
-   inner padding at that breakpoint collapses hero and body to the same
-   170px edge everywhere, with no change below 1150px where the padding is
-   still the only gutter. (AD-STEP4-RESPONSIVE-QC-2026-09-06.md §1.3, §2 P2.13) */
-@media (min-width: 1150px) {
+   centering to be doing the centering work, pushing content to 194px instead
+   of the intended 170px (measured live: pricing and api hero AND every
+   .container-wrapped body section on every page). Dropping the inner
+   padding at that breakpoint collapses hero and body to the same 170px edge.
+   (AD-STEP4-RESPONSIVE-QC-2026-09-06.md §1.3, §2 P2.13)
+
+   N4: the drop was originally pinned to >= 1150px, which is inside
+   .container's own max-width + auto-margin runway (--max-w: 1100px) — a
+   1150-1199px viewport centers the (padding-less) container with 25-49.5px
+   of auto-margin on each side, but a stray few px of that margin can still
+   read thinner than 24px depending on exact content width, so the gutter
+   was not guaranteed to hold. Pinning the drop to >= 1200px instead keeps
+   .container's own 24px padding the active gutter through 1150-1199px and
+   only hands off to the auto-margin once it's provably >= 24px on both
+   sides at every content width up to --max-w's 1100px. Below 1200px the
+   gutter never drops under 24px. */
+@media (min-width: 1200px) {
   .container { padding-left: 0; padding-right: 0; }
 }
 
@@ -818,9 +828,50 @@ section h2 {
   font-weight: 500;
 }
 
-/* AD sheet 9: "How It Holds Up" (#why-auxilo, .moat-*) removed. The section
-   was deleted from index.html in an earlier wave (RF-6); this was the last
-   of its CSS. */
+/* AD sheet 9 / B1: "How It Holds Up" (#why-auxilo) is gone from index.html
+   (RF-6), but .moat-grid/.moat-card/.moat-icon are still used by
+   /for-builders — restored verbatim from 624044c. */
+
+.moat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.moat-card {
+  padding: 32px 28px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(229,229,227,0.08);
+  border-radius: 6px;
+  transition: border-color 0.2s;
+}
+
+.moat-card:hover {
+  border-color: var(--aurum-border);
+}
+
+.moat-icon {
+  width: 32px;
+  height: 32px;
+  margin-bottom: 20px;
+  opacity: 0.85;
+}
+
+.moat-card h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ivory);
+  margin-bottom: 10px;
+  letter-spacing: -0.01em;
+}
+
+.moat-card p {
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--slate-text);
+}
 
 /* ── For Builders ──────────────────────────────────────────────────────────── */
 #for-builders {
@@ -1424,8 +1475,22 @@ footer {
   transition: transform 0.3s, color 0.3s;
 }
 .faq-item.open .faq-icon { transform: rotate(45deg); color: var(--aurum); }
-.faq-answer { max-height: 0; overflow: hidden; transition: max-height 0.35s ease; }
-.faq-item.open .faq-answer { max-height: 1000px; }
+/* N1: visibility:hidden on the closed state pulls any link inside the
+   (still-in-DOM) answer text out of tab order; visibility flips back the
+   instant the item opens (0s delay) but only flips to hidden after the
+   max-height collapse finishes (0.35s delay) so closing doesn't cut the
+   text off mid-animation. */
+.faq-answer {
+  max-height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  transition: max-height 0.35s ease, visibility 0s linear 0.35s;
+}
+.faq-item.open .faq-answer {
+  max-height: 1000px;
+  visibility: visible;
+  transition: max-height 0.35s ease, visibility 0s linear 0s;
+}
 .faq-answer-inner { padding: 0 0 24px; font-size: 15px; line-height: 1.7; color: var(--ash); }
 .faq-answer-inner a { color: var(--aurum); text-decoration: underline; }
 
@@ -1613,6 +1678,7 @@ footer {
   .api-grid { grid-template-columns: 1fr; gap: 48px; }
   .pricing-packs { grid-template-columns: repeat(2, 1fr); }
   .auth-options { grid-template-columns: 1fr; }
+  .moat-grid { grid-template-columns: 1fr; }
 
   .footer-inner { flex-direction: column; align-items: center; text-align: center; }
 }

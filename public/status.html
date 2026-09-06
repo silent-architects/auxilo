@@ -63,6 +63,19 @@
       --border:     rgba(229,229,227,0.08);
     }
 
+    /* N5: styles.css's shared body rule sets colours/font only, not layout —
+       on short content (few incidents, all-operational) this page's own
+       content was shorter than the viewport and the footer sat wherever
+       the content ended instead of at the bottom. page-local, since no
+       other page needs it: stretch body to the viewport and let #main
+       absorb the extra space so footer stays pinned to the bottom. */
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    main#main { flex: 1; }
+
     /* ── Page hero (compact, no decorative art — a status page) ──────── */
     .status-hero {
       padding: 140px 0 24px;
@@ -88,7 +101,10 @@
       margin-bottom: 2.5rem;
     }
 
-    .status-body { padding: 0 24px 96px; }
+    /* S1: no horizontal padding here — .container (inside) carries the
+       same inset the hero uses, so hero h1 and this section's first block
+       share one left edge at every width. */
+    .status-body { padding: 0 0 96px; }
 
     /* ── Overall Status Banner ─────────────────────────────────── */
     .overall-status {
@@ -301,7 +317,7 @@
 
     /* ── Mobile ─────────────────────────────────────────────────── */
     @media (max-width: 640px) {
-      .status-body { padding: 0 16px 64px; }
+      .status-body { padding: 0 0 64px; }
 
       /* Component rows stack so name + desc + badge don't push wide. */
       .component-row {

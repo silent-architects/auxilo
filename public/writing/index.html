@@ -23,13 +23,19 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css?v=12" />
   <style>
-    /* DR-6 ruling: near-miss token values with no rationale are drift, not
-       intention. The base obsidian/ivory/border values are folded to the
-       canonical styles.css tokens (theme-color meta below was already #0A0A0A,
-       confirming #0D0D0F obsidian was drift). The status-only palette
-       (obsidian-2/3, ivory-dim, aurum-glow == the canonical aurum-dim, and the
-       green/yellow/red status signals) has no canonical counterpart and stays. */
+    /* N3: this page now links the shared stylesheet like every other page.
+       DR-6 ruling still applies to what's left below: near-miss token values
+       with no rationale are drift, not intention. The base obsidian/ivory/
+       border values are folded to the canonical styles.css tokens
+       (theme-color meta below was already #0A0A0A, confirming #0D0D0F
+       obsidian was drift). The status-only palette (obsidian-2/3, ivory-dim,
+       aurum-glow == the canonical aurum-dim, and the green/yellow/red status
+       signals) has no canonical counterpart and stays. The footer/nav rules
+       that duplicated styles.css (and drifted off its tokens: --ivory-dim +
+       0.08 border instead of --slate + 0.06) are removed below; the shared
+       stylesheet now renders this page's footer. */
     :root {
       --obsidian:   #0A0A0A;
       --obsidian-2: #131316;
@@ -438,33 +444,9 @@
     }
     .contact-block a:hover { text-decoration: underline; }
 
-    /* AD sheet 9: footer markup now matches every other page byte-for-byte
-       (.footer-inner/.footer-logo/.footer-meta); this page carries no
-       styles.css import (out of this sheet's scope, unlike /status), so the
-       same rules from styles.css are duplicated here, scoped to the footer
-       only. */
-    footer {
-      border-top: 1px solid var(--border);
-      padding: 32px 24px;
-      text-align: center;
-    }
-    .footer-inner {
-      max-width: 1100px;
-      margin: 0 auto;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 16px;
-    }
-    .footer-logo { display: flex; align-items: center; gap: 8px; text-decoration: none; }
-    .footer-logo .wordmark { font-size: 15px; font-weight: 500; color: var(--ivory-dim); }
-    .footer-meta { font-size: 13px; color: var(--ivory-dim); }
-    .footer-meta a { color: var(--ivory-dim); text-decoration: none; transition: color 0.2s; }
-    .footer-meta a:hover { color: var(--aurum); }
-    @media (max-width: 600px) {
-      .footer-inner { flex-direction: column; align-items: center; text-align: center; }
-    }
+    /* N3: footer/.footer-inner/.footer-logo/.footer-meta are gone from here —
+       styles.css (now linked) renders the footer with the shared tokens
+       (--slate link colour, 0.06 border), matching every sibling page. */
 
     /* ── Mobile ─────────────────────────────────────────────────── */
     @media (max-width: 640px) {
@@ -474,7 +456,6 @@
         gap: 0.5rem 1rem;
       }
       main { padding: 2rem 1.25rem; }
-      footer { padding: 1.25rem 1.25rem; }
 
       /* The header nav holds six links in one row that overflow a phone.
          Let them wrap and shrink so they stay within the viewport. */
