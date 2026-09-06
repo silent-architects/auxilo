@@ -198,7 +198,7 @@ describe('N1 (static): FAQ accordion closed state is visibility:hidden', () => {
 // silent-failure class this repo's ch7-describe-body-guard.test.js sweeps
 // for; a plain throw here is fine, since it fails loudly rather than
 // silently, but the value is simple enough not to need one).
-const INDEX_STYLESHEET_MATCH = readPublic('index.html').match(/href="\/styles\.css\?v=(\d+)"/);
+const INDEX_STYLESHEET_MATCH = readPublic('index.html').match(/href="\/styles\.css\?v=([0-9a-f]+)"/);
 const CANONICAL_VERSION = INDEX_STYLESHEET_MATCH ? INDEX_STYLESHEET_MATCH[1] : null;
 
 describe('N3 (static): /about + /writing link the shared stylesheet, no duplicated footer CSS', () => {

@@ -109,7 +109,7 @@ describe('SITE-SYSTEM item 7: every page links styles.css with the same ?v=', ()
     const versions = new Map();
     for (const page of STYLESHEET_PAGES) {
       const html = readPublic(page);
-      const m = html.match(/href="\/styles\.css\?v=(\d+)"/);
+      const m = html.match(/href="\/styles\.css\?v=([0-9a-f]+)"/);
       assert.ok(m, `${page} carries a /styles.css?v=N link`);
       versions.set(page, m[1]);
     }

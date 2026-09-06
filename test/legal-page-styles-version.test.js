@@ -48,17 +48,17 @@ function serveLegalPageSource() {
 
 describe('LEGAL-PAGE-STYLES-VERSION: serveLegalPage\'s styles.css ?v= matches the shipped pages\'', () => {
   it('public/index.html carries exactly one /styles.css?v=N link', () => {
-    const matches = [...INDEX_HTML.matchAll(/href="\/styles\.css\?v=(\d+)"/g)];
+    const matches = [...INDEX_HTML.matchAll(/href="\/styles\.css\?v=([0-9a-f]+)"/g)];
     assert.equal(matches.length, 1,
       `expected exactly one /styles.css?v=N link in index.html, found ${matches.length}`);
   });
 
   it('serveLegalPage links /styles.css with the same ?v=N as the pages', () => {
     const fnSrc = serveLegalPageSource();
-    const legalMatch = fnSrc.match(/href="\/styles\.css\?v=(\d+)"/);
+    const legalMatch = fnSrc.match(/href="\/styles\.css\?v=([0-9a-f]+)"/);
     assert.ok(legalMatch, 'serveLegalPage must link /styles.css?v=N in its <head>');
 
-    const pageMatch = INDEX_HTML.match(/href="\/styles\.css\?v=(\d+)"/);
+    const pageMatch = INDEX_HTML.match(/href="\/styles\.css\?v=([0-9a-f]+)"/);
     assert.ok(pageMatch, 'index.html must link /styles.css?v=N');
 
     assert.equal(legalMatch[1], pageMatch[1],

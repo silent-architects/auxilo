@@ -161,7 +161,7 @@ describe('dashboard-clean-lane.js: unread badge + ack body', () => {
     // renderCleanLaneUnread only toggles visibility from the count; it never PATCHes.
     const render = DASHBOARD_HTML.slice(DASHBOARD_HTML.indexOf('function renderCleanLaneUnread(data)'), DASHBOARD_HTML.indexOf('window.ackCleanLanePublications = function'));
     assert.ok(!render.includes('apiFetch('), 'rendering the badge never calls the server');
-    assert.ok(DASHBOARD_HTML.includes('<script src="/dashboard-clean-lane.js?v=3"></script>'), 'cache-bust bumped for the new exports');
+    assert.match(DASHBOARD_HTML, /<script src="\/dashboard-clean-lane\.js\?v=[0-9a-f]{8}"><\/script>/, 'cache-bust present (content-hash scheme, ASSET-CACHE-BUST)');
   });
 });
 

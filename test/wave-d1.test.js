@@ -371,7 +371,7 @@ describe('WAVE-D1: styles.css ?v= bump rides in this commit, consistent across e
     const versions = new Map();
     for (const page of ALL_PAGES) {
       const html = readPage(page);
-      const m = html.match(/href="\/styles\.css\?v=(\d+)"/);
+      const m = html.match(/href="\/styles\.css\?v=([0-9a-f]+)"/);
       assert.ok(m, `${page} should link /styles.css?v=N`);
       versions.set(page, m[1]);
     }
