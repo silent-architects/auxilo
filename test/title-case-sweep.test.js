@@ -81,22 +81,91 @@ const APPLIED_ROWS = [
     old: 'The math (per unlock)',
     now: 'The Math (per Unlock)',
   },
+  // Addendum 1 (2026-09-06, day; SITE-PM successor) — the trust page's
+  // content pass and /works-with both shipped after the 7d2ce8f inventory
+  // snapshot, so their headings were never counted in the original 8-row
+  // table. Same ruling, same convention, casing only.
+  {
+    file: 'public/how-submissions-work.html',
+    old: 'What stands between a submission and the public catalog',
+    now: 'What Stands Between a Submission and the Public Catalog',
+    // This exact string was already the (pre-existing, untouched-by-this-
+    // sweep) <title>/og:title/twitter:title/JSON-LD "name" value before the
+    // h1 casing changed — those four surfaces plus the h1 itself is 5.
+    count: 5,
+  },
+  {
+    file: 'public/how-submissions-work.html',
+    old: 'If you run agents that will consume this catalog',
+    now: 'If You Run Agents That Will Consume This Catalog',
+  },
+  {
+    file: 'public/how-submissions-work.html',
+    old: 'What Auxilo is',
+    now: 'What Auxilo Is',
+  },
+  {
+    file: 'public/how-submissions-work.html',
+    old: 'Earnings and withdrawals, for builders',
+    now: 'Earnings and Withdrawals, for Builders',
+  },
+  {
+    file: 'public/how-submissions-work.html',
+    old: 'Where learnings come from',
+    now: 'Where Learnings Come From',
+  },
+  {
+    file: 'public/how-submissions-work.html',
+    old: 'What leaves your machine',
+    now: 'What Leaves Your Machine',
+  },
+  {
+    file: 'public/how-submissions-work.html',
+    old: 'The submission path',
+    now: 'The Submission Path',
+  },
+  {
+    file: 'public/how-submissions-work.html',
+    old: 'Who reviews what',
+    now: 'Who Reviews What',
+  },
+  {
+    file: 'public/how-submissions-work.html',
+    old: 'The live catalog count',
+    now: 'The Live Catalog Count',
+  },
+  {
+    file: 'public/how-submissions-work.html',
+    old: 'Who runs this',
+    now: 'Who Runs This',
+  },
+  {
+    file: 'public/works-with.html',
+    old: 'Works with the client you already run',
+    now: 'Works With the Client You Already Run',
+  },
 ];
 
 describe('TITLE-CASE-SWEEP part A: applied inventory rows read their NEW string', () => {
   for (const row of APPLIED_ROWS) {
     it(`${row.file} reads "${row.now}" and not the old string`, () => {
       const content = read(row.file);
+      const expectedCount = row.count || 1;
       assert.equal(
         (content.match(new RegExp(row.now.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length,
-        1,
-        `expected exactly one occurrence of the NEW heading text in ${row.file}`
+        expectedCount,
+        `expected exactly ${expectedCount} occurrence(s) of the NEW heading text in ${row.file}`
       );
       const headingTagsWithOld = extractHeadings(content).filter((h) => h.text === row.old);
       assert.deepEqual(
         headingTagsWithOld,
         [],
         `${row.file} still has an h1-h3 reading the pre-sweep OLD heading text`
+      );
+      const headingTagsWithNew = extractHeadings(content).filter((h) => h.text === row.now);
+      assert.ok(
+        headingTagsWithNew.length >= 1,
+        `${row.file} has no h1-h3 reading the NEW heading text "${row.now}"`
       );
     });
   }
@@ -152,23 +221,6 @@ const DOCUMENTED_EXCEPTIONS = new Set([
   'public/dashboard.html|||Sign In to Your Account',
   // Explicit "stays as written" exception (full sentence headline, GTM surface).
   "public/writing-agents-message-board.html|||The first post on the agents' Artifactory message board was a help-wanted ad",
-  // Not-inventoried: this whole page predates/postdates the 7d2ce8f
-  // inventory snapshot and was never enumerated in it. Left untouched per
-  // this sweep's "not in the inventory -> list, leave" rule.
-  'public/how-submissions-work.html|||What stands between a submission and the public catalog',
-  'public/how-submissions-work.html|||If you run agents that will consume this catalog',
-  'public/how-submissions-work.html|||What Auxilo is',
-  'public/how-submissions-work.html|||Earnings and withdrawals, for builders',
-  'public/how-submissions-work.html|||Where learnings come from',
-  'public/how-submissions-work.html|||What leaves your machine',
-  'public/how-submissions-work.html|||The submission path',
-  'public/how-submissions-work.html|||Who reviews what',
-  'public/how-submissions-work.html|||The live catalog count',
-  'public/how-submissions-work.html|||Who runs this',
-  // Not-inventoried: new page (works-with.html), never enumerated in the
-  // 7d2ce8f snapshot; doc prose names a Title Case target for it but this
-  // sweep's formal inventory table has no row for it, so it was left as-is.
-  'public/works-with.html|||Works with the client you already run',
 ]);
 
 function stripTags(html) {
