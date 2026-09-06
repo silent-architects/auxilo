@@ -83,6 +83,9 @@ const NAV_PAGES = [
     // Works with build (2026-09-06): works-with.html uses the same shared
     // #main-nav + hamburger markup as every page above.
     'works-with.html',
+    // SITE-PM packet 13 rev 2: /connect, built on the /about shell, so it
+    // carries the same shared #main-nav + hamburger.
+    'connect.html',
 ];
 
 // All 10 shared-nav pages are driven through the browser for the dynamic

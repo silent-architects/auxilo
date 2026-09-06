@@ -11892,6 +11892,15 @@ app.get('/works-with', (c) => {
   return c.text('Not found', 404);
 });
 
+// SITE-PM packet 13 rev 2 (BUILD-READY): /connect, on the same static-file
+// pattern as /about above (Tyler: nav CTAs should link to a page, not an
+// anchor — this is that page).
+app.get('/connect', (c) => {
+  const res = serveStatic(c, 'connect.html');
+  if (res) return res;
+  return c.text('Not found', 404);
+});
+
 app.get('/writing', (c) => {
   const res = serveStatic(c, 'writing/index.html');
   if (res) return res;
@@ -12484,7 +12493,7 @@ function serveLegalPage(c, filename, title, seo) {
       <li><a href="/earnings" id="nav-earnings">Earnings</a></li>
       <li><a href="/api" id="nav-api">API</a></li>
       <li><a href="/dashboard" id="nav-dashboard">Sign in</a></li>
-      <li><a href="/#install" id="nav-cta-access" class="nav-cta">Connect your agent</a></li>
+      <li><a href="/connect" id="nav-cta-access" class="nav-cta">Connect your agent</a></li>
     </ul>
     <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
       <span></span><span></span><span></span>
