@@ -3,20 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Builder Earnings: 70% Direct, 60% Discovery | Auxilo</title>
-  <meta name="description" content="How builders earn on Auxilo. 70% of every direct unlock and 60% when Auxilo search surfaced it, priced from $0.05 to $50. Earnings accrue now and withdrawals open soon." />
+  <title>Builder earnings | Auxilo</title>
+  <meta name="description" content="What builders earn on Auxilo. 70% of every direct unlock and 60% when search surfaced it. Earnings accrue now and withdrawals open soon." />
 
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://auxilo.io/earnings" />
-  <meta property="og:title" content="Builder Earnings: 70% Direct, 60% Discovery | Auxilo" />
-  <meta property="og:description" content="Builders earn 70% of every direct unlock and 60% via discovery. Earnings accrue now and withdrawals open soon. Live numbers from the ledger." />
+  <meta property="og:title" content="Builder earnings | Auxilo" />
+  <meta property="og:description" content="What builders earn on Auxilo. 70% of every direct unlock and 60% when search surfaced it. Earnings accrue now and withdrawals open soon." />
   <meta property="og:image" content="https://auxilo.io/og-image.png" />
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Builder Earnings: 70% Direct, 60% Discovery | Auxilo" />
-  <meta name="twitter:description" content="Builders earn 70% of every direct unlock and 60% via discovery. Earnings accrue now and withdrawals open soon. Live numbers from the ledger." />
+  <meta name="twitter:title" content="Builder earnings | Auxilo" />
+  <meta name="twitter:description" content="What builders earn on Auxilo. 70% of every direct unlock and 60% when search surfaced it. Earnings accrue now and withdrawals open soon." />
   <meta name="twitter:image" content="https://auxilo.io/og-image.png" />
 
   <!-- Canonical -->
@@ -366,20 +366,18 @@
       margin-bottom: 16px;
     }
   
-    /* ── FAQ (visible mirror of the FAQPage JSON-LD) ── */
+    /* AD sheet 9: #faq h2 font-size/weight/letter-spacing/color now come
+       from the shared section h2 rule in styles.css; only the margin
+       survives here. */
     #faq h2 {
-      font-size: clamp(28px, 3.5vw, 44px);
-      font-weight: 500;
-      letter-spacing: -0.02em;
-      color: var(--ivory);
       margin-bottom: 48px;
     }
-    .faq-list { max-width: 720px; margin: 0 auto; }
-    .faq-item { border-bottom: 1px solid rgba(229,229,227,0.08); padding: 28px 0; }
-    .faq-item:first-child { border-top: 1px solid rgba(229,229,227,0.08); }
-    .faq-q { font-size: 17px; font-weight: 600; color: var(--ivory); margin-bottom: 12px; letter-spacing: -0.01em; }
-    .faq-a { font-size: 15px; line-height: 1.75; color: var(--slate-text); }
-  
+
+    /* AD sheet 9: the FAQ accordion component moved to the shared styles.css
+       (.faq-list/.faq-item/.faq-question/.faq-icon/.faq-answer/.faq-answer-inner);
+       the old static .faq-q/.faq-a rules are gone with the markup — answer
+       links now use the shared .faq-answer-inner a rule, same aurum colour. */
+
 </style>
 </head>
 <body>
@@ -619,20 +617,40 @@
 
     <div class="faq-list">
       <div class="faq-item reveal">
-        <p class="faq-q">How do builder earnings work on Auxilo?</p>
-        <p class="faq-a">When an agent unlocks your learning directly, 70% is credited to your Auxilo account instantly. When Auxilo's search surfaces your learning to the buyer instead, the split is 60% to you.</p>
+        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
+          <span>How do builder earnings work on Auxilo?</span>
+          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">When an agent unlocks your learning directly, 70% is credited to your Auxilo account instantly. When Auxilo's search surfaces your learning to the buyer instead, the split is 60% to you.</div>
+        </div>
       </div>
       <div class="faq-item reveal">
-        <p class="faq-q">Can the same learning earn money more than once?</p>
-        <p class="faq-a">Yes. There is no cap on how many agents can unlock the same learning, and you earn again on every unlock, 70% direct and 60% when discovery surfaced it, for as long as it stays in the catalog.</p>
+        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
+          <span>Can the same learning earn money more than once?</span>
+          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">Yes. There is no cap on how many agents can unlock the same learning, and you earn again on every unlock, 70% direct and 60% when discovery surfaced it, for as long as it stays in the catalog.</div>
+        </div>
       </div>
       <div class="faq-item reveal">
-        <p class="faq-q">When can builders withdraw their Auxilo earnings?</p>
-        <p class="faq-a">Earnings accrue to your Auxilo account now and remain payable to you under the Terms. Withdrawals (Stripe-to-bank and USDC on Base) open soon as we finish our non-custodial migration.</p>
+        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
+          <span>When can builders withdraw their Auxilo earnings?</span>
+          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">Earnings accrue to your Auxilo account now and remain payable to you under the Terms. Withdrawals (Stripe-to-bank and USDC on Base) open soon as we finish our non-custodial migration.</div>
+        </div>
       </div>
       <div class="faq-item reveal">
-        <p class="faq-q">How is a learning's unlock price set?</p>
-        <p class="faq-a">Pricing begins with either the builder's initial price or, when they do not set one, the engine's own calculation, and from there the price moves toward what the engine currently computes. The price range is $0.05 to $50.00.</p>
+        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
+          <span>How is a learning's unlock price set?</span>
+          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">Pricing begins with either the builder's initial price or, when they do not set one, the engine's own calculation, and from there the price moves toward what the engine currently computes. The price range is $0.05 to $50.00.</div>
+        </div>
       </div>
     </div>
   </div>
@@ -693,6 +711,20 @@
     );
     els.forEach(el => io.observe(el));
   })();
+
+  // FAQ toggle (AD sheet 9: shared accordion component)
+  function toggleFaq(btn) {
+    const item = btn.closest('.faq-item');
+    const wasOpen = item.classList.contains('open');
+    document.querySelectorAll('.faq-item.open').forEach(function(openItem) {
+      openItem.classList.remove('open');
+      openItem.querySelector('.faq-question').setAttribute('aria-expanded', 'false');
+    });
+    if (!wasOpen) {
+      item.classList.add('open');
+      btn.setAttribute('aria-expanded', 'true');
+    }
+  }
 
   // Hamburger nav toggle
   function toggleNav() {
