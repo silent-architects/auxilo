@@ -428,7 +428,11 @@ describe('CLEAN-LANE-FLIP Phase A2: localIndexRow persists the standing-consent 
   // instead of the hand fixture silently staying green.
   it('producer-driven: a /learn clean-lane response body appended via appendSubmittedLearning is counted once by countStandingConsentPublishes over the real index file', () => {
     // 1. Extract the /learn response's clean-lane spread block from the producer.
-    const learnRoute = SERVER_SRC.slice(SERVER_SRC.indexOf("app.post('/learn'"), SERVER_SRC.indexOf("app.post('/learn'") + 40000);
+    // EXTRACT-PER-CLIENT W1 PART C added ~800 chars near the top of this route
+    // (the extraction_model destructure + its intake normalizer), pushing the
+    // response object's closing `}, 201);` past the old 40000-char window —
+    // widened with headroom rather than hand-tuned to the current byte count.
+    const learnRoute = SERVER_SRC.slice(SERVER_SRC.indexOf("app.post('/learn'"), SERVER_SRC.indexOf("app.post('/learn'") + 45000);
     const responseStart = learnRoute.indexOf('return c.json({\n    id: learning.id,');
     assert.ok(responseStart > 0, '/learn response object not found');
     const responseSrc = learnRoute.slice(responseStart, learnRoute.indexOf('}, 201);', responseStart));

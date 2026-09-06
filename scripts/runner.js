@@ -243,6 +243,12 @@ function zeroExtractionSkipState() {
     first_skip_at: null,
     last_skip_at: null,
     last_alert_at: null,
+    // EXTRACT-PER-CLIENT W1 PART C: the reasonCode of the most recent
+    // extraction outcome (skip or real), so `auxilo status` can print WHY
+    // (cli-billing-helper-configured / cli-unauthenticated /
+    // no-model-provider-available) without re-running extraction. null on a
+    // real full success (nothing to report) and on a fresh/zeroed state.
+    last_reason_code: null,
   };
 }
 
@@ -263,12 +269,17 @@ function normalizeExtractionSkipState(value) {
   for (const key of ['first_skip_at', 'last_skip_at', 'last_alert_at']) {
     if (!isCanonicalIsoTimestamp(value[key])) return null;
   }
+  // PART C: optional, back-compat with every state file written before this
+  // field existed — absent (old shape) normalizes to null, not a rejection.
+  const lastReasonCode = value.last_reason_code === undefined ? null : value.last_reason_code;
+  if (lastReasonCode !== null && typeof lastReasonCode !== 'string') return null;
   return {
     consecutive_skips: value.consecutive_skips,
     consecutive_unknown: consecutiveUnknown,
     first_skip_at: value.first_skip_at,
     last_skip_at: value.last_skip_at,
     last_alert_at: value.last_alert_at,
+    last_reason_code: lastReasonCode,
   };
 }
 
@@ -328,6 +339,19 @@ function resolveSkipAlertThreshold(value, env = process.env) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_SKIP_ALERT_THRESHOLD;
 }
 
+/**
+ * PART C: the reasonCode of the last row in this batch that carries one
+ * (rows are processed in order; postExtractDetailed sets reasonCode:null on
+ * a real success, per the shape at its two return sites above). Used only to
+ * populate last_reason_code for `auxilo status` — never affects streak logic.
+ */
+function latestReasonCode(rows) {
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    if (rows[i] && typeof rows[i].reasonCode === 'string') return rows[i].reasonCode;
+  }
+  return null;
+}
+
 async function finalizeExtractionRun(outcomes, opts = {}) {
   const rows = Array.isArray(outcomes) ? outcomes.filter(Boolean) : [];
   const state = opts.state
@@ -345,6 +369,7 @@ async function finalizeExtractionRun(outcomes, opts = {}) {
       // The streak resets, but alert delivery remains globally deduplicated
       // for 20h even if a real extraction lands between two skip streaks.
       last_alert_at: state.last_alert_at,
+      last_reason_code: latestReasonCode(rows),
     };
     persistExtractionSkipState(reset, opts);
     return reset;
@@ -360,6 +385,7 @@ async function finalizeExtractionRun(outcomes, opts = {}) {
       ...state,
       // R1: UNKNOWN never increments, resets, or alerts on the auth streak.
       consecutive_unknown: state.consecutive_unknown + 1,
+      last_reason_code: latestReasonCode(rows),
     };
     persistExtractionSkipState(unknown, opts);
     return unknown;
@@ -374,6 +400,7 @@ async function finalizeExtractionRun(outcomes, opts = {}) {
       : timestamp,
     last_skip_at: timestamp,
     last_alert_at: state.last_alert_at,
+    last_reason_code: latestReasonCode(rows),
   };
   const threshold = resolveSkipAlertThreshold(opts.threshold, opts.env || process.env);
   const lastAlertMs = next.last_alert_at ? Date.parse(next.last_alert_at) : NaN;
@@ -557,6 +584,10 @@ async function submitLearnings(learnings, sourceType, opts = {}) {
           submission_channel: 'extraction',
           ...(captureVisibility === 'private' && { visibility: 'private' }),
           ...(l.quality_self_assessment && { quality_self_assessment: l.quality_self_assessment }),
+          // EXTRACT-PER-CLIENT W1 PART C: which provider/model extracted this
+          // learning (extract-local.js attaches it per-learning; absent for
+          // pre-PART-C learnings and for the sourceless direct-submit paths).
+          ...(l.extraction_model && { extraction_model: l.extraction_model }),
         }),
       });
       if (!res.ok) { rejected += 1; continue; }
@@ -1511,6 +1542,7 @@ module.exports = {
   parseArgs, writeQueueFile, deleteQueueFile, listPendingFiles,
   loadLedger, saveLedger, ledgerHighWater, ledgerHas, ledgerMark,
   loadExtractionSkipState, saveExtractionSkipState, finalizeExtractionRun,
+  normalizeExtractionSkipState, zeroExtractionSkipState,
   isSkippedExtraction, recordRealExtractionCompletion, persistRealExtractionCompletion,
   renderExtractionStatus, renderExtractionResult,
   installHooks, installSweeper, installDigest, printStatus, scrubAndVerify, enumerateActiveSources,

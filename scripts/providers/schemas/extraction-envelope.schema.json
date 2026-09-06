@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$comment": "EXTRACT-PER-CLIENT W1 PART B — passed to `codex exec --output-schema` for mode:'extract'. Mirrors scripts/extract-local.js's parseExtractionOutput (line 252) and normalizeLearningArray (line 208, title>=10 chars / body>=50 chars gate at the filter on line ~211-212) exactly as they exist at this wave's base. A bare array of the same learning shape is ALSO accepted by the parser (parseExtractionOutput's Array.isArray(value) branch) — hence the oneOf. This file is a HINT to codex, not the parser: extract-local.js's extractJsonValue + parseExtractionOutput remain the actual source of truth and are model-agnostic already. Keep this file in sync if that shape ever changes; a schema/parser drift fails soft (codex ignores an unmet hint, parseExtractionOutput still runs) rather than throwing.",
+  "oneOf": [
+    { "type": "array", "items": { "$ref": "#/definitions/learning" } },
+    {
+      "type": "object",
+      "properties": {
+        "learnings": { "type": "array", "items": { "$ref": "#/definitions/learning" } },
+        "dedup_drops": { "type": "array", "items": {} }
+      },
+      "required": ["learnings"]
+    }
+  ],
+  "definitions": {
+    "learning": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "minLength": 10 },
+        "body": { "type": "string", "minLength": 50 },
+        "category": {
+          "type": "string",
+          "enum": ["data-processing", "web-interaction", "code-execution", "storage-state", "payment-financial", "monitoring", "non-technical"]
+        },
+        "tags": { "type": "array", "items": { "type": "string" }, "maxItems": 8 },
+        "task_context": { "type": "string" },
+        "outcome": { "type": "string", "enum": ["success", "partial", "failure", "workaround"] },
+        "quality_self_assessment": {
+          "type": "object",
+          "properties": {
+            "specificity": { "type": "integer", "minimum": 1, "maximum": 5 },
+            "actionability": { "type": "integer", "minimum": 1, "maximum": 5 },
+            "novelty": { "type": "integer", "minimum": 1, "maximum": 5 },
+            "completeness": { "type": "integer", "minimum": 1, "maximum": 5 },
+            "total": { "type": "integer" }
+          }
+        }
+      },
+      "required": ["title", "body", "category"]
+    }
+  }
+}

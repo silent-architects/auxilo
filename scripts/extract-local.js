@@ -12,7 +12,6 @@
  * runner no-ops immediately (runner.js checks it). runner.js also sets it in-process
  * before we're called; we set it on the child explicitly as belt-and-suspenders.
  */
-const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -24,6 +23,8 @@ const {
   rankIndexRowsForCandidate,
   estimatePromptTokens,
 } = require('../lib/extraction-index.js');
+const providers = require('./providers/index.js');
+const claudeCodeProvider = require('./providers/claude-code.js');
 
 // CI-5 (PUNCH-LIST §30, 2026-07-19): Auxilo is TECHNICAL-ONLY. The learning
 // taxonomy is these six tech categories; `communication` and `content-generation`
@@ -148,158 +149,10 @@ function buildExtractionPrompt(opts = {}) {
 /** Back-compat export: the default (gate-evaluated-at-call) prompt. */
 const EXTRACTION_PROMPT = buildExtractionPrompt({ scoreExtraction: false });
 
-/** Resolve the `claude` binary — hook/launchd env may have a minimal PATH. */
-function resolveClaudeBin(opts = {}) {
-  const homeDir = typeof opts.homeDir === 'string' ? opts.homeDir : os.homedir();
-  const existsSync = typeof opts.existsSync === 'function' ? opts.existsSync : fs.existsSync;
-  const candidates = [
-    path.join(homeDir, '.claude', 'local', 'claude'),
-    '/usr/local/bin/claude',
-    '/opt/homebrew/bin/claude',
-    path.join(homeDir, '.local', 'bin', 'claude'),
-  ];
-  for (const c of candidates) {
-    try {
-      if (existsSync(c)) return c;
-    } catch (_) { /* ignore */ }
-  }
-  // Absolute launchd fallbacks are absent; let PATH resolve the final option.
-  return 'claude';
-}
-
-/** Build the subscription-auth-only environment shared by Claude CLI children. */
-function claudeChildEnv() {
-  const childEnv = { ...process.env, AUXILO_EXTRACTING: '1' };
-  delete childEnv.ANTHROPIC_API_KEY;
-  return childEnv;
-}
-
-/**
- * Ask Claude Code for its authoritative local auth state. Only the boolean
- * `loggedIn` field is classified; every other outcome is unknown so callers
- * can fall through to the real model invocation as the classifier of record.
- */
-function checkClaudeAuthStatus(opts = {}) {
-  const spawnSyncImpl = typeof opts.spawnSyncImpl === 'function'
-    ? opts.spawnSyncImpl
-    : spawnSync;
-  const bin = typeof opts.claudeBin === 'string'
-    ? opts.claudeBin
-    : resolveClaudeBin();
-  let res;
-  try {
-    res = spawnSyncImpl(bin, ['auth', 'status'], {
-      encoding: 'utf-8',
-      env: claudeChildEnv(),
-      timeout: 5000,
-      maxBuffer: 1024 * 1024,
-    });
-  } catch {
-    return 'unknown';
-  }
-  if (!res || res.error || res.status !== 0) return 'unknown';
-  try {
-    const status = JSON.parse(String(res.stdout || ''));
-    if (!status || typeof status.loggedIn !== 'boolean') return 'unknown';
-    return status.loggedIn ? 'logged-in' : 'logged-out';
-  } catch {
-    return 'unknown';
-  }
-}
-
-/**
- * Invoke the local Claude Code model headlessly (uses the USER's subscription auth).
- * Prompt+transcript go via stdin. Returns { ok, out, reason } plus auth/cause
- * metadata — never throws, so the SessionEnd hook degrades gracefully (the
- * proactive auxilo_contribute path is the reliable primary; this deterministic
- * hook is best-effort).
- */
-function extractWithClaudeCode(transcript, opts = {}) {
-  const spawnSyncImpl = typeof opts.spawnSyncImpl === 'function'
-    ? opts.spawnSyncImpl
-    : spawnSync;
-  const bin = typeof opts.claudeBin === 'string'
-    ? opts.claudeBin
-    : resolveClaudeBin();
-  const authStatus = checkClaudeAuthStatus({ spawnSyncImpl, claudeBin: bin });
-  if (authStatus === 'logged-out') {
-    return {
-      ok: false,
-      out: '',
-      reason: 'local model not authenticated in this context (run `claude auth login` once); skipping deterministic extraction',
-      reasonCode: 'cli-unauthenticated',
-      authStatus,
-    };
-  }
-  const prompt = typeof opts.prompt === 'string'
-    ? opts.prompt
-    : buildExtractionPrompt({
-      previousLessonsSection: opts.previousLessonsSection,
-      captureVisibility: opts.captureVisibility,
-      ...(opts.scoreExtraction !== undefined && { scoreExtraction: opts.scoreExtraction }),
-    });
-  const input = prompt + String(transcript).slice(0, 200000);
-  // Do NOT pass ANTHROPIC_API_KEY through — we want the user's logged-in Claude
-  // subscription (OAuth), not an API key (which would bill someone). Delete it.
-  let res;
-  try {
-    res = spawnSyncImpl(bin, ['-p'], {
-      input,
-      encoding: 'utf-8',
-      env: claudeChildEnv(),
-      timeout: 120000,
-      maxBuffer: 20 * 1024 * 1024,
-    });
-  } catch (error) {
-    return {
-      ok: false,
-      out: '',
-      reason: `spawn failed (${bin}): ${error.message}`,
-      reasonCode: 'unknown',
-      authStatus,
-    };
-  }
-  if (!res) {
-    return {
-      ok: false,
-      out: '',
-      reason: `spawn failed (${bin}): no process result`,
-      reasonCode: 'unknown',
-      authStatus,
-    };
-  }
-  const out = String(res.stdout || '');
-  if (res.error) {
-    return {
-      ok: false,
-      out: '',
-      reason: `spawn failed (${bin}): ${res.error.message}`,
-      reasonCode: 'unknown',
-      authStatus,
-    };
-  }
-  // Claude prints auth failures ("API Error: 401 ... Please run /login") to stdout.
-  if (/Please run \/login|authentication_error|401/i.test(out) || /Please run \/login|authentication_error/i.test(String(res.stderr || ''))) {
-    return {
-      ok: false,
-      out,
-      reason: 'local model not authenticated in this context (run `claude auth login` once); skipping deterministic extraction',
-      reasonCode: 'cli-unauthenticated',
-      authStatus,
-      ...(authStatus === 'logged-in' && { authDiscrepancy: true }),
-    };
-  }
-  if (res.status !== 0) {
-    return {
-      ok: false,
-      out,
-      reason: `local model exited ${res.status}: ${(out || String(res.stderr || '')).slice(0, 160)}`,
-      reasonCode: 'model-error',
-      authStatus,
-    };
-  }
-  return { ok: true, out, reason: null, authStatus };
-}
+// resolveClaudeBin, claudeChildEnv, checkClaudeAuthStatus, extractWithClaudeCode
+// MOVED to scripts/providers/claude-code.js (EXTRACT-PER-CLIENT W1 PART A).
+// Re-exported below (module.exports) from claudeCodeProvider — required because
+// test/ext-0806b-silent-skip.test.js imports them directly from this module.
 
 /**
  * A1: validate a model-emitted quality_self_assessment. Returns the normalized
@@ -523,59 +376,97 @@ ${JSON.stringify(payload)}`;
   return { prompt, rankings };
 }
 
+// invokeJudgeWithClaudeCode MOVED into scripts/providers/claude-code.js's
+// runModel(mode:'judge') (EXTRACT-PER-CLIENT W1 PART A). Not re-exported here —
+// grep confirmed no test imports it directly from this module (no dead surface
+// carried).
+//
+// judgeUsage's Claude/Anthropic-specific summing (input_tokens +
+// cache_creation_input_tokens + cache_read_input_tokens) moved with it, into
+// claude-code.js's normalizeJudgeUsage() — that's the provider-specific half.
+// This slimmer, provider-agnostic remainder is what's left once a provider's
+// runModel already returns usage normalized to {input_tokens, output_tokens}
+// (or null): apply the SAME text-length-estimate fallback the original judgeUsage
+// used, generically, for whichever provider ran.
 function judgeUsage(usage, prompt, completion) {
   const numeric = usage && typeof usage === 'object' ? usage : {};
   const directInput = Number(numeric.input_tokens) || 0;
-  const cacheCreation = Number(numeric.cache_creation_input_tokens) || 0;
-  const cacheRead = Number(numeric.cache_read_input_tokens) || 0;
   const output = Number(numeric.output_tokens) || 0;
   return {
-    prompt_tokens: directInput + cacheCreation + cacheRead ||
-      estimatePromptTokens(prompt),
+    prompt_tokens: directInput || estimatePromptTokens(prompt),
     completion_tokens: output || estimatePromptTokens(completion),
   };
 }
 
-function invokeJudgeWithClaudeCode(prompt) {
-  const bin = resolveClaudeBin();
-  const childEnv = { ...process.env, AUXILO_EXTRACTING: '1' };
-  delete childEnv.ANTHROPIC_API_KEY;
-  const res = spawnSync(
-    bin,
-    ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', ''],
-    {
-      input: prompt,
-      encoding: 'utf8',
-      env: childEnv,
-      timeout: 120000,
-      maxBuffer: 20 * 1024 * 1024,
-    }
-  );
-  const stdout = String(res.stdout || '');
-  if (res.error) {
-    return { ok: false, out: '', reason: `judge spawn failed (${bin}): ${res.error.message}` };
+/**
+ * PART C — resolve the extraction_model identity for a runModel result.
+ * Prefers the additive `identity` field a provider's runModel result may
+ * carry (byo-key.js always sets one: {provider:'byo-key', model, version,
+ * vendor}). claude-code.js/codex-cli.js shipped (PART A/B) before this stamp
+ * existed and don't set one — rather than touch those provider modules
+ * (outside this part's disjoint file scope, AGENTS.md's one-build rule),
+ * this falls back to the resolved provider id alone (model/version/vendor
+ * null) so every provider gets SOME stamp, never silently none. Best-effort:
+ * a resolution failure here must never block extraction itself.
+ */
+async function resolveExtractionModelIdentity(runModelResult, opts) {
+  if (runModelResult && runModelResult.identity && typeof runModelResult.identity === 'object') {
+    return runModelResult.identity;
   }
-  if (/Please run \/login|authentication_error|401/i.test(stdout) ||
-      /Please run \/login|authentication_error/i.test(String(res.stderr || ''))) {
-    return { ok: false, out: '', reason: 'local judge model is not authenticated' };
-  }
-  if (res.status !== 0) {
-    return {
-      ok: false,
-      out: '',
-      reason: `local judge exited ${res.status}: ${(stdout || String(res.stderr || '')).slice(0, 160)}`,
-    };
-  }
-  let wrapper;
   try {
-    wrapper = JSON.parse(stdout);
-  } catch {
-    return { ok: false, out: '', reason: 'local judge returned malformed JSON wrapper' };
-  }
-  if (!wrapper || typeof wrapper.result !== 'string' || wrapper.is_error === true) {
-    return { ok: false, out: '', reason: 'local judge returned no successful result' };
-  }
-  return { ok: true, out: wrapper.result, usage: wrapper.usage || null, reason: null };
+    const resolved = await providers.resolveProvider(opts);
+    if (resolved && resolved.ok && resolved.id) {
+      return { provider: resolved.id, model: null, version: null, vendor: null };
+    }
+  } catch { /* identity is best-effort; never block extraction on it */ }
+  return null;
+}
+
+/**
+ * Default invokeModel (extractLocally) — routes through the resolved provider's
+ * runModel(mode:'extract'), mapped back to the legacy {ok, out, reason,
+ * reasonCode, authStatus} shape extractLocally's caller already expects. opts
+ * (spawnSyncImpl/claudeBin/etc.) thread straight through so the injection
+ * pattern used by every extractLocally test still works when a test exercises
+ * this default path instead of supplying its own opts.invokeModel.
+ */
+async function defaultInvokeModel(transcript, invokeOpts, opts) {
+  const result = await providers.runModel({
+    ...opts,
+    prompt: invokeOpts.prompt,
+    input: transcript,
+    timeoutMs: 120000,
+    log: opts.log,
+    mode: 'extract',
+  });
+  return {
+    ok: result.ok,
+    out: result.text,
+    reason: result.reason,
+    reasonCode: result.reasonCode,
+    authStatus: result.authStatus,
+    extractionModel: await resolveExtractionModelIdentity(result, opts),
+    ...(result.authDiscrepancy !== undefined && { authDiscrepancy: result.authDiscrepancy }),
+  };
+}
+
+/**
+ * Default invokeJudge (runAnchoredJudge) — routes through the resolved
+ * provider's runModel(mode:'judge'), mapped back to the legacy {ok, out, usage,
+ * reason} shape runAnchoredJudge already consumes. Same opts thread-through as
+ * defaultInvokeModel above.
+ */
+function defaultInvokeJudge(opts) {
+  return async (prompt) => {
+    const result = await providers.runModel({
+      ...opts,
+      prompt,
+      timeoutMs: 120000,
+      log: opts.log,
+      mode: 'judge',
+    });
+    return { ok: result.ok, out: result.text, usage: result.usage, reason: result.reason };
+  };
 }
 
 function parseJudgeDecisions(raw, candidates, rankings) {
@@ -630,7 +521,7 @@ async function runAnchoredJudge(candidates, indexState, opts = {}) {
   if (rankings.some((rows) => rows.length === 0)) return empty;
   const invokeJudge = typeof opts.invokeJudge === 'function'
     ? opts.invokeJudge
-    : invokeJudgeWithClaudeCode;
+    : defaultInvokeJudge(opts);
   let result;
   try {
     result = await invokeJudge(prompt, { candidates: input, rankings });
@@ -765,7 +656,7 @@ async function extractLocally(transcript, sourceType, opts = {}) {
   });
   const invokeModel = typeof opts.invokeModel === 'function'
     ? opts.invokeModel
-    : (text, invokeOpts) => extractWithClaudeCode(text, invokeOpts);
+    : (text, invokeOpts) => defaultInvokeModel(text, invokeOpts, opts);
   const modelResult = await invokeModel(transcript, { prompt });
   const { ok, out, reason } = modelResult;
   if (!ok) {
@@ -779,13 +670,21 @@ async function extractLocally(transcript, sourceType, opts = {}) {
       }),
     };
   }
+  // PART C: which provider/model actually ran this extraction, stamped onto
+  // every learning it produces (below). Absent when the caller supplied its
+  // own opts.invokeModel that doesn't report one (every existing test does
+  // this) — extraction_model then simply never appears, byte-identical to
+  // pre-PART-C behavior.
+  const extractionModel = modelResult.extractionModel || null;
   const parsed = parseExtractionOutput(out, opts);
   const promptDropResult = applyPromptMemoryDrops(
     parsed.prompt_drops,
     promptMemory,
     opts
   );
-  const candidates = [...parsed.learnings, ...promptDropResult.restored];
+  const candidates = [...parsed.learnings, ...promptDropResult.restored].map((l) => (
+    extractionModel ? { ...l, extraction_model: extractionModel } : l
+  ));
 
   // Re-read immediately before the lexical filter. If the index is deleted,
   // becomes unreadable, or is corrupted while the model runs, the filter is
@@ -840,11 +739,18 @@ async function extractLocally(transcript, sourceType, opts = {}) {
 }
 
 module.exports = {
-  extractLocally, extractWithClaudeCode, checkClaudeAuthStatus, EXTRACTABLE_SOURCES, EXTRACTABLE_SOURCE_IDS,
-  parseLearnings, parseExtractionOutput, resolveClaudeBin,
+  extractLocally, EXTRACTABLE_SOURCES, EXTRACTABLE_SOURCE_IDS,
+  parseLearnings, parseExtractionOutput,
   CATEGORIES, PRIVATE_CATEGORIES, RETIRED_CATEGORIES,
   EXTRACTION_PROMPT, buildExtractionPrompt, scoreExtractionEnabled,
   validateQualityAssessment, QUALITY_DIMENSIONS,
   buildAnchoredJudgePrompt, parseJudgeDecisions, runAnchoredJudge,
-  recordDropAudit, invokeJudgeWithClaudeCode, JUDGE_TOP_K,
+  recordDropAudit, JUDGE_TOP_K,
+  // Re-exported from scripts/providers/claude-code.js (moved there in PART A) —
+  // kept here ONLY because test/ext-0806b-silent-skip.test.js imports these
+  // three directly from this module (grep-confirmed; invokeJudgeWithClaudeCode
+  // and judgeUsage had no such importer and are NOT carried forward).
+  extractWithClaudeCode: claudeCodeProvider.extractWithClaudeCode,
+  checkClaudeAuthStatus: claudeCodeProvider.checkClaudeAuthStatus,
+  resolveClaudeBin: claudeCodeProvider.resolveClaudeBin,
 };

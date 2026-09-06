@@ -18,6 +18,8 @@ const ZERO_STATE = {
   first_skip_at: null,
   last_skip_at: null,
   last_alert_at: null,
+  // EXTRACT-PER-CLIENT W1 PART C: last_reason_code, additive to this shape.
+  last_reason_code: null,
 };
 const SKIP_RESULT = {
   learnings_published: 0,
@@ -161,7 +163,12 @@ describe('EXT-0806b Claude auth and cause classification', () => {
     });
     assert.equal(completed.ok, true);
     assert.equal(completed.authStatus, 'unknown');
-    assert.deepEqual(unknown.calls.map((call) => call.args), [['auth', 'status'], ['-p']]);
+    // EXTRACT-TOOLS-LOCK (PUNCH-LIST): the extraction spawn now carries
+    // '--tools',''  — the same tool-lock the dedup judge always had — so the
+    // stdin-fed model can't reach outside the transcript it was given.
+    // EXTRACT-PER-CLIENT W1 FIX GIVENS: it also carries
+    // '--no-session-persistence', matching the judge spawn.
+    assert.deepEqual(unknown.calls.map((call) => call.args), [['auth', 'status'], ['-p', '--no-session-persistence', '--tools', '']]);
   });
 
   it('maps auth regex, non-zero model exit, and spawn failure to the exact three reason codes', () => {
@@ -328,6 +335,9 @@ describe('EXT-0806b persistent once-per-run state and alerting', () => {
       assert.deepEqual(state, {
         ...ZERO_STATE,
         last_alert_at: '2026-08-29T00:00:00.000Z',
+        // PART C: a real success carries no reasonCode (null); a real
+        // model-error carries its own reasonCode through the reset.
+        last_reason_code: outcome.reasonCode || null,
       });
     }
   });
@@ -350,7 +360,7 @@ describe('EXT-0806b persistent once-per-run state and alerting', () => {
       sendOpsAlert: async (...args) => alerts.push(args),
       log: () => {},
     });
-    assert.deepEqual(state, { ...original, consecutive_unknown: 1 });
+    assert.deepEqual(state, { ...original, consecutive_unknown: 1, last_reason_code: 'unknown' });
     assert.deepEqual(JSON.parse(fs.readFileSync(statePath, 'utf8')), state);
     const second = await finalize([skipOutcome('unknown')], {
       statePath,
