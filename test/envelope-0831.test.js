@@ -880,7 +880,7 @@ describe('ENVELOPE-0831 staged live response envelopes', { timeout: 180_000 }, (
 });
 
 describe('ENVELOPE-0831 OpenAPI truth', () => {
-  it('omits buyer and public per-item earnings fields, documents owner by-learning detail, and holds version 0.9.11', () => {
+  it('omits buyer and public per-item earnings fields, documents owner by-learning detail, and holds version 0.9.12', () => {
     const fullProperties = OPENAPI.components.schemas.LearningFull.properties;
     assertFieldsAbsent(fullProperties, OWNER_ONLY_FIELDS, 'LearningFull schema');
 
@@ -900,6 +900,6 @@ describe('ENVELOPE-0831 OpenAPI truth', () => {
       { bearerAuth: [] },
       { apiKeyAuth: [] },
     ]);
-    assert.equal(OPENAPI.info.version, '0.9.11');
+    assert.equal(OPENAPI.info.version, '0.9.12');
   });
 });
