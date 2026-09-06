@@ -154,7 +154,19 @@ function managedSettingsPathForPlatform(opts) {
   // otherwise names a fixed, real, OS-level location no test should touch).
   if (typeof opts.managedSettingsPath === 'string') return opts.managedSettingsPath;
   const platform = typeof opts.platform === 'string' ? opts.platform : process.platform;
-  return MANAGED_SETTINGS_PATH_BY_PLATFORM[platform] || MANAGED_SETTINGS_PATH_BY_PLATFORM.linux;
+  // EXTRACTION-LOW-FOLLOWUPS item 1: a raw `[platform]` index is reachable
+  // (only via the test seam opts.platform, per the row) with a prototype key
+  // ('constructor', 'toString', '__proto__', …) and would return a truthy
+  // Object.prototype value instead of falling through to the Linux default —
+  // fails OPEN with a bogus path silently in place of the real managed-
+  // settings check. hasOwnProperty scopes the lookup to the object's own
+  // enumerable keys, mirroring the guard at scripts/providers/index.js:139,
+  // so an unknown or prototype-polluting key falls CLOSED to the Linux path
+  // exactly like any other unrecognized platform string does today.
+  if (Object.prototype.hasOwnProperty.call(MANAGED_SETTINGS_PATH_BY_PLATFORM, platform)) {
+    return MANAGED_SETTINGS_PATH_BY_PLATFORM[platform];
+  }
+  return MANAGED_SETTINGS_PATH_BY_PLATFORM.linux;
 }
 
 /**
@@ -167,7 +179,7 @@ function managedSettingsPathForPlatform(opts) {
  * that matches Claude Code's own behavior for those files, which this
  * managed path does not share.)
  */
-function managedSettingsBlocksOrUnverifiable(filePath, existsSyncImpl, readFileSyncImpl) {
+function managedSettingsBlocksOrUnverifiable(filePath, existsSyncImpl, readFileSyncImpl, log) {
   let exists;
   try {
     exists = existsSyncImpl(filePath);
@@ -176,7 +188,17 @@ function managedSettingsBlocksOrUnverifiable(filePath, existsSyncImpl, readFileS
   }
   if (!exists) return false;
   const parsed = readJsonSafe(filePath, readFileSyncImpl);
-  if (parsed === null) return true; // present but unreadable/unparseable — fail closed
+  if (parsed === null) {
+    // EXTRACTION-LOW-FOLLOWUPS item 3: this fail-closed branch silently
+    // switches the builder away from claude-code (reasonCode
+    // 'cli-billing-helper-configured', same as a real detected helper) with
+    // no visible signal that the cause was an UNVERIFIABLE managed-settings
+    // file rather than an actual foreign-billing helper. One stderr line
+    // naming the reason code — never the file's contents or any key
+    // material, both of which stay out of every log call in this module.
+    log('[providers] managed-settings.json is present but unreadable/unparseable; failing closed and switching away from claude-code (reasonCode cli-billing-helper-configured)');
+    return true; // present but unreadable/unparseable — fail closed
+  }
   return settingsHasBillingHelper(parsed);
 }
 
@@ -195,8 +217,9 @@ function detectBillingHelperConfigured(opts = {}) {
   const existsSyncImpl = typeof opts.existsSyncImpl === 'function' ? opts.existsSyncImpl : fs.existsSync;
   const homeDir = typeof opts.homeDir === 'string' ? opts.homeDir : os.homedir();
   const cwd = typeof opts.cwd === 'string' ? opts.cwd : process.cwd();
+  const log = typeof opts.log === 'function' ? opts.log : console.error;
 
-  if (managedSettingsBlocksOrUnverifiable(managedSettingsPathForPlatform(opts), existsSyncImpl, readFileSyncImpl)) {
+  if (managedSettingsBlocksOrUnverifiable(managedSettingsPathForPlatform(opts), existsSyncImpl, readFileSyncImpl, log)) {
     return true;
   }
 
