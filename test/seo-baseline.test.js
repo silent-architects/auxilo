@@ -411,7 +411,7 @@ describe('Hero wave (AD-STRINGS-PACKET-12 rev 3a): H1 B, title/og/twitter, meta 
     assert.ok(h2Match, 'h2 found');
     assert.ok(!/style=/.test(h2Match[0]), 'h2 carries no inline style (uses the default section h2 size)');
     assert.ok(
-      section.includes('<h2 id="learning-explainer-heading">What a learning is, and why another agent would use it</h2>'),
+      section.includes('<h2 id="learning-explainer-heading">What a Learning Is, and Why Another Agent Would Use It</h2>'),
       'h2 text verbatim'
     );
   });

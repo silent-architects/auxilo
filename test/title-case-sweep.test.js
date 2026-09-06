@@ -9,14 +9,17 @@
  * 8-row inventory (taken at origin/main 7d2ce8f) plus its "Exceptions and
  * touches for the builder" section, which overrides three of those rows.
  *
- * public/index.html is excluded from this whole sweep (a parallel hero
- * builder owns it) and from every check below.
+ * public/index.html is excluded from part A (a parallel hero builder owns
+ * it; none of the 8 inventory rows touch it) but IS included in part B's
+ * mechanical guard as of the 2026-09-06 h2 fix (learning-explainer-heading),
+ * once its headings were verified to pass the check (H1 stays exempt, it
+ * ends in a period; every other h1-h3 on the page is Title Case-compliant).
  *
  * This file has three parts:
  *   A. Per-row assertions — each applied inventory row now reads its NEW
  *      string verbatim, and the OLD string is gone from that page.
  *   B. A mechanical convention guard across every h1-h3 on every tracked
- *      page except index.html: any heading NOT ending in . ? or ! must
+ *      page, including index.html: any heading NOT ending in . ? or ! must
  *      either satisfy the small-word Title Case rule (capitalize first and
  *      last word and every other word except a/an/the/and/but/or/for/nor/
  *      at/by/in/of/on/to/up/as/vs/via/per when they fall mid-heading; a
@@ -134,11 +137,10 @@ const SMALL_WORDS = new Set([
   'of', 'on', 'to', 'up', 'as', 'vs', 'via', 'per',
 ]);
 
-// Tracked public/ pages except index.html (parallel hero builder owns it).
+// Tracked public/ pages, including index.html (verified passing 2026-09-06).
 const SWEPT_FILES = execFileSync('git', ['ls-files', 'public/'], { cwd: REPO_ROOT, encoding: 'utf8' })
   .split('\n')
-  .filter((f) => f.endsWith('.html'))
-  .filter((f) => f !== 'public/index.html');
+  .filter((f) => f.endsWith('.html'));
 
 // Headings this sweep found and deliberately left untouched, with why.
 // Keyed by "file|||exact heading text". A text change here means the
@@ -229,7 +231,7 @@ function extractHeadings(content) {
   return out;
 }
 
-describe('TITLE-CASE-SWEEP part B: no undocumented small-word-convention violation among swept headings (index.html excluded)', () => {
+describe('TITLE-CASE-SWEEP part B: no undocumented small-word-convention violation among swept headings (index.html included)', () => {
   for (const file of SWEPT_FILES) {
     it(`${file}: every non-period h1-h3 is Title Case or a documented exception`, () => {
       const content = read(file);
