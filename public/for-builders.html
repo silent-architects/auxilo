@@ -739,11 +739,17 @@
     <!-- Ledger strip (AD strings packet 1, Sheet 4). Ships COUNT-ONLY until
          TECH-PM reconciles the store: the contributors, unlocks, and money cells
          are HELD. The count renders live at serve time via renderLiveCatalogStats
-         (id="lc-learnings", fails open to the static value below). -->
+         (the lc-learnings span, fails open to the static value below). The as-of
+         line (the lc-asof span, AD strings packet 3 §4) is server-rendered from the
+         same stats computation; it ships EMPTY here and stays empty on the
+         renderer's fail path — never a baked or default date. Do not write a
+         literal id="lc-…" attribute inside this comment: the renderer's regex
+         would match the comment and inject the value as stray page text. -->
     <div class="builders-hero-stats reveal" style="justify-content:center;margin-bottom:24px;">
       <div class="builders-hero-stat" style="align-items:center;text-align:center;">
         <span class="stat-num pull-stat-num" id="lc-learnings">226</span>
         <span class="stat-label pull-stat-caption">learnings in the catalog</span>
+        <span id="lc-asof"></span>
       </div>
     </div>
     <p class="reveal" style="text-align:center;color:var(--slate);line-height:1.7;">Supply is ahead of demand.</p>
