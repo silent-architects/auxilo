@@ -357,7 +357,7 @@ All transactions on the Platform are final. Consumed credits, completed unlock t
 - Queries or searches that return no results.
 - Duplicate purchases made in error.
 
-If you believe a transaction was made due to a Platform error or involved fraudulent activity on our end, contact us at hello@auxilo.io. We will review the matter on a case-by-case basis, but we are under no obligation to issue a refund.
+If you believe a transaction was made due to a Platform error or involved fraudulent activity on our end, contact us at support@auxilo.io. We will review the matter on a case-by-case basis, but we are under no obligation to issue a refund.
 
 ### 7.4 Blockchain Transactions
 

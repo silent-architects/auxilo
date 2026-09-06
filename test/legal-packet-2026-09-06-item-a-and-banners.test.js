@@ -62,4 +62,17 @@ describe('Legal Packet 2026-09-06: Item A (Privacy §7.5) + Terms banner lines c
       assert.match(line[0].trim(), shape, `banner line for ${id} follows the shared sentence form`);
     }
   });
+
+  it('§7.3 dispute contact reads support@auxilo.io (GOV-2 confirmed), the old hello@ sentence is gone', () => {
+    assert.equal(
+      (TOS.match(/If you believe a transaction was made due to a Platform error or involved fraudulent activity on our end, contact us at hello@auxilo\.io\./g) || []).length,
+      0,
+      'old §7.3 hello@ sentence must be gone (positive control: 1 before, 0 after)'
+    );
+    assert.equal(
+      (TOS.match(/If you believe a transaction was made due to a Platform error or involved fraudulent activity on our end, contact us at support@auxilo\.io\./g) || []).length,
+      1,
+      'new §7.3 sentence must carry support@auxilo.io exactly once'
+    );
+  });
 });
