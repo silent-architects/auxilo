@@ -6086,8 +6086,27 @@ app.post('/learn', async (c) => {
 
   const { title, body: rawContent, category, tags, task_context, outcome,
     contributor_wallet, contributor_agent, related_skills, unlock_price,
-    quality_self_assessment, extraction_context, submission_channel, visibility } = body;
+    quality_self_assessment, extraction_context, submission_channel, visibility,
+    extraction_model } = body;
   const destinationVisibility = visibility === undefined ? 'public' : visibility;
+
+  // EXTRACT-PER-CLIENT W1 PART C: additive, optional, tolerant intake — a
+  // malformed extraction_model is treated as ABSENT, never a 400 (matches
+  // this route's existing style for quality_self_assessment/extraction_context).
+  // Bounded string lengths so a hostile client can't stuff an oversized value
+  // into a stored field. provider/model/version/vendor are the only shape.
+  function normalizeExtractionModel(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    if (typeof value.provider !== 'string' || !value.provider) return null;
+    const boundedString = (v, max) => (typeof v === 'string' ? v.slice(0, max) : null);
+    return {
+      provider: boundedString(value.provider, 64),
+      model: boundedString(value.model, 256),
+      version: boundedString(value.version, 128),
+      vendor: boundedString(value.vendor, 64),
+    };
+  }
+  const extractionModel = normalizeExtractionModel(extraction_model);
 
   // SPEC3 B1: client-asserted submission channel — enum direct|extraction,
   // default AND unknown → 'direct' (today's path; a typo'd client must degrade
@@ -6556,6 +6575,7 @@ app.post('/learn', async (c) => {
       consentState: laneState,
       qualityTotal: quality_self_assessment.total,
       accountSuspended: !!(laneAccount && laneAccount.disabled_at),
+      extractionModel,
     });
     if (laneVerdict.decision === 'auto_publish') {
       // Retraction-rate auto-freeze guardrail (SPEC3 §7): checked BEFORE every
@@ -6651,6 +6671,10 @@ app.post('/learn', async (c) => {
     submission_channel: submissionChannel,
     ...(quality_self_assessment && { quality_self_assessment }),
     ...(extraction_context && { extraction_context }),
+    // EXTRACT-PER-CLIENT W1 PART C: which provider/model extracted this
+    // learning — owner-only provenance (stripOwnerOnlyFields strips it from
+    // every buyer-facing envelope below).
+    ...(extractionModel && { extraction_model: extractionModel }),
     // SPEC3 C1: standing-consent publish stamps (audit parity with the
     // chat-pipeline's published_via stamps) + the 7-day retraction deadline.
     ...(cleanLanePublish && {
@@ -8263,6 +8287,9 @@ app.get('/account/learnings', requireSessionOrApiKey('read'), (c) => {
         standing_consent_version: learning.standing_consent_version,
       }),
       ...(learning.retractable_until != null && { retractable_until: learning.retractable_until }),
+      // EXTRACT-PER-CLIENT W1 PART C: owner-only provenance — which
+      // provider/model extracted this learning, when known.
+      ...(learning.extraction_model != null && { extraction_model: learning.extraction_model }),
     }));
 
   if (rawSort === 'desc') {
@@ -8622,6 +8649,9 @@ function stripOwnerOnlyFields(learning) {
     earnings: _earnings,
     quality_self_assessment: _qualitySelfAssessment,
     contributor_account_id: _contributorAccountId,
+    // EXTRACT-PER-CLIENT W1 PART C: which provider/model extracted this
+    // learning is owner-only provenance, never a buyer-facing field.
+    extraction_model: _extractionModel,
     ...buyerLearning
   } = learning;
   return buyerLearning;

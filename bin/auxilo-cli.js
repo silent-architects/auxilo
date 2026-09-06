@@ -22,6 +22,7 @@ const { exec } = require('child_process');
 const installer = require('../lib/installer.js');
 const review = require('../lib/review.js');
 const providers = require('../scripts/providers/index.js');
+const byoKeyProvider = require('../scripts/providers/byo-key.js');
 
 const HOME = os.homedir();
 
@@ -81,6 +82,50 @@ async function askYesNo(question, defaultYes = false) {
   const answer = (await ask(question + suffix)).toLowerCase();
   if (answer === '') return defaultYes;
   return answer === 'y' || answer === 'yes';
+}
+
+/**
+ * Hidden-input prompt (PART C, `auxilo provider set`'s key entry) — the
+ * typed key is never echoed to the terminal. Reuses the SAME shared
+ * readline interface / line-buffering scheme as `ask()` (LW-17: a second
+ * independent readline interface loses whatever the first already buffered
+ * on piped stdin), and suppresses only the per-keystroke echo `_writeToOutput`
+ * would otherwise perform — the question text itself is written directly,
+ * and the terminating newline is always passed through so the cursor
+ * advances normally. `_writeToOutput` is an internal Node readline hook (not
+ * a documented public API) — the same technique widely used before a
+ * dedicated password-prompt package existed; degrades safely to a normal
+ * (echoed) prompt on any Node build where the hook is absent.
+ */
+function askHidden(question) {
+  const rl = getRl();
+  process.stdout.write(question);
+  let restore = () => {};
+  if (process.stdin.isTTY && typeof rl._writeToOutput === 'function') {
+    const original = rl._writeToOutput.bind(rl);
+    rl._writeToOutput = (stringToWrite) => {
+      if (stringToWrite === '\r\n' || stringToWrite === '\n' || stringToWrite === '\r') {
+        original(stringToWrite);
+      }
+      // else: swallow the echoed keystroke.
+    };
+    restore = () => { rl._writeToOutput = original; };
+  }
+  if (bufferedLines.length > 0) {
+    const line = bufferedLines.shift();
+    restore();
+    return Promise.resolve(line);
+  }
+  if (readlineEnded) {
+    restore();
+    return Promise.resolve('');
+  }
+  return new Promise((resolve) => {
+    lineWaiters.push((answer) => {
+      restore();
+      resolve(answer);
+    });
+  });
 }
 
 function openBrowser(url) {
@@ -499,6 +544,15 @@ async function cmdStatus() {
     if (line) console.log(line);
   }
   console.log(extractionProviderLine(await providers.resolveProvider({})));
+  // Lazy require: scripts/runner.js is a heavier module (sources, sensitivity
+  // filter, ops-alert) than this one status line needs at require-time for
+  // every CLI invocation.
+  let skipState = null;
+  try {
+    skipState = require('../scripts/runner.js').loadExtractionSkipState();
+  } catch { /* status must never throw on a missing/corrupt skip-state file */ }
+  const skipLine = extractionSkipReasonLine(skipState);
+  if (skipLine) console.log(skipLine);
   console.log(`SessionEnd hook: ${s.hookInstalled ? 'installed' : 'not installed'}${s.hookRegistered ? ', registered in Claude Code settings' : ''}`);
   for (const c of s.clients.filter((c) => c.captureHook)) {
     console.log(`Capture hooks: ${c.name} (${c.captureEvent}, ${c.captureRegistered ? 'registered' : 'not registered'})`);
@@ -519,25 +573,55 @@ function runnerSkewLine(skew) {
 }
 
 /**
- * EXTRACT-PER-CLIENT W1 PART A — one unconditional line naming which extraction
- * model provider resolves, and why (env override vs auto-detected). The
- * companion conditional line (printed only when the last recorded extraction
- * skip reasonCode is cli-billing-helper-configured/cli-unauthenticated/
- * no-model-provider-available, per the spec's item 10) needs a
- * `last_reason_code` field added to runner.js's extraction skip-state schema
- * (normalizeExtractionSkipState/zeroExtractionSkipState) — scripts/runner.js is
- * outside PART A's touched-file scope, so that half is NOT implemented here;
- * flagged for the PM to route (extend PART A's scope or a follow-up part).
+ * Mirrors lib/clean-lane.js's CLEAN_LANE_CALIBRATED_PROVIDERS — that module
+ * is server-side and not in the published package's files[] (same reason
+ * CLEAN_LANE_AFFIRMATION below is a literal mirror, not an import; see
+ * test/clean-lane-phase-a.test.js's "the CLI must not require the unshipped
+ * server module" pin). test/clean-lane-calibration.test.js pins the two
+ * arrays equal.
+ */
+const CLI_CLEAN_LANE_CALIBRATED_PROVIDERS = ['claude-code'];
+
+/**
+ * EXTRACT-PER-CLIENT W1 PART A/C — one unconditional line naming which
+ * extraction model provider resolves, why (env override vs auto-detected),
+ * and (PART C) whether that provider's submissions can reach the clean-lane
+ * auto-publish path at all (server-side gate: lib/clean-lane.js's
+ * CLEAN_LANE_CALIBRATED_PROVIDERS, mirrored above).
  */
 function extractionProviderLine(resolution) {
   if (resolution && resolution.ok) {
     const via = process.env.AUXILO_EXTRACTION_PROVIDER
       ? 'env override AUXILO_EXTRACTION_PROVIDER'
       : 'auto-detected';
-    return `Extraction model provider: ${resolution.id} (${via})`;
+    const calibration = CLI_CLEAN_LANE_CALIBRATED_PROVIDERS.includes(resolution.id)
+      ? 'clean-lane calibrated'
+      : 'review-lane only';
+    return `Extraction model provider: ${resolution.id} (${via}, ${calibration})`;
   }
   const reason = (resolution && resolution.reason) || 'no provider available';
   return `Extraction model provider: none (${reason})`;
+}
+
+/**
+ * EXTRACT-PER-CLIENT W1 PART C — the companion conditional line PART A left
+ * unimplemented (see its report): printed ONLY when the last recorded
+ * extraction skip reasonCode (runner.js's normalizeExtractionSkipState,
+ * last_reason_code field, added in this part) is one of the three the spec
+ * names; null (nothing printed) for every other state, including "no state
+ * file yet" and "last outcome was a real success."
+ */
+const STATUS_WORTHY_SKIP_REASON_CODES = Object.freeze([
+  'cli-billing-helper-configured',
+  'cli-unauthenticated',
+  'no-model-provider-available',
+]);
+
+/** Pure render, mirroring runnerSkewLine(skew) above — the caller loads the
+ * state; this only decides whether/what to print. */
+function extractionSkipReasonLine(state) {
+  if (!state || !STATUS_WORTHY_SKIP_REASON_CODES.includes(state.last_reason_code)) return null;
+  return `  ⚠ Last extraction attempt: ${state.last_reason_code}`;
 }
 
 // ─── auxilo disable ─────────────────────────────────────────────────────────
@@ -917,6 +1001,18 @@ async function cmdReview(flags) {
 // byte-equal. The consent VERSION is never a client literal — it always comes
 // from GET /account/clean-lane (consent_version_current).
 const CLEAN_LANE_AFFIRMATION = 'I understand and choose auto-publish for qualifying extracted learnings.';
+
+/**
+ * EXTRACT-PER-CLIENT W1 PART C — `auxilo provider set`'s consent sentence.
+ * A SITE-PM string slot: this build ships it EMPTY on purpose.
+ * `cmdProvider('set')` refuses to run at all (reasonCode
+ * 'consent-sentence-missing') while it is empty — see the test asserting
+ * that refusal. When SITE-PM writes the real sentence it must state, at
+ * minimum: this is the builder's OWN key, Auxilo never bills it, and name
+ * the file written (~/.auxilo/providers.json) and which outside provider
+ * gets called with it. Not drafted here — see the build report.
+ */
+const PROVIDER_KEY_CONSENT_SENTENCE = '';
 const CLEAN_LANE_UNAVAILABLE = 'Auto-publish for clean learnings is not yet available on this account.';
 // CLEAN-LANE-FLIP Phase B (legal; DRAFT pending Tyler): the full text of ToS
 // §5.9.3(g) (plus its ratchet paragraph) prints ABOVE the affirmation prompt —
@@ -1131,6 +1227,103 @@ async function cmdCleanLane(flags) {
   console.log('  Turn it off any time: npx auxilo clean-lane revoke');
 }
 
+// ─── auxilo provider (EXTRACT-PER-CLIENT W1 PART C: BYO provider key) ───────
+//
+// Mirrors cmdCleanLane's grant discipline exactly: `set` runs ONLY on a TTY,
+// refuses piped input, and requires typing the consent sentence verbatim —
+// no confirmation flag, no bypass. Unlike clean-lane, nothing here ever reaches
+// the Auxilo server: the key is the builder's own, read from a hidden
+// prompt (never argv, never env), and written straight to
+// ~/.auxilo/providers.json (0600) via scripts/providers/byo-key.js.
+//
+// PROVIDER_KEY_CONSENT_SENTENCE is a SITE-PM string slot (see the module
+// comment on its declaration below) — `set` refuses to run at all while it
+// is empty, with reasonCode 'consent-sentence-missing'. This keeps the path
+// disabled end-to-end until that copy is written, rather than shipping a
+// silent placeholder sentence nobody actually reviewed.
+const PROVIDER_VENDORS = ['openai', 'anthropic', 'gemini'];
+
+async function cmdProvider(flags) {
+  const sub = process.argv[3];
+  if (!['status', 'set', 'clear'].includes(sub)) {
+    if (sub) console.error(`Unknown provider subcommand: ${sub}`);
+    usage('provider');
+    process.exit(sub ? 1 : 0);
+  }
+
+  if (sub === 'status') {
+    const config = byoKeyProvider.readByoConfig();
+    if (!config) {
+      console.log('BYO provider key: none configured');
+      return;
+    }
+    console.log(`BYO provider key: configured (vendor: ${config.provider}, model: ${config.model}, key: present)`);
+    return;
+  }
+
+  if (sub === 'clear') {
+    const removed = byoKeyProvider.clearProvidersFile();
+    console.log(removed
+      ? '✓ ~/.auxilo/providers.json removed.'
+      : '✓ Nothing to remove (no providers.json present).');
+    return;
+  }
+
+  // sub === 'set' below.
+  if (PROVIDER_KEY_CONSENT_SENTENCE === '') {
+    console.error('auxilo provider set is not available yet: the operator has not configured the consent sentence for this build (reasonCode: consent-sentence-missing).');
+    process.exit(1);
+  }
+
+  // The TTY gate runs BEFORE any prompt: a piped or scripted stdin can never
+  // reach the hidden key prompt or the typed affirmation.
+  if (!process.stdin.isTTY) {
+    console.error('auxilo provider set must be run by a person in an interactive terminal. It does not accept piped input, and there is no flag that skips typing the consent sentence or the key.');
+    process.exit(1);
+  }
+
+  let vendor = String(flags.vendor || '').toLowerCase();
+  while (!PROVIDER_VENDORS.includes(vendor)) {
+    vendor = (await ask(`Vendor [${PROVIDER_VENDORS.join('|')}]: `)).toLowerCase();
+    if (readlineEnded) { console.log('Aborted. Nothing changed.'); return; }
+  }
+
+  let baseUrl = flags['base-url'] ? String(flags['base-url']) : '';
+  if (!baseUrl) {
+    baseUrl = await ask(`Base URL (optional — press Enter for the ${vendor} default): `);
+    if (readlineEnded) { console.log('Aborted. Nothing changed.'); return; }
+  }
+
+  let model = flags.model ? String(flags.model) : '';
+  while (!model) {
+    model = await ask('Model (e.g. gpt-4o-mini, claude-sonnet-4-5, gemini-2.5-flash): ');
+    if (readlineEnded) { console.log('Aborted. Nothing changed.'); return; }
+  }
+
+  console.log(`\n${PROVIDER_KEY_CONSENT_SENTENCE}\n`);
+  console.log('To continue, type this sentence exactly as written, then press Enter:');
+  console.log(`\n  ${PROVIDER_KEY_CONSENT_SENTENCE}\n`);
+  const typed = await ask('> ');
+  if (typed !== PROVIDER_KEY_CONSENT_SENTENCE) {
+    console.log('The sentence did not match. Aborted. Nothing changed.');
+    return;
+  }
+
+  const apiKey = await askHidden('API key (input hidden): ');
+  if (readlineEnded || !apiKey) {
+    console.log('Aborted. Nothing changed.');
+    return;
+  }
+
+  const written = byoKeyProvider.writeByoConfig({
+    provider: vendor,
+    ...(baseUrl && { base_url: baseUrl }),
+    model,
+    api_key: apiKey,
+  });
+  console.log(`\n✓ Saved to ${written} (mode 0600). This machine will use your own ${vendor} key for extraction when no earlier provider in the order is available.`);
+}
+
 // ─── Entry point ────────────────────────────────────────────────────────────
 
 function usage(command) {
@@ -1186,6 +1379,17 @@ available on your account every subcommand says so and changes nothing.
            this for you.
   revoke   Turn it off (one step, no confirmation). Already-published
            learnings keep their 7-day retraction window.`,
+    provider: `Usage: auxilo provider <status|set|clear>
+
+Configure a bring-your-own (BYO) model provider key for local extraction —
+used only when no earlier provider in the fixed order (claude-code,
+codex-cli) is available. Auxilo never sees or bills this key.
+
+  status   Show the configured vendor and model (never the key itself).
+  set      Configure a vendor, model, and key. Interactive ONLY: the key is
+           read from a hidden prompt (never a flag, never an env var), and
+           you must type the consent sentence exactly. No flag skips this.
+  clear    Delete ~/.auxilo/providers.json.`,
   };
   if (command && blocks[command]) {
     console.log(`\n${blocks[command]}\n`);
@@ -1237,6 +1441,10 @@ Commands:
   clean-lane <status|grant|revoke>
             Auto-publish clean learnings (standing consent). grant is
             interactive only: you type the consent sentence yourself.
+  provider <status|set|clear>
+            Configure a bring-your-own model provider key for local
+            extraction. set is interactive only: hidden key prompt, typed
+            consent sentence.
 
 Docs: https://auxilo.io · API: ${installer.DEFAULT_BASE_URL}
 `);
@@ -1245,7 +1453,7 @@ Docs: https://auxilo.io · API: ${installer.DEFAULT_BASE_URL}
 async function main() {
   const cmd = process.argv[2];
   const subcommandHelp = ['help', '--help', '-h'].includes(process.argv[3]);
-  if (['setup', 'init', 'status', 'review', 'disable', 'clean-lane'].includes(cmd) && subcommandHelp) {
+  if (['setup', 'init', 'status', 'review', 'disable', 'clean-lane', 'provider'].includes(cmd) && subcommandHelp) {
     return usage(cmd);
   }
   const flags = parseFlags(process.argv);
@@ -1256,6 +1464,7 @@ async function main() {
     case 'review': return cmdReview(flags);
     case 'disable': return cmdDisable(flags);
     case 'clean-lane': return cmdCleanLane(flags);
+    case 'provider': return cmdProvider(flags);
     case 'help': case '--help': case '-h': case undefined: return usage();
     default:
       console.error(`Unknown command: ${cmd}`);
@@ -1297,4 +1506,9 @@ module.exports = {
   CLEAN_LANE_TERMS_G2,
   CLEAN_LANE_NO_EMAIL_LINE,
   wrapForTerminal,
+  PROVIDER_KEY_CONSENT_SENTENCE,
+  CLI_CLEAN_LANE_CALIBRATED_PROVIDERS,
+  STATUS_WORTHY_SKIP_REASON_CODES,
+  extractionSkipReasonLine,
+  cmdProvider,
 };

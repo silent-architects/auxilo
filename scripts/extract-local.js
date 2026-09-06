@@ -399,6 +399,30 @@ function judgeUsage(usage, prompt, completion) {
 }
 
 /**
+ * PART C — resolve the extraction_model identity for a runModel result.
+ * Prefers the additive `identity` field a provider's runModel result may
+ * carry (byo-key.js always sets one: {provider:'byo-key', model, version,
+ * vendor}). claude-code.js/codex-cli.js shipped (PART A/B) before this stamp
+ * existed and don't set one — rather than touch those provider modules
+ * (outside this part's disjoint file scope, AGENTS.md's one-build rule),
+ * this falls back to the resolved provider id alone (model/version/vendor
+ * null) so every provider gets SOME stamp, never silently none. Best-effort:
+ * a resolution failure here must never block extraction itself.
+ */
+async function resolveExtractionModelIdentity(runModelResult, opts) {
+  if (runModelResult && runModelResult.identity && typeof runModelResult.identity === 'object') {
+    return runModelResult.identity;
+  }
+  try {
+    const resolved = await providers.resolveProvider(opts);
+    if (resolved && resolved.ok && resolved.id) {
+      return { provider: resolved.id, model: null, version: null, vendor: null };
+    }
+  } catch { /* identity is best-effort; never block extraction on it */ }
+  return null;
+}
+
+/**
  * Default invokeModel (extractLocally) — routes through the resolved provider's
  * runModel(mode:'extract'), mapped back to the legacy {ok, out, reason,
  * reasonCode, authStatus} shape extractLocally's caller already expects. opts
@@ -421,6 +445,7 @@ async function defaultInvokeModel(transcript, invokeOpts, opts) {
     reason: result.reason,
     reasonCode: result.reasonCode,
     authStatus: result.authStatus,
+    extractionModel: await resolveExtractionModelIdentity(result, opts),
     ...(result.authDiscrepancy !== undefined && { authDiscrepancy: result.authDiscrepancy }),
   };
 }
@@ -645,13 +670,21 @@ async function extractLocally(transcript, sourceType, opts = {}) {
       }),
     };
   }
+  // PART C: which provider/model actually ran this extraction, stamped onto
+  // every learning it produces (below). Absent when the caller supplied its
+  // own opts.invokeModel that doesn't report one (every existing test does
+  // this) — extraction_model then simply never appears, byte-identical to
+  // pre-PART-C behavior.
+  const extractionModel = modelResult.extractionModel || null;
   const parsed = parseExtractionOutput(out, opts);
   const promptDropResult = applyPromptMemoryDrops(
     parsed.prompt_drops,
     promptMemory,
     opts
   );
-  const candidates = [...parsed.learnings, ...promptDropResult.restored];
+  const candidates = [...parsed.learnings, ...promptDropResult.restored].map((l) => (
+    extractionModel ? { ...l, extraction_model: extractionModel } : l
+  ));
 
   // Re-read immediately before the lexical filter. If the index is deleted,
   // becomes unreadable, or is corrupted while the model runs, the filter is
