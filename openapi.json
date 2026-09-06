@@ -3,7 +3,7 @@
   "info": {
     "title": "Auxilo",
     "description": "Agent Capability Discovery and Knowledge Marketplace. Skills registry for finding APIs and MCP servers. Knowledge marketplace where agents share and monetize operational learnings.",
-    "version": "0.9.11",
+    "version": "0.9.12",
     "contact": {
       "name": "Auxilo Support",
       "url": "https://auxilo.io",
@@ -1187,6 +1187,26 @@
                     "contributor_wallet": {
                       "type": "string"
                     },
+                    "published_via": {
+                      "type": "string",
+                      "enum": [
+                        "clean_lane_standing_consent"
+                      ],
+                      "description": "Optional. Present only when this submission auto-published under the account's clean-lane standing consent (SPEC3-C1; status 'approved', submission_channel 'extraction')."
+                    },
+                    "standing_consent_version": {
+                      "type": "string",
+                      "description": "Optional. Present only on a clean-lane standing-consent publish: the consent version in force at publish time (clients persist it in the local extraction index)."
+                    },
+                    "retractable_until": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "Optional. Present only on a clean-lane standing-consent publish: the end of the 7-day retraction window (DELETE /learn/{id}?reason=retract, `auxilo review`, or the dashboard)."
+                    },
+                    "standing_consent_notice": {
+                      "type": "string",
+                      "description": "Optional. Present only on a clean-lane standing-consent publish: the in-band per-publish notice line for the human (consent version, retraction deadline, and how to retract)."
+                    },
                     "timestamp": {
                       "type": "string",
                       "format": "date-time"
@@ -1340,31 +1360,47 @@
                       "$ref": "#/components/schemas/UntrustedPreviewAdvisory"
                     },
                     "learnings_count": {
-                      "type": "integer"
+                      "type": "integer",
+                      "description": "Count of publicly visible learnings (the canonical visibleCatalog predicate)."
                     },
                     "categories": {
                       "type": "array",
                       "items": {
                         "type": "string"
-                      }
+                      },
+                      "description": "Distinct categories over the visible catalog."
                     },
                     "total_unlocks": {
-                      "type": "integer"
+                      "type": "integer",
+                      "description": "STATS-TRUTH: count of credited unlock events in the per-unlock ledger (data/unlock-events.jsonl, deduplicated on event id) whose learning is visible; never a stored counter. OMITTED when the ledger is unreadable."
                     },
                     "total_ratings": {
-                      "type": "integer"
+                      "type": "integer",
+                      "description": "Sum of the per-learning ratings count over the visible catalog."
                     },
                     "total_earnings_usd": {
-                      "type": "number"
+                      "type": "number",
+                      "description": "STATS-TRUTH: sum of total_gross over earnings-ledger entries whose key is a contributor identity present in the visible catalog (account id, or case-insensitive wallet); entries owning no visible learning contribute nothing. Rounded to 2 dp."
                     },
                     "total_contributors": {
-                      "type": "integer"
+                      "type": "integer",
+                      "description": "STATS-TRUTH: distinct contributor identities over the visible catalog — contributor_account_id when present, else the lowercased contributor_wallet; a row with neither counts as the single platform identity."
                     },
                     "top_learnings": {
                       "type": "array",
                       "items": {
-                        "type": "object"
-                      }
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "title": { "type": "string" },
+                          "score": { "type": "number" },
+                          "unlocks": {
+                            "type": "integer",
+                            "description": "STATS-TRUTH: this learning's credited unlock events in the per-unlock ledger; OMITTED when the ledger is unreadable."
+                          }
+                        }
+                      },
+                      "description": "Top five visible learnings by quality score."
                     },
                     "timestamp": {
                       "type": "string",
@@ -2960,7 +2996,7 @@
     "/account/learnings": {
       "get": {
         "summary": "List your own submitted-learning metadata",
-        "description": "SPEC3-F2 fresh-machine hydration surface. Returns metadata only for learnings whose contributor_account_id is the authenticated caller. The default includes approved, rejected, and pending_review records. Bodies, evidence, quality objects, and every other content-bearing field are deliberately excluded.",
+        "description": "SPEC3-F2 fresh-machine hydration surface. Returns metadata only for learnings whose contributor_account_id is the authenticated caller. The default includes approved, rejected, and pending_review records; retracted records are returned only when status names retracted explicitly. Bodies, evidence, quality objects, and every other content-bearing field are deliberately excluded.",
         "operationId": "listAccountLearnings",
         "tags": [
           "Account",
@@ -2982,7 +3018,7 @@
               "type": "string",
               "default": "approved,rejected,pending_review"
             },
-            "description": "Comma-list containing only approved, rejected, and/or pending_review."
+            "description": "Comma-list containing only approved, rejected, pending_review, and/or retracted. retracted is an explicit opt-in: it is never part of the default set, so omitting status never returns retracted records."
           },
           {
             "name": "visibility",
@@ -3011,6 +3047,25 @@
               "minimum": 0
             },
             "description": "Zero-based page offset."
+          },
+          {
+            "name": "published_via",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional exact-match filter on the learning's published_via stamp (for example clean_lane_standing_consent), applied with the status and visibility filters before paging so total counts matching rows only. Rows without the stamp never match."
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "desc"
+              ]
+            },
+            "description": "Optional ordering. desc returns newest first by created_at. Omitted keeps the stored order."
           }
         ],
         "responses": {
@@ -3075,7 +3130,8 @@
                             "enum": [
                               "approved",
                               "rejected",
-                              "pending_review"
+                              "pending_review",
+                              "retracted"
                             ]
                           },
                           "visibility": {
@@ -3148,6 +3204,11 @@
                       "manual"
                     ],
                     "description": "Extraction trigger mode"
+                  },
+                  "standing_consent_ack_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "CLEAN-LANE-FLIP Phase B (notice hardening): the account's acknowledgement cursor for standing-consent publications. Set it to now from the dashboard's 'I've reviewed these' button; GET /account/clean-lane then counts only clean-lane publishes created after it (unacknowledged_publications). Must be an ISO 8601 date-time and not in the future (400 beyond a 5-minute clock-skew allowance); a value inside that allowance but ahead of the server clock is clamped to the server's now on store, so the cursor can never sit in the future. This PATCH is the only thing that moves the cursor — nothing clears the unread count implicitly, and no email is sent."
                   }
                 }
               }
@@ -3178,6 +3239,9 @@
           },
           "401": {
             "description": "Authorization required"
+          },
+          "403": {
+            "description": "Account suspended or key scope insufficient"
           }
         }
       }
@@ -4986,6 +5050,312 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/account/clean-lane": {
+      "get": {
+        "summary": "Clean-lane standing-consent status for this account",
+        "description": "SPEC3-C1: whether the authenticated account's standing consent to auto-publish qualifying extracted learnings is active, the CURRENT consent version (the only version POST /account/clean-lane/grant will bind to), and the last recorded consent action. The lane governs ONLY submission_channel 'extraction' items that pass every screen and the quality floor; while inactive those items hold with review_reason standing_consent_off (lane ready_to_publish). An enrolled account's FIRST public learning still holds for operator review (untrusted_account) until publication trust is stamped. Accepts a web session (Bearer) OR an account API key (read scope). Enrollment is dashboard/CLI-only and the only advertised enrollment surfaces are the dashboard and the TTY CLI; no MCP tool exists for these routes. The verbatim-affirmation layer is EVIDENTIARY, not preventive: it prevents accidental enrollment and creates a hash-chained record of a deliberate act by the credential holder. Gated by EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED (set exactly 'true' to arm; CLEAN-LANE-FLIP Phase B, 2026-09-05): while the flag is unset the route answers the catch-all 404 before authentication.",
+        "operationId": "getCleanLaneStatus",
+        "tags": [
+          "Account"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Consent status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "account_id",
+                    "clean_lane_active",
+                    "consent_version_current"
+                  ],
+                  "properties": {
+                    "account_id": {
+                      "type": "string"
+                    },
+                    "clean_lane_active": {
+                      "type": "boolean",
+                      "description": "true only when the latest recorded action is a grant at the CURRENT consent version (a revoke or freeze deactivates; a grant at a superseded version is inactive)."
+                    },
+                    "consent_version_current": {
+                      "type": "string",
+                      "description": "The consent version the server currently accepts (e.g. 2026-07-19-clean-lane-a1). Send it back verbatim in POST /account/clean-lane/grant."
+                    },
+                    "standing_consent_ack_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true,
+                      "description": "CLEAN-LANE-FLIP Phase B (notice hardening): the account's acknowledgement cursor for standing-consent publications, or null when the Builder has never acknowledged. Moved only by PATCH /account/settings {standing_consent_ack_at}."
+                    },
+                    "unacknowledged_publications": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "CLEAN-LANE-FLIP Phase B (notice hardening): how many of this account's learnings stamped published_via 'clean_lane_standing_consent' were created after standing_consent_ack_at (all of them when the cursor is null). Drives the dashboard's persistent 'N auto-published since you last checked' badge; reading this route never changes it."
+                    },
+                    "last_action": {
+                      "type": "string",
+                      "enum": [
+                        "grant",
+                        "revoke",
+                        "freeze"
+                      ],
+                      "description": "Present when any consent row exists for the account."
+                    },
+                    "last_action_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "Present with last_action."
+                    },
+                    "consent_version_recorded": {
+                      "type": "string",
+                      "description": "Present with last_action: the consent version the last row was recorded under."
+                    },
+                    "min_auto_publish_quality": {
+                      "type": "integer",
+                      "minimum": 14,
+                      "maximum": 20,
+                      "description": "Present only when last_action is grant: the account's auto-publish threshold (quality total must be >= this; default 16)."
+                    },
+                    "tos_version_at_grant": {
+                      "type": "string",
+                      "description": "Present only when last_action is grant: the Terms version the account had accepted when it granted ('none' if it never accepted)."
+                    },
+                    "freeze_reason": {
+                      "type": "string",
+                      "nullable": true,
+                      "enum": [
+                        "retraction_rate",
+                        "notice_undeliverable"
+                      ],
+                      "description": "Present only when last_action is freeze. retraction_rate = more than 5% of the account's clean-lane publishes were retracted within 30 days; reactivation requires an explicit human re-grant."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Account suspended or key scope insufficient"
+          },
+          "404": {
+            "description": "Feature not enabled (EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED unset) - the catch-all 404 body, returned before authentication."
+          }
+        }
+      }
+    },
+    "/account/clean-lane/grant": {
+      "post": {
+        "summary": "Grant clean-lane standing consent (strengthened versioned clickwrap)",
+        "description": "SPEC3-C1: records the account's standing consent to auto-publish qualifying extracted learnings (submission_channel 'extraction', every screen clean, quality total >= min_auto_publish_quality). The body MUST carry the CURRENT consent_version (from GET /account/clean-lane), agree:true, and the affirmation sentence transmitted VERBATIM from the enrollment surface (dashboard card or `auxilo clean-lane grant`); the server refuses a non-current version (409, code CONSENT_VERSION_MISMATCH), a missing/false agree (400, code AFFIRMATION_REQUIRED), and any affirmation that is not byte-exact (400, code AFFIRMATION_TEXT_MISMATCH - the error deliberately does not echo the expected sentence). The server stamps the timestamp, redacted IP, user-agent, accept path and tos_version_at_grant itself into a hash-chained consent record. Re-granting is how a frozen lane is reactivated. Each auto-publish under this consent stamps published_via / standing_consent_version / retractable_until (7 days) and returns a standing_consent_notice line; DELETE /learn/{id}?reason=retract is the remedy. Accepts a web session (Bearer) OR an account API key (contribute scope). Enrollment is dashboard/CLI-only and the only advertised enrollment surfaces are the dashboard and the TTY CLI; no MCP tool exists for these routes. The verbatim-affirmation layer is EVIDENTIARY, not preventive: it prevents accidental enrollment and creates a hash-chained record of a deliberate act by the credential holder. Gated by EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED (set exactly 'true' to arm; CLEAN-LANE-FLIP Phase B, 2026-09-05): while the flag is unset the route answers the catch-all 404 before authentication.",
+        "operationId": "grantCleanLaneConsent",
+        "tags": [
+          "Account"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "consent_version",
+                  "agree",
+                  "affirmation"
+                ],
+                "properties": {
+                  "consent_version": {
+                    "type": "string",
+                    "description": "Must equal consent_version_current from GET /account/clean-lane. A stale/unknown version is refused with 409 CONSENT_VERSION_MISMATCH (the body carries current_consent_version)."
+                  },
+                  "agree": {
+                    "type": "boolean",
+                    "description": "Must be exactly true - an explicit, transmitted affirmation. Anything else is refused (400, AFFIRMATION_REQUIRED)."
+                  },
+                  "affirmation": {
+                    "type": "string",
+                    "description": "The human affirmation sentence exactly as displayed on the enrollment surface (the dashboard checkbox label / the sentence the CLI asks you to type), byte-for-byte. Any difference is refused (400, AFFIRMATION_TEXT_MISMATCH). The API does not publish the sentence; enrollment surfaces carry it."
+                  },
+                  "min_auto_publish_quality": {
+                    "type": "integer",
+                    "minimum": 14,
+                    "maximum": 20,
+                    "default": 16,
+                    "description": "Optional per-grant auto-publish threshold on the 20-point quality self-assessment total. Integer 14-20; default 16. Items under it hold with review_reason below_auto_publish_threshold."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Standing consent recorded (the lane is active)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "clean_lane_active": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "consent_version": {
+                      "type": "string"
+                    },
+                    "min_auto_publish_quality": {
+                      "type": "integer",
+                      "minimum": 14,
+                      "maximum": 20
+                    },
+                    "tos_version_at_grant": {
+                      "type": "string"
+                    },
+                    "granted_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body; agree is not exactly true (code AFFIRMATION_REQUIRED); the affirmation is not byte-exact (code AFFIRMATION_TEXT_MISMATCH); or min_auto_publish_quality is not an integer 14-20.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "AFFIRMATION_REQUIRED",
+                        "AFFIRMATION_TEXT_MISMATCH"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required, or the account no longer exists"
+          },
+          "403": {
+            "description": "Account suspended"
+          },
+          "404": {
+            "description": "Feature not enabled (EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED unset) - the catch-all 404 body, returned before authentication."
+          },
+          "409": {
+            "description": "consent_version is not the current clean-lane consent version - cannot bind to a stale/unknown version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "CONSENT_VERSION_MISMATCH"
+                      ]
+                    },
+                    "current_consent_version": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/account/clean-lane/revoke": {
+      "post": {
+        "summary": "Revoke clean-lane standing consent (one call, immediate)",
+        "description": "SPEC3-C1: records a revoke row. Immediate for future submissions - extraction-channel items hold with review_reason standing_consent_off from the next /learn onward; learnings already published under the consent keep their 7-day retraction remedy (DELETE /learn/{id}?reason=retract). No body required. Accepts a web session (Bearer) OR an account API key (contribute scope). Gated by EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED (set exactly 'true' to arm; CLEAN-LANE-FLIP Phase B, 2026-09-05): while the flag is unset the route answers the catch-all 404 before authentication.",
+        "operationId": "revokeCleanLaneConsent",
+        "tags": [
+          "Account"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Standing consent revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "clean_lane_active": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ]
+                    },
+                    "revoked_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Account suspended or key scope insufficient"
+          },
+          "404": {
+            "description": "Feature not enabled (EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED unset) - the catch-all 404 body, returned before authentication."
           }
         }
       }

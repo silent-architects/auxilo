@@ -366,13 +366,16 @@ describe('clean-lane consent store: own JSONL, latest row wins', () => {
   });
 
   it('grant → revoke → grant: latest row wins; freeze deactivates; re-grant reactivates', () => {
-    cleanLane.appendCleanLaneRow({ accountId: ME, action: 'grant', minAutoPublishQuality: 17 });
+    cleanLane.appendCleanLaneRow({ accountId: ME, action: 'grant', minAutoPublishQuality: 17, affirmation: cleanLane.CLEAN_LANE_AFFIRMATION });
     let state = cleanLane.getCleanLaneState(ME, { forceReload: true });
     assert.equal(state.action, 'grant');
     assert.equal(state.min_auto_publish_quality, 17);
     assert.equal(state.mode, 'automatic');
     assert.equal(state.notify, 'per_publish');
     assert.equal(state.affirmed, true);
+    // Gate-A 2026-09-06 (S2): the affirmation itself is recorded as a sha256 of the exact text.
+    assert.equal(state.affirmation_sha256,
+      require('crypto').createHash('sha256').update(cleanLane.CLEAN_LANE_AFFIRMATION, 'utf8').digest('hex'));
     assert.equal(cleanLane.cleanLaneActive(state), true);
 
     cleanLane.appendCleanLaneRow({ accountId: ME, action: 'revoke' });
@@ -589,9 +592,17 @@ describe('openapi.json documents the B1 contract', () => {
     assert.ok(OPENAPI_SRC.includes('ready_to_publish'));
     assert.ok(OPENAPI_SRC.includes('submission_channel'));
   });
-  it('the DARK clean-lane routes are NOT advertised while dark', () => {
-    assert.ok(!OPENAPI_SRC.includes('/account/clean-lane'),
-      'dark consent routes must not be published in openapi until C1 activation');
+  // CLEAN-LANE-FLIP Phase B (2026-09-05): the C1 activation wave publishes the
+  // three consent routes. This inverts the former dark pin ("NOT advertised
+  // while dark") — the routes are advertised now, with the flag-gate note.
+  it('CLEAN-LANE-FLIP Phase B: the three clean-lane consent routes ARE advertised', () => {
+    const spec = JSON.parse(OPENAPI_SRC);
+    assert.ok(spec.paths['/account/clean-lane'] && spec.paths['/account/clean-lane'].get,
+      'GET /account/clean-lane must be published at activation');
+    assert.ok(spec.paths['/account/clean-lane/grant'] && spec.paths['/account/clean-lane/grant'].post,
+      'POST /account/clean-lane/grant must be published at activation');
+    assert.ok(spec.paths['/account/clean-lane/revoke'] && spec.paths['/account/clean-lane/revoke'].post,
+      'POST /account/clean-lane/revoke must be published at activation');
   });
 });
 

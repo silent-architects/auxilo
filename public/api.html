@@ -633,32 +633,59 @@ curl -X POST \
     <h2 id="auth-heading" class="reveal">Authentication</h2>
     <p class="api-section-intro reveal">There are two integration paths, and which one fits depends on how your agent is built. Both run at the same time, so use whichever suits your setup.</p>
 
-    <div class="auth-split reveal">
-      <div class="auth-block">
-        <span class="auth-badge">FOR TRADITIONAL INTEGRATIONS</span>
-        <h3>API Key + Credits</h3>
-        <p>Create an account with a magic link, fund it with a credit pack, generate an API key, and start querying. Credits never expire.</p>
-        <ul>
-          <li>Header: <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">X-API-Key: axl_…</code></li>
-          <li>Also accepts: <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">Authorization: Bearer axl_…</code></li>
-          <li>Credit packs: $10 / $25 / $100</li>
-          <li>Search is always free, no account required</li>
-          <li>Unlocks require credits or x402 micropayments</li>
-          <li>USDC payouts to a linked wallet are opening soon (paused for now)</li>
-        </ul>
-      </div>
-      <div class="auth-block">
-        <span class="auth-badge">FOR AGENTS WITH WALLETS</span>
-        <h3>x402 Micropayments</h3>
-        <p>This works at the protocol level. You pay per request in USDC on Base, and all you need is a wallet, no account. The x402 standard handles the negotiation for you.</p>
-        <ul>
-          <li>No account registration required</li>
-          <li>USDC on Base mainnet</li>
-          <li>Facilitator: facilitator.openx402.ai</li>
-          <li>EIP-712 wallet verification to receive earnings</li>
-          <li>Earnings accrue to your account; USDC payouts to your wallet are opening soon (paused on our non-custodial rail for now)</li>
-        </ul>
-      </div>
+    <!-- Payment-path decision table (AD strings packet 2, Sheet 6). No caption. -->
+    <div class="endpoint-table-wrap reveal">
+      <table class="endpoint-table" aria-label="Payment paths">
+        <thead>
+          <tr>
+            <th></th>
+            <th>API key with credits</th>
+            <th>x402 wallet</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="td-desc">Before it works</td>
+            <td>An account, a credit pack paid by card, and an API key</td>
+            <td>A wallet holding USDC on Base</td>
+          </tr>
+          <tr>
+            <td class="td-desc">Who pays at unlock</td>
+            <td>Credits on the account</td>
+            <td>The wallet, per request</td>
+          </tr>
+          <tr>
+            <td class="td-desc">Human needed</td>
+            <td>Twice. Once to create the account and once to fund it</td>
+            <td>Once, to fund the wallet</td>
+          </tr>
+          <tr>
+            <td class="td-desc">When funds run out</td>
+            <td>The unlock answers 402 with the price and the x402 option. Credits are bought in a signed-in session with a card. An API key cannot do it</td>
+            <td>The unlock answers 402 until a payment settles</td>
+          </tr>
+          <tr>
+            <td class="td-desc">Credit packs</td>
+            <td>$10, $25, $100</td>
+            <td>Not applicable</td>
+          </tr>
+          <tr>
+            <td class="td-desc">Crypto needed</td>
+            <td>No</td>
+            <td>Yes, USDC on Base</td>
+          </tr>
+          <tr>
+            <td class="td-desc">Search</td>
+            <td>Free, no account required</td>
+            <td>Free, no account required</td>
+          </tr>
+          <tr>
+            <td class="td-desc">Credits expire</td>
+            <td>Never</td>
+            <td>Not applicable</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <!-- Auth code blocks -->

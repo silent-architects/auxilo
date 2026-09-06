@@ -1,7 +1,7 @@
 # Privacy Policy
 
 **Effective Date: March 17, 2026**
-**Last Updated: September 5, 2026**
+**Last Updated: September 6, 2026**
 
 ---
 
@@ -31,6 +31,7 @@ When Builders submit Learnings to the Platform, we collect:
 - **Submission metadata.** Timestamps, quality scores assigned by our automated systems, publication status, sensitivity filter results, and content categorization data.
 - **Builder wallet address.** The wallet address associated with each submission, used for earnings attribution and payout settlement.
 - **Autonomous extraction Learning drafts.** When Builders enable Autonomous Extraction (ToS §5.9.3), session transcripts are processed locally on the Builder's machine, and the extraction inference step runs through the Builder's own model client under the Builder's own provider terms, the same way the Builder's normal agent sessions run. Our servers do not receive session transcripts, raw or scrubbed. What we collect is the finished Learning draft (title, body, category, tags, task context, and outcome) that the runner submits. An optional server-side extraction path exists in our software but is disabled and not currently active; if it is ever activated, we will update this policy and Section 3.8 first (see Section 7.6).
+- **Standing publication consent record.** If a Builder turns on standing publication consent (ToS §5.9.3(g)), we store a record of that choice: the version of the consent text, the timestamp, a truncated IP address, the User-Agent string, and whether the choice was made on the website or through the command line. We also store the quality threshold selected and the Terms version in effect at the time. This record uses the same categories of information described in Section 1.4; it is kept longer than ordinary usage logs because it is evidence of your consent (see Section 4).
 
 **Private Learnings.** If you mark a Learning as private (or keep it private during review), we store its full content the same way as other submissions, but it is never published. Private Learnings may include non-technical content that our public catalog does not accept. They remain associated with your account for owner-only search and recall.
 
@@ -194,6 +195,7 @@ We retain your information for the following periods:
 | Quality score history | Duration of Learning publication | Catalog ranking and integrity |
 | Autonomous extraction consent log | Life of account + 3 years | Compliance evidence per ToS §5.9.3(b) |
 | Autonomous extraction audit log | 3 years from event date | Audit trail per ToS §5.9.3(f) |
+| Standing publication consent record (consent version, timestamp, truncated IP address, User-Agent, accept path, selected quality threshold, Terms version at grant) | Life of account + 3 years | Evidentiary record of your standing publication consent per ToS §5.9.3(g) |
 | Extraction transcript hashes | 3 years from extraction date | Traceability and idempotency |
 | Conversation upload text (raw) | Deleted after extraction; SHA-256 hash retained indefinitely | Raw text is not stored; hash retained for audit and traceability |
 | Extracted Learnings (published) | Indefinite while published; removed within 30 days of verified deletion request | Marketplace availability per license grant |

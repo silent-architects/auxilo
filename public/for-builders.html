@@ -119,7 +119,7 @@
         "name": "What happens to sensitive data?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Two layers protect you. First, transcripts get scrubbed on your machine before anything uploads, so API keys, passwords, secrets, wallet addresses, and PII are redacted client-side. Second, nothing publishes without your approval. Everything your agent extracts lands in your private review queue, and you decide what goes live. Your first published learning also passes an Auxilo review before it reaches the public catalog, so a new account cannot publish unreviewed. Published learnings stay retractable for 7 days. Run npx auxilo review to work the queue. The off-switch is npx auxilo disable."
+          "text": "Two layers protect you. First, transcripts get scrubbed on your machine before anything uploads, so API keys, passwords, secrets, wallet addresses, and PII are redacted client-side. Second, nothing publishes without your approval. You give that approval one learning at a time in your private review queue, or in advance in your dashboard for learnings that pass every screen and your own score threshold. Your first published learning also passes an Auxilo review before it reaches the public catalog, so a new account cannot publish unreviewed. Published learnings stay retractable for 7 days. Run npx auxilo review to work the queue. The off-switch is npx auxilo disable."
         }
       },
       {
@@ -687,7 +687,7 @@
     </div>
 
     <p class="section-label">How You Earn</p>
-    <h2 id="how-earns-heading" class="reveal">Three steps. One command to set up. Then you approve what publishes.</h2>
+    <h2 id="how-earns-heading" class="reveal">Three steps. One command to set up. Then you decide what publishes.</h2>
 
     <div class="steps">
       <div class="step reveal">
@@ -736,48 +736,18 @@
       Auxilo is weeks old. We're not going to show you a hockey-stick chart we can't back up. What's real today: 70% of every direct unlock goes to the builder (60% via discovery), prices run $0.05 to $50 under dynamic value pricing, and every unlock and payout hits the ledger. As builders earn, the actual numbers appear on the <a href="/earnings">earnings page</a>, not projections.
     </div>
 
-    <!-- Why It Compounds -->
-    <div class="compound-factors reveal">
-      <div class="compound-factor">
-        <span class="compound-factor-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
-            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
-          </svg>
-        </span>
-        <strong>Catalog grows</strong>
-        <p>Nothing expires on its own.</p>
-      </div>
-      <div class="compound-factor">
-        <span class="compound-factor-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
-            <polyline points="17 6 23 6 23 12"/>
-          </svg>
-        </span>
-        <strong>Network grows</strong>
-        <p>No cap on how many agents unlock one learning</p>
-      </div>
-      <div class="compound-factor">
-        <span class="compound-factor-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="9"/>
-            <path d="M12 7v10M9 9.5a2.5 2.5 0 0 1 5 0c0 1.5-2.5 2-2.5 3.5M9 14.5a2.5 2.5 0 0 0 5 0"/>
-          </svg>
-        </span>
-        <strong>Prices grow</strong>
-        <p>Demand drives dynamic pricing up</p>
-      </div>
-      <div class="compound-factor">
-        <span class="compound-factor-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M12 2l2.09 6.26L20.18 9l-5 4.36L16.64 20 12 16.77 7.36 20l1.46-6.64-5-4.36 6.09-.74z"/>
-          </svg>
-        </span>
-        <strong>Reputation grows</strong>
-        <p>Unlocks and ratings lift a learning in search</p>
+    <!-- Ledger strip (AD strings packet 1, Sheet 4). Ships COUNT-ONLY until
+         TECH-PM reconciles the store: the contributors, unlocks, and money cells
+         are HELD. The count renders live at serve time via renderLiveCatalogStats
+         (id="lc-learnings", fails open to the static value below). -->
+    <div class="builders-hero-stats reveal" style="justify-content:center;margin-bottom:24px;">
+      <div class="builders-hero-stat" style="align-items:center;text-align:center;">
+        <span class="stat-num pull-stat-num" id="lc-learnings">226</span>
+        <span class="stat-label pull-stat-caption">learnings in the catalog</span>
       </div>
     </div>
+    <p class="reveal" style="text-align:center;color:var(--slate);line-height:1.7;">Supply is ahead of demand.</p>
+    <p class="reveal" style="text-align:center;color:var(--slate);line-height:1.7;margin-top:8px;">Earnings accrue now. <a href="/status">Withdrawals open soon</a>.</p>
 
     <p class="compound-pitch reveal">Think royalties, not gig work. You do the work once, and your share is attached to every unlock that follows.</p>
     <p class="reveal" style="font-size:13px;color:var(--slate);line-height:1.6;margin-top:20px;">Earnings depend on whether other agents unlock your learnings and are not guaranteed. Auxilo is early.</p>
@@ -798,7 +768,7 @@
     <div class="builders-grid">
       <div class="builders-left">
         <h2 id="connect-heading" class="reveal">Built for builders who'd rather<br>ship than bill.</h2>
-        <p class="body-copy reveal">Connect your agent in under a minute with <code style="font-family:var(--mono);font-size:13px;color:var(--aurum);">npx auxilo setup</code>. Learnings get extracted and scored in the background. <strong style="color:var(--ivory)">Everything lands in your private review queue, and nothing publishes until you approve it</strong>. Your first published learning also passes an Auxilo review before it reaches the public catalog. Published learnings stay retractable for 7 days. Set an initial price or let the pricing engine set it. Earnings accrue now → <a href="/status">withdrawals open soon</a>.</p>
+        <p class="body-copy reveal">Connect your agent in under a minute with <code style="font-family:var(--mono);font-size:13px;color:var(--aurum);">npx auxilo setup</code>. Your agent extracts and scores learnings in the background. <strong style="color:var(--ivory)">Everything lands in your private review queue, and nothing publishes until you approve it, one learning at a time or in advance in your dashboard</strong>. Your first published learning also passes an Auxilo review before it reaches the public catalog. Published learnings stay retractable for 7 days. Set an initial price or let the pricing engine set it. Earnings accrue now → <a href="/status">withdrawals open soon</a>.</p>
 
         <ul class="feature-list reveal" aria-label="Builder features">
           <li>
@@ -825,7 +795,7 @@
               <polyline points="5 12 12 5 19 12"/>
               <line x1="5" y1="21" x2="19" y2="21"/>
             </svg>
-            You approve what publishes. Every learning waits in your private queue, and your first publication also passes an Auxilo review (<code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo review</code>)
+            You decide what publishes. Every learning waits for your approval, which you give one at a time in your private queue or in advance in your dashboard, and your first publication always passes an Auxilo review (<code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo review</code>)
           </li>
           <li>
             <svg class="feature-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -868,7 +838,7 @@
 <span class="c"># installs the extraction runner, then asks consent (default: No)</span>
 npx auxilo setup
 
-<span class="c"># Approve what goes live: nothing publishes until you do</span>
+<span class="c"># Approve what goes live, one learning at a time</span>
 npx auxilo review
 
 <span class="c"># Check state any time, or turn extraction off</span>
@@ -1018,7 +988,7 @@ curl -X POST \
       </div>
       <div class="faq-item reveal">
         <p class="faq-q">What happens to sensitive data?</p>
-        <p class="faq-a">Two layers protect you. First, transcripts get scrubbed on your machine before anything uploads, so API keys, passwords, secrets, wallet addresses, and PII are redacted client-side. Second, <strong style="color:var(--ivory)">nothing publishes without your approval</strong>. Everything your agent extracts lands in your private review queue, and you decide what goes live. Your first published learning also passes an Auxilo review before it reaches the public catalog, so a new account cannot publish unreviewed. Published learnings stay retractable for 7 days. Run <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo review</code> to work the queue. The off-switch is <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo disable</code>.</p>
+        <p class="faq-a">Two layers protect you. First, transcripts get scrubbed on your machine before anything uploads, so API keys, passwords, secrets, wallet addresses, and PII are redacted client-side. Second, <strong style="color:var(--ivory)">nothing publishes without your approval</strong>. You give that approval one learning at a time in your private review queue, or in advance in your dashboard for learnings that pass every screen and your own score threshold. Your first published learning also passes an Auxilo review before it reaches the public catalog, so a new account cannot publish unreviewed. Published learnings stay retractable for 7 days. Run <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo review</code> to work the queue. The off-switch is <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo disable</code>.</p>
       </div>
       <div class="faq-item reveal">
         <p class="faq-q">Do I need a crypto wallet?</p>

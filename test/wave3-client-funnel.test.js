@@ -5,7 +5,8 @@
  * (BUILD-SPEC-WAVE3-CLIENT-2026-07-19)
  *
  * Covers:
- *   A1  — score-at-extraction, env-gated DARK (extract-local + runner channel)
+ *   A1  — score-at-extraction, ON by default since 0.9.12, opt-out
+ *         AUXILO_SCORE_EXTRACTION=0 (extract-local + runner channel)
  *   A2  — truthful digest (runner /learn classification + held= tokens + lanes)
  *   LW-18 — SessionStart held-count notice + macOS notification plumbing
  *   UC-1a — consent-ordering fix (removal functions, shim quoting, CLI order)
@@ -37,9 +38,9 @@ function rmrf(p) {
   try { fs.rmSync(p, { recursive: true, force: true }); } catch { /* best-effort */ }
 }
 
-// ─── A1: score-at-extraction, gated dark ────────────────────────────────────
+// ─── A1: score-at-extraction, ON by default (CLEAN-LANE-FLIP Phase B) ───────
 
-describe('A1 — score-at-extraction gate (AUXILO_SCORE_EXTRACTION)', () => {
+describe('A1 — score-at-extraction gate (AUXILO_SCORE_EXTRACTION, default ON)', () => {
   const VALID_QA = { specificity: 4, actionability: 4, novelty: 3, completeness: 3, total: 14 };
   const learningWith = (qa) => JSON.stringify([{
     title: 'A learning title long enough',
@@ -51,10 +52,14 @@ describe('A1 — score-at-extraction gate (AUXILO_SCORE_EXTRACTION)', () => {
     ...(qa !== undefined && { quality_self_assessment: qa }),
   }]);
 
-  it('gate defaults OFF and the default prompt carries no rubric', () => {
-    assert.strictEqual(extractLocal.scoreExtractionEnabled({}), false);
+  it('gate defaults ON; only an explicit 0/false opts out; the dark prompt carries no rubric', () => {
+    assert.strictEqual(extractLocal.scoreExtractionEnabled({}), true);
     assert.strictEqual(extractLocal.scoreExtractionEnabled({ AUXILO_SCORE_EXTRACTION: '0' }), false);
+    assert.strictEqual(extractLocal.scoreExtractionEnabled({ AUXILO_SCORE_EXTRACTION: 'false' }), false);
     assert.strictEqual(extractLocal.scoreExtractionEnabled({ AUXILO_SCORE_EXTRACTION: '1' }), true);
+    assert.strictEqual(extractLocal.scoreExtractionEnabled({ AUXILO_SCORE_EXTRACTION: '' }), true);
+    assert.strictEqual(extractLocal.scoreExtractionEnabled({ AUXILO_SCORE_EXTRACTION: 'off' }), true,
+      'only 0/false disable — an unrecognised value must not silently return the client to unscored');
     const dark = extractLocal.buildExtractionPrompt({ scoreExtraction: false });
     assert.ok(!dark.includes('quality_self_assessment'));
     const armed = extractLocal.buildExtractionPrompt({ scoreExtraction: true });

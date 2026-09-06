@@ -178,7 +178,7 @@ describe('dashboard card: Auto-publish clean learnings', () => {
     assert.ok(!/confirm\(/.test(revoke), 'revoke must be ONE click — no confirm dialog');
     assert.match(DASHBOARD_HTML, /loadCleanLane\(\);\s*\/\/ standing-consent card/, 'loaded on dashboard boot like the pending badge');
     assert.doesNotMatch(DASHBOARD_HTML, /\.innerHTML\s*=/);
-    assert.ok(DASHBOARD_HTML.includes('<script src="/dashboard-clean-lane.js?v=1"></script>'));
+    assert.ok(DASHBOARD_HTML.includes('<script src="/dashboard-clean-lane.js?v=3"></script>'));
   });
 
   it('dark state renders the one plain line, never an error or a control', () => {
@@ -197,10 +197,14 @@ describe('dashboard card: Auto-publish clean learnings', () => {
     const list = sliceAt(DASHBOARD_HTML, 'function renderStandingConsentList', 2200);
     assert.match(list, /Retractable until /);
     assert.match(list, /btn\.textContent = 'Retract'/);
-    assert.match(list, /if \(item\.retractable\)/, 'Retract only inside the window');
+    assert.match(list, /if \(item\.retractable && item\.status === 'approved'\)/, 'Retract only inside the window and only while still approved (Gate-A N2)');
+    assert.match(list, /statusLabel\.textContent = item\.status === 'approved' \? 'approved' : \(item\.status === 'retracted' \? 'retracted' : String\(item\.status\)\)/, 'a status label per row (Gate-A N2)');
     const retract = sliceAt(DASHBOARD_HTML, 'function retractStandingConsentItem', 900);
     assert.match(retract, /apiFetch\('\/learn\/' \+ encodeURIComponent\(item\.id\) \+ '\?reason=retract', \{ method: 'DELETE' \}\)/);
-    const on = sliceAt(DASHBOARD_HTML, 'id="clean-lane-on"', 700);
+    // Window widened 700 → 1600 (CLEAN-LANE-FLIP Phase B notice hardening: the
+    // unread badge + "I've reviewed these" button now sit between Turn off and
+    // the list label).
+    const on = sliceAt(DASHBOARD_HTML, 'id="clean-lane-on"', 1600);
     assert.match(on, /Published under standing consent/);
     assert.match(on, /onclick="revokeCleanLane\(\)"[^>]*>Turn off<\/button>/);
   });
@@ -255,12 +259,15 @@ describe('dashboard-clean-lane.js pure view logic', () => {
       { id: 'a', title: 'old', created_at: '2026-08-20T00:00:00Z', standing_consent_version: 'v', retractable_until: '2026-08-27T00:00:00Z' },
       { id: 'b', title: 'plain', created_at: '2026-09-04T00:00:00Z' },
       { id: 'c', title: 'fresh', created_at: '2026-09-03T00:00:00Z', standing_consent_version: 'v', retractable_until: '2026-09-10T00:00:00Z' },
+      { id: 'd', title: 'pulled', status: 'retracted', created_at: '2026-09-02T00:00:00Z', standing_consent_version: 'v', retractable_until: '2026-09-09T00:00:00Z' },
       null,
     ];
     const items = view.selectStandingConsentItems(rows, now);
-    assert.deepStrictEqual(items.map((i) => i.id), ['c', 'a']);
+    assert.deepStrictEqual(items.map((i) => i.id), ['c', 'd', 'a']);
     assert.strictEqual(items[0].retractable, true);
-    assert.strictEqual(items[1].retractable, false);
+    assert.strictEqual(items[2].retractable, false);
+    // Gate-A N2: status carried per row (default 'approved' when the server omits it); retracted rows stay listed.
+    assert.deepStrictEqual(items.map((i) => i.status), ['approved', 'retracted', 'approved']);
     assert.deepStrictEqual(view.selectStandingConsentItems([], now), []);
   });
 });

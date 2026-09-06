@@ -663,10 +663,10 @@
         <div id="clean-lane-frozen" class="alert alert-error" style="display:none;margin-bottom:12px"></div>
         <div id="clean-lane-grant-form" style="display:none">
           <p style="font-size:13px;color:var(--slate);margin-bottom:10px;line-height:1.6">
-            When this is on, a learning is published without waiting for your review only when all three hold: it was extracted by your own model, every server screen came back clean, and its quality score is at or above the threshold you set.
+            When this is on, a learning publishes without waiting for your review only when all three hold. Your own model extracted it. Every server screen came back clean. Its quality score is at or above the threshold you set.
           </p>
           <p style="font-size:13px;color:var(--slate);margin-bottom:16px;line-height:1.6">
-            What is never auto-published: your first public learning (it waits for operator review), anything a screen flags, anything below your threshold, and anything after an auto-freeze. Every auto-published learning can be retracted for 7 days.
+            Some things never auto-publish, whatever this setting says. Your first public learning waits for operator review. Anything a screen flags stays held. Anything below your threshold stays held. If more than 5% of your auto-published learnings are retracted within 30 days, the setting turns itself off and stays off until you turn it on again. Every auto-published learning can be retracted for 7 days.
           </p>
           <label for="clean-lane-min-quality" style="display:block;font-size:13px;color:var(--ivory);margin-bottom:6px">Publish only when the quality score is at least</label>
           <select id="clean-lane-min-quality" style="margin-bottom:16px;padding:6px 10px;border-radius:6px;background:rgba(255,255,255,0.05);color:var(--ivory);border:1px solid rgba(229,229,227,0.2);font-family:var(--sans);font-size:13px">
@@ -678,6 +678,19 @@
             <option value="19">19</option>
             <option value="20">20</option>
           </select>
+          <!-- CLEAN-LANE-FLIP Phase B (legal): the full ToS §5.9.3(g) text renders ABOVE the
+               affirmation on every enrollment surface (counsel condition). Static markup, byte-equal
+               to docs/TERMS-OF-SERVICE.md and the CLI literal — test/clean-lane-phase-b-legal.test.js. -->
+          <details open id="clean-lane-terms" style="margin-bottom:16px;font-size:13px;color:var(--slate);line-height:1.6">
+            <summary style="cursor:pointer;color:var(--ivory);margin-bottom:8px">Terms of Service, Section 5.9.3(g): the consent you are giving</summary>
+            <p id="clean-lane-terms-g" style="margin-bottom:10px"><strong>(g) Standing publication consent (optional).</strong> Standing publication consent is off by default. A Builder may turn it on by an affirmative act — a dashboard setting, or a terminal command that requires typing the affirmation sentence shown on that screen. Auxilo records that act, the affirmation, and the consent-text version in a durable, hash-chained consent log, retained for the life of the account plus three (3) years under subsection (b). While it is on, a Learning submitted through Autonomous Extraction is published without separate per-item approval only if it passes every Platform screen and the quality threshold the Builder chose at activation. An account's first public Learning is never published this way; it is held for operator review under Section 4.1. Auxilo records each such publication in the Builder's dashboard and returns a notice in the response to the submission that produced it; each is retractable for seven (7) days under Section 5.9.4. If more than five percent (5%) of a Builder's Learnings published this way in any thirty (30) day period are retracted, Auxilo freezes the feature for that account until the Builder turns it on again. A Builder may turn it off at any time, effective immediately for later submissions; doing so does not affect Learnings already published. Subsection (c) applies in full to every Learning so published.</p>
+            <p id="clean-lane-terms-g2" style="margin-bottom:10px">The quality threshold in effect for a Builder is the one that Builder selected, and Auxilo will not broaden the conditions under which a Learning qualifies for publication under this subsection without recording a new consent; Auxilo may make those conditions stricter at any time.</p>
+            <p style="margin-bottom:0"><a href="/terms" target="_blank" rel="noopener" style="color:var(--aurum)">Read the full Terms of Service</a></p>
+          </details>
+          <!-- CLEAN-LANE-FLIP Phase B (notice hardening): the no-email enrollment line, GOV-2 counsel
+               draft §6 read #2 "move 3", rendered verbatim directly above the affirmation. Byte-equal to
+               the CLI literal (bin/auxilo-cli.js CLEAN_LANE_NO_EMAIL_LINE) — test/clean-lane-phase-b-notice.test.js. -->
+          <p id="clean-lane-no-email-line" style="font-size:13px;color:var(--ivory);margin-bottom:16px;line-height:1.6">You will not receive an email for these. Publications appear in your dashboard and in the response to the session that submitted them. The 7-day retraction window runs from publication.</p>
           <label style="display:flex;align-items:flex-start;gap:10px;font-size:14px;color:var(--ivory);cursor:pointer;margin-bottom:16px">
             <input type="checkbox" id="clean-lane-agree" style="margin-top:3px" onchange="onCleanLaneAgreeChange()">
             <span id="clean-lane-affirmation">I understand and choose auto-publish for qualifying extracted learnings.</span>
@@ -687,6 +700,15 @@
         <div id="clean-lane-on" style="display:none">
           <p id="clean-lane-on-line" style="font-size:14px;color:var(--ivory);margin-bottom:12px;line-height:1.6"></p>
           <button class="btn btn-ghost btn-sm" id="clean-lane-revoke-btn" onclick="revokeCleanLane()" style="margin-bottom:16px">Turn off</button>
+          <!-- CLEAN-LANE-FLIP Phase B (notice hardening): persistent unread badge. Shown whenever the
+               server's unacknowledged_publications is > 0; ONLY the button below clears it (it PATCHes
+               the acknowledgement cursor to now) — loading, viewing, or reloading the card never does. -->
+          <div id="clean-lane-unread" style="display:none;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;padding:10px 12px;border:1px solid rgba(212,175,55,0.45);border-radius:8px;background:rgba(212,175,55,0.08)">
+            <span id="clean-lane-unread-badge" style="font-size:13px;color:var(--ivory);flex:1"></span>
+            <button class="btn btn-ghost btn-sm" id="clean-lane-ack-btn" onclick="ackCleanLanePublications()">I've reviewed these</button>
+          </div>
+          <!-- Gate-A 2026-09-06 (N4): static runner hint; plain text, no claim beyond it. -->
+          <p id="clean-lane-runner-hint" style="font-size:13px;color:var(--slate);margin-bottom:12px;line-height:1.6">If nothing is publishing, update your runner: run npx auxilo setup</p>
           <div style="font-size:13px;color:var(--ivory);margin-bottom:8px">Published under standing consent</div>
           <div id="clean-lane-published"></div>
         </div>
@@ -722,7 +744,7 @@
 </div>
 
 <script src="/dashboard-review.js?v=1"></script>
-<script src="/dashboard-clean-lane.js?v=1"></script>
+<script src="/dashboard-clean-lane.js?v=3"></script>
 <script>
 (function () {
   'use strict';
@@ -1374,6 +1396,7 @@
     }
     if (view.state === AuxiloCleanLane.STATE_ON) {
       setText('clean-lane-on-line', AuxiloCleanLane.onStateLine(data));
+      renderCleanLaneUnread(data);
       show('clean-lane-on');
       loadStandingConsentList();
       return;
@@ -1459,6 +1482,47 @@
       });
   };
 
+  // CLEAN-LANE-FLIP Phase B (notice hardening; GOV-2 counsel draft §6 read
+  // #2): the persistent unread badge. The count comes from the GET body
+  // (server-computed from the ack cursor); the badge shows whenever it is
+  // > 0 and is cleared ONLY by ackCleanLanePublications() below — never by
+  // loading, viewing, or re-rendering the card.
+  function renderCleanLaneUnread(data) {
+    var box = document.getElementById('clean-lane-unread');
+    var btn = document.getElementById('clean-lane-ack-btn');
+    if (!box) return;
+    var n = AuxiloCleanLane.unacknowledgedCount(data);
+    if (n > 0) {
+      setText('clean-lane-unread-badge', AuxiloCleanLane.unreadBadgeLine(n));
+      if (btn) { btn.disabled = false; btn.textContent = "I've reviewed these"; }
+      box.style.display = 'flex';
+    } else {
+      box.style.display = 'none';
+    }
+  }
+
+  // "I've reviewed these": PATCH the acknowledgement cursor to now, then
+  // reload the card so the server's recount drives the badge.
+  window.ackCleanLanePublications = function () {
+    var btn = document.getElementById('clean-lane-ack-btn');
+    hideAlert('clean-lane-alert');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+    apiFetch('/account/settings', { method: 'PATCH', body: JSON.stringify(AuxiloCleanLane.buildAckBody(Date.now())) })
+      .then(parseJsonResponse)
+      .then(function (res) {
+        if (!res.ok) {
+          showAlert('clean-lane-alert', res.data.error || 'Could not record your review.', 'error');
+          if (btn) { btn.disabled = false; btn.textContent = "I've reviewed these"; }
+          return;
+        }
+        loadCleanLane();
+      })
+      .catch(function () {
+        showAlert('clean-lane-alert', 'Request failed. Check your connection.', 'error');
+        if (btn) { btn.disabled = false; btn.textContent = "I've reviewed these"; }
+      });
+  };
+
   // The human-visible per-publish notice: every learning published under
   // standing consent, newest first, with its retraction deadline and a
   // Retract button while the window is open.
@@ -1474,25 +1538,40 @@
     loading.appendChild(document.createTextNode('Loading...'));
     el.appendChild(loading);
 
-    var all = [];
-    // Gate-A 2026-09-05: recursive paging is capped at MAX_PAGES and stops
-    // early when a page comes back short (fewer than PAGE_LIMIT rows).
+    // CLEAN-LANE-FLIP Phase B: the server filters published_via and sorts
+    // newest-first (AuxiloCleanLane.standingConsentListQuery), so the first
+    // page IS the list in the common case. Paging only continues when a page
+    // comes back full, and stays capped at MAX_PAGES (Gate-A 2026-09-05).
+    // N2: the server's default status set never includes retracted rows, so
+    // the card pages the default list AND the retracted list
+    // (AuxiloCleanLane.standingConsentRetractedListQuery) and merges them
+    // newest-first in the pure builder. The badge count is unaffected.
     var PAGE_LIMIT = 500;
     var MAX_PAGES = 4;
-    function page(offset, pageNo) {
-      return apiFetch('/account/learnings?status=approved&visibility=public&limit=500&offset=' + offset)
-        .then(parseJsonResponse)
-        .then(function (res) {
-          if (!res.ok) throw new Error(res.data.error || 'load failed');
-          var items = res.data.learnings || [];
-          all = all.concat(items);
-          var next = offset + items.length;
-          if (items.length >= PAGE_LIMIT && pageNo + 1 < MAX_PAGES && next < (res.data.total || 0)) return page(next, pageNo + 1);
-          return all;
-        });
+    function pageAll(buildQuery) {
+      var all = [];
+      function page(offset, pageNo) {
+        return apiFetch(buildQuery(PAGE_LIMIT, offset))
+          .then(parseJsonResponse)
+          .then(function (res) {
+            if (!res.ok) throw new Error(res.data.error || 'load failed');
+            var items = res.data.learnings || [];
+            all = all.concat(items);
+            var next = offset + items.length;
+            if (items.length >= PAGE_LIMIT && pageNo + 1 < MAX_PAGES && next < (res.data.total || 0)) return page(next, pageNo + 1);
+            return all;
+          });
+      }
+      return page(0, 0);
     }
-    page(0, 0)
-      .then(function (rows) { renderStandingConsentList(AuxiloCleanLane.selectStandingConsentItems(rows, Date.now())); })
+    Promise.all([
+      pageAll(AuxiloCleanLane.standingConsentListQuery),
+      pageAll(AuxiloCleanLane.standingConsentRetractedListQuery),
+    ])
+      .then(function (pages) {
+        var rows = AuxiloCleanLane.mergeStandingConsentRows(pages[0], pages[1]);
+        renderStandingConsentList(AuxiloCleanLane.selectStandingConsentItems(rows, Date.now()));
+      })
       .catch(function (err) {
         el.textContent = '';
         var p = document.createElement('div');
@@ -1528,6 +1607,13 @@
       var title = document.createElement('div');
       title.style.color = 'var(--ivory)';
       title.textContent = item.title;
+      // Gate-A 2026-09-06 (N2): a small status label per row (approved / retracted / other).
+      var statusLabel = document.createElement('span');
+      statusLabel.style.marginLeft = '8px';
+      statusLabel.style.fontSize = '11px';
+      statusLabel.style.color = item.status === 'retracted' ? 'var(--slate)' : 'var(--gold)';
+      statusLabel.textContent = item.status === 'approved' ? 'approved' : (item.status === 'retracted' ? 'retracted' : String(item.status));
+      title.appendChild(statusLabel);
       text.appendChild(title);
       var meta = document.createElement('div');
       meta.style.color = 'var(--slate)';
@@ -1537,7 +1623,7 @@
       text.appendChild(meta);
       row.appendChild(text);
 
-      if (item.retractable) {
+      if (item.retractable && item.status === 'approved') {
         var btn = document.createElement('button');
         btn.className = 'btn btn-danger btn-sm';
         btn.textContent = 'Retract';

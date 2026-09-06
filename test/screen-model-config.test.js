@@ -147,6 +147,68 @@ describe('SCREEN-MODEL-CONFIG: model_config.json resolver', () => {
     });
     assert.equal(resolveModelConfig('sensitivity_screen', { configPath: p2 }).max_attempts, 2);
   });
+
+  // WAVE-0905-RESIDUALS (5): a JSON array parses, is typeof 'object', and must
+  // still be rejected as a config document.
+  it('rejects a JSON array as the config document (falls back to the hardcoded default, nothing cached)', () => {
+    const p = path.join(tmpDir, 'array.json');
+    fs.writeFileSync(p, JSON.stringify([{ sensitivity_screen: { model: 'from-array' } }]));
+    assert.deepEqual(resolveModelConfig('sensitivity_screen', { configPath: p }),
+      { model: DEFAULT_MODEL, fallbacks: [], max_attempts: 1, source: 'default' });
+    // Not memoized: repairing the file to an object is picked up on the next resolve.
+    fs.writeFileSync(p, JSON.stringify({ sensitivity_screen: { model: 'repaired' } }));
+    assert.equal(resolveModelConfig('sensitivity_screen', { configPath: p }).model, 'repaired');
+  });
+
+  // WAVE-0905-RESIDUALS (3): the degraded-mode line prints ONCE per cache
+  // epoch, not on every /learn; a successful parse re-arms it.
+  it('throttles the config-missing/corrupt log line to once per cache epoch until a successful parse', () => {
+    const lines = [];
+    const origError = console.error;
+    console.error = (...args) => { lines.push(args.join(' ')); };
+    try {
+      clearModelConfigCache(); // fresh epoch
+      const p = path.join(tmpDir, 'throttled.json');
+      for (let i = 0; i < 5; i++) resolveModelConfig('sensitivity_screen', { configPath: p });
+      assert.equal(lines.filter((l) => l.includes('model_config.json unreadable')).length, 1,
+        'five failed resolves in one epoch must log exactly one degraded-mode line');
+      assert.match(lines[0], /ENOENT/);
+
+      // A corrupt document on the SAME path in the same epoch is still throttled.
+      fs.writeFileSync(p, '{ not json');
+      resolveModelConfig('sensitivity_screen', { configPath: p });
+      fs.writeFileSync(p, '[]');
+      resolveModelConfig('sensitivity_screen', { configPath: p });
+      assert.equal(lines.length, 1);
+
+      // A successful parse is cached (no further reads, no further lines).
+      fs.writeFileSync(p, JSON.stringify({ sensitivity_screen: { model: 'ok' } }));
+      assert.equal(resolveModelConfig('sensitivity_screen', { configPath: p }).model, 'ok');
+      resolveModelConfig('sensitivity_screen', { configPath: p });
+      assert.equal(lines.length, 1);
+
+      // A new epoch (cache cleared) with the file broken again: exactly one more line.
+      clearModelConfigCache();
+      fs.writeFileSync(p, '[]');
+      resolveModelConfig('sensitivity_screen', { configPath: p });
+      resolveModelConfig('sensitivity_screen', { configPath: p });
+      assert.equal(lines.length, 2, 'a new epoch logs the degraded line exactly once more');
+      assert.match(lines[1], /not a JSON object/);
+
+      // clearModelConfigCache() alone (file still broken) opens another epoch: one more line.
+      clearModelConfigCache();
+      resolveModelConfig('sensitivity_screen', { configPath: p });
+      resolveModelConfig('sensitivity_screen', { configPath: p });
+      assert.equal(lines.length, 3);
+
+      // Different paths are latched independently.
+      resolveModelConfig('sensitivity_screen', { configPath: path.join(tmpDir, 'other-missing.json') });
+      assert.equal(lines.length, 4);
+    } finally {
+      console.error = origError;
+      clearModelConfigCache();
+    }
+  });
 });
 
 describe('SCREEN-MODEL-CONFIG: retryable provider error classification', () => {

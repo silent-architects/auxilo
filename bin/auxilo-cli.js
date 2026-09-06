@@ -493,12 +493,27 @@ async function cmdStatus() {
   console.log(`Account mode: ${s.accountMode}`);
   console.log(`Kill-switch sentinel: ${s.sentinel ? 'present (extraction enabled)' : 'absent (extraction disabled)'}`);
   console.log(`Runner installed: ${s.runnerInstalled ? 'yes (~/.auxilo/bin)' : 'no'}`);
+  if (s.runnerInstalled) {
+    const line = runnerSkewLine(installer.runnerVersionSkew(HOME));
+    if (line) console.log(line);
+  }
   console.log(`SessionEnd hook: ${s.hookInstalled ? 'installed' : 'not installed'}${s.hookRegistered ? ', registered in Claude Code settings' : ''}`);
   for (const c of s.clients.filter((c) => c.captureHook)) {
     console.log(`Capture hooks: ${c.name} (${c.captureEvent}, ${c.captureRegistered ? 'registered' : 'not registered'})`);
   }
   console.log(`Last extraction sweep: ${s.lastSweep || 'never'}`);
   console.log(`Pending upload queue: ${s.pendingCount} file(s)\n`);
+}
+
+/**
+ * CLEAN-LANE-FLIP Phase B: ONE line when ~/.auxilo/bin/VERSION is missing or
+ * differs from this CLI's package version; null when the stack is current.
+ * `setup` is idempotent and re-copies the stack, so that is the remedy.
+ */
+function runnerSkewLine(skew) {
+  if (!skew || !skew.skew) return null;
+  const installed = skew.installed ? `v${skew.installed}` : 'unstamped (pre-0.9.12)';
+  return `  ⚠ Installed runner is ${installed} (package v${skew.package}) — run: npx auxilo setup`;
 }
 
 // ─── auxilo disable ─────────────────────────────────────────────────────────
@@ -879,6 +894,20 @@ async function cmdReview(flags) {
 // from GET /account/clean-lane (consent_version_current).
 const CLEAN_LANE_AFFIRMATION = 'I understand and choose auto-publish for qualifying extracted learnings.';
 const CLEAN_LANE_UNAVAILABLE = 'Auto-publish for clean learnings is not yet available on this account.';
+// CLEAN-LANE-FLIP Phase B (legal; DRAFT pending Tyler): the full text of ToS
+// §5.9.3(g) (plus its ratchet paragraph) prints ABOVE the affirmation prompt —
+// counsel condition: the enrollment surface must show what "qualifying",
+// revocation and the 7-day retraction mean, on both the dashboard and CLI
+// paths. Same package-boundary reason as the affirmation: these literals are
+// pinned byte-equal to docs/TERMS-OF-SERVICE.md and public/dashboard.html by
+// test/clean-lane-phase-b-legal.test.js. Edit the Terms first, then mirror.
+const CLEAN_LANE_TERMS_G = '(g) Standing publication consent (optional). Standing publication consent is off by default. A Builder may turn it on by an affirmative act — a dashboard setting, or a terminal command that requires typing the affirmation sentence shown on that screen. Auxilo records that act, the affirmation, and the consent-text version in a durable, hash-chained consent log, retained for the life of the account plus three (3) years under subsection (b). While it is on, a Learning submitted through Autonomous Extraction is published without separate per-item approval only if it passes every Platform screen and the quality threshold the Builder chose at activation. An account\'s first public Learning is never published this way; it is held for operator review under Section 4.1. Auxilo records each such publication in the Builder\'s dashboard and returns a notice in the response to the submission that produced it; each is retractable for seven (7) days under Section 5.9.4. If more than five percent (5%) of a Builder\'s Learnings published this way in any thirty (30) day period are retracted, Auxilo freezes the feature for that account until the Builder turns it on again. A Builder may turn it off at any time, effective immediately for later submissions; doing so does not affect Learnings already published. Subsection (c) applies in full to every Learning so published.';
+const CLEAN_LANE_TERMS_G2 = 'The quality threshold in effect for a Builder is the one that Builder selected, and Auxilo will not broaden the conditions under which a Learning qualifies for publication under this subsection without recording a new consent; Auxilo may make those conditions stricter at any time.';
+// CLEAN-LANE-FLIP Phase B (notice hardening): the no-email enrollment line —
+// GOV-2 counsel draft §6 read #2 "move 3" — printed verbatim before the
+// affirmation prompt on every enrollment surface. Byte-equal to the dashboard's
+// #clean-lane-no-email-line (test/clean-lane-phase-b-notice.test.js).
+const CLEAN_LANE_NO_EMAIL_LINE = 'You will not receive an email for these. Publications appear in your dashboard and in the response to the session that submitted them. The 7-day retraction window runs from publication.';
 const CLEAN_LANE_MIN_QUALITY_MIN = 14;
 const CLEAN_LANE_MIN_QUALITY_MAX = 20;
 const CLEAN_LANE_MIN_QUALITY_DEFAULT = 16;
@@ -896,6 +925,18 @@ operator review), anything a screen flags, anything below your threshold,
 and anything after an auto-freeze. Every auto-published learning can be
 retracted for 7 days (\`npx auxilo review\` or your dashboard).
 `;
+
+/** Word-wrap a single paragraph at `width` columns (whitespace only; no word is altered). */
+function wrapForTerminal(paragraph, width = 78) {
+  const lines = [];
+  let line = '';
+  for (const word of paragraph.split(' ')) {
+    if (line && (line.length + 1 + word.length) > width) { lines.push(line); line = word; }
+    else line = line ? `${line} ${word}` : word;
+  }
+  if (line) lines.push(line);
+  return lines.map((l) => `  ${l}`).join('\n');
+}
 
 async function cleanLaneRequest({ apiKey, baseUrl, method, route, body }) {
   const url = `${String(baseUrl).replace(/\/+$/, '')}${route}`;
@@ -927,6 +968,12 @@ function printCleanLaneStatus(data) {
     console.log(`  a grant exists under consent version ${data.consent_version_recorded} but the current version is ${data.consent_version_current}; re-grant to re-activate.`);
   }
   console.log(`  current consent version: ${data.consent_version_current}`);
+  // CLEAN-LANE-FLIP Phase B (notice hardening): the unread count, printed only
+  // when > 0. Nothing here acknowledges it — only the dashboard button does.
+  const unread = data.unacknowledged_publications;
+  if (Number.isInteger(unread) && unread > 0) {
+    console.log(`  auto-published since you last checked: ${unread} (review and acknowledge them in your dashboard)`);
+  }
 }
 
 async function cmdCleanLane(flags) {
@@ -1011,6 +1058,14 @@ async function cmdCleanLane(flags) {
     console.log(`Enter a whole number from ${CLEAN_LANE_MIN_QUALITY_MIN} to ${CLEAN_LANE_MIN_QUALITY_MAX}.`);
   }
 
+  // The consent text itself, verbatim (word-wrapped for the terminal only), before the sentence.
+  console.log('\nTerms of Service, Section 5.9.3(g): the consent you are giving\n');
+  console.log(wrapForTerminal(CLEAN_LANE_TERMS_G));
+  console.log('');
+  console.log(wrapForTerminal(CLEAN_LANE_TERMS_G2));
+  console.log(`\nFull Terms: ${baseUrl}/terms`);
+  // The no-email line, verbatim, directly before the affirmation prompt.
+  console.log(`\n${wrapForTerminal(CLEAN_LANE_NO_EMAIL_LINE)}`);
   console.log('\nTo turn on auto-publish, type this sentence exactly as written, then press Enter:');
   console.log(`\n  ${CLEAN_LANE_AFFIRMATION}\n`);
   const typed = await ask('> ');
@@ -1204,6 +1259,7 @@ if (require.main === module) {
 
 module.exports = {
   parseFlags,
+  runnerSkewLine,
   resolveBaseUrl,
   shortFlags,
   groupSummaryRows,
@@ -1212,4 +1268,8 @@ module.exports = {
   run,
   CLEAN_LANE_AFFIRMATION,
   CLEAN_LANE_UNAVAILABLE,
+  CLEAN_LANE_TERMS_G,
+  CLEAN_LANE_TERMS_G2,
+  CLEAN_LANE_NO_EMAIL_LINE,
+  wrapForTerminal,
 };

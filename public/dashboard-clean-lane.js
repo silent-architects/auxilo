@@ -33,6 +33,78 @@
   var PUBLISHED_VIA_CLEAN_LANE = 'clean_lane_standing_consent';
 
   /**
+   * CLEAN-LANE-FLIP Phase B: the GET /account/learnings query for the
+   * "Published under standing consent" list — server-side published_via
+   * filter + newest-first, so one page holds the common case and the client
+   * never walks an account's whole catalog from the oldest end
+   * (WAVE-0905-RESIDUALS (1)/(2)). `pageLimit` is interpolated, never a
+   * literal. selectStandingConsentItems stays as the defensive second filter.
+   * Gate-A 2026-09-06 (N2, badge vs list): no status filter — the badge counts
+   * stamped rows regardless of status, so the list shows every stamped row the
+   * server returns (its default status set), each with a status label.
+   *
+   * N2 follow-up: the server's default status set never includes `retracted`
+   * (that is an explicit opt-in on GET /account/learnings), so the card issues
+   * this query for the default set PLUS standingConsentRetractedListQuery for
+   * the retracted rows, then mergeStandingConsentRows joins the two. The badge
+   * count is untouched — it still comes from GET /account/clean-lane.
+   */
+  function standingConsentListQuery(pageLimit, offset) {
+    return standingConsentQueryBase(pageLimit, offset);
+  }
+
+  /** The same list request, restricted to the caller's retracted stamped rows. */
+  function standingConsentRetractedListQuery(pageLimit, offset) {
+    return standingConsentQueryBase(pageLimit, offset) + '&status=retracted';
+  }
+
+  function standingConsentQueryBase(pageLimit, offset) {
+    var limit = parseInt(pageLimit, 10);
+    if (!Number.isInteger(limit) || limit < 1) limit = 500;
+    var off = parseInt(offset, 10);
+    if (!Number.isInteger(off) || off < 0) off = 0;
+    return '/account/learnings?visibility=public' +
+      '&published_via=' + encodeURIComponent(PUBLISHED_VIA_CLEAN_LANE) +
+      '&sort=desc&limit=' + limit + '&offset=' + off;
+  }
+
+  function createdAtMs(row) {
+    var t = Date.parse(row && row.created_at);
+    return Number.isFinite(t) ? t : -Infinity;
+  }
+
+  /**
+   * Join the rows from the default-status list and the retracted list into
+   * one newest-first array (created_at desc; unparseable dates sink to the
+   * end; ties keep their arrival order). Rows are deduplicated by id — the
+   * first occurrence wins — so a row present in both responses (a retraction
+   * landing between the two requests) is listed once. Non-array inputs count
+   * as empty.
+   */
+  function mergeStandingConsentRows(defaultRows, retractedRows) {
+    var seen = Object.create(null);
+    var out = [];
+    [defaultRows, retractedRows].forEach(function (rows) {
+      if (!Array.isArray(rows)) return;
+      rows.forEach(function (r) {
+        if (!r || typeof r !== 'object') return;
+        var key = typeof r.id === 'string' && r.id ? r.id : null;
+        if (key !== null) {
+          if (seen[key]) return;
+          seen[key] = true;
+        }
+        out.push(r);
+      });
+    });
+    // Array.prototype.sort is stable (ES2019): equal timestamps keep order.
+    out.sort(function (a, b) {
+      var d = createdAtMs(b) - createdAtMs(a);
+      return Number.isNaN(d) ? 0 : d; // both unparseable → keep arrival order
+    });
+    return out;
+  }
+
+  /**
    * Map a GET /account/clean-lane result to a card state.
    * 404 → unavailable (the flag is off; never an error state). Other non-2xx →
    * error with the server's message. 2xx → on / frozen / off from the body.
@@ -98,6 +170,35 @@
   }
 
   /**
+   * CLEAN-LANE-FLIP Phase B (notice hardening; GOV-2 counsel draft §6 read #2):
+   * the unread count from GET /account/clean-lane `unacknowledged_publications`
+   * — a non-negative integer, 0 for anything missing or malformed. The server
+   * computes it from the account's ack cursor; this module never counts rows.
+   */
+  function unacknowledgedCount(data) {
+    var body = data && typeof data === 'object' ? data : {};
+    var n = body.unacknowledged_publications;
+    if (typeof n !== 'number' || !Number.isInteger(n) || n < 0) return 0;
+    return n;
+  }
+
+  /** "N auto-published since you last checked" — the persistent badge text. */
+  function unreadBadgeLine(count) {
+    var n = Number.isInteger(count) && count > 0 ? count : 0;
+    return n + ' auto-published since you last checked';
+  }
+
+  /**
+   * Body for PATCH /account/settings from the "I've reviewed these" button:
+   * the acknowledgement cursor, stamped to now (or the given ms). This PATCH
+   * is the ONLY thing that clears the badge — viewing never does.
+   */
+  function buildAckBody(nowMs) {
+    var t = Number.isFinite(nowMs) ? nowMs : Date.now();
+    return { standing_consent_ack_at: new Date(t).toISOString() };
+  }
+
+  /**
    * Items published under standing consent, newest first, each with its
    * retraction window state. Input: rows from GET /account/learnings (any
    * shape); only rows carrying standing_consent_version count.
@@ -111,6 +212,7 @@
       return {
         id: r.id,
         title: r.title || '(no title)',
+        status: typeof r.status === 'string' && r.status ? r.status : 'approved',
         created_at: r.created_at || null,
         standing_consent_version: r.standing_consent_version,
         retractable_until: r.retractable_until || null,
@@ -137,11 +239,17 @@
     MIN_QUALITY_MAX: MIN_QUALITY_MAX,
     DEFAULT_MIN_QUALITY: DEFAULT_MIN_QUALITY,
     PUBLISHED_VIA_CLEAN_LANE: PUBLISHED_VIA_CLEAN_LANE,
+    standingConsentListQuery: standingConsentListQuery,
+    standingConsentRetractedListQuery: standingConsentRetractedListQuery,
+    mergeStandingConsentRows: mergeStandingConsentRows,
     viewState: viewState,
     qualityOptions: qualityOptions,
     buildGrantBody: buildGrantBody,
     onStateLine: onStateLine,
     frozenLine: frozenLine,
+    unacknowledgedCount: unacknowledgedCount,
+    unreadBadgeLine: unreadBadgeLine,
+    buildAckBody: buildAckBody,
     selectStandingConsentItems: selectStandingConsentItems,
   };
 }));

@@ -36,20 +36,36 @@ const PRIVATE_CATEGORIES = [...CATEGORIES, 'non-technical'];
 const RETIRED_CATEGORIES = ['communication', 'content-generation'];
 
 /**
- * SPEC3 slice A1 gate — score-at-extraction, BUILT BUT DARK by default.
+ * SPEC3 slice A1 gate — score-at-extraction, ON BY DEFAULT since 0.9.12
+ * (CLEAN-LANE-FLIP Phase B). Explicit opt-out only: AUXILO_SCORE_EXTRACTION=0
+ * (or 'false') disables scoring; any other value, including unset, scores.
  *
- * ┌─ CRITICAL SEQUENCING CONSTRAINT (SPEC3-BUILDER-REVIEW-LOOP §3.1/§8) ──────┐
- * │ Under a server WITHOUT the B1 extraction-channel hold, a clean /learn     │
- * │ submission carrying a floor-passing quality_self_assessment publishes    │
- * │ IMMEDIATELY (seamlessEligible). Turning this gate on against such a      │
- * │ server silently flips hook extraction from "everything held" to "clean   │
- * │ items auto-publish" — an unrecorded consent change (2026-06-10 class).   │
- * │ Do NOT set AUXILO_SCORE_EXTRACTION=1 until the server holds              │
- * │ submission_channel:'extraction' items behind standing consent (B1).      │
- * └───────────────────────────────────────────────────────────────────────────┘
+ * ┌─ SEQUENCING CONSTRAINT — SATISFIED (SPEC3-BUILDER-REVIEW-LOOP §3.1/§8) ──┐
+ * │ This gate shipped dark (opt-in via AUXILO_SCORE_EXTRACTION=1) because   │
+ * │ under a server WITHOUT the B1 extraction-channel hold, a clean /learn    │
+ * │ submission carrying a floor-passing quality_self_assessment published   │
+ * │ IMMEDIATELY (seamlessEligible) — arming scoring would have silently      │
+ * │ flipped hook extraction from "everything held" to "clean items           │
+ * │ auto-publish", an unrecorded consent change (2026-06-10 class).          │
+ * │                                                                          │
+ * │ B1 SHIPPED (lib/clean-lane.js; server.js /learn): every submission       │
+ * │ carrying submission_channel:'extraction' (runner.js stamps it            │
+ * │ unconditionally) is HELD with reason 'standing_consent_off' unless the   │
+ * │ account holds an active standing-consent grant — regardless of the       │
+ * │ score. The server brake, not the absence of a score, is what keeps       │
+ * │ unconsented items out of the catalog, so default-on scoring is safe:     │
+ * │ the score can only move a held item into the ready_to_publish lane (one  │
+ * │ counted approve away) or, under an active grant, into the clean lane the │
+ * │ contributor explicitly opted into. Without a score every extraction      │
+ * │ submission held awaiting_quality forever, so a stock install could never │
+ * │ enter the clean lane at all — that was the Phase B defect this closes.   │
+ * └──────────────────────────────────────────────────────────────────────────┘
  */
 function scoreExtractionEnabled(env = process.env) {
-  return env.AUXILO_SCORE_EXTRACTION === '1';
+  const raw = env.AUXILO_SCORE_EXTRACTION;
+  if (raw === undefined || raw === null) return true;
+  const v = String(raw).trim().toLowerCase();
+  return !(v === '0' || v === 'false');
 }
 
 const EXTRACTION_PROMPT_BASE = `You are extracting reusable OPERATIONAL LEARNINGS from an AI agent's session transcript, to publish to a PUBLIC knowledge marketplace read by other AI agents.

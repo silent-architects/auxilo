@@ -66,6 +66,7 @@ const {
   evaluateExtractionPublish,
   computeCleanLaneRetractionStats,
   shouldFreezeCleanLane,
+  countUnacknowledgedStandingConsentPublications,
   getCleanLaneState,
   appendCleanLaneRow,
   CLEAN_LANE_CONSENT_VERSION,
@@ -1547,6 +1548,10 @@ const { deductCredit, refundCredit, getCreditStatus } = require('./lib/credits.j
 const { isAccrualCapped, recordAccrual, unrecordAccrual } = require('./lib/unlock-attribution.js');
 // LW-7: durable purchaser ledger — rating eligibility (proof of prior unlock).
 const { recordPurchase, hasPurchase } = require('./lib/purchase-ledger.js');
+// STATS-TRUTH: /knowledge/stats derivations — contributors as distinct
+// identities, money from attributable ledger entries, unlocks from the
+// per-unlock event ledger (fail closed: unreadable ledger ⇒ fields omitted).
+const { computeStatsTruth } = require('./lib/stats-truth.js');
 
 // ─── Phase 0.4: Stripe Integration (SPEC-P0.4) ─────────────────────────────
 const {
@@ -5593,7 +5598,7 @@ app.get('/api/info', (c) => {
       '/checkout/cancel': { price: 'free', method: 'GET', description: 'Stripe payment cancelled landing page (redirect target)' },
       '/openapi.json': { price: 'free', method: 'GET', description: 'OpenAPI 3.0 specification for all endpoints' },
       '/.well-known/agent.json': { price: 'free', method: 'GET', description: 'A2A agent card (Google Agent-to-Agent protocol)' },
-      '/.well-known/security.txt': { price: 'free', method: 'GET', description: 'RFC 9116 security contact and responsible disclosure policy' },
+      '/.well-known/security.txt': { price: 'free', method: 'GET', description: 'RFC 9116 security contact and responsible disclosure contact' },
       '/status': { price: 'free', method: 'GET', description: 'System status page' },
       '/auth/magic-link': { price: 'free', method: 'POST', description: 'Request magic link login. Body: { email }', auth: 'public' },
       '/auth/verify': { price: 'free', method: 'GET', description: 'Redeem magic link token, receive JWT. Query: ?token=...', auth: 'public' },
@@ -6758,8 +6763,11 @@ app.post('/learn', async (c) => {
     ...(howToReview && { how_to_review: howToReview }),
     // SPEC3 C1 (§4.3): per-publish notice for standing-consent publishes — the
     // human must reliably learn about every unattended publish while the
-    // retraction window is live. (The rollup email rides the C1 activation
-    // wave; this response line is the in-band half.)
+    // retraction window is live. The notice surfaces exactly as shipped: this
+    // response field (in-band), the dashboard's "Published under standing
+    // consent" list, and the client's session notice (scripts/review-notice.js).
+    // No email (Tyler, 2026-09-05: "dashboard option"); ToS §5.9.3(g) describes
+    // these channels and nothing more.
     ...(cleanLanePublish && {
       published_via: PUBLISHED_VIA_CLEAN_LANE,
       // Gate-A 2026-09-05: the version rides the response too, so the client's
@@ -8011,10 +8019,23 @@ app.get('/account/clean-lane', async (c) => {
   if (!auth.accountId) return c.json({ error: auth.error }, auth.status);
 
   const state = getCleanLaneState(auth.accountId, { forceReload: true });
+  // CLEAN-LANE-FLIP Phase B (notice hardening; GOV-2 counsel draft §6 read
+  // #2): the acknowledgement cursor and the unread count behind the
+  // dashboard's persistent "N auto-published since you last checked" badge.
+  // The cursor moves ONLY via PATCH /account/settings {standing_consent_ack_at}
+  // (the "I've reviewed these" button); reading this route never moves it, so
+  // the badge cannot clear itself. No email is sent — this is the dashboard
+  // half of the notice, made persistent and unread-counted.
+  const ackAccount = loadAccounts()[auth.accountId] || {};
+  const standingConsentAckAt = typeof ackAccount.standing_consent_ack_at === 'string'
+    ? ackAccount.standing_consent_ack_at : null;
   return c.json({
     account_id: auth.accountId,
     clean_lane_active: cleanLaneActive(state),
     consent_version_current: CLEAN_LANE_CONSENT_VERSION,
+    standing_consent_ack_at: standingConsentAckAt,
+    // G1_RAW_READ_ALLOW:37 — helper filters by the caller's own account and clean-lane stamp.
+    unacknowledged_publications: countUnacknowledgedStandingConsentPublications(learnings, auth.accountId, standingConsentAckAt),
     ...(state && {
       last_action: state.action,
       last_action_at: state.timestamp,
@@ -8097,6 +8118,9 @@ app.post('/account/clean-lane/grant', async (c) => {
       // under ('none' when the account never accepted) — activation policy is
       // counsel's, the record is ours.
       tosVersionAtGrant: account.tos_version || 'none',
+      // Gate-A 2026-09-06 (S2): the exact affirmation text received (verified
+      // byte-equal to CLEAN_LANE_AFFIRMATION above) is recorded as a sha256.
+      affirmation,
       ipRedacted: redactIp(getClientIp(c)),
       userAgent: c.req.header('user-agent') || 'unknown',
       acceptPath: c.req.header('X-API-Key') ? 'cli-api' : 'web',
@@ -8153,21 +8177,43 @@ app.post('/account/clean-lane/revoke', async (c) => {
 // authenticated caller's accountId.
 app.get('/account/learnings', requireSessionOrApiKey('read'), (c) => {
   const accountId = c.get('accountId');
-  const allowedStatuses = new Set(['approved', 'rejected', 'pending_review']);
+  // CLEAN-LANE-FLIP Phase B (N2): `retracted` is an accepted EXPLICIT status
+  // value so the standing-consent card can list the caller's own retracted
+  // rows. It is deliberately NOT in the default set — a request without
+  // `status` returns exactly what it returned before (approved, rejected,
+  // pending_review). Owner-scoped like every other status: the account
+  // filter below applies before the status filter.
+  const defaultStatuses = ['approved', 'rejected', 'pending_review'];
+  const allowedStatuses = new Set([...defaultStatuses, 'retracted']);
   const url = new URL(c.req.url, 'http://localhost');
   const rawStatus = url.searchParams.get('status');
   const rawVisibility = url.searchParams.get('visibility');
   const statuses = rawStatus === null
-    ? [...allowedStatuses]
+    ? defaultStatuses.slice()
     : [...new Set(rawStatus.split(',').map((value) => value.trim()).filter(Boolean))];
 
   if (statuses.length === 0 || statuses.some((status) => !allowedStatuses.has(status))) {
     return c.json({
-      error: 'status must be a comma-list containing only approved,rejected,pending_review',
+      error: 'status must be a comma-list containing only approved,rejected,pending_review,retracted',
     }, 400);
   }
   if (rawVisibility !== null && rawVisibility !== 'public' && rawVisibility !== 'private') {
     return c.json({ error: 'visibility must be one of: public,private' }, 400);
+  }
+  // CLEAN-LANE-FLIP Phase B (dashboard): two additive query params so the
+  // standing-consent card can ask for exactly its rows in one request
+  // (WAVE-0905-RESIDUALS (1)). `published_via` is an exact-match filter on the
+  // row's stamp, applied with the account/status/visibility filters BEFORE the
+  // page slice (so `total` counts matching rows only); `sort=desc` orders
+  // newest-first by created_at. Both absent → existing order and behaviour,
+  // byte-identical for every current caller.
+  const rawPublishedVia = url.searchParams.get('published_via');
+  const rawSort = url.searchParams.get('sort');
+  if (rawPublishedVia !== null && rawPublishedVia.trim() === '') {
+    return c.json({ error: 'published_via must be a non-empty exact-match value' }, 400);
+  }
+  if (rawSort !== null && rawSort !== 'desc') {
+    return c.json({ error: 'sort must be one of: desc' }, 400);
   }
 
   let limit = parseInt(url.searchParams.get('limit') || '200', 10);
@@ -8184,7 +8230,8 @@ app.get('/account/learnings', requireSessionOrApiKey('read'), (c) => {
       const status = learning.status || 'approved';
       const learningVisibility = learning.visibility === 'private' ? 'private' : 'public';
       return statusSet.has(status) &&
-        (rawVisibility === null || learningVisibility === rawVisibility);
+        (rawVisibility === null || learningVisibility === rawVisibility) &&
+        (rawPublishedVia === null || learning.published_via === rawPublishedVia);
     })
     .map((learning) => ({
       id: learning.id,
@@ -8208,6 +8255,19 @@ app.get('/account/learnings', requireSessionOrApiKey('read'), (c) => {
       ...(learning.retractable_until != null && { retractable_until: learning.retractable_until }),
     }));
 
+  if (rawSort === 'desc') {
+    // Stable newest-first; rows without a parseable created_at sink to the end
+    // in their original relative order.
+    const ts = (row) => {
+      const t = Date.parse(row.created_at);
+      return Number.isFinite(t) ? t : -Infinity;
+    };
+    own.sort((a, b) => {
+      const d = ts(b) - ts(a);
+      return Number.isNaN(d) ? 0 : d; // both unparseable → keep relative order
+    });
+  }
+
   return c.json({
     account_id: accountId,
     total: own.length,
@@ -8224,6 +8284,11 @@ app.get('/account/settings', requireSessionOrApiKey('read'), (c) => {
     autonomous_extraction_mode: account.autonomous_extraction_mode || 'off',
   }, 200);
 });
+
+// CLEAN-LANE-FLIP Phase B (notice hardening): shape + skew rules for the
+// standing_consent_ack_at cursor accepted by PATCH /account/settings.
+const STANDING_CONSENT_ACK_ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/;
+const STANDING_CONSENT_ACK_SKEW_MS = 5 * 60 * 1000;
 
 // ── PATCH /account/settings — Mode toggle + consent (§3.5) ──────────────────
 app.patch('/account/settings', requireAuth, async (c) => {
@@ -8279,6 +8344,34 @@ app.patch('/account/settings', requireAuth, async (c) => {
       }
     }
 
+    // CLEAN-LANE-FLIP Phase B (notice hardening; GOV-2 counsel draft §6 read
+    // #2): the standing-consent acknowledgement cursor. The dashboard's
+    // "I've reviewed these" button PATCHes it to now; GET /account/clean-lane
+    // then counts only lane publishes created after it. This is the ONLY
+    // writer of the cursor — nothing clears the unread badge implicitly. Must
+    // be an ISO 8601 date-time and not in the future (a small clock-skew
+    // allowance so a client's `new Date().toISOString()` never 400s). Stored
+    // on the account record; no consent row is written (nothing here changes
+    // what the account consented to).
+    if (body.standing_consent_ack_at !== undefined) {
+      const raw = body.standing_consent_ack_at;
+      const parsed = typeof raw === 'string' ? Date.parse(raw) : NaN;
+      if (typeof raw !== 'string' || !STANDING_CONSENT_ACK_ISO_RE.test(raw) || !Number.isFinite(parsed)) {
+        return c.json({ error: 'standing_consent_ack_at must be an ISO 8601 date-time string (e.g. 2026-09-06T12:00:00.000Z)' }, 400);
+      }
+      if (parsed > Date.now() + STANDING_CONSENT_ACK_SKEW_MS) {
+        return c.json({ error: 'standing_consent_ack_at cannot be in the future' }, 400);
+      }
+      const oldAck = typeof account.standing_consent_ack_at === 'string' ? account.standing_consent_ack_at : null;
+      // Gate-A 2026-09-06 (S3): inside the skew allowance, a stamp ahead of the
+      // server clock is clamped to the server's now — a fast client clock can
+      // never push the cursor into the future (which would hide publishes
+      // created between the client's now and the server's).
+      const newAck = new Date(Math.min(parsed, Date.now())).toISOString();
+      account.standing_consent_ack_at = newAck;
+      changes.standing_consent_ack_at = { from: oldAck, to: newAck };
+    }
+
     saveAccounts(accounts);
 
     return c.json({
@@ -8286,6 +8379,7 @@ app.patch('/account/settings', requireAuth, async (c) => {
       changes,
       current: {
         autonomous_extraction_mode: account.autonomous_extraction_mode || 'off',
+        standing_consent_ack_at: typeof account.standing_consent_ack_at === 'string' ? account.standing_consent_ack_at : null,
       },
     }, 200);
   } finally {
@@ -8564,31 +8658,61 @@ function serializeByLearningMoney(byLearning) {
 }
 
 // Knowledge marketplace stats (FREE) — must be registered BEFORE /knowledge/:id
+//
+// STATS-TRUTH: this surface is machine-read (agents, the trust page, GTM's
+// register) and FAILS CLOSED — every number derives from the visible catalog
+// and a ledger, never from a stored counter (lib/stats-truth.js):
+//   total_contributors  distinct contributor IDENTITIES over visibleCatalog()
+//                       (account id, else lowercased wallet; null/null = the
+//                       platform identity) — the CONTRIB-STAT casing +
+//                       wallet-blindness fix, one shared helper;
+//   total_earnings_usd  Σ total_gross over earnings entries whose KEY is an
+//                       identity present in the visible catalog — fixture
+//                       entries owning no visible learning contribute nothing;
+//   total_unlocks +     counts from the per-unlock event ledger
+//   top_learnings[]     (UNLOCK_EVENTS_FILE, deduped on the WAL id), filtered
+//     .unlocks          to visible ids; when the ledger is UNREADABLE both are
+//                       OMITTED (logged once) rather than served from
+//                       quality.unlocks. The stored counter is untouched —
+//                       computeScore still ranks on it.
+//   total_ratings       unchanged (the ratings JSONL is a re-rating event log
+//                       whose pre-CH-6 rows carry no rater id, so it is not
+//                       trivially countable per visible id).
+let statsLedgerUnreadableLogged = false;
 app.get('/knowledge/stats', (c) => {
-  // SPEC-P0.5: filter __wallet_index and other metadata keys from earnings totals
-  const earningsEntries = Object.entries(earnings).filter(([k]) => !k.startsWith('__'));
-  const totalEarnings = earningsEntries.reduce((sum, [, w]) => sum + (w.total_gross || 0), 0);
-
   // LW-QA fix: public stats must reflect only publicly-visible learnings —
   // the shared visibleCatalog() predicate (same as search + /knowledge/:id).
   // Without this, learnings_count reported the raw array length (e.g. 922)
   // instead of the ~dozens actually servable — a 10x-inflated headline.
   const visibleLearnings = visibleCatalog();
 
-  // PD-1 fix: count unique contributor wallets from learnings, not earnings entries
-  const contributorWallets = new Set(visibleLearnings.map(l => l.contributor_wallet).filter(Boolean));
-  const totalContributors = contributorWallets.size;
+  const truth = computeStatsTruth({
+    visibleRows: visibleLearnings,
+    earnings,
+    unlockEventsFile: UNLOCK_EVENTS_FILE,
+  });
+  if (!truth.ledger_readable && !statsLedgerUnreadableLogged) {
+    statsLedgerUnreadableLogged = true;
+    console.error('[STATS-TRUTH] unlock ledger unreadable — /knowledge/stats omits total_unlocks ' +
+      'and top_learnings[].unlocks until it is readable:', truth.ledger_error);
+  }
+  const ledgerUnlocks = truth.unlocks; // null ⇒ unreadable ⇒ omit
 
   return c.json({
     content_advisory: UNTRUSTED_PREVIEW_ADVISORY,
     learnings_count: visibleLearnings.length,
     categories: [...new Set(visibleLearnings.map(l => l.category))],
-    total_unlocks: visibleLearnings.reduce((sum, l) => sum + (l.quality.unlocks || 0), 0),
+    ...(ledgerUnlocks ? { total_unlocks: ledgerUnlocks.total } : {}),
     total_ratings: visibleLearnings.reduce((sum, l) => sum + (l.quality.ratings || 0), 0),
-    total_earnings_usd: totalEarnings,
-    total_contributors: totalContributors,
+    total_earnings_usd: truth.total_earnings_usd,
+    total_contributors: truth.total_contributors,
     top_learnings: visibleLearnings
-      .map(l => ({ id: l.id, title: l.title, score: computeScore(l), unlocks: l.quality.unlocks || 0 }))
+      .map(l => ({
+        id: l.id,
+        title: l.title,
+        score: computeScore(l),
+        ...(ledgerUnlocks ? { unlocks: ledgerUnlocks.byId.get(l.id) || 0 } : {}),
+      }))
       .sort((a, b) => b.score - a.score)
       .slice(0, 5),
     timestamp: new Date().toISOString()
@@ -11680,6 +11804,25 @@ app.get('/writing/agents-message-board', (c) => {
   if (res) return res;
   return c.text('Not found', 404);
 });
+
+// AD routes (2026-09-06): /about + /writing index. Same serveStatic pattern as
+// /status; serveStatic joins relPath under PUBLIC_DIR with the traversal guard,
+// so the nested writing/index.html is served with sibling headers/caching.
+app.get('/about', (c) => {
+  const res = serveStatic(c, 'about.html');
+  if (res) return res;
+  return c.text('Not found', 404);
+});
+
+app.get('/writing', (c) => {
+  const res = serveStatic(c, 'writing/index.html');
+  if (res) return res;
+  return c.text('Not found', 404);
+});
+
+// Hono routes strictly (/writing/ !== /writing); fold the trailing-slash form
+// onto the canonical path instead of 404ing.
+app.get('/writing/', (c) => c.redirect('/writing', 301));
 
 // ─── Standalone marketing / informational pages ───────────────────────
 // Both persona pages server-render the recent-discoveries band and the live

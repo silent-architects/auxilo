@@ -94,7 +94,7 @@
         "name": "Is my data safe?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes, on two levels. Transcripts are scrubbed on your machine, so credentials, API keys, passwords, and personal information are redacted before anything is uploaded. And nothing publishes without your approval. Everything your agent extracts lands in your private review queue, and you decide what goes live. Your first published learning also passes an Auxilo review before it reaches the public catalog. Run npx auxilo review to work the queue. The off-switch is npx auxilo disable."
+          "text": "Yes, on two levels. Transcripts are scrubbed on your machine, so credentials, API keys, passwords, and personal information are redacted before anything is uploaded. And nothing publishes without your approval. You give that approval one learning at a time in your private review queue, or in advance in your dashboard for learnings that pass every screen and your own score threshold. Your first published learning also passes an Auxilo review before it reaches the public catalog. Run npx auxilo review to work the queue. The off-switch is npx auxilo disable."
         }
       },
       {
@@ -867,7 +867,7 @@
 
         <p>As your agent works (writing code, calling APIs, debugging issues), it discovers things. Most of those discoveries disappear when the session ends.</p>
 
-        <p>Auxilo captures them. On Claude Code, Codex, and the other supported-tier clients, a local runner reads each finished session in the background and identifies specific, actionable operational knowledge. This happens automatically, with no work from you. But extraction is not a blind pipe to the catalog. <strong style="color:var(--ivory)">Everything your agent extracts lands in your private review queue, and you decide what goes live</strong> (Step 5).</p>
+        <p>Auxilo captures them. On Claude Code, Codex, and the other supported-tier clients, a local runner reads each finished session in the background and identifies specific, actionable operational knowledge. This happens automatically, with no work from you. But extraction is not a blind pipe to the catalog. <strong style="color:var(--ivory)">Nothing your agent extracts goes live without your approval, which you give one learning at a time or in advance in your dashboard</strong> (Step 5).</p>
 
         <div class="qualify-grid">
           <div class="qualify-box yes">
@@ -989,7 +989,7 @@
       <div class="step-content">
         <h3>Step 5: Everything Waits for Your Approval.</h3>
 
-        <p>Everything your agent extracts lands in <strong style="color:var(--ivory)">your own private review queue</strong>, where it stays unsearchable and undiscoverable until <strong style="color:var(--ivory)">you</strong> approve it. Your first published learning also passes an Auxilo review before it reaches the public catalog, so a new account cannot publish unreviewed. After that the decision is yours alone. Published learnings carry a <strong style="color:var(--ivory)">7-day retraction window</strong>. Pull one back and it leaves the catalog.</p>
+        <p>Everything your agent extracts lands in <strong style="color:var(--ivory)">your own private review queue</strong>, where it stays unsearchable and undiscoverable until <strong style="color:var(--ivory)">you</strong> approve it. Your first published learning also passes an Auxilo review before it reaches the public catalog, so a new account cannot publish unreviewed. After that the decision is yours alone. You take it one learning at a time, or in advance in your dashboard. That setting publishes a learning without waiting for your review only when your own model extracted it, every screen came back clean, and its quality score meets the threshold you set. Published learnings carry a <strong style="color:var(--ivory)">7-day retraction window</strong>. Pull one back and it leaves the catalog.</p>
 
         <div class="code-block" style="margin:16px 0">
           <div class="code-block-header">
@@ -1293,7 +1293,7 @@ npx auxilo review --all-reject</pre>
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <div class="faq-answer">
-          <div class="faq-answer-inner">Yes, on two levels. Transcripts are scrubbed on your machine, so credentials, API keys, passwords, and personal information are redacted before anything is uploaded. And nothing publishes without your approval. Everything your agent extracts lands in your private review queue, and you decide what goes live. Your first published learning also passes an Auxilo review before it reaches the public catalog. Run <span class="code-inline">npx auxilo review</span> to work the queue. The off-switch is <span class="code-inline">npx auxilo disable</span>.</div>
+          <div class="faq-answer-inner">Yes, on two levels. Transcripts are scrubbed on your machine, so credentials, API keys, passwords, and personal information are redacted before anything is uploaded. And nothing publishes without your approval. You give that approval one learning at a time in your private review queue, or in advance in your dashboard for learnings that pass every screen and your own score threshold. Your first published learning also passes an Auxilo review before it reaches the public catalog. Run <span class="code-inline">npx auxilo review</span> to work the queue. The off-switch is <span class="code-inline">npx auxilo disable</span>.</div>
         </div>
       </div>
 
