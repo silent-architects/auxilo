@@ -579,6 +579,67 @@ describe('runner-autoupdate: exclusive update lock (O_EXCL, stale-tolerant, B3)'
     autoupdate.releaseUpdateLock(home);
     fs.rmSync(home, { recursive: true, force: true });
   });
+
+  // LOW-3 fix: the OLD stale-reclaim path did `fs.rmSync(lockPath)` after
+  // observing staleness, then created a fresh lock — if TWO processes both
+  // observed the same stale lock, the SECOND one's rmSync could delete the
+  // FIRST one's brand-new fresh lock (and/or the first's later rmSync could
+  // delete the second's), letting both believe they held the lock
+  // exclusively. The fix claims the stale lock via `fs.renameSync` first —
+  // POSIX rename requires the source to exist, so only ONE racing renamer
+  // can ever succeed; the loser's rename throws (source already moved) and
+  // it reports 'locked' without touching anything.
+  it('LOW-3: two simulated claimants racing the SAME stale lock — only the rename-winner proceeds, and it never loses its fresh lock to the loser', () => {
+    const home = tmp('autoupdate-updatelock-race-');
+    const p = autoupdate.updateLockPath(home);
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, 'stale-owner\n');
+    const old = Date.now() - autoupdate.STALE_LOCK_MS - 60000;
+    fs.utimesSync(p, old / 1000, old / 1000);
+    const now = Date.now();
+
+    const realStatSync = fs.statSync;
+    const realRenameSync = fs.renameSync;
+    let renameCallsOnLock = 0;
+    // Force BOTH claimants to observe the lock as stale, regardless of what
+    // the first claimant's own success has already changed on disk by the
+    // time the second one checks — this is what makes the two calls below
+    // genuinely race the SAME stale snapshot instead of the second one
+    // trivially seeing an ordinary fresh (non-stale) EEXIST.
+    fs.statSync = (target) => {
+      const real = realStatSync(target);
+      if (target === p) return { ...real, mtimeMs: old };
+      return real;
+    };
+    fs.renameSync = (from, to) => {
+      if (from === p) {
+        renameCallsOnLock++;
+        if (renameCallsOnLock === 1) return realRenameSync(from, to); // claimant A wins
+        const err = new Error('ENOENT: no such file or directory, rename'); // claimant B: A already moved it
+        err.code = 'ENOENT';
+        throw err;
+      }
+      return realRenameSync(from, to);
+    };
+
+    let a;
+    let b;
+    try {
+      a = autoupdate.acquireUpdateLock(home, now);
+      b = autoupdate.acquireUpdateLock(home, now);
+    } finally {
+      fs.statSync = realStatSync;
+      fs.renameSync = realRenameSync;
+    }
+
+    assert.equal(a.ok, true, 'claimant A must win the race');
+    assert.equal(b.ok, false, 'claimant B must not also succeed');
+    assert.equal(b.reason, 'locked');
+    assert.equal(renameCallsOnLock, 2, 'both claimants must have attempted the stale-claim rename');
+    assert.equal(fs.existsSync(p), true, "claimant A's fresh lock must survive claimant B's failed race attempt");
+    autoupdate.releaseUpdateLock(home);
+    fs.rmSync(home, { recursive: true, force: true });
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -653,6 +714,120 @@ describe('installer.js: installRunnerAtomic (RUNNER-AUTO-UPDATE B1 — per-file 
     assert.throws(() => installer.installRunnerAtomic(home, { packageRoot: fakePackageRoot }), /missing package file/);
     fs.rmSync(home, { recursive: true, force: true });
     fs.rmSync(fakePackageRoot, { recursive: true, force: true });
+  });
+
+  it('installs every RUNNER_STACK file at its declared mode (0o755 executables, 0o644 non-executables), plus the hook (0o755) and VERSION (0o644)', () => {
+    const home = tmp('installrunneratomic-modes-');
+    installer.installRunnerAtomic(home);
+    const binRoot = installer.binRootFor(home);
+    for (const [, dest, mode] of installer.RUNNER_STACK) {
+      const destPath = path.join(binRoot, dest);
+      const actual = fs.statSync(destPath).mode & 0o777;
+      assert.equal(actual, mode, `${dest}: expected mode ${mode.toString(8)}, got ${actual.toString(8)}`);
+    }
+    const hookMode = fs.statSync(installer.hookScriptPathFor(home)).mode & 0o777;
+    assert.equal(hookMode, 0o755);
+    const versionMode = fs.statSync(installer.runnerVersionPath(home)).mode & 0o777;
+    assert.equal(versionMode, 0o644);
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  it('VERSION is written LAST — the final fs.renameSync of an install targets the VERSION path (order captured via a spy)', () => {
+    const home = tmp('installrunneratomic-versionlast-');
+    const realRenameSync = fs.renameSync;
+    const renameTargets = [];
+    fs.renameSync = (from, to) => {
+      renameTargets.push(to);
+      return realRenameSync(from, to);
+    };
+    try {
+      installer.installRunnerAtomic(home);
+    } finally {
+      fs.renameSync = realRenameSync;
+    }
+    const versionPath = installer.runnerVersionPath(home);
+    assert.ok(renameTargets.length > 1, 'expected multiple atomic renames during an install');
+    assert.equal(renameTargets[renameTargets.length - 1], versionPath, 'VERSION must be the LAST atomic rename of an install');
+    assert.ok(
+      renameTargets.slice(0, -1).every((t) => t !== versionPath),
+      'VERSION must not be renamed into place at any point before the very end'
+    );
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+});
+
+// 0.9.16 fix pass 2, MEDIUM-2: installRunnerAtomic no longer just WRITES the
+// new stack — it also PRUNES stale files left in the directories RUNNER_STACK
+// enumerates (scripts/sources, scripts/providers[/schemas], lib) from a prior
+// install whose stack no longer matches (e.g. a removed source adapter),
+// scoped tightly so nothing outside those dirs (bin-root siblings like
+// capture shims / jobs/) is ever touched, and sweeps orphaned
+// `.tmp-<pid>-<hex>` scratch files left by a crashed prior install.
+describe('installer.js: installRunnerAtomic prunes stale stack files (MEDIUM-2)', () => {
+  it('a stale adapter file under scripts/sources/ (present on disk, absent from the current RUNNER_STACK) is removed by the next install', () => {
+    const home = tmp('installrunneratomic-prune-adapter-');
+    installer.installRunnerAtomic(home);
+    const binRoot = installer.binRootFor(home);
+    const staleAdapter = path.join(binRoot, 'scripts', 'sources', 'zzz-removed-adapter.js');
+    fs.writeFileSync(staleAdapter, '// stale adapter from a prior version\n');
+    assert.equal(fs.existsSync(staleAdapter), true);
+    installer.installRunnerAtomic(home);
+    assert.equal(fs.existsSync(staleAdapter), false, 'a file no longer in RUNNER_STACK must be pruned from a scoped dir');
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  it('a stale file under scripts/providers/schemas/ is pruned; the schemas subdirectory itself survives', () => {
+    const home = tmp('installrunneratomic-prune-schemas-');
+    installer.installRunnerAtomic(home);
+    const binRoot = installer.binRootFor(home);
+    const schemasDir = path.join(binRoot, 'scripts', 'providers', 'schemas');
+    fs.mkdirSync(schemasDir, { recursive: true });
+    const staleSchema = path.join(schemasDir, 'zzz-removed.schema.json');
+    fs.writeFileSync(staleSchema, '{}');
+    installer.installRunnerAtomic(home);
+    assert.equal(fs.existsSync(staleSchema), false);
+    assert.equal(fs.existsSync(schemasDir), true, 'the schemas directory entry itself must not be removed');
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  it('a stale file under lib/ (removed module from a prior version) is pruned', () => {
+    const home = tmp('installrunneratomic-prune-lib-');
+    installer.installRunnerAtomic(home);
+    const binRoot = installer.binRootFor(home);
+    const staleLib = path.join(binRoot, 'lib', 'zzz-removed-module.js');
+    fs.writeFileSync(staleLib, 'module.exports = {};\n');
+    installer.installRunnerAtomic(home);
+    assert.equal(fs.existsSync(staleLib), false);
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  it('an orphaned .tmp-<pid>-<hex> scratch file left in a pruned dir (from a crashed prior install) is swept', () => {
+    const home = tmp('installrunneratomic-prune-tmp-');
+    installer.installRunnerAtomic(home);
+    const binRoot = installer.binRootFor(home);
+    const orphanTmp = path.join(binRoot, 'lib', `sensitivity-filter.js.tmp-999999-${crypto.randomBytes(3).toString('hex')}`);
+    fs.writeFileSync(orphanTmp, 'leftover partial write from a crashed install');
+    installer.installRunnerAtomic(home);
+    assert.equal(fs.existsSync(orphanTmp), false, 'an orphaned .tmp-<pid>-<hex> file in a prunable dir must be swept');
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  it('pruning is scoped to only the enumerated dirs — a sibling shim/dir at the BIN ROOT (never RUNNER_STACK-managed) survives untouched', () => {
+    const home = tmp('installrunneratomic-prune-siblings-');
+    const binRoot = installer.binRootFor(home);
+    installer.installRunnerAtomic(home);
+    fs.mkdirSync(path.join(binRoot, 'jobs'), { recursive: true });
+    fs.writeFileSync(path.join(binRoot, 'capture-shim-x.sh'), 'sentinel-shim');
+    fs.writeFileSync(path.join(binRoot, 'jobs', 'sweeper.sh'), 'sentinel-sweeper');
+    // Also a bin-root-level "orphaned-looking" tmp file, to prove pruning
+    // never walks the bin root itself, only the enumerated subdirs.
+    fs.writeFileSync(path.join(binRoot, `rogue.tmp-1-${crypto.randomBytes(3).toString('hex')}`), 'not swept: outside every prunable dir');
+    installer.installRunnerAtomic(home);
+    assert.equal(fs.readFileSync(path.join(binRoot, 'capture-shim-x.sh'), 'utf-8'), 'sentinel-shim');
+    assert.equal(fs.readFileSync(path.join(binRoot, 'jobs', 'sweeper.sh'), 'utf-8'), 'sentinel-sweeper');
+    const rogueSurvivors = fs.readdirSync(binRoot).filter((f) => f.startsWith('rogue.tmp-'));
+    assert.equal(rogueSurvivors.length, 1, 'a tmp-looking file directly in the bin root must not be swept — pruning never walks the bin root itself');
+    fs.rmSync(home, { recursive: true, force: true });
   });
 });
 
@@ -1114,6 +1289,95 @@ describe('checkAndApplyRunnerUpdate — M4: an unknown installed version does no
   });
 });
 
+// 0.9.16 fix pass 2, LOW-1: on a REAL install, installer.js's own PACKAGE_ROOT
+// resolves to the running module's on-disk location (<home>/.auxilo/bin) —
+// but package.json is deliberately NOT part of RUNNER_STACK (it isn't code),
+// so `<bin>/package.json` never exists on a real install. Before the fix,
+// M4's catch-up branch called `installer.packageVersion()` unconditionally
+// when installedRunnerVersion()===null, which threw a raw ENOENT that
+// propagated out of checkAndApplyRunnerUpdate's inner try as a confusing,
+// unlabeled 'check-failed'. The fix wraps that call and refuses cleanly.
+describe('checkAndApplyRunnerUpdate — LOW-1: an unreadable own-package-version (no <bin>/package.json, the real-install shape) refuses cleanly', () => {
+  it('installedRunnerVersion===null AND the REAL installer.packageVersion() throws (no package.json at packageRoot) → refused with reason installed-version-unknown, not a raw fs error', async () => {
+    const home = tmp('autoupdate-low1-');
+    // No package.json here at all — mirrors <bin> in production, since
+    // package.json is deliberately never copied into RUNNER_STACK. This
+    // installer deliberately does NOT override packageVersion with a fixed
+    // value — it calls the REAL lib/installer.js packageVersion() function
+    // against this empty root, so the genuine ENOENT path is exercised.
+    const emptyPackageRoot = tmp('autoupdate-low1-pkgroot-');
+    const fakeInstallerReal = {
+      readRunnerConfig: (home2) => installer.readRunnerConfig(home2),
+      writeRunnerConfig: (home2, patch) => installer.writeRunnerConfig(home2, patch),
+      binRootFor: (home2) => installer.binRootFor(home2),
+      installedRunnerVersion: () => null,
+      packageVersion: () => installer.packageVersion(emptyPackageRoot),
+    };
+    const { meta } = buildFakeRelease('9.9.9');
+    const logs = [];
+    const result = await autoupdate.checkAndApplyRunnerUpdate(home, {
+      env: {},
+      installer: fakeInstallerReal,
+      pinnedKeys: testPinnedKeys,
+      fetchImpl: fakeFetch({ [autoupdate.REGISTRY_LATEST_URL]: jsonResponse(meta) }),
+      log: (m) => logs.push(m),
+      now: 1,
+    });
+    assert.equal(result.status, 'refused');
+    assert.equal(result.reason, 'installed-version-unknown');
+    assert.equal(fs.existsSync(installer.binRootFor(home)), false, 'nothing must be installed on this refuse path');
+    assert.ok(logs.some((l) => /installed runner version is unknown/.test(l)));
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(emptyPackageRoot, { recursive: true, force: true });
+  });
+});
+
+// 0.9.16 fix pass 2, LOW-2: semverGt(latest, installed) is false whenever
+// EITHER side fails to parse as semver (lib/semver-min.js) — so a corrupted/
+// non-semver <bin>/VERSION stamp used to fall straight into the ordinary
+// "no-op" branch and stay there FOREVER (nothing ever repairs the stamp on
+// its own). The fix validates the stamp and treats an invalid one exactly
+// like "unknown" (null), routing it through the same M4/LOW-1 logic.
+describe('checkAndApplyRunnerUpdate — LOW-2: a corrupted/non-semver installed VERSION stamp no longer permanently no-ops', () => {
+  it('a garbled installed-version string + a fetched version newer than the running package → proceeds to install (not a silent no-op) and logs the corruption', async () => {
+    const home = tmp('autoupdate-low2-proceed-');
+    const { meta, tarball } = buildFakeRelease('9.9.9'); // newer than any real REPO_PKG_VERSION
+    const logs = [];
+    const result = await autoupdate.checkAndApplyRunnerUpdate(home, {
+      env: {},
+      installer: fakeInstaller('not-a-semver-stamp'),
+      pinnedKeys: testPinnedKeys,
+      fetchImpl: fakeFetch({
+        [autoupdate.REGISTRY_LATEST_URL]: jsonResponse(meta),
+        [meta.dist.tarball]: bufferResponse(tarball),
+      }),
+      log: (m) => logs.push(m),
+      now: 1,
+    });
+    assert.equal(result.status, 'updated', 'a corrupted stamp must route through the catch-up path, never a permanent no-op');
+    assert.ok(logs.some((l) => /VERSION stamp is corrupted\/non-semver/.test(l)));
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  it('a garbled installed-version string + a fetched version NOT newer than the running package → refused (same treatment as a truly unknown stamp)', async () => {
+    const home = tmp('autoupdate-low2-refuse-');
+    const { meta } = buildFakeRelease(REPO_PKG_VERSION); // not newer than the fakeInstaller's own version
+    const logs = [];
+    const result = await autoupdate.checkAndApplyRunnerUpdate(home, {
+      env: {},
+      installer: fakeInstaller('garbage-not-semver'),
+      pinnedKeys: testPinnedKeys,
+      fetchImpl: fakeFetch({ [autoupdate.REGISTRY_LATEST_URL]: jsonResponse(meta) }),
+      log: (m) => logs.push(m),
+      now: 1,
+    });
+    assert.equal(result.status, 'refused');
+    assert.equal(result.reason, 'unknown-installed-version');
+    assert.ok(logs.some((l) => /VERSION stamp is corrupted\/non-semver/.test(l)));
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+});
+
 describe('checkAndApplyRunnerUpdate — L7: the registry version string is strictly validated before it is persisted or logged', () => {
   it('a non-semver version string (newline/ANSI-bearing) is refused, never persisted to last_known_latest, never echoed raw in a log line', async () => {
     const home = tmp('autoupdate-l7-');
@@ -1216,6 +1480,101 @@ describe('checkAndApplyRunnerUpdate — L8: an install failure records last_upda
   });
 });
 
+// 0.9.16 fix pass 2, LOW-4: containment. stageAndSwap require()s the
+// EXTRACTED tree's OWN lib/installer.js (B2) and trusts its
+// installRunnerAtomic to write only under binRootFor(homeDir) — that trust
+// used to be unconditional. A signed release can still ship a BUG (and a
+// test fixture can deliberately be hostile) whose installRunnerAtomic
+// reports having written somewhere OUTSIDE the bin root. The fix verifies
+// every path the extracted installer CLAIMS to have touched resolves (via
+// realpath) under binRootFor(homeDir), aborting the whole update otherwise.
+function hostileFixtureInstallerSource() {
+  return `'use strict';
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+function binRootFor(homeDir) { return path.join(homeDir, '.auxilo', 'bin'); }
+function installRunnerAtomic(homeDir) {
+  const binRoot = binRootFor(homeDir);
+  fs.mkdirSync(binRoot, { recursive: true });
+  const okFile = path.join(binRoot, 'scripts_runner_marker.js');
+  fs.writeFileSync(okFile, '// ok\\n');
+  // HOSTILE: claims to have written somewhere OUTSIDE the bin root.
+  const evilPath = path.join(os.tmpdir(), 'auxilo-install-path-escape-' + process.pid + '-' + Date.now() + '.js');
+  fs.writeFileSync(evilPath, '// escaped\\n');
+  return { binRoot, hookPath: evilPath, versionPath: path.join(binRoot, 'VERSION'), installed: [okFile] };
+}
+module.exports = { binRootFor, installRunnerAtomic };
+`;
+}
+
+function buildHostileRelease(version) {
+  const files = {
+    'package.json': JSON.stringify({ name: 'auxilo-mcp', version }),
+    'lib/installer.js': hostileFixtureInstallerSource(),
+    'scripts/runner.js': '// fixture marker file\nmodule.exports = {};\n',
+  };
+  const tarball = buildFixtureTarball(files);
+  const integrity = sri(tarball);
+  const signatures = signMetadata('auxilo-mcp', version, integrity);
+  const meta = {
+    name: 'auxilo-mcp',
+    version,
+    dist: {
+      tarball: `https://registry.npmjs.org/auxilo-mcp/-/auxilo-mcp-${version}-hostile.tgz`,
+      integrity,
+      signatures,
+    },
+  };
+  return { meta, tarball };
+}
+
+describe('checkAndApplyRunnerUpdate — LOW-4: containment — claimed install paths outside the bin root are refused', () => {
+  it('a hostile/buggy extracted installer that reports writing OUTSIDE binRootFor(homeDir) is refused with reason install-path-escape', async () => {
+    const home = tmp('autoupdate-low4-');
+    const { meta, tarball } = buildHostileRelease('0.9.16');
+    const result = await autoupdate.checkAndApplyRunnerUpdate(home, {
+      env: {},
+      installer: fakeInstaller('0.9.14'),
+      pinnedKeys: testPinnedKeys,
+      fetchImpl: fakeFetch({
+        [autoupdate.REGISTRY_LATEST_URL]: jsonResponse(meta),
+        [meta.dist.tarball]: bufferResponse(tarball),
+      }),
+      log: () => {},
+      now: 1,
+    });
+    assert.equal(result.status, 'refused');
+    assert.match(result.reason, /install-path-escape/);
+    // Clean up the hostile fixture's escaped file so the test doesn't leak
+    // into the real OS temp dir across runs.
+    for (const f of fs.readdirSync(os.tmpdir())) {
+      if (f.startsWith('auxilo-install-path-escape-')) {
+        try { fs.rmSync(path.join(os.tmpdir(), f), { force: true }); } catch { /* best-effort */ }
+      }
+    }
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  it('a well-behaved extracted installer (every claimed path under the bin root) is unaffected by the containment check', async () => {
+    const home = tmp('autoupdate-low4-ok-');
+    const { meta, tarball } = buildFakeRelease('0.9.16');
+    const result = await autoupdate.checkAndApplyRunnerUpdate(home, {
+      env: {},
+      installer: fakeInstaller('0.9.14'),
+      pinnedKeys: testPinnedKeys,
+      fetchImpl: fakeFetch({
+        [autoupdate.REGISTRY_LATEST_URL]: jsonResponse(meta),
+        [meta.dist.tarball]: bufferResponse(tarball),
+      }),
+      log: () => {},
+      now: 1,
+    });
+    assert.equal(result.status, 'updated');
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+});
+
 // ═════════════════════════════════════════════════════════════════════════
 // `auxilo status` — Auto-update line (spec §6, fix pass L8)
 // ═════════════════════════════════════════════════════════════════════════
@@ -1298,5 +1657,56 @@ describe('CLI integration: `auxilo status` Auto-update line', () => {
     assert.equal(res.code, 0, res.stderr);
     assert.match(res.stdout, /Auto-update: off \(last check: never\)/);
     fs.rmSync(home, { recursive: true, force: true });
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════
+// scripts/runner.js — MEDIUM-1: lazy stack modules are pre-warmed BEFORE
+// the auto-update check, so an in-session swap can never change what this
+// process runs (0.9.16 fix pass 2)
+// ═════════════════════════════════════════════════════════════════════════
+
+describe('scripts/runner.js: pre-warms extract-local.js before checkAndApplyRunnerUpdate (MEDIUM-1)', () => {
+  const RUNNER_SRC_PATH = path.join(REPO, 'scripts', 'runner.js');
+
+  it('source order: the extract-local.js pre-warm require() appears textually BEFORE the checkAndApplyRunnerUpdate call in main()', () => {
+    const src = fs.readFileSync(RUNNER_SRC_PATH, 'utf-8');
+    const mainStart = src.indexOf('async function main()');
+    assert.notEqual(mainStart, -1, 'main() not found in scripts/runner.js');
+    const mainBody = src.slice(mainStart);
+    const prewarmIdx = mainBody.indexOf("require('./extract-local.js')");
+    const updateCallIdx = mainBody.indexOf('await checkAndApplyRunnerUpdate(');
+    assert.notEqual(prewarmIdx, -1, "pre-warm require('./extract-local.js') call not found in main()");
+    assert.notEqual(updateCallIdx, -1, 'checkAndApplyRunnerUpdate call not found in main()');
+    assert.ok(prewarmIdx < updateCallIdx, 'the extract-local.js pre-warm must run BEFORE the auto-update check, not after');
+  });
+
+  it("the underlying Node guarantee the pre-warm relies on: once required, a module's exports stay pinned to the OLD identity even after an atomic file swap replaces it on disk", () => {
+    const scratchDir = tmp('prewarm-mechanism-');
+    const modPath = path.join(scratchDir, 'extract-local.js');
+    fs.writeFileSync(modPath, 'module.exports = { marker: "OLD" };\n');
+
+    // Mirrors main()'s pre-warm: require it before any update/swap happens.
+    const preWarmed = require(modPath);
+    assert.equal(preWarmed.marker, 'OLD');
+
+    // Simulate the auto-update's atomic per-file swap (lib/installer.js
+    // installRunnerAtomic's atomicWrite: tmp file + fs.renameSync onto the
+    // SAME final path).
+    const tmpFile = `${modPath}.tmp-swap`;
+    fs.writeFileSync(tmpFile, 'module.exports = { marker: "NEW" };\n');
+    fs.renameSync(tmpFile, modPath);
+    assert.match(fs.readFileSync(modPath, 'utf-8'), /NEW/, 'the file on disk really is the new version now');
+
+    // A LATE require (mirroring runner.js's other lazy call sites —
+    // postExtractDetailed / checkClaudeAuthStatus — which run AFTER the
+    // swap within the same session) must still resolve to the identical
+    // cached module object with the OLD export.
+    const lateRequire = require(modPath);
+    assert.equal(lateRequire, preWarmed, 'require() must return the SAME cached module object as the pre-warm call');
+    assert.equal(lateRequire.marker, 'OLD', 'the process must keep using the pre-warmed OLD export, never the swapped-in NEW file');
+
+    delete require.cache[require.resolve(modPath)];
+    fs.rmSync(scratchDir, { recursive: true, force: true });
   });
 });

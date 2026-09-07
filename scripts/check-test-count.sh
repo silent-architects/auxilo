@@ -100,7 +100,7 @@ cd "${REPO_ROOT}"
 # file's count changed (envelope-0831/prepublish-guard version-string
 # fixtures were value edits, not test additions/removals). Verified
 # against the actual `npm test` discovered count: 2711 + 38 = 2749.
-EXPECTED_TEST_COUNT=2776
+EXPECTED_TEST_COUNT=2791
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

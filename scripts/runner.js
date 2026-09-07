@@ -1183,6 +1183,35 @@ async function main() {
   markExtractionStart(os.homedir());
   process.on('exit', () => markExtractionEnd(os.homedir()));
 
+  // ── Pre-warm lazily-required stack modules (0.9.16 fix pass 2, MEDIUM-1) ──
+  // extract-local.js (and transitively scripts/providers/index.js + every
+  // provider module it loads: claude-code.js, codex-cli.js, byo-key.js) is
+  // only ever require()'d LAZILY, inside functions this file calls AFTER
+  // the auto-update check below (postExtractDetailed's lazy require of this
+  // same module's extractLocally export, and the checkClaudeAuthStatus
+  // import further down). Node caches a module by resolved path the first time
+  // it's require()'d in a process and never re-reads that file from disk on
+  // a later require() of the same path — so if the FIRST require of
+  // extract-local.js happened after checkAndApplyRunnerUpdate has already
+  // swapped the files on disk, this already-running process would start
+  // executing the BRAND NEW extract chain mid-session, contradicting this
+  // module's "new code takes effect starting with the NEXT session"
+  // guarantee (see lib/runner-autoupdate.js's module doc). Forcing the
+  // require here, BEFORE the update check, pins the module identity this
+  // process uses for the rest of its life to whatever was on disk at
+  // process start, regardless of what the swap below does next. (Every
+  // OTHER require in this file's module-load-time closure — including
+  // SOURCES = loadSources() above, and scripts/providers/index.js's own
+  // provider loads — already runs at require() time, before main() is even
+  // called, so only this one lazy call site needed pre-warming; grepped for
+  // `require(` inside function bodies in both scripts/runner.js and
+  // scripts/providers/index.js to confirm.)
+  try {
+    require('./extract-local.js');
+  } catch (err) {
+    log(`[runner] pre-warm of extract-local.js failed: ${err.message}`);
+  }
+
   // ── RUNNER-AUTO-UPDATE: self-update check (0.9.16) ─────────────────────
   // Still "before any extraction work" per the invariant above — this is
   // the ONLY call site (see lib/runner-autoupdate.js's module doc for the
