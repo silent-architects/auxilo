@@ -13475,7 +13475,7 @@ app.post('/referral/track', requireSession, async (c) => {
   // Credit referee immediately ($5 credit)
   // AUD19-2: referral grants are $0-revenue mints — their unlock lots carry a
   // $0.00 unit price so they accrue $0 contributor share when spent.
-  await addPurchasedCredits(referee_account_id, 200, 40, { unlock_unit_price_usd: 0 }); // ~$5 worth
+  await addPurchasedCredits(referee_account_id, 0, 40, { unlock_unit_price_usd: 0 }); // ~$5 worth
 
   saveReferrals();
 
@@ -13515,7 +13515,7 @@ async function vestReferrerCredits(refereeAccountId) {
 
   // Credit referrer ($5)
   // AUD19-2: $0-revenue grant lot — accrues $0 contributor share when spent.
-  await addPurchasedCredits(referrerId, 200, 40, { unlock_unit_price_usd: 0 }); // ~$5 worth
+  await addPurchasedCredits(referrerId, 0, 40, { unlock_unit_price_usd: 0 }); // ~$5 worth
 
   // Fix C: Mark this referee as vested to prevent re-vesting on duplicate webhooks
   if (!referrerData.vested_referees) referrerData.vested_referees = [];

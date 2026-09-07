@@ -355,7 +355,7 @@ describe('server.js: WAL determinism (forward-only cutover)', () => {
 
 describe('server.js: $0 referral lots + pack pricing at the grant sites', () => {
   it('both referral grant sites mint $0-revenue lots', () => {
-    const grants = SERVER_SRC.match(/addPurchasedCredits\((referee_account_id|referrerId), 200, 40, \{ unlock_unit_price_usd: 0 \}\)/g) || [];
+    const grants = SERVER_SRC.match(/addPurchasedCredits\((referee_account_id|referrerId), 0, 40, \{ unlock_unit_price_usd: 0 \}\)/g) || [];
     assert.equal(grants.length, 2, 'referee + referrer grants both carry unit_price 0');
   });
 
