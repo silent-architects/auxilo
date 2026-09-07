@@ -89,7 +89,14 @@ cd "${REPO_ROOT}"
 # class, page h2 count still 7) plus 1 served-route assertion (staged
 # server, mirroring test/fb-accrual-sentence.test.js). Verified against
 # the actual `npm test` discovered count: 2696 + 7 = 2703.
-EXPECTED_TEST_COUNT=2778
+# agent/fb-hero-stats (base pm/integ-y 35189e3, 2778): FB-HERO-STATS-MOBILE
+# added 2 assertions to test/ask-wave.test.js (the deliberate
+# ".pull-stat-num gold TEXT ... is not counted as a gold-fill event" case,
+# once per viewport) and re-armed the existing /for-builders 375x812 (iii)
+# fold case (already counted pre-change, no new test — was skipped, now
+# runs). Verified against the actual `npm test` discovered count:
+# 2778 + 2 = 2780.
+EXPECTED_TEST_COUNT=2780
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

@@ -384,6 +384,67 @@
         padding: 24px 20px;
       }
     }
+
+    /* AD ruling 2026-09-07 (row FB-HERO-STATS-MOBILE, via SITE-PM): at
+       <=600px .builders-hero-stats was wrapping to a 3-row vertical stack
+       (298px + 48px margin -- the three columns' combined width, driven by
+       the longest caption "direct share (60% via discovery)", exceeded the
+       327px content box at 375), pushing the hero .btn-primary bottom to
+       951 > 812 (test/ask-wave.test.js exempted this case pending this
+       fix). Ruling: keep it a SINGLE COMPRESSED ROW (flex-wrap: nowrap,
+       not stacked, not dropped) at a target stats-block height of 75px and
+       margin-bottom of 32px, landing the button bottom at 712 (AD
+       arithmetic, live-verified: 130 locked hero pad + 40
+       .builders-hero-content padding-top + 88 h1 + 28 h1 margin + 132 sub1
+       + 40 shared .builders-hero-sub margin + 75 stats + 32 stats margin +
+       53 sub2 + 40 shared .builders-hero-sub margin + 54 button = 712).
+       Hierarchy is unchanged: 228 stays the sole ledger-tier number (gold
+       TEXT, not a gold-fill -- see test/ask-wave.test.js's deliberate
+       exclusion of .pull-stat-num from the gold-event collector), the
+       other two stay at caption tier; no colours touched here.
+       !important throughout: every property below is set by styles.css's
+       #builders-hero .builders-hero-stats .builders-hero-stat .stat-num
+       (plus its .pull-stat-num/.pull-stat-caption variants), which this
+       page-scoped block already outranks at equal specificity because it
+       loads after styles.css in <head> (BREAKPOINT-CONSOLIDATION
+       architecture) -- !important is kept here anyway, matching that
+       precedent, so the mobile override can't silently regress if either
+       file's load order ever changes. */
+    @media (max-width: 600px) {
+      .builders-hero-stats {
+        flex-wrap: nowrap;
+        gap: 14px;
+        margin-bottom: 32px !important;
+      }
+
+      .builders-hero-stat {
+        flex: 1 1 0;
+        min-width: 0;
+        gap: 13px;
+      }
+
+      /* Ledger number ("228") and its two demoted siblings ("70%", "under
+         1 minute" -- shipped as .stat-num.pull-stat-caption per styles.css
+         item 5) both need their font-size cut at this width; the shared
+         min-height (styles.css's baseline-alignment rule) is dropped so
+         the row can compress to the 75px target instead of reserving an
+         88px-clamp box under every cell. */
+      #builders-hero .builders-hero-stats .builders-hero-stat .stat-num {
+        min-height: 0 !important;
+        line-height: 1.15 !important;
+      }
+      #builders-hero .builders-hero-stats .builders-hero-stat .stat-num.pull-stat-num {
+        font-size: 22px !important;
+      }
+      #builders-hero .builders-hero-stats .builders-hero-stat .stat-num.pull-stat-caption {
+        font-size: 15px !important;
+      }
+      #builders-hero .builders-hero-stats .builders-hero-stat .stat-label.pull-stat-caption {
+        font-size: 9.5px !important;
+        line-height: 1.3 !important;
+        margin-top: 3px !important;
+      }
+    }
   </style>
 </head>
 <body>
