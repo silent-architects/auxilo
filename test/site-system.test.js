@@ -169,10 +169,18 @@ describe('SITE-SYSTEM item 2: the footer link set is byte-identical across every
     const serverSrc = fs.readFileSync(path.join(REPO_ROOT, 'server.js'), 'utf8');
     assert.ok(serverSrc.includes(`app.get('/how-submissions-work'`),
       'server.js now carries the how-submissions-work route (TRUST-PAGE, 2026-09-06)');
+    // Scoped to the <footer> element specifically (not the whole page):
+    // SITE-PERFECT-W2 item C (2026-09-06) gave for-builders.html a body-copy
+    // link to /how-submissions-work from its Sensitivity Protection card
+    // ("the submissions page"), which is a different surface than the
+    // footer nav slot this test guards. The footer itself still carries no
+    // such link on any existing page.
     for (const page of FOOTER_PAGES) {
       if (page === 'how-submissions-work.html') continue; // the page's own footer legitimately links itself via the wordmark, not this string
       const html = readPublic(page);
-      assert.ok(!html.includes('how-submissions-work'), `${page} footer must not link the not-yet-navigated route`);
+      const footerMatch = html.match(/<footer>[\s\S]*?<\/footer>/);
+      assert.ok(footerMatch, `${page} has a <footer> element`);
+      assert.ok(!footerMatch[0].includes('how-submissions-work'), `${page} footer must not link the not-yet-navigated route`);
     }
   });
 
