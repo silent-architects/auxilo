@@ -89,7 +89,7 @@ cd "${REPO_ROOT}"
 # class, page h2 count still 7) plus 1 served-route assertion (staged
 # server, mirroring test/fb-accrual-sentence.test.js). Verified against
 # the actual `npm test` discovered count: 2696 + 7 = 2703.
-EXPECTED_TEST_COUNT=2758
+EXPECTED_TEST_COUNT=2778
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

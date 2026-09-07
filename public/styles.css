@@ -311,17 +311,21 @@ section h2 {
    Wave E2 item 12: raised to 44px (measured 40.4px live, AD-STEP4-FINAL
    P3.18). Wave E2 item 10 sent this to an ash ghost button ("one accent
    event per screen"); the AD nav re-rule sheet (2026-09-06 §2/§6)
-   supersedes that call for a FILLED button: "The CTA is the property's one
-   filled button... The band then paints exactly one gold element, the
-   CTA." Ground var(--aurum), text var(--obsidian) (8.66:1 contrast per the
-   sheet), border recolored to var(--aurum) so the 1px box math is
-   unchanged. Hover raises the ground to --aurum-hi, text stays obsidian. */
+   superseded that call for a FILLED button, and ASK-WAVE (2026-09-07,
+   THE-ASK-PACKET §3) supersedes THAT: the homepage command block is now
+   the property's single gold event, so the nav pill demotes sitewide to
+   an outlined ivory ghost button — same box (44px min-height, 8px 18px
+   pad), same position, persistence and label. Ground transparent, text
+   var(--ivory), border rgba(229,229,227,0.35) — mirrors .btn-secondary's
+   outline pattern. Hover tints to rgba(255,255,255,0.04), text stays
+   ivory. --aurum-hi is no longer referenced by this rule (left defined,
+   unused). */
 .nav-cta {
   font-size: 14px !important;
   font-weight: 500 !important;
-  color: var(--obsidian) !important;
-  background: var(--aurum);
-  border: 1px solid var(--aurum);
+  color: var(--ivory) !important;
+  background: transparent;
+  border: 1px solid rgba(229,229,227,0.35);
   padding: 8px 18px;
   border-radius: 4px;
   min-height: 44px;
@@ -332,8 +336,8 @@ section h2 {
 }
 
 .nav-cta:hover {
-  background: var(--aurum-hi) !important;
-  color: var(--obsidian) !important;
+  background: rgba(255,255,255,0.04) !important;
+  color: var(--ivory) !important;
 }
 
 /* AD sheet §2: "Focus ring 2px var(--ivory) at 2px offset, because a gold
@@ -385,6 +389,43 @@ section h2 {
   display: flex;
   gap: 16px;
   flex-wrap: wrap;
+}
+
+/* ASK-WAVE (2026-09-07, THE-ASK-PACKET §1 item 4, AD ruling): the hero's
+   lone secondary text link sits beside the #install block itself, not
+   beneath the whole copy column — spec correction: the tree's real hero
+   grid breakpoint is 981px (index.html §"@media (min-width: 981px)"), not
+   the packet draft's 900px. Below 981px this stacks (link under the
+   block); at 981px+ it sits to the right, baseline-aligned with the
+   command block's bottom edge. */
+.hero-install-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+@media (min-width: 981px) {
+  .hero-install-row {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+}
+
+.hero-cta-link {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ivory);
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+
+.hero-cta-link:hover {
+  text-decoration: underline;
 }
 
 /* Wave E2 item 12: pinned to 54px (was 52px — .btn-secondary's 1px border
@@ -2042,25 +2083,49 @@ abbr[title] {
   }
 }
 
-/* ── Hero install block (E1: the primary conversion is the command) ───────── */
+/* ── Hero install block (E1: the primary conversion is the command).
+   ASK-WAVE (2026-09-07, THE-ASK-PACKET §1 item 1 + AD ruling): "the ask
+   IS the command block, not a button" — framed, isolated and scaled to
+   read as the fold's single decisive move rather than a code sample near
+   the headline, while `npx auxilo setup` itself stays fully inside the
+   hero fold at both 1440x900 and 375x812 (verified: #hero-setup-snippet's
+   own box, not the whole #install column below it, is the packet's "ask"
+   and the thing required to stay in-fold). Border upgraded from the base
+   .code-block's 0.08-alpha ivory hairline to an aurum-tinted frame with a
+   soft lift shadow; pre text raised from 16px to 18px (16px on mobile, up
+   from the prior 14px base); box widened from 560px to 600px. Kept
+   deliberately modest rather than maximal so the trust-bullet list below
+   it doesn't lose materially more fold real estate than the microcopy
+   line already costs it. The copy button's gold fill (index.html §"#install
+   .copy-btn") is unchanged and is part of this same event, not a second
+   one. */
 .hero-install {
-  max-width: 560px;
+  max-width: 600px;
   margin-bottom: 32px;
 }
 
 .hero-install .hero-setup-block {
   text-align: left;
+  border-color: var(--aurum-border);
+  box-shadow: 0 24px 48px -28px rgba(0,0,0,0.65);
 }
 
 .hero-install .hero-setup-block pre {
-  font-size: 16px;
-  padding: 18px 20px;
+  font-size: 18px;
+  padding: 20px 22px;
   color: var(--aurum);
+}
+
+.hero-setup-note {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--slate-text);
 }
 
 .hero-trust {
   list-style: none;
-  margin: 16px 0 0;
+  margin: 10px 0 0;
   padding: 0;
 }
 
@@ -2095,7 +2160,7 @@ abbr[title] {
 
 @media (max-width: 600px) {
   .hero-install { max-width: 100%; }
-  .hero-install .hero-setup-block pre { font-size: 14px; }
+  .hero-install .hero-setup-block pre { font-size: 17px; padding: 18px 18px; }
 }
 
 /* ── Pull-stats: ledger tier — exactly one gold figure per strip (Move 1) ── */

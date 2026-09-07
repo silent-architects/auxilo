@@ -229,20 +229,22 @@
         grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
         grid-template-areas:
           "head   head"
-          "copy   figure"
-          "ctas   figure";
+          "copy   figure";
         column-gap: 64px;
         align-items: start;
       }
       #hero .hero-content > h1 { grid-area: head; }
       #hero .hero-copy { grid-area: copy; }
-      #hero .hero-ctas { grid-area: ctas; }
       #hero .hero-figure {
         grid-area: figure;
         align-self: center;
         margin: 0;
       }
     }
+
+    /* ASK-WAVE (2026-09-07, THE-ASK-PACKET §1 item 4): the hero's secondary
+       reduces to one text link, retargeted to sit beside #install itself
+       (not the whole copy column) — see .hero-install-row in styles.css. */
 
     /* ── AD sheet 1, item 2: the fold's one gold fill lands on the install
        control (the copy button in #install), not the nav CTA. Existing
@@ -263,19 +265,11 @@
       opacity: 0.9;
     }
 
-    /* Nav CTA drops from gold to the ash outline on this page only, so it
-       stops competing with the install control above for the fold's one
-       gold event. Size/shape (175x35, transparent, 0.35 border) unchanged. */
-    #nav-cta-access.nav-cta {
-      color: var(--ash) !important;
-    }
-    #nav-cta-access.nav-cta {
-      border-color: rgba(229,229,227,0.35);
-    }
-    #nav-cta-access.nav-cta:hover {
-      background: rgba(255,255,255,0.04) !important;
-      color: var(--ash) !important;
-    }
+    /* ASK-WAVE (2026-09-07): the page-scoped ash-outline override that used
+       to live here is gone. It existed only to demote the nav CTA below the
+       old gold fill so it wouldn't compete with the install control for the
+       fold's one gold event; now that .nav-cta is globally outlined ivory
+       (styles.css), this page needs no fork — see THE-ASK-PACKET §1/§3. */
 
     /* AD-CLIENTS-VISUAL-SHEET-2026-09-06 strings rev 3: the works-with
        homepage band, directly under the hero's trust bullets. One size, no
@@ -360,20 +354,26 @@
     <div class="hero-copy">
     <p class="hero-sub">It hits the same error and works its way back to the same undocumented detail it found for you last month, because the session that found it is gone. Auxilo publishes that detail only when you approve it. When your agent asks Auxilo, signed in to your account, the answer you published comes back free.</p>
 
-    <div class="hero-install" id="install">
-      <div class="code-block hero-setup-block" id="hero-setup-snippet">
-        <div class="code-block-header">
-          <span class="code-block-lang">One command. Any terminal.</span>
-          <button class="copy-btn" id="copy-hero-setup" onclick="copyCode('hero-setup-code', 'copy-hero-setup')" aria-label="Copy command">copy</button>
+    <div class="hero-install-row">
+      <div class="hero-install" id="install">
+        <div class="code-block hero-setup-block" id="hero-setup-snippet">
+          <div class="code-block-header">
+            <span class="code-block-lang">One command. Any terminal.</span>
+            <button class="copy-btn" id="copy-hero-setup" onclick="copyCode('hero-setup-code', 'copy-hero-setup')" aria-label="Copy command">Copy the Setup Command</button>
+          </div>
+          <pre id="hero-setup-code">npx auxilo setup</pre>
         </div>
-        <pre id="hero-setup-code">npx auxilo setup</pre>
+        <p class="hero-setup-note">Setup is free and takes one command. Extraction stays off until you turn it on.</p>
+        <ul class="hero-trust" aria-label="What setup does and does not do">
+          <li>It finds your MCP clients, registers Auxilo, and signs you in.</li>
+          <li>Decline extraction and every Auxilo tool still works.</li>
+          <li>Raw transcripts never leave your machine. The secret filter runs locally and fails closed.</li>
+          <li>Everything waits in your review queue until you approve it, one learning at a time or in advance in your dashboard, and you can retract anything for 7 days. <code>npx auxilo disable</code> is the kill switch.</li>
+        </ul>
       </div>
-      <ul class="hero-trust" aria-label="What setup does and does not do">
-        <li>It finds your MCP clients, registers Auxilo, and signs you in.</li>
-        <li>Extraction defaults to off. Decline it and every Auxilo tool still works.</li>
-        <li>Raw transcripts never leave your machine. The secret filter runs locally and fails closed.</li>
-        <li>Everything waits in your review queue until you approve it, one learning at a time or in advance in your dashboard, and you can retract anything for 7 days. <code>npx auxilo disable</code> is the kill switch.</li>
-      </ul>
+      <div class="hero-ctas">
+        <a href="/how-it-works" id="hero-cta-secondary" class="hero-cta-link">See How It Works</a>
+      </div>
     </div>
     </div>
 
@@ -400,11 +400,6 @@
         <text class="ex-label" x="42" y="197">Another agent asks Auxilo and unlocks it</text>
         <text class="ex-label" x="42" y="277">Your share accrues</text>
       </svg>
-    </div>
-
-    <div class="hero-ctas">
-      <a href="/how-it-works" id="hero-cta-secondary" class="btn-secondary">See How It Works</a>
-      <a href="/for-builders" id="hero-cta-builders" class="btn-secondary">How builders earn</a>
     </div>
   </div>
 </section>
