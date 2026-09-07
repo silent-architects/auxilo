@@ -691,30 +691,6 @@ section h2 {
   line-height: 1.6;
 }
 
-/* ── The Market ──────────────────────────────────────────────────── */
-#the-market h2 {
-  /* font-size/weight/letter-spacing/color now come from the shared section h2 rule */
-  margin-bottom: 48px;
-  line-height: 1.15;
-}
-
-.market-copy {
-  max-width: 640px;
-}
-
-.market-copy p {
-  font-size: 17px;
-  line-height: 1.75;
-  color: var(--ash);
-  margin-bottom: 24px;
-}
-
-.market-copy p:last-child {
-  margin-bottom: 0;
-  color: var(--ivory);
-  font-weight: 500;
-}
-
 /* AD sheet 9 / B1: "How It Holds Up" (#why-auxilo) is gone from index.html
    (RF-6), but .moat-grid/.moat-card are still used by /for-builders.
    AD design-tells sweep tell 6: .moat-icon markup deleted (icon-as-marker
@@ -1620,7 +1596,6 @@ abbr[title] {
    plain obsidian (the decorative triangle texture was removed sitewide by
    the AD design-tells sweep, tell 8). Strict A/B/A/B per page. */
 .section-raised,
-#the-market,
 .explore-section,
 #for-builders,
 #pricing {
