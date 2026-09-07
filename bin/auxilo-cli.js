@@ -22,6 +22,7 @@ const readline = require('readline');
 const { exec } = require('child_process');
 const installer = require('../lib/installer.js');
 const review = require('../lib/review.js');
+const runnerAutoupdate = require('../lib/runner-autoupdate.js');
 const providers = require('../scripts/providers/index.js');
 const byoKeyProvider = require('../scripts/providers/byo-key.js');
 
@@ -291,6 +292,15 @@ async function cmdSetup(flags) {
     process.exit(1);
   }
 
+  // RUNNER-AUTO-UPDATE (0.9.16): `--no-autoupdate` persists the opt-out so
+  // every future hook-fired run skips the self-update network check, not
+  // just this invocation of `setup` (env AUXILO_RUNNER_AUTOUPDATE=0 is the
+  // other, per-run-only opt-out — see lib/runner-autoupdate.js).
+  if (flags['no-autoupdate']) {
+    installer.writeRunnerConfig(HOME, { autoupdate: false });
+    console.log('  ✓ Runner auto-update disabled (persisted to ~/.auxilo/runner-config.json)');
+  }
+
   const claudeCode = chosen.find((c) => c.id === 'claude-code');
   if (claudeCode) {
     // LW-18: SessionStart held-count notice ("N learnings held for your
@@ -551,6 +561,13 @@ async function cmdStatus() {
   if (s.runnerInstalled) {
     const line = runnerSkewLine(installer.runnerVersionSkew(HOME));
     if (line) console.log(line);
+    // RUNNER-AUTO-UPDATE (0.9.16): one more line in the same section, no new
+    // heading — auto-update on/off/paused-by-env, last check time, and the
+    // last verification result (if any check has ever run).
+    const autoupdateLine = runnerAutoupdate.runnerAutoupdateStatusLine(
+      runnerAutoupdate.getRunnerAutoupdateStatus(HOME)
+    );
+    if (autoupdateLine) console.log(autoupdateLine);
   }
   console.log(extractionProviderLine(await providers.resolveProvider({})));
   // Lazy require: scripts/runner.js is a heavier module (sources, sensitivity
@@ -1435,10 +1452,12 @@ async function cmdProvider(flags) {
 
 function usage(command) {
   const blocks = {
-    setup: `Usage: auxilo setup [--re-auth] [--base-url <url>]
+    setup: `Usage: auxilo setup [--re-auth] [--base-url <url>] [--no-autoupdate]
 
 Interactively detect clients, register Auxilo, sign in, install the optional
-extraction runner and SessionEnd hook, and record the extraction choice.`,
+extraction runner and SessionEnd hook, and record the extraction choice.
+--no-autoupdate persists opt-out of the runner's self-update check (default:
+on — see AUXILO_RUNNER_AUTOUPDATE=0 for a per-run-only opt-out instead).`,
     init: `Usage: auxilo init [--scope <read|earnings-read|contribute>] [--label <name>]
                    [--env-file <path>] [--save] [--json] [--no-browser]
                    [--base-url <url>]
