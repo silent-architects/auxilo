@@ -458,6 +458,12 @@ async function defaultInvokeModel(transcript, invokeOpts, opts) {
     authStatus: result.authStatus,
     extractionModel: await resolveExtractionModelIdentity(result, opts),
     ...(result.authDiscrepancy !== undefined && { authDiscrepancy: result.authDiscrepancy }),
+    // EXTRACTION-RUN-LOG (0.9.15): additive passthrough for the one-line-per-run
+    // provider summary logged at the end of extractLocally() below. Only
+    // claude-code's runModel() currently sets these (argv/cliVersion); other
+    // providers simply omit them, which the log builder renders as 'n/a'.
+    ...(result.argv !== undefined && { argv: result.argv }),
+    ...(result.cliVersion !== undefined && { cliVersion: result.cliVersion }),
   };
 }
 
@@ -476,7 +482,20 @@ function defaultInvokeJudge(opts) {
       log: opts.log,
       mode: 'judge',
     });
-    return { ok: result.ok, out: result.text, usage: result.usage, reason: result.reason };
+    return {
+      ok: result.ok,
+      out: result.text,
+      usage: result.usage,
+      reason: result.reason,
+      // EXTRACTION-RUN-LOG (0.9.15): threaded through so runAnchoredJudge below
+      // can report the judge call's status/argv/CLI version on the run summary
+      // log line. Additive — every existing invokeJudge stub in this repo's
+      // tests returns a subset of {ok,out,usage,reason} and these three simply
+      // come back undefined for them, changing nothing they assert.
+      reasonCode: result.reasonCode,
+      argv: result.argv,
+      cliVersion: result.cliVersion,
+    };
   };
 }
 
@@ -516,12 +535,26 @@ function parseJudgeDecisions(raw, candidates, rankings) {
 
 async function runAnchoredJudge(candidates, indexState, opts = {}) {
   const input = Array.isArray(candidates) ? candidates : [];
+  // judgeAttempted/judgeSucceeded (EXTRACTION-RUN-LOG, 0.9.15): additive
+  // status fields for the provider-run log line only — every field already on
+  // `empty` (kept/dropped/called/prompt_tokens/completion_tokens) keeps its
+  // exact pre-existing meaning and every existing caller's assertions on those
+  // fields are unaffected. judgeAttempted=true means invokeJudge was actually
+  // called (regardless of outcome); judgeSucceeded=true means it returned
+  // ok:true AND its output parsed into real decisions (the one path that
+  // actually judged anything, as opposed to failing open and keeping
+  // everything). This is a finer distinction than `called` — `called` is
+  // true even for a malformed-JSON response (an attempted-and-failed case) —
+  // so the log builder uses these two instead of `called` to tell
+  // "ran"/"failed"/"skipped(no-candidates)" apart accurately.
   const empty = {
     kept: input.slice(),
     dropped: [],
     called: false,
     prompt_tokens: 0,
     completion_tokens: 0,
+    judgeAttempted: false,
+    judgeSucceeded: false,
   };
   if (!input.length || !indexState || !indexState.usable ||
       !Array.isArray(indexState.rows) || !indexState.rows.length) {
@@ -538,17 +571,29 @@ async function runAnchoredJudge(candidates, indexState, opts = {}) {
     result = await invokeJudge(prompt, { candidates: input, rankings });
   } catch (error) {
     loudLocal(opts, `anchored judge unavailable; keeping all candidates: ${error.message}`);
-    return empty;
+    return { ...empty, judgeAttempted: true };
   }
   if (!result || !result.ok) {
     loudLocal(opts, `anchored judge unavailable; keeping all candidates: ${result && result.reason ? result.reason : 'unknown error'}`);
-    return empty;
+    return {
+      ...empty,
+      judgeAttempted: true,
+      judgeReasonCode: result && result.reasonCode,
+      judgeArgv: result && result.argv,
+      judgeCliVersion: result && result.cliVersion,
+    };
   }
   const parsed = parseJudgeDecisions(result.out, input, rankings);
   const usage = judgeUsage(result.usage, prompt, result.out);
+  const judgeMeta = {
+    judgeAttempted: true,
+    judgeReasonCode: result.reasonCode,
+    judgeArgv: result.argv,
+    judgeCliVersion: result.cliVersion,
+  };
   if (!parsed.ok) {
     loudLocal(opts, `anchored judge malformed; keeping all candidates: ${parsed.reason}`);
-    return { ...empty, called: true, ...usage };
+    return { ...empty, called: true, ...usage, ...judgeMeta, judgeSucceeded: false };
   }
 
   const kept = [];
@@ -575,7 +620,7 @@ async function runAnchoredJudge(candidates, indexState, opts = {}) {
       kept.push(input[index]);
     }
   }
-  return { kept, dropped, called: true, ...usage };
+  return { kept, dropped, called: true, ...usage, ...judgeMeta, judgeSucceeded: true };
 }
 
 /**
@@ -630,6 +675,68 @@ function immutableSet(ids) {
 
 const EXTRACTABLE_SOURCES = immutableSet(EXTRACTABLE_SOURCE_IDS);
 
+// ─── Provider-run log line (EXTRACTION-RUN-LOG, PUNCH-LIST P3, 0.9.15) ─────
+//
+// One line per extractLocally() run, written to the runner's log at the point
+// each run completes — never prompt/transcript content. reasonCode/argv/
+// cliVersion are provider-internal diagnostics only (every provider's own
+// `reason` string is secret-free by the same contract runModel() documents in
+// scripts/providers/index.js), so this line carries no learning text.
+const PRE_SPAWN_SKIP_REASON_CODES = new Set([
+  'cli-unauthenticated',
+  'cli-not-installed',
+  'cli-billing-helper-configured',
+  'cli-settings-isolation-unsupported',
+  'provider-not-configured',
+  'providers-file-mode-unsafe',
+  'provider-not-installed',
+  'no-usable-provider',
+  'no-model-provider-available',
+]);
+
+function formatArgvForLog(argv) {
+  if (!Array.isArray(argv) || !argv.length) return 'n/a';
+  return argv.map((arg) => (arg === '' ? "''" : arg)).join(' ');
+}
+
+/**
+ * `finder` and `judge` report whether each call was actually attempted
+ * (spawned) this run, not whether it succeeded — a spawn that ran and then
+ * hit a model error still counts as "ran" (it happened; the failure is in
+ * `reason`, not in whether isolation applied). `hooks` is `claude-code`-
+ * specific: 'isolated' whenever a claude-code spawn this run carried
+ * --setting-sources (the only state a spawn can be in per the fail-closed
+ * gate in scripts/providers/claude-code.js — it never spawns without the
+ * flag), 'unsupported' when the CLI was found not to support the flag at
+ * all, 'n/a' for a non-claude-code provider (codex-cli/byo-key isolate by a
+ * different mechanism entirely, out of this row's scope).
+ */
+function logProviderRunSummary(opts, runId, modelResult, judged) {
+  try {
+    const log = typeof opts.log === 'function' ? opts.log : console.error;
+    const provider = (modelResult.extractionModel && modelResult.extractionModel.provider) || 'unknown';
+    const finderRan = Boolean(modelResult.ok) || !PRE_SPAWN_SKIP_REASON_CODES.has(modelResult.reasonCode);
+    const finder = finderRan ? 'ran' : 'skipped';
+    let judgeState;
+    if (!judged || !judged.judgeAttempted) judgeState = 'skipped(no-candidates)';
+    else if (judged.judgeSucceeded) judgeState = 'ran';
+    else judgeState = 'failed';
+    const argv = (finderRan && modelResult.argv) || (judged && judged.judgeArgv) || null;
+    const cliVersion = modelResult.cliVersion || (judged && judged.judgeCliVersion) || null;
+    const finderUnsupported = modelResult.reasonCode === 'cli-settings-isolation-unsupported';
+    const judgeUnsupported = Boolean(judged && judged.judgeReasonCode === 'cli-settings-isolation-unsupported');
+    const hooks = provider === 'claude-code'
+      ? ((finderUnsupported || judgeUnsupported) ? 'unsupported' : 'isolated')
+      : 'n/a';
+    log(
+      `[providers] run=${runId || 'unknown'} provider=${provider} cli=${cliVersion || '-'} ` +
+      `finder=${finder} judge=${judgeState} flags=${formatArgvForLog(argv)} hooks=${hooks}`
+    );
+  } catch {
+    // Logging must never block or fail extraction.
+  }
+}
+
 async function extractLocally(transcript, sourceType, opts = {}) {
   if (sourceType && !EXTRACTABLE_SOURCES.has(sourceType)) {
     return { learnings: [], skipped: `local extraction not implemented for "${sourceType}" — agent contributes via auxilo_contribute` };
@@ -671,6 +778,7 @@ async function extractLocally(transcript, sourceType, opts = {}) {
   const modelResult = await invokeModel(transcript, { prompt });
   const { ok, out, reason } = modelResult;
   if (!ok) {
+    logProviderRunSummary(opts, opts.runId, modelResult, null);
     return {
       learnings: [],
       skipped: reason,
@@ -737,6 +845,7 @@ async function extractLocally(transcript, sourceType, opts = {}) {
       `lexical_filter=${lexicalDropped.length}, anchored_judge=${judged.dropped.length}`
     );
   }
+  logProviderRunSummary(opts, opts.runId, modelResult, judged);
   return {
     learnings: judged.kept,
     dedup_dropped: allDropped.length,
@@ -764,4 +873,6 @@ module.exports = {
   extractWithClaudeCode: claudeCodeProvider.extractWithClaudeCode,
   checkClaudeAuthStatus: claudeCodeProvider.checkClaudeAuthStatus,
   resolveClaudeBin: claudeCodeProvider.resolveClaudeBin,
+  // EXTRACTION-RUN-LOG (0.9.15) — exported for direct unit coverage.
+  formatArgvForLog, logProviderRunSummary, PRE_SPAWN_SKIP_REASON_CODES,
 };

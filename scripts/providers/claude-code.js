@@ -41,6 +41,93 @@ function resolveClaudeBin(opts = {}) {
   return 'claude';
 }
 
+// ─── Child settings/hooks isolation (EXTRACTION-CHILD-HOOKS, PUNCH-LIST P1,
+// 0.9.15) ────────────────────────────────────────────────────────────────
+//
+// Every `claude -p` extraction child previously loaded the OPERATOR'S OWN
+// ~/.claude/settings.json and therefore fired their personal SessionStart
+// hooks (mandate.sh, session-context.sh, ...) — output that reaches the
+// extraction/judge prompt without ever passing the package's scrubber. That
+// is a privacy defect: content from the machine's own hook configuration
+// (potentially personal notes, live queries, etc.) enters a transcript that
+// gets sent to the resolved provider.
+//
+// `--setting-sources <sources>` ("Comma-separated list of setting sources to
+// load (user, project, local)") is documented on both installed CLIs probed
+// during investigation (2.1.12, 2.1.260) — scratchpad hooks-0914/
+// EXTRACTION-CHILD-HOOKS-FINDINGS.md. This build (hooks-0915) tested LIVE
+// whether an EMPTY list (`--setting-sources ''`) — the narrowest, fully
+// cwd-independent value, loading none of user/project/local — is accepted:
+// it is (2.1.12, exit 0, hook_response count 0, well-formed result). Shipping
+// `''` means no fresh-temp-cwd workaround is needed: an empty source list
+// loads nothing regardless of the child's cwd, unlike the `project,local`
+// fallback (which still honors a target repo's own `.claude/settings.json`).
+const SETTING_SOURCES_VALUE = '';
+const SETTING_SOURCES_ARGS = Object.freeze(['--setting-sources', SETTING_SOURCES_VALUE]);
+
+/**
+ * Fail-closed detection of "this CLI build doesn't understand
+ * --setting-sources at all" (an old install predating the flag, or a rename).
+ * Detected from the SAME spawn that already carries the flag — no extra
+ * `--help`/`--version` probe call, so the happy-path spawn count for every
+ * existing caller/test is unchanged. A CLI rejecting an unknown flag exits
+ * non-zero with a message naming the flag (commander.js-style "error:
+ * unknown option '--setting-sources'"); this pattern-matches for that
+ * specific shape rather than treating every non-zero exit as unsupported (a
+ * real model/auth error must NOT be misreported as isolation-unsupported).
+ * Cached module-wide for the lifetime of the process ("once per run"): the
+ * first spawn that hits this failure marks the CLI unsupported and every
+ * subsequent runModel() call in the same process short-circuits BEFORE
+ * spawning again — it must never spawn without the flag, and re-attempting a
+ * doomed spawn every call would be silent waste, not safety.
+ */
+let cachedSettingSourcesUnsupported; // undefined = not yet observed; true once detected
+
+function looksLikeUnsupportedSettingSourcesFlag(res) {
+  if (!res || res.status === 0) return false;
+  const combined = `${String(res.stdout || '')}\n${String(res.stderr || '')}`;
+  return /--setting-sources/.test(combined) && /\b(unknown|unrecognized|invalid)\b.{0,20}\b(option|argument|flag)\b/i.test(combined);
+}
+
+function settingSourcesIsolationUnsupportedResult(authStatus) {
+  return {
+    ok: false,
+    text: '',
+    usage: null,
+    reason: 'installed Claude Code CLI does not support --setting-sources; extraction declines to run a child that would load the operator\'s own settings/hooks unisolated',
+    reasonCode: 'cli-settings-isolation-unsupported',
+    authStatus: authStatus || 'unknown',
+  };
+}
+
+/** Test-only: reset the module-level isolation-support cache between fixtures. */
+function _resetSettingSourcesCacheForTests() {
+  cachedSettingSourcesUnsupported = undefined;
+}
+
+// ─── CLI version, for diagnostics only (no subprocess spawn) ───────────────
+//
+// Resolves the installed package's own package.json version by following the
+// resolved binary's real path (e.g. `/usr/local/bin/claude` -> `.../
+// node_modules/@anthropic-ai/claude-code/cli.js`) and reading the sibling
+// package.json — filesystem-only, so it never adds a spawn to the extraction
+// path (verified live: realpath + package.json read, no `claude --version`
+// call). Best-effort: any failure (bare `claude` unresolved via PATH, an
+// install layout that doesn't carry a sibling package.json, a fixture path in
+// tests) yields null, never throws.
+function getClaudeCliVersion(bin, opts = {}) {
+  const realpathSyncImpl = typeof opts.realpathSyncImpl === 'function' ? opts.realpathSyncImpl : fs.realpathSync;
+  const readFileSyncImpl = typeof opts.readFileSyncImpl === 'function' ? opts.readFileSyncImpl : fs.readFileSync;
+  try {
+    const real = realpathSyncImpl(bin);
+    const pkgPath = path.join(path.dirname(real), 'package.json');
+    const pkg = JSON.parse(readFileSyncImpl(pkgPath, 'utf8'));
+    return pkg && typeof pkg.version === 'string' ? pkg.version : null;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Env scrub (EXTRACT-TOOLS-LOCK, PUNCH-LIST) ────────────────────────────
 //
 // SME-confirmed list (claude-code-guide, verified against official docs and
@@ -81,14 +168,17 @@ const SCRUBBED_CLIENT_ENV_VARS = Object.freeze([
 
 // ─── Spawn argv (EXTRACTION-ZERO-TOOL-CALLS control) ───────────────────────
 //
-// Named + frozen so a byte-pinned test (test/extraction-zero-tool-calls.test.js)
-// can assert the exact argv without duplicating the literal, and so a future
-// flag change is a conscious, greppable edit here rather than a silent literal
-// tweak buried in the two runXMode() functions below. No behavior change: the
-// two spawnSyncImpl() call sites below now pass these constants instead of
-// inline array literals of the identical contents.
-const EXTRACT_MODE_ARGV = Object.freeze(['-p', '--no-session-persistence', '--tools', '']);
-const JUDGE_MODE_ARGV = Object.freeze(['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '']);
+// Named + frozen so a byte-pinned test (test/extraction-zero-tool-calls.test.js,
+// test/claude-code-provider.test.js) can assert the exact argv without
+// duplicating the literal, and so a future flag change is a conscious,
+// greppable edit here rather than a silent literal tweak buried in the two
+// runXMode() functions below. No behavior change: the two spawnSyncImpl()
+// call sites below now pass these constants instead of inline array literals
+// of the identical contents. 0.9.15 (EXTRACTION-CHILD-HOOKS) appends
+// SETTING_SOURCES_ARGS to both — the child loads none of user/project/local
+// settings, so the operator's own SessionStart hooks never fire.
+const EXTRACT_MODE_ARGV = Object.freeze(['-p', '--no-session-persistence', '--tools', '', ...SETTING_SOURCES_ARGS]);
+const JUDGE_MODE_ARGV = Object.freeze(['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', ...SETTING_SOURCES_ARGS]);
 
 /**
  * Build the subscription-auth-only environment shared by BOTH the extraction and
@@ -308,6 +398,7 @@ function detect(opts = {}) {
 function runExtractMode(opts) {
   const spawnSyncImpl = typeof opts.spawnSyncImpl === 'function' ? opts.spawnSyncImpl : spawnSync;
   const bin = typeof opts.claudeBin === 'string' ? opts.claudeBin : resolveClaudeBin(opts);
+  if (cachedSettingSourcesUnsupported) return settingSourcesIsolationUnsupportedResult('unknown');
   const authStatus = checkAuthStatus({ spawnSyncImpl, claudeBin: bin, ...opts });
   if (authStatus === 'logged-out') {
     return {
@@ -321,11 +412,18 @@ function runExtractMode(opts) {
   }
   const prompt = typeof opts.prompt === 'string' ? opts.prompt : '';
   const stdin = prompt + String(opts.input || '').slice(0, 200000);
+  // --no-session-persistence (EXTRACT-PER-CLIENT W1 FIX GIVENS): matches the
+  // judge spawn below — an extraction run leaves no session file behind either.
+  // --setting-sources '' (EXTRACTION-CHILD-HOOKS, 0.9.15): the child loads none
+  // of user/project/local settings, so the operator's own SessionStart hooks
+  // never fire and their output never reaches this prompt.
+  const argv = EXTRACT_MODE_ARGV;
+  const cliVersion = getClaudeCliVersion(bin, opts);
   let res;
   try {
     // --no-session-persistence (EXTRACT-PER-CLIENT W1 FIX GIVENS): matches the
     // judge spawn below — an extraction run leaves no session file behind either.
-    res = spawnSyncImpl(bin, EXTRACT_MODE_ARGV, {
+    res = spawnSyncImpl(bin, argv, {
       input: stdin,
       encoding: 'utf-8',
       env: claudeChildEnv(),
@@ -333,14 +431,18 @@ function runExtractMode(opts) {
       maxBuffer: 20 * 1024 * 1024,
     });
   } catch (error) {
-    return { ok: false, text: '', usage: null, reason: `spawn failed (${bin}): ${error.message}`, reasonCode: 'unknown', authStatus };
+    return { ok: false, text: '', usage: null, reason: `spawn failed (${bin}): ${error.message}`, reasonCode: 'unknown', authStatus, argv, cliVersion };
   }
   if (!res) {
-    return { ok: false, text: '', usage: null, reason: `spawn failed (${bin}): no process result`, reasonCode: 'unknown', authStatus };
+    return { ok: false, text: '', usage: null, reason: `spawn failed (${bin}): no process result`, reasonCode: 'unknown', authStatus, argv, cliVersion };
+  }
+  if (looksLikeUnsupportedSettingSourcesFlag(res)) {
+    cachedSettingSourcesUnsupported = true;
+    return { ...settingSourcesIsolationUnsupportedResult(authStatus), argv, cliVersion };
   }
   const out = String(res.stdout || '');
   if (res.error) {
-    return { ok: false, text: '', usage: null, reason: `spawn failed (${bin}): ${res.error.message}`, reasonCode: 'unknown', authStatus };
+    return { ok: false, text: '', usage: null, reason: `spawn failed (${bin}): ${res.error.message}`, reasonCode: 'unknown', authStatus, argv, cliVersion };
   }
   // Claude prints auth failures ("API Error: 401 ... Please run /login") to stdout.
   if (/Please run \/login|authentication_error|401/i.test(out) || /Please run \/login|authentication_error/i.test(String(res.stderr || ''))) {
@@ -351,6 +453,8 @@ function runExtractMode(opts) {
       reason: 'local model not authenticated in this context (run `claude auth login` once); skipping deterministic extraction',
       reasonCode: 'cli-unauthenticated',
       authStatus,
+      argv,
+      cliVersion,
       ...(authStatus === 'logged-in' && { authDiscrepancy: true }),
     };
   }
@@ -362,9 +466,11 @@ function runExtractMode(opts) {
       reason: `local model exited ${res.status}: ${(out || String(res.stderr || '')).slice(0, 160)}`,
       reasonCode: 'model-error',
       authStatus,
+      argv,
+      cliVersion,
     };
   }
-  return { ok: true, text: out, usage: null, reason: null, authStatus };
+  return { ok: true, text: out, usage: null, reason: null, authStatus, argv, cliVersion };
 }
 
 /**
@@ -387,14 +493,18 @@ function normalizeJudgeUsage(rawUsage) {
   return { input_tokens: inputSum, output_tokens: output };
 }
 
-/** mode:'judge' — binary anchored-dedup decision. Argv byte-identical to pre-move. */
+/** mode:'judge' — binary anchored-dedup decision. Argv byte-identical to pre-move plus
+ * the same --setting-sources '' isolation the extraction spawn above gains (0.9.15). */
 function runJudgeMode(opts) {
   const spawnSyncImpl = typeof opts.spawnSyncImpl === 'function' ? opts.spawnSyncImpl : spawnSync;
   const bin = typeof opts.claudeBin === 'string' ? opts.claudeBin : resolveClaudeBin(opts);
+  if (cachedSettingSourcesUnsupported) return settingSourcesIsolationUnsupportedResult('unknown');
   const prompt = typeof opts.prompt === 'string' ? opts.prompt : '';
+  const argv = JUDGE_MODE_ARGV;
+  const cliVersion = getClaudeCliVersion(bin, opts);
   let res;
   try {
-    res = spawnSyncImpl(bin, JUDGE_MODE_ARGV, {
+    res = spawnSyncImpl(bin, argv, {
       input: prompt,
       encoding: 'utf8',
       env: claudeChildEnv(),
@@ -402,17 +512,21 @@ function runJudgeMode(opts) {
       maxBuffer: 20 * 1024 * 1024,
     });
   } catch (error) {
-    return { ok: false, text: '', usage: null, reason: `judge spawn failed (${bin}): ${error.message}`, reasonCode: 'unknown', authStatus: 'unknown' };
+    return { ok: false, text: '', usage: null, reason: `judge spawn failed (${bin}): ${error.message}`, reasonCode: 'unknown', authStatus: 'unknown', argv, cliVersion };
   }
   if (!res) {
-    return { ok: false, text: '', usage: null, reason: `judge spawn failed (${bin}): no process result`, reasonCode: 'unknown', authStatus: 'unknown' };
+    return { ok: false, text: '', usage: null, reason: `judge spawn failed (${bin}): no process result`, reasonCode: 'unknown', authStatus: 'unknown', argv, cliVersion };
+  }
+  if (looksLikeUnsupportedSettingSourcesFlag(res)) {
+    cachedSettingSourcesUnsupported = true;
+    return { ...settingSourcesIsolationUnsupportedResult('unknown'), argv, cliVersion };
   }
   const stdout = String(res.stdout || '');
   if (res.error) {
-    return { ok: false, text: '', usage: null, reason: `judge spawn failed (${bin}): ${res.error.message}`, reasonCode: 'unknown', authStatus: 'unknown' };
+    return { ok: false, text: '', usage: null, reason: `judge spawn failed (${bin}): ${res.error.message}`, reasonCode: 'unknown', authStatus: 'unknown', argv, cliVersion };
   }
   if (/Please run \/login|authentication_error|401/i.test(stdout) || /Please run \/login|authentication_error/i.test(String(res.stderr || ''))) {
-    return { ok: false, text: '', usage: null, reason: 'local judge model is not authenticated', reasonCode: 'cli-unauthenticated', authStatus: 'unknown' };
+    return { ok: false, text: '', usage: null, reason: 'local judge model is not authenticated', reasonCode: 'cli-unauthenticated', authStatus: 'unknown', argv, cliVersion };
   }
   if (res.status !== 0) {
     return {
@@ -422,18 +536,20 @@ function runJudgeMode(opts) {
       reason: `local judge exited ${res.status}: ${(stdout || String(res.stderr || '')).slice(0, 160)}`,
       reasonCode: 'model-error',
       authStatus: 'unknown',
+      argv,
+      cliVersion,
     };
   }
   let wrapper;
   try {
     wrapper = JSON.parse(stdout);
   } catch {
-    return { ok: false, text: '', usage: null, reason: 'local judge returned malformed JSON wrapper', reasonCode: 'model-error', authStatus: 'unknown' };
+    return { ok: false, text: '', usage: null, reason: 'local judge returned malformed JSON wrapper', reasonCode: 'model-error', authStatus: 'unknown', argv, cliVersion };
   }
   if (!wrapper || typeof wrapper.result !== 'string' || wrapper.is_error === true) {
-    return { ok: false, text: '', usage: null, reason: 'local judge returned no successful result', reasonCode: 'model-error', authStatus: 'unknown' };
+    return { ok: false, text: '', usage: null, reason: 'local judge returned no successful result', reasonCode: 'model-error', authStatus: 'unknown', argv, cliVersion };
   }
-  return { ok: true, text: wrapper.result, usage: normalizeJudgeUsage(wrapper.usage), reason: null, authStatus: 'unknown' };
+  return { ok: true, text: wrapper.result, usage: normalizeJudgeUsage(wrapper.usage), reason: null, authStatus: 'unknown', argv, cliVersion };
 }
 
 /**
@@ -509,7 +625,17 @@ module.exports = {
   managedSettingsPathForPlatform,
   MANAGED_SETTINGS_PATH_BY_PLATFORM,
   // Exported for direct byte-pinned coverage (test/extraction-zero-tool-calls.test.js,
-  // TRUST-PAGE control — SITE-PM: put the zero-tool-call assertion in the test suite).
+  // test/claude-code-provider.test.js; TRUST-PAGE control — SITE-PM: put the
+  // zero-tool-call assertion in the test suite). Carries the 0.9.15 argv
+  // (SETTING_SOURCES_ARGS included).
   EXTRACT_MODE_ARGV,
   JUDGE_MODE_ARGV,
+  // EXTRACTION-CHILD-HOOKS (0.9.15) — exported for direct unit coverage
+  // (test/claude-code-provider.test.js) and for extract-local.js's provider-run
+  // log line (getClaudeCliVersion).
+  SETTING_SOURCES_VALUE,
+  SETTING_SOURCES_ARGS,
+  getClaudeCliVersion,
+  looksLikeUnsupportedSettingSourcesFlag,
+  _resetSettingSourcesCacheForTests,
 };

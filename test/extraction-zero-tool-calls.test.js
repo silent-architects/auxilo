@@ -79,23 +79,36 @@ const claudeCode = require('../scripts/providers/claude-code.js');
 // ─── (i) STATIC — byte-pinned spawn argv ────────────────────────────────────
 
 describe('extraction-zero-tool-calls — STATIC: byte-pinned spawn argv (scripts/providers/claude-code.js)', () => {
-  it("finder (extract mode) argv is exactly ['-p','--no-session-persistence','--tools','']", () => {
-    assert.deepEqual(claudeCode.EXTRACT_MODE_ARGV, ['-p', '--no-session-persistence', '--tools', '']);
-  });
-
-  it("judge (dedup) argv is exactly ['-p','--output-format','json','--no-session-persistence','--tools','']", () => {
+  it("finder (extract mode) argv is exactly ['-p','--no-session-persistence','--tools','','--setting-sources','']", () => {
     assert.deepEqual(
-      claudeCode.JUDGE_MODE_ARGV,
-      ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', ''],
+      claudeCode.EXTRACT_MODE_ARGV,
+      ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', ''],
     );
   });
 
-  it("both argvs end in the literal pair --tools '' (the flag that disables all tools) — checked by value, not just by array length", () => {
+  it("judge (dedup) argv is exactly ['-p','--output-format','json','--no-session-persistence','--tools','','--setting-sources','']", () => {
+    assert.deepEqual(
+      claudeCode.JUDGE_MODE_ARGV,
+      ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--setting-sources', ''],
+    );
+  });
+
+  it("both argvs contain the literal pair --tools '' (the flag that disables all tools) — checked by value, not just by array length", () => {
     const finder = claudeCode.EXTRACT_MODE_ARGV;
     const judge = claudeCode.JUDGE_MODE_ARGV;
-    assert.equal(finder[finder.length - 2], '--tools');
+    const toolsIdx = (a) => a.indexOf('--tools');
+    assert.equal(finder[toolsIdx(finder)], '--tools');
+    assert.equal(finder[toolsIdx(finder) + 1], '');
+    assert.equal(judge[toolsIdx(judge)], '--tools');
+    assert.equal(judge[toolsIdx(judge) + 1], '');
+  });
+
+  it("both argvs end in the literal pair --setting-sources '' (0.9.15 EXTRACTION-CHILD-HOOKS isolation — the child loads no user/project/local settings)", () => {
+    const finder = claudeCode.EXTRACT_MODE_ARGV;
+    const judge = claudeCode.JUDGE_MODE_ARGV;
+    assert.equal(finder[finder.length - 2], '--setting-sources');
     assert.equal(finder[finder.length - 1], '');
-    assert.equal(judge[judge.length - 2], '--tools');
+    assert.equal(judge[judge.length - 2], '--setting-sources');
     assert.equal(judge[judge.length - 1], '');
   });
 

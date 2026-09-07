@@ -60,7 +60,18 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
 
 # ─── THE PIN — bump this in the same commit that adds/removes tests ─────────
-EXPECTED_TEST_COUNT=2665
+# integ (agent/assembly-0915): merges agent/mcp-0915 (0.9.15,
+# EXTRACTION-CHILD-HOOKS: +17 tests — --setting-sources isolation +
+# cli-settings-isolation-unsupported fallback/cache, getClaudeCliVersion,
+# EXTRACTION-RUN-LOG provider-run log line, runAnchoredJudge
+# judgeAttempted/judgeSucceeded) onto pm/integ-v (2665, post SITE-PERFECT-W1/W2).
+# Verified against the actual `npm test` discovered count post-merge below:
+# 2665 (pm/integ-v) + 18 new tests from agent/mcp-0915 (0.9.15
+# EXTRACTION-CHILD-HOOKS: --setting-sources isolation/fallback/cache,
+# getClaudeCliVersion, provider-run log line, judgeAttempted/judgeSucceeded,
+# plus the extraction-zero-tool-calls STATIC pin split into 2 asserts on
+# merge) = 2683.
+EXPECTED_TEST_COUNT=2683
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
