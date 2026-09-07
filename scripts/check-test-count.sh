@@ -81,7 +81,13 @@ cd "${REPO_ROOT}"
 # wiring, plus a new 4-test staged-server section C proving the 404 and
 # the public/ waitlist-string sweep). Verified against the actual
 # `npm test` discovered count: 2693 + 1 + 2 = 2696.
-EXPECTED_TEST_COUNT=2696
+# agent/prepublish-guard (base 4fdd4e8, 2696): STALE-PRIMARY-CHECKOUT added
+# test/prepublish-guard.test.js (8 tests covering the new
+# scripts/prepublish-guard.js prepublishOnly guard: pass, HEAD != origin/main,
+# dirty tree, untracked-only tree, already-published version, fetch failure,
+# force bypass, force-value-mismatch). Verified against the actual npm test
+# discovered count: 2696 + 8 = 2704.
+EXPECTED_TEST_COUNT=2704
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
