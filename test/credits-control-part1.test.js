@@ -82,10 +82,12 @@ describe('T2 lib/stripe.js: Checkout description + consent_collection (source)',
   it('consent_collection.terms_of_service is required on the Session', () => {
     assert.ok(STRIPE_LIB_SRC.includes("consent_collection: { terms_of_service: 'required' }"));
   });
-  it('unit_amount and metadata stay byte-unchanged (display-string fix only, not a data-model change)', () => {
+  it('unit_amount stays byte-unchanged; pack_queries metadata is retired (CREDITS-QUERIES-RESIDUAL)', () => {
     assert.ok(STRIPE_LIB_SRC.includes('unit_amount: pack.price_cents,'));
-    assert.ok(STRIPE_LIB_SRC.includes("pack_queries: String(pack.queries),"));
-    assert.ok(STRIPE_LIB_SRC.includes("pack_unlocks: String(pack.unlocks),"));
+    const metadataBlock = sliceAt(STRIPE_LIB_SRC, 'metadata: {', 200);
+    assert.ok(!metadataBlock.includes('pack_queries'),
+      'the metadata object must no longer carry a pack_queries key — packs grant unlocks only now (a code comment nearby may still name the retired field for context, which is fine)');
+    assert.ok(metadataBlock.includes("pack_unlocks: String(pack.unlocks),"));
   });
   it('success_url stays byte-identical (still carries session_id — the ROUTE strips it before the browser sees it)', () => {
     assert.ok(STRIPE_LIB_SRC.includes(
@@ -336,8 +338,10 @@ describe('T10 dashboard.html: Queries column retired, Credits card wired', () =>
     assert.ok(!h.includes('qTd'));
     assert.ok(!h.includes('p.queries_added'), 'no cell must read p.queries_added anymore (a nearby comment may still name the field — that is fine)');
   });
-  it('queries_added stays in the API response contract and purchases.jsonl (data model untouched)', () => {
-    assert.ok(SERVER_SRC.includes('queries_added: p.queries_added,'), '/account/purchases must still return it');
+  it('CREDITS-QUERIES-RESIDUAL: queries_added no longer appears in the /account/purchases response contract', () => {
+    const h = sliceAt(SERVER_SRC, "app.get('/account/purchases'", 900);
+    assert.ok(!h.includes('queries_added'), '/account/purchases must not return queries_added anymore');
+    assert.ok(h.includes('unlocks_added: p.unlocks_added,'), 'unlocks_added must still be returned');
   });
   it('loadCredits() is wired into showDashboard()', () => {
     const h = sliceAt(DASHBOARD_HTML, 'function showDashboard(email) {', 600);
@@ -612,5 +616,58 @@ describe('T15 auxiloBuyCredits: TERMS_NOT_ACCEPTED 403 routes to the terms-gate 
   it('the dashboard #terms-gate card (~:673) still exists with the checkbox this handler focuses', () => {
     assert.ok(DASHBOARD_HTML.includes('id="terms-gate"'));
     assert.ok(DASHBOARD_HTML.includes('id="terms-agree-check"'));
+  });
+});
+
+// ─── 16. CREDITS-QUERIES-RESIDUAL: query credits fully retired ──────────────
+// Nothing ever spent query credits — deductCredit()'s only caller
+// (dualAuthDynamic) has always passed 'unlock' exclusively. This closes the
+// grant side: packs no longer mint queries, the webhook no longer forwards
+// them, and the API/receipt surfaces stop mentioning them. Ledger fields
+// (purchased_queries/queries_used) stay in the record shape — see
+// test/credits.test.js for the reader-tolerance coverage of legacy records.
+
+describe('T16 CREDITS-QUERIES-RESIDUAL: packs grant unlocks only', () => {
+  it('lib/stripe.js PACKS: no pack defines a queries field anymore', () => {
+    const packsBlock = sliceAt(STRIPE_LIB_SRC, 'const PACKS = {', 700);
+    assert.ok(!/queries:\s*\d+/.test(packsBlock), 'no PACKS entry may carry a queries count');
+    assert.ok(/unlocks:\s*80/.test(packsBlock) && /unlocks:\s*250/.test(packsBlock) && /unlocks:\s*1000/.test(packsBlock),
+      'unlock counts must be untouched');
+  });
+
+  it('the webhook no longer destructures/parses pack_queries and always passes 0 to addPurchasedCredits', () => {
+    const h = sliceAt(SERVER_SRC, "event.type === 'checkout.session.completed'", 1500);
+    assert.ok(!h.includes('pack_queries'), 'pack_queries must not be read from the webhook metadata anymore');
+    assert.ok(h.includes('addPurchasedCredits(account_id, 0, unlocks, { unlock_unit_price_usd: unlockUnitPrice })'),
+      'the webhook must always grant 0 queries — packs sell unlocks only');
+  });
+
+  it('the purchase record written to purchases.jsonl no longer carries queries_added', () => {
+    const h = sliceAt(SERVER_SRC, 'const purchase = {', 400);
+    assert.ok(!h.includes('queries_added'), 'new purchase records must not carry queries_added');
+    assert.ok(h.includes('unlocks_added: unlocks,'));
+  });
+
+  it('the credited-account server log line no longer mentions queries', () => {
+    const h = sliceAt(SERVER_SRC, '[stripe] Credited account', 200);
+    assert.ok(!/queries/i.test(h), 'the log line must not claim a queries grant anymore');
+    assert.ok(h.includes('+${unlocks} unlocks (${pack_id})'),
+      'the log line must still report the unlocks grant and pack id');
+  });
+
+  it('openapi.json: CreditPack has no "queries" property and Purchase has no "queries_added" property', () => {
+    const openapi = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'openapi.json'), 'utf-8'));
+    const creditPack = openapi.components.schemas.CreditPack.properties;
+    const purchase = openapi.components.schemas.Purchase.properties;
+    assert.ok(!Object.prototype.hasOwnProperty.call(creditPack, 'queries'), 'CreditPack.queries must be removed');
+    assert.ok(Object.prototype.hasOwnProperty.call(creditPack, 'unlocks'), 'CreditPack.unlocks must remain');
+    assert.ok(!Object.prototype.hasOwnProperty.call(purchase, 'queries_added'), 'Purchase.queries_added must be removed');
+    assert.ok(Object.prototype.hasOwnProperty.call(purchase, 'unlocks_added'), 'Purchase.unlocks_added must remain');
+  });
+
+  it('lib/credits.js: deductCredit() rejects creditType "query" (real behavior, not just source)', async () => {
+    const { deductCredit: realDeductCredit } = require('../lib/credits.js');
+    const r = await realDeductCredit('acc_test_ccp1_residual_' + crypto.randomBytes(6).toString('hex'), 'query');
+    assert.equal(r.success, false, 'query credits are retired — deductCredit must reject the type outright');
   });
 });

@@ -13,6 +13,17 @@
  * NOTE: Free tier has been killed. Every account starts with 0 credits
  * and must purchase a credit pack. Discovery/search are free (no credits
  * needed). Only unlocks consume credits.
+ *
+ * CREDITS-QUERIES-RESIDUAL (2026-09-06): query credits are retired — packs
+ * grant unlocks only, and deductCredit() now rejects creditType 'query'
+ * outright regardless of any purchased_queries balance. The legacy
+ * purchased_queries / queries_used fields stay in the record shape (older
+ * ledger entries carry them) and must remain READABLE — writeRecord() below
+ * still seeds them so the reader-tolerance tests have something to tolerate.
+ * Nothing in this suite exercises deductCredit(id, 'query') expecting
+ * success anymore; where earlier revisions did, the currency under test was
+ * switched to 'unlock' (the only currency still live) or the test was
+ * repurposed to assert the rejection.
  */
 
 const { test, before, after, beforeEach, afterEach } = require('node:test');
@@ -119,44 +130,64 @@ test('New account: starts with 0 purchased credits', () => {
 
 test('New account: deduction fails immediately (no credits)', async () => {
     const id = uid();
-    const result = await deductCredit(id, 'query');
+    const result = await deductCredit(id, 'unlock');
     assert.equal(result.success, false, 'Deduction must fail with no credits');
     assert.ok(result.message, 'Must include an error message');
     assert.ok(result.message.includes('x402'), 'Must mention x402 as alternative');
     deleteRecord(id);
 });
 
-// 2. Purchased Credits — Queries
+// 2. Query Credits — Retired (CREDITS-QUERIES-RESIDUAL)
 // ---------------------------------------------------------------------------
+// Nothing sells or spends query credits anymore. deductCredit() rejects the
+// 'query' creditType unconditionally; the legacy purchased_queries /
+// queries_used fields stay in the record shape and must remain readable and
+// untouched by unrelated (unlock) activity.
 
-test('Deduction: purchased query credit decrements and increments queries_used', async () => {
+test('Deduction: creditType "query" is rejected even when purchased_queries > 0', async () => {
     const id = uid();
     writeRecord(id, { purchased_queries: 10 });
 
     const r = await deductCredit(id, 'query');
-    assert.equal(r.success, true);
-    assert.equal(r.remaining, 9);
-    assert.equal(r.source, 'purchased');
+    assert.equal(r.success, false, 'query credits are retired — must be rejected outright');
+    assert.ok(r.message, 'Must include an error message');
+    assert.ok(!/x402/.test(r.message), 'a rejection is not an exhaustion — no x402 fallback offered');
 
     const store = loadCredits();
-    assert.equal(store[id].purchased_queries, 9);
-    assert.equal(store[id].queries_used, 1);
+    assert.equal(store[id].purchased_queries, 10, 'the rejected deduction must not touch the legacy balance');
+    assert.equal(store[id].queries_used || 0, 0, 'queries_used must not increment on a rejected deduction');
 
     deleteRecord(id);
 });
 
-test('Deduction: ten sequential query deductions leave correct counts', async () => {
+test('Deduction: legacy purchased_queries/queries_used fields survive unrelated unlock deductions untouched', async () => {
     const id = uid();
-    writeRecord(id, { purchased_queries: 50 });
+    writeRecord(id, { purchased_queries: 10, purchased_unlocks: 5 });
 
-    for (let i = 0; i < 10; i++) {
-        const r = await deductCredit(id, 'query');
-        assert.equal(r.success, true, `Deduction ${i + 1} must succeed`);
-    }
+    const r = await deductCredit(id, 'unlock');
+    assert.equal(r.success, true);
 
     const store = loadCredits();
-    assert.equal(store[id].purchased_queries, 40);
-    assert.equal(store[id].queries_used, 10);
+    assert.equal(store[id].purchased_queries, 10, 'legacy query balance is read-only now, never touched');
+    assert.equal(store[id].queries_used, 0, 'legacy queries_used is read-only now, never touched');
+    assert.equal(store[id].purchased_unlocks, 4, 'unlock pool still deducts normally');
+
+    deleteRecord(id);
+});
+
+test('getOrInitCredits: a pre-existing record carrying only legacy query fields still loads without error', () => {
+    const id = uid();
+    // Simulate a pre-retirement record shape: purchased_queries/queries_used
+    // present, no unlock_lots yet. Must be readable, not migrated/stripped.
+    writeRecord(id, { purchased_queries: 7, queries_used: 3, purchased_unlocks: 0 });
+
+    const status = getCreditStatus(id);
+    assert.equal(status.unlocks.purchased, 0);
+    assert.equal(status.unlocks.used, 0);
+
+    const store = loadCredits();
+    assert.equal(store[id].purchased_queries, 7, 'legacy field survives a read cycle unchanged');
+    assert.equal(store[id].queries_used, 3, 'legacy field survives a read cycle unchanged');
 
     deleteRecord(id);
 });
@@ -181,21 +212,27 @@ test('Deduction: purchased unlock credit decrements and increments unlocks_used'
     deleteRecord(id);
 });
 
-test('Deduction: query and unlock pools are fully independent', async () => {
+test('Deduction: unlock deduction succeeds regardless of a legacy purchased_queries balance', async () => {
     const id = uid();
     writeRecord(id, { purchased_queries: 3, purchased_unlocks: 5 });
 
-    // Exhaust queries
-    for (let i = 0; i < 3; i++) await deductCredit(id, 'query');
-    // Unlock deduction still works
     const r = await deductCredit(id, 'unlock');
-    assert.equal(r.success, true, 'Unlock must succeed when queries are exhausted');
+    assert.equal(r.success, true, 'Unlock deduction is unaffected by the retired query pool');
+
+    const store = loadCredits();
+    assert.equal(store[id].purchased_queries, 3, 'legacy query balance untouched');
+    assert.equal(store[id].purchased_unlocks, 4);
 
     deleteRecord(id);
 });
 
 // 4. Purchased Credits — Add and Accumulate
 // ---------------------------------------------------------------------------
+// addPurchasedCredits() keeps its generic (queries, unlocks) signature at the
+// lib layer — no production caller passes a nonzero queries count anymore
+// (the Stripe webhook always passes 0; see test/aud19-2-econ.test.js), but
+// the lib function itself is not the enforcement point, so these tests still
+// exercise it directly to prove the field stays writable/readable.
 
 test('addPurchasedCredits: adds queries and unlocks to the account', async () => {
     const id = uid();
@@ -225,11 +262,24 @@ test('addPurchasedCredits: accumulates across multiple calls', async () => {
     deleteRecord(id);
 });
 
+test('addPurchasedCredits: production call shape (0 queries, N unlocks) only credits unlocks', async () => {
+    const id = uid();
+    writeRecord(id);
+
+    // Mirrors the webhook's actual call: addPurchasedCredits(account_id, 0, unlocks, opts)
+    const r = await addPurchasedCredits(id, 0, 80, { unlock_unit_price_usd: 0.125 });
+    assert.equal(r.success, true);
+    assert.equal(r.purchased_queries, 0, 'a pack purchase grants unlocks only');
+    assert.equal(r.purchased_unlocks, 80);
+
+    deleteRecord(id);
+});
+
 test('Purchased credits are deducted correctly', async () => {
     const id = uid();
-    writeRecord(id, { purchased_queries: 10 });
+    writeRecord(id, { purchased_unlocks: 10 });
 
-    const r = await deductCredit(id, 'query');
+    const r = await deductCredit(id, 'unlock');
     assert.equal(r.success, true);
     assert.equal(r.source, 'purchased');
     assert.equal(r.remaining, 9);
@@ -259,12 +309,12 @@ test('Period reset: purchased credits are NOT reset across periods', async () =>
         period_end:        '2020-02-01T00:00:00.000Z',
     });
 
-    await deductCredit(id, 'query'); // triggers reset + deduction
+    await deductCredit(id, 'unlock'); // triggers reset + deduction
     const store = loadCredits();
-    assert.equal(store[id].purchased_queries, 24,
-        'purchased_queries must survive the period reset (minus 1 deduction)');
-    assert.equal(store[id].purchased_unlocks, 8,
-        'purchased_unlocks must survive the period reset');
+    assert.equal(store[id].purchased_unlocks, 7,
+        'purchased_unlocks must survive the period reset (minus 1 deduction)');
+    assert.equal(store[id].purchased_queries, 25,
+        'legacy purchased_queries must survive the period reset untouched (retired currency, still readable)');
 
     deleteRecord(id);
 });
@@ -300,23 +350,19 @@ test('computePeriod: December → January rollover is correct', () => {
 // 6. Deduction Fails Gracefully — no negative credits
 // ---------------------------------------------------------------------------
 
-test('Deduction: fails gracefully when purchased credits exhausted', async () => {
+test('Deduction: fails gracefully when purchased unlock credits exhausted', async () => {
     const id = uid();
     writeRecord(id, {
         purchased_queries: 0,
         purchased_unlocks: 0,
     });
 
-    const qr = await deductCredit(id, 'query');
-    assert.equal(qr.success, false);
-    assert.ok(qr.message,   'Must include an error message');
-    assert.ok(qr.message.includes('query'),  'Message must mention "query"');
-    assert.ok(qr.message.includes('x402'),   'Must mention x402 as alternative');
-    assert.ok(qr.status,    'Must include a status snapshot');
-
     const ur = await deductCredit(id, 'unlock');
     assert.equal(ur.success, false);
+    assert.ok(ur.message,   'Must include an error message');
     assert.ok(ur.message.includes('unlock'), 'Message must mention "unlock"');
+    assert.ok(ur.message.includes('x402'),   'Must mention x402 as alternative');
+    assert.ok(ur.status,    'Must include a status snapshot');
 
     deleteRecord(id);
 });
@@ -324,20 +370,20 @@ test('Deduction: fails gracefully when purchased credits exhausted', async () =>
 test('Deduction: credits never go below zero', async () => {
     const id = uid();
     writeRecord(id, {
-        purchased_queries: 1,
+        purchased_unlocks: 1,
     });
 
-    await deductCredit(id, 'query'); // consumes the last one
-    const r2 = await deductCredit(id, 'query'); // must fail, not go negative
+    await deductCredit(id, 'unlock'); // consumes the last one
+    const r2 = await deductCredit(id, 'unlock'); // must fail, not go negative
     assert.equal(r2.success, false);
 
     const store = loadCredits();
-    assert.ok(store[id].purchased_queries >= 0, 'purchased_queries must not be negative');
+    assert.ok(store[id].purchased_unlocks >= 0, 'purchased_unlocks must not be negative');
 
     deleteRecord(id);
 });
 
-test('Deduction: exhaustion message differs for query vs unlock', async () => {
+test('Deduction: rejected-query message differs from unlock-exhaustion message', async () => {
     const id = uid();
     writeRecord(id, {
         purchased_queries: 0,
@@ -346,7 +392,9 @@ test('Deduction: exhaustion message differs for query vs unlock', async () => {
 
     const qr = await deductCredit(id, 'query');
     const ur = await deductCredit(id, 'unlock');
-    assert.notEqual(qr.message, ur.message, 'Messages should differ by credit type');
+    assert.equal(qr.success, false, 'query is rejected outright (retired currency)');
+    assert.equal(ur.success, false, 'unlock fails because the pool is exhausted');
+    assert.notEqual(qr.message, ur.message, 'Messages should differ: rejection vs exhaustion');
 
     deleteRecord(id);
 });
@@ -358,12 +406,12 @@ test('Concurrency: simultaneous deductions do not over-deduct (mutex)', async ()
     const id = uid();
     const AVAILABLE = 3;
     writeRecord(id, {
-        purchased_queries: AVAILABLE,
+        purchased_unlocks: AVAILABLE,
     });
 
     const TOTAL = 10;
     const results = await Promise.all(
-        Array.from({ length: TOTAL }, () => deductCredit(id, 'query'))
+        Array.from({ length: TOTAL }, () => deductCredit(id, 'unlock'))
     );
 
     const successes = results.filter(r => r.success).length;
@@ -372,7 +420,7 @@ test('Concurrency: simultaneous deductions do not over-deduct (mutex)', async ()
     assert.equal(failures,  TOTAL - AVAILABLE);
 
     const store = loadCredits();
-    assert.equal(store[id].purchased_queries, 0);
+    assert.equal(store[id].purchased_unlocks, 0);
 
     deleteRecord(id);
 });

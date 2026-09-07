@@ -83,14 +83,15 @@ describe('credit lots: unit price travels with the credit', () => {
     assert.equal(store[id].purchased_unlocks, 39, 'the credit still burned');
   });
 
-  it('query deductions are untouched by lots (no unit price, pool independent)', async () => {
+  it('CREDITS-QUERIES-RESIDUAL: query deductions are rejected outright, lots and unlock pool untouched', async () => {
     const id = uid();
     await addPurchasedCredits(id, 2, 1, { unlock_unit_price_usd: 0.10 });
     const q = await deductCredit(id, 'query');
-    assert.equal(q.success, true);
+    assert.equal(q.success, false, 'query credits are retired — deductCredit rejects the type');
     assert.equal(q.unit_price_usd, undefined);
     const store = loadCredits();
-    assert.equal(store[id].purchased_unlocks, 1, 'unlock pool untouched by query deduct');
+    assert.equal(store[id].purchased_unlocks, 1, 'unlock pool untouched by the rejected query deduct');
+    assert.equal(store[id].purchased_queries, 2, 'legacy purchased_queries balance untouched by the rejection');
   });
 });
 
@@ -360,6 +361,8 @@ describe('server.js: $0 referral lots + pack pricing at the grant sites', () => 
 
   it('the Stripe webhook lots unlocks at the pack pro-rata unit price', () => {
     assert.ok(/PACKS\[pack_id\]\.price_usd \/ unlocks/.test(SERVER_SRC));
-    assert.ok(/addPurchasedCredits\(account_id, queries, unlocks, \{ unlock_unit_price_usd: unlockUnitPrice \}\)/.test(SERVER_SRC));
+    // CREDITS-QUERIES-RESIDUAL: the webhook now always passes 0 for the
+    // retired queries argument (packs grant unlocks only).
+    assert.ok(/addPurchasedCredits\(account_id, 0, unlocks, \{ unlock_unit_price_usd: unlockUnitPrice \}\)/.test(SERVER_SRC));
   });
 });
