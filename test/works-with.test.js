@@ -41,6 +41,7 @@ const REPO = path.join(__dirname, '..');
 const WORKS_WITH_HTML = fs.readFileSync(path.join(REPO, 'public', 'works-with.html'), 'utf8');
 const INDEX_HTML = fs.readFileSync(path.join(REPO, 'public', 'index.html'), 'utf8');
 const SITEMAP = fs.readFileSync(path.join(REPO, 'public', 'sitemap.xml'), 'utf8');
+const STYLES_CSS = fs.readFileSync(path.join(REPO, 'public', 'styles.css'), 'utf8');
 const MATRIX_MD = fs.readFileSync(path.join(REPO, 'docs', 'SUPPORTED-CLIENTS.md'), 'utf8');
 const LOGOS_DIR = path.join(REPO, 'public', 'logos');
 const SOURCES_MD = fs.readFileSync(path.join(LOGOS_DIR, 'SOURCES.md'), 'utf8');
@@ -123,7 +124,10 @@ describe('WORKS-WITH: structural — public/works-with.html, public/index.html b
   });
 
   it('every logo referenced by public/works-with.html exists under public/logos/ and is a clean, valid SVG', () => {
-    const refs = [...WORKS_WITH_HTML.matchAll(/src="\/logos\/([a-z0-9.-]+\.svg)"/g)].map((m) => m[1]);
+    // LOGOS-INVISIBLE: logos are masked spans (--logo:url(/logos/<name>.svg)
+    // custom property), not <img src>, so the reference pattern matches the
+    // mask URL rather than an img src attribute.
+    const refs = [...WORKS_WITH_HTML.matchAll(/--logo:url\(\/logos\/([a-z0-9.-]+\.svg)\)/g)].map((m) => m[1]);
     assert.ok(refs.length >= 9, `expected at least 9 sourced logo references, found ${refs.length}`);
     for (const file of refs) {
       const filePath = path.join(LOGOS_DIR, file);
@@ -137,6 +141,36 @@ describe('WORKS-WITH: structural — public/works-with.html, public/index.html b
       assert.ok(!/<metadata/i.test(svg), `${file} has no <metadata> block`);
       assert.match(svg, /fill="currentColor"/, `${file} carries a single currentColor fill`);
     }
+  });
+
+  it('LOGOS-INVISIBLE: nine client marks are masked spans with the nine expected logo URLs, and zero <img src="/logos/ remain', () => {
+    const expected = [
+      'claude-code.svg', 'cursor.svg', 'github-copilot.svg', 'gemini-cli.svg',
+      'windsurf.svg', 'claude-desktop.svg', 'cline.svg', 'jetbrains-junie.svg', 'opencode.svg',
+    ];
+    const maskSpans = [...WORKS_WITH_HTML.matchAll(/<span class="ww-logo" role="img" aria-label="([^"]+)" style="--logo:url\(\/logos\/([a-z0-9.-]+\.svg)\)"><\/span>/g)];
+    assert.equal(maskSpans.length, 9, `expected exactly 9 masked marks, found ${maskSpans.length}`);
+    const foundUrls = maskSpans.map((m) => m[2]).sort();
+    assert.deepEqual(foundUrls, [...expected].sort(), 'the 9 masked marks reference exactly the 9 expected logo files');
+
+    assert.ok(!/<img[^>]+src="\/logos\//.test(WORKS_WITH_HTML), 'zero <img src="/logos/ remain -- every client mark is a masked span');
+
+    // Every mask span carries an accessible name via role="img" + aria-label,
+    // and the label matches the client's visible name text.
+    for (const [, ariaLabel] of maskSpans) {
+      assert.ok(ariaLabel.length > 0, 'mask span carries a non-empty aria-label');
+      assert.ok(WORKS_WITH_HTML.includes(`>${ariaLabel}<`), `aria-label "${ariaLabel}" matches a visible client name in the page`);
+    }
+  });
+
+  it('LOGOS-INVISIBLE: the shared .ww-logo mask rule exists in public/styles.css with mask + -webkit-mask + the ivory background', () => {
+    const ruleMatch = STYLES_CSS.match(/\.ww-logo\s*\{[^}]*\}/);
+    assert.ok(ruleMatch, 'shared .ww-logo rule present in public/styles.css');
+    const rule = ruleMatch[0];
+    assert.match(rule, /background-color:\s*var\(--ivory\)/, 'rule sets background-color to var(--ivory)');
+    assert.match(rule, /-webkit-mask:\s*var\(--logo\)\s*center\s*\/\s*contain\s*no-repeat/, 'rule sets -webkit-mask from the --logo custom property, centered/contain/no-repeat');
+    assert.match(rule, /(?<!-webkit-)mask:\s*var\(--logo\)\s*center\s*\/\s*contain\s*no-repeat/, 'rule sets the standard mask property too');
+    assert.match(STYLES_CSS, /--ivory:\s*#FAFAF8/i, 'the --ivory token is confirmed as #FAFAF8 (rgb(250,250,248)) in public/styles.css');
   });
 
   it('OpenClaw cell in works-with.html carries its matrix note verbatim and no check mark', () => {
