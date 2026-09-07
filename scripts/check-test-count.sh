@@ -89,7 +89,18 @@ cd "${REPO_ROOT}"
 # class, page h2 count still 7) plus 1 served-route assertion (staged
 # server, mirroring test/fb-accrual-sentence.test.js). Verified against
 # the actual `npm test` discovered count: 2696 + 7 = 2703.
-EXPECTED_TEST_COUNT=2711
+#
+# agent/mcp-0916 (base c1e06ec, 2711): RUNNER-AUTO-UPDATE added
+# test/runner-auto-update.test.js — 38 new tests (semver-min, tar-extract,
+# integrity/signature verification incl. a golden fixture against the real
+# npm registry's live signing key, cadence stamp, in-flight lock, the
+# installer.installRunner binRootOverride staging seam, runner-config
+# read/write, all 8 BUILD-SPEC §5 orchestrator scenarios, the `auxilo
+# status` Auto-update line pure-render + CLI integration). No other test
+# file's count changed (envelope-0831/prepublish-guard version-string
+# fixtures were value edits, not test additions/removals). Verified
+# against the actual `npm test` discovered count: 2711 + 38 = 2749.
+EXPECTED_TEST_COUNT=2749
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
@@ -114,6 +125,16 @@ AUXILO_TEST_HOME="$(mktemp -d)"
 trap 'rm -rf "${AUXILO_TEST_HOME}"' EXIT
 export AUXILO_HOME="${AUXILO_TEST_HOME}"
 export HOME="${AUXILO_TEST_HOME}"
+
+# RUNNER-AUTO-UPDATE (0.9.16): scripts/runner.js's main() now makes a real
+# registry.npmjs.org network call (offline-tolerant, but still a call) past
+# the kill-switch+recursion-guard checks unless opted out. This is the other
+# suite entry point (see the matching comment in scripts/test/run-isolated.js)
+# so it needs the same suite-wide opt-out — a test that forgets its own
+# override must not reach the real network. lib/runner-autoupdate.js's own
+# unit tests exercise the real check logic in-process with an injected
+# fetchImpl and are unaffected by this env var.
+export AUXILO_RUNNER_AUTOUPDATE="0"
 
 # Playwright resolves its browser cache under $HOME by default
 # (~/Library/Caches/ms-playwright on macOS, ~/.cache/ms-playwright on

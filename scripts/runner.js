@@ -39,6 +39,11 @@ const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { scanText, SENSITIVITY_FILTER_VERSION } = require('../lib/sensitivity-filter.js');
 const { appendSubmittedLearning } = require('../lib/extraction-index.js');
+const {
+  checkAndApplyRunnerUpdate,
+  markExtractionStart,
+  markExtractionEnd,
+} = require('../lib/runner-autoupdate.js');
 const { hasAuxiloSessionEndHook } = require('../lib/hook-status.js');
 const { sendOpsAlert: defaultSendOpsAlert } = require('../lib/ops-alert.js');
 const { TranscriptSource } = require('./sources/source.interface.js');
@@ -1161,6 +1166,29 @@ async function main() {
     process.exit(0);
   }
   process.env.AUXILO_EXTRACTING = '1';
+
+  // ── RUNNER-AUTO-UPDATE: self-update check (0.9.16) ─────────────────────
+  // Still "before any extraction work" per the invariant above — this is
+  // the ONLY call site (see lib/runner-autoupdate.js's module doc for the
+  // full mechanism: 24h cadence, offline-tolerant, integrity + registry-
+  // signature verified, atomic swap, next-session activation). Never
+  // throws, but belt-and-braces anyway: an auto-update crash must never
+  // block extraction.
+  try {
+    await checkAndApplyRunnerUpdate(os.homedir(), { log });
+  } catch (err) {
+    log(`[runner] auto-update check crashed: ${err.message}, continuing on installed copy`);
+  }
+
+  // ── In-flight guard target (RUNNER-AUTO-UPDATE) ─────────────────────────
+  // Mark that extraction work is starting so a concurrently-invoked auto-
+  // update check (a different, overlapping SessionEnd hook run) skips the
+  // swap rather than racing this process's own reads of <bin>. Cleared via
+  // process.exit's 'exit' event, NOT a try/finally — main() below exits
+  // from many branches via process.exit(), which does not run pending
+  // finally blocks but DOES fire 'exit' synchronously first.
+  markExtractionStart(os.homedir());
+  process.on('exit', () => markExtractionEnd(os.homedir()));
 
   // ── Credentials ───────────────────────────────────────────────────────
   if (!API_KEY && !args.dryRun) {
