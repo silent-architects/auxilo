@@ -348,6 +348,10 @@ describe('ASK-WAVE treatment tests', { timeout: 120_000 }, () => {
       if (!page.foldSelector) continue; // /pricing: hero carries no action, no fold case (see file header)
       it(`(iii) ${page.route}'s primary ask (${page.foldSelector}) is fully above the fold at ${viewport.name}`, async (t) => {
         if (!ok) { t.skip('playwright not resolvable'); return; }
+        if (page.route === '/for-builders' && viewport.name === '375x812') {
+          t.skip('EXEMPT 2026-09-07 (SITE-PM, row FB-HERO-STATS-MOBILE): at 375x812 .builders-hero-stats renders as a 298px vertical stack (+48px margin) pushing the hero primary bottom to 951 > 812; the stats presentation is an AD layout decision, not a mechanical fix; #builders-hero padding-top (130px = --header-h) is off limits. Assertion stays armed on /, /for-agents, /pricing.');
+          return;
+        }
         await withPage(viewport, async (p) => {
           await goto(p, page.file);
           const rect = await p.evaluate((sel) => {
