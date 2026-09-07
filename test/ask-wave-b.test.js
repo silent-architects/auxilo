@@ -133,10 +133,22 @@ describe('ASK wave B — /for-builders mid-page gold demotion', () => {
     assert.equal(countOccurrences(forBuildersSrc, fresh), 1);
   });
 
-  it('the copy button at line ~787 (footer setup copy) is untouched — outside the packet', () => {
-    const untouched =
-      '<button class="copy-btn" id="copy-footer-setup" onclick="copyCode(\'footer-setup-code\', \'copy-footer-setup\')" aria-label="Copy command">copy</button>';
-    assert.equal(countOccurrences(forBuildersSrc, untouched), 1);
+  it('the copy button targeting footer-setup-code reads "Copy the Setup Command" (SITE-PM label-follows-target ruling; micro-1)', () => {
+    const relabelled =
+      '<button class="copy-btn" id="copy-footer-setup" onclick="copyCode(\'footer-setup-code\', \'copy-footer-setup\')" aria-label="Copy command">Copy the Setup Command</button>';
+    assert.equal(countOccurrences(forBuildersSrc, relabelled), 1);
+  });
+
+  it('the three documentation copy controls (not targeting npx auxilo setup) still read lowercase "copy"', () => {
+    const openclaw =
+      '<button class="copy-btn" id="copy-openclaw" onclick="copyCode(\'openclaw-code\', \'copy-openclaw\')" aria-label="Copy code">copy</button>';
+    const learn =
+      '<button class="copy-btn" id="copy-learn" onclick="copyCode(\'learn-code\', \'copy-learn\')" aria-label="Copy code">copy</button>';
+    const wallet =
+      '<button class="copy-btn" id="copy-wallet" onclick="copyCode(\'wallet-code\', \'copy-wallet\')" aria-label="Copy code">copy</button>';
+    assert.equal(countOccurrences(forBuildersSrc, openclaw), 1);
+    assert.equal(countOccurrences(forBuildersSrc, learn), 1);
+    assert.equal(countOccurrences(forBuildersSrc, wallet), 1);
   });
 
   it('gold appears once: total .btn-primary class count on the page is exactly 1', () => {
