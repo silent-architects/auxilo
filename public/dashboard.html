@@ -2434,6 +2434,22 @@
   // window.__AUXILO_PACKS__ (server-injected from lib/stripe.js PACKS by
   // renderPackData) — never hand-typed here.
   var _stripeReady = false;
+  // CREDITS-E2E-FINDINGS: last-known purchased-unlock balance, kept in sync by
+  // renderCreditBalance. Stashed to sessionStorage right before a Stripe
+  // redirect (auxiloBuyCredits) so the post-checkout poll has a true
+  // pre-purchase baseline instead of inferring one from its own first fetch
+  // (which can already reflect the webhook if it lands before the browser
+  // returns from Stripe -- the race behind the false "not appeared" banner).
+  var _creditsBalanceCache = null;
+
+  function stashPrebuyBalance() {
+    try {
+      sessionStorage.setItem(
+        'auxilo_prebuy_unlock_balance',
+        _creditsBalanceCache === null ? '' : String(_creditsBalanceCache)
+      );
+    } catch (_) { /* sessionStorage unavailable -- poll falls back to its own first fetch */ }
+  }
 
   function loadCredits() {
     show('credits-loading');
@@ -2461,6 +2477,7 @@
     if (!line) return;
     var purchased = data && data.unlocks && typeof data.unlocks.purchased === 'number'
       ? data.unlocks.purchased : null;
+    _creditsBalanceCache = purchased;
     // D4 (Terms §7.2 verbatim), never adjacent to the Earnings card's numbers (GOV-2 A6).
     line.textContent = purchased !== null
       ? purchased.toLocaleString('en-US') + ' unlock credits'
@@ -2538,6 +2555,7 @@
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); })
       .then(function (res) {
         if (res.ok && res.data && res.data.url) {
+          stashPrebuyBalance(); // CREDITS-E2E-FINDINGS: real baseline for the post-checkout poll
           window.location = res.data.url;
           return;
         }
@@ -2566,10 +2584,39 @@
   // The redirect carries no session_id (spec STOP gate c), so this never
   // asserts "payment received" from the URL — the webhook can land after
   // the browser redirect, so success polls the balance instead.
+  var CHECKOUT_POLL_MAX_ATTEMPTS = 4;
+
+  // CREDITS-E2E-FINDINGS: pure decision function, DOM- and network-free, so
+  // the state machine is unit-testable without a browser. Given what the
+  // latest /account/credits poll returned against the pre-purchase baseline,
+  // returns which of the three checkout-banner states applies:
+  //   'increased'  -- balance rose vs. baseline -> hide the banner (no
+  //                   dedicated success-confirmed copy exists to show
+  //                   instead, per CREDITS-E2E-FINDINGS -- do not compose
+  //                   new copy) and stop polling.
+  //   'exhausted'  -- poll window used up with no increase -> show the
+  //                   existing "have not appeared yet" copy verbatim.
+  //   'continue'   -- keep polling.
+  function checkoutPollOutcome(priorBalance, balance, attempt, maxAttempts) {
+    if (balance !== null && priorBalance !== null && balance > priorBalance) {
+      return 'increased';
+    }
+    if (attempt >= maxAttempts) {
+      return 'exhausted';
+    }
+    return 'continue';
+  }
+
   function showCheckoutBanner(state) {
     if (state === 'success') {
       showAlert('checkout-banner', 'Your credits appear here as soon as the purchase lands.', 'info');
-      pollForCreditIncrease(0, null);
+      var priorBalance = null;
+      try {
+        var stashed = sessionStorage.getItem('auxilo_prebuy_unlock_balance');
+        sessionStorage.removeItem('auxilo_prebuy_unlock_balance');
+        if (stashed !== null && stashed !== '') priorBalance = parseInt(stashed, 10);
+      } catch (_) { /* sessionStorage unavailable -- falls back to the first poll's own reading */ }
+      pollForCreditIncrease(0, priorBalance);
     } else if (state === 'cancel') {
       showAlert('checkout-banner', 'Checkout cancelled. Nothing was charged.', 'info');
     }
@@ -2580,20 +2627,25 @@
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
         var balance = (res.ok && res.data && res.data.unlocks) ? res.data.unlocks.purchased : null;
+        // No stashed pre-purchase baseline (sessionStorage unavailable, or the
+        // checkout link was opened outside auxiloBuyCredits) -- fall back to
+        // this first reading, same as before this fix.
         if (priorBalance === null) priorBalance = balance;
         renderCreditBalance(res.ok ? res.data : null);
-        if (balance !== null && priorBalance !== null && balance > priorBalance) {
+        var outcome = checkoutPollOutcome(priorBalance, balance, attempt, CHECKOUT_POLL_MAX_ATTEMPTS);
+        if (outcome === 'increased') {
+          hideAlert('checkout-banner');
           loadPurchases();
-          return; // balance moved -- stop polling
+          return;
         }
-        if (attempt >= 4) {
+        if (outcome === 'exhausted') {
           showAlert('checkout-banner', 'Credits have not appeared yet. If they do not show in a few minutes, write to support@auxilo.io.', 'info');
           return;
         }
         setTimeout(function () { pollForCreditIncrease(attempt + 1, priorBalance); }, 3000);
       })
       .catch(function () {
-        if (attempt >= 4) {
+        if (attempt >= CHECKOUT_POLL_MAX_ATTEMPTS) {
           showAlert('checkout-banner', 'Credits have not appeared yet. If they do not show in a few minutes, write to support@auxilo.io.', 'info');
         }
       });
@@ -2633,6 +2685,17 @@
           show('purchases-content');
         }
       });
+  }
+
+  // CREDITS-E2E-FINDINGS: pure lookup, DOM-free -- looks up a pack's display
+  // name from window.__AUXILO_PACKS__ (same source the pack-card rows use),
+  // falling back to the raw key if the pack isn't found there.
+  function packDisplayName(packId) {
+    var packs = window.__AUXILO_PACKS__ || [];
+    for (var i = 0; i < packs.length; i++) {
+      if (packs[i] && packs[i].id === packId) return packs[i].name;
+    }
+    return packId || '';
   }
 
   function renderPurchases(data, el) {
@@ -2678,7 +2741,13 @@
       tr.appendChild(dateTd);
 
       var packTd = document.createElement('td');
-      packTd.textContent = p.pack_id || ''; // textContent -- safe
+      // CREDITS-E2E-FINDINGS: /account/purchases only returns the pack key
+      // (pack_id); render its display name from the same window.__AUXILO_PACKS__
+      // global the pack cards above already use (server-injected from
+      // lib/stripe.js PACKS by renderPackData) rather than the raw key.
+      // Smaller change than adding a name field server-side to every stored
+      // purchase record and the /account/purchases response shape.
+      packTd.textContent = packDisplayName(p.pack_id); // textContent -- safe
       tr.appendChild(packTd);
 
       var amtTd = document.createElement('td');
