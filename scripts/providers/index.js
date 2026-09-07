@@ -78,7 +78,13 @@ const PROVIDERS = {
   'byo-key': byoKey,
 };
 
-const PROVIDERS_STATE_PATH = path.join(os.homedir(), '.auxilo', 'providers.json');
+// TEST-HOME-ISOLATION: same AUXILO_HOME-over-os.homedir() fallback as
+// scripts/providers/byo-key.js's DEFAULT_PROVIDERS_STATE_PATH (duplicated,
+// not imported — see that file's docblock; test/byo-key-provider.test.js
+// pins the two byte-equal). opts.providersStatePath, threaded through every
+// resolveProvider()/runModel()/persistSelected() call site in this repo's
+// tests, still wins over both.
+const PROVIDERS_STATE_PATH = path.join(process.env.AUXILO_HOME || os.homedir(), '.auxilo', 'providers.json');
 
 function readProvidersState(statePath) {
   try {

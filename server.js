@@ -4601,7 +4601,7 @@ app.post('/webhook/stripe', async (c) => {
 
     const session = event.data.object;
     const metadata = session.metadata || {};
-    const { account_id, pack_id, pack_queries, pack_unlocks } = metadata;
+    const { account_id, pack_id, pack_unlocks } = metadata;
 
     if (!account_id || !pack_id) {
         console.warn('[stripe] Webhook missing metadata:', { account_id, pack_id });
@@ -4615,7 +4615,6 @@ app.post('/webhook/stripe', async (c) => {
     }
 
     // Credit the account
-    const queries = parseInt(pack_queries, 10) || 0;
     const unlocks = parseInt(pack_unlocks, 10) || 0;
 
     // AUD19-2: lot the unlocks at the pack's pro-rata unit price (pack price
@@ -4624,7 +4623,11 @@ app.post('/webhook/stripe', async (c) => {
     const unlockUnitPrice = (PACKS[pack_id] && unlocks > 0)
         ? PACKS[pack_id].price_usd / unlocks
         : undefined;
-    const creditResult = await addPurchasedCredits(account_id, queries, unlocks, { unlock_unit_price_usd: unlockUnitPrice });
+    // CREDITS-QUERIES-RESIDUAL: query credits are retired — packs grant
+    // unlocks only. addPurchasedCredits still accepts a queries argument
+    // (the ledger field stays readable for pre-retirement balances) but this
+    // webhook always passes 0 now that nothing sells query credits.
+    const creditResult = await addPurchasedCredits(account_id, 0, unlocks, { unlock_unit_price_usd: unlockUnitPrice });
     if (!creditResult.success) {
         console.error('[stripe] Failed to add credits for', account_id);
         // Still return 200 to prevent Stripe retries — log for manual review
@@ -4637,7 +4640,6 @@ app.post('/webhook/stripe', async (c) => {
         account_id,
         pack_id,
         amount_usd: PACKS[pack_id]?.price_usd || 0,
-        queries_added: queries,
         unlocks_added: unlocks,
         stripe_session_id: session.id,
         stripe_payment_intent: session.payment_intent || null,
@@ -4652,7 +4654,7 @@ app.post('/webhook/stripe', async (c) => {
       vestReferrerCredits(account_id).catch(err => console.error('[referral] vestReferrerCredits error:', err.message));
     }
 
-    console.log(`[stripe] Credited account ${account_id}: +${queries} queries, +${unlocks} unlocks (${pack_id})`);
+    console.log(`[stripe] Credited account ${account_id}: +${unlocks} unlocks (${pack_id})`);
     return c.json({ received: true, processed: true, purchase_id: purchase.id });
   } else if (event.type === 'account.updated') {
     // Stripe Connect: account status changed
@@ -4676,7 +4678,6 @@ app.get('/account/purchases', requireAuth, (c) => {
         id: p.id,
         pack_id: p.pack_id,
         amount_usd: p.amount_usd,
-        queries_added: p.queries_added,
         unlocks_added: p.unlocks_added,
         timestamp: p.timestamp,
     }));
@@ -13474,7 +13475,7 @@ app.post('/referral/track', requireSession, async (c) => {
   // Credit referee immediately ($5 credit)
   // AUD19-2: referral grants are $0-revenue mints — their unlock lots carry a
   // $0.00 unit price so they accrue $0 contributor share when spent.
-  await addPurchasedCredits(referee_account_id, 200, 40, { unlock_unit_price_usd: 0 }); // ~$5 worth
+  await addPurchasedCredits(referee_account_id, 0, 40, { unlock_unit_price_usd: 0 }); // ~$5 worth
 
   saveReferrals();
 
@@ -13514,7 +13515,7 @@ async function vestReferrerCredits(refereeAccountId) {
 
   // Credit referrer ($5)
   // AUD19-2: $0-revenue grant lot — accrues $0 contributor share when spent.
-  await addPurchasedCredits(referrerId, 200, 40, { unlock_unit_price_usd: 0 }); // ~$5 worth
+  await addPurchasedCredits(referrerId, 0, 40, { unlock_unit_price_usd: 0 }); // ~$5 worth
 
   // Fix C: Mark this referee as vested to prevent re-vesting on duplicate webhooks
   if (!referrerData.vested_referees) referrerData.vested_referees = [];

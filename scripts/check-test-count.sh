@@ -60,10 +60,47 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
 
 # ─── THE PIN — bump this in the same commit that adds/removes tests ─────────
-EXPECTED_TEST_COUNT=2602
+EXPECTED_TEST_COUNT=2622
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
+
+# TEST-HOME-ISOLATION: this script is the actual CI-blocking gate (wired
+# directly into .github/workflows/ci.yml — NOT through `npm test`, so
+# scripts/test/run-isolated.js's isolation never runs for this invocation
+# unless duplicated here). A fresh mkdtemp'd dir stands in as both
+# AUXILO_HOME (scripts/providers/{byo-key,index}.js's dedicated seam) and
+# HOME (what every other os.homedir()-based path in this repo actually
+# reads) for the whole run, so a test that forgets its own override still
+# cannot reach the operator's real ~/.auxilo or ~/.claude. Cleaned up on
+# every exit path via the trap.
+#
+# Tradeoff: a handful of tests are genuine self-checks of THIS machine's
+# real installed state (a LaunchAgent plist, a counsel-draft file) — under
+# this isolated HOME they always see an empty temp dir and always skip. Run
+# `npm run test:host` (scripts/test/run-host.js) on the operator's own
+# machine to actually exercise those checks against real installed state.
+AUXILO_TEST_REAL_HOME="${HOME}"
+AUXILO_TEST_HOME="$(mktemp -d)"
+trap 'rm -rf "${AUXILO_TEST_HOME}"' EXIT
+export AUXILO_HOME="${AUXILO_TEST_HOME}"
+export HOME="${AUXILO_TEST_HOME}"
+
+# Playwright resolves its browser cache under $HOME by default
+# (~/Library/Caches/ms-playwright on macOS, ~/.cache/ms-playwright on
+# Linux) -- the HOME override above would otherwise make test/sheet9-
+# fixups.test.js's Tier-2 suite think the browsers CI just installed
+# (`npx playwright install chromium`, which runs under the REAL HOME,
+# before this script) are missing. Point PLAYWRIGHT_BROWSERS_PATH at the
+# REAL home's cache (read-only from here) so the isolated HOME doesn't
+# shadow it.
+if [ -z "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then
+  case "$(uname -s)" in
+    Darwin) export PLAYWRIGHT_BROWSERS_PATH="${AUXILO_TEST_REAL_HOME}/Library/Caches/ms-playwright" ;;
+    *)      export PLAYWRIGHT_BROWSERS_PATH="${AUXILO_TEST_REAL_HOME}/.cache/ms-playwright" ;;
+  esac
+fi
+
 # --test-reporter=tap is pinned EXPLICITLY (not left to node's ambient
 # default) so the summary-footer format this script parses ("# tests N")
 # is stable across node versions and TTY/non-TTY contexts -- the default
