@@ -148,7 +148,15 @@ cd "${REPO_ROOT}"
 # dynamic package.json read, not added or removed). Verified against the
 # actual `npm test` discovered count (run twice, identical both times):
 # 2866 + 38 = 2904, 0 fail, 6 skipped (pre-existing, unrelated).
-EXPECTED_TEST_COUNT=2904
+#
+# 0.9.17 FIX PASS (F1/F2/F3, same test file): +11 tests covering the review
+# findings — F1 in-place command/args patching preserves user keys/order
+# (json-mcpServers x2, opencode, amp, openhands-stdio = 5), F2 config
+# writers preserve the existing file mode (json-mcpServers, writeJsonAtomic,
+# toml-codex x2 = 4), F3 unique tmp names + stale-tmp sweep (2). Verified
+# against the actual `npm test` discovered count (run twice, identical both
+# times): 2904 + 11 = 2915, 0 fail, 6 skipped (pre-existing, unrelated).
+EXPECTED_TEST_COUNT=2915
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
