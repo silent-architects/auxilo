@@ -20,7 +20,7 @@
   <meta name="theme-color" content="#0A0A0A" />
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=60b165c1" />
+  <link rel="stylesheet" href="/styles.css?v=080b8f62" />
   <style>
     /* Page-scoped: the works-with grid system. Sized to the AD build sheet
        (AD-CLIENTS-VISUAL-SHEET-2026-09-06.md §2), strings rev 3 (BUILD FROM
@@ -49,12 +49,13 @@
 
     .ww-h1 {
       font-family: var(--sans);
-      font-size: 64px;
+      font-size: 56px;
       font-weight: 600;
       letter-spacing: -0.02em;
       line-height: 1.08;
       color: var(--ivory);
       max-width: 900px;
+      margin-bottom: 20px;
     }
 
     .ww-honest {
@@ -98,10 +99,21 @@
       align-items: flex-end;
       color: var(--ivory);
     }
-    .ww-size-large .ww-logo-box  { max-height: 48px; max-width: 135.6px; }
-    .ww-size-medium .ww-logo-box { max-height: 34.56px; max-width: 105.6px; }
-    .ww-size-small .ww-logo-box  { max-height: 24.32px; max-width: 90.88px; }
-    .ww-logo-box img { height: 100%; width: auto; max-width: 100%; display: block; }
+    /* LOGOS-INVISIBLE: max-height became height. A CSS mask needs its box
+       to carry a real height (mask-size:contain scales the mask image to
+       fit whatever box it's given); the old img relied on the replaced-
+       element auto-intrinsic-size behavior a max-height cap can lean on,
+       which a masked span has no equivalent of. max-width is left as-is:
+       .ww-logo-box already stretches (flex default align-items) to fill
+       its .ww-cell, so max-width alone already resolves to a real used
+       width -- no width->max-width swap needed. */
+    .ww-size-large .ww-logo-box  { height: 48px; max-width: 135.6px; }
+    .ww-size-medium .ww-logo-box { height: 34.56px; max-width: 105.6px; }
+    .ww-size-small .ww-logo-box  { height: 24.32px; max-width: 90.88px; }
+    /* LOGOS-INVISIBLE (public/styles.css): .ww-logo carries the shared CSS
+       mask that renders these marks in ivory -- see the "Works With client
+       marks" block at the end of styles.css for the rule + why it lives
+       there instead of this page-scoped block. */
 
     .ww-client-name {
       font-family: var(--sans);
@@ -234,29 +246,29 @@
   <main class="ww-main">
     <div class="ww-wrap">
       <h1 class="ww-h1">Works With the Client You Already Run</h1>
-      <p class="ww-honest">Auxilo works with every client below. Once you turn extraction on, it captures sessions on the clients marked for capture, and the label on each cell says which. Drafting still runs through a single model client on your machine, not through the client a session came from. Per-client extraction is being built.</p>
+      <p class="ww-honest">Auxilo works with every client below. Once you turn extraction on, it captures sessions on the clients marked for capture, and the label on each cell says which. Drafting still runs through a single model path on your machine, not through the client a session came from. Per-client extraction is being built.</p>
 
       <ul class="ww-list">
         <li class="ww-cell ww-size-large">
-          <div class="ww-logo-box"><img src="/logos/claude-code.svg" alt="Claude Code"></div>
+          <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Claude Code" style="--logo:url(/logos/claude-code.svg)"></span></div>
           <div class="ww-client-name">Claude Code</div>
           <div class="ww-client-label">supported, hook capture</div>
           <div class="ww-client-note"></div>
         </li>
         <li class="ww-cell ww-size-large">
-          <div class="ww-logo-box"><img src="/logos/cursor.svg" alt="Cursor"></div>
+          <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Cursor" style="--logo:url(/logos/cursor.svg)"></span></div>
           <div class="ww-client-name">Cursor</div>
           <div class="ww-client-label">supported, hook capture</div>
           <div class="ww-client-note"></div>
         </li>
         <li class="ww-cell ww-size-large">
-          <div class="ww-logo-box"><img src="/logos/github-copilot.svg" alt="GitHub Copilot"></div>
+          <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="GitHub Copilot" style="--logo:url(/logos/github-copilot.svg)"></span></div>
           <div class="ww-client-name">GitHub Copilot</div>
           <div class="ww-client-label">supported, hook capture</div>
           <div class="ww-client-note">hooks are a VS Code Preview feature</div>
         </li>
         <li class="ww-cell ww-size-large">
-          <div class="ww-logo-box"><img src="/logos/gemini-cli.svg" alt="Gemini CLI"></div>
+          <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Gemini CLI" style="--logo:url(/logos/gemini-cli.svg)"></span></div>
           <div class="ww-client-name">Gemini CLI</div>
           <div class="ww-client-label">supported, hook capture</div>
           <div class="ww-client-note"></div>
@@ -268,19 +280,19 @@
           <div class="ww-client-note">Desktop app currently does not execute hooks (upstream openai/codex#21639); sweep covers it.</div>
         </li>
         <li class="ww-cell ww-size-medium">
-          <div class="ww-logo-box"><img src="/logos/windsurf.svg" alt="Windsurf"></div>
+          <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Windsurf" style="--logo:url(/logos/windsurf.svg)"></span></div>
           <div class="ww-client-name">Windsurf</div>
           <div class="ww-client-label">supported, hook capture</div>
           <div class="ww-client-note"></div>
         </li>
         <li class="ww-cell ww-size-medium">
-          <div class="ww-logo-box"><img src="/logos/claude-desktop.svg" alt="Claude Desktop"></div>
+          <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Claude Desktop" style="--logo:url(/logos/claude-desktop.svg)"></span></div>
           <div class="ww-client-name">Claude Desktop</div>
           <div class="ww-client-label">probabilistic, no capture, MCP only</div>
           <div class="ww-client-note">no extraction surface exists</div>
         </li>
         <li class="ww-cell ww-size-medium">
-          <div class="ww-logo-box"><img src="/logos/cline.svg" alt="Cline"></div>
+          <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Cline" style="--logo:url(/logos/cline.svg)"></span></div>
           <div class="ww-client-name">Cline</div>
           <div class="ww-client-label">best-effort, sweep capture</div>
           <div class="ww-client-note">NOT locally verified; strict format probe fails silent on storage-shape drift</div>
@@ -316,7 +328,7 @@
           <div class="ww-client-note">applies to new sessions after setup</div>
         </li>
         <li class="ww-cell ww-size-small">
-          <div class="ww-logo-box"><img src="/logos/jetbrains-junie.svg" alt="JetBrains Junie"></div>
+          <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="JetBrains Junie" style="--logo:url(/logos/jetbrains-junie.svg)"></span></div>
           <div class="ww-client-name">JetBrains Junie</div>
           <div class="ww-client-label">probabilistic, no capture, MCP only</div>
           <div class="ww-client-note"></div>
@@ -334,7 +346,7 @@
           <div class="ww-client-note">(best-effort adapter planned)</div>
         </li>
         <li class="ww-cell ww-size-small">
-          <div class="ww-logo-box"><img src="/logos/opencode.svg" alt="opencode"></div>
+          <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="opencode" style="--logo:url(/logos/opencode.svg)"></span></div>
           <div class="ww-client-name">opencode</div>
           <div class="ww-client-label">probabilistic, no capture, MCP only</div>
           <div class="ww-client-note">(plugin planned)</div>

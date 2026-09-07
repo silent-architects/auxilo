@@ -1590,15 +1590,21 @@ footer {
   top: 0;
 }
 
+/* FOCUS-VISIBLE (SITE-PERFECT-DEFECT-SHEET-2026-09-06.md V3): one universal
+   keyboard-focus ring for every focusable element site-wide (nav links,
+   buttons, footer links, form controls, the hamburger toggle). Ivory
+   (var(--ivory) = #FAFAF8 = rgb(250,250,248)), not aurum -- aurum dies
+   against the aurum-filled .nav-cta and other gold grounds the same way
+   the AD sheet's nav-cta override already avoids; making the universal
+   ring ivory means every element gets a ring that survives its own
+   background without a per-component override. The two prior identical
+   `*:focus-visible` / `button,a,input:focus-visible` blocks (both aurum
+   2px, redundant with each other) are consolidated into this one rule.
+   `:focus-visible` (not bare `:focus`) is what already scopes this to
+   keyboard/programmatic focus and skips mouse-click focus -- no separate
+   `:focus:not(:focus-visible)` suppression rule existed or is needed. */
 *:focus-visible {
-  outline: 2px solid var(--aurum);
-  outline-offset: 2px;
-}
-
-button:focus-visible,
-a:focus-visible,
-input:focus-visible {
-  outline: 2px solid var(--aurum);
+  outline: 1.5px solid var(--ivory);
   outline-offset: 2px;
 }
 
@@ -2632,4 +2638,29 @@ span.pull-stat-range.pull-stat-range, .pull-stat-range.pull-stat-range.pull-stat
 .writing-wrap h1 {
   line-height: 1.1 !important;
   letter-spacing: -0.02em;
+}
+
+/* ── LOGOS-INVISIBLE: Works With client marks rendered via CSS mask ───────
+   works-with.html's own <style> block defines the ww-logo-box tier sizing
+   (.ww-size-large/medium/small .ww-logo-box), but this one shared rule
+   lives here instead: every logo SVG under public/logos/ is authored
+   fill="currentColor", and an SVG loaded via <img> is an isolated document
+   -- currentColor never sees this page's `color`, so it resolved to
+   black-on-black against the page's rgb(10,10,10) ground. Nine <img
+   src="/logos/...svg"> tags are replaced with <span class="ww-logo"
+   role="img" aria-label="<client name>" style="--logo:url(/logos/<name>
+   .svg)"> so a real element (background-color: var(--ivory), #FAFAF8 =
+   rgb(250,250,248), this file line 25) paints through the SVG's shape via
+   mask instead of asking the SVG to inherit a color -- always ivory
+   regardless of what the SVG's own fill says. The span fills whatever box
+   its ww-logo-box parent gives it (that box now carries a real `height`,
+   not just `max-height`, precisely so this mask has a real box to paint
+   into); mask-size:contain scales the mark to fit without distortion. */
+.ww-logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-color: var(--ivory);
+  -webkit-mask: var(--logo) center / contain no-repeat;
+  mask: var(--logo) center / contain no-repeat;
 }

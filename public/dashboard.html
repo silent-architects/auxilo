@@ -8,7 +8,7 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=60b165c1" />
+  <link rel="stylesheet" href="/styles.css?v=080b8f62" />
   <style>
     /* ── Dashboard layout ───────────────────────────────────────────── */
     .dash-wrap {
@@ -239,9 +239,20 @@
       color: var(--ivory);
       font-size: 14px;
       font-family: var(--sans);
-      outline: none;
       transition: border-color 0.15s;
     }
+    /* FOCUS-VISIBLE (SITE-PERFECT-DEFECT-SHEET-2026-09-06.md V3): the
+       unconditional `outline: none;` this rule used to carry sat at the
+       same specificity as styles.css's shared `*:focus-visible` rule (both
+       0,1,0) and, coming later in the cascade (this page's own <style>
+       block loads after the linked stylesheet), always won outright --
+       keyboard-Tab focus on this field rendered no ring at all, regardless
+       of the shared rule. Removed rather than rescoped to
+       `:focus:not(:focus-visible)`: text inputs are the one control class
+       where showing the ring on a plain mouse click too (Chromium's
+       :focus-visible heuristic already does this for <input> by design) is
+       the expected, standard behaviour, not a suppression this page needs
+       to keep. */
 
     .form-input:focus {
       border-color: var(--aurum-border);
