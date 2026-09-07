@@ -437,10 +437,6 @@
             "type": "number",
             "description": "Pack price in USD"
           },
-          "queries": {
-            "type": "integer",
-            "description": "Number of query credits included"
-          },
           "unlocks": {
             "type": "integer",
             "description": "Number of unlock credits included"
@@ -461,10 +457,6 @@
           "amount_usd": {
             "type": "number",
             "description": "Amount paid in USD"
-          },
-          "queries_added": {
-            "type": "integer",
-            "description": "Query credits added"
           },
           "unlocks_added": {
             "type": "integer",
