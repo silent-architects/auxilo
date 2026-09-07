@@ -79,22 +79,22 @@ describe('Wave E2 item 10 (partially reverted by the AD nav re-rule sheet, 2026-
     assert.doesNotMatch(m[1], /var\(--aurum\)/, '.nav-links a.active no longer references --aurum');
   });
 
-  it('.nav-cta is a FILLED gold button — background var(--aurum), text var(--obsidian), border recolored to var(--aurum) (and still 44px tall, item 12)', () => {
+  it('.nav-cta is an OUTLINED ivory ghost button — transparent background, ivory text, ash-alpha border (and still 44px tall, item 12)', () => {
     const m = STYLES.match(/^\.nav-cta\s*\{([^}]*)\}/m);
     assert.ok(m, '.nav-cta rule found');
-    assert.match(m[1], /background:\s*var\(--aurum\)/, '.nav-cta background is the gold token — the AD sheet\'s filled button, superseding Wave E2 item 10\'s ash ghost button');
-    assert.match(m[1], /color:\s*var\(--obsidian\)\s*!important/, '.nav-cta text color is obsidian (on a gold ground)');
-    assert.match(m[1], /border:\s*1px solid var\(--aurum\)/, '.nav-cta border recolors to aurum so the 1px box math stays unchanged');
-    assert.match(m[1], /min-height:\s*44px/, '.nav-cta is 44px tall');
-    assert.doesNotMatch(m[1], /var\(--ash\b/, '.nav-cta base rule no longer references any --ash token');
+    assert.match(m[1], /background:\s*transparent/, '.nav-cta background is transparent — ASK-WAVE (2026-09-07, THE-ASK-PACKET §3) demotes the nav pill sitewide since the hero command block is now the property\'s single gold event, superseding the AD sheet\'s filled-gold call');
+    assert.match(m[1], /color:\s*var\(--ivory\)\s*!important/, '.nav-cta text color is ivory');
+    assert.match(m[1], /border:\s*1px solid rgba\(229,\s*229,\s*227,\s*0\.35\)/, '.nav-cta border is the ash-alpha outline (mirrors --ash-border/--aurum-border\'s 0.35 pattern), same box math as before');
+    assert.match(m[1], /min-height:\s*44px/, '.nav-cta is still 44px tall (same position, item 12 unchanged)');
+    assert.doesNotMatch(m[1], /var\(--aurum\b/, '.nav-cta base rule no longer references any --aurum token');
   });
 
-  it('.nav-cta:hover raises the ground to --aurum-hi, a new token, text stays obsidian', () => {
+  it('.nav-cta:hover tints to a faint white/ivory ground, text stays ivory', () => {
     const m = STYLES.match(/\.nav-cta:hover\s*\{([^}]*)\}/);
     assert.ok(m, '.nav-cta:hover rule found');
-    assert.match(m[1], /background:\s*var\(--aurum-hi\)/, '.nav-cta:hover raises the ground to --aurum-hi');
-    assert.match(m[1], /color:\s*var\(--obsidian\)/, '.nav-cta:hover text stays obsidian');
-    assert.doesNotMatch(m[1], /var\(--ash\b/, '.nav-cta:hover no longer references any --ash token');
+    assert.match(m[1], /background:\s*rgba\(255,\s*255,\s*255,\s*0\.04\)/, '.nav-cta:hover tints to a faint ivory ground — --aurum-hi is no longer referenced by this rule (left defined, unused)');
+    assert.match(m[1], /color:\s*var\(--ivory\)/, '.nav-cta:hover text stays ivory');
+    assert.doesNotMatch(m[1], /var\(--aurum-hi\b/, '.nav-cta:hover no longer references --aurum-hi');
   });
 
   it('--aurum-hi token exists at #D8B95F (the AD sheet\'s CTA hover ground)', () => {
