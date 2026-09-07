@@ -60,7 +60,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
 
 # ─── THE PIN — bump this in the same commit that adds/removes tests ─────────
-EXPECTED_TEST_COUNT=2604
+EXPECTED_TEST_COUNT=2602
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
@@ -74,6 +74,12 @@ echo "── check-test-count: running the node:test suite (test/*.test.js) ─�
 # reads) for the whole run, so a test that forgets its own override still
 # cannot reach the operator's real ~/.auxilo or ~/.claude. Cleaned up on
 # every exit path via the trap.
+#
+# Tradeoff: a handful of tests are genuine self-checks of THIS machine's
+# real installed state (a LaunchAgent plist, a counsel-draft file) — under
+# this isolated HOME they always see an empty temp dir and always skip. Run
+# `npm run test:host` (scripts/test/run-host.js) on the operator's own
+# machine to actually exercise those checks against real installed state.
 AUXILO_TEST_REAL_HOME="${HOME}"
 AUXILO_TEST_HOME="$(mktemp -d)"
 trap 'rm -rf "${AUXILO_TEST_HOME}"' EXIT

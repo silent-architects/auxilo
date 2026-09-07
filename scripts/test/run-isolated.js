@@ -17,6 +17,12 @@
  * fixture `{"byo":{"provider":"anthropic","model":"x","api_key":"y"}}` was
  * found written into the operator's real ~/.auxilo/providers.json).
  *
+ * Tradeoff: a handful of tests are genuine self-checks of THIS machine's
+ * real installed state (a LaunchAgent plist, a counsel-draft file) — under
+ * this isolated HOME they always see an empty temp dir and always skip.
+ * Run `npm run test:host` (scripts/test/run-host.js) on the operator's own
+ * machine to actually exercise those checks against real installed state.
+ *
  * Two env vars, not one, because os.homedir() is read directly (with no
  * override seam at all) by a wide swath of this repo's OTHER modules
  * (scripts/runner.js's ~/.claude/settings.json and LaunchAgents paths,

@@ -32,7 +32,8 @@
   ],
   "scripts": {
     "start": "node mcp-server.js",
-    "test": "node scripts/test/run-isolated.js"
+    "test": "node scripts/test/run-isolated.js",
+    "test:host": "node scripts/test/run-host.js"
   },
   "keywords": [
     "mcp",
