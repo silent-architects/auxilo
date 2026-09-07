@@ -26,8 +26,10 @@
  *         SOMEWHERE in the document, scroll allowed;
  *   (iii) the primary ask's full bounding box sits inside the viewport at
  *         both breakpoints, on the pages whose hero carries an ask at all
- *         (`/` -> `#install`, the setup-command container; `/for-builders`
- *         -> the hero's `.btn-primary`; `/for-agents` -> the hero's
+ *         (`/` -> `#hero-setup-snippet`, the setup-command block itself
+ *         (not `#install`, whose box also wraps the `.hero-setup-note`
+ *         microcopy and the `.hero-trust` list, which push it past the
+ *         fold); `/for-builders` -> the hero's `.btn-primary`; `/for-agents` -> the hero's
  *         `.btn-primary`). `/pricing`'s hero (`#pricing-hero`) ships no
  *         action per the packet ("No change... already form a primary and
  *         secondary pair" refers to the page's BOTTOM CTA section,
@@ -105,8 +107,16 @@ const VIEWPORTS = [
 
 // The 4 pages in scope. `hasFoldAsk` names the CSS selector for the page's
 // primary/hero ask for case (iii); pricing has none (see file header).
+//
+// `/`'s foldSelector is `#hero-setup-snippet`, not `#install`: `#install`
+// also wraps `.hero-setup-note` (the microcopy line) and `.hero-trust`
+// (the bullet list), which push its box past 812 at 375x812. The ruled
+// ask on `/` is the command block itself -- `#hero-setup-snippet`
+// (`.hero-setup-block` in public/index.html), which stays fully in view
+// at both viewports (confirmed live, matching builder A's own measurement
+// of that element).
 const PAGES = [
-  { file: 'index.html', route: '/', foldSelector: '#install' },
+  { file: 'index.html', route: '/', foldSelector: '#hero-setup-snippet' },
   { file: 'for-builders.html', route: '/for-builders', foldSelector: '#builders-hero .btn-primary' },
   { file: 'for-agents.html', route: '/for-agents', foldSelector: '#page-hero .btn-primary' },
   { file: 'pricing.html', route: '/pricing', foldSelector: null },

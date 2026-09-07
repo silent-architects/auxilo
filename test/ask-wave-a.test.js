@@ -16,10 +16,13 @@
  *   2. The hero command block (#install) is promoted/framed as the fold's
  *      one gold event; no new button is added (zero .btn-primary on /).
  *   3. Copy-button label -> "Copy the Setup Command" on the hero button
- *      (index.html) and the /connect button (connect.html); the two OTHER
+ *      (index.html) and the /connect button (connect.html). The two OTHER
  *      same-affordance footer copy buttons (index.html's own footer,
- *      for-builders.html's footer) are named in the spec as OUT OF SCOPE
- *      and must stay the literal old "copy" label.
+ *      for-builders.html's footer) were originally out of the packet's
+ *      scope, flagged for a ruling; SITE-PM's ruling has since landed
+ *      (label follows the copy target, sitewide) and is already applied
+ *      to both footers -- so they now carry "Copy the Setup Command" too,
+ *      not the old lowercase "copy".
  *   4. Hero secondary reduces to one: "How builders earn" is gone, "See How
  *      It Works" survives as a plain text link (no .btn-secondary chrome).
  *   5. New hero microcopy beneath the command block.
@@ -119,29 +122,38 @@ describe('ASK-WAVE A: old strings retired', () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe('ASK-WAVE A: new strings land exactly once', () => {
-  it('hero copy button reads "Copy the Setup Command" (count 1, index.html)', () => {
-    assert.equal(countOccurrences(indexHtml, 'Copy the Setup Command'), 1);
+  it('hero copy button reads "Copy the Setup Command" (count 2, index.html: hero + footer)', () => {
+    // SITE-PM ruling landed since this count was first pinned: the label
+    // follows the copy target, not the page position, so index.html's
+    // footer setup-snippet button (id="footer-setup-snippet") now carries
+    // the same "Copy the Setup Command" label as the hero button
+    // (already applied by micro-2) -- pushing the whole-file count from
+    // 1 to 2. See the re-pinned footer assertion below.
+    assert.equal(countOccurrences(indexHtml, 'Copy the Setup Command'), 2);
   });
 
   it('/connect copy button reads "Copy the Setup Command" (count 1, connect.html)', () => {
     assert.equal(countOccurrences(connectHtml, 'Copy the Setup Command'), 1);
   });
 
-  it('the two out-of-scope footer copy buttons are untouched (still lowercase "copy")', () => {
+  it('the footer copy buttons follow the SITE-PM label ruling ("Copy the Setup Command", not lowercase "copy")', () => {
     // index.html's own footer setup snippet + for-builders.html's footer setup
-    // snippet share the same affordance and label but the packet is silent on
-    // them -- flagged for a ruling, not touched by this wave.
+    // snippet share the same affordance as the hero/connect buttons. The
+    // packet was originally silent on them ("flagged for a ruling"); the
+    // ruling has since landed -- label follows the copy target, so both
+    // footer buttons read "Copy the Setup Command" like every other copy
+    // button on the site (already applied by micro-2). Re-pinned here.
     const footerStart = indexHtml.indexOf('id="footer-setup-snippet"');
     assert.notEqual(footerStart, -1);
     const footerButtonMatch = indexHtml.slice(footerStart, footerStart + 400).match(/aria-label="Copy command">([^<]*)</);
     assert.ok(footerButtonMatch, 'footer setup button not found');
-    assert.equal(footerButtonMatch[1], 'copy');
+    assert.equal(footerButtonMatch[1], 'Copy the Setup Command');
 
     const fbFooterStart = forBuildersHtml.indexOf('id="footer-setup-snippet"');
     assert.notEqual(fbFooterStart, -1);
     const fbFooterButtonMatch = forBuildersHtml.slice(fbFooterStart, fbFooterStart + 400).match(/aria-label="Copy command">([^<]*)</);
     assert.ok(fbFooterButtonMatch, 'for-builders footer setup button not found');
-    assert.equal(fbFooterButtonMatch[1], 'copy');
+    assert.equal(fbFooterButtonMatch[1], 'Copy the Setup Command');
   });
 
   it('new hero microcopy lands exactly once, verbatim', () => {

@@ -96,7 +96,23 @@ cd "${REPO_ROOT}"
 # fold case (already counted pre-change, no new test — was skipped, now
 # runs). Verified against the actual `npm test` discovered count:
 # 2778 + 2 = 2780.
-EXPECTED_TEST_COUNT=2780
+#
+# agent/ask-final (base pm/integ-y e0a6111, "integ: + FB-HERO-STATS-MOBILE
+# (builder pass; ruled CSS applied in the final micro)"): the pin above was
+# already 1 test stale on that base BEFORE this micro touched anything —
+# `node --test --test-reporter=tap test/*.test.js` on the unmodified base
+# reports 2781 discovered, not 2780 (4 failing overall: 3 in-scope here --
+# the / (iii) fold case on the stale `#install` selector, and the two
+# ask-wave-a.test.js footer-label assertions pending the SITE-PM ruling --
+# plus 1 out-of-scope pre-existing asset-hash failure, unchanged by this
+# micro). This micro's edits (the ruled hero-stats CSS, the / fold
+# selector fix, the wave-A footer-label re-pin) fix the 3 in-scope
+# failures and add/remove no `it()` blocks -- discovered count stays 2781,
+# now pass-clean except that same 1 pre-existing asset-hash failure
+# (pending the PM's hash rewrite) and 1 pre-existing, unrelated skip.
+# Re-pinning to the actual count rather than carrying the stale drift
+# forward.
+EXPECTED_TEST_COUNT=2781
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
