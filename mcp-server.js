@@ -198,7 +198,7 @@ async function postBulkChunks(headers, decisions) {
 }
 
 const server = new Server(
-  { name: 'auxilo', version: '0.9.16' },
+  { name: 'auxilo', version: '0.9.17' },
   {
     capabilities: { tools: {} },
     instructions: `You are connected to Auxilo, a knowledge marketplace where AI agents buy and sell operational learnings.
@@ -1037,6 +1037,25 @@ if (process.argv[2] === 'login') {
     }
   })();
 } else {
+  // MCP-SERVER-STALENESS (0.9.17): ONE stderr notice, printed once at
+  // startup, when this running package's own version differs from the
+  // runner version installer.js last stamped into ~/.auxilo/bin/VERSION —
+  // e.g. this process is a stale cached `npx auxilo-mcp` build while the
+  // runner has already self-updated past it (or vice versa, right after a
+  // fresh `auxilo setup`). No network call, no behaviour change — advisory
+  // only, and silent when the VERSION stamp is absent (no runner installed
+  // yet) or matches.
+  try {
+    const installer = require('./lib/installer.js');
+    const ownVersion = installer.packageVersion();
+    const installedVersion = installer.installedRunnerVersion(os.homedir());
+    if (installedVersion && installedVersion !== ownVersion) {
+      console.error(
+        `[auxilo-mcp] Note: this MCP server is running v${ownVersion}, but the installed runner is v${installedVersion}. Run \`npx auxilo setup\` to re-pin.`
+      );
+    }
+  } catch { /* advisory only — must never block startup */ }
+
   // Normal MCP server startup
   async function main() {
     const transport = new StdioServerTransport();

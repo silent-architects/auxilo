@@ -135,7 +135,37 @@ cd "${REPO_ROOT}"
 # actual post-merge `bash scripts/check-test-count.sh` discovered count
 # (isolated HOME, --test-reporter=tap, test/*.test.js only): 2863, 0 fail,
 # 6 skipped (pre-existing, unrelated to this merge).
-EXPECTED_TEST_COUNT=2868
+# agent/mcp-0917 (base 5be93b8, 2866): MCP-SERVER-STALENESS added
+# test/mcp-server-staleness.test.js — 38 tests covering registerMcp pinning
+# per client format (json-mcpServers/json-dropin/opencode/amp/openhands-stdio/
+# toml-codex), mcpPinnedVersion, rewriteMcpPins (the self-update re-pin path,
+# including foreign-entry and malformed-config skip cases), stageAndSwap's
+# call into the extracted tree's rewriteMcpPins, getStatus pin/staleness
+# fields, the `auxilo status` CLI pin line, and mcp-server.js's startup
+# version-skew notice. No other test file's assertion COUNT changed (two
+# pre-existing hardcoded-version assertions in test/prepublish-guard.test.js
+# and test/envelope-0831.test.js were updated to the new 0.9.17 value/a
+# dynamic package.json read, not added or removed). Verified against the
+# actual `npm test` discovered count (run twice, identical both times):
+# 2866 + 38 = 2904, 0 fail, 6 skipped (pre-existing, unrelated).
+#
+# 0.9.17 FIX PASS (F1/F2/F3, same test file): +11 tests covering the review
+# findings — F1 in-place command/args patching preserves user keys/order
+# (json-mcpServers x2, opencode, amp, openhands-stdio = 5), F2 config
+# writers preserve the existing file mode (json-mcpServers, writeJsonAtomic,
+# toml-codex x2 = 4), F3 unique tmp names + stale-tmp sweep (2). Verified
+# against the actual `npm test` discovered count (run twice, identical both
+# times): 2904 + 11 = 2915, 0 fail, 6 skipped (pre-existing, unrelated).
+# agent/assembly-0917 (this merge, main b9d241f x agent/mcp-0917-fix
+# 6578d14): two independent test-count deltas off the same base (5be93b8,
+# 2866) combine, neither branch touching the other's test files. main added
+# 2 tests (test/wave-e3.test.js, test/works-with.test.js) for the
+# COPY-UNGATED-SUPPORTED-CLIENTS revert (2866 -> 2868); the mcp-0917-fix
+# branch added 49 (2866 -> 2915, per the history above). Analytic estimate
+# 2868 + 49 = 2917. Re-pinned to the actual post-merge
+# `bash scripts/check-test-count.sh` discovered count (isolated HOME,
+# --test-reporter=tap, test/*.test.js only) below.
+EXPECTED_TEST_COUNT=2917
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
