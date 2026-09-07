@@ -191,6 +191,11 @@ describe('WORKS-WITH: structural — public/works-with.html, public/index.html b
     assert.ok(row.includes('capture is paused until the adapter is re-pointed'), 'Notes cell truth is unchanged and is what the status cell now matches');
   });
 
+  it('docs/SUPPORTED-CLIENTS.md does not carry the ungated runner auto-update paragraph (6b9ce96 addition, reverted — disclosure lives on the trust page + consent block only)', () => {
+    assert.doesNotMatch(MATRIX_MD, /keeps itself current/);
+    assert.doesNotMatch(MATRIX_MD, /AUXILO_RUNNER_AUTOUPDATE/);
+  });
+
   it('public/index.html carries the works-with band eyebrow line, directly after the hero section', () => {
     const heroEnd = INDEX_HTML.indexOf('<section id="hero"');
     assert.ok(heroEnd > -1, 'hero section present');
