@@ -17,6 +17,21 @@
  * modules across this repo write via a bare os.homedir()) at the start of
  * this file's run and asserts nothing about them changed by the end.
  *
+ * TEST-HOME-ISOLATION incident 2 (2026-09-06): a committed test
+ * (test/extraction-model-stamp.test.js's runner.submitLearnings coverage)
+ * called submitLearnings() with no `indexPath`, so lib/extraction-index.js's
+ * appendSubmittedLearning() fell through to DEFAULT_INDEX_PATH and wrote 404
+ * fixture rows into the operator's REAL ~/.auxilo/extracted-index.jsonl, and
+ * touched ~/.auxilo/pending-learnings/ along the way. That test now passes
+ * an explicit indexPath (see its Part 2 describe block), and
+ * DEFAULT_INDEX_PATH itself now honors AUXILO_HOME the same way the
+ * providers-state seam above does — but this guard did not watch either
+ * path, so a future test making the same mistake would go undetected. Both
+ * are added to WATCHED_PATHS below: the index file like the other watched
+ * files (mtime + size), and pending-learnings as a directory (mtime + entry
+ * count, since a dropped queue file may not change the directory's own size
+ * in a way every filesystem reports usefully).
+ *
  * Deliberately uses os.userInfo().homedir, NOT os.homedir() — the whole
  * point of the suite-wide mechanism this guards is to make os.homedir()
  * report a FAKE temp dir for the entire node --test process, so checking
@@ -51,15 +66,38 @@ const WATCHED_PATHS = [
   path.join(REAL_HOME, '.auxilo', 'providers.json'),
   path.join(REAL_HOME, '.auxilo', 'bin', 'VERSION'),
   path.join(REAL_HOME, '.claude', 'settings.json'),
+  // TEST-HOME-ISOLATION incident 2: the extraction index a test wrote 404
+  // fixture rows into, and the pending-learnings dir it touched along the way.
+  path.join(REAL_HOME, '.auxilo', 'extracted-index.jsonl'),
+  path.join(REAL_HOME, '.auxilo', 'pending-learnings'),
 ];
 
 function snapshot() {
   return WATCHED_PATHS.map((p) => {
     try {
       const stat = fs.statSync(p);
-      return { path: p, exists: true, mtimeMs: stat.mtimeMs, size: stat.size };
+      const isDir = stat.isDirectory();
+      // Directories: watch mtime + entry count (a dropped/removed queue file
+      // always changes the entry count, even on filesystems where directory
+      // "size" doesn't reflect content changes). Files: watch mtime + size,
+      // as the other watched paths in this file already do.
+      let entryCount = null;
+      if (isDir) {
+        try { entryCount = fs.readdirSync(p).length; } catch { entryCount = null; }
+      }
+      return {
+        path: p,
+        exists: true,
+        isDir,
+        mtimeMs: stat.mtimeMs,
+        size: isDir ? null : stat.size,
+        entryCount,
+      };
     } catch (err) {
-      return { path: p, exists: false, mtimeMs: null, size: null, errCode: err && err.code };
+      return {
+        path: p, exists: false, isDir: false, mtimeMs: null, size: null, entryCount: null,
+        errCode: err && err.code,
+      };
     }
   });
 }
@@ -100,11 +138,19 @@ describe('TEST-HOME-ISOLATION guard: this test file must not touch the real HOME
           before_.mtimeMs,
           `${before_.path}: mtime changed during this test file's run — something wrote to the real HOME`
         );
-        assert.equal(
-          after_.size,
-          before_.size,
-          `${before_.path}: size changed during this test file's run — something wrote to the real HOME`
-        );
+        if (before_.isDir) {
+          assert.equal(
+            after_.entryCount,
+            before_.entryCount,
+            `${before_.path}: directory entry count changed during this test file's run — something wrote to the real HOME`
+          );
+        } else {
+          assert.equal(
+            after_.size,
+            before_.size,
+            `${before_.path}: size changed during this test file's run — something wrote to the real HOME`
+          );
+        }
       }
     }
   });

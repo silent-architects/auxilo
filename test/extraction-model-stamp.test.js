@@ -170,19 +170,26 @@ describe('extract-local.js: extractLocally attaches extraction_model per learnin
 
 describe('runner.js: submitLearnings forwards extraction_model in the /learn POST body', () => {
   it('includes it when present on the learning object; omits the key entirely when absent', async () => {
-    const bodies = [];
-    const fetchImpl = async (url, init) => {
-      bodies.push(JSON.parse(init.body));
-      return { ok: true, json: async () => ({ status: 'approved' }) };
-    };
-    const withModel = { ...LEARNING_A, extraction_model: { provider: 'byo-key', model: 'gpt-4o-mini', version: null, vendor: 'openai-compatible' } };
-    const withoutModel = { ...LEARNING_A, title: 'A distinct second title padded to length ok' };
-    await runner.submitLearnings([withModel, withoutModel], 'claude-code', {
-      fetchImpl, baseUrl: 'https://auxilo.test', apiKey: 'axl_test',
-    });
-    assert.equal(bodies.length, 2);
-    assert.deepEqual(bodies[0].extraction_model, withModel.extraction_model);
-    assert.equal('extraction_model' in bodies[1], false);
+    const dir = tempDir('auxilo-stamp-submit-');
+    const indexPath = path.join(dir, 'extracted-index.jsonl');
+    fs.writeFileSync(indexPath, '');
+    try {
+      const bodies = [];
+      const fetchImpl = async (url, init) => {
+        bodies.push(JSON.parse(init.body));
+        return { ok: true, json: async () => ({ status: 'approved' }) };
+      };
+      const withModel = { ...LEARNING_A, extraction_model: { provider: 'byo-key', model: 'gpt-4o-mini', version: null, vendor: 'openai-compatible' } };
+      const withoutModel = { ...LEARNING_A, title: 'A distinct second title padded to length ok' };
+      await runner.submitLearnings([withModel, withoutModel], 'claude-code', {
+        fetchImpl, baseUrl: 'https://auxilo.test', apiKey: 'axl_test', indexPath,
+      });
+      assert.equal(bodies.length, 2);
+      assert.deepEqual(bodies[0].extraction_model, withModel.extraction_model);
+      assert.equal('extraction_model' in bodies[1], false);
+    } finally {
+      cleanupTempDirs();
+    }
   });
 });
 
