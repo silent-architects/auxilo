@@ -425,6 +425,11 @@
         <span class="badge operational">Operational</span>
       </div>
       <div class="component-row">
+        <span class="component-name">Credit Purchases</span>
+        <span class="component-desc">Prepaid credit packs bought through Stripe checkout. One credit unlocks one learning.</span>
+        <span class="badge" id="badge-credits"></span>
+      </div>
+      <div class="component-row">
         <span class="component-name">Builder Payouts</span>
         <span class="component-desc">Contributor withdrawals (both USDC on Base and Stripe-to-bank) are migrating to our non-custodial rail and paused meanwhile. Earnings still accrue and buyer payments are unaffected.</span>
         <span class="badge degraded">Migrating</span>
@@ -507,11 +512,24 @@
 </footer>
 
 <script>
+  // STATUS-CREDIT-PURCHASES: fail-closed state mapping for the Credit
+  // Purchases component row, driven off the same /health payload the rest
+  // of this page already fetches (no second request). Pure and DOM-free so
+  // it can be extracted and unit-tested in isolation (source-slice pattern,
+  // see test/credits-e2e-findings.test.js). Only stripe_configured is ever
+  // read here -- no other health-payload field from this cluster is used
+  // or rendered on this page.
+  function creditPurchasesStatus(data) {
+    if (!data) return '';
+    return data.stripe_configured === true ? 'Operational' : 'Unavailable';
+  }
+
   (async function () {
     const healthJsonEl = document.getElementById('health-json');
     const liveEl      = document.getElementById('live-health');
     const timeEl      = document.getElementById('status-time');
     const badgeApi    = document.getElementById('badge-api');
+    const badgeCredits = document.getElementById('badge-credits');
     const statusLabel = document.getElementById('status-label');
     const statusDot   = document.getElementById('status-dot');
     const overall     = document.getElementById('overall-status');
@@ -526,6 +544,12 @@
         liveEl.textContent = '✓ Server is healthy';
         liveEl.className   = 'ok';
         timeEl.textContent = 'Last checked: ' + new Date().toLocaleTimeString();
+
+        const creditsStatus = creditPurchasesStatus(data);
+        if (creditsStatus) {
+          badgeCredits.textContent = creditsStatus;
+          badgeCredits.className   = 'badge ' + (creditsStatus === 'Operational' ? 'operational' : 'degraded');
+        }
       } else {
         throw new Error('Non-ok status');
       }
