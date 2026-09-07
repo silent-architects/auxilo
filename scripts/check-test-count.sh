@@ -71,7 +71,7 @@ cd "${REPO_ROOT}"
 # getClaudeCliVersion, provider-run log line, judgeAttempted/judgeSucceeded,
 # plus the extraction-zero-tool-calls STATIC pin split into 2 asserts on
 # merge) = 2683.
-EXPECTED_TEST_COUNT=2683
+EXPECTED_TEST_COUNT=2693
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
