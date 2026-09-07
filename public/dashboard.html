@@ -2619,6 +2619,13 @@
       pollForCreditIncrease(0, priorBalance);
     } else if (state === 'cancel') {
       showAlert('checkout-banner', 'Checkout cancelled. Nothing was charged.', 'info');
+      // REVIEW-NOTES-0906 (1): a cancelled checkout never reaches the success
+      // branch's own removeItem above, so without this the stash from
+      // stashPrebuyBalance() would sit in sessionStorage and get read as a
+      // stale baseline by a later, unrelated successful purchase.
+      try {
+        sessionStorage.removeItem('auxilo_prebuy_unlock_balance');
+      } catch (_) { /* sessionStorage unavailable -- nothing to clear */ }
     }
   }
 
