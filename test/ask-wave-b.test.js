@@ -1,0 +1,174 @@
+'use strict';
+
+/**
+ * test/ask-wave-b.test.js — ASK-WAVE builder B (2026-09-07)
+ *
+ * Source of truth: ~/.auxilo/handoffs/THE-ASK-PACKET-2026-09-06.md (verbatim
+ * strings) + ~/.auxilo/handoffs/BUILD-SPEC-ASK-WAVE-2026-09-07.md Wave B.
+ *
+ * Static (source-level) checks only — no server boot, no browser.
+ *
+ * `/for-agents` (public/for-agents.html):
+ *   - Final CTA pair `Get an API Key` / `Explore the API` (old lines
+ *     875-876) is gone — both exact old anchor strings count 0.
+ *   - Replaced with ONE `<a href="/connect" class="btn-primary">Install the
+ *     MCP Server</a>`, mirroring the page's own hero (already-live line
+ *     524). Sitewide on this page that string now counts 2 (hero + close)
+ *     — same verb + same destination-type, one gold-event group per the
+ *     AD's reusable-event test (packet, LAYOUT §item "The reusable
+ *     gold-event test"), so both keeping `.btn-primary` is correct, not a
+ *     second competing ask.
+ *   - The closing-ask section (`#agent-cta`) carries exactly one
+ *     `.btn-primary` element.
+ *   - No stray gold: total `.btn-primary` count on the page is exactly 2
+ *     (hero + close) — nothing else picked up the class.
+ *   - Line 727's `Explore the API` (id="agents-cta", `.btn-secondary`,
+ *     mid-page) is untouched — a different literal string (carries an id
+ *     attribute) from the removed closing-pair instance, so it survives
+ *     the count-0 assertion on the exact old string.
+ *
+ * `/for-builders` (public/for-builders.html):
+ *   - Closing ask (hero `<a href="/connect" class="btn-primary">Connect
+ *     Your Agent</a>`, line 460) is UNCHANGED — packet: "No copy change.
+ *     Its ask is already `Connect Your Agent` and it is correct."
+ *   - Mid-page `#builders-setup-cta` (was the page's only other
+ *     `.btn-primary`, line 588) demoted to `.btn-secondary` — exact old
+ *     string count 0, exact new string count 1.
+ *   - Total `.btn-primary` count on the page is exactly 1 (the closing ask
+ *     only) — gold appears once.
+ *
+ * `/pricing` (public/pricing.html) — out of scope, guarded untouched:
+ *   byte-identical to origin/main (its three `Buy credits` buttons take
+ *   real money and must never be touched by this wave).
+ *
+ * Runner: node --test test/ask-wave-b.test.js
+ */
+
+const { describe, it, before } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
+
+const REPO = path.join(__dirname, '..');
+
+function readPublic(name) {
+  return fs.readFileSync(path.join(REPO, 'public', name), 'utf-8');
+}
+
+function countOccurrences(haystack, needle) {
+  if (needle === '') return 0;
+  let count = 0;
+  let idx = 0;
+  for (;;) {
+    idx = haystack.indexOf(needle, idx);
+    if (idx === -1) break;
+    count += 1;
+    idx += needle.length;
+  }
+  return count;
+}
+
+let forAgentsSrc;
+let forBuildersSrc;
+
+before(() => {
+  forAgentsSrc = readPublic('for-agents.html');
+  forBuildersSrc = readPublic('for-builders.html');
+});
+
+describe('ASK wave B — /for-agents closing ask', () => {
+  it('old string: "Get an API Key" dashboard anchor is gone (count 0)', () => {
+    const old = '<a href="/dashboard" class="btn-secondary">Get an API Key</a>';
+    assert.equal(countOccurrences(forAgentsSrc, old), 0);
+  });
+
+  it('old string: the closing-pair "Explore the API" anchor is gone (count 0)', () => {
+    // Exact old closing-pair markup (no id attribute) — distinct from the
+    // untouched mid-page instance at line 727, which carries id="agents-cta".
+    const old = '<a href="/api" class="btn-secondary">Explore the API</a>';
+    assert.equal(countOccurrences(forAgentsSrc, old), 0);
+  });
+
+  it('mid-page "Explore the API" secondary (id="agents-cta") is untouched', () => {
+    const untouched = '<a href="/api" id="agents-cta" class="btn-secondary">Explore the API</a>';
+    assert.equal(countOccurrences(forAgentsSrc, untouched), 1);
+  });
+
+  it('new string: one primary "Install the MCP Server" -> /connect, count 2 sitewide on this page (hero + close)', () => {
+    const fresh = '<a href="/connect" class="btn-primary">Install the MCP Server</a>';
+    assert.equal(countOccurrences(forAgentsSrc, fresh), 2);
+  });
+
+  it('the closing-ask section (#agent-cta) carries exactly one .btn-primary', () => {
+    const sectionMatch = forAgentsSrc.match(
+      /<section class="agent-cta-section[\s\S]*?<\/section>/
+    );
+    assert.ok(sectionMatch, 'expected to find the #agent-cta Final CTA section');
+    const section = sectionMatch[0];
+    assert.equal(countOccurrences(section, 'class="btn-primary"'), 1);
+    assert.equal(countOccurrences(section, 'class="btn-secondary"'), 0);
+  });
+
+  it('no stray gold: total .btn-primary class count on the page is exactly 2', () => {
+    assert.equal(countOccurrences(forAgentsSrc, 'class="btn-primary"'), 2);
+  });
+});
+
+describe('ASK wave B — /for-builders mid-page gold demotion', () => {
+  it('closing ask (hero "Connect Your Agent" -> /connect) is unchanged', () => {
+    const unchanged = '<a href="/connect" class="btn-primary">Connect Your Agent</a>';
+    assert.equal(countOccurrences(forBuildersSrc, unchanged), 1);
+  });
+
+  it('old string: mid-page #builders-setup-cta as .btn-primary is gone (count 0)', () => {
+    const old =
+      '<a href="/connect" id="builders-setup-cta" class="btn-primary">Run <code style="font-family:var(--mono);font-size:0.9em;">npx auxilo setup</code></a>';
+    assert.equal(countOccurrences(forBuildersSrc, old), 0);
+  });
+
+  it('new string: mid-page #builders-setup-cta demoted to .btn-secondary (count 1)', () => {
+    const fresh =
+      '<a href="/connect" id="builders-setup-cta" class="btn-secondary">Run <code style="font-family:var(--mono);font-size:0.9em;">npx auxilo setup</code></a>';
+    assert.equal(countOccurrences(forBuildersSrc, fresh), 1);
+  });
+
+  it('the copy button at line ~787 (footer setup copy) is untouched — outside the packet', () => {
+    const untouched =
+      '<button class="copy-btn" id="copy-footer-setup" onclick="copyCode(\'footer-setup-code\', \'copy-footer-setup\')" aria-label="Copy command">copy</button>';
+    assert.equal(countOccurrences(forBuildersSrc, untouched), 1);
+  });
+
+  it('gold appears once: total .btn-primary class count on the page is exactly 1', () => {
+    assert.equal(countOccurrences(forBuildersSrc, 'class="btn-primary"'), 1);
+  });
+});
+
+describe('ASK wave B — /pricing guard (out of scope, real money)', () => {
+  it('public/pricing.html is byte-identical to origin/main — untouched', () => {
+    let originBytes;
+    try {
+      originBytes = execFileSync(
+        'git',
+        ['show', 'origin/main:public/pricing.html'],
+        { cwd: REPO, maxBuffer: 1024 * 1024 * 16 }
+      );
+    } catch (err) {
+      assert.fail(
+        `could not read origin/main:public/pricing.html for comparison — ${err.message}`
+      );
+      return;
+    }
+    const localBytes = fs.readFileSync(path.join(REPO, 'public', 'pricing.html'));
+    assert.ok(
+      Buffer.compare(localBytes, originBytes) === 0,
+      'public/pricing.html has diverged from origin/main — this wave must not touch /pricing (its three Buy credits buttons take real money)'
+    );
+  });
+
+  it('its three "Buy credits" pack buttons are present and untouched (positive control)', () => {
+    const pricingSrc = readPublic('pricing.html');
+    assert.equal(countOccurrences(pricingSrc, 'class="btn-primary pack-buy-btn"'), 3);
+    assert.equal(countOccurrences(pricingSrc, '>Buy credits<'), 3);
+  });
+});
