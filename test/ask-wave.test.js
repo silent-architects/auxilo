@@ -342,16 +342,67 @@ describe('ASK-WAVE treatment tests', { timeout: 120_000 }, () => {
     }
   }
 
+  // ── gold-event collector deliberately keys on background-color, not text
+  // colour: /for-builders' hero ledger number (.pull-stat-num, "228") is
+  // gold TEXT (color: var(--aurum)) sitting on a transparent background,
+  // by design (row FB-HERO-STATS-MOBILE comment in for-builders.html: "228
+  // stays the sole ledger-tier number ... gold TEXT, not a gold-fill").
+  // goldElements() above only inspects `cs.backgroundColor` (see its body),
+  // so this was already correct behaviour, incidentally, not on purpose --
+  // pin it explicitly so nobody "fixes" goldElements() to also match on
+  // `color` and starts double-counting every gold-text ledger number as a
+  // second gold-fill event (which would break case (ii)'s "at most one
+  // gold-event group" invariant on every page that carries a ledger stat
+  // next to a real gold-fill CTA). ──
+  for (const viewport of VIEWPORTS) {
+    it(`.pull-stat-num gold TEXT on /for-builders is not counted as a gold-fill event at ${viewport.name}`, async (t) => {
+      if (!ok) { t.skip('playwright not resolvable'); return; }
+      await withPage(viewport, async (p) => {
+        await goto(p, 'for-builders.html');
+        const aurum = await resolveToken(p, '--aurum');
+        const aurumHi = await resolveToken(p, '--aurum-hi');
+        const numEl = await p.evaluate(() => {
+          const el = document.querySelector('.pull-stat-num');
+          if (!el) return null;
+          const cs = getComputedStyle(el);
+          return { color: cs.color, backgroundColor: cs.backgroundColor };
+        });
+        assert.ok(numEl, '.pull-stat-num not found on /for-builders');
+        // The number's own text colour IS the solid gold token (that's the
+        // ledger-tier hierarchy row FB-HERO-STATS-MOBILE preserved)...
+        assert.ok(
+          numEl.color === aurum || numEl.color === aurumHi,
+          `.pull-stat-num text colour at ${viewport.name}: got ${numEl.color}, expected the solid --aurum/--aurum-hi token`,
+        );
+        // ...but its background is NOT gold, so the collector (which keys
+        // on background-color only) must not surface it as a gold-fill
+        // event.
+        assert.notEqual(numEl.backgroundColor, aurum, `.pull-stat-num background at ${viewport.name} unexpectedly equals solid --aurum — gold TEXT must not read as a gold fill`);
+        assert.notEqual(numEl.backgroundColor, aurumHi, `.pull-stat-num background at ${viewport.name} unexpectedly equals solid --aurum-hi — gold TEXT must not read as a gold fill`);
+
+        const els = await goldElements(p, aurum, aurumHi, false);
+        const numInResults = els.some((e) => e.className && e.className.split(/\s+/).includes('pull-stat-num'));
+        assert.ok(!numInResults, `.pull-stat-num at ${viewport.name} was incorrectly included in goldElements() output — gold text must not be counted as a gold-fill event`);
+      });
+    });
+  }
+
   // ── (iii) the primary/hero ask sits fully above the fold ──
   for (const viewport of VIEWPORTS) {
     for (const page of PAGES) {
       if (!page.foldSelector) continue; // /pricing: hero carries no action, no fold case (see file header)
       it(`(iii) ${page.route}'s primary ask (${page.foldSelector}) is fully above the fold at ${viewport.name}`, async (t) => {
         if (!ok) { t.skip('playwright not resolvable'); return; }
-        if (page.route === '/for-builders' && viewport.name === '375x812') {
-          t.skip('EXEMPT 2026-09-07 (SITE-PM, row FB-HERO-STATS-MOBILE): at 375x812 .builders-hero-stats renders as a 298px vertical stack (+48px margin) pushing the hero primary bottom to 951 > 812; the stats presentation is an AD layout decision, not a mechanical fix; #builders-hero padding-top (130px = --header-h) is off limits. Assertion stays armed on /, /for-agents, /pricing.');
-          return;
-        }
+        // EXEMPTION REMOVED 2026-09-07 (row FB-HERO-STATS-MOBILE): the
+        // 375x812 /for-builders case above was skipped pending the AD's
+        // single-compressed-row ruling for .builders-hero-stats (was a
+        // 298px vertical stack + 48px margin, pushing the primary bottom
+        // to 951 > 812). That ruling has landed in for-builders.html's
+        // page-scoped <style> block (see its @media max-width:600px
+        // comment) -- the stats row now compresses to ~75px, and the
+        // primary bottom lands at ~712, back inside the 812 fold. This
+        // assertion is re-armed for every page/viewport, /for-builders
+        // 375x812 included.
         await withPage(viewport, async (p) => {
           await goto(p, page.file);
           const rect = await p.evaluate((sel) => {
