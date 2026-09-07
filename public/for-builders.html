@@ -29,7 +29,7 @@
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono500.0ecb6352.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=4990d538" />
+  <link rel="stylesheet" href="/styles.css?v=ddd971ac" />
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: FAQPage -->
@@ -373,6 +373,47 @@
          while the body sat at 40. Adding it here, page-local, closes the
          gap without touching the shared token or any other page. */
       .builders-hero-content { padding-left: 24px; padding-right: 24px; }
+
+      /* AD ruling FB-HERO-STATS-MOBILE, 2026-09-07
+         (~/.auxilo/handoffs/FB-HERO-STATS-MOBILE-CSS-2026-09-07.md),
+         reproduced verbatim -- supersedes an earlier builder pass in this
+         same block (flex-wrap: nowrap, 22/15/9.5px) that the AD's own
+         live measurement ruled against. Grid, not flex: 3 equal columns,
+         14px column-gap, 6px row-gap, 32px margin-bottom -- live-verified
+         stats height 75px, landing .btn-primary bottom at 712 (130 hero
+         pad + 40 content pad + 88 h1 + 28 h1 margin + 132 sub1 + 40 shared
+         sub margin + 75 stats + 32 stats margin + 53 sub2 + 40 shared sub
+         margin + 54 button = 712). The doubled
+         #builders-hero span.pull-stat-num.pull-stat-num selector is
+         DELIBERATE specificity per the ruling -- do not tidy it to a
+         single class. !important throughout because this page-scoped
+         block must outrank styles.css's shared #builders-hero
+         .builders-hero-stats .builders-hero-stat .stat-num rules at equal
+         specificity (BREAKPOINT-CONSOLIDATION precedent). DO NOT TOUCH
+         (verbatim from the ruling): #builders-hero padding-top: 130px
+         above; .builders-hero-content padding-top: 40px !important
+         above; .builders-hero-sub margin-bottom: 40px (styles.css,
+         shared); the base .pull-stat-num/.pull-stat-caption rules in
+         styles.css. */
+      #builders-hero .builders-hero-stats {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        column-gap: 14px;
+        row-gap: 6px;
+        margin-bottom: 32px !important;
+      }
+      #builders-hero .builders-hero-stats .builders-hero-stat .stat-num {
+        min-height: 0 !important;
+      }
+      #builders-hero span.pull-stat-num.pull-stat-num {
+        font-size: 28px !important; line-height: 1.05 !important;
+      }
+      #builders-hero .builders-hero-stats .builders-hero-stat .stat-num.pull-stat-caption {
+        font-size: 16px !important; line-height: 1.15 !important;
+      }
+      #builders-hero .stat-label {
+        font-size: 11px !important; line-height: 1.32 !important; margin-top: 5px !important;
+      }
     }
 
     @media (max-width: 700px) {
@@ -585,7 +626,7 @@
         </div>
 
         <div style="margin-top:32px;">
-          <a href="/connect" id="builders-setup-cta" class="btn-primary">Run <code style="font-family:var(--mono);font-size:0.9em;">npx auxilo setup</code></a>
+          <a href="/connect" id="builders-setup-cta" class="btn-secondary">Run <code style="font-family:var(--mono);font-size:0.9em;">npx auxilo setup</code></a>
         </div>
       </div>
 
@@ -783,7 +824,7 @@ curl -X POST \
       <div class="code-block" id="footer-setup-snippet" style="max-width:420px;margin:0 auto;text-align:left">
         <div class="code-block-header">
           <span class="code-block-lang">One command. Any terminal.</span>
-          <button class="copy-btn" id="copy-footer-setup" onclick="copyCode('footer-setup-code', 'copy-footer-setup')" aria-label="Copy command">copy</button>
+          <button class="copy-btn" id="copy-footer-setup" onclick="copyCode('footer-setup-code', 'copy-footer-setup')" aria-label="Copy command">Copy the Setup Command</button>
         </div>
         <pre id="footer-setup-code">npx auxilo setup</pre>
       </div>

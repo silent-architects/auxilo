@@ -418,7 +418,7 @@ describe('Hero wave (AD-STRINGS-PACKET-12 rev 3a): H1 B, title/og/twitter, meta 
 
   it('bullet 351 (packet 11): hero-trust bullet reads "every Auxilo tool still works"', () => {
     assert.ok(
-      INDEX_HTML.includes('Extraction defaults to off. Decline it and every Auxilo tool still works.'),
+      INDEX_HTML.includes('Decline extraction and every Auxilo tool still works.'),
       'naming-sweep fix for the hero-trust bullet is applied'
     );
   });
