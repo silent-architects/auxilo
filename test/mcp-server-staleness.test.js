@@ -268,6 +268,170 @@ describe('MCP-SERVER-STALENESS: registerMcp pins each format', () => {
   });
 });
 
+// ─── 1b. 0.9.17 fix pass: F1 (in-place patch preserves user keys/order),
+//         F2 (writers preserve file mode), F3 (unique tmp names + sweep) ────
+
+describe('0.9.17 fix pass F1: re-pin patches command/args in place, other keys survive', () => {
+  it('json-mcpServers: env + disabled survive a registerMcp re-pin, key order preserved', () => {
+    const home = tmpHome('f1-json-');
+    const client = fixtureClient(home);
+    writeJson(client.configPath, {
+      mcpServers: {
+        auxilo: { command: 'npx', args: ['auxilo-mcp@0.9.16'], env: { FOO: 'bar' }, disabled: false },
+      },
+    });
+    const result = installer.registerMcp(client, '0.9.17');
+    assert.equal(result.changed, true);
+    const config = readJson(client.configPath);
+    assert.deepEqual(config.mcpServers.auxilo, {
+      command: 'npx', args: ['auxilo-mcp@0.9.17'], env: { FOO: 'bar' }, disabled: false,
+    });
+    assert.deepEqual(Object.keys(config.mcpServers.auxilo), ['command', 'args', 'env', 'disabled'],
+      'key order must be preserved — command/args updated in place, not re-inserted');
+  });
+
+  it('json-mcpServers: same survives via rewriteMcpPins (the self-update path)', () => {
+    const home = tmpHome('f1-json-rewrite-');
+    fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+    const settingsPath = path.join(home, '.claude', 'settings.json');
+    writeJson(settingsPath, {
+      mcpServers: {
+        auxilo: { command: 'npx', args: ['auxilo-mcp@0.9.16'], env: { FOO: 'bar' }, timeout: 30, alwaysAllow: ['search'] },
+      },
+    });
+    const results = installer.rewriteMcpPins(home, '0.9.17');
+    assert.equal(results.find((r) => r.id === 'claude-code').changed, true);
+    const config = readJson(settingsPath);
+    assert.deepEqual(config.mcpServers.auxilo, {
+      command: 'npx', args: ['auxilo-mcp@0.9.17'], env: { FOO: 'bar' }, timeout: 30, alwaysAllow: ['search'],
+    });
+  });
+
+  it('opencode: env key on the entry survives a re-pin', () => {
+    const home = tmpHome('f1-opencode-');
+    const client = fixtureClient(home, { format: 'opencode' });
+    writeJson(client.configPath, {
+      mcp: { auxilo: { type: 'local', command: ['npx', 'auxilo-mcp@0.9.16'], env: { FOO: 'bar' } } },
+    });
+    installer.registerMcp(client, '0.9.17');
+    const config = readJson(client.configPath);
+    assert.deepEqual(config.mcp.auxilo, { type: 'local', command: ['npx', 'auxilo-mcp@0.9.17'], env: { FOO: 'bar' } });
+  });
+
+  it('amp: env + disabled on the entry survive a re-pin', () => {
+    const home = tmpHome('f1-amp-');
+    const client = fixtureClient(home, { format: 'amp' });
+    writeJson(client.configPath, {
+      'amp.mcpServers': { auxilo: { command: 'npx', args: ['auxilo-mcp@0.9.16'], env: { FOO: 'bar' }, disabled: true } },
+    });
+    installer.registerMcp(client, '0.9.17');
+    const config = readJson(client.configPath);
+    assert.deepEqual(config['amp.mcpServers'].auxilo, {
+      command: 'npx', args: ['auxilo-mcp@0.9.17'], env: { FOO: 'bar' }, disabled: true,
+    });
+  });
+
+  it('openhands-stdio: cwd key + array position survive a re-pin', () => {
+    const home = tmpHome('f1-openhands-');
+    const client = fixtureClient(home, { format: 'openhands-stdio' });
+    writeJson(client.configPath, {
+      stdio_servers: [
+        { name: 'other', command: 'node', args: ['/opt/x.js'] },
+        { name: 'auxilo', command: 'npx', args: ['auxilo-mcp@0.9.16'], cwd: '/home/user' },
+      ],
+    });
+    installer.registerMcp(client, '0.9.17');
+    const config = readJson(client.configPath);
+    assert.equal(config.stdio_servers.length, 2);
+    assert.deepEqual(config.stdio_servers[0], { name: 'other', command: 'node', args: ['/opt/x.js'] });
+    assert.deepEqual(config.stdio_servers[1], { name: 'auxilo', command: 'npx', args: ['auxilo-mcp@0.9.17'], cwd: '/home/user' });
+  });
+});
+
+describe('0.9.17 fix pass F2: config writers preserve the existing file mode', () => {
+  it('json-mcpServers: a 0600 config file stays 0600 after registerMcp re-pin', () => {
+    const home = tmpHome('f2-json-');
+    const client = fixtureClient(home);
+    writeJson(client.configPath, { mcpServers: { auxilo: { command: 'npx', args: ['auxilo-mcp@0.9.16'] } } });
+    fs.chmodSync(client.configPath, 0o600);
+    installer.registerMcp(client, '0.9.17');
+    assert.equal(fs.statSync(client.configPath).mode & 0o777, 0o600);
+  });
+
+  it('writeJsonAtomic: preserves an arbitrary existing mode (0640) across rewrite', () => {
+    const home = tmpHome('f2-writejsonatomic-');
+    const filePath = path.join(home, 'config.json');
+    writeJson(filePath, { a: 1 });
+    fs.chmodSync(filePath, 0o640);
+    installer.writeJsonAtomic(filePath, { a: 2 });
+    assert.equal(fs.statSync(filePath).mode & 0o777, 0o640);
+    assert.deepEqual(readJson(filePath), { a: 2 });
+  });
+
+  it('toml-codex: a 0600 config.toml stays 0600 after rewriting the args line of an owned section', () => {
+    const home = tmpHome('f2-codex-rewrite-');
+    const client = fixtureClient(home, { format: 'toml-codex', configPath: path.join(home, 'config.toml') });
+    fs.writeFileSync(client.configPath, '[mcp_servers.auxilo]\ncommand = "npx"\nargs = ["auxilo-mcp@0.9.16"]\n');
+    fs.chmodSync(client.configPath, 0o600);
+    installer.registerMcp(client, '0.9.17');
+    assert.equal(fs.statSync(client.configPath).mode & 0o777, 0o600);
+  });
+
+  it('toml-codex: a 0600 config.toml stays 0600 after appending a fresh section', () => {
+    const home = tmpHome('f2-codex-append-');
+    const client = fixtureClient(home, { format: 'toml-codex', configPath: path.join(home, 'config.toml') });
+    fs.writeFileSync(client.configPath, '# preamble\n');
+    fs.chmodSync(client.configPath, 0o600);
+    installer.registerMcp(client, '0.9.17');
+    assert.equal(fs.statSync(client.configPath).mode & 0o777, 0o600);
+  });
+});
+
+describe('0.9.17 fix pass F3: config writers use unique tmp names and sweep stale ones', () => {
+  it('writeJsonAtomic: two consecutive writes to the same file use distinct tmp names', () => {
+    const home = tmpHome('f3-unique-');
+    const filePath = path.join(home, 'config.json');
+    const seen = [];
+    const origWriteFileSync = fs.writeFileSync;
+    fs.writeFileSync = function patched(dest, ...rest) {
+      if (typeof dest === 'string' && dest.startsWith(filePath + '.tmp-')) seen.push(dest);
+      return origWriteFileSync.call(fs, dest, ...rest);
+    };
+    try {
+      installer.writeJsonAtomic(filePath, { n: 1 });
+      installer.writeJsonAtomic(filePath, { n: 2 });
+    } finally {
+      fs.writeFileSync = origWriteFileSync;
+    }
+    assert.equal(seen.length, 2, 'both writes must go through the tmp-name pattern');
+    assert.notEqual(seen[0], seen[1], 'each write must pick a distinct tmp name');
+    for (const tmp of seen) assert.match(path.basename(tmp), /^config\.json\.tmp-\d+-[0-9a-f]{12}$/);
+  });
+
+  it('writeJsonAtomic: sweeps a stale (>1h old) leftover tmp file matching our pattern, in this file\'s own dir only', () => {
+    const home = tmpHome('f3-sweep-');
+    const filePath = path.join(home, 'config.json');
+    writeJson(filePath, { a: 1 });
+    const staleTmp = `${filePath}.tmp-99999-deadbeef0000`;
+    fs.writeFileSync(staleTmp, 'leftover from a crashed writer');
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    fs.utimesSync(staleTmp, twoHoursAgo, twoHoursAgo);
+
+    const freshTmp = `${filePath}.tmp-88888-cafebabe0000`;
+    fs.writeFileSync(freshTmp, 'a concurrent writer that started moments ago');
+
+    const unrelated = path.join(home, 'other-file.tmp-1-abc');
+    fs.writeFileSync(unrelated, 'not ours');
+
+    installer.writeJsonAtomic(filePath, { a: 2 });
+
+    assert.equal(fs.existsSync(staleTmp), false, 'stale (>1h) tmp matching our pattern must be swept');
+    assert.equal(fs.existsSync(freshTmp), true, 'a fresh (<1h) tmp must be left alone — could be a concurrent writer');
+    assert.equal(fs.existsSync(unrelated), true, 'a non-matching filename must never be touched');
+    assert.deepEqual(readJson(filePath), { a: 2 });
+  });
+});
+
 // ─── 2. mcpPinnedVersion probe ───────────────────────────────────────────────
 
 describe('MCP-SERVER-STALENESS: mcpPinnedVersion', () => {
