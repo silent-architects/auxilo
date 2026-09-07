@@ -19,9 +19,18 @@
  * static swap survives the serveStatic path unmodified).
  *
  * SITE-PERFECT-W2 item D (2026-09-06) gave the "again" in this sentence a
- * superscript footnote link (the Math block's asterisk marker), so the
+ * superscript footnote marker (the Math block's asterisk marker), so the
  * checked string below now carries that inline markup between "again" and
  * "on the same learning" — the prose itself is unchanged.
+ *
+ * FOOTNOTE-SUP (2026-09-06, SITE-PM ruling under Tyler's standing rule
+ * "links go to pages, never anchors"): the two math-block markers changed
+ * from an in-page anchor link (`<sup><a href="#math-footnote"
+ * aria-label="footnote">*</a></sup>`) to a plain non-link marker associated
+ * to the footnote via `aria-describedby` (`<sup
+ * aria-describedby="math-footnote">*</sup>`) — no `<a>`, no `href`, no
+ * `aria-label`. The checked string below tracks that markup change; the
+ * prose itself is unchanged.
  *
  * Staged-server pattern: test/ad-routes.test.js.
  *
@@ -45,17 +54,31 @@ const REPO = path.join(__dirname, '..');
 const STATIC_HTML = fs.readFileSync(path.join(REPO, 'public', 'for-builders.html'), 'utf8');
 
 const OLD_SENTENCE = 'You earn on the same learning every time it unlocks, with no cap and no expiry.';
-const NEW_SENTENCE = 'You earn again<sup><a href="#math-footnote" aria-label="footnote">*</a></sup> on the same learning when another agent unlocks it, and nothing you publish expires while it stays in the catalog.';
+const NEW_SENTENCE = 'You earn again<sup aria-describedby="math-footnote">*</sup> on the same learning when another agent unlocks it, and nothing you publish expires while it stays in the catalog.';
 
 function countOccurrences(haystack, needle) {
   return haystack.split(needle).length - 1;
 }
+
+// FOOTNOTE-SUP (2026-09-06): before the fix, public/for-builders.html carried
+// 3 total `href="#`-prefixed anchors — 2 were the math-footnote sup-links
+// (removed by this change) and 1 was the unrelated "#main" skip-to-content
+// link (kept). After the fix, exactly 1 `href="#` occurrence should remain.
+const HREF_HASH_COUNT_BEFORE = 3;
+const HREF_HASH_COUNT_AFTER = HREF_HASH_COUNT_BEFORE - 2;
 
 describe('FB-ACCRUAL-GIVEN: /for-builders accrual sentence — ruled conditioned form', { timeout: 180_000 }, () => {
   describe('static file', () => {
     it('public/for-builders.html: old sentence absent, new sentence present exactly once', () => {
       assert.equal(countOccurrences(STATIC_HTML, OLD_SENTENCE), 0, 'old accrual sentence must not survive in the static file');
       assert.equal(countOccurrences(STATIC_HTML, NEW_SENTENCE), 1, 'new accrual sentence must appear exactly once in the static file');
+    });
+
+    it('public/for-builders.html: math-footnote markers are non-link (no in-page anchors), only the skip-to-content href="#" survives', () => {
+      assert.equal(countOccurrences(STATIC_HTML, 'href="#math-footnote"'), 0, 'the two math-footnote markers must no longer be anchor links');
+      assert.equal(countOccurrences(STATIC_HTML, 'aria-describedby="math-footnote"'), 2, 'both markers must be associated to the footnote via aria-describedby');
+      assert.equal(countOccurrences(STATIC_HTML, 'id="math-footnote"'), 1, 'the footnote element must keep its id, unchanged');
+      assert.equal(countOccurrences(STATIC_HTML, 'href="#'), HREF_HASH_COUNT_AFTER, `href="#" occurrences must equal the pre-existing count (${HREF_HASH_COUNT_BEFORE}) minus the 2 removed footnote anchors`);
     });
   });
 
