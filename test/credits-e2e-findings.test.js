@@ -165,6 +165,27 @@ describe('CREDITS-E2E-FINDINGS 1b: checkout-banner wiring (source)', () => {
     assert.ok(h.includes("sessionStorage.removeItem('auxilo_prebuy_unlock_balance')"));
     assert.ok(h.includes('pollForCreditIncrease(0, priorBalance)'));
   });
+
+  it('REVIEW-NOTES-0906 (1): the cancel branch also clears the stashed pre-buy baseline', () => {
+    // stashPrebuyBalance() writes 'auxilo_prebuy_unlock_balance' right before
+    // the Stripe redirect. If checkout comes back cancelled, the success
+    // branch's own removeItem never runs, so without a defensive clear here
+    // the stash would sit in sessionStorage and get read as a stale baseline
+    // by a later, unrelated successful purchase.
+    const h = extractFunctionSource(DASHBOARD_HTML, 'function showCheckoutBanner(state) {');
+    const cancelIdx = h.indexOf("state === 'cancel'");
+    assert.ok(cancelIdx !== -1, 'cancel branch present');
+    const cancelBranch = h.slice(cancelIdx);
+    assert.ok(
+      cancelBranch.includes("sessionStorage.removeItem('auxilo_prebuy_unlock_balance')"),
+      'cancel branch must clear the same stash key the success branch clears'
+    );
+    // Defensive: try/catch around the clear, matching the style of the
+    // existing sessionStorage reads/writes in this function.
+    const clearIdx = cancelBranch.indexOf("sessionStorage.removeItem('auxilo_prebuy_unlock_balance')");
+    const surrounding = cancelBranch.slice(Math.max(0, clearIdx - 40), clearIdx + 80);
+    assert.ok(surrounding.includes('try'), 'clear is wrapped in try/catch like the existing reads');
+  });
 });
 
 // ─── 3. packDisplayName (pack-name lookup, DOM-free unit tests) ───────────
