@@ -135,7 +135,20 @@ cd "${REPO_ROOT}"
 # actual post-merge `bash scripts/check-test-count.sh` discovered count
 # (isolated HOME, --test-reporter=tap, test/*.test.js only): 2863, 0 fail,
 # 6 skipped (pre-existing, unrelated to this merge).
-EXPECTED_TEST_COUNT=2866
+# agent/mcp-0917 (base 5be93b8, 2866): MCP-SERVER-STALENESS added
+# test/mcp-server-staleness.test.js — 38 tests covering registerMcp pinning
+# per client format (json-mcpServers/json-dropin/opencode/amp/openhands-stdio/
+# toml-codex), mcpPinnedVersion, rewriteMcpPins (the self-update re-pin path,
+# including foreign-entry and malformed-config skip cases), stageAndSwap's
+# call into the extracted tree's rewriteMcpPins, getStatus pin/staleness
+# fields, the `auxilo status` CLI pin line, and mcp-server.js's startup
+# version-skew notice. No other test file's assertion COUNT changed (two
+# pre-existing hardcoded-version assertions in test/prepublish-guard.test.js
+# and test/envelope-0831.test.js were updated to the new 0.9.17 value/a
+# dynamic package.json read, not added or removed). Verified against the
+# actual `npm test` discovered count (run twice, identical both times):
+# 2866 + 38 = 2904, 0 fail, 6 skipped (pre-existing, unrelated).
+EXPECTED_TEST_COUNT=2904
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
