@@ -168,7 +168,10 @@ describe('EXT-0806b Claude auth and cause classification', () => {
     // stdin-fed model can't reach outside the transcript it was given.
     // EXTRACT-PER-CLIENT W1 FIX GIVENS: it also carries
     // '--no-session-persistence', matching the judge spawn.
-    assert.deepEqual(unknown.calls.map((call) => call.args), [['auth', 'status'], ['-p', '--no-session-persistence', '--tools', '']]);
+    // EXTRACTION-CHILD-HOOKS (0.9.15): and '--setting-sources',''  — the child
+    // loads none of the operator's own user/project/local settings, so their
+    // personal SessionStart hooks never fire into this prompt.
+    assert.deepEqual(unknown.calls.map((call) => call.args), [['auth', 'status'], ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', '']]);
   });
 
   it('maps auth regex, non-zero model exit, and spawn failure to the exact three reason codes', () => {

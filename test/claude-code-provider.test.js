@@ -13,7 +13,7 @@
  * its own file per the spec; selection order; caching; e2e no-throw proof).
  */
 
-const { describe, it } = require('node:test');
+const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -97,17 +97,18 @@ describe('claude-code.js — claudeChildEnv() scrub completeness + preservation'
 // ─── (2)+(3) Extraction argv gains --tools '', judge argv unchanged ────────
 
 describe('claude-code.js — runModel argv per mode', () => {
-  it("mode:'extract' spawns [bin, '-p', '--no-session-persistence', '--tools', ''] (EXTRACT-TOOLS-LOCK + the W1 FIX GIVENS: matches the judge spawn's --no-session-persistence)", async () => {
+  it("mode:'extract' spawns [bin, '-p', '--no-session-persistence', '--tools', '', '--setting-sources', ''] (EXTRACT-TOOLS-LOCK + the W1 FIX GIVENS: matches the judge spawn's --no-session-persistence; EXTRACTION-CHILD-HOOKS 0.9.15 adds --setting-sources '' so the child loads none of the operator's own settings/hooks)", async () => {
     const stub = spawnQueue([authJson(true), { status: 0, stdout: '{"learnings":[]}', stderr: '' }]);
     const result = await claudeCode.runModel({
       prompt: 'PROMPT', input: 'TRANSCRIPT', mode: 'extract',
       spawnSyncImpl: stub.spawnSyncImpl, claudeBin: 'claude',
     });
     assert.equal(result.ok, true);
-    assert.deepEqual(stub.calls[1].args, ['-p', '--no-session-persistence', '--tools', '']);
+    assert.deepEqual(stub.calls[1].args, ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', '']);
+    assert.deepEqual(result.argv, ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', '']);
   });
 
-  it("mode:'judge' spawns byte-identical argv to pre-move: ['-p','--output-format','json','--no-session-persistence','--tools','']", async () => {
+  it("mode:'judge' spawns byte-identical argv to pre-move plus --setting-sources '' (0.9.15): ['-p','--output-format','json','--no-session-persistence','--tools','','--setting-sources','']", async () => {
     const stub = spawnQueue([{
       status: 0,
       stdout: JSON.stringify({ result: '{"decisions":[]}', is_error: false, usage: { input_tokens: 5, output_tokens: 2 } }),
@@ -118,7 +119,7 @@ describe('claude-code.js — runModel argv per mode', () => {
       spawnSyncImpl: stub.spawnSyncImpl, claudeBin: 'claude',
     });
     assert.equal(result.ok, true);
-    assert.deepEqual(stub.calls[0].args, ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '']);
+    assert.deepEqual(stub.calls[0].args, ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--setting-sources', '']);
     assert.deepEqual(result.usage, { input_tokens: 5, output_tokens: 2 });
   });
 });
@@ -154,6 +155,155 @@ describe('claude-code.js — extraction and judge spawns share one env shape (no
       assert.equal(judgeEnv.AUXILO_EXTRACTING, '1');
     } finally {
       process.env = originalEnv;
+    }
+  });
+});
+
+// ─── EXTRACTION-CHILD-HOOKS (0.9.15): --setting-sources isolation ─────────
+//
+// SETTING_SOURCES_VALUE ships as '' (empty list) — verified LIVE this build
+// (scratchpad hooks-0915) against the installed CLI: '--setting-sources ""'
+// is accepted (exit 0, hook_response count 0, well-formed result), so no
+// fresh-temp-cwd fallback is needed (an empty source list is cwd-independent
+// — unlike 'project,local', which would still honor a target repo's own
+// .claude/settings.json). Detection of a CLI that doesn't understand the
+// flag at all happens from the SAME spawn that already carries it (a
+// commander.js-style "unknown option" exit), never a separate probe call —
+// so the happy-path spawn count is unchanged from before this row.
+describe('claude-code.js — EXTRACTION-CHILD-HOOKS: --setting-sources isolation', () => {
+  // cachedSettingSourcesUnsupported is module-level state (deliberately, so a
+  // real process detects the CLI's flag support once and reuses it — see the
+  // module's own doc). Reset it around every test in this block so one test
+  // deliberately tripping it into 'unsupported' can never leak into the next.
+  beforeEach(() => claudeCode._resetSettingSourcesCacheForTests());
+  afterEach(() => claudeCode._resetSettingSourcesCacheForTests());
+
+  it("every real spawn (extract AND judge) carries --setting-sources '' — the shipped narrowest value, verified accepted live", async () => {
+    const extractStub = spawnQueue([authJson(true), { status: 0, stdout: '{"learnings":[]}', stderr: '' }]);
+    const extractResult = await claudeCode.runModel({
+      prompt: 'P', input: 'T', mode: 'extract', spawnSyncImpl: extractStub.spawnSyncImpl, claudeBin: 'claude',
+    });
+    assert.ok(extractResult.argv.includes('--setting-sources'));
+    assert.equal(extractResult.argv[extractResult.argv.indexOf('--setting-sources') + 1], '');
+
+    const judgeStub = spawnQueue([{
+      status: 0,
+      stdout: JSON.stringify({ result: '{"decisions":[]}', is_error: false, usage: {} }),
+      stderr: '',
+    }]);
+    const judgeResult = await claudeCode.runModel({
+      prompt: 'P', mode: 'judge', spawnSyncImpl: judgeStub.spawnSyncImpl, claudeBin: 'claude',
+    });
+    assert.ok(judgeResult.argv.includes('--setting-sources'));
+    assert.equal(judgeResult.argv[judgeResult.argv.indexOf('--setting-sources') + 1], '');
+  });
+
+  it("looksLikeUnsupportedSettingSourcesFlag: true only for a non-zero exit naming both --setting-sources AND an 'unknown option'-shaped message", () => {
+    assert.equal(claudeCode.looksLikeUnsupportedSettingSourcesFlag(
+      { status: 1, stdout: '', stderr: "error: unknown option '--setting-sources'" }
+    ), true);
+    assert.equal(claudeCode.looksLikeUnsupportedSettingSourcesFlag(
+      { status: 0, stdout: '', stderr: '' }
+    ), false, 'exit 0 is never unsupported, regardless of stdout content');
+    assert.equal(claudeCode.looksLikeUnsupportedSettingSourcesFlag(
+      { status: 1, stdout: '', stderr: 'API Error: 400 bad transcript' }
+    ), false, 'a real model error must not be misread as flag-unsupported');
+    assert.equal(claudeCode.looksLikeUnsupportedSettingSourcesFlag(null), false);
+  });
+
+  it('extraction: an unrecognized-flag response sets reasonCode cli-settings-isolation-unsupported and caches it — a SECOND call in the same process short-circuits before spawning again', async () => {
+    let spawnCalls = 0;
+    const responses = [authJson(true), { status: 1, stdout: '', stderr: "error: unknown option '--setting-sources'" }];
+    const spawnSyncImpl = () => { spawnCalls += 1; return responses.shift(); };
+    const first = await claudeCode.runModel({ prompt: 'P', input: 'T', mode: 'extract', spawnSyncImpl, claudeBin: 'claude' });
+    assert.equal(first.ok, false);
+    assert.equal(first.reasonCode, 'cli-settings-isolation-unsupported');
+    assert.equal(spawnCalls, 2, 'the auth check + the one real spawn that revealed unsupported — no separate probe call');
+
+    const second = await claudeCode.runModel({ prompt: 'P', input: 'T', mode: 'extract', spawnSyncImpl, claudeBin: 'claude' });
+    assert.equal(second.ok, false);
+    assert.equal(second.reasonCode, 'cli-settings-isolation-unsupported');
+    assert.equal(spawnCalls, 2, 'cached: a second call must not spawn again (it must never run without the flag, and re-attempting a doomed spawn is silent waste)');
+  });
+
+  it('judge mode: same unsupported-flag detection and cache short-circuit', async () => {
+    let spawnCalls = 0;
+    const responses = [{ status: 1, stdout: '', stderr: "error: unknown option '--setting-sources'" }];
+    const spawnSyncImpl = () => { spawnCalls += 1; return responses.shift(); };
+    const first = await claudeCode.runModel({ prompt: 'P', mode: 'judge', spawnSyncImpl, claudeBin: 'claude' });
+    assert.equal(first.ok, false);
+    assert.equal(first.reasonCode, 'cli-settings-isolation-unsupported');
+    assert.equal(spawnCalls, 1);
+
+    const second = await claudeCode.runModel({ prompt: 'P', mode: 'judge', spawnSyncImpl, claudeBin: 'claude' });
+    assert.equal(second.reasonCode, 'cli-settings-isolation-unsupported');
+    assert.equal(spawnCalls, 1, 'cached across modes — extract detecting it also gates judge, and vice versa');
+  });
+
+  it('providers/index.js runModel(): cli-settings-isolation-unsupported is in NON_RETRYABLE_FOR_THIS_PROVIDER and falls through to the next provider rather than hard-failing', async () => {
+    assert.ok(providers.NON_RETRYABLE_FOR_THIS_PROVIDER.has('cli-settings-isolation-unsupported'));
+    const responses = [authJson(true), { status: 1, stdout: '', stderr: "error: unknown option '--setting-sources'" }];
+    // Beyond claude-code's 2 calls, give codex-cli/byo-key's own probes a
+    // clean, deterministic "not found" rather than letting the shared stub
+    // run dry (which would surface a DIFFERENT provider's spawn-plumbing
+    // failure as the walk's final reasonCode and make this assertion about
+    // codex-cli/byo-key's own behavior instead of claude-code's fall-through).
+    const spawnSyncImpl = () => responses.shift() || { status: 1, stdout: '', stderr: '', error: Object.assign(new Error('not found'), { code: 'ENOENT' }) };
+    const home = tempDir('auxilo-isolation-fallthrough-home-');
+    const logLines = [];
+    try {
+      const result = await providers.runModel({
+        prompt: 'P', input: 'T', mode: 'extract', spawnSyncImpl, claudeBin: 'claude',
+        homeDir: home, cwd: home, existsSync: () => false,
+        providersStatePath: path.join(home, '.auxilo', 'providers.json'),
+        log: (line) => logLines.push(line),
+        // Pre-resolve to claude-code — bypasses resolveProvider()'s own
+        // detect() scan (which would otherwise consume this test's crafted
+        // auth-status/spawn response queue before runModel() gets to it) so
+        // only runModel()'s own two claude-code calls (auth check, then the
+        // real spawn that reveals the unsupported flag) draw from `responses`.
+        providerCache: { resolved: { ok: true, id: 'claude-code', module: claudeCode } },
+      });
+      assert.equal(result.ok, false);
+      assert.notEqual(result.reasonCode, 'cli-settings-isolation-unsupported', 'must not stop at claude-code — the whole point of the retryable set is falling through');
+      assert.ok(
+        logLines.some((line) => line.includes('claude-code unusable (cli-settings-isolation-unsupported); trying next provider')),
+        `expected a claude-code fall-through log line; got: ${JSON.stringify(logLines)}`
+      );
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('getClaudeCliVersion: reads the installed package.json version via realpath, filesystem-only (no spawn)', () => {
+    const home = tempDir('auxilo-cliversion-fixture-');
+    try {
+      const installDir = path.join(home, 'node_modules', '@anthropic-ai', 'claude-code');
+      fs.mkdirSync(installDir, { recursive: true });
+      fs.writeFileSync(path.join(installDir, 'package.json'), JSON.stringify({ version: '9.9.9-fixture' }));
+      fs.writeFileSync(path.join(installDir, 'cli.js'), '// fixture');
+      const binLink = path.join(home, 'claude');
+      fs.symlinkSync(path.join(installDir, 'cli.js'), binLink);
+      let spawnCalls = 0;
+      const version = claudeCode.getClaudeCliVersion(binLink, { spawnSyncImpl: () => { spawnCalls += 1; return { status: 0, stdout: '', stderr: '' }; } });
+      assert.equal(version, '9.9.9-fixture');
+      assert.equal(spawnCalls, 0, 'version resolution must never spawn — filesystem read only');
+    } finally {
+      cleanupTempDirs();
+    }
+  });
+
+  it('getClaudeCliVersion: an unresolvable bin or a missing/malformed package.json yields null, never throws', () => {
+    assert.doesNotThrow(() => {
+      assert.equal(claudeCode.getClaudeCliVersion('claude', {}), null);
+    });
+    const home = tempDir('auxilo-cliversion-missing-pkg-');
+    try {
+      const bogusBin = path.join(home, 'claude');
+      fs.writeFileSync(bogusBin, '// no sibling package.json');
+      assert.equal(claudeCode.getClaudeCliVersion(bogusBin, {}), null);
+    } finally {
+      cleanupTempDirs();
     }
   });
 });
@@ -563,5 +713,127 @@ describe('bin/auxilo-cli.js — extractionProviderLine', () => {
     const line = cli.extractionProviderLine({ ok: false, reason: 'no extraction model provider available — tried: claude-code, codex-cli, byo-key' });
     assert.match(line, /none/);
     assert.match(line, /tried: claude-code, codex-cli, byo-key/);
+  });
+});
+
+// ─── EXTRACTION-RUN-LOG (0.9.15): one-line-per-run provider summary ───────
+
+describe('extract-local.js — logProviderRunSummary / formatArgvForLog', () => {
+  it("formatArgvForLog: empty strings render as '', missing/empty argv renders 'n/a'", () => {
+    const extractLocal = require('../scripts/extract-local.js');
+    assert.equal(extractLocal.formatArgvForLog(['-p', '--tools', '', '--setting-sources', '']), "-p --tools '' --setting-sources ''");
+    assert.equal(extractLocal.formatArgvForLog([]), 'n/a');
+    assert.equal(extractLocal.formatArgvForLog(undefined), 'n/a');
+    assert.equal(extractLocal.formatArgvForLog(null), 'n/a');
+  });
+
+  it('claude-code, finder ran + judge ran: hooks=isolated, both argvs surfaced, cli version present', () => {
+    const extractLocal = require('../scripts/extract-local.js');
+    const lines = [];
+    extractLocal.logProviderRunSummary(
+      { log: (l) => lines.push(l) },
+      'sess-1',
+      {
+        ok: true,
+        extractionModel: { provider: 'claude-code', model: null, version: null, vendor: null },
+        argv: ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', ''],
+        cliVersion: '2.1.12',
+      },
+      { judgeAttempted: true, judgeSucceeded: true, judgeReasonCode: null, judgeArgv: ['-p', '--output-format', 'json'], judgeCliVersion: '2.1.12' }
+    );
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /^\[providers\] run=sess-1 provider=claude-code cli=2\.1\.12 finder=ran judge=ran flags=.*setting-sources.* hooks=isolated$/);
+  });
+
+  it('finder skipped (cli-unauthenticated) with no extractionModel identity: provider/hooks both render as unknown/n-a rather than guessing', () => {
+    const extractLocal = require('../scripts/extract-local.js');
+    const lines = [];
+    extractLocal.logProviderRunSummary(
+      { log: (l) => lines.push(l) },
+      'sess-2',
+      { ok: false, reasonCode: 'cli-unauthenticated', extractionModel: null },
+      null
+    );
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /run=sess-2 provider=unknown cli=- finder=skipped judge=skipped\(no-candidates\) flags=n\/a hooks=n\/a$/);
+  });
+
+  it('claude-code, isolation unsupported: hooks=unsupported and finder=skipped', () => {
+    const extractLocal = require('../scripts/extract-local.js');
+    const lines = [];
+    extractLocal.logProviderRunSummary(
+      { log: (l) => lines.push(l) },
+      'sess-3',
+      {
+        ok: false,
+        reasonCode: 'cli-settings-isolation-unsupported',
+        extractionModel: { provider: 'claude-code', model: null, version: null, vendor: null },
+      },
+      null
+    );
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /provider=claude-code .*finder=skipped judge=skipped\(no-candidates\) .*hooks=unsupported$/);
+  });
+
+  it('judge failed after a real attempt (malformed/erroring, not "no candidates"): judge=failed', () => {
+    const extractLocal = require('../scripts/extract-local.js');
+    const lines = [];
+    extractLocal.logProviderRunSummary(
+      { log: (l) => lines.push(l) },
+      'sess-4',
+      { ok: true, extractionModel: { provider: 'claude-code' }, argv: ['-p'], cliVersion: '2.1.12' },
+      { judgeAttempted: true, judgeSucceeded: false, judgeReasonCode: 'model-error' }
+    );
+    assert.match(lines[0], /judge=failed/);
+  });
+
+  it('a non-claude-code provider reports hooks=n/a', () => {
+    const extractLocal = require('../scripts/extract-local.js');
+    const lines = [];
+    extractLocal.logProviderRunSummary(
+      { log: (l) => lines.push(l) },
+      'sess-5',
+      { ok: true, extractionModel: { provider: 'codex-cli' } },
+      { judgeAttempted: false, judgeSucceeded: false }
+    );
+    assert.match(lines[0], /provider=codex-cli .*hooks=n\/a$/);
+  });
+
+  it('logging must never throw or block extraction, even with a throwing log function', () => {
+    const extractLocal = require('../scripts/extract-local.js');
+    assert.doesNotThrow(() => {
+      extractLocal.logProviderRunSummary(
+        { log: () => { throw new Error('log sink down'); } },
+        'sess-6',
+        { ok: true, extractionModel: { provider: 'claude-code' } },
+        null
+      );
+    });
+  });
+
+  it('extractLocally() end to end: emits exactly one run-summary line per run, at the skip exit AND at the success exit', async () => {
+    const extractLocal = require('../scripts/extract-local.js');
+    const lines = [];
+    const skipResult = await extractLocal.extractLocally('t', 'claude-code', {
+      log: (l) => { if (l.startsWith('[providers]')) lines.push(l); },
+      invokeModel: async () => ({ ok: false, reason: 'fixture-stop', reasonCode: 'cli-unauthenticated' }),
+      runId: 'run-skip',
+    });
+    assert.equal(skipResult.learnings.length, 0);
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /run=run-skip/);
+    assert.match(lines[0], /finder=skipped/);
+
+    lines.length = 0;
+    const okResult = await extractLocal.extractLocally('t', 'claude-code', {
+      log: (l) => { if (l.startsWith('[providers]')) lines.push(l); },
+      invokeModel: async () => ({ ok: true, out: JSON.stringify({ learnings: [] }) }),
+      runId: 'run-ok',
+    });
+    assert.equal(okResult.learnings.length, 0);
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /run=run-ok/);
+    assert.match(lines[0], /finder=ran/);
+    assert.match(lines[0], /judge=skipped\(no-candidates\)/, 'no learnings means no judge candidates this run');
   });
 });
