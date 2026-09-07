@@ -96,6 +96,16 @@ const isolatedEnv = {
   AUXILO_HOME: tmpHome,
   HOME: tmpHome,
   PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH || defaultPlaywrightBrowsersPath(realHome),
+  // RUNNER-AUTO-UPDATE (0.9.16): scripts/runner.js's main() now makes a real
+  // registry.npmjs.org network call (offline-tolerant, but still a call) on
+  // every invocation past the kill-switch+recursion-guard checks unless
+  // opted out. Suite-wide opt-out here is the same defense-in-depth this
+  // file already applies to HOME/AUXILO_HOME: a spawned test that forgets
+  // its own override must not reach the real network. The dedicated
+  // lib/runner-autoupdate.js unit tests exercise the real check logic
+  // in-process with an injected fetchImpl, never through this suite-wide
+  // env var, so they are unaffected by it.
+  AUXILO_RUNNER_AUTOUPDATE: '0',
 };
 
 let exitCode = 0;

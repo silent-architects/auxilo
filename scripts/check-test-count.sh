@@ -111,8 +111,31 @@ cd "${REPO_ROOT}"
 # now pass-clean except that same 1 pre-existing asset-hash failure
 # (pending the PM's hash rewrite) and 1 pre-existing, unrelated skip.
 # Re-pinning to the actual count rather than carrying the stale drift
-# forward.
-EXPECTED_TEST_COUNT=2783
+# forward. Wave continued (ASK wave A/B/C, PRICE guard) to main's tip at
+# 2783 (see PUNCH-LIST for the per-wave breakdown) — that is the pin this
+# branch's base (agent/mcp-0916-fix2's merge-base c1e06ec, 2711) diverged
+# from.
+#
+# agent/mcp-0916-fix2 (base c1e06ec, 2711): RUNNER-AUTO-UPDATE added
+# test/runner-auto-update.test.js — 38 new tests (semver-min, tar-extract,
+# integrity/signature verification incl. a golden fixture against the real
+# npm registry's live signing key, cadence stamp, in-flight lock, the
+# installer.installRunner binRootOverride staging seam, runner-config
+# read/write, all 8 BUILD-SPEC §5 orchestrator scenarios, the `auxilo
+# status` Auto-update line pure-render + CLI integration). No other test
+# file's count changed (envelope-0831/prepublish-guard version-string
+# fixtures were value edits, not test additions/removals).
+#
+# agent/assembly-0916 (this merge, main f687402 x agent/mcp-0916-fix2
+# 2fc2b69): two independent test-count deltas off the same base (c1e06ec,
+# 2711) combine, neither branch touching the other's test files. Analytic
+# estimate (main 2783 + branch's 38 RUNNER-AUTO-UPDATE tests = 2821) undershot
+# the real post-merge total — main's own tip pin (2783) was itself carrying
+# more in-tree tests than its comment math accounted for. Re-pinned to the
+# actual post-merge `bash scripts/check-test-count.sh` discovered count
+# (isolated HOME, --test-reporter=tap, test/*.test.js only): 2863, 0 fail,
+# 6 skipped (pre-existing, unrelated to this merge).
+EXPECTED_TEST_COUNT=2866
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
@@ -137,6 +160,16 @@ AUXILO_TEST_HOME="$(mktemp -d)"
 trap 'rm -rf "${AUXILO_TEST_HOME}"' EXIT
 export AUXILO_HOME="${AUXILO_TEST_HOME}"
 export HOME="${AUXILO_TEST_HOME}"
+
+# RUNNER-AUTO-UPDATE (0.9.16): scripts/runner.js's main() now makes a real
+# registry.npmjs.org network call (offline-tolerant, but still a call) past
+# the kill-switch+recursion-guard checks unless opted out. This is the other
+# suite entry point (see the matching comment in scripts/test/run-isolated.js)
+# so it needs the same suite-wide opt-out — a test that forgets its own
+# override must not reach the real network. lib/runner-autoupdate.js's own
+# unit tests exercise the real check logic in-process with an injected
+# fetchImpl and are unaffected by this env var.
+export AUXILO_RUNNER_AUTOUPDATE="0"
 
 # Playwright resolves its browser cache under $HOME by default
 # (~/Library/Caches/ms-playwright on macOS, ~/.cache/ms-playwright on

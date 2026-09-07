@@ -37,9 +37,12 @@ describe('A5.2: Kill-switch sentinel and recursion guard', () => {
     // Kill-switch check must appear before any source processing
     // Window widened to 10000 chars after --transcript handler (P1-3)
     // added ~80 lines of single-file-mode code between the guard and
-    // the discover loop. The invariant under test is still correct:
-    // kill-switch check happens BEFORE source enumeration.
-    const mainBody = src.slice(mainIdx, mainIdx + 10000);
+    // the discover loop, then to 15000 after RUNNER-AUTO-UPDATE (0.9.16)
+    // added the self-update check + in-flight-guard marking between the
+    // recursion guard and the credentials check. The invariant under test
+    // is still correct: kill-switch check happens BEFORE source
+    // enumeration.
+    const mainBody = src.slice(mainIdx, mainIdx + 15000);
     const killSwitchIdx = mainBody.indexOf('KILL_SWITCH_PATH');
     const discoverIdx = mainBody.indexOf('enumerateActiveSources');
 

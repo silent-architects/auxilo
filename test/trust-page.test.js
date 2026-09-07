@@ -96,6 +96,10 @@ const S7_UNLOCKS_LABEL = "unlocks recorded"; // packet 15 rev 3a caption change 
 const S2B_WHAT_IS_READ = "Session transcripts on your machine, from the coding clients Auxilo has an adapter for. Where a client fires a capture hook, the hook hands over the transcript. Where it does not, a local sweep reads that client's own session files on a schedule. The current list is at <a href=\"/legal/supported-clients\">auxilo.io/legal/supported-clients</a>. The runner looks for those session files and for its own state under ~/.auxilo. It does not search the rest of your disk. What the model itself can read on each path is in the row What runs where, below.";
 const S2B_WHAT_RUNS_WHERE = "Drafting runs on your machine, never through Auxilo's. It uses the first model client you are signed in to, Claude Code first and then Codex, and only one runs at a time. If neither is signed in, you can set a provider key of your own. It stays on this machine, readable only by your user account, and Auxilo never receives it. A run with your key sends the scrubbed transcript only to that provider, under your own account. The model reads nothing on your machine. Any use is charged to that account, never to Auxilo. Run auxilo provider clear to remove it. The scrubbed transcript goes to that client's model provider under your own agreement with them. Before the run, Auxilo removes the provider's billing variables from the run. On the Claude path the model has no tools, so it cannot open files on your machine. On the Codex path the model cannot write to your files, but it can read what its sandbox allows. Which clients Auxilo can capture sessions from is listed at auxilo.io/legal/supported-clients.";
 const S2B_ROW_LABEL = "If no model client is signed in and no key is set";
+// 0.9.16 disclosure (AUTO-UPDATE-DISCLOSURE-2026-09-07.md, Tyler-approved): a
+// new row directly after "What runs where", NOT appended to that row.
+const S2B_UPDATE_LABEL = "How the runner updates itself";
+const S2B_UPDATE_STATEMENT = "Once a day the runner asks npm whether a newer version exists. If there is one, it checks that version's signature and its checksum before installing. If either check fails it keeps the copy you have. It never replaces itself while a run is in progress. You can turn this off in setup.";
 
 function tpStaticCell(html, id) {
   const m = html.match(new RegExp(`id="${id}"[^>]*>([^<]*)<`));
@@ -205,6 +209,31 @@ describe('Trust page: route, redirects, head tags, h1, forbidden strings', { tim
     assert.ok(TRUST_HTML.includes(S2B_WHAT_IS_READ), '§2b What-is-read cell verbatim, including the What-runs-where pointer sentence');
     assert.ok(TRUST_HTML.includes(S2B_WHAT_RUNS_WHERE), '§2b What-runs-where cell verbatim (Stage A + Stage B, both shipped together per rev 2e)');
     assert.ok(TRUST_HTML.includes(`<td>${S2B_ROW_LABEL}</td>`), '§2b row label verbatim: "If no model client is signed in and no key is set"');
+  });
+
+  it('§2b: "How the runner updates itself" row present once, placed directly after "What runs where" (0.9.16 disclosure, AUTO-UPDATE-DISCLOSURE-2026-09-07.md)', () => {
+    // Positive control: the row label appears exactly once, both before and
+    // after this change — proves the new row is separate, not appended.
+    const whatRunsWhereLabelMatches = TRUST_HTML.match(/<td>What runs where<\/td>/g) || [];
+    assert.equal(whatRunsWhereLabelMatches.length, 1, '"What runs where" row label: exactly one <td> occurrence (unaffected by the new row)');
+
+    const updateLabelMatches = TRUST_HTML.match(/<td>How the runner updates itself<\/td>/g) || [];
+    assert.equal(updateLabelMatches.length, 1, 'new row label "How the runner updates itself": exactly one occurrence (was 0 before 0.9.16)');
+
+    const updateStatementMatches = TRUST_HTML.split(S2B_UPDATE_STATEMENT).length - 1;
+    assert.equal(updateStatementMatches, 1, 'new row statement byte-equal, exactly one occurrence');
+
+    // Order: the new row's label must appear after "What runs where"'s row
+    // label and before the next existing row's label, i.e. directly after.
+    const runsWhereIdx = TRUST_HTML.indexOf('<td>What runs where</td>');
+    const updateIdx = TRUST_HTML.indexOf(`<td>${S2B_UPDATE_LABEL}</td>`);
+    const nextRowIdx = TRUST_HTML.indexOf(`<td>${S2B_ROW_LABEL}</td>`);
+    assert.ok(runsWhereIdx > -1 && updateIdx > runsWhereIdx, 'new row appears after "What runs where"');
+    assert.ok(nextRowIdx > -1 && updateIdx < nextRowIdx, 'new row appears before the next existing row ("If no model client is signed in and no key is set") — i.e. directly after "What runs where"');
+
+    // Same markup shape as its sibling rows: <tr>\n <td>label</td>\n <td>statement</td>\n</tr>
+    const rowRe = new RegExp(`<tr>\\s*<td>${S2B_UPDATE_LABEL}</td>\\s*<td>${S2B_UPDATE_STATEMENT.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}</td>\\s*</tr>`);
+    assert.ok(rowRe.test(TRUST_HTML), 'new row uses the same <tr><td>label</td><td>statement</td></tr> markup as sibling rows');
   });
 
   it('"Claude Code" appears exactly once, naming the shipped selection order in §2b (not a requirement) — supersedes the 2026-09-06 "no Claude Code" ban per TRUST-PAGE-WHAT-RUNS-WHERE-RIDER-2026-09-06.md rev 2e binds ("Tyler\'s approval bars a Claude Code requirement, not the disclosure of the order")', () => {

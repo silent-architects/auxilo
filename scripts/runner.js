@@ -39,6 +39,11 @@ const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { scanText, SENSITIVITY_FILTER_VERSION } = require('../lib/sensitivity-filter.js');
 const { appendSubmittedLearning } = require('../lib/extraction-index.js');
+const {
+  checkAndApplyRunnerUpdate,
+  markExtractionStart,
+  markExtractionEnd,
+} = require('../lib/runner-autoupdate.js');
 const { hasAuxiloSessionEndHook } = require('../lib/hook-status.js');
 const { sendOpsAlert: defaultSendOpsAlert } = require('../lib/ops-alert.js');
 const { TranscriptSource } = require('./sources/source.interface.js');
@@ -1161,6 +1166,64 @@ async function main() {
     process.exit(0);
   }
   process.env.AUXILO_EXTRACTING = '1';
+
+  // ── In-flight guard target (RUNNER-AUTO-UPDATE) ─────────────────────────
+  // 0.9.16 fix pass, B3: this now runs BEFORE the auto-update check below
+  // (was after — which left a real race: two overlapping SessionEnd hook
+  // runs could both read "no marker" and both pass checkAndApplyRunnerUpdate's
+  // in-flight gate before either one had written its own marker). The
+  // marker is PID-scoped (lib/runner-autoupdate.js extractionMarkerPath),
+  // so THIS process marking itself here never blocks its OWN update check
+  // — isExtractionInProgress always excludes the caller's own pid — but it
+  // immediately blocks any OTHER overlapping runner's check from swapping
+  // while this one still has extraction in flight. Cleared via
+  // process.exit's 'exit' event, NOT a try/finally — main() below exits
+  // from many branches via process.exit(), which does not run pending
+  // finally blocks but DOES fire 'exit' synchronously first.
+  markExtractionStart(os.homedir());
+  process.on('exit', () => markExtractionEnd(os.homedir()));
+
+  // ── Pre-warm lazily-required stack modules (0.9.16 fix pass 2, MEDIUM-1) ──
+  // extract-local.js (and transitively scripts/providers/index.js + every
+  // provider module it loads: claude-code.js, codex-cli.js, byo-key.js) is
+  // only ever require()'d LAZILY, inside functions this file calls AFTER
+  // the auto-update check below (postExtractDetailed's lazy require of this
+  // same module's extractLocally export, and the checkClaudeAuthStatus
+  // import further down). Node caches a module by resolved path the first time
+  // it's require()'d in a process and never re-reads that file from disk on
+  // a later require() of the same path — so if the FIRST require of
+  // extract-local.js happened after checkAndApplyRunnerUpdate has already
+  // swapped the files on disk, this already-running process would start
+  // executing the BRAND NEW extract chain mid-session, contradicting this
+  // module's "new code takes effect starting with the NEXT session"
+  // guarantee (see lib/runner-autoupdate.js's module doc). Forcing the
+  // require here, BEFORE the update check, pins the module identity this
+  // process uses for the rest of its life to whatever was on disk at
+  // process start, regardless of what the swap below does next. (Every
+  // OTHER require in this file's module-load-time closure — including
+  // SOURCES = loadSources() above, and scripts/providers/index.js's own
+  // provider loads — already runs at require() time, before main() is even
+  // called, so only this one lazy call site needed pre-warming; grepped for
+  // `require(` inside function bodies in both scripts/runner.js and
+  // scripts/providers/index.js to confirm.)
+  try {
+    require('./extract-local.js');
+  } catch (err) {
+    log(`[runner] pre-warm of extract-local.js failed: ${err.message}`);
+  }
+
+  // ── RUNNER-AUTO-UPDATE: self-update check (0.9.16) ─────────────────────
+  // Still "before any extraction work" per the invariant above — this is
+  // the ONLY call site (see lib/runner-autoupdate.js's module doc for the
+  // full mechanism: 24h cadence, offline-tolerant, integrity + registry-
+  // signature verified, atomic swap, next-session activation). Never
+  // throws, but belt-and-braces anyway: an auto-update crash must never
+  // block extraction.
+  try {
+    await checkAndApplyRunnerUpdate(os.homedir(), { log });
+  } catch (err) {
+    log(`[runner] auto-update check crashed: ${err.message}, continuing on installed copy`);
+  }
 
   // ── Credentials ───────────────────────────────────────────────────────
   if (!API_KEY && !args.dryRun) {
