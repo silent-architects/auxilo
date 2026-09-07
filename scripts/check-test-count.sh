@@ -60,7 +60,9 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
 
 # ─── THE PIN — bump this in the same commit that adds/removes tests ─────────
-EXPECTED_TEST_COUNT=2622
+# 2622 -> 2639: test/focus-visible-css-mechanical.test.js added (17 tests,
+# TECH-PM build rows FOCUS-VISIBLE + CSS-MECHANICAL).
+EXPECTED_TEST_COUNT=2639
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

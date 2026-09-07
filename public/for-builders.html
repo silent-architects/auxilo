@@ -238,115 +238,20 @@
       background: rgba(201,168,76,0.04);
     }
 
-    /* ── Tier Cards ── */
-    .tier-cards-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 20px;
-      margin-bottom: 48px;
-    }
-
-    .tier-card {
-      background: rgba(255,255,255,0.02);
-      border: 1px solid rgba(229,229,227,0.1);
-      border-radius: 6px;
-      padding: 28px 24px;
-      transition: border-color 0.2s;
-    }
-
-    .tier-card:hover { border-color: rgba(229,229,227,0.22); }
-
-    .tier-card--active {
-      border-color: var(--aurum-border);
-      background: rgba(201,168,76,0.04);
-    }
-
-    .tier-card--power {
-      border-color: rgba(229,229,227,0.18);
-    }
-
-    .tier-card-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-
-    .tier-icon {
-      font-size: 20px;
-    }
-
-    .tier-name {
-      font-size: 16px;
-      font-weight: 600;
-      color: var(--ivory);
-      letter-spacing: -0.01em;
-    }
-
-    .tier-card .tier-desc {
-      font-size: 13px;
-      color: var(--slate);
-      margin-bottom: 20px;
-      line-height: 1.5;
-      display: block;
-    }
-
-    .tier-numbers {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      margin-bottom: 20px;
-    }
-
-    .tier-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 5px 0;
-      border-bottom: 1px solid rgba(229,229,227,0.05);
-    }
-
-    .tier-row:last-child { border-bottom: none; }
-
-    .tier-row-highlight .tier-amount {
-      color: var(--aurum);
-      font-weight: 600;
-    }
-
-    .tier-year {
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--slate);
-      letter-spacing: 0.04em;
-    }
-
-    .tier-amount {
-      font-family: var(--mono);
-      font-size: 15px;
-      color: var(--ivory);
-    }
-
-    .tier-annual {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding-top: 14px;
-      border-top: 1px solid rgba(229,229,227,0.08);
-    }
-
-    .tier-annual-label {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--slate);
-    }
-
-    .tier-annual-amount {
-      font-family: var(--mono);
-      font-size: 16px;
-      font-weight: 600;
-      color: var(--aurum);
-    }
+    /* CSS-MECHANICAL (SITE-PERFECT-DEFECT-SHEET-2026-09-06.md, mechanical
+       dispositions table): the page's own forked .tier-cards-grid/.tier-card/
+       .tier-card--active/.tier-card--power/.tier-card-header/.tier-icon/
+       .tier-name/.tier-card .tier-desc/.tier-numbers/.tier-row/
+       .tier-row-highlight .tier-amount/.tier-year/.tier-amount/.tier-annual/
+       .tier-annual-label/.tier-annual-amount block (formerly here, ~110
+       lines) is deleted so this page consumes the shared .tier-* rules in
+       styles.css (Tier Cards (Compounding Earnings) section) instead.
+       Verified dead before deletion: no element in this file's markup
+       carries any tier-card/tier-cards-grid/tier-annual/tier-numbers/etc.
+       class (grep of the rendered body, not just the <style> block, returns
+       zero matches) -- the fork had no DOM consumer, so this deletion
+       changes zero computed styles on the live page.
+    */
 
     /* ── Line Chart ── */
     .line-chart-wrap {
@@ -391,8 +296,14 @@
       margin-bottom: 0;
     }
 
+    /* CSS-MECHANICAL (SITE-PERFECT-DEFECT-SHEET-2026-09-06.md, mechanical
+       dispositions table): h3/p font-size were swapped vs the shared rule
+       (styles.css .earnings-scenario h3 { font-size: 14px }, .earnings-scenario
+       p { font-size: 13px }) -- un-swapped below. Every other property
+       (weight, letter-spacing, uppercase, color) is this page's own
+       intentional override, untouched. */
     .earnings-scenario h3 {
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 500;
       letter-spacing: 0.08em;
       text-transform: uppercase;
@@ -401,7 +312,7 @@
     }
 
     .earnings-scenario p {
-      font-size: 14px;
+      font-size: 13px;
       line-height: 1.75;
       color: var(--slate-text);
     }
@@ -478,15 +389,10 @@
        rule to key on (it previously relied on this ID override alone). */
 
     /* ── Responsive ── */
-    @media (max-width: 900px) {
-      .tier-cards-grid {
-        grid-template-columns: 1fr;
-        max-width: 420px;
-        margin-left: auto;
-        margin-right: auto;
-      }
-
-    }
+    /* CSS-MECHANICAL: the page's own @media (max-width: 900px) .tier-cards-grid
+       override (part of the deleted .tier-* fork above) is removed here too --
+       same dead-selector finding, shared styles.css has its own
+       .tier-cards-grid responsive rule at 768px if the markup is ever added. */
 
     @media (max-width: 600px) {
       /* AD sheet 9: --hero-pad-mobile — this page had NO mobile hero-padding
