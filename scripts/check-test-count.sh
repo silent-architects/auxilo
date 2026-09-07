@@ -89,7 +89,24 @@ cd "${REPO_ROOT}"
 # class, page h2 count still 7) plus 1 served-route assertion (staged
 # server, mirroring test/fb-accrual-sentence.test.js). Verified against
 # the actual `npm test` discovered count: 2696 + 7 = 2703.
-EXPECTED_TEST_COUNT=2711
+#
+# agent/ask-c (base 5ec0a80, 2711): ASK-WAVE Wave C added
+# test/ask-wave.test.js — 34 Playwright cases pinning the ruled ask-layout
+# end state (BUILD-SPEC-ASK-WAVE-2026-09-07.md) across /, /for-builders,
+# /for-agents, /pricing at 1440x900 and 375x812: identical .btn-primary
+# treatment (2), / ships zero .btn-primary + gold command block (2),
+# .nav-cta never the gold fill (8), at-most-one gold-event group at load
+# (8), >=1 gold ask somewhere in the document (8), primary/hero ask fully
+# above the fold on the 3 pages whose hero carries one (6, /pricing's hero
+# has no action by design). Written test-only, in parallel with Wave A/B
+# builders who had not landed on this base — 12 of the 34 cases FAIL on
+# this base (8 .nav-cta-is-still-gold, 2 gold-event-grouping, 2
+# above-the-fold), which is the intended proof the file pins the wave and
+# does not pass by accident; they are expected to go green once Wave A
+# (nav-cta demotion, hero command-block promotion) and Wave B (for-agents
+# closing-ask consolidation) land. Verified against the actual `npm test`
+# discovered count: 2711 + 34 = 2745.
+EXPECTED_TEST_COUNT=2745
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
