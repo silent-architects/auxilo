@@ -1167,6 +1167,22 @@ async function main() {
   }
   process.env.AUXILO_EXTRACTING = '1';
 
+  // ── In-flight guard target (RUNNER-AUTO-UPDATE) ─────────────────────────
+  // 0.9.16 fix pass, B3: this now runs BEFORE the auto-update check below
+  // (was after — which left a real race: two overlapping SessionEnd hook
+  // runs could both read "no marker" and both pass checkAndApplyRunnerUpdate's
+  // in-flight gate before either one had written its own marker). The
+  // marker is PID-scoped (lib/runner-autoupdate.js extractionMarkerPath),
+  // so THIS process marking itself here never blocks its OWN update check
+  // — isExtractionInProgress always excludes the caller's own pid — but it
+  // immediately blocks any OTHER overlapping runner's check from swapping
+  // while this one still has extraction in flight. Cleared via
+  // process.exit's 'exit' event, NOT a try/finally — main() below exits
+  // from many branches via process.exit(), which does not run pending
+  // finally blocks but DOES fire 'exit' synchronously first.
+  markExtractionStart(os.homedir());
+  process.on('exit', () => markExtractionEnd(os.homedir()));
+
   // ── RUNNER-AUTO-UPDATE: self-update check (0.9.16) ─────────────────────
   // Still "before any extraction work" per the invariant above — this is
   // the ONLY call site (see lib/runner-autoupdate.js's module doc for the
@@ -1179,16 +1195,6 @@ async function main() {
   } catch (err) {
     log(`[runner] auto-update check crashed: ${err.message}, continuing on installed copy`);
   }
-
-  // ── In-flight guard target (RUNNER-AUTO-UPDATE) ─────────────────────────
-  // Mark that extraction work is starting so a concurrently-invoked auto-
-  // update check (a different, overlapping SessionEnd hook run) skips the
-  // swap rather than racing this process's own reads of <bin>. Cleared via
-  // process.exit's 'exit' event, NOT a try/finally — main() below exits
-  // from many branches via process.exit(), which does not run pending
-  // finally blocks but DOES fire 'exit' synchronously first.
-  markExtractionStart(os.homedir());
-  process.on('exit', () => markExtractionEnd(os.homedir()));
 
   // ── Credentials ───────────────────────────────────────────────────────
   if (!API_KEY && !args.dryRun) {
