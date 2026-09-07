@@ -587,9 +587,26 @@ describe('bin/auxilo-cli.js: providersFileModeUnsafe (owner-read-only predicate)
 });
 
 function runCli(args, env, input = '') {
+  // TEST-HOME-ISOLATION: bin/auxilo-cli.js's cmdProvider (status/set/clear)
+  // has no opts seam of its own — it always reads
+  // byoKeyProvider.DEFAULT_PROVIDERS_STATE_PATH, which now honors
+  // AUXILO_HOME before falling back to os.homedir() (see byo-key.js). The
+  // whole suite runs under a suite-wide AUXILO_HOME/HOME override
+  // (scripts/test/run-isolated.js / scripts/check-test-count.sh), so
+  // `process.env.AUXILO_HOME` here is already set to THAT (unrelated,
+  // suite-wide) temp dir — spreading only `{ HOME: home }` would leave
+  // AUXILO_HOME pointed at the wrong directory and the spawned CLI would
+  // silently read/write the wrong providers.json. Whenever a caller
+  // overrides HOME for this helper, mirror it onto AUXILO_HOME too (unless
+  // the caller explicitly set AUXILO_HOME itself), so the two seams never
+  // disagree about which temp dir this particular test is isolated to.
+  const mergedEnv = { ...process.env, ...env };
+  if (env && Object.prototype.hasOwnProperty.call(env, 'HOME') && !Object.prototype.hasOwnProperty.call(env, 'AUXILO_HOME')) {
+    mergedEnv.AUXILO_HOME = env.HOME;
+  }
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [CLI_PATH, ...args], {
-      env: { ...process.env, ...env },
+      env: mergedEnv,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     let stdout = '';

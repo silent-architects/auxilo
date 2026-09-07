@@ -37,8 +37,23 @@ const os = require('os');
 /** Same literal value as scripts/providers/index.js's PROVIDERS_STATE_PATH —
  * duplicated (not imported) to avoid a circular require (index.js loads this
  * module dynamically via loadOptionalProvider). test/byo-key-provider.test.js
- * pins the two paths equal. */
-const DEFAULT_PROVIDERS_STATE_PATH = path.join(os.homedir(), '.auxilo', 'providers.json');
+ * pins the two paths equal.
+ *
+ * TEST-HOME-ISOLATION: `AUXILO_HOME`, when set, wins over `os.homedir()` —
+ * a dedicated override for auxilo's own state directory, distinct from the
+ * general-purpose `HOME` every other os.homedir()-based path in this repo
+ * reads (settings.json, the VERSION stamp, credentials.json, ...). Per-call
+ * `opts.providersStatePath` (every test in this repo passes one) still wins
+ * over BOTH — this only narrows what an omitted opts falls back to, closing
+ * the gap that let a bare `bin/auxilo-cli.js provider status|clear` call (no
+ * opts seam of its own — see cmdProvider in bin/auxilo-cli.js) or any future
+ * test that forgets its own override reach the real ~/.auxilo/providers.json
+ * (TEST-HOME-ISOLATION incident, 2026-09-06). Evaluated once at module load,
+ * same as before — every entry point that cares (scripts/test/run-isolated.js
+ * for `npm test`, scripts/check-test-count.sh for the CI gate) sets both
+ * AUXILO_HOME and HOME before node starts, so this still resolves correctly
+ * even though it's a frozen constant, not a per-call lookup. */
+const DEFAULT_PROVIDERS_STATE_PATH = path.join(process.env.AUXILO_HOME || os.homedir(), '.auxilo', 'providers.json');
 
 const VENDOR_DEFAULT_BASE_URL = Object.freeze({
   anthropic: 'https://api.anthropic.com/v1',

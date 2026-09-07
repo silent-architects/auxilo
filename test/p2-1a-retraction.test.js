@@ -176,35 +176,50 @@ describe('B2: Module exports', () => {
   });
 });
 
-// ─── Plist validation ───────────────────────────────────────────────────────
+// ─── LaunchAgent retirement (2026-06-11) ────────────────────────────────────
+//
+// TEST-HOME-ISOLATION host-lane audit (2026-09-06) found this describe block
+// asserting a machine-state fiction: it checked for
+// ~/Library/LaunchAgents/io.auxilo.retraction-sweeper.plist, but NO installer
+// in this repo has ever written that file. scripts/runner.js only exposes
+// --install-sweeper (SWEEPER_LABEL = 'io.auxilo.sweeper' — the extraction
+// sweeper, an unrelated job on a different schedule: StartCalendarInterval
+// daily 03:15, not StartInterval hourly) and --install-digest (DIGEST_LABEL
+// = 'io.auxilo.digest'). There is no --install-retraction-sweeper flag, and
+// jobs/retraction-sunset.js's own header says why: "the
+// auxilo-retraction-sweeper LaunchAgent was RETIRED 2026-06-11 ... a local
+// LaunchAgent never operated on real data. Run it on the box (or as a
+// server-side cron) if window expiry sweeping is needed; manual invocation
+// still works." So the skip-when-absent guard here would skip on every
+// machine forever, including the operator's own (confirmed:
+// ~/Library/LaunchAgents has io.auxilo.{digest,sweeper,backup}.plist, no
+// retraction-named plist, on 2026-09-06) — not a host self-check, just dead
+// test code. This traces back through 11ae999 (renamed the checked filename
+// tech.conway.auxilo-retraction-sweeper.plist -> io.auxilo.retraction-
+// sweeper.plist without an installer ever producing either) to 0125a6d,
+// which re-added skip-guarded plist-existence assertions that 95e77b4 had
+// already replaced with the retirement-documentation check below — restoring
+// that fix here, worded against the current (not 2026-06-11) doc text.
+//
+// What IS verifiable from the repo, with no HOME dependency, on every
+// machine including CI: jobs/retraction-sunset.js documents the retirement
+// and the sweeper's logic (tested above) still runs via direct CLI
+// invocation rather than a LaunchAgent.
 
-describe('B2: LaunchAgent plist', () => {
-  // This LaunchAgent is a macOS-only local operations artifact installed into
-  // ~/Library/LaunchAgents by the retraction-sweeper setup script. It cannot be
-  // present on Linux CI, and is absent on a dev machine until setup is run, so
-  // these checks skip when the plist is not installed and run in full where it is.
-  const plistPath = path.join(os.homedir(), 'Library', 'LaunchAgents',
-    'io.auxilo.retraction-sweeper.plist');
-  const skipReason = !fs.existsSync(plistPath) &&
-    'LaunchAgent plist not installed on this host (macOS-only local ops artifact)';
-
-  it('io.auxilo.retraction-sweeper.plist exists', { skip: skipReason }, () => {
-    assert.ok(fs.existsSync(plistPath), `plist must exist at ${plistPath}`);
+describe('B2: LaunchAgent retirement (2026-06-11)', () => {
+  it('jobs/retraction-sunset.js documents the LaunchAgent retirement', () => {
+    const src = fs.readFileSync(
+      path.join(__dirname, '..', 'jobs', 'retraction-sunset.js'), 'utf-8');
+    assert.ok(src.includes('RETIRED'),
+      'retraction-sunset.js must document the LaunchAgent retirement');
+    assert.ok(src.includes('auxilo-retraction-sweeper'),
+      'retirement note must name the retired LaunchAgent');
   });
 
-  it('plist contains correct label', { skip: skipReason }, () => {
-    const content = fs.readFileSync(plistPath, 'utf-8');
-    assert.ok(content.includes('io.auxilo.retraction-sweeper'));
-  });
-
-  it('plist runs hourly (StartInterval 3600)', { skip: skipReason }, () => {
-    const content = fs.readFileSync(plistPath, 'utf-8');
-    assert.ok(content.includes('<key>StartInterval</key>'));
-    assert.ok(content.includes('<integer>3600</integer>'));
-  });
-
-  it('plist logs to ~/.auxilo/logs/', { skip: skipReason }, () => {
-    const content = fs.readFileSync(plistPath, 'utf-8');
-    assert.ok(content.includes('.auxilo/logs/'));
+  it('sweeper remains manually invocable (no LaunchAgent dependency)', () => {
+    const src = fs.readFileSync(
+      path.join(__dirname, '..', 'jobs', 'retraction-sunset.js'), 'utf-8');
+    assert.ok(src.includes('require.main === module') || src.includes('parseArgs'),
+      'sweeper must support direct CLI invocation for manual/server-side runs');
   });
 });
