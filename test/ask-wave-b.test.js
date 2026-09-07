@@ -56,6 +56,35 @@ function readPublic(name) {
   return fs.readFileSync(path.join(REPO, 'public', name), 'utf-8');
 }
 
+// The sitewide `styles.css?v=<hash>` cache-bust query is rewritten by the
+// PM's `asset-versions --write` after any styles.css change, by design —
+// it is not a copy or markup change. Normalize every `?v=[0-9a-f]+`
+// occurrence to a fixed token so a hash-only rewrite doesn't trip a
+// byte-identity guard, while everything else still has to match exactly.
+function normalizeCacheBust(buf) {
+  const str = buf.toString('utf-8').replace(/\?v=[0-9a-f]+/g, '?v=CACHEBUST');
+  return Buffer.from(str, 'utf-8');
+}
+
+// The guard means "this wave did not touch /pricing" — that has to be
+// checked against the point this wave actually forked from main, not
+// against origin/main's current tip, which may have moved on for reasons
+// unrelated to this wave and would otherwise produce false failures (or
+// false passes, if main happened to touch pricing.html the same way).
+function resolveWaveBaseRef() {
+  try {
+    return execFileSync('git', ['merge-base', 'HEAD', 'origin/main'], {
+      cwd: REPO,
+    })
+      .toString('utf-8')
+      .trim();
+  } catch (err) {
+    // No merge-base available (e.g. origin/main not fetched here) — fall
+    // back to comparing against origin/main directly.
+    return 'origin/main';
+  }
+}
+
 function countOccurrences(haystack, needle) {
   if (needle === '') return 0;
   let count = 0;
@@ -158,22 +187,26 @@ describe('ASK wave B — /for-builders mid-page gold demotion', () => {
 
 describe('ASK wave B — /pricing guard (out of scope, real money)', () => {
   it('public/pricing.html is byte-identical to origin/main — untouched', () => {
-    let originBytes;
+    const baseRef = resolveWaveBaseRef();
+    let baseBytes;
     try {
-      originBytes = execFileSync(
+      baseBytes = execFileSync(
         'git',
-        ['show', 'origin/main:public/pricing.html'],
+        ['show', `${baseRef}:public/pricing.html`],
         { cwd: REPO, maxBuffer: 1024 * 1024 * 16 }
       );
     } catch (err) {
       assert.fail(
-        `could not read origin/main:public/pricing.html for comparison — ${err.message}`
+        `could not read ${baseRef}:public/pricing.html for comparison — ${err.message}`
       );
       return;
     }
     const localBytes = fs.readFileSync(path.join(REPO, 'public', 'pricing.html'));
     assert.ok(
-      Buffer.compare(localBytes, originBytes) === 0,
+      Buffer.compare(
+        normalizeCacheBust(localBytes),
+        normalizeCacheBust(baseBytes)
+      ) === 0,
       'public/pricing.html has diverged from origin/main — this wave must not touch /pricing (its three Buy credits buttons take real money)'
     );
   });
@@ -182,5 +215,34 @@ describe('ASK wave B — /pricing guard (out of scope, real money)', () => {
     const pricingSrc = readPublic('pricing.html');
     assert.equal(countOccurrences(pricingSrc, 'class="btn-primary pack-buy-btn"'), 3);
     assert.equal(countOccurrences(pricingSrc, '>Buy credits<'), 3);
+  });
+
+  it('normalizer catches a real content change (one mutated copy byte does not disappear into the ?v= normalization)', () => {
+    const localBytes = fs.readFileSync(path.join(REPO, 'public', 'pricing.html'));
+    const normalizedOriginal = normalizeCacheBust(localBytes);
+    const marker = 'Buy credits';
+    const markerIdx = normalizedOriginal.indexOf(marker);
+    assert.notEqual(markerIdx, -1, 'expected to find "Buy credits" copy in pricing.html to mutate');
+    const mutated = Buffer.from(normalizedOriginal); // independent copy
+    const flipIdx = markerIdx + marker.indexOf('c'); // mutate one byte of real copy: 'c' -> 'C'
+    mutated[flipIdx] = 'C'.charCodeAt(0);
+    assert.notEqual(
+      Buffer.compare(normalizeCacheBust(mutated), normalizedOriginal),
+      0,
+      'a one-byte copy mutation must still be detected after ?v= normalization'
+    );
+  });
+
+  it('normalizer passes when the only difference is the ?v= cache-bust hash', () => {
+    const localBytes = fs.readFileSync(path.join(REPO, 'public', 'pricing.html'));
+    const localStr = localBytes.toString('utf-8');
+    assert.match(localStr, /\?v=[0-9a-f]+/, 'expected a ?v=<hash> cache-bust query in pricing.html');
+    const withHashA = Buffer.from(localStr.replace(/\?v=[0-9a-f]+/g, '?v=aaaaaaaa'), 'utf-8');
+    const withHashB = Buffer.from(localStr.replace(/\?v=[0-9a-f]+/g, '?v=bbbbbbbb'), 'utf-8');
+    assert.equal(
+      Buffer.compare(normalizeCacheBust(withHashA), normalizeCacheBust(withHashB)),
+      0,
+      'two copies differing only by ?v= hash value must normalize to byte-identical'
+    );
   });
 });

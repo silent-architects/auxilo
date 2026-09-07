@@ -112,7 +112,7 @@ cd "${REPO_ROOT}"
 # (pending the PM's hash rewrite) and 1 pre-existing, unrelated skip.
 # Re-pinning to the actual count rather than carrying the stale drift
 # forward.
-EXPECTED_TEST_COUNT=2781
+EXPECTED_TEST_COUNT=2783
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
