@@ -25,7 +25,7 @@ npx auxilo setup
 
 The installer detects your clients, registers the MCP server in each, signs you in with a device code, installs the extraction runner to `~/.auxilo/bin`, wires capture hooks for hook-capable clients, and asks (default **No**) before enabling background extraction. See also: `npx auxilo status`, `npx auxilo disable`.
 
-Once installed, the runner keeps itself current on its own: on each hook run it checks the registry at most once every 24 hours, and installs a newer signed, integrity-verified release the next time your session ends — turn this off with `npx auxilo setup --no-autoupdate` or the `AUXILO_RUNNER_AUTOUPDATE=0` environment variable.
+Once installed, the runner keeps itself current on its own: on each hook run it checks the registry at most once every 24 hours, and installs a newer signed, integrity-verified release the next time your session ends — turn this off with `npx auxilo setup --no-autoupdate` or the `AUXILO_RUNNER_AUTOUPDATE=0` environment variable. The MCP registration itself is pinned to an exact version (`npx auxilo-mcp@<version>`, never a bare `npx auxilo-mcp`), and a runner self-update re-pins every client config it already owns to the version it just installed — re-run `npx auxilo setup` any time to sync it by hand.
 
 **One account, all clients.** Every client on a machine shares `~/.auxilo/credentials.json` — all contributions and extractions attribute to the same Auxilo account and earnings balance regardless of which client produced them. On additional machines, run `npx auxilo setup` and sign in with the same email; each device gets its own revocable API key under the same account.
 

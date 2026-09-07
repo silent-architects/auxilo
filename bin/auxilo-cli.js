@@ -553,7 +553,20 @@ async function cmdStatus() {
     const reg = c.mcp
       ? (c.registered ? 'MCP registered' : 'detected, MCP NOT registered')
       : 'poll-based source (no MCP config)';
-    console.log(`  ${c.name}: ${reg}`);
+    // MCP-SERVER-STALENESS (0.9.17): show the pin written into this client's
+    // config alongside the installed runner version, so a stale pin (or a
+    // pre-0.9.17 unpinned entry) is visible without opening the config file.
+    let pinNote = '';
+    if (c.mcp && c.registered) {
+      if (c.mcpPin === 'unpinned') {
+        pinNote = ' (pin: unpinned — run `npx auxilo setup` to pin)';
+      } else if (c.mcpPin) {
+        pinNote = c.mcpPinStale
+          ? ` (pin: v${c.mcpPin}, runner: v${s.runnerVersion} — STALE, run \`npx auxilo setup\`)`
+          : ` (pin: v${c.mcpPin})`;
+      }
+    }
+    console.log(`  ${c.name}: ${reg}${pinNote}`);
   }
 
   console.log(`Auth: ${s.auth.credentialsFile
