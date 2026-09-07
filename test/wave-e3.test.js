@@ -384,4 +384,13 @@ describe('WAVE-E3 items 3+4 (live): legal routes render the nav and no literal -
     const body = await res.text();
     assert.match(body, /Local extraction<\/strong>\s*:\s*the first model client you are signed in to on your machine, Claude Code first and then Codex, or a provider key you set yourself, drafts learnings from the scrubbed text\./);
   });
+
+  it('GET /legal/supported-clients does not carry the ungated runner auto-update paragraph (6b9ce96 addition, reverted — disclosure lives on the trust page + consent block only)', async (t) => {
+    if (bootSkipReason) { t.skip(bootSkipReason); return; }
+    const res = await fetch(`${baseUrl}/legal/supported-clients`);
+    assert.equal(res.status, 200);
+    const body = await res.text();
+    assert.doesNotMatch(body, /keeps itself current/);
+    assert.doesNotMatch(body, /AUXILO_RUNNER_AUTOUPDATE/);
+  });
 });
