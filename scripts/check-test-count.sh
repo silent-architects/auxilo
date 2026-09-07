@@ -81,7 +81,15 @@ cd "${REPO_ROOT}"
 # wiring, plus a new 4-test staged-server section C proving the 404 and
 # the public/ waitlist-string sweep). Verified against the actual
 # `npm test` discovered count: 2693 + 1 + 2 = 2696.
-EXPECTED_TEST_COUNT=2696
+#
+# agent/fb-control-rev2 (base 7932958, 2696): FB-CONTROL-REV2 added
+# test/fb-control-rev2.test.js — 6 static-file assertions (new label once
+# as the section h2, old label gone, old h2 gone, old body gone / new body
+# once with its page link, section keeps its id + background-alternation
+# class, page h2 count still 7) plus 1 served-route assertion (staged
+# server, mirroring test/fb-accrual-sentence.test.js). Verified against
+# the actual `npm test` discovered count: 2696 + 7 = 2703.
+EXPECTED_TEST_COUNT=2711
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
