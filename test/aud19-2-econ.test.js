@@ -75,7 +75,7 @@ describe('credit lots: unit price travels with the credit', () => {
 
   it('referral grant lot ($0) burns the credit, serves success, and prices at $0.00', async () => {
     const id = uid();
-    await addPurchasedCredits(id, 200, 40, { unlock_unit_price_usd: 0 });
+    await addPurchasedCredits(id, 0, 40, { unlock_unit_price_usd: 0 });
     const r = await deductCredit(id, 'unlock');
     assert.equal(r.success, true, 'the buyer still gets their unlock');
     assert.equal(r.unit_price_usd, 0, 'referral lots accrue on a $0 basis');
