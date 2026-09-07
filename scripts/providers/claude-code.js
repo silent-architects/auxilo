@@ -79,6 +79,17 @@ const SCRUBBED_CLIENT_ENV_VARS = Object.freeze([
   'CLOUD_ML_REGION',
 ]);
 
+// ─── Spawn argv (EXTRACTION-ZERO-TOOL-CALLS control) ───────────────────────
+//
+// Named + frozen so a byte-pinned test (test/extraction-zero-tool-calls.test.js)
+// can assert the exact argv without duplicating the literal, and so a future
+// flag change is a conscious, greppable edit here rather than a silent literal
+// tweak buried in the two runXMode() functions below. No behavior change: the
+// two spawnSyncImpl() call sites below now pass these constants instead of
+// inline array literals of the identical contents.
+const EXTRACT_MODE_ARGV = Object.freeze(['-p', '--no-session-persistence', '--tools', '']);
+const JUDGE_MODE_ARGV = Object.freeze(['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '']);
+
 /**
  * Build the subscription-auth-only environment shared by BOTH the extraction and
  * judge Claude CLI children — one function, no drift between the two spawns.
@@ -314,7 +325,7 @@ function runExtractMode(opts) {
   try {
     // --no-session-persistence (EXTRACT-PER-CLIENT W1 FIX GIVENS): matches the
     // judge spawn below — an extraction run leaves no session file behind either.
-    res = spawnSyncImpl(bin, ['-p', '--no-session-persistence', '--tools', ''], {
+    res = spawnSyncImpl(bin, EXTRACT_MODE_ARGV, {
       input: stdin,
       encoding: 'utf-8',
       env: claudeChildEnv(),
@@ -383,7 +394,7 @@ function runJudgeMode(opts) {
   const prompt = typeof opts.prompt === 'string' ? opts.prompt : '';
   let res;
   try {
-    res = spawnSyncImpl(bin, ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', ''], {
+    res = spawnSyncImpl(bin, JUDGE_MODE_ARGV, {
       input: prompt,
       encoding: 'utf8',
       env: claudeChildEnv(),
@@ -497,4 +508,8 @@ module.exports = {
   // Exported for direct unit coverage (test/extract-w1-fix2.test.js, GOV-3 item 6).
   managedSettingsPathForPlatform,
   MANAGED_SETTINGS_PATH_BY_PLATFORM,
+  // Exported for direct byte-pinned coverage (test/extraction-zero-tool-calls.test.js,
+  // TRUST-PAGE control — SITE-PM: put the zero-tool-call assertion in the test suite).
+  EXTRACT_MODE_ARGV,
+  JUDGE_MODE_ARGV,
 };
