@@ -472,12 +472,13 @@ describe('EXTRACT-PER-CLIENT W1 P1: a working provider that merely failed once d
 });
 
 describe('EXTRACT-PER-CLIENT W1 P1: NON_RETRYABLE_FOR_THIS_PROVIDER — the exact fall-through set', () => {
-  it('is exactly the five named reasonCodes, no more, no less', () => {
+  it('is exactly the six named reasonCodes, no more, no less (EXTRACTION-CHILD-HOOKS 0.9.15 adds cli-settings-isolation-unsupported)', () => {
     assert.deepEqual(
       Array.from(providers.NON_RETRYABLE_FOR_THIS_PROVIDER).sort(),
       [
         'cli-billing-helper-configured',
         'cli-not-installed',
+        'cli-settings-isolation-unsupported',
         'cli-unauthenticated',
         'provider-not-configured',
         'providers-file-mode-unsafe',

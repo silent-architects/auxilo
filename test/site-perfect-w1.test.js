@@ -74,23 +74,27 @@ function startStaticServer(root) {
   });
 }
 
-// The nine top-level homepage sections (git-truth: grep '^<section' public/index.html,
-// all nine live inside <main id="main">), each labeled by its first heading, or a
+// The eight top-level homepage sections (git-truth: grep '^<section' public/index.html,
+// all eight live inside <main id="main">), each labeled by its first heading, or a
 // descriptive label when it has none (works-with-band is the unheaded one this
 // item's fix targets).
+//
+// #the-market was cut from the homepage (SITE-PERFECT-W2 A, commit 2997932,
+// Tyler-approved: no unique claims, zero inbound links) -- see
+// test/site-perfect-w2-a.test.js for the regression asserting its absence.
+// This file's section list and count were updated to match (9 -> 8).
 //
 // #hero is deliberately excluded from the "everything computes 120px" invariant:
 // public/styles.css's `#hero { padding: 0 24px; ... min-height: 100vh; }` is a
 // full-viewport hero with its own layout system (flex-centered content, no
 // var(--section-pad) rhythm) -- verified unchanged at 0px/0px before and after
-// this fix, not part of the --section-pad rhythm the other 8 sections share.
+// this fix, not part of the --section-pad rhythm the other 7 sections share.
 const HOMEPAGE_SECTIONS = [
   { id: 'hero', label: 'hero (Hero heading)', expectPad: false },
   { id: 'learning-explainer', label: 'What a Learning Is, and Why Another Agent Would Use It', expectPad: true },
   { id: 'works-with-band', label: '(unheaded) works-with logo band', expectPad: true },
   { id: 'own-learnings-free', label: 'Never watch your agent solve the same problem twice.', expectPad: true },
   { id: 'how-it-works', label: 'Your Agents Learn. You Earn.', expectPad: true },
-  { id: 'the-market', label: 'the-market', expectPad: true },
   { id: 'explore-section', label: 'explore-section (class-selected, no id)', expectPad: true },
   { id: 'faq', label: 'faq', expectPad: true },
   { id: 'footer-cta', label: 'footer-cta', expectPad: true },
@@ -183,7 +187,7 @@ describe('SITE-PERFECT-W1 item 4: every top-level homepage section computes padd
     if (server) server.close();
   });
 
-  it('index.html <main id="main"> declares exactly the 9 expected top-level sections (no drift)', async (t) => {
+  it('index.html <main id="main"> declares exactly the 8 expected top-level sections (no drift)', async (t) => {
     if (!ok) { t.skip('playwright not resolvable'); return; }
     const found = await page.evaluate(() =>
       Array.from(document.querySelectorAll('#main > section')).map((s) => s.id || `.${s.className}`)

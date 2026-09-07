@@ -238,6 +238,11 @@ const NON_RETRYABLE_FOR_THIS_PROVIDER = new Set([
   'cli-billing-helper-configured',
   'provider-not-configured',
   'providers-file-mode-unsafe',
+  // EXTRACTION-CHILD-HOOKS (0.9.15): the resolved claude-code CLI doesn't
+  // support --setting-sources, so it can never run isolated — same
+  // "cannot run at all right now" class as the codes above, safe to try the
+  // next provider in PROVIDER_ORDER rather than reporting a hard failure.
+  'cli-settings-isolation-unsupported',
 ]);
 
 /**

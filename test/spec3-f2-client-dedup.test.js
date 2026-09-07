@@ -441,7 +441,41 @@ describe('SPEC3-F2 candidate-anchored judge and local drop audit', () => {
       assert.deepEqual(result.kept, [candidate]);
       assert.equal(result.dropped.length, 0);
       assert.ok(logs.some((line) => /anchored judge (unavailable|malformed)/.test(line)));
+      // EXTRACTION-RUN-LOG (0.9.15): all three of these cases DID attempt a
+      // real invokeJudge call (unlike the "no candidates at all" early
+      // return) but none of them count as a successful judgment — the
+      // provider-run log line's judge=ran|failed|skipped(no-candidates)
+      // distinction depends on telling these two states apart.
+      assert.equal(result.judgeAttempted, true);
+      assert.equal(result.judgeSucceeded, false);
     }
+  });
+
+  it('judgeAttempted is false when there are no candidates at all (the true "skipped(no-candidates)" case, distinct from an attempted-but-failed call above)', async () => {
+    const result = await extractLocal.runAnchoredJudge([], { usable: true, rows: priorRows() }, {
+      invokeJudge: async () => { throw new Error('must not be called with zero candidates'); },
+    });
+    assert.equal(result.judgeAttempted, false);
+    assert.equal(result.judgeSucceeded, false);
+    assert.equal(result.called, false);
+  });
+
+  it('judgeAttempted+judgeSucceeded are both true on a real, successful judgment', async () => {
+    const candidate = learning();
+    const result = await extractLocal.runAnchoredJudge([candidate], { usable: true, rows: priorRows() }, {
+      invokeJudge: async (_prompt, context) => ({
+        ok: true,
+        out: JSON.stringify({ decisions: [{ candidate_index: 0, duplicate: false }] }),
+        usage: { input_tokens: 1, output_tokens: 1 },
+        reasonCode: null,
+        argv: ['-p', '--output-format', 'json'],
+        cliVersion: '2.1.12',
+      }),
+    });
+    assert.equal(result.judgeAttempted, true);
+    assert.equal(result.judgeSucceeded, true);
+    assert.deepEqual(result.judgeArgv, ['-p', '--output-format', 'json']);
+    assert.equal(result.judgeCliVersion, '2.1.12');
   });
 
   it('logs prompt-memory and lexical drops before removing them', async () => {

@@ -645,6 +645,11 @@ async function postExtractDetailed(transcript, sessionId, sourceType, _scrubRepo
       captureVisibility: opts.captureVisibility || CAPTURE_VISIBILITY,
       log: runnerLog,
       auditLog: auditDropLog,
+      // EXTRACTION-RUN-LOG (0.9.15): the identifier the provider-run summary
+      // log line reports as `run=`. sessionId is already this call's natural
+      // run identity (it's what extraction_id: `client-${sessionId}` uses
+      // below); opts.runId (if a caller supplied one) wins over it.
+      runId: opts.runId || sessionId,
     }));
   } catch (err) {
     throw new Error(`Local extraction failed: ${err.message}`);
