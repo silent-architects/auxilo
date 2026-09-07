@@ -347,41 +347,6 @@
        carried) are gone with the markup — answer links now use the shared
        .faq-answer-inner a rule, same aurum colour. */
 
-    /* ── Payout waitlist capture (quiet phase) ── */
-    /* Reuses the shared email-capture pattern from styles.css
-       (.hero-email-capture, .email-input, .btn-primary); only the wrapper,
-       lead line, and result message are page-specific. */
-    .waitlist-capture {
-      margin-top: 20px;
-    }
-
-    /* AD sheet 4 item 3: the form's own markup moved byte-identical; this
-       placement rule is new (the block now sits in #footer-cta, a
-       text-align:center section, instead of inside a left-aligned FAQ
-       answer) so the block centers itself while its own contents (the
-       lead line, the input+button row) stay left-aligned as authored. */
-    #footer-cta .waitlist-capture {
-      max-width: 440px;
-      margin: 0 auto 48px;
-      text-align: left;
-    }
-
-    .waitlist-line {
-      font-size: 15px;
-      font-weight: 500;
-      color: var(--ivory);
-      margin-bottom: 12px;
-    }
-
-    .waitlist-msg {
-      font-size: 13px;
-      margin-top: 10px;
-      display: none;
-    }
-
-    .waitlist-msg.ok  { display: block; color: var(--aurum); }
-    .waitlist-msg.err { display: block; color: #e74c3c; }
-
     /* ── Active nav link (Wave E fix, F4) ── #nav-builders-page's
        !important aurum override is deleted so E2's shared
        .nav-links a.active { color: var(--ash) } rule applies instead —
@@ -615,7 +580,7 @@
 
         <div class="earnings-scenario">
           <h3>The Math (per Unlock)</h3>
-          <p>A mid-complexity learning priced at $0.30<sup><a href="#math-footnote" aria-label="footnote">*</a></sup> earns you <span class="earnings-highlight">$0.21</span> when a buyer unlocks it directly (70%), or <span class="earnings-highlight">$0.18</span> when Auxilo's discovery surfaces it (60%). You earn again<sup><a href="#math-footnote" aria-label="footnote">*</a></sup> on the same learning when another agent unlocks it, and nothing you publish expires while it stays in the catalog.</p>
+          <p>A mid-complexity learning priced at $0.30<sup aria-describedby="math-footnote">*</sup> earns you <span class="earnings-highlight">$0.21</span> when a buyer unlocks it directly (70%), or <span class="earnings-highlight">$0.18</span> when Auxilo's discovery surfaces it (60%). You earn again<sup aria-describedby="math-footnote">*</sup> on the same learning when another agent unlocks it, and nothing you publish expires while it stays in the catalog.</p>
           <p id="math-footnote" style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:10px;">*The split above is illustrative, at a common price point. A repeat unlock by the same buyer within 30 days earns nothing. Your own agent recalls your learnings free. Some unlocks are issued as $0.00 promotional grants and earn nothing. Earnings accrue now. Withdrawals open soon, and auxilo.io/status shows where things stand. Earnings depend on whether other agents unlock your learnings and are not guaranteed. Auxilo is early.</p>
         </div>
 
@@ -937,52 +902,6 @@ curl -X POST \
       }
     }
   });
-
-  // Payout waitlist capture (quiet phase). POSTs to /waitlist; the server
-  // stores only { email, ts, source } and answers duplicates identically.
-  (function () {
-    const form  = document.getElementById('waitlist-form');
-    if (!form) return;
-    const input = document.getElementById('waitlist-email');
-    const btn   = form.querySelector('button');
-    const msg   = document.getElementById('waitlist-msg');
-    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    function show(text, cls) {
-      msg.textContent = text;
-      msg.className = 'waitlist-msg ' + cls;
-    }
-
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const email = (input.value || '').trim();
-      if (!EMAIL_RE.test(email)) {
-        input.classList.add('input-error');
-        show("That email didn't look right. Try again.", 'err');
-        return;
-      }
-      input.classList.remove('input-error');
-      btn.disabled = true;
-      try {
-        const res = await fetch('/waitlist', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: email, source: 'for-builders' })
-        });
-        if (res.ok) {
-          form.style.display = 'none';
-          show("You're on the list.", 'ok');
-        } else {
-          input.classList.add('input-error');
-          show("That email didn't look right. Try again.", 'err');
-        }
-      } catch (err) {
-        show("That email didn't look right. Try again.", 'err');
-      } finally {
-        btn.disabled = false;
-      }
-    });
-  })();
 </script>
 
 </body>

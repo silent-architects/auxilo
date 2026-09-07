@@ -71,7 +71,17 @@ cd "${REPO_ROOT}"
 # getClaudeCliVersion, provider-run log line, judgeAttempted/judgeSucceeded,
 # plus the extraction-zero-tool-calls STATIC pin split into 2 asserts on
 # merge) = 2683.
-EXPECTED_TEST_COUNT=2693
+#
+# agent/footnote-sup-waitlist (base cacb665, 2693): FOOTNOTE-SUP added 1
+# static assertion to test/fb-accrual-sentence.test.js (the href="#" /
+# aria-describedby / id count pin). WAITLIST-DEAD-CODE removed the POST
+# /waitlist route and rewrote test/waitlist.test.js's structural section —
+# net +2 there (3 removed source-string assertions for the deleted route,
+# 2 replacement assertions for the surviving GET /waitlist/count + purge
+# wiring, plus a new 4-test staged-server section C proving the 404 and
+# the public/ waitlist-string sweep). Verified against the actual
+# `npm test` discovered count: 2693 + 1 + 2 = 2696.
+EXPECTED_TEST_COUNT=2696
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
