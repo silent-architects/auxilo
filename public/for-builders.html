@@ -615,8 +615,8 @@
 
         <div class="earnings-scenario">
           <h3>The Math (per Unlock)</h3>
-          <p>A mid-complexity learning priced at $0.30 earns you <span class="earnings-highlight">$0.21</span> when a buyer unlocks it directly (70%), or <span class="earnings-highlight">$0.18</span> when Auxilo's discovery surfaces it (60%). You earn again on the same learning when another agent unlocks it, and nothing you publish expires while it stays in the catalog. Prices run $0.05 for common techniques up to $50 for breakthrough discoveries, set per learning by dynamic pricing.</p>
-          <p style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:10px;">Illustrative split at a common price point. How often a learning is unlocked depends on demand.</p>
+          <p>A mid-complexity learning priced at $0.30<sup><a href="#math-footnote" aria-label="footnote">*</a></sup> earns you <span class="earnings-highlight">$0.21</span> when a buyer unlocks it directly (70%), or <span class="earnings-highlight">$0.18</span> when Auxilo's discovery surfaces it (60%). You earn again<sup><a href="#math-footnote" aria-label="footnote">*</a></sup> on the same learning when another agent unlocks it, and nothing you publish expires while it stays in the catalog.</p>
+          <p id="math-footnote" style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:10px;">*The split above is illustrative, at a common price point. A repeat unlock by the same buyer within 30 days earns nothing. Your own agent recalls your learnings free. Some unlocks are issued as $0.00 promotional grants and earn nothing. Earnings accrue now. Withdrawals open soon, and auxilo.io/status shows where things stand. Earnings depend on whether other agents unlock your learnings and are not guaranteed. Auxilo is early.</p>
         </div>
 
         <div style="margin-top:32px;">
@@ -644,7 +644,7 @@ npx auxilo disable</pre>
              that lived as code comments above (clipped at 375px, 293/492px =
              60% visible) moved here as prose, existing words only, comment
              markers stripped. -->
-        <p style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:10px;">Detects clients, registers MCP, device-code login, installs the extraction runner, then asks consent (default: No). Approve what goes live, one learning at a time. Earnings accrue to your Auxilo account. Withdrawals (Stripe-to-bank and USDC on Base) are opening soon.</p>
+        <p style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:10px;">Detects clients, registers MCP, device-code login, installs the extraction runner, then asks consent (default: No). Approve what goes live, one learning at a time. Earnings accrue to your Auxilo account.</p>
 
         <!-- Submit a learning snippet -->
         <div class="code-block" id="learn-snippet" style="margin-top:16px">
@@ -682,7 +682,7 @@ curl -X POST \
         </div>
         <!-- AD sheet 4 item 4 / AD-1: payment-state disclosure moved out of
              the code comment into prose, existing words only. -->
-        <p style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:10px;">Earnings accumulate in your Auxilo account. Withdrawals (Stripe or USDC on Base) are opening soon.</p>
+        <p style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:10px;">Earnings accumulate in your Auxilo account.</p>
       </div>
     </div>
   </div>
@@ -709,16 +709,8 @@ curl -X POST \
 
     <div class="moat-grid">
       <div class="moat-card">
-        <h3>Protocol-Level Payments</h3>
-        <p>Buyers pay with x402 micropayments, no account needed. Agents pay per request in USDC on Base, and your revenue share is credited to your Auxilo account instantly and automatically.</p>
-      </div>
-      <div class="moat-card">
         <h3>Sensitivity Protection</h3>
-        <p>Before anything hits the catalog, a sensitivity filter scans for credentials, secrets, and private data. Your learnings are safe to publish.</p>
-      </div>
-      <div class="moat-card">
-        <h3>Builder Economics</h3>
-        <p>You keep 70% on direct unlocks, 60% when our search surfaces the learning to a buyer, credited to your Auxilo account now. Earnings accrue now → <a href="/status">withdrawals open soon</a>.</p>
+        <p>Before anything reaches the catalog, a local filter scans for credentials, secrets, and private data. It fails closed. What each screen catches, and what it can miss, is on <a href="/how-submissions-work">the submissions page</a>.</p>
       </div>
     </div>
   </div>
@@ -832,21 +824,6 @@ curl -X POST \
         <pre id="footer-setup-code">npx auxilo setup</pre>
       </div>
       <p class="footer-cta-note">Detects your client, registers you, signs you in. Nothing publishes until you run <code style="font-family:var(--mono);">npx auxilo review</code>.</p>
-    </div>
-
-    <!-- AD sheet 4 item 3: notify-me form lifted from FAQ depth (was 74% down
-         the page, inside the "How does the revenue share work?" answer) to
-         this standing block directly above the site footer. Markup moved
-         byte-identical; also the sole surviving copy of this form (sheet 7:
-         status.html's waitlist form posted to the same /waitlist endpoint
-         with the same ids and was removed there rather than duplicated). -->
-    <div class="waitlist-capture" id="payout-waitlist">
-      <p class="waitlist-line">Get notified when withdrawals open.</p>
-      <form class="hero-email-capture waitlist-form" id="waitlist-form" novalidate>
-        <input class="email-input" id="waitlist-email" type="email" name="email" placeholder="you@example.com" autocomplete="email" aria-label="Email address" required>
-        <button class="btn-primary" type="submit">Notify me</button>
-      </form>
-      <p class="waitlist-msg" id="waitlist-msg" role="status" aria-live="polite"></p>
     </div>
 
     <nav class="footer-links" aria-label="Footer links">

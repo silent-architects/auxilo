@@ -18,6 +18,11 @@
  * plain static markup, not server-templated, so this also proves the
  * static swap survives the serveStatic path unmodified).
  *
+ * SITE-PERFECT-W2 item D (2026-09-06) gave the "again" in this sentence a
+ * superscript footnote link (the Math block's asterisk marker), so the
+ * checked string below now carries that inline markup between "again" and
+ * "on the same learning" — the prose itself is unchanged.
+ *
  * Staged-server pattern: test/ad-routes.test.js.
  *
  * Runner: node --test test/fb-accrual-sentence.test.js
@@ -40,7 +45,7 @@ const REPO = path.join(__dirname, '..');
 const STATIC_HTML = fs.readFileSync(path.join(REPO, 'public', 'for-builders.html'), 'utf8');
 
 const OLD_SENTENCE = 'You earn on the same learning every time it unlocks, with no cap and no expiry.';
-const NEW_SENTENCE = 'You earn again on the same learning when another agent unlocks it, and nothing you publish expires while it stays in the catalog.';
+const NEW_SENTENCE = 'You earn again<sup><a href="#math-footnote" aria-label="footnote">*</a></sup> on the same learning when another agent unlocks it, and nothing you publish expires while it stays in the catalog.';
 
 function countOccurrences(haystack, needle) {
   return haystack.split(needle).length - 1;
