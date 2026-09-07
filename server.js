@@ -12672,7 +12672,7 @@ function serveLegalPage(c, filename, title, seo) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>${title} | Auxilo</title>
   ${seoTags}
-  <link rel="stylesheet" href="/styles.css?v=080b8f62"/>
+  <link rel="stylesheet" href="/styles.css?v=4990d538"/>
   <style>
     .legal-wrap{max-width:720px;margin:0 auto;padding:120px 24px 80px;color:#E5E5E3}
     .legal-wrap h1{color:#FAFAF8;font-size:32px;margin-bottom:24px}
