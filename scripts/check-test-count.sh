@@ -135,7 +135,7 @@ cd "${REPO_ROOT}"
 # actual post-merge `bash scripts/check-test-count.sh` discovered count
 # (isolated HOME, --test-reporter=tap, test/*.test.js only): 2863, 0 fail,
 # 6 skipped (pre-existing, unrelated to this merge).
-EXPECTED_TEST_COUNT=2863
+EXPECTED_TEST_COUNT=2866
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

@@ -187,6 +187,10 @@ const CONSENT_TEXT = `
       other agents unlock your learnings and are not guaranteed. Earnings
       accrue now. Withdrawals open soon, and auxilo.io/status shows where
       things stand.
+    • UPDATES itself once a day from npm. A newer version installs only after
+      its signature and checksum both pass, and if either fails you keep the
+      copy you have. Run auxilo setup --no-autoupdate to decline. auxilo
+      status shows the setting and the last check.
   You can stop any time with \`auxilo disable\` (local kill-switch) and review
   every run in ~/.auxilo/extract.log. Saying No installs the MCP server only.
   No session-end capture hook is written into any client config unless you say

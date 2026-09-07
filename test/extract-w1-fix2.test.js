@@ -946,6 +946,15 @@ describe('STRINGS: bin/auxilo-cli.js CONSENT_TEXT — three gated replacements (
   const OLD_MANUAL_MODE_LINE = 'Manual mode (approve first, for everything) is';
   const OLD_EARN_70_LINE = 'You earn 70% of sales.';
 
+  // 0.9.16 disclosure (AUTO-UPDATE-DISCLOSURE-2026-09-07.md, Tyler-approved):
+  // new top-level UPDATES bullet, placed after the UPLOADS bullet, byte-exact
+  // hard-wrap to the block's existing width.
+  const NEW_UPDATES_BULLET =
+    '    • UPDATES itself once a day from npm. A newer version installs only after\n' +
+    '      its signature and checksum both pass, and if either fails you keep the\n' +
+    '      copy you have. Run auxilo setup --no-autoupdate to decline. auxilo\n' +
+    '      status shows the setting and the last check.';
+
   it('positive control: the OLD EXTRACTS-bullet fragment appears exactly 0 times now (was 1)', () => {
     const count = (CLI_SRC.match(new RegExp(OLD_EXTRACTS_BULLET_FRAGMENT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
     assert.equal(count, 0);
@@ -979,6 +988,24 @@ describe('STRINGS: bin/auxilo-cli.js CONSENT_TEXT — three gated replacements (
 
   it('the retired "publishes to the marketplace immediately" overclaim is still absent (COPY-18, unrelated to this pass)', () => {
     assert.ok(!CLI_SRC.includes('publishes to the marketplace immediately'));
+  });
+
+  it('0.9.16: the new UPDATES bullet appears byte-for-byte, exactly once, directly after the UPLOADS/earnings block and before the kill-switch line', () => {
+    const count = CLI_SRC.split(NEW_UPDATES_BULLET).length - 1;
+    assert.equal(count, 1);
+    const earningsEndIdx = CLI_SRC.indexOf('accrue now. Withdrawals open soon, and auxilo.io/status shows where\n      things stand.');
+    const updatesIdx = CLI_SRC.indexOf(NEW_UPDATES_BULLET);
+    const stopAnyTimeIdx = CLI_SRC.indexOf('You can stop any time with');
+    assert.ok(earningsEndIdx > -1 && updatesIdx > earningsEndIdx, 'UPDATES bullet follows the UPLOADS/earnings block');
+    assert.ok(stopAnyTimeIdx > -1 && updatesIdx < stopAnyTimeIdx, 'UPDATES bullet precedes the kill-switch closing line');
+  });
+
+  it('0.9.16: PROVIDER_KEY_CONSENT_SENTENCE and the three gated strings stay byte-identical (untouched by the UPDATES bullet addition)', () => {
+    assert.match(CLI_SRC, /const PROVIDER_KEY_CONSENT_SENTENCE = 'This key is yours\. It stays on this machine in ~\/\.auxilo\/providers\.json, readable only by your user account, and Auxilo never receives it\./);
+    const newExtractsCount = CLI_SRC.split(NEW_EXTRACTS_BULLET).length - 1;
+    const newEarningsCount = CLI_SRC.split(NEW_EARNINGS_BLOCK).length - 1;
+    assert.equal(newExtractsCount, 1);
+    assert.equal(newEarningsCount, 1);
   });
 });
 
