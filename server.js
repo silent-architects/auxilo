@@ -141,9 +141,13 @@ const geoEmbargo = require('./lib/geo-embargo.js');
 // SDN refresh (pure decision engine; see file header for why this is separate
 // from rescreenLinkedWallets() below).
 const { rescreenVerifiedWallets } = require('./lib/ofac-rescreen.js');
-// Quiet phase: payout-notification waitlist (validation, dedupe, storage, and
-// the per-IP limiter live in lib; the routes below own transport only).
-const { addToWaitlist, removeWaitlistEmail, waitlistCount, isWaitlistRateLimited } = require('./lib/waitlist.js');
+// Quiet phase: payout-notification waitlist storage. The write path
+// (addToWaitlist / isWaitlistRateLimited) was removed with the dead
+// POST /waitlist route (WAITLIST-DEAD-CODE, 2026-09-06); only the two
+// storage-reader/consumer functions still in use are imported below —
+// removeWaitlistEmail (GOV2-DEL account-deletion purge) and waitlistCount
+// (GET /waitlist/count aggregate reporting).
+const { removeWaitlistEmail, waitlistCount } = require('./lib/waitlist.js');
 const { sendDeletionConfirmation } = require('./lib/email.js');
 // Quiet phase: inert-by-default analytics readiness (Plausible). Everything is
 // a no-op unless ANALYTICS_DOMAIN is set; see lib/analytics.js.
@@ -11849,38 +11853,18 @@ app.get('/admin/reports', adminAuth('read'), (c) => {
 });
 
 // ─── Quiet phase: payout-notification waitlist ──────────────────────────────
-// Public capture for the accrue-only window (withdrawals paused during the
-// non-custodial migration; see /status). Validation, normalization, dedupe,
-// the growth ceiling, and the per-IP limiter live in lib/waitlist.js; these
-// routes own transport only. Storage is data/waitlist.json, an array of
-// { email, ts, source } records: no IP addresses are ever persisted, and
-// data/ is gitignored so the list never enters git.
-
-// POST /waitlist: join the withdrawal-notification list
-app.post('/waitlist', async (c) => {
-  const clientIp = getClientIp(c);
-
-  // Rate limit: 10 signups per IP per hour (mirrors the /report limiter).
-  if (isWaitlistRateLimited(clientIp)) {
-    return c.json({ error: 'Rate limit exceeded. Try again later.' }, 429);
-  }
-
-  let body;
-  try { body = await c.req.json(); } catch {
-    return c.json({ error: 'Invalid JSON body' }, 400);
-  }
-
-  const { email, source } = body || {};
-  const result = addToWaitlist(email, source);
-  if (!result.ok) {
-    return c.json({ error: result.error }, result.status);
-  }
-
-  // Silent success on duplicates: the response body and status are identical
-  // whether the email is new to the list or not, so this endpoint cannot be
-  // used to probe list membership.
-  return c.json({ ok: true });
-});
+// WAITLIST-DEAD-CODE (2026-09-06): the POST /waitlist join route is removed
+// — after W2 cut the Notify-me form (public/for-builders.html), it had zero
+// callers (verified: grep waitlist across public/, llms.txt, openapi.json,
+// agent.json, mcp-server.js — none referenced it; the only surviving
+// references were this dead server route and its own tests). The write path
+// (addToWaitlist / isWaitlistRateLimited from lib/waitlist.js) goes with it.
+// The storage reader below and the underlying data/waitlist.json store are
+// UNTOUCHED — GET /waitlist/count still reads live rows (via waitlistCount()
+// in lib/waitlist.js) for aggregate reporting, and the GOV2-DEL account-
+// deletion flow still reads/purges per-account waitlist rows
+// (deletionCounts() and removeWaitlistEmail() in server.js) — both are
+// storage readers/consumers, not the removed write route.
 
 // GET /waitlist/count: aggregate count only (no emails), for social proof
 app.get('/waitlist/count', (c) => {

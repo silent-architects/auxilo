@@ -3,26 +3,46 @@
 /**
  * test/waitlist.test.js: quiet-phase payout-notification waitlist.
  *
- * Two layers, matching the repo's conventions:
+ * WAITLIST-DEAD-CODE (2026-09-06): POST /waitlist (the join route) is
+ * removed from server.js — after W2 cut the Notify-me form
+ * (public/for-builders.html), it had zero callers anywhere in the repo.
+ * lib/waitlist.js and its data (data/waitlist.json) are UNTOUCHED: the
+ * write functions (addToWaitlist, isWaitlistRateLimited) remain exported
+ * and still directly unit-tested below (section A), and the two storage
+ * readers/consumers that remain wired into server.js — GET /waitlist/count
+ * (aggregate reporting) and the GOV2-DEL account-deletion purge
+ * (removeWaitlistEmail) — are untouched and still covered.
+ *
+ * Three layers, matching the repo's conventions:
  *   A) Behavioral unit tests of the pure logic in lib/waitlist.js
  *      (validation, normalization, dedupe, storage shape, capacity ceiling,
  *      per-IP rate limiter) against a private temp data dir via
  *      AUXILO_DATA_DIR, mirroring test/p2-1a-audit-chain.test.js isolation.
- *   B) Structural tests that server.js wires the routes correctly: the rate
- *      limit runs before body parsing, duplicates get the same response as
- *      first-time signups (no membership leak), the count endpoint exists,
- *      and data/ stays gitignored so emails never enter git. This mirrors
+ *   B) Structural tests that server.js wires the surviving routes
+ *      correctly: the count endpoint exists and stays email-free, and
+ *      data/ stays gitignored so emails never enter git. This mirrors
  *      test/r01-launch-blockers.test.js, which analyzes server.js source
  *      rather than booting the whole app.
+ *   C) Staged-server proof that POST /waitlist is actually gone (404, not
+ *      just absent from a source-string check) and that no "waitlist"
+ *      string survives anywhere under public/. Staged-server pattern:
+ *      test/ad-routes.test.js.
  *
  * Runner: node --test test/waitlist.test.js
  */
 
-const { describe, it, beforeEach } = require('node:test');
+const { describe, it, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const {
+  reservePort,
+  stageServer,
+  bootServer,
+  stopServer,
+  BOOT_SANDBOX_SKIP_REASON,
+} = require('./helpers/staged-server');
 
 // Route this file's writes into a private temp dir. lib/waitlist.js reads
 // AUXILO_DATA_DIR at require() time, so this must be set before the require.
@@ -32,7 +52,8 @@ process.env.AUXILO_DATA_DIR = DATA_DIR;
 const waitlist = require('../lib/waitlist.js');
 const WAITLIST_FILE = path.join(DATA_DIR, 'waitlist.json');
 
-const SERVER_SRC = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf-8');
+const REPO = path.join(__dirname, '..');
+const SERVER_SRC = fs.readFileSync(path.join(REPO, 'server.js'), 'utf-8');
 
 function sliceHandler(marker, span = 2500) {
   const i = SERVER_SRC.indexOf(marker);
@@ -195,40 +216,126 @@ describe('isWaitlistRateLimited', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// B. Structural: server.js route wiring
+// B. Structural: server.js route wiring (surviving routes only)
 // ─────────────────────────────────────────────────────────────────────────────
-describe('server.js POST /waitlist wiring', () => {
-  it('the route exists and delegates to lib/waitlist.js', () => {
-    const h = sliceHandler("app.post('/waitlist'");
-    assert.ok(h.includes('addToWaitlist('), 'must delegate validation/storage to the lib');
-    assert.ok(SERVER_SRC.includes("require('./lib/waitlist.js')"), 'server.js must import the lib');
+describe('server.js waitlist route wiring', () => {
+  it('POST /waitlist no longer exists in server.js source', () => {
+    assert.ok(!SERVER_SRC.includes("app.post('/waitlist'"), 'the POST /waitlist route must be removed (WAITLIST-DEAD-CODE)');
+    assert.ok(!SERVER_SRC.includes('addToWaitlist('), 'the write path must no longer be called from server.js');
+    assert.ok(!SERVER_SRC.includes('isWaitlistRateLimited('), 'the per-IP limiter must no longer be called from server.js');
   });
 
-  it('rate-limits by client IP BEFORE parsing the body (mirrors /report)', () => {
-    const h = sliceHandler("app.post('/waitlist'");
-    const ipAt   = h.indexOf('getClientIp(c)');
-    const rlAt   = h.indexOf('isWaitlistRateLimited(');
-    const bodyAt = h.indexOf('c.req.json()');
-    assert.ok(ipAt !== -1 && rlAt !== -1 && bodyAt !== -1);
-    assert.ok(rlAt < bodyAt, 'the limiter must run before body parsing');
-    assert.ok(/\}, 429\)/.test(h), 'must return HTTP 429 when limited');
-  });
-
-  it('returns the SAME success body for new and duplicate emails (no membership probe)', () => {
-    const h = sliceHandler("app.post('/waitlist'");
-    assert.ok(h.includes('c.json({ ok: true })'), 'must return the uniform success body');
-    assert.ok(!h.includes('result.duplicate'), 'the response must not branch on duplicate status');
-    assert.ok(!/already/i.test(h), 'no already-on-the-list wording may reach the client');
-  });
-
-  it('GET /waitlist/count returns only an aggregate count', () => {
+  it('GET /waitlist/count returns only an aggregate count (storage reader survives, untouched)', () => {
     const h = sliceHandler("app.get('/waitlist/count'", 400);
     assert.ok(h.includes('waitlistCount()'));
     assert.ok(!h.includes('email'), 'the count endpoint must not touch email fields');
+    assert.ok(SERVER_SRC.includes("require('./lib/waitlist.js')"), 'server.js must still import the lib for the surviving readers');
+  });
+
+  it('removeWaitlistEmail still wired into the GOV2-DEL account-deletion purge', () => {
+    assert.ok(SERVER_SRC.includes('removeWaitlistEmail('), 'the deletion-purge storage consumer must remain untouched');
   });
 
   it('data/ is gitignored so waitlist emails can never enter git', () => {
-    const gitignore = fs.readFileSync(path.join(__dirname, '..', '.gitignore'), 'utf-8');
+    const gitignore = fs.readFileSync(path.join(REPO, '.gitignore'), 'utf-8');
     assert.ok(gitignore.split('\n').some(line => line.trim() === 'data/'));
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// C. Staged-server proof: POST /waitlist is actually gone; no "waitlist"
+//    string survives anywhere under public/.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('WAITLIST-DEAD-CODE: staged-server removal proof', { timeout: 180_000 }, () => {
+  it('no "waitlist" string remains anywhere under public/', () => {
+    function walk(dir, out) {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) walk(full, out);
+        else out.push(full);
+      }
+      return out;
+    }
+    const files = walk(path.join(REPO, 'public'), []);
+    assert.ok(files.length > 0, 'sanity: public/ must contain files to check');
+    const offenders = files.filter((f) => fs.readFileSync(f, 'utf8').toLowerCase().includes('waitlist'));
+    assert.deepEqual(offenders, [], 'no file under public/ may contain the string "waitlist"');
+  });
+
+  describe('served route (staged server)', () => {
+    let tmpDir;
+    let child;
+    let baseUrl;
+    let bootSkipReason = null;
+
+    before(async () => {
+      const honoEntry = require.resolve('hono', { paths: [REPO] });
+      const nodeModulesDir = honoEntry.slice(
+        0,
+        honoEntry.lastIndexOf(`${path.sep}node_modules${path.sep}`) + '/node_modules'.length
+      );
+      const reservation = await reservePort();
+      if ('skipReason' in reservation) {
+        assert.equal(reservation.skipReason, BOOT_SANDBOX_SKIP_REASON);
+        bootSkipReason = BOOT_SANDBOX_SKIP_REASON;
+        return;
+      }
+      const { port } = reservation;
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'auxilo-waitlist-dead-code-'));
+      stageServer({
+        repoRoot: REPO,
+        tmpDir,
+        nodeModulesDir,
+        port,
+        rootFiles: ['server.js', 'seed-knowledge.json', 'skills.json', 'openapi.json', 'package.json', 'model_config.json'],
+        linkDirs: ['lib', 'public', 'prompts', 'config'],
+        replacements: [],
+      });
+
+      const boot = await bootServer({
+        tmpDir,
+        port,
+        env: {
+          ...process.env,
+          NODE_ENV: 'test',
+          WALLET_PRIVATE_KEY: `0x${'11'.repeat(32)}`,
+          LLM_SENSITIVITY_ENABLED: 'false',
+          SESSION_SECRET: 'waitlist-dead-code-test-session-secret-0123456789',
+          AUXILO_DATA_DIR: path.join(tmpDir, 'data'),
+        },
+        timeoutMs: 60_000,
+        maxAttempts: 3,
+      });
+      if ('skipReason' in boot) {
+        assert.equal(boot.skipReason, BOOT_SANDBOX_SKIP_REASON);
+        bootSkipReason = BOOT_SANDBOX_SKIP_REASON;
+        return;
+      }
+      child = boot.child;
+      baseUrl = boot.baseUrl;
+    });
+
+    after(async () => {
+      if (child) await stopServer(child);
+      if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('POST /waitlist -> 404 on the staged server', async (t) => {
+      if (bootSkipReason) { t.skip(bootSkipReason); return; }
+      const res = await fetch(`${baseUrl}/waitlist`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'gone@example.com', source: 'test' }),
+      });
+      assert.equal(res.status, 404, 'the removed join route must answer 404');
+    });
+
+    it('GET /waitlist/count still 200s (surviving storage reader)', async (t) => {
+      if (bootSkipReason) { t.skip(bootSkipReason); return; }
+      const res = await fetch(`${baseUrl}/waitlist/count`);
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.equal(typeof body.count, 'number');
+    });
   });
 });
