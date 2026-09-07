@@ -37,9 +37,23 @@ function tmp(prefix) {
 }
 
 function runCli(args, env) {
+  // TEST-HOME-ISOLATION: `auxilo status` (spawned below) reads provider
+  // state via providers.resolveProvider({}) -> byo-key.js's
+  // DEFAULT_PROVIDERS_STATE_PATH, which now honors AUXILO_HOME before
+  // os.homedir(). The suite runs under a suite-wide AUXILO_HOME/HOME
+  // override (scripts/test/run-isolated.js / scripts/check-test-count.sh),
+  // so a bare `{ HOME: home }` override here would leave AUXILO_HOME
+  // pointed at that unrelated suite-wide temp dir. Mirror HOME onto
+  // AUXILO_HOME (unless the caller already set it) so both seams agree on
+  // this test's own isolated dir — see the identical fix + longer
+  // explanation in test/byo-key-provider.test.js's runCli.
+  const mergedEnv = { ...process.env, ...env };
+  if (env && Object.prototype.hasOwnProperty.call(env, 'HOME') && !Object.prototype.hasOwnProperty.call(env, 'AUXILO_HOME')) {
+    mergedEnv.AUXILO_HOME = env.HOME;
+  }
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [CLI_PATH, ...args], {
-      env: { ...process.env, ...env },
+      env: mergedEnv,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     let stdout = '';

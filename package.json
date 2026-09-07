@@ -32,7 +32,7 @@
   ],
   "scripts": {
     "start": "node mcp-server.js",
-    "test": "node --test test/*.test.js && node tests/test-mobile-nav-overlay.js"
+    "test": "node scripts/test/run-isolated.js"
   },
   "keywords": [
     "mcp",
