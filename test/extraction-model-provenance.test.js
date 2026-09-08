@@ -320,4 +320,98 @@ describe('EXTRACTION-MODEL-PROVENANCE side-effect removal: identity resolution n
   });
 });
 
+// ─── (7) the fall-through FAILURE identity — the exact mislabeled-log-line
+//         shape observed 2026-09-08: claude-code fails non-retryable, the
+//         walk moves on, codex-cli then fails RETRYABLE (cli-timeout is NOT
+//         in NON_RETRYABLE_FOR_THIS_PROVIDER, so the walk STOPS there and
+//         never reaches byo-key), and codex-cli's own failure return
+//         carries no identity of its own (it only self-stamps on its SINGLE
+//         success return) — this is the untested gap: every fixture above
+//         covers a winning SUCCESS or full exhaustion, never a STOPPING
+//         failure mid-walk. Deliberately does not force
+//         AUXILO_EXTRACTION_PROVIDER (bypasses fall-through entirely, which
+//         is why this shape went untested in the first place) ────────────
+
+describe('providers/index.js runModel() + extract-local.js extractLocally(): the fall-through FAILURE identity (claude-code skipped, codex-cli ran and failed, no identity of its own)', () => {
+  it('providers.runModel(): names codex-cli on the returned failure, never claude-code and never a guess; byo-key is never tried', async () => {
+    const statePath = path.join(tempDir('auxilo-provenance-g-'), 'providers.json');
+    let byoKeyCalled = false;
+    await withPatched(claudeCode, {
+      detect: async () => true,
+      runModel: async () => ({
+        ok: false, text: '', usage: null,
+        reasonCode: 'cli-unauthenticated', reason: 'not authenticated', authStatus: 'logged-out',
+      }),
+    }, () => withPatched(codexCli, {
+      runModel: async () => ({
+        ok: false, text: '', usage: null,
+        reasonCode: 'cli-timeout', reason: 'codex exec timed out', authStatus: 'unknown',
+      }),
+    }, () => withPatched(byoKey, {
+      runModel: async () => {
+        byoKeyCalled = true;
+        return { ok: false, text: '', usage: null, reasonCode: 'provider-not-configured', reason: 'no key configured', authStatus: 'unknown' };
+      },
+    }, async () => {
+      const result = await providers.runModel({
+        env: {}, providerCache: {}, mode: 'extract', prompt: 'P', input: 'T',
+        providersStatePath: statePath,
+      });
+      assert.equal(result.ok, false);
+      assert.equal(result.reasonCode, 'cli-timeout', 'a RETRYABLE failure must be returned as-is, never aggregated into no-usable-provider');
+      assert.equal(result.identity && result.identity.provider, 'codex-cli', 'the module actually invoked, derived centrally by providers/index.js — never claude-code (skipped) and never a guess');
+      assert.equal(byoKeyCalled, false, 'a RETRYABLE failure stops the walk right there — byo-key must never be tried');
+    })));
+  });
+
+  it('extract-local.js extractLocally(): the same fall-through-then-stop through the REAL default (non-forced) path — the per-run [providers] log line names codex-cli, and nothing is stamped or published from the failed run', async () => {
+    const dir = tempDir('auxilo-provenance-g-extract-');
+    const indexPath = path.join(dir, 'extracted-index.jsonl');
+    fs.writeFileSync(indexPath, '');
+    const statePath = path.join(dir, 'providers.json');
+    const logLines = [];
+    let byoKeyCalled = false;
+    await withPatched(claudeCode, {
+      detect: async () => true,
+      runModel: async () => ({
+        ok: false, text: '', usage: null,
+        reasonCode: 'cli-unauthenticated', reason: 'not authenticated', authStatus: 'logged-out',
+      }),
+    }, () => withPatched(codexCli, {
+      // codex-cli's own failure return, deliberately carrying NO `identity`
+      // — its real contract (see providers/index.js's deriveIdentity
+      // docblock: codex-cli and byo-key only self-stamp on their single
+      // success return). This is the exact shape that used to be
+      // mislabeled: the log line named the LAST provider whose runModel()
+      // was actually invoked, but with no identity of its own to trust.
+      runModel: async () => ({
+        ok: false, text: '', usage: null,
+        reasonCode: 'cli-timeout', reason: 'codex exec timed out', authStatus: 'unknown',
+      }),
+    }, () => withPatched(byoKey, {
+      runModel: async () => {
+        byoKeyCalled = true;
+        return { ok: false, text: '', usage: null, reasonCode: 'provider-not-configured', reason: 'no key configured', authStatus: 'unknown' };
+      },
+    }, async () => {
+      const result = await extractLocal.extractLocally(
+        'a synthetic transcript, long enough for the extractor',
+        'claude-code',
+        { indexPath, log: (msg) => logLines.push(msg), providersStatePath: statePath, providerCache: {} }
+      );
+      assert.deepEqual(result.learnings, [], 'the candidate path (extract-local.js ~:823-834) must return before the stamp spread (~:848) — nothing published from a failed run');
+      assert.equal(result.reasonCode, 'cli-timeout');
+      assert.equal(byoKeyCalled, false, 'a RETRYABLE failure stops the walk before byo-key is ever tried');
+      assert.ok(
+        logLines.some((l) => /^\[providers\] run=\S+ provider=codex-cli /.test(l)),
+        `the per-run [providers] log line must name codex-cli (the module that actually ran), got: ${JSON.stringify(logLines)}`
+      );
+      assert.ok(
+        !logLines.some((l) => /provider=claude-code/.test(l)),
+        'must never mislabel the fall-through failure as claude-code — the exact defect this row fixes'
+      );
+    })));
+  });
+});
+
 after(cleanupTempDirs);

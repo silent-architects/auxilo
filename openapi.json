@@ -1177,7 +1177,7 @@
                     },
                     "review_reason": {
                       "type": "array",
-                      "description": "LW-16: present only when status is 'pending_review'. Reasons the submission was held. CI-7: 'process_advice_screen' = the system-fact screen judged the content process/workflow advice rather than a system fact (or could not judge it) \u2014 held for the human, never bounced; approve it only if it is actually a misclassified system fact. AUD19-6: 'below_quality_floor' = the quality self-assessment is present but under the server floor (total >= 14, dims >= 3) - quarantined for review, never bounced. SPEC3-B1: 'standing_consent_off' = a clean, floor-passing extraction-channel submission held because the account's clean-lane standing consent is not active (lane ready_to_publish - one counted approve away); 'below_auto_publish_threshold' = consent active but the score is under the account's auto-publish threshold. SPEC3-B3: 'sanitized_resubmission' = the item is a sanitize-and-resubmit replacement - ALWAYS held for the contributor's explicit approve, regardless of screens or channel.",
+                      "description": "LW-16: present only when status is 'pending_review'. Reasons the submission was held. CI-7: 'process_advice_screen' = the system-fact screen judged the content process/workflow advice rather than a system fact (or could not judge it) \u2014 held for the human, never bounced; approve it only if it is actually a misclassified system fact. AUD19-6: 'below_quality_floor' = the quality self-assessment is present but under the server floor (total >= 14, dims >= 3) - quarantined for review, never bounced. SPEC3-B1: 'standing_consent_off' = a clean, floor-passing extraction-channel submission held because the account's clean-lane standing consent is not active (lane ready_to_publish - one counted approve away); 'below_auto_publish_threshold' = consent active but the score is under the account's auto-publish threshold. SPEC3-B3: 'sanitized_resubmission' = the item is a sanitize-and-resubmit replacement - ALWAYS held for the contributor's explicit approve, regardless of screens or channel. EXTRACTION-MODEL-PROVENANCE (PUNCH-LIST P1): 'uncalibrated_extraction_provider' = the submission's extraction_model.provider names a real, known provider not in the clean lane's calibrated allowlist (currently only claude-code); 'unknown_extraction_provider' = the submission has no extraction_model stamp, or one the server could not identify a provider from - both hold regardless of flag/consent/quality.",
                       "items": {
                         "type": "string",
                         "enum": [
@@ -1191,7 +1191,9 @@
                           "standing_consent_off",
                           "below_auto_publish_threshold",
                           "sanitized_resubmission",
-                          "private_destination"
+                          "private_destination",
+                          "uncalibrated_extraction_provider",
+                          "unknown_extraction_provider"
                         ]
                       }
                     },
