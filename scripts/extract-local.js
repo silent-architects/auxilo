@@ -704,12 +704,53 @@ function formatArgvForLog(argv) {
  * (spawned) this run, not whether it succeeded — a spawn that ran and then
  * hit a model error still counts as "ran" (it happened; the failure is in
  * `reason`, not in whether isolation applied). `hooks` is `claude-code`-
- * specific: 'isolated' whenever a claude-code spawn this run carried
- * --setting-sources (the only state a spawn can be in per the fail-closed
- * gate in scripts/providers/claude-code.js — it never spawns without the
- * flag), 'unsupported' when the CLI was found not to support the flag at
- * all, 'n/a' for a non-claude-code provider (codex-cli/byo-key isolate by a
- * different mechanism entirely, out of this row's scope).
+ * specific and EVIDENCE-DERIVED (EXTRACT-LOG-HOOKS-EVIDENCE, PUNCH-LIST P2):
+ * it reads the argv this run actually captured rather than inferring
+ * isolation from the provider name plus the absence of a reason code —
+ * 'isolated' ONLY when that argv literally contains --setting-sources (the
+ * flag scripts/providers/claude-code.js's fail-closed gate never spawns
+ * without), 'unsupported' when the CLI was found not to support the flag at
+ * all (existing reason-code path, unchanged), 'unknown' when no argv was
+ * captured this run (finder skipped pre-spawn, or the run that actually
+ * produced this result fell through to a different/no provider — see the
+ * EXTRACT-LOG-HOOKS-EVIDENCE root-cause note below), and 'n/a' for a
+ * non-claude-code provider (codex-cli/byo-key isolate by a different
+ * mechanism entirely, out of this row's scope). Never 'isolated' without an
+ * argv carrying the flag in hand — a safety claim needs evidence, not an
+ * absence of contrary evidence.
+ *
+ * Root cause of the missing-argv runs (EXTRACT-LOG-HOOKS-EVIDENCE
+ * investigation): claude-code.js's own runExtractMode() never omits argv on
+ * a claude-code result that actually reached this line — every return after
+ * `const argv = EXTRACT_MODE_ARGV` carries it, and the two pre-spawn
+ * short-circuits that don't (cached --setting-sources-unsupported,
+ * cli-unauthenticated) both carry reasonCodes already in
+ * PRE_SPAWN_SKIP_REASON_CODES, so they render finder=skipped, not ran. The
+ * observed defect lines (finder=ran, flags=n/a, provider=claude-code) come
+ * from a DIFFERENT case: scripts/providers/index.js's runModel() falls
+ * through from claude-code to the next configured provider (e.g. codex-cli)
+ * whenever claude-code's own attempt fails with a
+ * NON_RETRYABLE_FOR_THIS_PROVIDER reasonCode, and returns that OTHER
+ * provider's result directly when it stops there. That provider's result
+ * carries no `argv` field at all (argv is a claude-code-only concept) and,
+ * on a failure, sets no `identity` either (codex-cli/byo-key only stamp
+ * identity on success) — so resolveExtractionModelIdentity()'s fallback
+ * (above) re-resolves the provider identity via a FRESH, INDEPENDENT
+ * providers.resolveProvider() call, decoupled from which provider's runModel()
+ * result is actually being logged. That re-resolution can still land on
+ * 'claude-code' (its detect() only checks the billing-helper gate + auth
+ * status, not whether the earlier attempt actually spawned), producing a
+ * `provider=claude-code` label on a result that was really codex-cli's
+ * model-error failure with zero claude-code argv to plumb through — there is
+ * no shipped argv being hidden here, so 'unknown' is the correct, honest
+ * value, not a surfacing bug to fix by threading a field through. The
+ * provider-label mismatch itself (a claude-code-run-log line whose evidence
+ * actually belongs to a fallthrough provider) is a separate, pre-existing
+ * identity-resolution gap in resolveExtractionModelIdentity() / providers
+ * runModel() fallthrough — out of this row's scope (would touch the
+ * extraction_model stamped on every learning, not just this log line) and
+ * left for a follow-up row; this fix's evidence-derived 'unknown' already
+ * closes the safety-claim gap regardless of which provider is named.
  */
 function logProviderRunSummary(opts, runId, modelResult, judged) {
   try {
@@ -725,8 +766,11 @@ function logProviderRunSummary(opts, runId, modelResult, judged) {
     const cliVersion = modelResult.cliVersion || (judged && judged.judgeCliVersion) || null;
     const finderUnsupported = modelResult.reasonCode === 'cli-settings-isolation-unsupported';
     const judgeUnsupported = Boolean(judged && judged.judgeReasonCode === 'cli-settings-isolation-unsupported');
+    const hasSettingSourcesArgv = Array.isArray(argv) && argv.includes('--setting-sources');
     const hooks = provider === 'claude-code'
-      ? ((finderUnsupported || judgeUnsupported) ? 'unsupported' : 'isolated')
+      ? ((finderUnsupported || judgeUnsupported)
+        ? 'unsupported'
+        : (hasSettingSourcesArgv ? 'isolated' : 'unknown'))
       : 'n/a';
     log(
       `[providers] run=${runId || 'unknown'} provider=${provider} cli=${cliVersion || '-'} ` +
