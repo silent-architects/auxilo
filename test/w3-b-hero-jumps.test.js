@@ -139,10 +139,30 @@ describe('W3-B static: hero jump buttons and target ids present in markup', () =
     assert.ok(re.test(HTML), 'expected a page-scoped rule giving both jump targets scroll-margin-top: var(--header-h)');
   });
 
-  it('styles.css is untouched by this build (page-scoped CSS only, per spec preference)', () => {
+  it('styles.css is untouched by this build (page-scoped CSS only, per spec preference)', (t) => {
+    // Environment-independent by design: this compares against origin/main
+    // rather than a local branch name (e.g. agent/w3-a), which only exists
+    // on a developer's machine and is absent on the CI runner (CI only has
+    // origin/main and the checked-out sha). Skips gracefully, never throws,
+    // if origin/main can't be resolved.
     const { execFileSync } = require('node:child_process');
-    const diff = execFileSync('git', ['diff', '--name-only', 'agent/w3-a', '--', 'public/styles.css'], { cwd: REPO, encoding: 'utf8' }).trim();
-    assert.equal(diff, '', 'public/styles.css should not appear in the diff vs agent/w3-a for this item');
+    let baseStyles;
+    try {
+      execFileSync('git', ['rev-parse', '--verify', 'origin/main'], {
+        cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'ignore', 'ignore'],
+      });
+    } catch (e) {
+      t.skip('origin/main is not resolvable in this environment; cannot verify styles.css against a base ref');
+      return;
+    }
+    try {
+      baseStyles = execFileSync('git', ['show', 'origin/main:public/styles.css'], { cwd: REPO, encoding: 'utf8' });
+    } catch (e) {
+      t.skip(`could not read public/styles.css from origin/main: ${e.message}`);
+      return;
+    }
+    const currentStyles = fs.readFileSync(path.join(PUBLIC_DIR, 'styles.css'), 'utf8');
+    assert.equal(currentStyles, baseStyles, 'public/styles.css should be unchanged from origin/main for this item');
   });
 });
 
