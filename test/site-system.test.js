@@ -262,7 +262,12 @@ describe('SITE-SYSTEM item 4: deleted assets are gone and unreferenced', () => {
 });
 
 describe('SITE-SYSTEM item 2: one FAQ accordion component, everywhere the FAQ markup exists', () => {
-  const FAQ_PAGES = ['index.html', 'how-it-works.html', 'for-agents.html', 'for-builders.html', 'pricing.html', 'api.html'];
+  // NOTE (SITE-RESTRUCTURE-W3 item A, 2026-09-07): how-it-works.html's FAQ
+  // section was cut entirely (all 9 questions moved/deduped to their
+  // canonical page). It no longer carries accordion markup and is excluded
+  // from this list; see test/faq-consolidation.test.js for its own
+  // zero-FAQ assertion.
+  const FAQ_PAGES = ['index.html', 'for-agents.html', 'for-builders.html', 'pricing.html', 'api.html'];
 
   it('every FAQ page uses the accordion markup (.faq-question/.faq-answer), not the old static .faq-q/.faq-a pair', () => {
     for (const page of FAQ_PAGES) {
