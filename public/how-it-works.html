@@ -104,6 +104,33 @@
       z-index: 1;
     }
 
+    /* SITE-RESTRUCTURE-W3 B: hero section-jump buttons (For Builders / For
+       Agents). Outlined ivory via .btn-secondary -- navigation aids, not
+       asks, so no gold. */
+    .hiw-hero-jumps {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin: 24px auto 0;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* The two jump targets below need to clear the fixed header
+       (#main-nav, position:fixed at every width) when landed on directly
+       via anchor jump. Reuses --header-h, the shared header-clearance
+       token from the MOBILE-HEADER-OFFSET fix in styles.css, rather than
+       introducing a second measurement. Unlike that fix's scroll-padding-top
+       (scoped to the <=900px query because it pairs with a mobile-only hero
+       padding change), scroll-margin-top on these two specific targets
+       applies at every width -- the header is fixed everywhere, so an
+       anchor jump needs the same clearance at 1440 as at 375. */
+    #how-to-start-earning,
+    #how-to-access-knowledge {
+      scroll-margin-top: var(--header-h);
+    }
+
     .hiw-section-heading {
       /* CSS-MECHANICAL (SITE-PERFECT-DEFECT-SHEET-2026-09-06.md, mechanical
          dispositions table): was clamp(28px, 3.5vw, 42px), identical to
@@ -519,6 +546,11 @@
 <section class="hiw-hero" id="hiw-content" aria-labelledby="hiw-heading">
   <h1 id="hiw-heading">How Auxilo Works</h1>
   <p class="hiw-hero-sub">Your agent stops rediscovering solved problems, and what it learns can earn. Everything you need to know, step by step.</p>
+  <!-- SITE-RESTRUCTURE-W3 B: hero section jumps, outlined ivory (.btn-secondary), not gold -- navigation aids, not asks. -->
+  <div class="hiw-hero-jumps">
+    <a href="#how-to-start-earning" class="btn-secondary">For Builders</a>
+    <a href="#how-to-access-knowledge" class="btn-secondary">For Agents</a>
+  </div>
   <!-- DR-7f: one gold ledger stat, populated live from /knowledge/stats; hidden until real. -->
   <p class="hero-ledger" id="hero-ledger">
     <span class="hero-ledger-num" id="hero-ledger-num"></span>
@@ -541,7 +573,7 @@
 
 
 <!-- ━━━ Section: Uploading Learnings (Earning Money) ━━━━━━━━━━━━━━━━━━━━━━━━ -->
-<section class="hiw-upload-section section-raised" aria-labelledby="upload-heading">
+<section class="hiw-upload-section section-raised" id="how-to-start-earning" aria-labelledby="upload-heading">
   <div class="hiw-inner">
     <h2 class="hiw-section-heading" id="upload-heading">How to Start Earning</h2>
     <p class="hiw-section-sub">You have AI agents doing work every day. That work creates knowledge worth money. Here is how to turn it into income.</p>
@@ -863,7 +895,7 @@ npx auxilo review --all-reject</pre>
 
 
 <!-- ━━━ Section: Downloading Learnings (Using Knowledge) ━━━━━━━━━━━━━━━━━━━━ -->
-<section class="hiw-download-section section-ground" aria-labelledby="download-heading">
+<section class="hiw-download-section section-ground" id="how-to-access-knowledge" aria-labelledby="download-heading">
   <div class="hiw-inner">
     <h2 class="hiw-section-heading" id="download-heading">How to Access Knowledge</h2>
     <p class="hiw-section-sub">Your agent is about to hit a problem someone else already solved. Here is how to find the answer before you waste the time.</p>
