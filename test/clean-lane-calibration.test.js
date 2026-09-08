@@ -36,8 +36,17 @@ describe('lib/clean-lane.js: CLEAN_LANE_CALIBRATED_PROVIDERS / HOLD_UNCALIBRATED
 });
 
 describe('evaluateExtractionPublish: provider calibration gate (PART C)', () => {
-  it('extractionModel omitted entirely is byte-identical to pre-PART-C behavior (back-compat)', () => {
-    const withField = cleanLane.evaluateExtractionPublish({
+  // EXTRACTION-MODEL-PROVENANCE (PUNCH-LIST P1): the old "missing stamp is
+  // calibrated-equivalent" fail-open is GONE. Every shipped client now
+  // stamps `extraction_model` (providers/index.js's runModel() makes
+  // `identity` mandatory), so a missing stamp today means a client too old
+  // to have ever stamped one, or one whose stamp got dropped — neither of
+  // which this gate should treat as "known claude-code quality". Omitted,
+  // explicit `null`, and an explicit `{provider:'unknown'}` stamp all now
+  // HOLD under the SAME distinct reason, HOLD_UNKNOWN_EXTRACTION_PROVIDER —
+  // never auto-publish, never refuse; one operator click in pending_review.
+  it('extractionModel omitted, explicit null, and an explicit unknown provider all HOLD under the same distinct reason (no more calibrated-equivalent fail-open)', () => {
+    const omitted = cleanLane.evaluateExtractionPublish({
       flagEnabled: true, consentState: GRANT, qualityTotal: 20,
     });
     const explicitUndefined = cleanLane.evaluateExtractionPublish({
@@ -46,12 +55,20 @@ describe('evaluateExtractionPublish: provider calibration gate (PART C)', () => 
     const explicitNull = cleanLane.evaluateExtractionPublish({
       flagEnabled: true, consentState: GRANT, qualityTotal: 20, extractionModel: null,
     });
-    assert.deepEqual(withField, { decision: 'auto_publish', consent_version: cleanLane.CLEAN_LANE_CONSENT_VERSION, min_quality: 16 });
-    assert.deepEqual(explicitUndefined, withField);
-    assert.deepEqual(explicitNull, withField);
+    const explicitUnknown = cleanLane.evaluateExtractionPublish({
+      flagEnabled: true, consentState: GRANT, qualityTotal: 20,
+      extractionModel: { provider: 'unknown', model: null, version: null, vendor: null },
+    });
+    const expected = { decision: 'hold', reason: cleanLane.HOLD_UNKNOWN_EXTRACTION_PROVIDER };
+    assert.deepEqual(omitted, expected);
+    assert.deepEqual(explicitUndefined, expected);
+    assert.deepEqual(explicitNull, expected);
+    assert.deepEqual(explicitUnknown, expected);
+    assert.notEqual(cleanLane.HOLD_UNKNOWN_EXTRACTION_PROVIDER, cleanLane.HOLD_UNCALIBRATED_PROVIDER,
+      '"we don\'t know who ran this" must read differently from "we know and it is not calibrated yet"');
   });
 
-  it('{provider:"claude-code"} (calibrated) behaves identically to omitted', () => {
+  it('a genuinely calibrated {provider:"claude-code"} stamp still auto-publishes — the new unknown/missing hold does not touch the real calibrated path', () => {
     const v = cleanLane.evaluateExtractionPublish({
       flagEnabled: true, consentState: GRANT, qualityTotal: 20,
       extractionModel: { provider: 'claude-code', model: 'sonnet', version: null, vendor: null },
@@ -59,7 +76,7 @@ describe('evaluateExtractionPublish: provider calibration gate (PART C)', () => 
     assert.equal(v.decision, 'auto_publish');
   });
 
-  it('{provider:"codex-cli"} (not calibrated) ALWAYS holds, even with flag on + active grant + quality 20', () => {
+  it('{provider:"codex-cli"} (a NAMED, known, but not-yet-calibrated provider) ALWAYS holds, even with flag on + active grant + quality 20 — distinct reason from the unknown/missing case', () => {
     const v = cleanLane.evaluateExtractionPublish({
       flagEnabled: true, consentState: GRANT, qualityTotal: 20,
       extractionModel: { provider: 'codex-cli', model: null, version: '0.144.5', vendor: null },
@@ -87,19 +104,32 @@ describe('evaluateExtractionPublish: provider calibration gate (PART C)', () => 
       'must report the calibration reason, not standing_consent_off, even though the flag is also off');
   });
 
-  it('a non-string provider field is treated as absent (calibrated-equivalent), never crashes', () => {
+  it('the unknown/missing-provider check ALSO runs BEFORE flag/consent/quality', () => {
+    const v = cleanLane.evaluateExtractionPublish({
+      flagEnabled: false, consentState: null, qualityTotal: 0,
+    });
+    assert.deepEqual(v, { decision: 'hold', reason: cleanLane.HOLD_UNKNOWN_EXTRACTION_PROVIDER },
+      'must report the unknown-provider reason, not standing_consent_off, even though the flag is also off');
+  });
+
+  it('a non-string provider field holds under the unknown reason (never crashes, never silently auto-publishes)', () => {
     const v = cleanLane.evaluateExtractionPublish({
       flagEnabled: true, consentState: GRANT, qualityTotal: 20,
       extractionModel: { provider: 12345 },
     });
-    assert.equal(v.decision, 'auto_publish', 'malformed provider falls through to normal checks, not a crash or a hold');
+    assert.deepEqual(v, { decision: 'hold', reason: cleanLane.HOLD_UNKNOWN_EXTRACTION_PROVIDER },
+      'a malformed provider value must hold as unknown, not fall through to auto-publish');
   });
 
-  it('extractionModel itself malformed (not an object) never throws, falls through', () => {
+  it('extractionModel itself malformed (not an object) never throws, and holds as unknown rather than auto-publishing', () => {
     for (const bad of ['codex-cli', 42, [], true]) {
-      assert.doesNotThrow(() => cleanLane.evaluateExtractionPublish({
-        flagEnabled: true, consentState: GRANT, qualityTotal: 20, extractionModel: bad,
-      }));
+      let v;
+      assert.doesNotThrow(() => {
+        v = cleanLane.evaluateExtractionPublish({
+          flagEnabled: true, consentState: GRANT, qualityTotal: 20, extractionModel: bad,
+        });
+      });
+      assert.deepEqual(v, { decision: 'hold', reason: cleanLane.HOLD_UNKNOWN_EXTRACTION_PROVIDER });
     }
   });
 });

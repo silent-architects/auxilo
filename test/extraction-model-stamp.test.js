@@ -73,7 +73,7 @@ const LEARNING_A = {
 // ─── Part 1: extract-local.js attaches extraction_model per learning ───────
 
 describe('extract-local.js: extractLocally attaches extraction_model per learning', () => {
-  it('default path (claude-code forced) stamps {provider:"claude-code", model:null, version:null, vendor:null} — claude-code.js has no identity field yet, so extractLocally falls back to the resolved provider id alone', async () => {
+  it('default path (claude-code forced) stamps {provider:"claude-code", model:null, version:<cliVersion or null>, vendor:"anthropic"} — claude-code.js itself sets no identity field; providers/index.js runModel() derives it centrally (EXTRACTION-MODEL-PROVENANCE, PUNCH-LIST P1), richer than the old null/null/null triple', async () => {
     const dir = tempDir('auxilo-stamp-claude-');
     const indexPath = path.join(dir, 'extracted-index.jsonl');
     fs.writeFileSync(indexPath, '');
@@ -86,7 +86,7 @@ describe('extract-local.js: extractLocally attaches extraction_model per learnin
       });
       assert.equal(result.learnings.length, 1);
       assert.deepEqual(result.learnings[0].extraction_model, {
-        provider: 'claude-code', model: null, version: null, vendor: null,
+        provider: 'claude-code', model: null, version: null, vendor: 'anthropic',
       });
     } finally {
       cleanupTempDirs();
@@ -200,12 +200,13 @@ describe('server.js /learn wiring: extraction_model intake (structural)', () => 
     assert.match(SERVER_SRC, /quality_self_assessment, extraction_context, submission_channel, visibility,\s*extraction_model \} = body/);
   });
 
-  it('normalizeExtractionModel: malformed input -> null (tolerant, never a 400), bounded string lengths', () => {
+  it('normalizeExtractionModel: absent -> null, malformed-but-present -> explicit unknown stamp (tolerant, never a 400), bounded string lengths (EXTRACTION-MODEL-PROVENANCE, PUNCH-LIST P1)', () => {
     assert.match(SERVER_SRC, /function normalizeExtractionModel\(value\)/);
     const start = SERVER_SRC.indexOf('function normalizeExtractionModel(value)');
     const fn = SERVER_SRC.slice(start, start + 900);
-    assert.match(fn, /if \(!value \|\| typeof value !== 'object' \|\| Array\.isArray\(value\)\) return null;/);
-    assert.match(fn, /if \(typeof value\.provider !== 'string' \|\| !value\.provider\) return null;/);
+    assert.match(fn, /if \(value === undefined \|\| value === null\) return null;/);
+    assert.match(fn, /if \(typeof value !== 'object' \|\| Array\.isArray\(value\) \|\| typeof value\.provider !== 'string' \|\| !value\.provider\) \{/);
+    assert.match(fn, /return \{ provider: 'unknown', model: null, version: null, vendor: null \};/);
     assert.match(fn, /boundedString\(value\.provider, 64\)/);
     assert.match(fn, /boundedString\(value\.model, 256\)/);
     assert.match(fn, /boundedString\(value\.version, 128\)/);
@@ -428,8 +429,12 @@ describe('EXTRACT-PER-CLIENT W1 PART C: real staged-server round trip', () => {
       assert.ok(uncalibratedRow, 'the held learning must still appear in the owner listing');
       assert.deepEqual(uncalibratedRow.extraction_model, { provider: 'codex-cli', model: null, version: '0.144.5', vendor: null });
 
-      // (3) Malformed extraction_model (a string, not an object) — never a 400;
-      // treated as absent (no extraction_model stored at all).
+      // (3) Malformed extraction_model (a string, not an object) — never a
+      // 400. EXTRACTION-MODEL-PROVENANCE (PUNCH-LIST P1): this now
+      // normalizes to an explicit {provider:'unknown', ...} stamp (server.js
+      // normalizeExtractionModel) rather than being treated as absent, so it
+      // holds through the SAME distinct reason as a missing stamp — never
+      // silently auto-published as calibrated-equivalent.
       const malformedBody = extractionPayload({
         title: 'Flush the write buffer before closing a piped child process',
         body: 'Closing a child process stdin immediately after a large write can truncate the piped output on the far end; wait for the write callback or drain event before calling end() so the consumer receives every byte.',
@@ -439,10 +444,31 @@ describe('EXTRACT-PER-CLIENT W1 PART C: real staged-server round trip', () => {
       const malformed = await post('/learn', malformedBody);
       assert.notEqual(malformed.status, 400, 'a malformed extraction_model must never 400 the whole submission');
       assert.equal(malformed.status, 201);
+      assert.equal(malformed.body.status, 'pending_review', 'a malformed stamp must hold, never auto-publish as calibrated-equivalent');
+      assert.ok(malformed.body.review_reason.includes('unknown_extraction_provider'));
       const allRows = await get('/account/learnings?status=approved,pending_review,rejected');
       const malformedRow = allRows.learnings.find((l) => l.id === malformed.body.id);
       assert.ok(malformedRow);
-      assert.equal('extraction_model' in malformedRow, false, 'malformed input normalizes to absent, not a garbage value');
+      assert.deepEqual(malformedRow.extraction_model, { provider: 'unknown', model: null, version: null, vendor: null });
+
+      // (4) NO extraction_model field sent at all — the genuinely-missing
+      // case, distinct from malformed-but-present. Must hold under the SAME
+      // reason as (3), and store no extraction_model key (matches
+      // pre-existing back-compat: absent stays absent, never synthesized).
+      const missingBody = extractionPayload({
+        title: 'Bound the retry backoff ceiling to avoid an unbounded sleep',
+        body: 'An exponential backoff with no ceiling can sleep for hours after enough consecutive failures; cap the backoff at a fixed maximum so a retry loop keeps making forward progress within a sane bound.',
+        tags: ['retry', 'backoff'],
+      });
+      assert.equal('extraction_model' in missingBody, false);
+      const missing = await post('/learn', missingBody);
+      assert.equal(missing.status, 201);
+      assert.equal(missing.body.status, 'pending_review', 'a genuinely missing stamp must hold, never auto-publish as calibrated-equivalent');
+      assert.ok(missing.body.review_reason.includes('unknown_extraction_provider'));
+      const missingRows = await get('/account/learnings?status=approved,pending_review,rejected');
+      const missingRow = missingRows.learnings.find((l) => l.id === missing.body.id);
+      assert.ok(missingRow);
+      assert.equal('extraction_model' in missingRow, false, 'a genuinely absent stamp stores no extraction_model key');
     } finally {
       if (child) await stopServer(child);
       fs.rmSync(tmpDir, { recursive: true, force: true });

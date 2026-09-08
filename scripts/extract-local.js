@@ -400,37 +400,37 @@ function judgeUsage(usage, prompt, completion) {
 
 /**
  * PART C — resolve the extraction_model identity for a runModel result.
- * Prefers the additive `identity` field a provider's runModel result may
- * carry. Current state (post Gate-A item a): byo-key.js always sets one
- * ({provider:'byo-key', model, version:null, vendor}); codex-cli.js sets one
- * on success ({provider:'codex-cli', model:null, version:<codex --version>,
- * vendor:null} — its result also carries the same object under the
- * deprecated `extraction_model` alias, kept for one release only for
- * test/codex-cli-provider.test.js). claude-code.js is the one provider that
- * still sets no `identity` on its result — that's the case this function's
- * fallback exists for: it re-resolves via providers.resolveProvider() and
- * stamps {provider: resolved.id, model: null, version: null, vendor: null},
- * so every provider gets SOME stamp, never silently none. That re-resolution
- * walks scripts/providers/index.js's PROVIDER_ORDER (claude-code →
- * codex-cli → byo-key); resolveProvider/runModel there fall through from one
- * provider to the next only on a NON_RETRYABLE_FOR_THIS_PROVIDER reasonCode
- * (unauthenticated, not installed, a billing helper configured, an
- * unconfigured BYO key, or an unsafe providers.json mode) — a provider that
- * merely failed once (a timeout, a model error) is not retried under a
- * different one. Best-effort throughout: a resolution failure here must
- * never block extraction itself.
+ *
+ * EXTRACTION-MODEL-PROVENANCE (PUNCH-LIST P1): this function used to fall
+ * back to a FRESH, INDEPENDENT providers.resolveProvider() call whenever the
+ * result carried no `identity` — a re-detect decoupled from which provider
+ * actually produced `runModelResult`, which is what "what would run now"
+ * answers, not "what ran". That re-resolve could also silently rewrite
+ * `~/.auxilo/providers.json` (resolveProvider's full-scan path calls
+ * persistSelected) from what should have been a read-only identity lookup.
+ * Both are gone. `identity` is now ALWAYS attached by
+ * scripts/providers/index.js's runModel() itself — centrally, because that
+ * registry is the only thing that knows which module it actually invoked
+ * for this call (see its withIdentity()/deriveIdentity() — claude-code's own
+ * cliVersion is used there when present, richer than the null/null/null
+ * triple this function used to guess). This function's job shrinks to: use
+ * the identity the result actually carries, or admit the honest
+ * `provider:'unknown'` when none exists (the `no-usable-provider` /
+ * bad-override-name aggregate failures — nothing actually ran to
+ * completion, so there is nothing to attribute). Never re-derives, never
+ * writes, never blocks extraction on failure.
  */
-async function resolveExtractionModelIdentity(runModelResult, opts) {
-  if (runModelResult && runModelResult.identity && typeof runModelResult.identity === 'object') {
+function resolveExtractionModelIdentity(runModelResult) {
+  if (
+    runModelResult
+    && runModelResult.identity
+    && typeof runModelResult.identity === 'object'
+    && typeof runModelResult.identity.provider === 'string'
+    && runModelResult.identity.provider
+  ) {
     return runModelResult.identity;
   }
-  try {
-    const resolved = await providers.resolveProvider(opts);
-    if (resolved && resolved.ok && resolved.id) {
-      return { provider: resolved.id, model: null, version: null, vendor: null };
-    }
-  } catch { /* identity is best-effort; never block extraction on it */ }
-  return null;
+  return { provider: 'unknown', model: null, version: null, vendor: null };
 }
 
 /**
@@ -456,7 +456,7 @@ async function defaultInvokeModel(transcript, invokeOpts, opts) {
     reason: result.reason,
     reasonCode: result.reasonCode,
     authStatus: result.authStatus,
-    extractionModel: await resolveExtractionModelIdentity(result, opts),
+    extractionModel: resolveExtractionModelIdentity(result),
     ...(result.authDiscrepancy !== undefined && { authDiscrepancy: result.authDiscrepancy }),
     // EXTRACTION-RUN-LOG (0.9.15): additive passthrough for the one-line-per-run
     // provider summary logged at the end of extractLocally() below. Only
@@ -726,31 +726,31 @@ function formatArgvForLog(argv) {
  * short-circuits that don't (cached --setting-sources-unsupported,
  * cli-unauthenticated) both carry reasonCodes already in
  * PRE_SPAWN_SKIP_REASON_CODES, so they render finder=skipped, not ran. The
- * observed defect lines (finder=ran, flags=n/a, provider=claude-code) come
- * from a DIFFERENT case: scripts/providers/index.js's runModel() falls
- * through from claude-code to the next configured provider (e.g. codex-cli)
- * whenever claude-code's own attempt fails with a
- * NON_RETRYABLE_FOR_THIS_PROVIDER reasonCode, and returns that OTHER
- * provider's result directly when it stops there. That provider's result
- * carries no `argv` field at all (argv is a claude-code-only concept) and,
- * on a failure, sets no `identity` either (codex-cli/byo-key only stamp
- * identity on success) — so resolveExtractionModelIdentity()'s fallback
- * (above) re-resolves the provider identity via a FRESH, INDEPENDENT
- * providers.resolveProvider() call, decoupled from which provider's runModel()
- * result is actually being logged. That re-resolution can still land on
- * 'claude-code' (its detect() only checks the billing-helper gate + auth
- * status, not whether the earlier attempt actually spawned), producing a
- * `provider=claude-code` label on a result that was really codex-cli's
- * model-error failure with zero claude-code argv to plumb through — there is
- * no shipped argv being hidden here, so 'unknown' is the correct, honest
- * value, not a surfacing bug to fix by threading a field through. The
- * provider-label mismatch itself (a claude-code-run-log line whose evidence
- * actually belongs to a fallthrough provider) is a separate, pre-existing
- * identity-resolution gap in resolveExtractionModelIdentity() / providers
- * runModel() fallthrough — out of this row's scope (would touch the
- * extraction_model stamped on every learning, not just this log line) and
- * left for a follow-up row; this fix's evidence-derived 'unknown' already
- * closes the safety-claim gap regardless of which provider is named.
+ * observed defect lines (finder=ran, flags=n/a) come from a DIFFERENT case:
+ * scripts/providers/index.js's runModel() falls through from claude-code to
+ * the next configured provider (e.g. codex-cli) whenever claude-code's own
+ * attempt fails with a NON_RETRYABLE_FOR_THIS_PROVIDER reasonCode, and
+ * returns that OTHER provider's result directly when it stops there. That
+ * provider's result carries no `argv` field at all (argv is a
+ * claude-code-only concept), so there is no shipped argv being hidden here —
+ * 'unknown' remains the correct, honest `hooks` value regardless of which
+ * provider is named.
+ *
+ * EXTRACTION-MODEL-PROVENANCE (PUNCH-LIST P1) closed the mismatch this
+ * docblock used to describe as a known, deferred gap: a fallthrough
+ * provider's result used to reach this function carrying no `identity` on
+ * failure (codex-cli/byo-key only self-stamped on success), so
+ * resolveExtractionModelIdentity()'s old fallback re-resolved the label via
+ * a FRESH, INDEPENDENT providers.resolveProvider() call — decoupled from
+ * which provider's runModel() result was actually being logged, and prone to
+ * landing back on 'claude-code' (its detect() only checks the
+ * billing-helper gate + auth status, not whether the earlier attempt
+ * actually spawned). That fallback is gone. `identity` is now attached
+ * centrally by providers/index.js's runModel() to EVERY result it returns —
+ * success or failure, fallthrough or not — because that registry alone
+ * knows which module it actually invoked for a given attempt. The line this
+ * function renders now names the provider that actually ran (or 'unknown'
+ * only when nothing did), not a guess.
  */
 function logProviderRunSummary(opts, runId, modelResult, judged) {
   try {
@@ -919,4 +919,7 @@ module.exports = {
   resolveClaudeBin: claudeCodeProvider.resolveClaudeBin,
   // EXTRACTION-RUN-LOG (0.9.15) — exported for direct unit coverage.
   formatArgvForLog, logProviderRunSummary, PRE_SPAWN_SKIP_REASON_CODES,
+  // EXTRACTION-MODEL-PROVENANCE (PUNCH-LIST P1) — exported for direct unit
+  // coverage of the "never guess, fail closed to unknown" contract.
+  resolveExtractionModelIdentity,
 };

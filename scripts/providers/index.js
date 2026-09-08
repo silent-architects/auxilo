@@ -246,6 +246,92 @@ const NON_RETRYABLE_FOR_THIS_PROVIDER = new Set([
 ]);
 
 /**
+ * EXTRACTION-MODEL-PROVENANCE (PUNCH-LIST P1, follow-up to the
+ * EXTRACT-LOG-HOOKS-EVIDENCE row): `identity` on a runModel() result is
+ * provenance — a record of which provider actually produced this text — not
+ * a guess. It must never be re-derived after the fact from a fresh detect(),
+ * because a fresh detect() answers "what would run now", not "what ran".
+ * This registry is the only thing that KNOWS which module's runModel() it
+ * just invoked for a given attempt, so identity is enforced HERE, centrally,
+ * rather than trusted to per-provider convention (the gap this row closes:
+ * before this fix, a provider `ok:true` return that forgot to attach
+ * `identity` would silently fall through to extract-local.js's
+ * resolveExtractionModelIdentity() re-detecting via resolveProvider() —
+ * decoupled from which module actually ran).
+ */
+function hasUsableIdentity(identity) {
+  return Boolean(
+    identity
+    && typeof identity === 'object'
+    && typeof identity.provider === 'string'
+    && identity.provider
+  );
+}
+
+/**
+ * Derive an identity for the module actually invoked as `id`, used only when
+ * that module's own result didn't already carry one. The derivation differs
+ * by outcome, because a SUCCESS identity can reach a published learning and
+ * the clean-lane calibration gate, while a FAILURE identity is purely
+ * diagnostic (extract-local.js returns before stamping anything onto a
+ * candidate on `ok:false` — see its `:824-834`):
+ *
+ * - claude-code: always gets a real, provider-specific identity — it
+ *   already has `cliVersion` in hand on every returned result (success or
+ *   failure), richer than the null/null/null triple this used to guess, and
+ *   claude-code is the one provider documented to never self-stamp
+ *   `identity` at all, so this is filling a KNOWN, structural gap, not
+ *   papering over a violated contract.
+ * - Every other provider on a FAILURE: `{provider:id, model:null,
+ *   version:null, vendor:null}` — naming the module we actually invoked is
+ *   a plain structural fact (we chose to call it), not a guess, and it is
+ *   what lets the per-run `[providers]` log name the provider that actually
+ *   ran even when that provider's own failure return carries no identity
+ *   (codex-cli and byo-key only self-stamp on their SINGLE success return —
+ *   this is the exact fall-through failure case the investigation traced:
+ *   claude-code skipped, codex-cli ran and failed, no identity of its own,
+ *   the label used to be re-guessed as claude-code by the old fallback).
+ * - Every other provider on a SUCCESS: `{provider:'unknown', ...}` —
+ *   byo-key.js and codex-cli.js both self-stamp `identity` on their only
+ *   success return BY CONTRACT; a success with none means that contract was
+ *   violated, so this registry has no provider-reported basis for the
+ *   claim. Confidently naming the module here would look like provenance
+ *   without being backed by anything the provider itself reported — since
+ *   this stamp CAN reach a published learning, the fail-closed, honest
+ *   answer is 'unknown', never a guess dressed up as a fact.
+ */
+function deriveIdentity(id, result) {
+  if (id === 'claude-code') {
+    return {
+      provider: 'claude-code',
+      model: null,
+      version: (result && result.cliVersion) || null,
+      vendor: 'anthropic',
+    };
+  }
+  if (!(result && result.ok)) {
+    return { provider: id, model: null, version: null, vendor: null };
+  }
+  return { provider: 'unknown', model: null, version: null, vendor: null };
+}
+
+/**
+ * Attach a derived identity to `result` IFF it doesn't already carry a
+ * usable one — never overwrites a provider-reported identity (e.g.
+ * byo-key's real model name). Applied to every result this registry
+ * returns, success or failure, so the per-run `[providers]` log
+ * (scripts/extract-local.js's logProviderRunSummary) names the provider
+ * that actually ran even on a failure — that is the fall-through failure
+ * case this row's investigation traced (claude-code skipped, codex-cli ran
+ * and failed with no identity of its own, the stamp used to be re-guessed
+ * as claude-code by the caller).
+ */
+function withIdentity(id, result) {
+  if (hasUsableIdentity(result && result.identity)) return result;
+  return { ...result, identity: deriveIdentity(id, result) };
+}
+
+/**
  * runModel(opts) — resolve a starting provider via resolveProvider(), then
  * walk PROVIDER_ORDER from there, calling each candidate's OWN runModel()
  * (never a separate detect() pre-check — a provider's runModel() already
@@ -262,7 +348,9 @@ const NON_RETRYABLE_FOR_THIS_PROVIDER = new Set([
  * as-is. When every provider tried is exhausted, returns reasonCode
  * 'no-usable-provider' with a bounded summary of every provider's reason in
  * `reason` (no secrets — each provider's own reason string is already
- * secret-free by contract). Never throws.
+ * secret-free by contract) and NO identity — nothing actually ran to
+ * completion, so the caller (extract-local.js) stamps `provider:'unknown'`
+ * rather than have this registry guess one. Never throws.
  */
 async function runModel(opts = {}) {
   const mode = opts.mode === 'judge' ? 'judge' : 'extract';
@@ -281,7 +369,8 @@ async function runModel(opts = {}) {
         authStatus: 'unknown',
       };
     }
-    return resolved.module.runModel({ ...opts, mode });
+    const result = await resolved.module.runModel({ ...opts, mode });
+    return withIdentity(resolved.id, result);
   }
 
   const log = typeof opts.log === 'function' ? opts.log : console.error;
@@ -293,7 +382,8 @@ async function runModel(opts = {}) {
   for (const id of order) {
     const mod = PROVIDERS[id];
     // eslint-disable-next-line no-await-in-loop
-    const result = await mod.runModel({ ...opts, mode });
+    const rawResult = await mod.runModel({ ...opts, mode });
+    const result = withIdentity(id, rawResult);
     if (result.ok) return result;
     attempts.push({ id, reasonCode: result.reasonCode, reason: result.reason });
     if (!NON_RETRYABLE_FOR_THIS_PROVIDER.has(result.reasonCode)) {

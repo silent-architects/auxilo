@@ -682,14 +682,14 @@ describe('extract-local.js — e2e: unavailable forced provider degrades to a na
 // schema, and scripts/runner.js is outside this part's touched-file scope) ──
 
 describe('bin/auxilo-cli.js — extractionProviderLine', () => {
-  it('renders the resolved provider id and "auto-detected" when no env override is set', () => {
+  it('renders the resolved provider id and "last recorded selection" when no env override is set (EXTRACTION-MODEL-PROVENANCE, PUNCH-LIST P1: no live detect() behind this line any more)', () => {
     const cli = require('../bin/auxilo-cli.js');
     const originalEnv = process.env.AUXILO_EXTRACTION_PROVIDER;
     delete process.env.AUXILO_EXTRACTION_PROVIDER;
     try {
       const line = cli.extractionProviderLine({ ok: true, id: 'claude-code' });
       assert.match(line, /claude-code/);
-      assert.match(line, /auto-detected/);
+      assert.match(line, /last recorded selection/);
     } finally {
       if (originalEnv !== undefined) process.env.AUXILO_EXTRACTION_PROVIDER = originalEnv;
     }
@@ -713,6 +713,102 @@ describe('bin/auxilo-cli.js — extractionProviderLine', () => {
     const line = cli.extractionProviderLine({ ok: false, reason: 'no extraction model provider available — tried: claude-code, codex-cli, byo-key' });
     assert.match(line, /none/);
     assert.match(line, /tried: claude-code, codex-cli, byo-key/);
+  });
+});
+
+// ─── EXTRACTION-MODEL-PROVENANCE (PUNCH-LIST P1): `auxilo status` no longer
+// calls providers.resolveProvider({}) live — a fresh detect() answering
+// "what would run now", not "what ran". lastRecordedProviderResolution()
+// replaces that with two read-only sources: the current env override
+// (a certain fact, not a probe) or providers.json's persisted `selected`
+// field (a plain file read, no detect() invoked, no write possible). ───────
+
+describe('bin/auxilo-cli.js — lastRecordedProviderResolution (no live detect() behind `auxilo status`)', () => {
+  // PROVIDERS_STATE_PATH is a plain property on providers/index.js's
+  // exports object (computed once at require time from AUXILO_HOME/
+  // os.homedir()) — monkeypatching it for the duration of one test (and
+  // restoring it in `finally`) redirects lastRecordedProviderResolution()'s
+  // file read without touching the real home directory or any other test's
+  // state, since Node caches the module by resolved path and every
+  // consumer (including this function, via `providers.PROVIDERS_STATE_PATH`)
+  // reads the same live object property.
+  function withStatePath(statePath, fn) {
+    const providers = require('../scripts/providers/index.js');
+    const original = providers.PROVIDERS_STATE_PATH;
+    providers.PROVIDERS_STATE_PATH = statePath;
+    try {
+      return fn();
+    } finally {
+      providers.PROVIDERS_STATE_PATH = original;
+    }
+  }
+
+  it('AUXILO_EXTRACTION_PROVIDER, when set to a known provider, wins unconditionally over any persisted selection', () => {
+    const cli = require('../bin/auxilo-cli.js');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'auxilo-lastrecorded-override-'));
+    const statePath = path.join(dir, 'providers.json');
+    fs.writeFileSync(statePath, JSON.stringify({ selected: 'byo-key' }));
+    const originalEnv = process.env.AUXILO_EXTRACTION_PROVIDER;
+    try {
+      process.env.AUXILO_EXTRACTION_PROVIDER = 'claude-code';
+      const resolution = withStatePath(statePath, () => cli.lastRecordedProviderResolution());
+      assert.equal(resolution.ok, true);
+      assert.equal(resolution.id, 'claude-code', 'the override must win even though providers.json records a different persisted selection');
+    } finally {
+      if (originalEnv === undefined) delete process.env.AUXILO_EXTRACTION_PROVIDER;
+      else process.env.AUXILO_EXTRACTION_PROVIDER = originalEnv;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('an unknown AUXILO_EXTRACTION_PROVIDER value fails closed with a named reason, validated against PROVIDER_ORDER without calling resolveProvider() (no detect(), no spawn)', () => {
+    const cli = require('../bin/auxilo-cli.js');
+    const originalEnv = process.env.AUXILO_EXTRACTION_PROVIDER;
+    try {
+      process.env.AUXILO_EXTRACTION_PROVIDER = 'not-a-real-provider';
+      const resolution = cli.lastRecordedProviderResolution();
+      assert.equal(resolution.ok, false);
+      assert.match(resolution.reason, /not-a-real-provider.*is not a known provider/);
+    } finally {
+      if (originalEnv === undefined) delete process.env.AUXILO_EXTRACTION_PROVIDER;
+      else process.env.AUXILO_EXTRACTION_PROVIDER = originalEnv;
+    }
+  });
+
+  it('no override + a persisted `selected` field: reads it straight from disk, no detect() call, no write', () => {
+    const cli = require('../bin/auxilo-cli.js');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'auxilo-lastrecorded-persisted-'));
+    const statePath = path.join(dir, 'providers.json');
+    fs.writeFileSync(statePath, JSON.stringify({ selected: 'codex-cli' }));
+    const before = fs.readFileSync(statePath, 'utf8');
+    const originalEnv = process.env.AUXILO_EXTRACTION_PROVIDER;
+    try {
+      delete process.env.AUXILO_EXTRACTION_PROVIDER;
+      const resolution = withStatePath(statePath, () => cli.lastRecordedProviderResolution());
+      assert.equal(resolution.ok, true);
+      assert.equal(resolution.id, 'codex-cli');
+      assert.equal(fs.readFileSync(statePath, 'utf8'), before, 'a plain read must never rewrite the file');
+    } finally {
+      if (originalEnv === undefined) delete process.env.AUXILO_EXTRACTION_PROVIDER;
+      else process.env.AUXILO_EXTRACTION_PROVIDER = originalEnv;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('no override + no providers.json at all: ok:false with "no recorded provider selection yet" — never a guess, never a crash', () => {
+    const cli = require('../bin/auxilo-cli.js');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'auxilo-lastrecorded-empty-'));
+    const statePath = path.join(dir, 'providers.json'); // deliberately never written
+    const originalEnv = process.env.AUXILO_EXTRACTION_PROVIDER;
+    try {
+      delete process.env.AUXILO_EXTRACTION_PROVIDER;
+      const resolution = withStatePath(statePath, () => cli.lastRecordedProviderResolution());
+      assert.deepEqual(resolution, { ok: false, reason: 'no recorded provider selection yet' });
+    } finally {
+      if (originalEnv === undefined) delete process.env.AUXILO_EXTRACTION_PROVIDER;
+      else process.env.AUXILO_EXTRACTION_PROVIDER = originalEnv;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

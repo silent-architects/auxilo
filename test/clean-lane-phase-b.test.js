@@ -158,6 +158,11 @@ function extractionPayload(key, total = 16) {
       completeness: per,
       total,
     },
+    // EXTRACTION-MODEL-PROVENANCE (PUNCH-LIST P1): a missing stamp now holds
+    // unconditionally, ahead of the flag/consent/quality behavior this file
+    // exercises — a genuinely calibrated stamp keeps that gate out of the
+    // way of the "trusted" auto-publish case under test.
+    extraction_model: { provider: 'claude-code', model: null, version: null, vendor: null },
   };
 }
 
