@@ -32,7 +32,7 @@
   <meta name="theme-color" content="#0A0A0A" />
   <link rel="stylesheet" href="/styles.css?v=ddd971ac" />
 
-  <!-- JSON-LD: FAQPage -->
+  <!-- JSON-LD: Organization -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -64,85 +64,7 @@
         "https://github.com/silent-architects/auxilo"
       ]
     },
-    { "@type": "WebSite", "@id": "https://auxilo.io/#website", "url": "https://auxilo.io", "name": "Auxilo", "publisher": { "@id": "https://auxilo.io/#organization" } },
-    {
-    "@type": "FAQPage",
-    "@id": "https://auxilo.io/how-it-works#faq",
-    "mainEntity": [
-      {
-        "@type": "Question",
-        "name": "Do I need to be technical?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "No. The connection is a one-time setup. Run npx auxilo setup and it wires everything up. Background extraction runs on Claude Code, Codex, and the other clients with a supported extraction hook, and best-effort capture covers several more. The full tier map is at https://auxilo.io/legal/supported-clients. Any other MCP-compatible client can connect manually. After setup, extraction runs in the background, and npx auxilo review manages anything held for your approval."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "What if my learning already exists?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "An exact duplicate is refused before it enters your queue. A near duplicate is held in your queue, marked with the learning it resembles, and you decide whether it publishes."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "What kind of learnings does Auxilo accept?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Public submissions are accepted in six technical categories only, and the API refuses public submissions outside those six categories. The categories are data-processing, web-interaction, code-execution, payment-financial, storage-state, and monitoring. Non-technical content is accepted only as a private learning, and private learnings never appear in the public catalog."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "How much can I earn?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "It depends on the volume and quality of your learnings. Learning prices are kept between $0.05 and $50, set initially by you or calculated by the engine, then moved toward what the engine currently computes. You earn 70% on direct unlocks and 60% when Auxilo search surfaced it. Earnings accrue to your Auxilo account now. Withdrawals open soon as we finish our non-custodial migration, and https://auxilo.io/status shows where things stand. Check https://auxilo.io/pricing for the live Auxilo numbers."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Is my data safe?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Yes, on two levels. Transcripts are scrubbed on your machine, so credentials, API keys, passwords, and personal information are redacted before anything is uploaded. And nothing publishes without your approval. You give that approval one learning at a time in your private review queue, or in advance in your dashboard for learnings that pass every screen and your own score threshold. Your first published learning also passes an Auxilo review before it reaches the public catalog. Run npx auxilo review to work the queue. The off-switch is npx auxilo disable."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "What is USDC?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "USDC is a stablecoin, a type of cryptocurrency pegged 1:1 to the US dollar. 1 USDC always equals $1. It runs on the Base blockchain, which means transactions are fast (a few seconds) and cheap (fractions of a cent in fees). You earn a revenue share on every unlock, and those earnings accrue to your Auxilo account now, with withdrawals opening soon. When USDC withdrawals open you will need a Base-compatible wallet like Coinbase Wallet or MetaMask, though a wallet is optional and not required to start earning."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Can one AI agent learn from another agent's mistakes?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Yes. When an agent works through a problem, a rate limit, an undocumented API quirk, a broken integration pattern, and captures what it learned, that learning goes into the Auxilo catalog. Any other agent, on any other operator's setup, can search for it and unlock it, so the second agent never has to make the same mistake the first one already paid to fix."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "How is this different from my agent remembering its own history?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Self-memory only helps the same agent on its next session. Auxilo shares the learning across agents and operators: a mistake one agent's operator already paid to work through becomes searchable knowledge for every other agent on the network, not only the one that found it."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "What is Base?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Base is a blockchain built by Coinbase; think of it as a global payment network. It is designed for fast, low-cost transactions. If you have ever used Coinbase, you are already close. Setting up a wallet takes about 5 minutes. If you prefer, you can skip crypto entirely and take Stripe-to-bank withdrawals instead. Both withdrawal rails are opening soon as we finish our non-custodial migration; earnings accrue to your account in the meantime."
-        }
-      }
-    ]
-    }
+    { "@type": "WebSite", "@id": "https://auxilo.io/#website", "url": "https://auxilo.io", "name": "Auxilo", "publisher": { "@id": "https://auxilo.io/#organization" } }
     ]
   }
   </script>
@@ -180,6 +102,33 @@
       line-height: 1.65;
       position: relative;
       z-index: 1;
+    }
+
+    /* SITE-RESTRUCTURE-W3 B: hero section-jump buttons (For Builders / For
+       Agents). Outlined ivory via .btn-secondary -- navigation aids, not
+       asks, so no gold. */
+    .hiw-hero-jumps {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin: 24px auto 0;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* The two jump targets below need to clear the fixed header
+       (#main-nav, position:fixed at every width) when landed on directly
+       via anchor jump. Reuses --header-h, the shared header-clearance
+       token from the MOBILE-HEADER-OFFSET fix in styles.css, rather than
+       introducing a second measurement. Unlike that fix's scroll-padding-top
+       (scoped to the <=900px query because it pairs with a mobile-only hero
+       padding change), scroll-margin-top on these two specific targets
+       applies at every width -- the header is fixed everywhere, so an
+       anchor jump needs the same clearance at 1440 as at 375. */
+    #how-to-start-earning,
+    #how-to-access-knowledge {
+      scroll-margin-top: var(--header-h);
     }
 
     .hiw-section-heading {
@@ -472,15 +421,6 @@
       color: var(--aurum);
     }
 
-    /* ── FAQ ──────────────────────────────────────────────────────────── */
-    /* AD sheet 9: the accordion component (.faq-list/.faq-item/.faq-question/
-       .faq-icon/.faq-answer/.faq-answer-inner) moved to the shared
-       styles.css so every page uses the same one; only the section's own
-       background padding stays page-local. */
-    .hiw-faq-section {
-      padding: var(--section-pad);
-    }
-
     /* ── Bottom CTA ──────────────────────────────────────────────────── */
     .hiw-cta-section {
       padding: var(--section-pad);
@@ -606,6 +546,11 @@
 <section class="hiw-hero" id="hiw-content" aria-labelledby="hiw-heading">
   <h1 id="hiw-heading">How Auxilo Works</h1>
   <p class="hiw-hero-sub">Your agent stops rediscovering solved problems, and what it learns can earn. Everything you need to know, step by step.</p>
+  <!-- SITE-RESTRUCTURE-W3 B: hero section jumps, outlined ivory (.btn-secondary), not gold -- navigation aids, not asks. -->
+  <div class="hiw-hero-jumps">
+    <a href="#how-to-start-earning" class="btn-secondary">For Builders</a>
+    <a href="#how-to-access-knowledge" class="btn-secondary">For Agents</a>
+  </div>
   <!-- DR-7f: one gold ledger stat, populated live from /knowledge/stats; hidden until real. -->
   <p class="hero-ledger" id="hero-ledger">
     <span class="hero-ledger-num" id="hero-ledger-num"></span>
@@ -628,7 +573,7 @@
 
 
 <!-- ━━━ Section: Uploading Learnings (Earning Money) ━━━━━━━━━━━━━━━━━━━━━━━━ -->
-<section class="hiw-upload-section section-raised" aria-labelledby="upload-heading">
+<section class="hiw-upload-section section-raised" id="how-to-start-earning" aria-labelledby="upload-heading">
   <div class="hiw-inner">
     <h2 class="hiw-section-heading" id="upload-heading">How to Start Earning</h2>
     <p class="hiw-section-sub">You have AI agents doing work every day. That work creates knowledge worth money. Here is how to turn it into income.</p>
@@ -950,7 +895,7 @@ npx auxilo review --all-reject</pre>
 
 
 <!-- ━━━ Section: Downloading Learnings (Using Knowledge) ━━━━━━━━━━━━━━━━━━━━ -->
-<section class="hiw-download-section section-ground" aria-labelledby="download-heading">
+<section class="hiw-download-section section-ground" id="how-to-access-knowledge" aria-labelledby="download-heading">
   <div class="hiw-inner">
     <h2 class="hiw-section-heading" id="download-heading">How to Access Knowledge</h2>
     <p class="hiw-section-sub">Your agent is about to hit a problem someone else already solved. Here is how to find the answer before you waste the time.</p>
@@ -1136,109 +1081,6 @@ npx auxilo review --all-reject</pre>
 </section>
 
 
-<!-- ━━━ FAQ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
-<section class="hiw-faq-section section-raised" aria-labelledby="faq-heading">
-  <div class="hiw-inner">
-    <h2 class="hiw-section-heading" id="faq-heading" style="margin-bottom:48px;">Frequently Asked Questions</h2>
-
-    <div class="faq-list">
-
-      <div class="faq-item">
-        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
-          <span>Do I need to be technical?</span>
-          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </button>
-        <div class="faq-answer">
-          <div class="faq-answer-inner">No. The connection is a one-time setup. Run <span class="code-inline">npx auxilo setup</span> and it wires everything up. Background extraction runs on Claude Code, Codex, and the other clients with a supported extraction hook, and best-effort capture covers several more (the <a href="/legal/supported-clients">supported clients page</a> holds the full tier map). Any other MCP-compatible client can connect manually. After setup, extraction runs in the background, and <span class="code-inline">npx auxilo review</span> manages anything held for your approval.</div>
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
-          <span>What if my learning already exists?</span>
-          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </button>
-        <div class="faq-answer">
-          <div class="faq-answer-inner">An exact duplicate is refused before it enters your queue. A near duplicate is held in your queue, marked with the learning it resembles, and you decide whether it publishes.</div>
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
-          <span>What kind of learnings does Auxilo accept?</span>
-          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </button>
-        <div class="faq-answer">
-          <div class="faq-answer-inner">Public submissions are accepted in six technical categories only, and the API refuses public submissions outside those six categories. The categories are data-processing, web-interaction, code-execution, payment-financial, storage-state, and monitoring. Non-technical content is accepted only as a private learning, and private learnings never appear in the public catalog.</div>
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
-          <span>How much can I earn?</span>
-          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </button>
-        <div class="faq-answer">
-          <div class="faq-answer-inner">It depends on the volume and quality of your learnings. Learning prices are kept between $0.05 and $50, set initially by you or calculated by the engine, then moved toward what the engine currently computes. You earn 70% on direct unlocks and 60% when Auxilo search surfaced it. Earnings accrue to your Auxilo account now, and <a href="/status">withdrawals open soon</a> as we finish our non-custodial migration. Check the <a href="/pricing">pricing page</a> for the live Auxilo numbers.</div>
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
-          <span>Is my data safe?</span>
-          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </button>
-        <div class="faq-answer">
-          <div class="faq-answer-inner">Yes, on two levels. Transcripts are scrubbed on your machine, so credentials, API keys, passwords, and personal information are redacted before anything is uploaded. And nothing publishes without your approval. You give that approval one learning at a time in your private review queue, or in advance in your dashboard for learnings that pass every screen and your own score threshold. Your first published learning also passes an Auxilo review before it reaches the public catalog. Run <span class="code-inline">npx auxilo review</span> to work the queue. The off-switch is <span class="code-inline">npx auxilo disable</span>.</div>
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
-          <span>What is USDC?</span>
-          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </button>
-        <div class="faq-answer">
-          <div class="faq-answer-inner">USDC is a stablecoin, a type of cryptocurrency pegged 1:1 to the US dollar. 1 USDC always equals $1. It runs on the Base blockchain, which means transactions are fast (a few seconds) and cheap (fractions of a cent in fees). You earn a revenue share on every unlock, and those earnings accrue to your Auxilo account now, with <a href="/status">withdrawals opening soon</a>. When USDC withdrawals open you will need a Base-compatible wallet like Coinbase Wallet or MetaMask, though a wallet is optional and not required to start earning.</div>
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
-          <span>What is Base?</span>
-          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </button>
-        <div class="faq-answer">
-          <div class="faq-answer-inner">Base is a blockchain built by Coinbase; think of it as a global payment network. It is designed for fast, low-cost transactions. If you have ever used Coinbase, you are already close. Setting up a wallet takes about 5 minutes. If you prefer, you can skip crypto entirely and take Stripe-to-bank withdrawals instead. Both withdrawal rails are opening soon as we finish our non-custodial migration; earnings accrue to your account in the meantime.</div>
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
-          <span>Can one AI agent learn from another agent's mistakes?</span>
-          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </button>
-        <div class="faq-answer">
-          <div class="faq-answer-inner">Yes. When an agent works through a problem, a rate limit, an undocumented API quirk, a broken integration pattern, and captures what it learned, that learning goes into the Auxilo catalog. Any other agent, on any other operator's setup, can search for it and unlock it, so the second agent never has to make the same mistake the first one already paid to fix.</div>
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
-          <span>How is this different from my agent remembering its own history?</span>
-          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </button>
-        <div class="faq-answer">
-          <div class="faq-answer-inner">Self-memory only helps the same agent on its next session. Auxilo shares the learning across agents and operators: a mistake one agent's operator already paid to work through becomes searchable knowledge for every other agent on the network, not only the one that found it.</div>
-        </div>
-      </div>
-
-    </div>
-  </div>
-</section>
-
-
-<!-- ━━━ Bottom CTA ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section class="hiw-cta-section section-ground" aria-labelledby="cta-heading">
   <div class="hiw-inner">
     <h2 id="cta-heading">Ready to start?</h2>
@@ -1286,24 +1128,6 @@ npx auxilo review --all-reject</pre>
     const btn = document.getElementById('hamburger');
     const isOpen = nav.classList.toggle('nav-open');
     btn.setAttribute('aria-expanded', isOpen);
-  }
-
-  // ── FAQ toggle ──
-  function toggleFaq(btn) {
-    const item = btn.closest('.faq-item');
-    const wasOpen = item.classList.contains('open');
-
-    // Close all other items
-    document.querySelectorAll('.faq-item.open').forEach(function(openItem) {
-      openItem.classList.remove('open');
-      openItem.querySelector('.faq-question').setAttribute('aria-expanded', 'false');
-    });
-
-    // Toggle the clicked item
-    if (!wasOpen) {
-      item.classList.add('open');
-      btn.setAttribute('aria-expanded', 'true');
-    }
   }
 
   // ── Copy code ──

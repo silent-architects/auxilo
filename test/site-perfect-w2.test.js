@@ -14,6 +14,15 @@
  * the Base answer's "skip crypto entirely" alternative-rail sentence are
  * kept verbatim, unchanged.
  *
+ * SUPERSEDED (SITE-RESTRUCTURE-W3 item A, 2026-09-07): /how-it-works lost
+ * its entire FAQ section, including "What is Base?" and "What is USDC?",
+ * as part of the 31->18 FAQ consolidation (Tyler-approved "one canonical
+ * FAQ per topic domain"). The per-question dedup assertions below are moot
+ * now that the section they targeted no longer exists; they are kept as
+ * "gone entirely" checks instead of being deleted outright, per the
+ * project's "mark superseded, never delete" convention. See
+ * test/faq-consolidation.test.js for the current per-page FAQ contract.
+ *
  * Item E1: /pricing, structural only. `Dynamic, Not Fixed.` stays an h2.
  * `Value Tiers` is demoted from its own h2/section-heading to the tier
  * table's label — reusing this same page's existing sub-block label
@@ -46,49 +55,41 @@ const USDC_KEPT_SENTENCE =
 const SKIP_CRYPTO_KEPT_SENTENCE =
   'If you prefer, you can skip crypto entirely and take Stripe-to-bank withdrawals instead.';
 
-describe('SITE-PERFECT-W2 item B — /how-it-works wallet-sentence dedup', () => {
+describe('SITE-PERFECT-W2 item B — /how-it-works wallet-sentence dedup (SUPERSEDED, see header)', () => {
   it('the duplicate Base-answer wallet sentence is gone from the page entirely (rendered + JSON-LD)', () => {
     const count = hiw.split(DELETED_SENTENCE).length - 1;
     assert.equal(count, 0, 'deleted sentence must not appear anywhere on the page');
   });
 
-  it('the FAQPage JSON-LD "What is Base?" answer no longer carries the deleted sentence', () => {
-    const jsonLdMatch = hiw.match(
-      /"name":\s*"What is Base\?"[\s\S]*?"text":\s*"([^"]*)"/
-    );
-    assert.ok(jsonLdMatch, 'expected a "What is Base?" JSON-LD answer');
-    assert.ok(
-      !jsonLdMatch[1].includes(DELETED_SENTENCE),
-      'JSON-LD Base answer must not include the deleted sentence'
-    );
+  it('SUPERSEDED: /how-it-works no longer carries a FAQPage JSON-LD block at all ("What is Base?" included)', () => {
+    assert.ok(!hiw.includes('FAQPage'), 'how-it-works.html must not carry a FAQPage JSON-LD block (FAQ section removed, W3 item A)');
+    assert.ok(!hiw.includes('"name": "What is Base?"'), '"What is Base?" no longer exists anywhere on the page');
   });
 
-  it('the rendered FAQ "What is Base?" answer no longer carries the deleted sentence', () => {
-    const renderedMatch = hiw.match(
-      /<span>What is Base\?<\/span>[\s\S]*?<div class="faq-answer-inner">([^<]*)<\/div>/
-    );
-    assert.ok(renderedMatch, 'expected a rendered "What is Base?" FAQ answer');
-    assert.ok(
-      !renderedMatch[1].includes(DELETED_SENTENCE),
-      'rendered Base answer must not include the deleted sentence'
-    );
+  it('SUPERSEDED: /how-it-works no longer carries a rendered "What is Base?" FAQ item', () => {
+    assert.ok(!/<span>What is Base\?<\/span>/.test(hiw), 'rendered "What is Base?" FAQ item must not exist (FAQ section removed, W3 item A)');
   });
 
-  it('the USDC answer keeps its fuller wallet sentence exactly once, unchanged', () => {
+  it('SUPERSEDED: the USDC answer sentence no longer appears anywhere (its FAQ item was removed with the section)', () => {
     const count = hiw.split(USDC_KEPT_SENTENCE).length - 1;
-    assert.equal(count, 2, 'expected the USDC wallet sentence once in JSON-LD and once in rendered markup');
+    assert.equal(count, 0, 'USDC wallet sentence lived only in the now-removed FAQ section');
   });
 
-  it('the Base answer keeps the skip-crypto alternative-rail sentence exactly once per occurrence, unchanged', () => {
+  it('SUPERSEDED: the skip-crypto sentence no longer appears anywhere (its FAQ item was removed with the section)', () => {
     const count = hiw.split(SKIP_CRYPTO_KEPT_SENTENCE).length - 1;
-    assert.equal(count, 2, 'expected the skip-crypto sentence once in JSON-LD and once in rendered markup (kept, not a repeat)');
+    assert.equal(count, 0, 'skip-crypto sentence lived only in the now-removed FAQ section');
   });
 });
 
 describe('SITE-PERFECT-W2 item E1 — /pricing Value Tiers demotion', () => {
-  it('the page has exactly seven h2 elements', () => {
+  // SITE-RESTRUCTURE-W3 item C (2026-09-07) later folded Credit Packs (h2)
+  // into For Agents (h3) and cut The Numbers (h2) entirely, taking the page
+  // from seven h2s down to five. See test/site-restructure-w3-c.test.js for
+  // that wave's own guards; this count is updated here so the two files
+  // don't disagree about the current page.
+  it('the page has exactly five h2 elements', () => {
     const h2Count = (pricing.match(/<h2\b/g) || []).length;
-    assert.equal(h2Count, 7, 'pricing.html should have 7 h2s after the Value Tiers demotion');
+    assert.equal(h2Count, 5, 'pricing.html should have 5 h2s after SITE-RESTRUCTURE-W3 item C');
   });
 
   it('"Dynamic, Not Fixed." remains an h2', () => {
@@ -103,13 +104,15 @@ describe('SITE-PERFECT-W2 item E1 — /pricing Value Tiers demotion', () => {
     assert.ok(nonH2Heading, 'expected "Value Tiers" as an h3 labelled tiers-heading');
   });
 
-  it('the demoted heading keeps id="tiers-heading" so the section aria-labelledby still resolves', () => {
-    assert.match(
-      pricing,
-      /<section id="value-tiers"[^>]*aria-labelledby="tiers-heading"[^>]*>/,
-      'value-tiers section must still reference tiers-heading'
-    );
+  it('the demoted heading keeps id="tiers-heading" (SITE-RESTRUCTURE-W3 item C folded the standalone #value-tiers section into #how-pricing-works, so the heading no longer needs its own section landmark — same precedent as this page\'s "Payment Methods" h3)', () => {
     assert.match(pricing, /id="tiers-heading"/, 'tiers-heading id must exist on the page');
+    // Match the actual <section id="value-tiers"> element, not a build
+    // comment that names the retired id in prose (this page's own C1 merge
+    // comment does exactly that).
+    assert.equal(pricing.match(/<section id="value-tiers"/), null, 'the standalone value-tiers section container is gone (folded into how-pricing-works)');
+    const howPricingSection = pricing.match(/<section id="how-pricing-works"[\s\S]*?<\/section>/);
+    assert.ok(howPricingSection, 'expected #how-pricing-works section');
+    assert.match(howPricingSection[0], /<h3[^>]*id="tiers-heading"[^>]*>Value Tiers<\/h3>/, 'Value Tiers heading now lives inside #how-pricing-works');
   });
 
   it('the tier table and its body content are unchanged (byte-identical rows)', () => {
