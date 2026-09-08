@@ -185,7 +185,7 @@ cd "${REPO_ROOT}"
 # fail each time except one transient flake in test/x402-router.test.js's
 # 2-second _waitForFinality timeout tests (pre-existing, unrelated to this
 # wave — not touched) that did not reproduce on 3 immediate reruns.
-EXPECTED_TEST_COUNT=3021
+EXPECTED_TEST_COUNT=3025
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
