@@ -39,7 +39,7 @@ function passingResponses(overrides = {}) {
     'git rev-parse HEAD': HEAD_SHA,
     'git rev-parse origin/main': HEAD_SHA,
     'git status --porcelain': '',
-    [`npm view ${PACKAGE_NAME}@0.9.17 version`]: new Error('npm ERR! 404'),
+    [`npm view ${PACKAGE_NAME}@0.9.18 version`]: new Error('npm ERR! 404'),
     ...overrides,
   };
 }
@@ -49,7 +49,7 @@ test('prepublish-guard: passes when HEAD == origin/main, tree clean, version unp
   assert.equal(result.ok, true);
   assert.equal(result.forced, false);
   assert.equal(result.headSha, HEAD_SHA);
-  assert.equal(result.version, '0.9.17');
+  assert.equal(result.version, '0.9.18');
 });
 
 test('prepublish-guard: refuses when HEAD != origin/main', () => {
@@ -79,7 +79,7 @@ test('prepublish-guard: untracked-only changes do not block (npm files[] is auth
 
 test('prepublish-guard: refuses when the current version is already published', () => {
   const responses = passingResponses({
-    [`npm view ${PACKAGE_NAME}@0.9.17 version`]: '0.9.17',
+    [`npm view ${PACKAGE_NAME}@0.9.18 version`]: '0.9.18',
   });
   const result = check({ run: fakeRun(responses), env: {} });
   assert.equal(result.ok, false);

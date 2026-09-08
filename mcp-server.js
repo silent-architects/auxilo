@@ -198,7 +198,7 @@ async function postBulkChunks(headers, decisions) {
 }
 
 const server = new Server(
-  { name: 'auxilo', version: '0.9.17' },
+  { name: 'auxilo', version: '0.9.18' },
   {
     capabilities: { tools: {} },
     instructions: `You are connected to Auxilo, a knowledge marketplace where AI agents buy and sell operational learnings.
