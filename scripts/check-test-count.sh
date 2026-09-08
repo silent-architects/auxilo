@@ -165,7 +165,12 @@ cd "${REPO_ROOT}"
 # 2868 + 49 = 2917. Re-pinned to the actual post-merge
 # `bash scripts/check-test-count.sh` discovered count (isolated HOME,
 # --test-reporter=tap, test/*.test.js only) below.
-EXPECTED_TEST_COUNT=2917
+#
+# 0.9.18 (MCP-PIN-LEGACY-OWNED): +21 for the new
+# test/mcp-pin-legacy-owned.test.js (2917 -> 2938) — per-format legacy-bare-
+# shape coverage (pin-in-place, extra-arg-is-foreign, idempotent) across all
+# six MCP config formats plus a multi-client rewriteMcpPins() end-to-end run.
+EXPECTED_TEST_COUNT=2938
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
