@@ -185,7 +185,18 @@ cd "${REPO_ROOT}"
 # fail each time except one transient flake in test/x402-router.test.js's
 # 2-second _waitForFinality timeout tests (pre-existing, unrelated to this
 # wave — not touched) that did not reproduce on 3 immediate reruns.
-EXPECTED_TEST_COUNT=2998
+#
+# EXTRACT-LOG-HOOKS-EVIDENCE (P2, 2026-09-08): +3 to
+# test/claude-code-provider.test.js's logProviderRunSummary describe block —
+# argv captured without --setting-sources renders hooks=unknown (never
+# isolated), finder=ran with no argv captured at all (the production
+# fallthrough-to-another-provider case) renders hooks=unknown + flags=n/a,
+# and the existing cli-settings-isolation-unsupported reason-code path still
+# wins. No other test file's assertion count changed. Verified against the
+# actual `bash scripts/check-test-count.sh` discovered count, run twice
+# (identical both times): 2998 + 3 = 3001, 0 fail, 6 skipped (pre-existing,
+# unrelated).
+EXPECTED_TEST_COUNT=3001
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

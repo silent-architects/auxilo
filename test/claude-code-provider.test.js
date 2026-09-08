@@ -799,6 +799,70 @@ describe('extract-local.js — logProviderRunSummary / formatArgvForLog', () => 
     assert.match(lines[0], /provider=codex-cli .*hooks=n\/a$/);
   });
 
+  it('EXTRACT-LOG-HOOKS-EVIDENCE: claude-code, finder ran with argv captured but NOT carrying --setting-sources: hooks=unknown, never isolated', () => {
+    const extractLocal = require('../scripts/extract-local.js');
+    const lines = [];
+    extractLocal.logProviderRunSummary(
+      { log: (l) => lines.push(l) },
+      'sess-7',
+      {
+        ok: true,
+        extractionModel: { provider: 'claude-code' },
+        argv: ['-p', '--no-session-persistence', '--tools', ''],
+        cliVersion: '2.1.12',
+      },
+      null
+    );
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /finder=ran .*hooks=unknown$/);
+    assert.doesNotMatch(lines[0], /hooks=isolated/);
+  });
+
+  it('EXTRACT-LOG-HOOKS-EVIDENCE: claude-code, finder=ran but NO argv captured this run (the fallthrough-to-another-provider case observed in production): hooks=unknown + flags=n/a, never isolated', () => {
+    const extractLocal = require('../scripts/extract-local.js');
+    const lines = [];
+    // Reproduces the real defect: providers.runModel() fell through from
+    // claude-code to a different provider (e.g. codex-cli, whose own
+    // result carries no `argv` field and, on failure, no `identity`), so
+    // resolveExtractionModelIdentity()'s fallback re-resolved the label
+    // back to 'claude-code' independent of which provider's result this
+    // actually is. reasonCode 'model-error' is NOT in
+    // PRE_SPAWN_SKIP_REASON_CODES, so finder correctly reports 'ran' — but
+    // there is no claude-code argv evidence to back an 'isolated' claim.
+    extractLocal.logProviderRunSummary(
+      { log: (l) => lines.push(l) },
+      'sess-8',
+      {
+        ok: false,
+        reasonCode: 'model-error',
+        extractionModel: { provider: 'claude-code', model: null, version: null, vendor: null },
+      },
+      null
+    );
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /provider=claude-code cli=- finder=ran judge=skipped\(no-candidates\) flags=n\/a hooks=unknown$/);
+    assert.doesNotMatch(lines[0], /hooks=isolated/);
+  });
+
+  it('EXTRACT-LOG-HOOKS-EVIDENCE: the reason-code path still wins when the CLI is genuinely unsupported', () => {
+    const extractLocal = require('../scripts/extract-local.js');
+    const lines = [];
+    extractLocal.logProviderRunSummary(
+      { log: (l) => lines.push(l) },
+      'sess-9',
+      {
+        ok: false,
+        reasonCode: 'cli-settings-isolation-unsupported',
+        extractionModel: { provider: 'claude-code', model: null, version: null, vendor: null },
+        argv: ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', ''],
+        cliVersion: '2.1.12',
+      },
+      null
+    );
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /hooks=unsupported$/);
+  });
+
   it('logging must never throw or block extraction, even with a throwing log function', () => {
     const extractLocal = require('../scripts/extract-local.js');
     assert.doesNotThrow(() => {
