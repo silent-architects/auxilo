@@ -170,7 +170,22 @@ cd "${REPO_ROOT}"
 # test/mcp-pin-legacy-owned.test.js (2917 -> 2938) — per-format legacy-bare-
 # shape coverage (pin-in-place, extra-arg-is-foreign, idempotent) across all
 # six MCP config formats plus a multi-client rewriteMcpPins() end-to-end run.
-EXPECTED_TEST_COUNT=2938
+#
+# SITE-RESTRUCTURE-W3 item A (FAQ consolidation, 2026-09-07): +30 for the
+# new test/faq-consolidation.test.js (2938 -> 2968) — per-page expected-
+# question-list assertions (rendered + JSON-LD), JSON-LD<->DOM equality per
+# page, site-wide no-duplicate-question checks, and positive controls for
+# every cut/moved question, covering the 31->18 FAQ consolidation across
+# all six FAQ-bearing pages. test/site-system.test.js and
+# test/site-perfect-w2.test.js and test/ask-wave-b.test.js were edited in
+# place (assertions updated/narrowed for the new state), not added to or
+# removed from, so they contribute no net delta. Verified against the
+# actual `bash scripts/check-test-count.sh` discovered count (isolated
+# HOME, --test-reporter=tap, test/*.test.js only), run 4 times: 2968, 0
+# fail each time except one transient flake in test/x402-router.test.js's
+# 2-second _waitForFinality timeout tests (pre-existing, unrelated to this
+# wave — not touched) that did not reproduce on 3 immediate reruns.
+EXPECTED_TEST_COUNT=2968
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

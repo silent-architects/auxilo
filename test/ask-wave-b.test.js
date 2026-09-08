@@ -37,9 +37,25 @@
  *   - Total `.btn-primary` count on the page is exactly 1 (the closing ask
  *     only) — gold appears once.
  *
- * `/pricing` (public/pricing.html) — out of scope, guarded untouched:
- *   byte-identical to origin/main (its three `Buy credits` buttons take
- *   real money and must never be touched by this wave).
+ * `/pricing` (public/pricing.html) — out of scope for THIS wave, guarded
+ *   untouched: byte-identical to origin/main (its three `Buy credits`
+ *   buttons take real money and must never be touched by ASK-WAVE-B).
+ *
+ * SCOPE NOTE (SITE-RESTRUCTURE-W3 item A, 2026-09-07): the /pricing guard
+ * below was narrowed from "byte-identical to origin/main in full" to
+ * "byte-identical outside the FAQ section". ASK-WAVE-B shipped and is not
+ * touching this file again; the blanket guard was this wave's own
+ * self-check, not a promise that no *later*, separately-scoped wave would
+ * ever touch pricing.html. SITE-RESTRUCTURE-W3 item A is a distinct,
+ * Tyler-approved, spec'd wave (`~/.auxilo/handoffs/
+ * SITE-RESTRUCTURE-W3-SPEC-2026-09-07.md` section A) that cuts 3 FAQ
+ * questions from /pricing's `#faq` section (rendered + FAQPage JSON-LD)
+ * as part of a site-wide "one canonical FAQ per topic" consolidation. It
+ * never touches the pack cards, the Buy-credits buttons, or anything
+ * money-shaped — the positive-control test below still enforces that
+ * directly. The guard now proves the FAQ section is the *only* place the
+ * file changed, which is a strictly narrower, still-real protection than
+ * the original all-bytes check.
  *
  * Runner: node --test test/ask-wave-b.test.js
  */
@@ -185,8 +201,19 @@ describe('ASK wave B — /for-builders mid-page gold demotion', () => {
   });
 });
 
+// Strip the two FAQ-shaped regions SITE-RESTRUCTURE-W3 item A is
+// authorized to touch: the rendered `<section id="faq">...</section>`
+// block, and the FAQPage node's `mainEntity` array inside the page's
+// JSON-LD script. Everything else in the returned string must still be
+// byte-identical to the pre-W3-A baseline for the guard below to hold.
+function stripAuthorizedFaqRegions(str) {
+  let out = str.replace(/<section id="faq"[\s\S]*?<\/section>/, '<section id="faq"></section>');
+  out = out.replace(/("mainEntity":\s*\[)[\s\S]*?(\]\s*\}\s*\]\s*\}\s*<\/script>)/, '$1$2');
+  return out;
+}
+
 describe('ASK wave B — /pricing guard (out of scope, real money)', () => {
-  it('public/pricing.html is byte-identical to origin/main — untouched', () => {
+  it('public/pricing.html is byte-identical to origin/main outside the FAQ section (SITE-RESTRUCTURE-W3 item A scope note above)', () => {
     const baseRef = resolveWaveBaseRef();
     let baseBytes;
     try {
@@ -202,12 +229,12 @@ describe('ASK wave B — /pricing guard (out of scope, real money)', () => {
       return;
     }
     const localBytes = fs.readFileSync(path.join(REPO, 'public', 'pricing.html'));
-    assert.ok(
-      Buffer.compare(
-        normalizeCacheBust(localBytes),
-        normalizeCacheBust(baseBytes)
-      ) === 0,
-      'public/pricing.html has diverged from origin/main — this wave must not touch /pricing (its three Buy credits buttons take real money)'
+    const localNormalized = normalizeCacheBust(localBytes).toString('utf-8');
+    const baseNormalized = normalizeCacheBust(baseBytes).toString('utf-8');
+    assert.equal(
+      stripAuthorizedFaqRegions(localNormalized),
+      stripAuthorizedFaqRegions(baseNormalized),
+      'public/pricing.html has diverged from origin/main OUTSIDE its FAQ section — only the #faq DOM block and the FAQPage JSON-LD mainEntity may change (SITE-RESTRUCTURE-W3 item A); the three Buy-credits buttons and everything else must stay untouched'
     );
   });
 
