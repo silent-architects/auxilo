@@ -185,7 +185,18 @@ cd "${REPO_ROOT}"
 # fail each time except one transient flake in test/x402-router.test.js's
 # 2-second _waitForFinality timeout tests (pre-existing, unrelated to this
 # wave — not touched) that did not reproduce on 3 immediate reruns.
-EXPECTED_TEST_COUNT=2968
+#
+# SITE-RESTRUCTURE-W3 item C (2026-09-07): bumped 2968 -> 2979 (net +11) in
+# the same commit as the /pricing 9->6 section merge. New:
+# test/site-restructure-w3-c.test.js (+13). Edited-in-place, no net count
+# change: test/site-perfect-w2.test.js, test/pricing-live-range.test.js.
+# Net -2: test/ask-wave-b.test.js retired its whole-file "byte-identical
+# outside FAQ" diff test (obsoleted by item C's sanctioned structural
+# change — see that file's SCOPE NOTE 2) while keeping its Buy-credits
+# positive control and normalizer self-tests. Confirmed 2979, 0 fail, run
+# twice via `bash scripts/check-test-count.sh` (isolated HOME,
+# --test-reporter=tap) and twice via plain `npm test`.
+EXPECTED_TEST_COUNT=2979
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

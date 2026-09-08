@@ -57,6 +57,22 @@
  * file changed, which is a strictly narrower, still-real protection than
  * the original all-bytes check.
  *
+ * SCOPE NOTE 2 (SITE-RESTRUCTURE-W3 item C, 2026-09-07): item C is a
+ * second, distinct, Tyler-approved, spec'd wave (same spec, section C)
+ * that merges /pricing's 9 top-level sections down to 6 (Value Tiers into
+ * How Pricing Works, Credit Packs into For Agents, The Numbers cut with
+ * its live stats moved to the hero). That is real, sanctioned structural
+ * change across most of the page, well beyond the FAQ section this guard
+ * was scoped to — so the whole-file "byte-identical outside FAQ" diff
+ * below is retired as of item C (see the removed test's history in git
+ * blame if needed). What still matters — the three Buy-credits buttons
+ * being real money and never silently touched — is enforced directly by
+ * the positive-control test right below, plus test/site-restructure-w3-c
+ * .test.js's own byte-identity assertion on that exact button markup.
+ * The normalizer self-tests below are independent of pricing.html's
+ * structure (they exercise normalizeCacheBust in isolation) and still
+ * hold.
+ *
  * Runner: node --test test/ask-wave-b.test.js
  */
 
@@ -213,30 +229,17 @@ function stripAuthorizedFaqRegions(str) {
 }
 
 describe('ASK wave B — /pricing guard (out of scope, real money)', () => {
-  it('public/pricing.html is byte-identical to origin/main outside the FAQ section (SITE-RESTRUCTURE-W3 item A scope note above)', () => {
-    const baseRef = resolveWaveBaseRef();
-    let baseBytes;
-    try {
-      baseBytes = execFileSync(
-        'git',
-        ['show', `${baseRef}:public/pricing.html`],
-        { cwd: REPO, maxBuffer: 1024 * 1024 * 16 }
-      );
-    } catch (err) {
-      assert.fail(
-        `could not read ${baseRef}:public/pricing.html for comparison — ${err.message}`
-      );
-      return;
-    }
-    const localBytes = fs.readFileSync(path.join(REPO, 'public', 'pricing.html'));
-    const localNormalized = normalizeCacheBust(localBytes).toString('utf-8');
-    const baseNormalized = normalizeCacheBust(baseBytes).toString('utf-8');
-    assert.equal(
-      stripAuthorizedFaqRegions(localNormalized),
-      stripAuthorizedFaqRegions(baseNormalized),
-      'public/pricing.html has diverged from origin/main OUTSIDE its FAQ section — only the #faq DOM block and the FAQPage JSON-LD mainEntity may change (SITE-RESTRUCTURE-W3 item A); the three Buy-credits buttons and everything else must stay untouched'
-    );
-  });
+  // The whole-file "byte-identical to origin/main outside FAQ" diff that
+  // used to run here is RETIRED as of SITE-RESTRUCTURE-W3 item C (see
+  // "SCOPE NOTE 2" in the file header): item C is a distinct,
+  // Tyler-approved wave that restructures most of this page's sections,
+  // so a blanket outside-FAQ diff would fail on sanctioned work. What
+  // actually mattered — the three Buy-credits buttons never being
+  // silently touched, since they move real money — is asserted directly
+  // by the positive control immediately below, which checks the button
+  // markup itself rather than the whole file's bytes. resolveWaveBaseRef
+  // and stripAuthorizedFaqRegions stay defined above for any future wave
+  // that wants to resurrect a scoped diff guard.
 
   it('its three "Buy credits" pack buttons are present and untouched (positive control)', () => {
     const pricingSrc = readPublic('pricing.html');

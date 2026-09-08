@@ -32,6 +32,24 @@
  *      the live-computed range (not the static fallback), the label text
  *      once, and no example-text cells / Example header.
  *
+ * RETIREMENT NOTE (SITE-RESTRUCTURE-W3 item C, 2026-09-07): item C's
+ * Tyler-approved spec (~/.auxilo/handoffs/SITE-RESTRUCTURE-W3-SPEC-
+ * 2026-09-07.md section C3) cuts "The Numbers" (id="platform-economics")
+ * from /pricing entirely, including the "Current Unlock Price Range" /
+ * id="lc-price-range" tile this file's item-1 guards were written for —
+ * spec's own words call it a "static econ card" and orders it "cut with
+ * no replacement," even though (as this file documents) it was actually
+ * a live server-rendered value, not static. That is flagged in the item C
+ * build report for Tyler/TECH-PM's attention; the cut itself is executed
+ * as spec'd. renderLiveCatalogStats' generic id="lc-price-range" handling
+ * is untouched and still exercised by /for-agents.html (which keeps its
+ * own lc-price-range tile), so the assertions on that generic server.js
+ * behavior below are kept. Only the assertions that require
+ * id="lc-price-range" / "Current Unlock Price Range" to exist ON
+ * PRICING.HTML SPECIFICALLY are removed or converted to intentional-
+ * absence checks — marked inline below. Item 2 (Value Tiers EXAMPLE
+ * column) is untouched by item C and its guard still holds unchanged.
+ *
  * Runner: node --test test/pricing-live-range.test.js
  */
 
@@ -76,24 +94,17 @@ describe('structural: /pricing on the live-data path; EXAMPLE column gone from t
       '/pricing must still fall back to serveStatic on a failed live render');
   });
 
-  it('public/pricing.html carries id="lc-price-range" under the gated label, with no static bound literal (AD strings packet 8 rev 2: the fail path hides the whole tile instead of a fabricated fallback)', () => {
-    const m = PRICING_HTML.match(/<p class="econ-value" id="lc-price-range">([^<]*)<\/p>/);
-    assert.ok(m, 'the observed-range tile must carry id="lc-price-range" for the SSR regex to fill');
-    assert.equal(m[1], '',
-      'the literal fallback is empty; the fail path hides the whole tile server-side rather than shipping a fabricated number');
+  it('SITE-RESTRUCTURE-W3 item C3: id="lc-price-range" and "Current Unlock Price Range" are intentionally absent from pricing.html ("The Numbers" was cut, no replacement — see file-header retirement note)', () => {
+    assert.ok(!PRICING_HTML.includes('id="lc-price-range"'),
+      'the price-range tile was cut from pricing.html along with the rest of "The Numbers"');
+    assert.equal(PRICING_HTML.split(OBSERVED_RANGE_LABEL).length - 1, 0,
+      'the "Current Unlock Price Range" label was cut along with its tile');
+    assert.ok(!PRICING_HTML.includes('<!--LC-PRICE-RANGE-CELL-->'),
+      'the LC-PRICE-RANGE-CELL marker pair was cut along with its tile');
     assert.ok(!/<p class="econ-value">\$50\.00<\/p>/.test(PRICING_HTML),
       'the old static $50.00 / Max Price tile must be gone — it must not coexist with the live element');
     assert.ok(!PRICING_HTML.includes('Max Price'),
       'the retired "Max Price" label must not remain anywhere on the page');
-  });
-
-  it('the gated label "Current Unlock Price Range" appears exactly once, immediately above the lc-price-range tile', () => {
-    const occurrences = PRICING_HTML.split(OBSERVED_RANGE_LABEL).length - 1;
-    assert.equal(occurrences, 1, 'the label string must appear exactly once on the page');
-    const labelIdx = PRICING_HTML.indexOf(OBSERVED_RANGE_LABEL);
-    const between = PRICING_HTML.slice(labelIdx, labelIdx + 200);
-    assert.ok(between.includes('id="lc-price-range"'),
-      'the label must sit directly on the tile that carries the live-filled value');
   });
 
   it('renderLiveCatalogStats\' default range is empty, and the fail path strips the whole LC-PRICE-RANGE-CELL block', () => {
@@ -171,8 +182,8 @@ function expectedDisplayPrice(learning, catalog) {
   return Math.min(50, Math.max(0.05, Number(p) || DEFAULT_UNLOCK_PRICE));
 }
 
-describe('behavioral: GET /pricing renders the live price range, no EXAMPLE column', () => {
-  it('renders id="lc-price-range" with the live-computed min/max, the label once, and zero example-text cells', { timeout: 90_000 }, async (t) => {
+describe('behavioral: GET /pricing renders the live hero stats, no lc-price-range, no EXAMPLE column (SITE-RESTRUCTURE-W3 item C3)', () => {
+  it('renders id="lc-learnings"/id="lc-categories" live in the hero, carries no id="lc-price-range" anywhere, and zero example-text cells', { timeout: 90_000 }, async (t) => {
     let nodeModulesDir;
     try {
       const honoEntry = require.resolve('hono', { paths: [REPO_ROOT] });
@@ -227,21 +238,28 @@ describe('behavioral: GET /pricing renders the live price range, no EXAMPLE colu
       assert.match(res.headers.get('content-type') || '', /^text\/html/);
       const html = await res.text();
 
-      // Expected range: derived the SAME way displayPrice() derives it,
-      // against the exact fixture catalog that was staged.
-      const prices = catalog.map((l) => expectedDisplayPrice(l, catalog));
-      const expectedRange = `$${Math.min(...prices).toFixed(2)} to $${Math.max(...prices).toFixed(2)}`;
+      // SITE-RESTRUCTURE-W3 item C3: lc-price-range/"Current Unlock Price
+      // Range" were cut from pricing.html entirely (see file-header
+      // retirement note) — assert absence rather than a live value.
+      assert.ok(!html.includes('id="lc-price-range"'),
+        'id="lc-price-range" must not appear anywhere in the rendered /pricing HTML');
+      assert.equal(html.split('Current Unlock Price Range').length - 1, 0,
+        'the retired "Current Unlock Price Range" label must not appear in the rendered HTML');
 
-      const m = html.match(/id="lc-price-range"[^>]*>([^<]*)</);
-      assert.ok(m, 'lc-price-range element must be present in the rendered HTML');
-      assert.equal(m[1], expectedRange,
-        `live price range must reflect the fixture catalog (expected ${expectedRange}), not the static fallback`);
-      assert.notEqual(m[1], '$0.05 to $50.00',
-        'a two-learning fixture at $0.20/$5.00 must not render the untouched static fallback');
-
-      // The gated label rides with the live value, exactly once.
-      const labelCount = html.split('Current Unlock Price Range').length - 1;
-      assert.equal(labelCount, 1, 'the label text must be present exactly once in the served HTML');
+      // The 3 live-ledger stats that replaced it, now in the hero, still
+      // bind from the SAME fixture catalog — derived the same way
+      // renderLiveCatalogStats derives them (count = visible.length,
+      // cats = distinct categories), not hand-typed.
+      const expectedCount = String(catalog.length);
+      const expectedCats = String(new Set(catalog.map((l) => l.category)).size);
+      const learningsMatch = html.match(/id="lc-learnings"[^>]*>([^<]*)</);
+      const categoriesMatch = html.match(/id="lc-categories"[^>]*>([^<]*)</);
+      assert.ok(learningsMatch, 'id="lc-learnings" element must be present in the rendered HTML (moved to the hero)');
+      assert.equal(learningsMatch[1], expectedCount,
+        `live learnings count must reflect the fixture catalog (expected ${expectedCount})`);
+      assert.ok(categoriesMatch, 'id="lc-categories" element must be present in the rendered HTML (moved to the hero)');
+      assert.equal(categoriesMatch[1], expectedCats,
+        `live categories count must reflect the fixture catalog (expected ${expectedCats})`);
 
       // Item 2: EXAMPLE column absent from the live-rendered page too.
       assert.ok(!html.includes('example-text'), 'no example-text cells in the served HTML');
@@ -306,14 +324,12 @@ describe('wave B copy pass: Min Price card removed, range tile desc added, one d
       'the retired Min Price card must not remain anywhere on the page');
   });
 
-  it('the range tile carries its own econ-desc paragraph, present exactly once', () => {
+  it('the range tile and its econ-desc paragraph are gone (SITE-RESTRUCTURE-W3 item C3 cut the whole tile with "The Numbers" — no replacement, see file-header retirement note)', () => {
     const DESC = 'The lowest and highest unlock prices in the catalog right now. The engine keeps every price between $0.05 and $50.';
-    assert.equal(PRICING_HTML.split(DESC).length - 1, 1,
-      'the range tile econ-desc text must appear exactly once');
-    const valueIdx = PRICING_HTML.indexOf('<p class="econ-value" id="lc-price-range">');
-    assert.ok(valueIdx !== -1, 'lc-price-range tile must exist');
-    const after = PRICING_HTML.slice(valueIdx, valueIdx + 300);
-    assert.ok(after.includes(DESC), 'the econ-desc paragraph must sit directly after the range value, matching sibling card markup');
+    assert.equal(PRICING_HTML.split(DESC).length - 1, 0,
+      'the range tile econ-desc text was cut along with its tile');
+    assert.ok(!PRICING_HTML.includes('<p class="econ-value" id="lc-price-range">'),
+      'lc-price-range tile must not exist on pricing.html');
   });
 
   it('description, og:description, and twitter:description are one identical string', () => {

@@ -82,9 +82,14 @@ describe('SITE-PERFECT-W2 item B — /how-it-works wallet-sentence dedup (SUPERS
 });
 
 describe('SITE-PERFECT-W2 item E1 — /pricing Value Tiers demotion', () => {
-  it('the page has exactly seven h2 elements', () => {
+  // SITE-RESTRUCTURE-W3 item C (2026-09-07) later folded Credit Packs (h2)
+  // into For Agents (h3) and cut The Numbers (h2) entirely, taking the page
+  // from seven h2s down to five. See test/site-restructure-w3-c.test.js for
+  // that wave's own guards; this count is updated here so the two files
+  // don't disagree about the current page.
+  it('the page has exactly five h2 elements', () => {
     const h2Count = (pricing.match(/<h2\b/g) || []).length;
-    assert.equal(h2Count, 7, 'pricing.html should have 7 h2s after the Value Tiers demotion');
+    assert.equal(h2Count, 5, 'pricing.html should have 5 h2s after SITE-RESTRUCTURE-W3 item C');
   });
 
   it('"Dynamic, Not Fixed." remains an h2', () => {
@@ -99,13 +104,15 @@ describe('SITE-PERFECT-W2 item E1 — /pricing Value Tiers demotion', () => {
     assert.ok(nonH2Heading, 'expected "Value Tiers" as an h3 labelled tiers-heading');
   });
 
-  it('the demoted heading keeps id="tiers-heading" so the section aria-labelledby still resolves', () => {
-    assert.match(
-      pricing,
-      /<section id="value-tiers"[^>]*aria-labelledby="tiers-heading"[^>]*>/,
-      'value-tiers section must still reference tiers-heading'
-    );
+  it('the demoted heading keeps id="tiers-heading" (SITE-RESTRUCTURE-W3 item C folded the standalone #value-tiers section into #how-pricing-works, so the heading no longer needs its own section landmark — same precedent as this page\'s "Payment Methods" h3)', () => {
     assert.match(pricing, /id="tiers-heading"/, 'tiers-heading id must exist on the page');
+    // Match the actual <section id="value-tiers"> element, not a build
+    // comment that names the retired id in prose (this page's own C1 merge
+    // comment does exactly that).
+    assert.equal(pricing.match(/<section id="value-tiers"/), null, 'the standalone value-tiers section container is gone (folded into how-pricing-works)');
+    const howPricingSection = pricing.match(/<section id="how-pricing-works"[\s\S]*?<\/section>/);
+    assert.ok(howPricingSection, 'expected #how-pricing-works section');
+    assert.match(howPricingSection[0], /<h3[^>]*id="tiers-heading"[^>]*>Value Tiers<\/h3>/, 'Value Tiers heading now lives inside #how-pricing-works');
   });
 
   it('the tier table and its body content are unchanged (byte-identical rows)', () => {
