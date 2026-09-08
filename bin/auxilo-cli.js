@@ -586,7 +586,7 @@ async function cmdStatus() {
     );
     if (autoupdateLine) console.log(autoupdateLine);
   }
-  console.log(extractionProviderLine(await providers.resolveProvider({})));
+  console.log(extractionProviderLine(lastRecordedProviderResolution()));
   // Lazy require: scripts/runner.js is a heavier module (sources, sensitivity
   // filter, ops-alert) than this one status line needs at require-time for
   // every CLI invocation.
@@ -626,17 +626,57 @@ function runnerSkewLine(skew) {
 const CLI_CLEAN_LANE_CALIBRATED_PROVIDERS = ['claude-code'];
 
 /**
+ * EXTRACTION-MODEL-PROVENANCE (PUNCH-LIST P1): `auxilo status` used to feed
+ * extractionProviderLine() a LIVE `providers.resolveProvider({})` call — a
+ * fresh detect() answering "what would run right now" (and, on a full scan,
+ * capable of writing ~/.auxilo/providers.json's `selected` field as a side
+ * effect of a status check), not "what actually ran". This function replaces
+ * that with two read-only, no-detect sources of TRUTH, in priority order:
+ * (1) AUXILO_EXTRACTION_PROVIDER, if set, is a certain fact about the
+ *     current session's config — reading it is not a guess — validated
+ *     against providers.PROVIDER_ORDER exactly as resolveProvider() itself
+ *     validates an override, without calling it.
+ * (2) Otherwise, providers.json's `selected` field — the LAST provider a
+ *     genuine resolveProvider() full-scan actually chose and persisted
+ *     (scripts/providers/index.js's persistSelected(), only ever called
+ *     after a real detect() succeeded) — read here with a plain
+ *     fs.readFileSync, no detect() invoked, no possibility of writing.
+ * Neither source can misrepresent "would run" as "ran": (1) is what WILL
+ * run (an explicit operator override, not a probe), and (2) is what was
+ * last recorded to have been selected, honestly labeled as such below.
+ * `{ok:false}` (shown as "no recorded provider selection yet") when neither
+ * source has an answer — e.g. a fresh install that has never extracted.
+ */
+function lastRecordedProviderResolution() {
+  const override = process.env.AUXILO_EXTRACTION_PROVIDER;
+  if (override) {
+    if (providers.PROVIDER_ORDER.includes(override)) return { ok: true, id: override };
+    return {
+      ok: false,
+      reason: `AUXILO_EXTRACTION_PROVIDER="${override}" is not a known provider (expected one of: ${providers.PROVIDER_ORDER.join(', ')})`,
+    };
+  }
+  try {
+    const raw = fs.readFileSync(providers.PROVIDERS_STATE_PATH, 'utf8');
+    const parsed = JSON.parse(raw);
+    const id = parsed && typeof parsed === 'object' && typeof parsed.selected === 'string' ? parsed.selected : null;
+    if (id) return { ok: true, id };
+  } catch { /* no recorded selection yet, or the file is unreadable/corrupt */ }
+  return { ok: false, reason: 'no recorded provider selection yet' };
+}
+
+/**
  * EXTRACT-PER-CLIENT W1 PART A/C — one unconditional line naming which
- * extraction model provider resolves, why (env override vs auto-detected),
- * and (PART C) whether that provider's submissions can reach the clean-lane
- * auto-publish path at all (server-side gate: lib/clean-lane.js's
- * CLEAN_LANE_CALIBRATED_PROVIDERS, mirrored above).
+ * extraction model provider resolves, why (env override vs last recorded
+ * selection), and (PART C) whether that provider's submissions can reach
+ * the clean-lane auto-publish path at all (server-side gate:
+ * lib/clean-lane.js's CLEAN_LANE_CALIBRATED_PROVIDERS, mirrored above).
  */
 function extractionProviderLine(resolution) {
   if (resolution && resolution.ok) {
     const via = process.env.AUXILO_EXTRACTION_PROVIDER
       ? 'env override AUXILO_EXTRACTION_PROVIDER'
-      : 'auto-detected';
+      : 'last recorded selection';
     const calibration = CLI_CLEAN_LANE_CALIBRATED_PROVIDERS.includes(resolution.id)
       ? 'clean-lane calibrated'
       : 'review-lane only';
@@ -1639,6 +1679,7 @@ module.exports = {
   parseFlags,
   runnerSkewLine,
   extractionProviderLine,
+  lastRecordedProviderResolution,
   resolveBaseUrl,
   shortFlags,
   groupSummaryRows,

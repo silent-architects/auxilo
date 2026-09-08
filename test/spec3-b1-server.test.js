@@ -299,9 +299,17 @@ describe('evaluateExtractionPublish: the channel-hold decision (SPEC3 §4.4)', (
     consent_version: cleanLane.CLEAN_LANE_CONSENT_VERSION,
     min_auto_publish_quality: 16,
   };
+  // EXTRACTION-MODEL-PROVENANCE (PUNCH-LIST P1): the provider-calibration
+  // gate now runs BEFORE flag/consent/quality/suspension and holds on a
+  // missing extractionModel (see test/clean-lane-calibration.test.js and
+  // test/extraction-model-provenance.test.js for that gate's own coverage).
+  // Every case in THIS describe block is testing flag/consent/quality/
+  // suspension specifically, so each call supplies a genuinely calibrated
+  // stamp to isolate the behavior under test from the provider gate.
+  const CALIBRATED = { provider: 'claude-code', model: null, version: null, vendor: null };
 
   it('flag OFF holds standing_consent_off even with a recorded grant (dark = zero behavior change)', () => {
-    const v = cleanLane.evaluateExtractionPublish({ flagEnabled: false, consentState: GRANT, qualityTotal: 20 });
+    const v = cleanLane.evaluateExtractionPublish({ flagEnabled: false, consentState: GRANT, qualityTotal: 20, extractionModel: CALIBRATED });
     assert.deepEqual(v, { decision: 'hold', reason: 'standing_consent_off' });
   });
 
@@ -312,37 +320,37 @@ describe('evaluateExtractionPublish: the channel-hold decision (SPEC3 §4.4)', (
       { ...GRANT, action: 'freeze' },
       { ...GRANT, consent_version: '2025-01-01-clean-lane-a0' },
     ]) {
-      const v = cleanLane.evaluateExtractionPublish({ flagEnabled: true, consentState: state, qualityTotal: 20 });
+      const v = cleanLane.evaluateExtractionPublish({ flagEnabled: true, consentState: state, qualityTotal: 20, extractionModel: CALIBRATED });
       assert.equal(v.decision, 'hold');
       assert.equal(v.reason, 'standing_consent_off');
     }
   });
 
   it('active grant + below threshold holds below_auto_publish_threshold (floor-passing 15 < default 16)', () => {
-    const v = cleanLane.evaluateExtractionPublish({ flagEnabled: true, consentState: GRANT, qualityTotal: 15 });
+    const v = cleanLane.evaluateExtractionPublish({ flagEnabled: true, consentState: GRANT, qualityTotal: 15, extractionModel: CALIBRATED });
     assert.deepEqual(v, { decision: 'hold', reason: 'below_auto_publish_threshold', min_quality: 16 });
   });
 
   it('active grant + threshold-passing score publishes; per-grant threshold respected', () => {
-    const v = cleanLane.evaluateExtractionPublish({ flagEnabled: true, consentState: GRANT, qualityTotal: 16 });
+    const v = cleanLane.evaluateExtractionPublish({ flagEnabled: true, consentState: GRANT, qualityTotal: 16, extractionModel: CALIBRATED });
     assert.equal(v.decision, 'auto_publish');
     assert.equal(v.consent_version, cleanLane.CLEAN_LANE_CONSENT_VERSION);
     const strict = { ...GRANT, min_auto_publish_quality: 18 };
-    assert.equal(cleanLane.evaluateExtractionPublish({ flagEnabled: true, consentState: strict, qualityTotal: 17 }).decision, 'hold');
-    assert.equal(cleanLane.evaluateExtractionPublish({ flagEnabled: true, consentState: strict, qualityTotal: 18 }).decision, 'auto_publish');
+    assert.equal(cleanLane.evaluateExtractionPublish({ flagEnabled: true, consentState: strict, qualityTotal: 17, extractionModel: CALIBRATED }).decision, 'hold');
+    assert.equal(cleanLane.evaluateExtractionPublish({ flagEnabled: true, consentState: strict, qualityTotal: 18, extractionModel: CALIBRATED }).decision, 'auto_publish');
   });
 
   it('a malformed stored threshold clamps to the default 16, never below 14', () => {
     const weird = { ...GRANT, min_auto_publish_quality: 3 };
     // clamp floor is 14 — a stored 3 can never arm a below-floor auto-publish
-    assert.equal(cleanLane.evaluateExtractionPublish({ flagEnabled: true, consentState: weird, qualityTotal: 13 }).decision, 'hold');
-    assert.equal(cleanLane.evaluateExtractionPublish({ flagEnabled: true, consentState: weird, qualityTotal: 14 }).decision, 'auto_publish');
+    assert.equal(cleanLane.evaluateExtractionPublish({ flagEnabled: true, consentState: weird, qualityTotal: 13, extractionModel: CALIBRATED }).decision, 'hold');
+    assert.equal(cleanLane.evaluateExtractionPublish({ flagEnabled: true, consentState: weird, qualityTotal: 14, extractionModel: CALIBRATED }).decision, 'auto_publish');
     const missing = { ...GRANT, min_auto_publish_quality: undefined };
-    assert.equal(cleanLane.evaluateExtractionPublish({ flagEnabled: true, consentState: missing, qualityTotal: 15 }).decision, 'hold');
+    assert.equal(cleanLane.evaluateExtractionPublish({ flagEnabled: true, consentState: missing, qualityTotal: 15, extractionModel: CALIBRATED }).decision, 'hold');
   });
 
   it('suspended accounts never auto-publish', () => {
-    const v = cleanLane.evaluateExtractionPublish({ flagEnabled: true, consentState: GRANT, qualityTotal: 20, accountSuspended: true });
+    const v = cleanLane.evaluateExtractionPublish({ flagEnabled: true, consentState: GRANT, qualityTotal: 20, accountSuspended: true, extractionModel: CALIBRATED });
     assert.deepEqual(v, { decision: 'hold', reason: 'standing_consent_off' });
   });
 });
@@ -692,6 +700,11 @@ function extractionPayload(n) {
     contributor_agent: 'auxilo-hook/claude-code',
     submission_channel: 'extraction',
     quality_self_assessment: { specificity: 4, actionability: 4, novelty: 4, completeness: 4, total: 16 },
+    // EXTRACTION-MODEL-PROVENANCE (PUNCH-LIST P1): a missing/unknown stamp
+    // now holds unconditionally, ahead of the flag/consent/quality behavior
+    // this file's boot test exercises — a genuinely calibrated stamp keeps
+    // that gate out of the way of the behavior under test here.
+    extraction_model: { provider: 'claude-code', model: null, version: null, vendor: null },
   };
 }
 

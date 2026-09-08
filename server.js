@@ -6180,15 +6180,28 @@ app.post('/learn', async (c) => {
     extraction_model } = body;
   const destinationVisibility = visibility === undefined ? 'public' : visibility;
 
-  // EXTRACT-PER-CLIENT W1 PART C: additive, optional, tolerant intake — a
-  // malformed extraction_model is treated as ABSENT, never a 400 (matches
-  // this route's existing style for quality_self_assessment/extraction_context).
-  // Bounded string lengths so a hostile client can't stuff an oversized value
-  // into a stored field. provider/model/version/vendor are the only shape.
+  // EXTRACT-PER-CLIENT W1 PART C: additive, optional, tolerant intake — never
+  // a 400 (matches this route's existing style for quality_self_assessment/
+  // extraction_context). Bounded string lengths so a hostile client can't
+  // stuff an oversized value into a stored field. provider/model/version/
+  // vendor are the only shape.
+  //
+  // EXTRACTION-MODEL-PROVENANCE (PUNCH-LIST P1): field genuinely ABSENT
+  // (undefined/null — the client sent no stamp at all) still normalizes to
+  // `null`, so lib/clean-lane.js's evaluateExtractionPublish sees "no
+  // stamp" and holds under HOLD_UNKNOWN_EXTRACTION_PROVIDER exactly as
+  // before. A stamp that IS present but malformed/unparseable (wrong
+  // shape, missing or empty `provider`) now normalizes to an explicit
+  // `{provider:'unknown', ...}` instead of `null` — still no 400, the field
+  // stays optional and tolerant, but a garbled stamp reaches the SAME hold
+  // path deterministically (via the literal 'unknown' string) rather than
+  // being indistinguishable from "field absent" at the type level.
   function normalizeExtractionModel(value) {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-    if (typeof value.provider !== 'string' || !value.provider) return null;
+    if (value === undefined || value === null) return null;
     const boundedString = (v, max) => (typeof v === 'string' ? v.slice(0, max) : null);
+    if (typeof value !== 'object' || Array.isArray(value) || typeof value.provider !== 'string' || !value.provider) {
+      return { provider: 'unknown', model: null, version: null, vendor: null };
+    }
     return {
       provider: boundedString(value.provider, 64),
       model: boundedString(value.model, 256),
