@@ -94,8 +94,17 @@ const S7_UNLOCKS_LABEL = "unlocks recorded"; // packet 15 rev 3a caption change 
 // tarball; both stages ship together). Strings copied verbatim for byte
 // comparison against the served page.
 const S2B_WHAT_IS_READ = "Session transcripts on your machine, from the coding clients Auxilo has an adapter for. Where a client fires a capture hook, the hook hands over the transcript. Where it does not, a local sweep reads that client's own session files on a schedule. The current list is at <a href=\"/legal/supported-clients\">auxilo.io/legal/supported-clients</a>. The runner looks for those session files and for its own state under ~/.auxilo. It does not search the rest of your disk. What the model itself can read on each path is in the row What runs where, below.";
-const S2B_WHAT_RUNS_WHERE = "Drafting runs on your machine, never through Auxilo's. It uses the first model client you are signed in to, Claude Code first and then Codex, and only one runs at a time. If neither is signed in, you can set a provider key of your own. It stays on this machine, readable only by your user account, and Auxilo never receives it. A run with your key sends the scrubbed transcript only to that provider, under your own account. The model reads nothing on your machine. Any use is charged to that account, never to Auxilo. Run auxilo provider clear to remove it. The scrubbed transcript goes to that client's model provider under your own agreement with them. Before the run, Auxilo removes the provider's billing variables from the run. On the Claude path the model has no tools, so it cannot open files on your machine. On the Codex path the model cannot write to your files, but it can read what its sandbox allows. Which clients Auxilo can capture sessions from is listed at auxilo.io/legal/supported-clients.";
+const S2B_WHAT_RUNS_WHERE = "Drafting runs on your machine, never through Auxilo's. It uses the first model client you are signed in to, Claude Code first and then Codex, and only one runs at a time. If neither is signed in, you can set a provider key of your own. It stays on this machine, readable only by your user account, and Auxilo never receives it. A run with your key sends the scrubbed transcript only to that provider, under your own account. The model reads nothing on your machine. Any use is charged to that account, never to Auxilo. Run auxilo provider clear to remove it. The scrubbed transcript goes to that client's model provider under your own agreement with them. Before the run, Auxilo removes the provider's billing variables from the run. On the Claude path the model has no tools and receives no hooks, no project instructions, and no settings files from your environment. On the Codex path the model cannot write to your files, but it can read what its sandbox allows. Which clients Auxilo can capture sessions from is listed at auxilo.io/legal/supported-clients.";
 const S2B_ROW_LABEL = "If no model client is signed in and no key is set";
+// SITE-RESTRUCTURE-W3 item D (SITE-RESTRUCTURE-W3-SPEC-2026-09-07.md §D,
+// Tyler-approved 2026-09-08, all three gates PASSED): the Claude-path
+// sentence in the "What runs where" row now states BOTH isolation
+// dimensions (no tools AND no hooks/instructions/settings), not just the
+// tool-access one. Kept as standalone constants (not just inlined into
+// S2B_WHAT_RUNS_WHERE above) so the swap is asserted directly, not only as
+// a side effect of the full-cell byte comparison.
+const S2B_CLAUDE_PATH_SENTENCE_OLD = "On the Claude path the model has no tools, so it cannot open files on your machine.";
+const S2B_CLAUDE_PATH_SENTENCE_NEW = "On the Claude path the model has no tools and receives no hooks, no project instructions, and no settings files from your environment.";
 // 0.9.16 disclosure (AUTO-UPDATE-DISCLOSURE-2026-09-07.md, Tyler-approved): a
 // new row directly after "What runs where", NOT appended to that row.
 const S2B_UPDATE_LABEL = "How the runner updates itself";
@@ -209,6 +218,29 @@ describe('Trust page: route, redirects, head tags, h1, forbidden strings', { tim
     assert.ok(TRUST_HTML.includes(S2B_WHAT_IS_READ), '§2b What-is-read cell verbatim, including the What-runs-where pointer sentence');
     assert.ok(TRUST_HTML.includes(S2B_WHAT_RUNS_WHERE), '§2b What-runs-where cell verbatim (Stage A + Stage B, both shipped together per rev 2e)');
     assert.ok(TRUST_HTML.includes(`<td>${S2B_ROW_LABEL}</td>`), '§2b row label verbatim: "If no model client is signed in and no key is set"');
+  });
+
+  it('§2b SITE-RESTRUCTURE-W3 item D: the Claude-path sentence states BOTH tool isolation and context isolation, in the "What runs where" row specifically', () => {
+    // Positive control (spec: count 1 before): the old single-dimension
+    // sentence must be gone from the whole file, not merely superseded.
+    const oldMatches = TRUST_HTML.split(S2B_CLAUDE_PATH_SENTENCE_OLD).length - 1;
+    assert.equal(oldMatches, 0, 'old Claude-path sentence ("...so it cannot open files on your machine.") absent from the file');
+
+    const newMatches = TRUST_HTML.split(S2B_CLAUDE_PATH_SENTENCE_NEW).length - 1;
+    assert.equal(newMatches, 1, 'new Claude-path sentence present exactly once in the file');
+
+    // Row-scoped: isolate the "What runs where" row's statement <td>
+    // specifically (not just "somewhere on the page") so a copy that
+    // migrated the sentence to the wrong row would still fail.
+    const runsWhereRowMatch = TRUST_HTML.match(/<tr>\s*<td>What runs where<\/td>\s*<td>([\s\S]*?)<\/td>\s*<\/tr>/);
+    assert.ok(runsWhereRowMatch, '"What runs where" row located as <tr><td>label</td><td>statement</td></tr>');
+    const runsWhereStatement = runsWhereRowMatch[1];
+    assert.ok(runsWhereStatement.includes(S2B_CLAUDE_PATH_SENTENCE_NEW), 'new sentence is inside the "What runs where" row\'s statement cell');
+    assert.ok(!runsWhereStatement.includes(S2B_CLAUDE_PATH_SENTENCE_OLD), 'old sentence is not inside the "What runs where" row\'s statement cell');
+
+    // The Codex-path sentence in the same row is unchanged (spec: "no change
+    // to the Codex-path sentence").
+    assert.ok(runsWhereStatement.includes('On the Codex path the model cannot write to your files, but it can read what its sandbox allows.'), 'Codex-path sentence unchanged in the same row');
   });
 
   it('§2b: "How the runner updates itself" row present once, placed directly after "What runs where" (0.9.16 disclosure, AUTO-UPDATE-DISCLOSURE-2026-09-07.md)', () => {
@@ -589,6 +621,20 @@ describe('TRUST-PAGE-SSR: §4 partition render + §7 live counts + no-store', { 
   it('GET /how-submissions-work sends Cache-Control: no-store', { timeout: 240_000 }, async (t) => {
     await withTrustPageStagedServer(t, { catalog: tpAllInternalCatalog(), ledger: '' }, async (_html, res) => {
       assert.equal(res.headers.get('cache-control'), 'no-store');
+    });
+  });
+
+  it('SITE-RESTRUCTURE-W3 item D: the served page carries the new Claude-path sentence exactly once, the old one nowhere, and it lands in the "What runs where" row', { timeout: 240_000 }, async (t) => {
+    await withTrustPageStagedServer(t, { catalog: tpAllInternalCatalog(), ledger: '' }, async (html) => {
+      const oldMatches = html.split(S2B_CLAUDE_PATH_SENTENCE_OLD).length - 1;
+      assert.equal(oldMatches, 0, 'old Claude-path sentence absent from the served page');
+
+      const newMatches = html.split(S2B_CLAUDE_PATH_SENTENCE_NEW).length - 1;
+      assert.equal(newMatches, 1, 'new Claude-path sentence present exactly once on the served page');
+
+      const runsWhereRowMatch = html.match(/<tr>\s*<td>What runs where<\/td>\s*<td>([\s\S]*?)<\/td>\s*<\/tr>/);
+      assert.ok(runsWhereRowMatch, '"What runs where" row located on the served page');
+      assert.ok(runsWhereRowMatch[1].includes(S2B_CLAUDE_PATH_SENTENCE_NEW), 'new sentence is inside the served "What runs where" row\'s statement cell');
     });
   });
 
