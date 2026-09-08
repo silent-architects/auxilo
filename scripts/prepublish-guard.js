@@ -20,6 +20,13 @@
  * origin/main, clean, and the version being published is genuinely new.
  *
  * CONDITIONS — ALL must hold, or the guard refuses:
+ *   0. `npm whoami` succeeds — the local npm session is authenticated to
+ *      the registry. Checked FIRST, before anything else below, because a
+ *      logged-out session (npm whoami -> E401/ENEEDAUTH) makes condition 4's
+ *      registry lookup unreliable too, and because a publish attempted
+ *      while logged out fails with a confusing "404 Not Found" on the PUT
+ *      — which reads as "the package is missing," not "you are logged
+ *      out." See PUBLISH-GUARD-AUTH below.
  *   1. `git fetch origin main` succeeds (network reachable). If it fails,
  *      refuse — do not fall back to a possibly-stale local origin/main ref.
  *   2. `git rev-parse HEAD` === `git rev-parse origin/main` — HEAD is
@@ -29,6 +36,20 @@
  *      see the follow-up npm-pack note below for why that is still safe.
  *   4. The version in package.json is NOT already published to the
  *      registry (`npm view auxilo-mcp@<version> version` returns nothing).
+ *
+ * PUBLISH-GUARD-AUTH
+ * -------------------
+ * The operator's `npm publish` failed twice in 24h with a bare "not
+ * found." Root cause both times was a dead npm session — `npm whoami`
+ * returned E401 — and the registry answers an unauthenticated PUT with a
+ * 404, which looks like a missing package rather than a logged-out
+ * session. Condition 0 above surfaces the real cause up front. The
+ * `npm whoami` check runs with a short timeout (10s) so a hung network
+ * call can't stall a publish indefinitely, and its stdout/stderr is never
+ * logged verbatim — only its exit code and, at most, whether E401 or
+ * ENEEDAUTH appears in the captured output are inspected — because some
+ * npm configs embed credentials in registry URLs that could otherwise leak
+ * into a terminal or CI log.
  *
  * On untracked files: allowing untracked files past condition 3 is safe
  * only because npm's own packing step is independently authoritative over
@@ -76,10 +97,16 @@ const CANONICAL_FIX =
 /**
  * Default shell-command runner. Returns trimmed stdout on success, throws
  * on non-zero exit (matching execSync's own behavior) so callers can
- * distinguish "ran and returned empty" from "failed to run".
+ * distinguish "ran and returned empty" from "failed to run". `options` is
+ * merged into the execSync call (e.g. `{ timeout: 10000 }`) — the fake
+ * runner used in tests ignores this second argument entirely.
  */
-function defaultRun(cmd) {
-  return execSync(cmd, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+function defaultRun(cmd, options = {}) {
+  return execSync(cmd, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    ...options,
+  }).trim();
 }
 
 /**
@@ -99,6 +126,29 @@ function check({ run = defaultRun, env = process.env } = {}) {
       forced: true,
       headSha: null,
       version: null,
+    };
+  }
+
+  // 0. npm registry auth. Checked first — a dead session (E401/ENEEDAUTH)
+  // makes condition 4's registry lookup unreliable too, and would otherwise
+  // surface at `npm publish` time as a confusing 404 on the PUT rather than
+  // as an auth failure. Short timeout so a hung network call can't stall
+  // the guard indefinitely. `npm whoami`'s stdout (the username) and any
+  // stderr are deliberately never logged — some npm configs embed
+  // credentials in registry URLs, and those could otherwise leak into a
+  // terminal or CI log via an error message.
+  try {
+    run('npm whoami', { timeout: 10000 });
+    // Success: authenticated. Never print the username here — see above.
+  } catch (err) {
+    return {
+      ok: false,
+      reason:
+        'not authenticated to the npm registry (npm whoami failed). A publish ' +
+        'would fail with a confusing 404 Not Found on the PUT. Fix: npm login\n' +
+        '(A longer-lived automation token in ~/.npmrc avoids the repeat — set ' +
+        "one up through npm's own token flow, not by pasting a token into a " +
+        'shell command.)',
     };
   }
 
