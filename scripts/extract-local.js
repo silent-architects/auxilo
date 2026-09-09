@@ -648,11 +648,18 @@ const EXTRACTABLE_SOURCE_IDS = Object.freeze([
   'continue',
   'copilot',
   'cursor',
+  // DEVIN-RENAME (0.9.19): 'windsurf' → 'devin' — the windsurf registry
+  // client (id kept for ledger continuity) dropped its capture hook in
+  // favor of scripts/sources/devin.js's poll adapter, whose static id is
+  // 'devin'. This list is the union of adapter ids (scripts/sources/*.js)
+  // and installer hook-client source ids (test/ext-gate-closure.test.js is
+  // the authority) — devin.js contributes 'devin' via the adapter side now
+  // that windsurf no longer contributes 'windsurf' via the hook side.
+  'devin',
   'factory',
   'gemini-cli',
   'openclaw',
   'roo-code',
-  'windsurf',
 ]);
 
 // Gate-A 2026-09-05: the exported set is IMMUTABLE. It stays a real Set (same
