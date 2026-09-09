@@ -32,7 +32,7 @@ The installer detects your clients, registers the MCP server in each, signs you 
 | Client | Detection | MCP registration | Background extraction | Notes |
 |---|---|---|---|---|
 | **Claude Code** | `~/.claude/` | `~/.claude/settings.json` | ✅ **Supported** — SessionEnd hook | |
-| **Cursor** | `~/.cursor/` | `~/.cursor/mcp.json` | ✅ **Supported** — `sessionEnd` hook (`~/.cursor/hooks.json`) | |
+| **Cursor** | `~/.cursor/` | `~/.cursor/mcp.json` | ✅ **Supported** — `stop` hook (`~/.cursor/hooks.json`) | |
 | **Gemini CLI** | `~/.gemini/tmp/` or `~/.gemini/settings.json` | `~/.gemini/settings.json` | ✅ **Supported** — `SessionEnd` hook | |
 | **Antigravity** | `~/.gemini/antigravity/` | `~/.gemini/config/mcp_config.json` | ⚠️ **Supported (early)** — `Stop` hook (`~/.gemini/config/hooks.json`) | hook schema young; verified against live install |
 | **Devin Desktop** (formerly Windsurf) | `~/.config/devin/` (legacy `~/.codeium/windsurf/`) | `~/.config/devin/mcp_config.json` | ✅ **Supported** — per-response hook capture | Renamed from Windsurf; Devin 1.126 migrates config to `~/.config/devin/`. Both locations are read during the migration window. |

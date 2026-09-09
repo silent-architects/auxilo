@@ -96,8 +96,12 @@ describe('CLI-CAPTURE-MODE-DISAGREE: clientHasCaptureHookMode is the one shared 
     assert.equal(clientHasCaptureHookMode(claudeDesktop), false);
   });
 
-  it('the other six captureHook clients (windsurf, codex, gemini-cli, antigravity, factory, copilot-cli) also report true', () => {
-    for (const id of ['windsurf', 'codex', 'gemini-cli', 'antigravity', 'factory', 'copilot-cli']) {
+  it('the other five captureHook clients (codex, gemini-cli, antigravity, factory, copilot-cli) also report true', () => {
+    // DEVIN-RENAME (0.9.19): windsurf dropped OUT of this list — it lost its
+    // capture hook (scripts/sources/devin.js's poll adapter replaces it), so
+    // it no longer reports hook-capture mode at all. See the dedicated
+    // devin-cursor-0919.test.js for windsurf/Devin's own coverage.
+    for (const id of ['codex', 'gemini-cli', 'antigravity', 'factory', 'copilot-cli']) {
       const c = registry.find((x) => x.id === id);
       assert.ok(c, `${id} must be in the registry`);
       assert.equal(c.captureHook, true, `${id}: expected captureHook:true`);
@@ -208,7 +212,8 @@ describe('CLI-CAPTURE-MODE-DISAGREE: `auxilo setup` and `auxilo status` print th
     // Cursor: status's own per-client "Capture hooks" line (unconditionally
     // present once cursor is detected — captureHook is a registry fact, not
     // dependent on the hook actually having been installed yet).
-    assert.match(statusRes.stdout, /Capture hooks: Cursor \(sessionEnd, not registered\)/,
+    // CURSOR-STOP-HOOK (0.9.19): captureEvent is now 'stop', not 'sessionEnd'.
+    assert.match(statusRes.stdout, /Capture hooks: Cursor \(stop, not registered\)/,
       `status must report cursor's capture hook\nfull stdout:\n${statusRes.stdout}`);
     // Claude Code: status's separate, always-present SessionEnd-hook line —
     // "not installed" here because setup was killed before completing.

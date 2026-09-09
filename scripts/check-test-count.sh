@@ -185,7 +185,31 @@ cd "${REPO_ROOT}"
 # fail each time except one transient flake in test/x402-router.test.js's
 # 2-second _waitForFinality timeout tests (pre-existing, unrelated to this
 # wave — not touched) that did not reproduce on 3 immediate reruns.
-EXPECTED_TEST_COUNT=3035
+#
+# BUILD-SPEC-0919 (agent/0919-devin-cursor, base pm/integ-devin-0919 @
+# 0dbdd41, inherited pin 3035): +20 for the new
+# test/devin-cursor-0919.test.js — Cursor stop-hook registry/writer
+# coverage, the windsurf->Devin registry rename (incl. dual-dir detection),
+# and the new scripts/sources/devin.js poll adapter (registration/packaging
+# closure, the EXTRACTABLE_SOURCES windsurf->devin swap, detect(),
+# discover-filters-agent-only-DBs, since + -wal/-shm handling, streaming-
+# chunk reassembly, unknown model provenance, and three best-effort/
+# never-throw paths). test/wave3-client-funnel.test.js's existing UC-3
+# dynamic-SOURCES-registry test had 'devin' added to its static expected-id
+# list (value edit, not a new test — no count change). 3035 -> 3055.
+#
+# Also required to make `bash scripts/check-test-count.sh` pass, though not
+# itself a test-count change and not named by this wave's spec: the
+# package.json 0.9.18->0.9.19 bump has two companions the spec omitted but
+# the suite enforces — openapi.json's info.version (test/envelope-0831.test.js
+# + test/r01-launch-blockers.test.js both assert it equals package.json's
+# version) and four hardcoded '0.9.18' literals in
+# test/prepublish-guard.test.js's fixtures/assertions (the same drift class
+# its own header comment already documents recurring at the 0.9.6 and
+# 0.9.17 bumps). Verified against the actual `bash scripts/check-test-count.sh`
+# discovered count (isolated HOME, --test-reporter=tap, test/*.test.js
+# only): 3055, 0 fail.
+EXPECTED_TEST_COUNT=3055
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
