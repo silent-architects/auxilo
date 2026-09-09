@@ -215,8 +215,17 @@ async function cmdSetup(flags) {
 
   console.log('Detected clients:');
   detected.forEach((c, i) => {
-    const extras = [c.mcp ? 'MCP' : 'poll-based source', c.hooks ? 'background extraction' : null]
-      .filter(Boolean).join(', ');
+    // CLI-CAPTURE-MODE-DISAGREE: was `c.hooks ? 'background extraction' : null`
+    // — true only for Claude Code, so the seven captureHook clients (cursor,
+    // windsurf, codex, gemini-cli, antigravity, factory, copilot-cli) printed
+    // "(MCP)" here even though setup wires their capture hook a few steps
+    // later. `installer.clientHasCaptureHookMode` is the same predicate
+    // `auxilo status` already uses (`c.captureHook`, cmdStatus below), so the
+    // two screens can no longer disagree about a client's capture mode.
+    const extras = [
+      c.mcp ? 'MCP' : 'poll-based source',
+      installer.clientHasCaptureHookMode(c) ? 'background extraction' : null,
+    ].filter(Boolean).join(', ');
     console.log(`  ${i + 1}. ${c.name} (${extras})`);
   });
 
