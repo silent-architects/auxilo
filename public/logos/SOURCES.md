@@ -36,10 +36,11 @@ Nine clients below shipped as a normalized official SVG mark (single `fill="curr
 - simple-icons' own recorded source for this mark: https://www.jetbrains.com/company/brand/logos/, guidelines at https://www.jetbrains.com/company/brand/
 - License/brand note: CC0 1.0 (repo `LICENSE.md`) for the SVG markup; mark remains JetBrains' trademark.
 
-### Windsurf — `windsurf.svg`
-- Downloaded from: https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/windsurf.svg
-- simple-icons' own recorded source for this mark: https://windsurf.com/brand, guidelines at the same URL
-- License/brand note: CC0 1.0 (repo `LICENSE.md`) for the SVG markup; mark remains Windsurf's (Cognition) trademark.
+### Devin Desktop — `devin.svg`
+- Extracted from the shipped application: `/Applications/Devin.app/Contents/Resources/app/out/media/sessions-icon.svg` (Devin 1.126.0). simple-icons has no `devin` entry.
+- Vendor: https://devin.ai/desktop (Cognition). Windsurf was renamed to Devin Desktop; `windsurf.svg` was removed in the same change.
+- Adaptation: the four product-mark paths were kept verbatim; the four `linearGradient` fills were dropped and replaced with `fill="currentColor"` on the root, matching every other mark in this directory (they are rendered as CSS masks — see `public/styles.css` `.ww-logo`).
+- License/brand note: mark remains Cognition's trademark; used nominatively to identify the client.
 
 ### Cline — `cline.svg`
 - Downloaded from: https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/cline.svg

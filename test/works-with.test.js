@@ -146,7 +146,7 @@ describe('WORKS-WITH: structural — public/works-with.html, public/index.html b
   it('LOGOS-INVISIBLE: nine client marks are masked spans with the nine expected logo URLs, and zero <img src="/logos/ remain', () => {
     const expected = [
       'claude-code.svg', 'cursor.svg', 'github-copilot.svg', 'gemini-cli.svg',
-      'windsurf.svg', 'claude-desktop.svg', 'cline.svg', 'jetbrains-junie.svg', 'opencode.svg',
+      'devin.svg', 'claude-desktop.svg', 'cline.svg', 'jetbrains-junie.svg', 'opencode.svg',
     ];
     const maskSpans = [...WORKS_WITH_HTML.matchAll(/<span class="ww-logo" role="img" aria-label="([^"]+)" style="--logo:url\(\/logos\/([a-z0-9.-]+\.svg)\)"><\/span>/g)];
     assert.equal(maskSpans.length, 9, `expected exactly 9 masked marks, found ${maskSpans.length}`);
@@ -210,7 +210,7 @@ describe('WORKS-WITH: structural — public/works-with.html, public/index.html b
     const bandStart = INDEX_HTML.indexOf('id="works-with-band"');
     const bandEnd = INDEX_HTML.indexOf('</section>', bandStart);
     const bandBlock = INDEX_HTML.slice(bandStart, bandEnd);
-    const expectedNames = ['Claude Code', 'Cursor', 'Gemini CLI', 'Windsurf', 'GitHub Copilot', 'Codex', 'Factory droid', 'Antigravity', 'Cline', 'Roo Code', 'Continue.dev'];
+    const expectedNames = ['Claude Code', 'Cursor', 'Gemini CLI', 'Devin Desktop', 'GitHub Copilot', 'Codex', 'Factory droid', 'Antigravity', 'Cline', 'Roo Code', 'Continue.dev'];
     for (const name of expectedNames) {
       assert.ok(bandBlock.includes(`>${name}<`), `band carries ${name}`);
     }

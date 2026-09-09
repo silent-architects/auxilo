@@ -35,7 +35,7 @@ The installer detects your clients, registers the MCP server in each, signs you 
 | **Cursor** | `~/.cursor/` | `~/.cursor/mcp.json` | ✅ **Supported** — `sessionEnd` hook (`~/.cursor/hooks.json`) | |
 | **Gemini CLI** | `~/.gemini/tmp/` or `~/.gemini/settings.json` | `~/.gemini/settings.json` | ✅ **Supported** — `SessionEnd` hook | |
 | **Antigravity** | `~/.gemini/antigravity/` | `~/.gemini/config/mcp_config.json` | ⚠️ **Supported (early)** — `Stop` hook (`~/.gemini/config/hooks.json`) | hook schema young; verified against live install |
-| **Windsurf** | `~/.codeium/windsurf/` | `~/.codeium/windsurf/mcp_config.json` | ✅ **Supported** — per-response transcript hook (deduplicated) | |
+| **Devin Desktop** (formerly Windsurf) | `~/.config/devin/` (legacy `~/.codeium/windsurf/`) | `~/.config/devin/mcp_config.json` | ✅ **Supported** — per-response hook capture | Renamed from Windsurf; Devin 1.126 migrates config to `~/.config/devin/`. Both locations are read during the migration window. |
 | **GitHub Copilot (VS Code agent / CLI)** | `~/.copilot/` | `~/.copilot/mcp-config.json` | ✅ **Supported** — `Stop` hook (`~/.copilot/hooks/auxilo.json`) | hooks are a VS Code Preview feature |
 | **Codex (CLI + Desktop)** | `~/.codex/` | `~/.codex/config.toml` | ✅ **Supported** — `Stop` hook (`~/.codex/hooks.json`, CLI; requires one-time `/hooks` trust) **+ poll sweep of `~/.codex/sessions/` rollouts (Desktop + CLI, best-effort)** | Desktop app currently does not execute hooks (upstream openai/codex#21639); sweep covers it. |
 | **Factory droid** | `~/.factory/` | `~/.factory/mcp.json` | ✅ **Supported** — `SessionEnd` hook (`~/.factory/hooks.json`) | applies to new sessions after setup |
