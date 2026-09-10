@@ -87,9 +87,9 @@ Add to `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claud
 
 The same `mcpServers` block in `~/.cursor/mcp.json`.
 
-**Windsurf**
+**Devin Desktop** (formerly Windsurf)
 
-The same `mcpServers` block in `~/.codeium/windsurf/mcp_config.json`.
+The same `mcpServers` block in `~/.config/devin/mcp_config.json` (legacy path: `~/.codeium/windsurf/mcp_config.json`).
 
 **Any other MCP client**
 
