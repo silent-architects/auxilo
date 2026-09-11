@@ -209,7 +209,40 @@ cd "${REPO_ROOT}"
 # 0.9.17 bumps). Verified against the actual `bash scripts/check-test-count.sh`
 # discovered count (isolated HOME, --test-reporter=tap, test/*.test.js
 # only): 3055, 0 fail.
-EXPECTED_TEST_COUNT=3055
+#
+# BUILD-SPEC-0920 (agent/0920-copilot, base pm/integ-0920 @ a2cd3c9, inherited
+# pin 3055): +16 for the new test/copilot-0920.test.js — the new
+# scripts/sources/copilot.js dedicated parser for GitHub Copilot CLI's typed
+# events.jsonl (registration/packaging closure incl. RUNNER_STACK + sweeper
+# manifest + EXTRACTABLE_SOURCES, detect(), discoverSessions() poll + since
+# handling, [user]/[assistant] reconstruction, transformedContent ignored,
+# empty-content tool-call turns skipped, non-conversation types ignored,
+# real on-disk model provenance from session.start.selectedModel with
+# last-assistant.message.model fallback, in-file sessionId override,
+# malformed-line/non-object-line/unreadable-file/no-turns best-effort paths,
+# poll-only registerSessionEndHook). test/wave3-client-funnel.test.js's
+# existing UC-3 dynamic-SOURCES-registry test had 'copilot' added to its
+# static expected-id list, nine->ten adapters (value edit, not a new test —
+# no count change). package.json 0.9.19->0.9.20 bump's usual companions
+# (openapi.json info.version, mcp-server.js, .well-known/agent.json, and the
+# four hardcoded version literals in test/prepublish-guard.test.js) were
+# applied in the same commit. 3055 -> 3071.
+#
+# GOTCHA (not a test-count factor, but blocks this script if missed): a
+# fresh `git worktree add` does NOT carry node_modules (untracked, per
+# worktree) — running this script straight after `git worktree add` fails
+# ~340 tests short of the pin (59 real failures + 217 cancelled-by-parent +
+# a handful skipped) via cascading `Cannot find module 'hono'` /
+# `Cannot find module 'jose'` MODULE_NOT_FOUND errors (lib/accounts.js and
+# the server-route test files require them). Confirmed by stashing every
+# 0920 change and re-running against the untouched pm/integ-0920 base in
+# the same node_modules-less worktree: identical 59 fail / 217 cancelled —
+# i.e. this is a worktree-setup gap, not a base-branch regression. Fix:
+# `npm ci --no-audit --no-fund` in the new worktree before running any test
+# battery. Verified against the actual `bash scripts/check-test-count.sh`
+# discovered count post-`npm ci` (isolated HOME, --test-reporter=tap,
+# test/*.test.js only): 3071, 0 fail, 6 skipped (pre-existing, unrelated).
+EXPECTED_TEST_COUNT=3071
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

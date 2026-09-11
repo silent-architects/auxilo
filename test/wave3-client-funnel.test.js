@@ -625,13 +625,15 @@ describe('UC-3 — Cline / Roo Code / Continue adapters', () => {
 });
 
 describe('UC-3 — dynamic SOURCES registry', () => {
-  it('registers all nine adapters, excludes generic/interface, unique ids', () => {
+  it('registers all ten adapters, excludes generic/interface, unique ids', () => {
     const ids = runner.SOURCES.map((S) => S.id).sort();
     // BUILD-SPEC-0919: 'devin' joins the registry (scripts/sources/devin.js,
     // the poll adapter that replaced the windsurf registry entry's dropped
     // capture hook).
+    // BUILD-SPEC-0920: 'copilot' joins the registry (scripts/sources/copilot.js,
+    // the dedicated parser for Copilot CLI's typed-event-stream events.jsonl).
     assert.deepStrictEqual(ids,
-      ['antigravity', 'claude-code', 'cline', 'codex-cli', 'continue', 'devin', 'gemini-cli', 'openclaw', 'roo-code']);
+      ['antigravity', 'claude-code', 'cline', 'codex-cli', 'continue', 'copilot', 'devin', 'gemini-cli', 'openclaw', 'roo-code']);
     assert.strictEqual(new Set(ids).size, ids.length);
     for (const S of runner.SOURCES) {
       assert.ok(S.prototype instanceof TranscriptSource, `${S.id} extends TranscriptSource`);
