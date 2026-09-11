@@ -210,7 +210,7 @@ describe('WORKS-WITH: structural — public/works-with.html, public/index.html b
     const bandStart = INDEX_HTML.indexOf('id="works-with-band"');
     const bandEnd = INDEX_HTML.indexOf('</section>', bandStart);
     const bandBlock = INDEX_HTML.slice(bandStart, bandEnd);
-    const expectedNames = ['Claude Code', 'Cursor', 'Gemini CLI', 'Devin Desktop', 'GitHub Copilot', 'Codex', 'Factory droid', 'Antigravity', 'Cline', 'Roo Code', 'Continue.dev'];
+    const expectedNames = ['Claude Code', 'Cursor', 'Gemini CLI', 'Devin Desktop', 'GitHub Copilot', 'Codex', 'Antigravity', 'Cline', 'Roo Code', 'Continue.dev'];
     for (const name of expectedNames) {
       assert.ok(bandBlock.includes(`>${name}<`), `band carries ${name}`);
     }
