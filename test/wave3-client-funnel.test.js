@@ -38,6 +38,15 @@ function rmrf(p) {
   try { fs.rmSync(p, { recursive: true, force: true }); } catch { /* best-effort */ }
 }
 
+function assertInstalledGolden(installedExtractLocal, options, fixtureName) {
+  const expected = fs.readFileSync(
+    path.join(__dirname, 'fixtures', 'epc2-1-prompts', fixtureName)
+  );
+  const actual = Buffer.from(installedExtractLocal.buildExtractionPrompt(options));
+  assert.strictEqual(Buffer.compare(actual, expected), 0,
+    `${fixtureName} must match from the sweeper-installed layout`);
+}
+
 // ─── A1: score-at-extraction, ON by default (CLEAN-LANE-FLIP Phase B) ───────
 
 describe('A1 — score-at-extraction gate (AUXILO_SCORE_EXTRACTION, default ON)', () => {
@@ -652,6 +661,21 @@ describe('UC-3 — manifest closure (the d8c7099 bug class)', () => {
   const repoRoot = path.join(__dirname, '..');
   const sourceFiles = fs.readdirSync(path.join(repoRoot, 'scripts', 'sources'))
     .filter((f) => f.endsWith('.js'));
+  const promptFiles = fs.readdirSync(path.join(repoRoot, 'scripts', 'prompts'))
+    .filter((f) => f.endsWith('.js'));
+  const providerFiles = fs.readdirSync(path.join(repoRoot, 'scripts', 'providers'))
+    .filter((f) => f.endsWith('.js'));
+  const providerSchemaFiles = fs.readdirSync(path.join(repoRoot, 'scripts', 'providers', 'schemas'))
+    .filter((f) => f.endsWith('.json'));
+
+  function copySweeperManifest(installedRoot) {
+    for (const [src, dest, mode] of runner.sweeperManifest(repoRoot)) {
+      const destinationPath = path.join(installedRoot, ...dest.split('/'));
+      fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
+      fs.copyFileSync(path.join(repoRoot, ...src.split('/')), destinationPath);
+      fs.chmodSync(destinationPath, mode);
+    }
+  }
 
   it('every scripts/sources/*.js has a RUNNER_STACK row (installer copies it)', () => {
     const stackSrcs = new Set(installer.RUNNER_STACK.map(([src]) => src));
@@ -679,6 +703,58 @@ describe('UC-3 — manifest closure (the d8c7099 bug class)', () => {
       const rel = `scripts/sources/${m[1].endsWith('.js') ? m[1] : m[1] + '.js'}`;
       assert.ok(stackSrcs.has(rel), `${rel} required by runner.js but missing from RUNNER_STACK`);
       assert.ok(sweeperSrcs.has(rel), `${rel} required by runner.js but missing from sweeper manifest`);
+    }
+  });
+
+  it('sweeper manifest carries every prompt, provider, and provider schema asset', () => {
+    const sweeperSrcs = new Set(runner.sweeperManifest(repoRoot).map(([src]) => src));
+    for (const file of promptFiles) {
+      assert.ok(sweeperSrcs.has(`scripts/prompts/${file}`),
+        `scripts/prompts/${file} missing from sweeper manifest`);
+    }
+    for (const file of providerFiles) {
+      assert.ok(sweeperSrcs.has(`scripts/providers/${file}`),
+        `scripts/providers/${file} missing from sweeper manifest`);
+    }
+    for (const file of providerSchemaFiles) {
+      assert.ok(sweeperSrcs.has(`scripts/providers/schemas/${file}`),
+        `scripts/providers/schemas/${file} missing from sweeper manifest`);
+    }
+  });
+
+  it('loads the copied sweeper extractor and reproduces public/private goldens', () => {
+    const tempRoot = tmpdir('auxilo-epc2-sweeper-');
+    try {
+      const installedRoot = path.join(tempRoot, 'bin');
+      copySweeperManifest(installedRoot);
+      const installedExtractLocal = require(path.join(installedRoot, 'scripts', 'extract-local.js'));
+      assertInstalledGolden(installedExtractLocal,
+        { captureVisibility: 'public', scoreExtraction: true },
+        'extraction-public-score-on-memory-absent.txt');
+      assertInstalledGolden(installedExtractLocal,
+        { captureVisibility: 'private', scoreExtraction: false },
+        'extraction-private-score-off-memory-absent.txt');
+    } finally {
+      rmrf(tempRoot);
+    }
+  });
+
+  it('sweeperManifest derives a sorted row for a future prompt bundle', () => {
+    const tempRoot = tmpdir('auxilo-epc2-sweeper-rows-');
+    try {
+      const promptDir = path.join(tempRoot, 'scripts', 'prompts');
+      fs.mkdirSync(promptDir, { recursive: true });
+      fs.writeFileSync(path.join(promptDir, 'z-future.js'), 'module.exports = {};\n');
+      fs.writeFileSync(path.join(promptDir, 'a-current.js'), 'module.exports = {};\n');
+      fs.writeFileSync(path.join(promptDir, 'ignore.txt'), 'not a prompt module\n');
+      const promptRows = runner.sweeperManifest(tempRoot)
+        .filter(([src]) => src.startsWith('scripts/prompts/'));
+      assert.deepStrictEqual(promptRows, [
+        ['scripts/prompts/a-current.js', 'scripts/prompts/a-current.js', 0o644],
+        ['scripts/prompts/z-future.js', 'scripts/prompts/z-future.js', 0o644],
+      ]);
+    } finally {
+      rmrf(tempRoot);
     }
   });
 

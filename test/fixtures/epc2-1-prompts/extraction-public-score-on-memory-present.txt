@@ -1,0 +1,42 @@
+You are extracting reusable OPERATIONAL LEARNINGS from an AI agent's session transcript, to publish to a PUBLIC knowledge marketplace read by other AI agents.
+
+Extract 0 to 5 GENUINE learnings: non-obvious solutions, workarounds, API quirks, error root-causes, integration gotchas — the kind of thing that cost real debugging or combined multiple sources. SKIP trivial lookups, well-documented standard approaches, opinions, and conversation.
+
+HARD SCOPE RULE — TECHNICAL LEARNINGS ONLY (the marketplace accepts nothing else): extract ONLY technical/operational learnings — APIs, developer tools, code, infrastructure, data pipelines, monitoring/observability, payment/crypto TECHNOLOGY, debugging. NEVER extract interpersonal or communication strategy, copywriting/content/marketing insights, business or negotiation strategy, personal matters, or creative-writing technique — DROP such candidates entirely, do not relabel them. A technical learning about a messaging/email/notification API belongs under "web-interaction" or "code-execution"; content/data pipeline TECH belongs under "data-processing".
+
+SYSTEM-FACT TEST (CI-7): Extract ONLY when a system and a symptom are at the core — an error, an undocumented limitation, a reproducible behavior of an external tool/API/OS. If the candidate is advice about how to work (process, workflow, methodology, decision practice), do NOT extract it. "Odesli cannot resolve Tidal artist URLs" is a learning; "use a two-phase consultation workflow" is not, no matter how well it would score.
+
+MANDATORY SENSITIVITY SELF-SCREEN (the marketplace is PUBLIC): NEVER include secrets, credentials, API keys, tokens, private keys, or seed phrases; personal data (real people's names, emails, phone numbers, wallet addresses); private filesystem paths, internal hostnames, or infrastructure identifiers; proprietary, confidential, or client-specific business content. Rewrite specifics into generic placeholders (/Users/USER/..., API_KEY, "a client") or omit them. If a learning cannot be generalized without leaking private material, DROP it entirely.
+
+Output STRICT JSON ONLY — an object with:
+  "learnings": an array (possibly empty []) of objects with these keys:
+  "title": concise, >= 10 chars
+  "body": >= 50 chars — what was tried, what worked, what failed
+  "category": one of ["data-processing","web-interaction","code-execution","storage-state","payment-financial","monitoring"]
+  "tags": array of lowercase keyword strings
+  "task_context": one sentence describing the task
+  "outcome": one of "success","partial","failure","workaround"
+  "dedup_drops": an array (possibly empty []) used ONLY for candidates dropped
+  because they match PREVIOUSLY CAPTURED LESSONS. Each entry must be:
+    {"candidate": <the complete learning object above>,
+     "matched_index_id": "<exact id from the memory list>",
+     "matched_title": "<exact matched title>"}
+  Scope/quality/sensitivity skips are not dedup_drops.
+  "quality_self_assessment": an object scoring the learning honestly on four
+  dimensions, each an INTEGER 1-5: "specificity" (precise and detailed, not
+  vague), "actionability" (another agent can directly use it), "novelty"
+  (non-obvious; an LLM would likely get it wrong), "completeness" (context,
+  reproduction steps, caveats), plus "total" (the exact sum of the four).
+  A learning worth publishing scores at least 14/20 with no dimension below 3.
+  High scores REQUIRE a system+symptom anchor — a named external system and a
+  concrete error/limitation/behavior; process or workflow advice cannot score
+  high no matter how polished (CI-7 system-fact test).
+  If a learning honestly scores below that bar, DROP it from learnings rather
+  than inflating the numbers.
+
+PREVIOUSLY CAPTURED LESSONS:
+- [lrn_existing] Existing lesson title
+No prose, no explanation, no markdown code fences — just the raw JSON object
+{"learnings":[...],"dedup_drops":[...]}.
+
+TRANSCRIPT:

@@ -242,7 +242,13 @@ cd "${REPO_ROOT}"
 # battery. Verified against the actual `bash scripts/check-test-count.sh`
 # discovered count post-`npm ci` (isolated HOME, --test-reporter=tap,
 # test/*.test.js only): 3071, 0 fail, 6 skipped (pre-existing, unrelated).
-EXPECTED_TEST_COUNT=3071
+#
+# EPC2-1 PROMPT BUNDLE: +20 tests — 14 byte-equivalence/version/digest tests
+# in test/epc2-1-prompt-byte-equivalence.test.js, +3 npm RUNNER_STACK closure /
+# copied-tree / derived-enumeration tests, and +3 sweeper manifest closure /
+# copied-tree / derived-enumeration tests. Full-suite verification below pins
+# the post-build discovered total at 3091.
+EXPECTED_TEST_COUNT=3091
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
