@@ -1,6 +1,6 @@
 # Supported clients
 
-*Last updated: 2026-09-06 (Works with build, TECH-PM given: OpenClaw's status cell corrected to match its own Notes -- the checkmark is gone and the cell reads "Best-effort, paused" instead of claiming live capture)*
+*Last updated: 2026-09-12 (TECH-PM tier corrections, Devin Desktop moved to Best-effort because its capture is a hookless sweep, Gemini CLI moved to Unverified because it has not been confirmed on a live session)*
 
 This page lists the AI coding assistants and development environments currently supported by Auxilo, including the clients supported by the Autonomous Learning Extraction feature (ToS §5.9.3). Served at `/legal/supported-clients`. Updated in-place when new adapters are added.
 
@@ -33,9 +33,9 @@ The installer detects your clients, registers the MCP server in each, signs you 
 |---|---|---|---|---|
 | **Claude Code** | `~/.claude/` | `~/.claude/settings.json` | ✅ **Supported** — SessionEnd hook | |
 | **Cursor** | `~/.cursor/` | `~/.cursor/mcp.json` | ✅ **Supported** — `stop` hook (`~/.cursor/hooks.json`) | |
-| **Gemini CLI** | `~/.gemini/tmp/` or `~/.gemini/settings.json` | `~/.gemini/settings.json` | ✅ **Supported** — `SessionEnd` hook | |
+| **Gemini CLI** | `~/.gemini/tmp/` or `~/.gemini/settings.json` | `~/.gemini/settings.json` | ⚠️ **Unverified** — `SessionEnd` hook wired, not confirmed on a live session | Adapter built from Gemini CLI's documented session format; not yet confirmed against a live install. |
 | **Antigravity** | `~/.gemini/antigravity/` | `~/.gemini/config/mcp_config.json` | ⚠️ **Supported (early)** — `Stop` hook (`~/.gemini/config/hooks.json`) | hook schema young; verified against live install |
-| **Devin Desktop** (formerly Windsurf) | `~/.config/devin/` (legacy `~/.codeium/windsurf/`) | `~/.config/devin/mcp_config.json` | ✅ **Supported** — session-store sweep capture | Renamed from Windsurf; Devin 1.126 migrates config to `~/.config/devin/` (both locations read during migration). Capture reads Devin's local ACP session store on the sweep — no hook. |
+| **Devin Desktop** (formerly Windsurf) | `~/.config/devin/` (legacy `~/.codeium/windsurf/`) | `~/.config/devin/mcp_config.json` | ✅ **Best-effort** — session-store sweep capture | Renamed from Windsurf; Devin 1.126 migrates config to `~/.config/devin/` (both locations read during migration). Capture reads Devin's local ACP session store on the sweep — no hook. Store format verified against a live install (2026-09-09). |
 | **GitHub Copilot (VS Code agent / CLI)** | `~/.copilot/` | `~/.copilot/mcp-config.json` | ✅ **Supported** — `Stop` hook (`~/.copilot/hooks/auxilo.json`) | hooks are a VS Code Preview feature |
 | **Codex (CLI + Desktop)** | `~/.codex/` | `~/.codex/config.toml` | ✅ **Supported** — `Stop` hook (`~/.codex/hooks.json`, CLI; requires one-time `/hooks` trust) **+ poll sweep of `~/.codex/sessions/` rollouts (Desktop + CLI, best-effort)** | Desktop app currently does not execute hooks (upstream openai/codex#21639); sweep covers it. |
 | **Factory droid** | `~/.factory/` | `~/.factory/mcp.json` | ⚠️ **Unverified** — hook + generic capture wired, not confirmed on a live session | Droid requires a subscription to run its model; our probe session hit the usage limit before producing an assistant turn, so end-to-end capture is unproven. The on-disk session transcript (`~/.factory/sessions/`) does parse via the generic reader. |

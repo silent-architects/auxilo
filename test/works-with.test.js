@@ -210,11 +210,12 @@ describe('WORKS-WITH: structural — public/works-with.html, public/index.html b
     const bandStart = INDEX_HTML.indexOf('id="works-with-band"');
     const bandEnd = INDEX_HTML.indexOf('</section>', bandStart);
     const bandBlock = INDEX_HTML.slice(bandStart, bandEnd);
-    const expectedNames = ['Claude Code', 'Cursor', 'Gemini CLI', 'Devin Desktop', 'GitHub Copilot', 'Codex', 'Antigravity', 'Cline', 'Roo Code', 'Continue.dev'];
+    const expectedNames = ['Claude Code', 'Cursor', 'Devin Desktop', 'GitHub Copilot', 'Codex', 'Antigravity', 'Cline', 'Roo Code', 'Continue.dev'];
     for (const name of expectedNames) {
       assert.ok(bandBlock.includes(`>${name}<`), `band carries ${name}`);
     }
     assert.ok(!bandBlock.includes('OpenClaw'), 'band excludes OpenClaw (sweep paused)');
+    assert.ok(!bandBlock.includes('Gemini CLI'), 'band excludes Gemini CLI (unverified, pulled 2026-09-12)');
     assert.ok(!bandBlock.includes('Claude Desktop'), 'band excludes probabilistic clients');
   });
 
