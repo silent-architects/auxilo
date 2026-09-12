@@ -27,6 +27,7 @@
     "scripts/capture-core.js",
     "scripts/extract-local.js",
     "scripts/review-notice.js",
+    "scripts/prompts/",
     "scripts/sources/",
     "scripts/providers/",
     "scripts/hooks/auxilo-extract.sh",
