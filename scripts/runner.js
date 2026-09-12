@@ -850,15 +850,36 @@ const SWEEPER_LABEL = 'io.auxilo.sweeper';
  */
 function sweeperManifest(repoRoot = path.resolve(__dirname, '..')) {
   const sourceRows = [];
+  const promptRows = [];
+  const providerRows = [];
+  const providerSchemaRows = [];
   try {
     for (const f of fs.readdirSync(path.join(repoRoot, 'scripts', 'sources')).filter(f => f.endsWith('.js')).sort()) {
       sourceRows.push([`scripts/sources/${f}`, `scripts/sources/${f}`, 0o644]);
+    }
+  } catch { /* missing dir surfaces as missing-file errors below */ }
+  try {
+    for (const f of fs.readdirSync(path.join(repoRoot, 'scripts', 'prompts')).filter(f => f.endsWith('.js')).sort()) {
+      promptRows.push([`scripts/prompts/${f}`, `scripts/prompts/${f}`, 0o644]);
+    }
+  } catch { /* missing dir surfaces as missing-file errors below */ }
+  try {
+    for (const f of fs.readdirSync(path.join(repoRoot, 'scripts', 'providers')).filter(f => f.endsWith('.js')).sort()) {
+      providerRows.push([`scripts/providers/${f}`, `scripts/providers/${f}`, 0o644]);
+    }
+  } catch { /* missing dir surfaces as missing-file errors below */ }
+  try {
+    for (const f of fs.readdirSync(path.join(repoRoot, 'scripts', 'providers', 'schemas')).filter(f => f.endsWith('.json')).sort()) {
+      providerSchemaRows.push([`scripts/providers/schemas/${f}`, `scripts/providers/schemas/${f}`, 0o644]);
     }
   } catch { /* missing dir surfaces as missing-file errors below */ }
   return [
     ['scripts/auxilo-sweeper-wrapper.sh', 'auxilo-sweeper-wrapper.sh', 0o755],
     ['scripts/runner.js', 'scripts/runner.js', 0o755],
     ...sourceRows,
+    ...promptRows,
+    ...providerRows,
+    ...providerSchemaRows,
     ['lib/sensitivity-filter.js', 'lib/sensitivity-filter.js', 0o644],
     ['lib/extraction-index.js', 'lib/extraction-index.js', 0o644],
     ['lib/similarity.js', 'lib/similarity.js', 0o644],

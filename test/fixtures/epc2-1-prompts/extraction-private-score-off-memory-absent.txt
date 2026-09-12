@@ -1,0 +1,26 @@
+You are extracting reusable OPERATIONAL LEARNINGS from an AI agent's session transcript, for the owner's private, owner-only knowledge lane.
+
+Extract 0 to 5 GENUINE learnings: non-obvious solutions, workarounds, API quirks, error root-causes, integration gotchas — the kind of thing that cost real debugging or combined multiple sources. SKIP trivial lookups, well-documented standard approaches, opinions, and conversation.
+
+PRIVATE CAPTURE SCOPE — OWNER-ONLY: extract reusable technical OR non-technical operational learnings. Non-technical process, workflow, communication, content, business, or creative learnings may use category "non-technical"; do not drop a genuine reusable candidate solely because it is non-technical. This private lane is never published unless the owner later sanitizes and promotes an item through public review. The mandatory sensitivity screen still applies without exception.
+
+MANDATORY SENSITIVITY SELF-SCREEN (the marketplace is PUBLIC): NEVER include secrets, credentials, API keys, tokens, private keys, or seed phrases; personal data (real people's names, emails, phone numbers, wallet addresses); private filesystem paths, internal hostnames, or infrastructure identifiers; proprietary, confidential, or client-specific business content. Rewrite specifics into generic placeholders (/Users/USER/..., API_KEY, "a client") or omit them. If a learning cannot be generalized without leaking private material, DROP it entirely.
+
+Output STRICT JSON ONLY — an object with:
+  "learnings": an array (possibly empty []) of objects with these keys:
+  "title": concise, >= 10 chars
+  "body": >= 50 chars — what was tried, what worked, what failed
+  "category": one of ["data-processing","web-interaction","code-execution","storage-state","payment-financial","monitoring","non-technical"]
+  "tags": array of lowercase keyword strings
+  "task_context": one sentence describing the task
+  "outcome": one of "success","partial","failure","workaround"
+  "dedup_drops": an array (possibly empty []) used ONLY for candidates dropped
+  because they match PREVIOUSLY CAPTURED LESSONS. Each entry must be:
+    {"candidate": <the complete learning object above>,
+     "matched_index_id": "<exact id from the memory list>",
+     "matched_title": "<exact matched title>"}
+  Scope/quality/sensitivity skips are not dedup_drops.
+No prose, no explanation, no markdown code fences — just the raw JSON object
+{"learnings":[...],"dedup_drops":[...]}.
+
+TRANSCRIPT:

@@ -28,10 +28,11 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const REPO_ROOT = path.join(__dirname, '..');
-const { RUNNER_STACK } = require('../lib/installer.js');
+const { RUNNER_STACK, promptBundleRows } = require('../lib/installer.js');
 const pkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf-8'));
 
 // Entry points the installer places in ~/.auxilo/bin that Node executes
@@ -95,6 +96,15 @@ function computeClosure() {
     closure.add(rel);
     queue.push(rel);
   }
+  // EPC2-1: prompts/index.js resolves versioned bundles dynamically, so fold
+  // every prompt module into the runtime closure just like source adapters.
+  const promptsDir = path.join(REPO_ROOT, 'scripts', 'prompts');
+  for (const f of fs.readdirSync(promptsDir).filter((f) => f.endsWith('.js'))) {
+    const rel = `scripts/prompts/${f}`;
+    if (closure.has(rel)) continue;
+    closure.add(rel);
+    queue.push(rel);
+  }
   while (queue.length > 0) {
     const fileRel = queue.shift();
     for (const [spec, resolved] of relativeRequiresOf(fileRel)) {
@@ -119,6 +129,24 @@ const closure = computeClosure();
 const stackSrcs = new Set(RUNNER_STACK.map(([src]) => src));
 const srcToDest = new Map(RUNNER_STACK.map(([src, dest]) => [src, dest]));
 
+function copyManifest(rows, installedRoot) {
+  for (const [src, dest, mode] of rows) {
+    const sourcePath = path.join(REPO_ROOT, ...src.split('/'));
+    const destinationPath = path.join(installedRoot, ...dest.split('/'));
+    fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
+    fs.copyFileSync(sourcePath, destinationPath);
+    fs.chmodSync(destinationPath, mode);
+  }
+}
+
+function assertGoldenPrompt(installedExtractLocal, options, fixtureName) {
+  const expected = fs.readFileSync(
+    path.join(REPO_ROOT, 'test', 'fixtures', 'epc2-1-prompts', fixtureName)
+  );
+  const actual = Buffer.from(installedExtractLocal.buildExtractionPrompt(options));
+  assert.equal(Buffer.compare(actual, expected), 0, `${fixtureName} must match from installed layout`);
+}
+
 describe('Runner packaging closure', () => {
   it('closure walker found the known require graph (sanity)', () => {
     // If the walker regresses to finding nothing, every downstream assertion
@@ -132,6 +160,8 @@ describe('Runner packaging closure', () => {
       // sources-dir enumeration in computeClosure.
       'scripts/sources/claude-code.js',
       'scripts/sources/cline.js',
+      'scripts/prompts/index.js',
+      'scripts/prompts/extraction.v1.js',
     ]) {
       assert.ok(closure.has(known), `closure must include ${known}`);
     }
@@ -194,6 +224,49 @@ describe('Runner packaging closure', () => {
         `RUNNER_STACK copies ${src} but package.json files[] does not ship it, so ` +
           'installRunner would throw on npm installs'
       );
+    }
+  });
+
+  it('ships the prompt bundle in package.json and the installed RUNNER_STACK layout', () => {
+    assert.ok(pkg.files.includes('scripts/prompts/'));
+    for (const file of fs.readdirSync(path.join(REPO_ROOT, 'scripts', 'prompts')).filter((f) => f.endsWith('.js'))) {
+      const rel = `scripts/prompts/${file}`;
+      assert.ok(stackSrcs.has(rel), `${rel} missing from RUNNER_STACK`);
+      assert.equal(srcToDest.get(rel), rel, `${rel} destination must preserve relative layout`);
+    }
+  });
+
+  it('loads the copied npm-installed extractor and reproduces public/private goldens', () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'auxilo-epc2-installer-'));
+    try {
+      const installedRoot = path.join(tempRoot, 'bin');
+      copyManifest(RUNNER_STACK, installedRoot);
+      const installedExtractLocal = require(path.join(installedRoot, 'scripts', 'extract-local.js'));
+      assertGoldenPrompt(installedExtractLocal,
+        { captureVisibility: 'public', scoreExtraction: true },
+        'extraction-public-score-on-memory-absent.txt');
+      assertGoldenPrompt(installedExtractLocal,
+        { captureVisibility: 'private', scoreExtraction: false },
+        'extraction-private-score-off-memory-absent.txt');
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('promptBundleRows derives sorted rows for a future bundle without a manifest edit', () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'auxilo-epc2-prompt-rows-'));
+    try {
+      const promptDir = path.join(tempRoot, 'scripts', 'prompts');
+      fs.mkdirSync(promptDir, { recursive: true });
+      fs.writeFileSync(path.join(promptDir, 'z-future.js'), 'module.exports = {};\n');
+      fs.writeFileSync(path.join(promptDir, 'a-current.js'), 'module.exports = {};\n');
+      fs.writeFileSync(path.join(promptDir, 'ignore.txt'), 'not a prompt module\n');
+      assert.deepEqual(promptBundleRows(tempRoot), [
+        ['scripts/prompts/a-current.js', 'scripts/prompts/a-current.js', 0o644],
+        ['scripts/prompts/z-future.js', 'scripts/prompts/z-future.js', 0o644],
+      ]);
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
     }
   });
 });
