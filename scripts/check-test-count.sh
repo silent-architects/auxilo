@@ -248,7 +248,10 @@ cd "${REPO_ROOT}"
 # copied-tree / derived-enumeration tests, and +3 sweeper manifest closure /
 # copied-tree / derived-enumeration tests. Full-suite verification below pins
 # the post-build discovered total at 3091.
-EXPECTED_TEST_COUNT=3091
+# CLI-BINARY-RESOLUTION: +15 tests (T1–T15) for version-ranked resolution,
+# native CLI provenance, known-old auth gating and setup path persistence.
+# Verified post-build discovered count: 3106 (3100 pass, 0 fail, 6 skipped).
+EXPECTED_TEST_COUNT=3106
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
