@@ -299,6 +299,8 @@ async function cmdSetup(flags) {
   console.log('');
   try {
     const { binRoot } = installer.installRunner(HOME);
+    const claudeBin = installer.recordClaudeBin(HOME, process.env.PATH);
+    if (claudeBin !== null) console.log(`  ✓ Claude Code CLI recorded: ${claudeBin}`);
     console.log(`  ✓ Extraction runner installed to ${binRoot}`);
   } catch (err) {
     console.error(`  ✗ Runner install failed: ${err.message}`);

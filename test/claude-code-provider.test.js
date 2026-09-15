@@ -599,7 +599,7 @@ describe('providers/index.js — resolveProvider caches the resolved auto-detect
     const second = await providers.resolveProvider(opts);
     assert.equal(first.id, 'claude-code');
     assert.equal(second.id, 'claude-code');
-    // resolveClaudeBin probes 4 candidates per detect() call; a cached second
+    // resolveClaudeBin probes every candidate per detect() call; a cached second
     // call must add ZERO further existsSync probes.
     const callsAfterFirst = detectCalls;
     assert.ok(callsAfterFirst > 0);
