@@ -105,23 +105,42 @@ function enableClientRunner(home) {
 }
 
 describe('EXT-0806b Claude auth and cause classification', () => {
-  it('prefers an existing absolute Claude binary before falling back to PATH', () => {
+  it('probes every Claude candidate, selects the newest readable version, and preserves fallbacks', () => {
     const resolve = mustFunction(extractLocal, 'resolveClaudeBin');
     const checked = [];
-    const resolved = resolve({
-      homeDir: '/fixture/home',
-      existsSync: (candidate) => {
-        checked.push(candidate);
-        return candidate === '/opt/homebrew/bin/claude';
-      },
-    });
-    assert.equal(resolved, '/opt/homebrew/bin/claude');
-    assert.deepEqual(checked, [
+    const candidates = [
+      '/fixture/recorded/claude',
       '/fixture/home/.claude/local/claude',
       '/usr/local/bin/claude',
       '/opt/homebrew/bin/claude',
+      '/fixture/home/.local/bin/claude',
+      '/fixture/home/.npm-global/bin/claude',
+    ];
+    const versions = new Map([
+      ['/fixture/recorded/package.json', '2.1.40'],
+      ['/usr/local/bin/package.json', '2.1.12'],
+      ['/fixture/home/.npm-global/bin/package.json', '2.1.251'],
     ]);
-    assert.equal(resolve({ homeDir: '/fixture/home', existsSync: () => false }), 'claude');
+    const opts = {
+      homeDir: '/fixture/home',
+      existsSync: (candidate) => {
+        checked.push(candidate);
+        return [candidates[0], candidates[2], candidates[5]].includes(candidate);
+      },
+      realpathSyncImpl: (bin) => bin,
+      readFileSyncImpl: (file) => {
+        if (file.endsWith('/runner-config.json')) return JSON.stringify({ claude_bin: candidates[0] });
+        if (versions.has(file)) return JSON.stringify({ version: versions.get(file) });
+        throw new Error('fixture file absent');
+      },
+    };
+    assert.equal(resolve(opts), candidates[5]);
+    assert.deepEqual(checked, candidates);
+    versions.clear();
+    checked.length = 0;
+    assert.equal(resolve(opts), candidates[0], 'unreadable versions preserve first-existing order');
+    assert.deepEqual(checked, candidates);
+    assert.equal(resolve({ ...opts, existsSync: () => false }), 'claude');
   });
 
   it('uses a five-second authoritative pre-check and returns logged-in, logged-out, or unknown', () => {

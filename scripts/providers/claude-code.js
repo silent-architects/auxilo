@@ -22,23 +22,56 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-/** Resolve the `claude` binary — hook/launchd env may have a minimal PATH. */
+/** Leading major.minor.patch only; unreadable versions retain fallback behavior. */
+function versionParts(version) {
+  const match = typeof version === 'string' && /^(\d+)\.(\d+)\.(\d+)/.exec(version);
+  return match ? match.slice(1).map(Number) : null;
+}
+
+function compareVersions(left, right) {
+  for (let i = 0; i < 3; i += 1) {
+    if (left[i] !== right[i]) return left[i] > right[i] ? 1 : -1;
+  }
+  return 0;
+}
+
+/** Resolve the newest readable CLI — hook/launchd env may have a minimal PATH. */
 function resolveClaudeBin(opts = {}) {
   const homeDir = typeof opts.homeDir === 'string' ? opts.homeDir : os.homedir();
   const existsSync = typeof opts.existsSync === 'function' ? opts.existsSync : fs.existsSync;
+  const readFileSyncImpl = typeof opts.readFileSyncImpl === 'function' ? opts.readFileSyncImpl : fs.readFileSync;
   const candidates = [
     path.join(homeDir, '.claude', 'local', 'claude'),
     '/usr/local/bin/claude',
     '/opt/homebrew/bin/claude',
     path.join(homeDir, '.local', 'bin', 'claude'),
+    path.join(homeDir, '.npm-global', 'bin', 'claude'),
   ];
+  // Read directly: the sweeper install does not include lib/installer.js.
+  try {
+    const config = JSON.parse(readFileSyncImpl(path.join(homeDir, '.auxilo', 'runner-config.json'), 'utf8'));
+    const recorded = config && config.claude_bin;
+    if (typeof recorded === 'string' && path.isAbsolute(recorded) && path.basename(recorded) === 'claude') {
+      candidates.unshift(recorded);
+    }
+  } catch (_) { /* missing/malformed config means no recorded candidate */ }
+
+  let firstExisting;
+  let newest;
+  let newestVersion;
   for (const c of candidates) {
     try {
-      if (existsSync(c)) return c;
+      if (!existsSync(c)) continue;
+      if (!firstExisting) firstExisting = c;
+      const version = versionParts(getClaudeCliVersion(c, opts));
+      if (version && (!newestVersion || compareVersions(version, newestVersion) > 0)) {
+        newest = c;
+        newestVersion = version;
+      }
     } catch (_) { /* ignore */ }
   }
   // Absolute launchd fallbacks are absent; let PATH resolve the final option.
-  return 'claude';
+  return newest || firstExisting || 'claude';
 }
 
 // ─── Child settings/hooks isolation (EXTRACTION-CHILD-HOOKS, PUNCH-LIST P1,
@@ -105,27 +138,35 @@ function _resetSettingSourcesCacheForTests() {
   cachedSettingSourcesUnsupported = undefined;
 }
 
-// ─── CLI version, for diagnostics only (no subprocess spawn) ───────────────
+// ─── CLI version, for selection, auth gating and provenance (no spawn) ──────
 //
 // Resolves the installed package's own package.json version by following the
 // resolved binary's real path (e.g. `/usr/local/bin/claude` -> `.../
 // node_modules/@anthropic-ai/claude-code/cli.js`) and reading the sibling
-// package.json — filesystem-only, so it never adds a spawn to the extraction
+// package.json, or the named parent package for the native bin/claude.exe
+// layout — filesystem-only, so it never adds a spawn to the extraction
 // path (verified live: realpath + package.json read, no `claude --version`
 // call). Best-effort: any failure (bare `claude` unresolved via PATH, an
-// install layout that doesn't carry a sibling package.json, a fixture path in
+// install layout that doesn't carry either package.json, a fixture path in
 // tests) yields null, never throws.
 function getClaudeCliVersion(bin, opts = {}) {
   const realpathSyncImpl = typeof opts.realpathSyncImpl === 'function' ? opts.realpathSyncImpl : fs.realpathSync;
   const readFileSyncImpl = typeof opts.readFileSyncImpl === 'function' ? opts.readFileSyncImpl : fs.readFileSync;
   try {
     const real = realpathSyncImpl(bin);
-    const pkgPath = path.join(path.dirname(real), 'package.json');
-    const pkg = JSON.parse(readFileSyncImpl(pkgPath, 'utf8'));
-    return pkg && typeof pkg.version === 'string' ? pkg.version : null;
+    const dir = path.dirname(real);
+    for (const [pkgDir, requireName] of [[dir, false], [path.dirname(dir), true]]) {
+      try {
+        const pkg = JSON.parse(readFileSyncImpl(path.join(pkgDir, 'package.json'), 'utf8'));
+        if (pkg && typeof pkg.version === 'string' && (!requireName || pkg.name === '@anthropic-ai/claude-code')) {
+          return pkg.version;
+        }
+      } catch (_) { /* unreadable sibling may still have a valid parent */ }
+    }
   } catch {
-    return null;
+    /* unresolved binary */
   }
+  return null;
 }
 
 // ─── Env scrub (EXTRACT-TOOLS-LOCK, PUNCH-LIST) ────────────────────────────
@@ -345,6 +386,10 @@ function detectBillingHelperConfigured(opts = {}) {
 function checkAuthStatus(opts = {}) {
   const spawnSyncImpl = typeof opts.spawnSyncImpl === 'function' ? opts.spawnSyncImpl : spawnSync;
   const bin = typeof opts.claudeBin === 'string' ? opts.claudeBin : resolveClaudeBin(opts);
+  const version = versionParts(getClaudeCliVersion(bin, opts));
+  // Older CLIs treat `auth status` as a model prompt. Unknown versions retain
+  // the existing probe; only a known-old build can safely skip it here.
+  if (version && compareVersions(version, [2, 1, 41]) < 0) return 'unknown';
   let res;
   try {
     res = spawnSyncImpl(bin, ['auth', 'status'], {
