@@ -9,13 +9,18 @@
  * builder's own `codex` login (or their own OPENAI_API_KEY, see detect()
  * below), scrubbed of every var that could redirect billing elsewhere.
  *
- * Flags verified live against `codex exec --help` (codex-cli 0.144.5) before
- * this module was written — see BUILD-SPEC-EXTRACT-PER-CLIENT-W1 §1/§6:
+ * Isolation flags and config keys were source-verified against codex-cli
+ * 0.144.5 — see BUILD-SPEC-CODEX-ROUTE-ISOLATION §2–§3:
  *   -s, --sandbox <read-only|workspace-write|danger-full-access>
  *   --skip-git-repo-check   (codex refuses to run outside a git repo otherwise)
  *   --ephemeral              (no session file left behind)
  *   --ignore-user-config     (don't load ~/.codex/config.toml — auth still
  *                             comes from CODEX_HOME/auth.json regardless)
+ *   --ignore-rules           (don't load project instruction files)
+ *   --strict-config          (reject unknown config keys before model use)
+ *   -C <DIR>                 (run from a fresh private empty directory)
+ *   --json                   (emit the lifecycle stream audited below)
+ *   --disable / -c           (remove optional tools/context injection)
  *   --output-schema <FILE>   (a JSON-Schema HINT, not a hard parser — see
  *                             schemas/*.schema.json for the shapes)
  *   -o, --output-last-message <FILE>  (where the final answer lands)
@@ -32,6 +37,45 @@ const { SCRUBBED_CLIENT_ENV_VARS } = require('./claude-code.js');
 
 const EXTRACTION_SCHEMA_PATH = path.join(__dirname, 'schemas', 'extraction-envelope.schema.json');
 const JUDGE_SCHEMA_PATH = path.join(__dirname, 'schemas', 'judge-decisions.schema.json');
+
+const ISOLATION_DISABLED_FEATURES = Object.freeze([
+  'shell_tool',
+  'unified_exec',
+  'shell_snapshot',
+  'hooks',
+  'multi_agent',
+  'apps',
+  'plugins',
+  'remote_plugin',
+  'tool_suggest',
+  'image_generation',
+  'goals',
+  'memories',
+  'skill_mcp_dependency_install',
+  'guardian_approval',
+]);
+
+const ISOLATION_CONFIG_OVERRIDES = Object.freeze([
+  'web_search="disabled"',
+  'notify=[]',
+  'tools.experimental_request_user_input.enabled=false',
+  'project_doc_max_bytes=0',
+  'skills.include_instructions=false',
+  'orchestrator.skills.enabled=false',
+  'include_environment_context=false',
+  'include_apps_instructions=false',
+  'include_permissions_instructions=false',
+  'include_collaboration_mode_instructions=false',
+]);
+
+const DEFAULT_SYSTEM_CONFIG_PATHS = Object.freeze([
+  '/etc/codex/config.toml',
+  '/etc/codex/requirements.toml',
+]);
+
+const ALLOWED_ITEM_TYPES = new Set(['agent_message', 'reasoning', 'todo_list', 'error']);
+const AUDITED_ITEM_EVENTS = new Set(['item.started', 'item.updated', 'item.completed']);
+const AUTH_FAILURE_RE = /not authenticated|not logged in|codex login/i;
 
 /** Resolve the `codex` binary — hook/launchd env may have a minimal PATH. */
 function resolveCodexBin(opts = {}) {
@@ -66,7 +110,62 @@ function codexChildEnv() {
   const childEnv = { ...process.env, AUXILO_EXTRACTING: '1' };
   for (const key of SCRUBBED_CLIENT_ENV_VARS) delete childEnv[key];
   delete childEnv.OPENAI_API_KEY;
+  for (const key of Object.keys(childEnv)) {
+    if (key.startsWith('CODEX_EXEC_SERVER_')) delete childEnv[key];
+  }
+  childEnv.CODEX_EXEC_SERVER_URL = 'none';
   return childEnv;
+}
+
+function neutralizeSkillMentions(text) {
+  return String(text).replace(/\$(?=[A-Za-z0-9_:-])/g, '$\u200B');
+}
+
+function stripNeutralizationMarker(text) {
+  return String(text).replace(/\u200B/g, '');
+}
+
+function parseJsonlEvents(stdout) {
+  const events = [];
+  for (const line of String(stdout || '').split(/\r?\n/)) {
+    try {
+      const parsed = JSON.parse(line);
+      if (parsed && typeof parsed === 'object' && typeof parsed.type === 'string') {
+        events.push(parsed);
+      }
+    } catch { /* non-JSON stdout lines are ignored */ }
+  }
+  return events;
+}
+
+function eventAuthMessages(events) {
+  const messages = [];
+  for (const event of events) {
+    if (event.type === 'error' || event.type === 'turn.failed') {
+      if (typeof event.message === 'string') messages.push(event.message);
+      if (event.error && typeof event.error.message === 'string') messages.push(event.error.message);
+    }
+    if (AUDITED_ITEM_EVENTS.has(event.type)
+      && event.item
+      && event.item.type === 'error'
+      && typeof event.item.message === 'string') {
+      messages.push(event.item.message);
+    }
+  }
+  return messages;
+}
+
+function lastCompletedAgentMessage(events) {
+  let text = '';
+  for (const event of events) {
+    if (event.type === 'item.completed'
+      && event.item
+      && event.item.type === 'agent_message'
+      && typeof event.item.text === 'string') {
+      text = event.item.text;
+    }
+  }
+  return text;
 }
 
 /**
@@ -114,10 +213,9 @@ function detect(opts = {}) {
 
 // ─── codex --version capture (extraction_model.version) ───────────────────
 //
-// codex exposes no per-call model identifier (no --json event stream is
-// requested here, and -o's last-message file carries prose/schema-shaped
-// output only) — the CLI build version is the honest proxy for "which codex
-// build ran this extraction". Captured once per process and cached: every
+// This route preserves its existing null per-call model identifier; the CLI
+// build version is the honest proxy for "which codex build ran this
+// extraction". Captured once per process and cached: every
 // runModel() call after the first reuses the cached value, so a session that
 // calls runModel() twice (extract, then judge) only pays for one version
 // probe. `undefined` = not yet probed; `null` = probed, could not determine.
@@ -175,17 +273,14 @@ function classifySpawnError(error, bin) {
 }
 
 /**
- * Shared invocation for both modes: builds argv, spawns, reads the answer
- * back from the `-o` file (falling back to stdout only if that file cannot
- * be read — see module comment on why: --output-last-message's own docs
- * promise a file is written on a normal completion, but say nothing about a
- * crash/timeout/schema-rejection path, so a defensive stdout fallback covers
- * the cases where no file ever landed; text as documented is the file's
- * content and stdout is treated as the exception path, never the default).
+ * Shared invocation for both modes: builds the isolated argv, spawns, audits
+ * the JSONL lifecycle stream, and reads the answer back from the `-o` file.
+ * If that file cannot be read, only the last completed agent-message event is
+ * eligible as a fallback; raw stdout is never returned.
  *
  * The `-o` file's private-dir creation, 0600 chmod, and cleanup (GOV-3
  * should-fix item 11) are handled by an outer try/finally so EVERY exit
- * path — auth-not-configured, every spawn-error/timeout classification,
+ * path after directory creation — every spawn-error/timeout classification,
  * non-zero exit, empty output, and the normal success path — cleans up the
  * same way. `cleanupDir` is null (nothing to remove) when the caller
  * supplied its own `opts.outputPath`.
@@ -196,6 +291,9 @@ function invoke(opts, mode) {
   const unlinkSyncImpl = typeof opts.unlinkSyncImpl === 'function' ? opts.unlinkSyncImpl : fs.unlinkSync;
   const rmdirSyncImpl = typeof opts.rmdirSyncImpl === 'function' ? opts.rmdirSyncImpl : fs.rmdirSync;
   const chmodSyncImpl = typeof opts.chmodSyncImpl === 'function' ? opts.chmodSyncImpl : fs.chmodSync;
+  const mkdtempSyncImpl = typeof opts.mkdtempSyncImpl === 'function' ? opts.mkdtempSyncImpl : fs.mkdtempSync;
+  const rmSyncImpl = typeof opts.rmSyncImpl === 'function' ? opts.rmSyncImpl : fs.rmSync;
+  const existsSync = typeof opts.existsSync === 'function' ? opts.existsSync : fs.existsSync;
   const bin = typeof opts.codexBin === 'string' ? opts.codexBin : resolveCodexBin(opts);
 
   const authMode = readAuthMode(opts);
@@ -210,17 +308,43 @@ function invoke(opts, mode) {
     };
   }
 
+  const systemConfigPaths = Array.isArray(opts.systemConfigPaths)
+    ? opts.systemConfigPaths
+    : DEFAULT_SYSTEM_CONFIG_PATHS;
+  for (const systemConfigPath of systemConfigPaths) {
+    let exists = false;
+    try { exists = existsSync(systemConfigPath); } catch { /* unreadable is treated as absent */ }
+    if (exists) {
+      return {
+        ok: false,
+        text: '',
+        usage: null,
+        reason: `codex system configuration is present at ${systemConfigPath}`,
+        reasonCode: 'isolation-precondition',
+        authStatus: 'unknown',
+      };
+    }
+  }
+
   const { outputPath, cleanupDir } = makeOutputLocation(opts, mode);
+  let workDir = null;
   try {
+    workDir = mkdtempSyncImpl(path.join(os.tmpdir(), 'auxilo-codex-cwd-'));
     const schemaFile = mode === 'judge' ? JUDGE_SCHEMA_PATH : EXTRACTION_SCHEMA_PATH;
     const prompt = typeof opts.prompt === 'string' ? opts.prompt : '';
-    const stdin = prompt + String(opts.input || '');
+    const stdin = neutralizeSkillMentions(prompt + String(opts.input || ''));
     const args = [
       'exec',
       '-s', 'read-only',
       '--skip-git-repo-check',
       '--ephemeral',
       '--ignore-user-config',
+      '--ignore-rules',
+      '--strict-config',
+      '-C', workDir,
+      '--json',
+      ...ISOLATION_DISABLED_FEATURES.flatMap((feature) => ['--disable', feature]),
+      ...ISOLATION_CONFIG_OVERRIDES.flatMap((override) => ['-c', override]),
       '--output-schema', schemaFile,
       '-o', outputPath,
       '-',
@@ -232,6 +356,7 @@ function invoke(opts, mode) {
         input: stdin,
         encoding: 'utf-8',
         env: codexChildEnv(),
+        cwd: workDir,
         timeout: opts.timeoutMs || 120000,
         maxBuffer: 20 * 1024 * 1024,
       });
@@ -253,7 +378,9 @@ function invoke(opts, mode) {
     }
 
     const stdout = String(res.stdout || '');
-    if (/not authenticated|not logged in|codex login/i.test(stdout) || /not authenticated|not logged in|codex login/i.test(String(res.stderr || ''))) {
+    const stderr = String(res.stderr || '');
+    const events = parseJsonlEvents(stdout);
+    if (AUTH_FAILURE_RE.test(stderr) || eventAuthMessages(events).some((message) => AUTH_FAILURE_RE.test(message))) {
       return { ok: false, text: '', usage: null, reason: 'codex CLI reported it is not authenticated', reasonCode: 'cli-unauthenticated', authStatus: 'unknown' };
     }
     if (res.status !== 0) {
@@ -261,10 +388,38 @@ function invoke(opts, mode) {
         ok: false,
         text: '',
         usage: null,
-        reason: `codex exec exited ${res.status}: ${(stdout || String(res.stderr || '')).slice(0, 160)}`,
+        reason: `codex exec exited ${res.status}: ${stderr.slice(0, 160)}`,
         reasonCode: 'model-error',
         authStatus: 'unknown',
       };
+    }
+
+    if (events.length === 0) {
+      return {
+        ok: false,
+        text: '',
+        usage: null,
+        reason: 'codex exec emitted no parseable lifecycle event',
+        reasonCode: 'isolation-unverified',
+        authStatus: 'unknown',
+      };
+    }
+
+    for (const event of events) {
+      if (!AUDITED_ITEM_EVENTS.has(event.type)) continue;
+      const itemType = event.item && typeof event.item.type === 'string'
+        ? event.item.type
+        : 'unknown';
+      if (!ALLOWED_ITEM_TYPES.has(itemType)) {
+        return {
+          ok: false,
+          text: '',
+          usage: null,
+          reason: `codex exec emitted disallowed item type: ${itemType}`,
+          reasonCode: 'isolation-violation',
+          authStatus: 'unknown',
+        };
+      }
     }
 
     // Force 0600 before reading — codex writes this file itself, under its
@@ -278,12 +433,11 @@ function invoke(opts, mode) {
     try {
       text = String(readFileSyncImpl(outputPath, 'utf8'));
     } catch {
-      // --output-last-message's own docs make no promise about a file existing
-      // outside a normal completion — fall back to stdout rather than
-      // reporting a false failure when codex exited 0 but the file is absent.
-      text = stdout;
+      text = lastCompletedAgentMessage(events);
       usedStdoutFallback = true;
     }
+
+    text = stripNeutralizationMarker(text);
 
     if (!text.trim()) {
       return {
@@ -291,7 +445,7 @@ function invoke(opts, mode) {
         text: '',
         usage: null,
         reason: usedStdoutFallback
-          ? 'codex exec produced no output-last-message file and stdout was empty'
+          ? 'codex exec produced no output-last-message file and no completed agent message'
           : 'codex exec produced an empty output-last-message file',
         reasonCode: 'cli-bad-output',
         authStatus: 'unknown',
@@ -310,7 +464,7 @@ function invoke(opts, mode) {
     // until that test (and any external consumer) moves to `.identity`.
     const identity = {
       provider: 'codex-cli',
-      model: null, // codex exposes no per-call model id without --json (not requested)
+      model: null, // the route intentionally preserves its existing identity contract
       version: getCodexVersion(opts),
       vendor: null,
     };
@@ -333,6 +487,9 @@ function invoke(opts, mode) {
     if (cleanupDir) {
       try { rmdirSyncImpl(cleanupDir); } catch { /* best-effort cleanup only */ }
     }
+    if (workDir) {
+      try { rmSyncImpl(workDir, { recursive: true, force: true }); } catch { /* best-effort cleanup only */ }
+    }
   }
 }
 
@@ -349,6 +506,10 @@ module.exports = {
   readAuthMode,
   codexChildEnv,
   getCodexVersion,
+  neutralizeSkillMentions,
+  stripNeutralizationMarker,
+  ISOLATION_DISABLED_FEATURES,
+  ISOLATION_CONFIG_OVERRIDES,
   EXTRACTION_SCHEMA_PATH,
   JUDGE_SCHEMA_PATH,
   _resetVersionCacheForTests,

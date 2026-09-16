@@ -54,6 +54,14 @@ function authJson(loggedIn) {
   return { status: 0, stdout: JSON.stringify({ loggedIn }), stderr: '' };
 }
 
+function lifecycleJsonl() {
+  return [
+    { type: 'thread.started', thread_id: 'fixture-thread' },
+    { type: 'turn.started' },
+    { type: 'turn.completed' },
+  ].map((event) => JSON.stringify(event)).join('\n');
+}
+
 // ─── GOV-3 item 1: ONE writer, post-rename chmod, api_key never rewritten ──
 
 describe('GOV-3 item 1: index.js persistSelected routes through byo-key.js\'s writeProvidersStateAtomic', () => {
@@ -663,7 +671,7 @@ describe('GATE-A item (a): codex-cli identity field (resolveExtractionModelIdent
       codexCli._resetVersionCacheForTests();
       const spawnSyncImpl = (bin, args) => {
         if (args[0] === '--version') return { status: 0, stdout: 'codex-cli 0.144.5', stderr: '', error: null };
-        return { status: 0, stdout: '', stderr: '', error: null };
+        return { status: 0, stdout: lifecycleJsonl(), stderr: '', error: null };
       };
       const result = await codexCli.runModel({
         prompt: 'P', input: 'T', mode: 'extract', homeDir: home, codexBin: 'codex', outputPath, spawnSyncImpl,
@@ -696,7 +704,7 @@ describe('GATE-A item (a): codex-cli identity field (resolveExtractionModelIdent
     try {
       const spawnSyncImpl = (bin, args) => {
         if (args[0] === '--version') return { status: 0, stdout: 'codex-cli 0.144.5', stderr: '', error: null };
-        return { status: 0, stdout: '', stderr: '', error: null };
+        return { status: 0, stdout: lifecycleJsonl(), stderr: '', error: null };
       };
       const result = await extractLocal.extractLocally('a synthetic transcript', 'claude-code', {
         indexPath, log: () => {}, spawnSyncImpl, homeDir: home, cwd: home, codexBin: 'codex', outputPath,
@@ -755,7 +763,7 @@ describe('GOV-3 should-fix item 11: codex -o file lands in a private 0700 dir, 0
       const oIdx = args.indexOf('-o');
       capturedOutputPath = args[oIdx + 1];
       fs.writeFileSync(capturedOutputPath, '{"learnings":[]}');
-      return { status: 0, stdout: '', stderr: '', error: null };
+      return { status: 0, stdout: lifecycleJsonl(), stderr: '', error: null };
     };
     try {
       const result = await codexCli.runModel({ prompt: 'P', input: 'T', mode: 'extract', homeDir: home, codexBin: 'codex', spawnSyncImpl });
@@ -804,7 +812,7 @@ describe('GOV-3 should-fix item 11: codex -o file lands in a private 0700 dir, 0
       const oIdx = args.indexOf('-o');
       const outputPath = args[oIdx + 1];
       fs.writeFileSync(outputPath, '{"learnings":[]}', { mode: 0o644 });
-      return { status: 0, stdout: '', stderr: '', error: null };
+      return { status: 0, stdout: lifecycleJsonl(), stderr: '', error: null };
     };
     try {
       const result = await codexCli.runModel({ prompt: 'P', input: 'T', mode: 'extract', homeDir: home, codexBin: 'codex', spawnSyncImpl, chmodSyncImpl });
