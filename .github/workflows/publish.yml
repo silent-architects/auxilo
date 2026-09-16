@@ -1,0 +1,87 @@
+name: Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Package version to publish (must match package.json)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the canonical branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Install and verify npm
+        run: |
+          npm install -g npm@^11.6.0
+          npm --version
+          node -e 'const [a, b, c] = process.argv[1].split(".").map(Number); if (![a, b, c].every(Number.isInteger) || a < 11 || (a === 11 && (b < 5 || (b === 5 && c < 1)))) { console.error("npm >= 11.5.1 required"); process.exit(1); }' "$(npm --version)"
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Require the requested package version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          actual="$(node -p "require('./package.json').version")"
+          if [ "$actual" != "$REQUESTED_VERSION" ]; then
+            printf 'version gate refused: package.json=%s, requested=%s\n' "$actual" "$REQUESTED_VERSION"
+            exit 1
+          fi
+
+      - name: Run tests and test-count gate
+        run: bash scripts/check-test-count.sh
+
+      - name: Run predeploy gate
+        run: bash scripts/predeploy-check.sh
+
+      # DR-1 requires a Playwright browser install. ci.yml runs it on every
+      # push to the commit being published; this manual workflow does not.
+      - name: Assert no injected registry auth
+        run: |
+          set -eu
+          if ! userconfig="$(npm config get userconfig 2>/dev/null)"; then
+            echo 'refusing to publish: injected registry auth detected'
+            exit 1
+          fi
+          if ! globalconfig="$(npm config get globalconfig 2>/dev/null)"; then
+            echo 'refusing to publish: injected registry auth detected'
+            exit 1
+          fi
+          for config in .npmrc "$userconfig" "$globalconfig"; do
+            if [ -e "$config" ] && [ ! -r "$config" ]; then
+              echo 'refusing to publish: injected registry auth detected'
+              exit 1
+            fi
+            if [ -f "$config" ] && grep -Fq '_authToken' "$config" 2>/dev/null; then
+              echo 'refusing to publish: injected registry auth detected'
+              exit 1
+            fi
+          done
+
+      - name: Publish to npm with OIDC
+        run: npm publish
+
+      - name: Report published version
+        run: |
+          echo "Published auxilo-mcp@$(node -p "require('./package.json').version")"
+          echo 'npm trusted publishing attaches provenance automatically.'
