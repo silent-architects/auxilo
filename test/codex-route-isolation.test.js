@@ -117,6 +117,37 @@ describe('CODEX-ROUTE-ISOLATION', () => {
     }
   });
 
+  it('T16: exported isolation controls are literal-pinned in the spec order', () => {
+    assert.deepEqual(codexCli.ISOLATION_DISABLED_FEATURES, [
+      'shell_tool',
+      'unified_exec',
+      'shell_snapshot',
+      'hooks',
+      'multi_agent',
+      'apps',
+      'plugins',
+      'remote_plugin',
+      'tool_suggest',
+      'image_generation',
+      'goals',
+      'memories',
+      'skill_mcp_dependency_install',
+      'guardian_approval',
+    ]);
+    assert.deepEqual(codexCli.ISOLATION_CONFIG_OVERRIDES, [
+      'web_search="disabled"',
+      'notify=[]',
+      'tools.experimental_request_user_input.enabled=false',
+      'project_doc_max_bytes=0',
+      'skills.include_instructions=false',
+      'orchestrator.skills.enabled=false',
+      'include_environment_context=false',
+      'include_apps_instructions=false',
+      'include_permissions_instructions=false',
+      'include_collaboration_mode_instructions=false',
+    ]);
+  });
+
   it('T2: argv and module source contain no destructive or bypass flags', async () => {
     const home = withAuth(tempDir('auxilo-codex-isolation-t2-'));
     const outputPath = path.join(home, 'out.txt');
