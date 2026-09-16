@@ -20,8 +20,11 @@
  * origin/main, clean, and the version being published is genuinely new.
  *
  * CONDITIONS — ALL must hold, or the guard refuses:
- *   0. `npm whoami` succeeds — the local npm session is authenticated to
- *      the registry. Checked FIRST, before anything else below, because a
+ *   0. `npm whoami` succeeds for local token publishing — the local npm
+ *      session is authenticated to the registry. Under GitHub Actions OIDC,
+ *      both ID-token request variables must be present; then this condition
+ *      alone is skipped because identity is minted during `npm publish`.
+ *      Otherwise checked FIRST, before anything else below, because a
  *      logged-out session (npm whoami -> E401/ENEEDAUTH) makes condition 4's
  *      registry lookup unreliable too, and because a publish attempted
  *      while logged out fails with a confusing "404 Not Found" on the PUT
@@ -119,7 +122,7 @@ function defaultRun(cmd, options = {}) {
  * is allowed to propagate, since it likely means the environment itself is
  * broken, not that any of the four conditions failed.
  */
-function check({ run = defaultRun, env = process.env } = {}) {
+function check({ run = defaultRun, env = process.env, log = console.log } = {}) {
   if (env.AUXILO_PUBLISH_FORCE === '1') {
     return {
       ok: true,
@@ -129,7 +132,8 @@ function check({ run = defaultRun, env = process.env } = {}) {
     };
   }
 
-  // 0. npm registry auth. Checked first — a dead session (E401/ENEEDAUTH)
+  // 0. npm registry auth. Checked first for local token publishing — a dead
+  // session (E401/ENEEDAUTH)
   // makes condition 4's registry lookup unreliable too, and would otherwise
   // surface at `npm publish` time as a confusing 404 on the PUT rather than
   // as an auth failure. Short timeout so a hung network call can't stall
@@ -137,19 +141,28 @@ function check({ run = defaultRun, env = process.env } = {}) {
   // stderr are deliberately never logged — some npm configs embed
   // credentials in registry URLs, and those could otherwise leak into a
   // terminal or CI log via an error message.
-  try {
-    run('npm whoami', { timeout: 10000 });
-    // Success: authenticated. Never print the username here — see above.
-  } catch (err) {
-    return {
-      ok: false,
-      reason:
-        'not authenticated to the npm registry (npm whoami failed). A publish ' +
-        'would fail with a confusing 404 Not Found on the PUT. Fix: npm login\n' +
-        '(A longer-lived automation token in ~/.npmrc avoids the repeat — set ' +
-        "one up through npm's own token flow, not by pasting a token into a " +
-        'shell command.)',
-    };
+  const oidc = typeof env.ACTIONS_ID_TOKEN_REQUEST_URL === 'string' &&
+    env.ACTIONS_ID_TOKEN_REQUEST_URL.length > 0 &&
+    typeof env.ACTIONS_ID_TOKEN_REQUEST_TOKEN === 'string' &&
+    env.ACTIONS_ID_TOKEN_REQUEST_TOKEN.length > 0;
+
+  if (oidc) {
+    log('prepublish-guard: OIDC trusted publishing skips npm whoami; the credential is minted at publish time.');
+  } else {
+    try {
+      run('npm whoami', { timeout: 10000 });
+      // Success: authenticated. Never print the username here — see above.
+    } catch (err) {
+      return {
+        ok: false,
+        reason:
+          'not authenticated to the npm registry (npm whoami failed). A publish ' +
+          'would fail with a confusing 404 Not Found on the PUT. Fix: npm login\n' +
+          '(A longer-lived automation token in ~/.npmrc avoids the repeat — set ' +
+          "one up through npm's own token flow, not by pasting a token into a " +
+          'shell command.)',
+      };
+    }
   }
 
   // 1. Fetch origin/main — tolerate offline by refusing with a clear message

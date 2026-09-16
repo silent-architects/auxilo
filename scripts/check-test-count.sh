@@ -253,7 +253,9 @@ cd "${REPO_ROOT}"
 # Verified post-build discovered count: 3106 (3100 pass, 0 fail, 6 skipped).
 # CODEX-ROUTE-ISOLATION: +16 tests (T1–T16) for isolated argv/env/cwd,
 # skill-mention transport encoding, fail-closed JSONL auditing and cleanup.
-EXPECTED_TEST_COUNT=3122
+# TRUSTED-PUBLISHING: +8 OIDC guard cases and +8 workflow/fixture cases
+# (T1–T15); the local token guard remains covered by its existing tests.
+EXPECTED_TEST_COUNT=3138
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

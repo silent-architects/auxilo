@@ -11,6 +11,10 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 const { check, PACKAGE_NAME } = require('../scripts/prepublish-guard.js');
 
@@ -171,4 +175,121 @@ test('prepublish-guard: AUXILO_PUBLISH_FORCE=1 bypasses the auth check too (npm 
   const result = check({ run: fakeRun({}), env: { AUXILO_PUBLISH_FORCE: '1' } });
   assert.equal(result.ok, true);
   assert.equal(result.forced, true);
+});
+
+// Trusted publishing has no whoami identity before npm publish. These cases
+// use the injected env/run/log seams; they never touch the real process env,
+// npm config, registry, or checkout.
+const OIDC_ENV = {
+  ACTIONS_ID_TOKEN_REQUEST_URL: 'private-request-url',
+  ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'private-request-token',
+};
+
+test('prepublish-guard: full OIDC skips only whoami and prints one secret-free explanation', () => {
+  const calls = [];
+  const lines = [];
+  const responses = passingResponses();
+  delete responses['npm whoami'];
+  const run = (cmd) => {
+    calls.push(cmd);
+    return fakeRun(responses)(cmd);
+  };
+  const result = check({ run, env: OIDC_ENV, log: (line) => lines.push(line) });
+  assert.equal(result.ok, true);
+  assert.equal(result.forced, false);
+  assert.equal(calls.includes('npm whoami'), false);
+  assert.deepEqual(calls, [
+    'git fetch origin main --quiet',
+    'git rev-parse HEAD',
+    'git rev-parse origin/main',
+    'git status --porcelain',
+    `npm view ${PACKAGE_NAME}@0.9.23 version`,
+  ]);
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /OIDC.*npm whoami.*publish time/);
+  assert.doesNotMatch(lines[0], /private-request-url|private-request-token/);
+});
+
+for (const loneKey of ['ACTIONS_ID_TOKEN_REQUEST_URL', 'ACTIONS_ID_TOKEN_REQUEST_TOKEN']) {
+  test(`prepublish-guard: only ${loneKey} does not bypass whoami`, () => {
+    const lines = [];
+    const result = check({
+      run: fakeRun({ 'npm whoami': new Error('E401') }),
+      env: { [loneKey]: OIDC_ENV[loneKey] },
+      log: (line) => lines.push(line),
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /not authenticated to the npm registry/);
+    assert.deepEqual(lines, []);
+  });
+}
+
+test('prepublish-guard: OIDC still refuses when fetch fails', () => {
+  const result = check({
+    run: fakeRun({ 'git fetch origin main --quiet': new Error('offline') }),
+    env: OIDC_ENV,
+    log: () => {},
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /git fetch origin main failed/);
+});
+
+test('prepublish-guard: OIDC still refuses a stale checkout', () => {
+  const result = check({
+    run: fakeRun(passingResponses({ 'git rev-parse origin/main': OTHER_SHA })),
+    env: OIDC_ENV,
+    log: () => {},
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /HEAD .* is not origin\/main/);
+});
+
+test('prepublish-guard: OIDC still refuses a dirty tracked tree', () => {
+  const result = check({
+    run: fakeRun(passingResponses({ 'git status --porcelain': ' M lib/foo.js' })),
+    env: OIDC_ENV,
+    log: () => {},
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /uncommitted changes to tracked files/);
+});
+
+test('prepublish-guard: OIDC still refuses an already published version', () => {
+  const result = check({
+    run: fakeRun(passingResponses({ [`npm view ${PACKAGE_NAME}@0.9.23 version`]: '0.9.23' })),
+    env: OIDC_ENV,
+    log: () => {},
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /already published to the registry/);
+});
+
+test('prepublish-guard: force remains loud and bypasses every check under OIDC', () => {
+  const lines = [];
+  const result = check({
+    run: fakeRun({}),
+    env: { ...OIDC_ENV, AUXILO_PUBLISH_FORCE: '1' },
+    log: (line) => lines.push(line),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.forced, true);
+  assert.deepEqual(lines, []);
+
+  const isolatedHome = fs.mkdtempSync(path.join(os.tmpdir(), 'auxilo-force-test-'));
+  try {
+    const child = spawnSync(process.execPath, [path.join(__dirname, '..', 'scripts', 'prepublish-guard.js')], {
+      encoding: 'utf8',
+      env: {
+        HOME: isolatedHome,
+        AUXILO_HOME: isolatedHome,
+        AUXILO_PUBLISH_FORCE: '1',
+        ...OIDC_ENV,
+      },
+    });
+    assert.equal(child.status, 0);
+    assert.match(child.stderr, /AUXILO_PUBLISH_FORCE=1 set.*checks BYPASSED/);
+    assert.equal(child.stdout, '');
+  } finally {
+    fs.rmSync(isolatedHome, { recursive: true, force: true });
+  }
 });
