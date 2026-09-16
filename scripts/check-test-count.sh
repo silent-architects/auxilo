@@ -251,7 +251,9 @@ cd "${REPO_ROOT}"
 # CLI-BINARY-RESOLUTION: +15 tests (T1–T15) for version-ranked resolution,
 # native CLI provenance, known-old auth gating and setup path persistence.
 # Verified post-build discovered count: 3106 (3100 pass, 0 fail, 6 skipped).
-EXPECTED_TEST_COUNT=3106
+# CODEX-ROUTE-ISOLATION: +15 tests (T1–T15) for isolated argv/env/cwd,
+# skill-mention transport encoding, fail-closed JSONL auditing and cleanup.
+EXPECTED_TEST_COUNT=3121
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

@@ -55,6 +55,14 @@ function withCodexBin(home) {
   return binPath;
 }
 
+function lifecycleJsonl() {
+  return [
+    { type: 'thread.started', thread_id: 'fixture-thread' },
+    { type: 'turn.started' },
+    { type: 'turn.completed' },
+  ].map((event) => JSON.stringify(event)).join('\n');
+}
+
 // ─── fixture (a) ─────────────────────────────────────────────────────────
 // claude installed + logged-out, codex auth present → codex-cli selected,
 // extraction proceeds.
@@ -78,7 +86,7 @@ describe('EXTRACT-PER-CLIENT W1 P1 fixture (a): claude installed+logged-out, cod
         return { status: 0, stdout: 'codex-cli 0.144.5', stderr: '', error: null };
       }
       if (base === 'codex' && args[0] === 'exec') {
-        return { status: 0, stdout: '', stderr: '', error: null };
+        return { status: 0, stdout: lifecycleJsonl(), stderr: '', error: null };
       }
       throw new Error(`unexpected spawn: ${bin} ${JSON.stringify(args)}`);
     };
@@ -221,7 +229,7 @@ describe("EXTRACT-PER-CLIENT W1 P1 fixture (c): claude auth status 'unknown' at 
         return { status: 0, stdout: 'codex-cli 0.144.5', stderr: '', error: null };
       }
       if (base === 'codex' && args[0] === 'exec') {
-        return { status: 0, stdout: '', stderr: '', error: null };
+        return { status: 0, stdout: lifecycleJsonl(), stderr: '', error: null };
       }
       throw new Error(`unexpected spawn: ${bin} ${JSON.stringify(args)}`);
     };
@@ -325,7 +333,7 @@ describe('EXTRACT-PER-CLIENT W1 P1 fixture (e): a foreign-billing CLI helper is 
         return { status: 0, stdout: 'codex-cli 0.144.5', stderr: '', error: null };
       }
       if (base === 'codex' && args[0] === 'exec') {
-        return { status: 0, stdout: '', stderr: '', error: null };
+        return { status: 0, stdout: lifecycleJsonl(), stderr: '', error: null };
       }
       throw new Error(`unexpected spawn: ${bin} ${JSON.stringify(args)}`);
     };
