@@ -3,8 +3,8 @@
  * test/codex-cli-provider.test.js — EXTRACT-PER-CLIENT W1 PART B.
  *
  * Covers scripts/providers/codex-cli.js: argv shape, the two JSON-Schema hint
- * files, stdin composition, output-file-over-stdout precedence (with the
- * documented stdout fallback), env scrub (imported from claude-code.js, plus
+ * files, stdin composition, output-file-over-event precedence (with the
+ * completed-agent-message fallback), env scrub (imported from claude-code.js, plus
  * the OPENAI_API_KEY-specific scrub), detect()'s two-leg requirement, auth_mode
  * reading, every reason code, usage always null, the cached `codex --version`
  * capture, and the provider-selection e2e proof named in the build spec:
@@ -58,6 +58,18 @@ function okSpawnResult(stdout = '', stderr = '') {
   return { status: 0, stdout, stderr, error: null, signal: null };
 }
 
+function lifecycleJsonl(agentText) {
+  const events = [
+    { type: 'thread.started', thread_id: 'fixture-thread' },
+    { type: 'turn.started' },
+  ];
+  if (typeof agentText === 'string') {
+    events.push({ type: 'item.completed', item: { type: 'agent_message', text: agentText } });
+  }
+  events.push({ type: 'turn.completed' });
+  return events.map((event) => JSON.stringify(event)).join('\n');
+}
+
 describe('codex-cli.js — module shape', () => {
   it('exports runModel and detect (provider.interface.js contract)', () => {
     assert.equal(typeof codexCli.runModel, 'function');
@@ -72,7 +84,7 @@ describe('codex-cli.js — runModel argv', () => {
     const home = withAuthJson(tempDir('auxilo-codex-argv-'));
     const outputPath = path.join(home, 'out-extract.txt');
     fs.writeFileSync(outputPath, '{"learnings":[]}');
-    const stub = spawnQueue([okSpawnResult('')]);
+    const stub = spawnQueue([okSpawnResult(lifecycleJsonl())]);
     try {
       const result = await codexCli.runModel({
         prompt: 'PROMPT', input: 'TRANSCRIPT', mode: 'extract',
@@ -86,6 +98,12 @@ describe('codex-cli.js — runModel argv', () => {
         '--skip-git-repo-check',
         '--ephemeral',
         '--ignore-user-config',
+        '--ignore-rules',
+        '--strict-config',
+        '-C', stub.calls[0].args[stub.calls[0].args.indexOf('-C') + 1],
+        '--json',
+        ...codexCli.ISOLATION_DISABLED_FEATURES.flatMap((feature) => ['--disable', feature]),
+        ...codexCli.ISOLATION_CONFIG_OVERRIDES.flatMap((override) => ['-c', override]),
         '--output-schema', codexCli.EXTRACTION_SCHEMA_PATH,
         '-o', outputPath,
         '-',
@@ -100,7 +118,7 @@ describe('codex-cli.js — runModel argv', () => {
     const home = withAuthJson(tempDir('auxilo-codex-argv-judge-'));
     const outputPath = path.join(home, 'out-judge.txt');
     fs.writeFileSync(outputPath, '{"decisions":[]}');
-    const stub = spawnQueue([okSpawnResult('')]);
+    const stub = spawnQueue([okSpawnResult(lifecycleJsonl())]);
     try {
       const result = await codexCli.runModel({
         prompt: 'JUDGE_PROMPT', mode: 'judge',
@@ -114,6 +132,12 @@ describe('codex-cli.js — runModel argv', () => {
         '--skip-git-repo-check',
         '--ephemeral',
         '--ignore-user-config',
+        '--ignore-rules',
+        '--strict-config',
+        '-C', stub.calls[0].args[stub.calls[0].args.indexOf('-C') + 1],
+        '--json',
+        ...codexCli.ISOLATION_DISABLED_FEATURES.flatMap((feature) => ['--disable', feature]),
+        ...codexCli.ISOLATION_CONFIG_OVERRIDES.flatMap((override) => ['-c', override]),
         '--output-schema', codexCli.JUDGE_SCHEMA_PATH,
         '-o', outputPath,
         '-',
@@ -192,7 +216,7 @@ describe('codex-cli.js — stdin composition', () => {
     const home = withAuthJson(tempDir('auxilo-codex-stdin-'));
     const outputPath = path.join(home, 'out.txt');
     fs.writeFileSync(outputPath, '{"learnings":[]}');
-    const stub = spawnQueue([okSpawnResult('')]);
+    const stub = spawnQueue([okSpawnResult(lifecycleJsonl())]);
     try {
       await codexCli.runModel({
         prompt: 'PROMPT-', input: 'TRANSCRIPT-BODY', mode: 'extract',
@@ -209,7 +233,7 @@ describe('codex-cli.js — stdin composition', () => {
     const home = withAuthJson(tempDir('auxilo-codex-stdin-judge-'));
     const outputPath = path.join(home, 'out.txt');
     fs.writeFileSync(outputPath, '{"decisions":[]}');
-    const stub = spawnQueue([okSpawnResult('')]);
+    const stub = spawnQueue([okSpawnResult(lifecycleJsonl())]);
     try {
       await codexCli.runModel({
         prompt: 'JUDGE-PROMPT-ONLY', mode: 'judge',
@@ -223,14 +247,14 @@ describe('codex-cli.js — stdin composition', () => {
   });
 });
 
-// ─── (4) output read from the -o file, not stdout; documented stdout fallback ─
+// ─── (4) output read from the -o file; agent-message event fallback only ───
 
 describe('codex-cli.js — output source', () => {
   it('text comes from the -o file even when stdout carries stray banner/telemetry content', async () => {
     const home = withAuthJson(tempDir('auxilo-codex-output-'));
     const outputPath = path.join(home, 'out.txt');
     fs.writeFileSync(outputPath, '{"learnings":[{"title":"real answer from the file, not stdout","body":"body body body body body body body body body body body","category":"monitoring","outcome":"success"}]}');
-    const stub = spawnQueue([okSpawnResult('session id: abc123\nstray telemetry line\n')]);
+    const stub = spawnQueue([okSpawnResult(`${lifecycleJsonl()}\nstray telemetry line`)]);
     try {
       const result = await codexCli.runModel({
         prompt: 'P', input: 'T', mode: 'extract',
@@ -245,10 +269,10 @@ describe('codex-cli.js — output source', () => {
     }
   });
 
-  it('falls back to stdout when the -o file is absent (documented as the exception path, not the default)', async () => {
+  it('falls back to the last completed agent-message event when the -o file is absent', async () => {
     const home = withAuthJson(tempDir('auxilo-codex-output-fallback-'));
     const outputPath = path.join(home, 'never-written.txt'); // never created
-    const stub = spawnQueue([okSpawnResult('{"learnings":[]}')]);
+    const stub = spawnQueue([okSpawnResult(lifecycleJsonl('{"learnings":[]}'))]);
     try {
       const result = await codexCli.runModel({
         prompt: 'P', input: 'T', mode: 'extract',
@@ -266,7 +290,7 @@ describe('codex-cli.js — output source', () => {
     const home = withAuthJson(tempDir('auxilo-codex-cleanup-'));
     const outputPath = path.join(home, 'out.txt');
     fs.writeFileSync(outputPath, '{"learnings":[]}');
-    const stub = spawnQueue([okSpawnResult('')]);
+    const stub = spawnQueue([okSpawnResult(lifecycleJsonl())]);
     try {
       await codexCli.runModel({
         prompt: 'P', input: 'T', mode: 'extract',
@@ -326,7 +350,7 @@ describe('codex-cli.js — codexChildEnv() scrub', () => {
     const home = withAuthJson(tempDir('auxilo-codex-spawnenv-'));
     const outputPath = path.join(home, 'out.txt');
     fs.writeFileSync(outputPath, '{"learnings":[]}');
-    const stub = spawnQueue([okSpawnResult('')]);
+    const stub = spawnQueue([okSpawnResult(lifecycleJsonl())]);
     const originalEnv = process.env;
     process.env = { ...originalEnv, ANTHROPIC_API_KEY: 'leak', OPENAI_API_KEY: 'leak' };
     try {
@@ -531,10 +555,10 @@ describe('codex-cli.js — reason codes', () => {
     }
   });
 
-  it('cli-bad-output: exit 0, no -o file, empty stdout', async () => {
+  it('cli-bad-output: exit 0, lifecycle events but no -o file or agent answer', async () => {
     const home = withAuthJson(tempDir('auxilo-codex-reason-badoutput-'));
     const outputPath = path.join(home, 'never-written.txt');
-    const stub = spawnQueue([okSpawnResult('')]);
+    const stub = spawnQueue([okSpawnResult(lifecycleJsonl())]);
     try {
       const result = await codexCli.runModel({
         prompt: 'P', input: 'T', mode: 'extract',
@@ -571,7 +595,7 @@ describe('codex-cli.js — usage', () => {
     const home = withAuthJson(tempDir('auxilo-codex-usage-'));
     const outputPath = path.join(home, 'out.txt');
     fs.writeFileSync(outputPath, '{"learnings":[]}');
-    const stub = spawnQueue([okSpawnResult('')]);
+    const stub = spawnQueue([okSpawnResult(lifecycleJsonl())]);
     try {
       const result = await codexCli.runModel({
         prompt: 'P', input: 'T', mode: 'extract',
@@ -601,7 +625,7 @@ describe('codex-cli.js — getCodexVersion() caching', () => {
         versionProbeCalls += 1;
         return { status: 0, stdout: 'codex-cli 0.144.5', stderr: '', error: null };
       }
-      return okSpawnResult('');
+      return okSpawnResult(lifecycleJsonl());
     };
     try {
       const r1 = await codexCli.runModel({

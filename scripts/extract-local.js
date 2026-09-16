@@ -639,6 +639,7 @@ const PRE_SPAWN_SKIP_REASON_CODES = new Set([
   'cli-not-installed',
   'cli-billing-helper-configured',
   'cli-settings-isolation-unsupported',
+  'isolation-precondition',
   'provider-not-configured',
   'providers-file-mode-unsafe',
   'provider-not-installed',
