@@ -48,14 +48,21 @@ jobs:
             exit 1
           fi
 
+      # check-test-count.sh runs the full test/*.test.js tree, which includes
+      # Playwright suites (test/ask-wave.test.js). npm ci installs the package
+      # but not the browser binary; without it those suites hang and their
+      # subtests are cancelled. ci.yml installs it for the same reason.
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium --with-deps
+
       - name: Run tests and test-count gate
         run: bash scripts/check-test-count.sh
 
       - name: Run predeploy gate
         run: bash scripts/predeploy-check.sh
 
-      # DR-1 requires a Playwright browser install. ci.yml runs it on every
-      # push to the commit being published; this manual workflow does not.
+      # Chromium above supports the test-count gate. The separate DR-1
+      # regression runs in ci.yml, not in this manual workflow.
       - name: Assert no injected registry auth
         run: |
           set -eu
