@@ -153,8 +153,8 @@ it('T6: native package version is returned and follows the selected binary into 
   }
   assert.deepEqual(calls, [
     { bin: NPM, argv: ['auth', 'status'] },
-    { bin: NPM, argv: ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', ''] },
-    { bin: NPM, argv: ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--setting-sources', ''] },
+    { bin: NPM, argv: ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config'] },
+    { bin: NPM, argv: ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config'] },
   ]);
 });
 
@@ -235,7 +235,7 @@ it('T11: only 2.1.12 installed means detect has zero spawns and extract still in
   assert.equal(result.ok, true);
   assert.equal(result.authStatus, 'unknown');
   assert.equal(result.cliVersion, '2.1.12');
-  assert.deepEqual(calls, [{ bin: SYSTEM, args: ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', ''] }]);
+  assert.deepEqual(calls, [{ bin: SYSTEM, args: ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config'] }]);
 });
 
 it('T12: resolution and version reads tolerate filesystem errors without spawning', () => {

@@ -190,7 +190,9 @@ describe('EXT-0806b Claude auth and cause classification', () => {
     // EXTRACTION-CHILD-HOOKS (0.9.15): and '--setting-sources',''  — the child
     // loads none of the operator's own user/project/local settings, so their
     // personal SessionStart hooks never fire into this prompt.
-    assert.deepEqual(unknown.calls.map((call) => call.args), [['auth', 'status'], ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', '']]);
+    // CLAUDE-CHILD-MCP-CONTEXT: '--strict-mcp-config' also excludes MCP
+    // servers when no explicit MCP config is supplied.
+    assert.deepEqual(unknown.calls.map((call) => call.args), [['auth', 'status'], ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config']]);
   });
 
   it('maps auth regex, non-zero model exit, and spawn failure to the exact three reason codes', () => {

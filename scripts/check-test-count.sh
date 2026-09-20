@@ -255,7 +255,9 @@ cd "${REPO_ROOT}"
 # skill-mention transport encoding, fail-closed JSONL auditing and cleanup.
 # TRUSTED-PUBLISHING: +8 OIDC guard cases and +8 workflow/fixture cases
 # (T1–T15); the local token guard remains covered by its existing tests.
-EXPECTED_TEST_COUNT=3138
+# CLAUDE-CHILD-MCP-CONTEXT Parts A+B: +12 tests (T1–T6, selection no-fallback,
+# TB1–TB5) for MCP isolation, wrapper decoding and strict Codex output schemas.
+EXPECTED_TEST_COUNT=3150
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
