@@ -353,11 +353,11 @@ describe('claude-code.js — EXTRACTION-CHILD-HOOKS: --setting-sources isolation
   it('providers/index.js runModel(): cli-settings-isolation-unsupported is in NON_RETRYABLE_FOR_THIS_PROVIDER and falls through to the next provider rather than hard-failing', async () => {
     assert.ok(providers.NON_RETRYABLE_FOR_THIS_PROVIDER.has('cli-settings-isolation-unsupported'));
     const responses = [authJson(true), { status: 1, stdout: '', stderr: "error: unknown option '--setting-sources'" }];
-    // Beyond claude-code's 2 calls, give codex-cli/byo-key's own probes a
+    // Beyond claude-code's 2 calls, give byo-key's own probe a
     // clean, deterministic "not found" rather than letting the shared stub
     // run dry (which would surface a DIFFERENT provider's spawn-plumbing
     // failure as the walk's final reasonCode and make this assertion about
-    // codex-cli/byo-key's own behavior instead of claude-code's fall-through).
+    // byo-key's own behavior instead of claude-code's fall-through).
     const spawnSyncImpl = () => responses.shift() || { status: 1, stdout: '', stderr: '', error: Object.assign(new Error('not found'), { code: 'ENOENT' }) };
     const home = tempDir('auxilo-isolation-fallthrough-home-');
     const logLines = [];
@@ -608,7 +608,7 @@ describe('providers/index.js — resolveProvider selection', () => {
     assert.match(resolved.reason, /not-a-real-provider/);
   });
 
-  it('absent override picks the first detect()-true provider in fixed order (claude-code first)', async () => {
+  it('absent override picks the first detect()-true provider in automatic order (claude-code first)', async () => {
     const resolved = await providers.resolveProvider({
       env: {},
       providerCache: {},
@@ -624,7 +624,7 @@ describe('providers/index.js — resolveProvider selection', () => {
     assert.equal(resolved.id, 'claude-code');
   });
 
-  it('all providers false → ok:false naming every provider tried, in order', async () => {
+  it('all automatic providers false → ok:false naming every automatic provider tried, in order', async () => {
     const resolved = await providers.resolveProvider({
       env: {},
       providerCache: {},
@@ -638,7 +638,8 @@ describe('providers/index.js — resolveProvider selection', () => {
       spawnSyncImpl: () => authJson(false),
     });
     assert.equal(resolved.ok, false);
-    assert.match(resolved.reason, /claude-code, codex-cli, byo-key/);
+    assert.match(resolved.reason, /claude-code, byo-key/);
+    assert.doesNotMatch(resolved.reason, /codex-cli/);
   });
 
   // byo-key's stub window closed in PART C (scripts/providers/byo-key.js now
@@ -820,9 +821,9 @@ describe('bin/auxilo-cli.js — extractionProviderLine', () => {
 
   it('renders "none" with the reason when resolution failed', () => {
     const cli = require('../bin/auxilo-cli.js');
-    const line = cli.extractionProviderLine({ ok: false, reason: 'no extraction model provider available — tried: claude-code, codex-cli, byo-key' });
+    const line = cli.extractionProviderLine({ ok: false, reason: 'no extraction model provider available — tried: claude-code, byo-key' });
     assert.match(line, /none/);
-    assert.match(line, /tried: claude-code, codex-cli, byo-key/);
+    assert.match(line, /tried: claude-code, byo-key/);
   });
 });
 
@@ -871,7 +872,7 @@ describe('bin/auxilo-cli.js — lastRecordedProviderResolution (no live detect()
     }
   });
 
-  it('an unknown AUXILO_EXTRACTION_PROVIDER value fails closed with a named reason, validated against PROVIDER_ORDER without calling resolveProvider() (no detect(), no spawn)', () => {
+  it('an unknown AUXILO_EXTRACTION_PROVIDER value fails closed with a named reason, validated against KNOWN_PROVIDER_IDS without calling resolveProvider() (no detect(), no spawn)', () => {
     const cli = require('../bin/auxilo-cli.js');
     const originalEnv = process.env.AUXILO_EXTRACTION_PROVIDER;
     try {
@@ -1027,8 +1028,8 @@ describe('extract-local.js — logProviderRunSummary / formatArgvForLog', () => 
   it('EXTRACT-LOG-HOOKS-EVIDENCE: claude-code, finder=ran but NO argv captured this run (the fallthrough-to-another-provider case observed in production): hooks=unknown + flags=n/a, never isolated', () => {
     const extractLocal = require('../scripts/extract-local.js');
     const lines = [];
-    // Reproduces the real defect: providers.runModel() fell through from
-    // claude-code to a different provider (e.g. codex-cli, whose own
+    // Reproduces the real defect class: providers.runModel() fell through
+    // from claude-code to a different provider (byo-key, whose own
     // result carries no `argv` field and, on failure, no `identity`), so
     // resolveExtractionModelIdentity()'s fallback re-resolved the label
     // back to 'claude-code' independent of which provider's result this

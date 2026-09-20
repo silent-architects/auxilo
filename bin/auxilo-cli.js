@@ -167,12 +167,12 @@ const CONSENT_TEXT = `
     • READS the session transcript on your machine,
     • SCRUBS it locally (sensitivity filter: API keys, tokens, emails, PII
       are redacted first),
-    • EXTRACTS reusable learnings locally through the first model client you
-      are signed in to (Claude Code, then Codex) or, when neither is
-      available, a provider key you set yourself. For this step your
-      scrubbed transcript goes only to that provider, under your own
-      account with them, and any use is charged to that account, never to
-      Auxilo. It is never sent to Auxilo, raw or scrubbed.
+    • EXTRACTS reusable learnings locally through Claude Code, when you
+      are signed in to it, or a provider key you set yourself. For this
+      step your scrubbed transcript goes only to that provider, under
+      your own account with them, and any use is charged to that
+      account, never to Auxilo. It is never sent to Auxilo, raw or
+      scrubbed.
     • UPLOADS only the finished learning drafts (title, body, category,
       tags, task context, outcome) to Auxilo (${'POST /learn'}). Everything
       waits in your review queue until you approve it, one learning at a
@@ -645,7 +645,7 @@ const CLI_CLEAN_LANE_CALIBRATED_PROVIDERS = ['claude-code'];
  * that with two read-only, no-detect sources of TRUTH, in priority order:
  * (1) AUXILO_EXTRACTION_PROVIDER, if set, is a certain fact about the
  *     current session's config — reading it is not a guess — validated
- *     against providers.PROVIDER_ORDER exactly as resolveProvider() itself
+ *     against providers.KNOWN_PROVIDER_IDS exactly as resolveProvider() itself
  *     validates an override, without calling it.
  * (2) Otherwise, providers.json's `selected` field — the LAST provider a
  *     genuine resolveProvider() full-scan actually chose and persisted
@@ -661,10 +661,10 @@ const CLI_CLEAN_LANE_CALIBRATED_PROVIDERS = ['claude-code'];
 function lastRecordedProviderResolution() {
   const override = process.env.AUXILO_EXTRACTION_PROVIDER;
   if (override) {
-    if (providers.PROVIDER_ORDER.includes(override)) return { ok: true, id: override };
+    if (providers.KNOWN_PROVIDER_IDS.includes(override)) return { ok: true, id: override };
     return {
       ok: false,
-      reason: `AUXILO_EXTRACTION_PROVIDER="${override}" is not a known provider (expected one of: ${providers.PROVIDER_ORDER.join(', ')})`,
+      reason: `AUXILO_EXTRACTION_PROVIDER="${override}" is not a known provider (expected one of: ${providers.KNOWN_PROVIDER_IDS.join(', ')})`,
     };
   }
   try {
@@ -709,7 +709,9 @@ function extractionProviderLine(resolution) {
  * 'no-model-provider-available' (nothing even LOOKED usable at the detect()
  * stage) — this is the selection-fall-through exhaustion code from
  * scripts/providers/index.js's runModel(), where every provider in
- * PROVIDER_ORDER was actually tried and each failed for its own reason.
+ * AUTOMATIC_PROVIDER_ORDER was actually tried and each failed for its own
+ * reason. codex-cli remains reachable only through the explicit override,
+ * which never enters this fallback walk.
  */
 const STATUS_WORTHY_SKIP_REASON_CODES = Object.freeze([
   'cli-billing-helper-configured',
@@ -1513,7 +1515,7 @@ async function cmdProvider(flags) {
     }
     throw err;
   }
-  console.log(`\n✓ Saved to ${written} (mode 0600). This machine will use your own ${vendor} key for extraction when no earlier provider in the order is available.`);
+  console.log(`\n✓ Saved to ${written} (mode 0600). This machine drafts through Claude Code first when you are signed in to it; your ${vendor} key only takes over when Claude Code is not usable, and once it does, it keeps drafting even after Claude Code becomes usable again.`);
 }
 
 // ─── Entry point ────────────────────────────────────────────────────────────
@@ -1575,9 +1577,11 @@ available on your account every subcommand says so and changes nothing.
            learnings keep their 7-day retraction window.`,
     provider: `Usage: auxilo provider <status|set|clear>
 
-Configure a bring-your-own (BYO) model provider key for local extraction —
-used only when no earlier provider in the fixed order (claude-code,
-codex-cli) is available. Auxilo never sees or bills this key.
+Configure a bring-your-own (BYO) model provider key for local extraction.
+Claude Code drafts first when you are signed in to it; your key only
+takes over when Claude Code is not usable, and once it does, it keeps
+drafting even after Claude Code becomes usable again. Auxilo never sees
+or bills this key.
 
   status   Show the configured vendor and model (never the key itself).
   set      Configure a vendor, model, and key. Interactive ONLY: the key is

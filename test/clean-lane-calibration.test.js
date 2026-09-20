@@ -170,7 +170,7 @@ describe('bin/auxilo-cli.js: extractionSkipReasonLine (PART C, last_reason_code 
     }
     // EXTRACT-PER-CLIENT W1 P1 fix (PUNCH-LIST): 'no-usable-provider' added —
     // the selection-fall-through exhaustion code (every provider in
-    // PROVIDER_ORDER was actually tried), distinct from
+    // AUTOMATIC_PROVIDER_ORDER was actually tried), distinct from
     // 'no-model-provider-available' (nothing even looked usable at detect()).
     assert.deepEqual(cli.STATUS_WORTHY_SKIP_REASON_CODES, [
       'cli-billing-helper-configured', 'cli-unauthenticated', 'no-model-provider-available', 'no-usable-provider',

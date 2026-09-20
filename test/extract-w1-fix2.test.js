@@ -933,12 +933,12 @@ describe('GOV-3 note item 13: os.homedir() must resolve to an absolute path', ()
 
 describe('STRINGS: bin/auxilo-cli.js CONSENT_TEXT — three gated replacements (byte-for-byte)', () => {
   const NEW_EXTRACTS_BULLET =
-    '    • EXTRACTS reusable learnings locally through the first model client you\n' +
-    '      are signed in to (Claude Code, then Codex) or, when neither is\n' +
-    '      available, a provider key you set yourself. For this step your\n' +
-    '      scrubbed transcript goes only to that provider, under your own\n' +
-    '      account with them, and any use is charged to that account, never to\n' +
-    '      Auxilo. It is never sent to Auxilo, raw or scrubbed.';
+    '    • EXTRACTS reusable learnings locally through Claude Code, when you\n' +
+    '      are signed in to it, or a provider key you set yourself. For this\n' +
+    '      step your scrubbed transcript goes only to that provider, under\n' +
+    '      your own account with them, and any use is charged to that\n' +
+    '      account, never to Auxilo. It is never sent to Auxilo, raw or\n' +
+    '      scrubbed.';
 
   const NEW_EARNINGS_BLOCK =
     '      \\`auxilo review\\`. Auto-publish for learnings that pass every screen is\n' +
@@ -1026,9 +1026,9 @@ describe('EXTRACTION-LOW-FOLLOWUPS item 6: CLI consent "you have installed" -> "
     assert.doesNotMatch(CLI_SRC, /you\s+have\s+installed/);
   });
 
-  it('the new "you are signed in to" phrasing appears exactly once, in the EXTRACTS bullet', () => {
-    const count = (CLI_SRC.match(/you\s+are\s+signed\s+in\s+to/g) || []).length;
+  it('the new "you are signed in to it" phrasing appears exactly once, in the EXTRACTS bullet', () => {
+    const count = (CLI_SRC.match(/through Claude Code, when you\n {6}are signed in to it, or a provider key/g) || []).length;
     assert.equal(count, 1);
-    assert.match(CLI_SRC, /the first model client you\n {6}are signed in to \(Claude Code, then Codex\)/);
+    assert.match(CLI_SRC, /through Claude Code, when you\n {6}are signed in to it, or a provider key/);
   });
 });
