@@ -758,10 +758,10 @@ describe('codex-cli.js — getCodexVersion() caching', () => {
   });
 });
 
-// ─── (11) e2e proof: no claude on PATH + codex auth.json present → codex-cli ─
+// ─── (11) E0: no claude on PATH + codex auth.json present → stays dark ────
 
-describe('providers/index.js — e2e: claude unavailable, codex-cli available → resolveProvider picks codex-cli', () => {
-  it("resolveProvider selects id:'codex-cli' when claude-code.detect() is false and codex-cli.detect() is true", async () => {
+describe('providers/index.js — e2e: claude unavailable, codex-cli available → automatic resolution stays dark', () => {
+  it('resolveProvider does not select codex-cli automatically even when its adapter is usable', async () => {
     const home = tempDir('auxilo-e2e-codex-selected-');
     withAuthJson(home, 'chatgpt');
     const codexBinDir = path.join(home, '.npm-global', 'bin');
@@ -798,8 +798,9 @@ describe('providers/index.js — e2e: claude unavailable, codex-cli available �
         existsSync,
         spawnSyncImpl,
       });
-      assert.equal(resolved.ok, true);
-      assert.equal(resolved.id, 'codex-cli');
+      assert.equal(resolved.ok, false);
+      assert.match(resolved.reason, /tried: claude-code, byo-key/);
+      assert.doesNotMatch(resolved.reason, /codex-cli/);
     } finally {
       cleanupTempDirs();
     }

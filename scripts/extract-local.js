@@ -681,13 +681,14 @@ function formatArgvForLog(argv) {
  * PRE_SPAWN_SKIP_REASON_CODES, so they render finder=skipped, not ran. The
  * observed defect lines (finder=ran, flags=n/a) come from a DIFFERENT case:
  * scripts/providers/index.js's runModel() falls through from claude-code to
- * the next configured provider (e.g. codex-cli) whenever claude-code's own
- * attempt fails with a NON_RETRYABLE_FOR_THIS_PROVIDER reasonCode, and
- * returns that OTHER provider's result directly when it stops there. That
- * provider's result carries no `argv` field at all (argv is a
- * claude-code-only concept), so there is no shipped argv being hidden here —
- * 'unknown' remains the correct, honest `hooks` value regardless of which
- * provider is named.
+ * the next automatic provider (byo-key) whenever claude-code's own attempt
+ * fails with a NON_RETRYABLE_FOR_THIS_PROVIDER reasonCode, and returns that
+ * OTHER provider's result directly when it stops there. codex-cli is not in
+ * that automatic walk; it remains reachable only through the explicit env
+ * override, which never falls through. A non-Claude provider's result carries
+ * no `argv` field at all (argv is a claude-code-only concept), so there is no
+ * shipped argv being hidden here — 'unknown' remains the correct, honest
+ * `hooks` value regardless of which provider is named.
  *
  * EXTRACTION-MODEL-PROVENANCE (PUNCH-LIST P1) closed the mismatch this
  * docblock used to describe as a known, deferred gap: a fallthrough

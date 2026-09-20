@@ -10,20 +10,22 @@
  * from ~/.auxilo/providers.json if it is STILL usable (re-verified via its
  * own detect() every call, never trusted blindly — a stale persisted choice
  * falls through to a full re-scan rather than failing) → else the first
- * provider whose detect() is true, in fixed order (claude-code → codex-cli →
- * byo-key) → else ok:false, with a reason naming every provider tried.
+ * provider whose detect() is true, in automatic order (claude-code →
+ * byo-key) → else ok:false, with a reason naming every automatic provider
+ * tried. codex-cli remains available only through the explicit env override.
  *
  * runModel(): resolves via resolveProvider(), then actually RUNS it. A
  * non-override resolution that fails with a reasonCode meaning "this
  * provider cannot run at all" (NON_RETRYABLE_FOR_THIS_PROVIDER — e.g.
  * unauthenticated, not installed, a billing helper is configured) falls
- * through to the next provider in PROVIDER_ORDER rather than reporting a
- * hard failure; a working provider that merely failed once (timeout, model
- * error) does not fall through — that is still the builder's chosen
- * provider having a bad run, not a reason to switch under them. An explicit
- * env override never falls through, honoring the operator's explicit
- * choice. Every provider exhausted → reasonCode 'no-usable-provider' with
- * every attempt's reason summarized in `reason`.
+ * through to the next provider in AUTOMATIC_PROVIDER_ORDER rather than
+ * reporting a hard failure; a working provider that merely failed once
+ * (timeout, model error) does not fall through — that is still the builder's
+ * chosen provider having a bad run, not a reason to switch under them. An
+ * explicit env override, including codex-cli, never falls through, honoring
+ * the operator's explicit choice. Every automatic provider exhausted →
+ * reasonCode 'no-usable-provider' with every attempt's reason summarized in
+ * `reason`.
  *
  * codex-cli.js and byo-key.js don't exist yet (PART B/C). loadOptionalProvider()
  * degrades a missing module into a "not installed yet" stub so this file — and
@@ -71,7 +73,8 @@ function loadOptionalProvider(id, modulePath) {
 const codexCli = loadOptionalProvider('codex-cli', './codex-cli.js');
 const byoKey = loadOptionalProvider('byo-key', './byo-key.js');
 
-const PROVIDER_ORDER = Object.freeze(['claude-code', 'codex-cli', 'byo-key']);
+const KNOWN_PROVIDER_IDS = Object.freeze(['claude-code', 'codex-cli', 'byo-key']);
+const AUTOMATIC_PROVIDER_ORDER = Object.freeze(['claude-code', 'byo-key']);
 const PROVIDERS = {
   'claude-code': claudeCode,
   'codex-cli': codexCli,
@@ -145,19 +148,16 @@ async function resolveProvider(opts = {}) {
     if (!Object.prototype.hasOwnProperty.call(PROVIDERS, override)) {
       return {
         ok: false,
-        reason: `AUXILO_EXTRACTION_PROVIDER="${override}" is not a known provider (expected one of: ${PROVIDER_ORDER.join(', ')})`,
+        reason: `AUXILO_EXTRACTION_PROVIDER="${override}" is not a known provider (expected one of: ${KNOWN_PROVIDER_IDS.join(', ')})`,
       };
     }
     return { ok: true, id: override, module: PROVIDERS[override] };
   }
 
-  const cache = opts.providerCache || defaultCache;
-  if (cache.resolved) return cache.resolved;
-
   // Fast path (EXTRACT-PER-CLIENT W1 FIX, PUNCH-LIST P1, item 3): the
   // persisted `selected` choice — written by a prior successful resolution,
   // possibly in an earlier process — skips re-probing every provider ahead
-  // of it in PROVIDER_ORDER when it is STILL usable (the common
+  // of it in AUTOMATIC_PROVIDER_ORDER when it is STILL usable (the common
   // steady-state case: same builder, same login, repeated extraction
   // calls). "Usable" is re-verified via that provider's own detect() every
   // time, never trusted blindly from the file alone. A stale persisted
@@ -185,6 +185,26 @@ async function resolveProvider(opts = {}) {
   const log = typeof opts.log === 'function' ? opts.log : console.error;
   const statePath = opts.providersStatePath || PROVIDERS_STATE_PATH;
   const persistedState = readProvidersState(statePath);
+
+  // EPC2-2 E0: codex-cli failed the live isolation sentinel and is therefore
+  // ineligible for automatic selection. Treat a cached pre-E0 winner as
+  // absent in memory on EVERY resolution, even if the best-effort migration
+  // below cannot rewrite providers.json. The explicit env override above is
+  // intentionally untouched and remains the only route to codex-cli.
+  if (persistedState.selected === 'codex-cli') {
+    delete persistedState.selected;
+    try {
+      if (typeof byoKey.writeProvidersStateAtomic !== 'function') throw new Error('writer unavailable');
+      byoKey.writeProvidersStateAtomic(persistedState, opts);
+    } catch {
+      log('[providers] could not clear retired automatic codex-cli selection; continuing without it');
+    }
+  }
+
+  const cache = opts.providerCache || defaultCache;
+  if (cache.resolved && cache.resolved.id !== 'codex-cli') return cache.resolved;
+  if (cache.resolved && cache.resolved.id === 'codex-cli') delete cache.resolved;
+
   const persistedId = persistedState.selected;
   if (typeof persistedId === 'string' && Object.prototype.hasOwnProperty.call(PROVIDERS, persistedId)) {
     const persistedMod = PROVIDERS[persistedId];
@@ -203,7 +223,7 @@ async function resolveProvider(opts = {}) {
   }
 
   const tried = [];
-  for (const id of PROVIDER_ORDER) {
+  for (const id of AUTOMATIC_PROVIDER_ORDER) {
     const mod = PROVIDERS[id];
     tried.push(id);
     let available = false;
@@ -224,7 +244,7 @@ async function resolveProvider(opts = {}) {
 
 /**
  * reasonCodes meaning "this provider cannot run at all right now" — safe to
- * try the NEXT provider in PROVIDER_ORDER rather than reporting a hard
+ * try the NEXT provider in AUTOMATIC_PROVIDER_ORDER rather than reporting a hard
  * failure (EXTRACT-PER-CLIENT W1 FIX, PUNCH-LIST P1, item 2). Everything
  * else (timeouts, model errors, malformed output, rate limits) means the
  * chosen provider DID run and failed on THIS call — that is not a signal to
@@ -241,7 +261,8 @@ const NON_RETRYABLE_FOR_THIS_PROVIDER = new Set([
   // EXTRACTION-CHILD-HOOKS (0.9.15): the resolved claude-code CLI doesn't
   // support --setting-sources, so it can never run isolated — same
   // "cannot run at all right now" class as the codes above, safe to try the
-  // next provider in PROVIDER_ORDER rather than reporting a hard failure.
+  // next automatic provider rather than reporting a hard failure. codex-cli
+  // remains reachable only through the explicit override, which never walks.
   'cli-settings-isolation-unsupported',
 ]);
 
@@ -288,9 +309,9 @@ function hasUsableIdentity(identity) {
  *   what lets the per-run `[providers]` log name the provider that actually
  *   ran even when that provider's own failure return carries no identity
  *   (codex-cli and byo-key only self-stamp on their SINGLE success return —
- *   this is the exact fall-through failure case the investigation traced:
- *   claude-code skipped, codex-cli ran and failed, no identity of its own,
- *   the label used to be re-guessed as claude-code by the old fallback).
+ *   the automatic fall-through failure case is now: claude-code skipped,
+ *   byo-key ran and failed, no identity of its own, and the label must name
+ *   byo-key rather than be re-guessed as claude-code by the old fallback).
  * - Every other provider on a SUCCESS: `{provider:'unknown', ...}` —
  *   byo-key.js and codex-cli.js both self-stamp `identity` on their only
  *   success return BY CONTRACT; a success with none means that contract was
@@ -321,10 +342,10 @@ function deriveIdentity(id, result) {
  * byo-key's real model name). Applied to every result this registry
  * returns, success or failure, so the per-run `[providers]` log
  * (scripts/extract-local.js's logProviderRunSummary) names the provider
- * that actually ran even on a failure — that is the fall-through failure
- * case this row's investigation traced (claude-code skipped, codex-cli ran
- * and failed with no identity of its own, the stamp used to be re-guessed
- * as claude-code by the caller).
+ * that actually ran even on a failure — the automatic fall-through failure
+ * case is now claude-code skipped, byo-key ran and failed with no identity
+ * of its own, and the stamp must not be re-guessed as claude-code by the
+ * caller.
  */
 function withIdentity(id, result) {
   if (hasUsableIdentity(result && result.identity)) return result;
@@ -333,19 +354,20 @@ function withIdentity(id, result) {
 
 /**
  * runModel(opts) — resolve a starting provider via resolveProvider(), then
- * walk PROVIDER_ORDER from there, calling each candidate's OWN runModel()
+ * walk AUTOMATIC_PROVIDER_ORDER from there, calling each candidate's OWN runModel()
  * (never a separate detect() pre-check — a provider's runModel() already
  * performs the equivalent authoritative check internally and returns a
  * specific, accurate reason, so a second detect() call would only add a
  * redundant probe without adding information). Falls through to the next
  * provider when the current one's failure reasonCode is in
  * NON_RETRYABLE_FOR_THIS_PROVIDER; when resolveProvider itself found no
- * usable provider at all, the walk starts at PROVIDER_ORDER's beginning so
- * every provider still gets an actual runModel() call and contributes its
- * own reason (not just a single generic "no provider available"). An
- * explicit AUXILO_EXTRACTION_PROVIDER override never falls through — it is
- * the operator's explicit choice, so its own failure reason is reported
- * as-is. When every provider tried is exhausted, returns reasonCode
+ * usable provider at all, the walk starts at AUTOMATIC_PROVIDER_ORDER's
+ * beginning so every automatic provider still gets an actual runModel()
+ * call and contributes its own reason (not just a single generic "no
+ * provider available"). An explicit AUXILO_EXTRACTION_PROVIDER override,
+ * including codex-cli, never falls through — it is the operator's explicit
+ * choice, so its own failure reason is reported as-is. When every provider
+ * tried is exhausted, returns reasonCode
  * 'no-usable-provider' with a bounded summary of every provider's reason in
  * `reason` (no secrets — each provider's own reason string is already
  * secret-free by contract) and NO identity — nothing actually ran to
@@ -375,8 +397,10 @@ async function runModel(opts = {}) {
 
   const log = typeof opts.log === 'function' ? opts.log : console.error;
   const resolved = await resolveProvider(opts);
-  const startIdx = resolved.ok ? PROVIDER_ORDER.indexOf(resolved.id) : -1;
-  const order = startIdx === -1 ? PROVIDER_ORDER.slice() : PROVIDER_ORDER.slice(startIdx);
+  const startIdx = resolved.ok ? AUTOMATIC_PROVIDER_ORDER.indexOf(resolved.id) : -1;
+  const order = startIdx === -1
+    ? AUTOMATIC_PROVIDER_ORDER.slice()
+    : AUTOMATIC_PROVIDER_ORDER.slice(startIdx);
 
   const attempts = [];
   for (const id of order) {
@@ -411,7 +435,8 @@ async function runModel(opts = {}) {
 module.exports = {
   runModel,
   resolveProvider,
-  PROVIDER_ORDER,
+  KNOWN_PROVIDER_IDS,
+  AUTOMATIC_PROVIDER_ORDER,
   PROVIDERS_STATE_PATH,
   NON_RETRYABLE_FOR_THIS_PROVIDER,
 };
