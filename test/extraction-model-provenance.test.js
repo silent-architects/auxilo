@@ -104,10 +104,10 @@ function spawnQueue(responses) {
   return { calls, spawnSyncImpl };
 }
 
-// ─── (1) fall-through to codex-cli success stamps codex-cli, never claude-code ──
+// ─── (1) fall-through to BYO success stamps BYO, never claude-code ────────
 
 describe('providers/index.js runModel(): fall-through SUCCESS names the provider that actually ran', () => {
-  it('claude-code fails non-retryable, codex-cli runs and self-stamps its own identity — the result names codex-cli, never claude-code', async () => {
+  it('claude-code fails non-retryable, BYO runs and self-stamps its own identity — the result names byo-key, never claude-code or codex-cli', async () => {
     const statePath = path.join(tempDir('auxilo-provenance-a-'), 'providers.json');
     await withPatched(claudeCode, {
       detect: async () => true,
@@ -115,10 +115,10 @@ describe('providers/index.js runModel(): fall-through SUCCESS names the provider
         ok: false, text: '', usage: null,
         reasonCode: 'cli-unauthenticated', reason: 'not authenticated', authStatus: 'logged-out',
       }),
-    }, () => withPatched(codexCli, {
+    }, () => withPatched(byoKey, {
       runModel: async () => ({
         ok: true, text: '{"learnings":[]}', usage: null, reason: null,
-        identity: { provider: 'codex-cli', model: null, version: '0.144.5', vendor: null },
+        identity: { provider: 'byo-key', model: 'fixture-model', version: null, vendor: 'openai-compatible' },
       }),
     }, async () => {
       const result = await providers.runModel({
@@ -126,8 +126,9 @@ describe('providers/index.js runModel(): fall-through SUCCESS names the provider
         providersStatePath: statePath,
       });
       assert.equal(result.ok, true);
-      assert.equal(result.identity.provider, 'codex-cli');
+      assert.equal(result.identity.provider, 'byo-key');
       assert.notEqual(result.identity.provider, 'claude-code');
+      assert.notEqual(result.identity.provider, 'codex-cli');
     }));
   });
 });
@@ -135,7 +136,7 @@ describe('providers/index.js runModel(): fall-through SUCCESS names the provider
 // ─── (2) fall-through where the winning result carries no identity ──────────
 
 describe('providers/index.js runModel(): fall-through SUCCESS with no self-stamped identity stamps unknown, never a guess', () => {
-  it('claude-code fails non-retryable; codex-cli runs and succeeds but its result omits `identity` (contract violation) — stamped unknown, NOT claude-code and NOT a confident codex-cli guess', async () => {
+  it('claude-code fails non-retryable; BYO runs and succeeds but its result omits `identity` (contract violation) — stamped unknown, not a provider guess', async () => {
     const statePath = path.join(tempDir('auxilo-provenance-b-'), 'providers.json');
     await withPatched(claudeCode, {
       detect: async () => true,
@@ -143,7 +144,7 @@ describe('providers/index.js runModel(): fall-through SUCCESS with no self-stamp
         ok: false, text: '', usage: null,
         reasonCode: 'cli-unauthenticated', reason: 'not authenticated', authStatus: 'logged-out',
       }),
-    }, () => withPatched(codexCli, {
+    }, () => withPatched(byoKey, {
       // Deliberately no `identity` field — simulates the contract violation
       // the investigation flagged as "latent, not open... opens the moment
       // any provider's success return omits identity."
@@ -175,15 +176,12 @@ describe('providers/index.js runModel(): fall-through SUCCESS with no self-stamp
 
 // ─── (3) no-usable-provider stamps nothing and publishes nothing ────────────
 
-describe('providers/index.js runModel(): every provider exhausted (no-usable-provider) never fabricates an identity', () => {
-  it('claude-code, codex-cli, and byo-key all fail non-retryable — ok:false, reasonCode no-usable-provider, no identity attached to the aggregate failure', async () => {
+describe('providers/index.js runModel(): every automatic provider exhausted (no-usable-provider) never fabricates an identity', () => {
+  it('claude-code and byo-key both fail non-retryable — ok:false, reasonCode no-usable-provider, no identity attached to the aggregate failure', async () => {
     const statePath = path.join(tempDir('auxilo-provenance-c-'), 'providers.json');
     await withPatched(claudeCode, {
       detect: async () => false,
       runModel: async () => ({ ok: false, text: '', usage: null, reasonCode: 'cli-unauthenticated', reason: 'claude not authed', authStatus: 'logged-out' }),
-    }, () => withPatched(codexCli, {
-      detect: async () => false,
-      runModel: async () => ({ ok: false, text: '', usage: null, reasonCode: 'cli-unauthenticated', reason: 'codex not authed', authStatus: 'unknown' }),
     }, () => withPatched(byoKey, {
       detect: async () => false,
       runModel: async () => ({ ok: false, text: '', usage: null, reasonCode: 'provider-not-configured', reason: 'no key configured', authStatus: 'unknown' }),
@@ -195,7 +193,7 @@ describe('providers/index.js runModel(): every provider exhausted (no-usable-pro
       assert.equal(result.ok, false);
       assert.equal(result.reasonCode, 'no-usable-provider');
       assert.equal(result.identity, undefined, 'nothing actually ran to completion — this registry must not fabricate an identity for it');
-    })));
+    }));
   });
 
   it('extract-local.js extractLocally(): the same full exhaustion, through the REAL default (non-forced) path, stamps NO extraction_model on any candidate and publishes nothing', async () => {
@@ -206,9 +204,6 @@ describe('providers/index.js runModel(): every provider exhausted (no-usable-pro
     await withPatched(claudeCode, {
       detect: async () => false,
       runModel: async () => ({ ok: false, text: '', usage: null, reasonCode: 'cli-unauthenticated', reason: 'claude not authed', authStatus: 'logged-out' }),
-    }, () => withPatched(codexCli, {
-      detect: async () => false,
-      runModel: async () => ({ ok: false, text: '', usage: null, reasonCode: 'cli-unauthenticated', reason: 'codex not authed', authStatus: 'unknown' }),
     }, () => withPatched(byoKey, {
       detect: async () => false,
       runModel: async () => ({ ok: false, text: '', usage: null, reasonCode: 'provider-not-configured', reason: 'no key configured', authStatus: 'unknown' }),
@@ -218,7 +213,7 @@ describe('providers/index.js runModel(): every provider exhausted (no-usable-pro
       });
       assert.deepEqual(result.learnings, [], 'no candidates were ever produced — nothing to stamp or publish');
       assert.equal(result.reasonCode, 'no-usable-provider');
-    })));
+    }));
   });
 });
 
@@ -320,22 +315,19 @@ describe('EXTRACTION-MODEL-PROVENANCE side-effect removal: identity resolution n
   });
 });
 
-// ─── (7) the fall-through FAILURE identity — the exact mislabeled-log-line
-//         shape observed 2026-09-08: claude-code fails non-retryable, the
-//         walk moves on, codex-cli then fails RETRYABLE (cli-timeout is NOT
-//         in NON_RETRYABLE_FOR_THIS_PROVIDER, so the walk STOPS there and
-//         never reaches byo-key), and codex-cli's own failure return
-//         carries no identity of its own (it only self-stamps on its SINGLE
-//         success return) — this is the untested gap: every fixture above
-//         covers a winning SUCCESS or full exhaustion, never a STOPPING
-//         failure mid-walk. Deliberately does not force
+// ─── (7) the fall-through FAILURE identity — claude-code fails
+//         non-retryable, the automatic walk moves to byo-key, and BYO then
+//         fails RETRYABLE (provider-rate-limited is NOT in
+//         NON_RETRYABLE_FOR_THIS_PROVIDER, so the walk STOPS there). The
+//         provider's failure fixture carries no identity of its own — this
+//         covers a STOPPING failure mid-walk. Deliberately does not force
 //         AUXILO_EXTRACTION_PROVIDER (bypasses fall-through entirely, which
 //         is why this shape went untested in the first place) ────────────
 
-describe('providers/index.js runModel() + extract-local.js extractLocally(): the fall-through FAILURE identity (claude-code skipped, codex-cli ran and failed, no identity of its own)', () => {
-  it('providers.runModel(): names codex-cli on the returned failure, never claude-code and never a guess; byo-key is never tried', async () => {
+describe('providers/index.js runModel() + extract-local.js extractLocally(): the automatic fall-through FAILURE identity', () => {
+  it('providers.runModel(): names byo-key on the returned failure, never claude-code or codex-cli', async () => {
     const statePath = path.join(tempDir('auxilo-provenance-g-'), 'providers.json');
-    let byoKeyCalled = false;
+    let codexCalled = false;
     await withPatched(claudeCode, {
       detect: async () => true,
       runModel: async () => ({
@@ -343,34 +335,34 @@ describe('providers/index.js runModel() + extract-local.js extractLocally(): the
         reasonCode: 'cli-unauthenticated', reason: 'not authenticated', authStatus: 'logged-out',
       }),
     }, () => withPatched(codexCli, {
+      runModel: async () => {
+        codexCalled = true;
+        return { ok: true, text: 'wrong provider' };
+      },
+    }, () => withPatched(byoKey, {
       runModel: async () => ({
         ok: false, text: '', usage: null,
-        reasonCode: 'cli-timeout', reason: 'codex exec timed out', authStatus: 'unknown',
+        reasonCode: 'provider-rate-limited', reason: 'BYO provider rate limited', authStatus: 'unknown',
       }),
-    }, () => withPatched(byoKey, {
-      runModel: async () => {
-        byoKeyCalled = true;
-        return { ok: false, text: '', usage: null, reasonCode: 'provider-not-configured', reason: 'no key configured', authStatus: 'unknown' };
-      },
     }, async () => {
       const result = await providers.runModel({
         env: {}, providerCache: {}, mode: 'extract', prompt: 'P', input: 'T',
         providersStatePath: statePath,
       });
       assert.equal(result.ok, false);
-      assert.equal(result.reasonCode, 'cli-timeout', 'a RETRYABLE failure must be returned as-is, never aggregated into no-usable-provider');
-      assert.equal(result.identity && result.identity.provider, 'codex-cli', 'the module actually invoked, derived centrally by providers/index.js — never claude-code (skipped) and never a guess');
-      assert.equal(byoKeyCalled, false, 'a RETRYABLE failure stops the walk right there — byo-key must never be tried');
+      assert.equal(result.reasonCode, 'provider-rate-limited', 'a RETRYABLE failure must be returned as-is, never aggregated into no-usable-provider');
+      assert.equal(result.identity && result.identity.provider, 'byo-key', 'the module actually invoked, derived centrally by providers/index.js');
+      assert.equal(codexCalled, false, 'codex-cli is not in the automatic walk');
     })));
   });
 
-  it('extract-local.js extractLocally(): the same fall-through-then-stop through the REAL default (non-forced) path — the per-run [providers] log line names codex-cli, and nothing is stamped or published from the failed run', async () => {
+  it('extract-local.js extractLocally(): automatic fall-through stops at BYO, logs byo-key, and publishes nothing', async () => {
     const dir = tempDir('auxilo-provenance-g-extract-');
     const indexPath = path.join(dir, 'extracted-index.jsonl');
     fs.writeFileSync(indexPath, '');
     const statePath = path.join(dir, 'providers.json');
     const logLines = [];
-    let byoKeyCalled = false;
+    let codexCalled = false;
     await withPatched(claudeCode, {
       detect: async () => true,
       runModel: async () => ({
@@ -378,21 +370,17 @@ describe('providers/index.js runModel() + extract-local.js extractLocally(): the
         reasonCode: 'cli-unauthenticated', reason: 'not authenticated', authStatus: 'logged-out',
       }),
     }, () => withPatched(codexCli, {
-      // codex-cli's own failure return, deliberately carrying NO `identity`
-      // — its real contract (see providers/index.js's deriveIdentity
-      // docblock: codex-cli and byo-key only self-stamp on their single
-      // success return). This is the exact shape that used to be
-      // mislabeled: the log line named the LAST provider whose runModel()
-      // was actually invoked, but with no identity of its own to trust.
+      runModel: async () => {
+        codexCalled = true;
+        return { ok: true, text: 'wrong provider' };
+      },
+    }, () => withPatched(byoKey, {
+      // Deliberately no `identity` field: providers/index.js must derive the
+      // failure identity from the module it actually invoked.
       runModel: async () => ({
         ok: false, text: '', usage: null,
-        reasonCode: 'cli-timeout', reason: 'codex exec timed out', authStatus: 'unknown',
+        reasonCode: 'provider-rate-limited', reason: 'BYO provider rate limited', authStatus: 'unknown',
       }),
-    }, () => withPatched(byoKey, {
-      runModel: async () => {
-        byoKeyCalled = true;
-        return { ok: false, text: '', usage: null, reasonCode: 'provider-not-configured', reason: 'no key configured', authStatus: 'unknown' };
-      },
     }, async () => {
       const result = await extractLocal.extractLocally(
         'a synthetic transcript, long enough for the extractor',
@@ -400,11 +388,11 @@ describe('providers/index.js runModel() + extract-local.js extractLocally(): the
         { indexPath, log: (msg) => logLines.push(msg), providersStatePath: statePath, providerCache: {} }
       );
       assert.deepEqual(result.learnings, [], 'the candidate path (extract-local.js ~:823-834) must return before the stamp spread (~:848) — nothing published from a failed run');
-      assert.equal(result.reasonCode, 'cli-timeout');
-      assert.equal(byoKeyCalled, false, 'a RETRYABLE failure stops the walk before byo-key is ever tried');
+      assert.equal(result.reasonCode, 'provider-rate-limited');
+      assert.equal(codexCalled, false, 'codex-cli is not in the automatic walk');
       assert.ok(
-        logLines.some((l) => /^\[providers\] run=\S+ provider=codex-cli /.test(l)),
-        `the per-run [providers] log line must name codex-cli (the module that actually ran), got: ${JSON.stringify(logLines)}`
+        logLines.some((l) => /^\[providers\] run=\S+ provider=byo-key /.test(l)),
+        `the per-run [providers] log line must name byo-key (the module that actually ran), got: ${JSON.stringify(logLines)}`
       );
       assert.ok(
         !logLines.some((l) => /provider=claude-code/.test(l)),

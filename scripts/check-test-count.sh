@@ -257,7 +257,7 @@ cd "${REPO_ROOT}"
 # (T1–T15); the local token guard remains covered by its existing tests.
 # CLAUDE-CHILD-MCP-CONTEXT Parts A+B: +12 tests (T1–T6, selection no-fallback,
 # TB1–TB5) for MCP isolation, wrapper decoding and strict Codex output schemas.
-EXPECTED_TEST_COUNT=3150
+EXPECTED_TEST_COUNT=3163
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

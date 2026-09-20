@@ -44,7 +44,7 @@ function passingResponses(overrides = {}) {
     'git rev-parse HEAD': HEAD_SHA,
     'git rev-parse origin/main': HEAD_SHA,
     'git status --porcelain': '',
-    [`npm view ${PACKAGE_NAME}@0.9.25 version`]: new Error('npm ERR! 404'),
+    [`npm view ${PACKAGE_NAME}@0.9.26 version`]: new Error('npm ERR! 404'),
     ...overrides,
   };
 }
@@ -54,7 +54,7 @@ test('prepublish-guard: passes when HEAD == origin/main, tree clean, version unp
   assert.equal(result.ok, true);
   assert.equal(result.forced, false);
   assert.equal(result.headSha, HEAD_SHA);
-  assert.equal(result.version, '0.9.25');
+  assert.equal(result.version, '0.9.26');
 });
 
 test('prepublish-guard: refuses when HEAD != origin/main', () => {
@@ -84,7 +84,7 @@ test('prepublish-guard: untracked-only changes do not block (npm files[] is auth
 
 test('prepublish-guard: refuses when the current version is already published', () => {
   const responses = passingResponses({
-    [`npm view ${PACKAGE_NAME}@0.9.25 version`]: '0.9.25',
+    [`npm view ${PACKAGE_NAME}@0.9.26 version`]: '0.9.26',
   });
   const result = check({ run: fakeRun(responses), env: {} });
   assert.equal(result.ok, false);
@@ -129,7 +129,7 @@ test('prepublish-guard: npm whoami succeeds -> proceeds past auth to the other c
   assert.equal(result.ok, true);
   assert.equal(result.forced, false);
   assert.equal(result.headSha, HEAD_SHA);
-  assert.equal(result.version, '0.9.25');
+  assert.equal(result.version, '0.9.26');
 });
 
 test('prepublish-guard: npm whoami fails with E401 -> refuses with the auth message, never runs fetch/HEAD/version checks', () => {
@@ -203,7 +203,7 @@ test('prepublish-guard: full OIDC skips only whoami and prints one secret-free e
     'git rev-parse HEAD',
     'git rev-parse origin/main',
     'git status --porcelain',
-    `npm view ${PACKAGE_NAME}@0.9.25 version`,
+    `npm view ${PACKAGE_NAME}@0.9.26 version`,
   ]);
   assert.equal(lines.length, 1);
   assert.match(lines[0], /OIDC.*npm whoami.*publish time/);
@@ -256,7 +256,7 @@ test('prepublish-guard: OIDC still refuses a dirty tracked tree', () => {
 
 test('prepublish-guard: OIDC still refuses an already published version', () => {
   const result = check({
-    run: fakeRun(passingResponses({ [`npm view ${PACKAGE_NAME}@0.9.25 version`]: '0.9.25' })),
+    run: fakeRun(passingResponses({ [`npm view ${PACKAGE_NAME}@0.9.26 version`]: '0.9.26' })),
     env: OIDC_ENV,
     log: () => {},
   });
