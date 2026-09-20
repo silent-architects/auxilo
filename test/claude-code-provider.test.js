@@ -94,21 +94,21 @@ describe('claude-code.js — claudeChildEnv() scrub completeness + preservation'
   });
 });
 
-// ─── (2)+(3) Extraction argv gains --tools '', judge argv unchanged ────────
+// ─── (2)+(3) Exact extraction and judge argv, including MCP isolation ─────
 
 describe('claude-code.js — runModel argv per mode', () => {
-  it("mode:'extract' spawns [bin, '-p', '--no-session-persistence', '--tools', '', '--setting-sources', ''] (EXTRACT-TOOLS-LOCK + the W1 FIX GIVENS: matches the judge spawn's --no-session-persistence; EXTRACTION-CHILD-HOOKS 0.9.15 adds --setting-sources '' so the child loads none of the operator's own settings/hooks)", async () => {
+  it("mode:'extract' spawns the literal tool-free, settings-free, strict-MCP argv", async () => {
     const stub = spawnQueue([authJson(true), { status: 0, stdout: '{"learnings":[]}', stderr: '' }]);
     const result = await claudeCode.runModel({
       prompt: 'PROMPT', input: 'TRANSCRIPT', mode: 'extract',
       spawnSyncImpl: stub.spawnSyncImpl, claudeBin: 'claude',
     });
     assert.equal(result.ok, true);
-    assert.deepEqual(stub.calls[1].args, ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', '']);
-    assert.deepEqual(result.argv, ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', '']);
+    assert.deepEqual(stub.calls[1].args, ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config']);
+    assert.deepEqual(result.argv, ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config']);
   });
 
-  it("mode:'judge' spawns byte-identical argv to pre-move plus --setting-sources '' (0.9.15): ['-p','--output-format','json','--no-session-persistence','--tools','','--setting-sources','']", async () => {
+  it("mode:'judge' spawns the literal JSON-output, tool-free, settings-free, strict-MCP argv", async () => {
     const stub = spawnQueue([{
       status: 0,
       stdout: JSON.stringify({ result: '{"decisions":[]}', is_error: false, usage: { input_tokens: 5, output_tokens: 2 } }),
@@ -119,8 +119,118 @@ describe('claude-code.js — runModel argv per mode', () => {
       spawnSyncImpl: stub.spawnSyncImpl, claudeBin: 'claude',
     });
     assert.equal(result.ok, true);
-    assert.deepEqual(stub.calls[0].args, ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--setting-sources', '']);
+    assert.deepEqual(stub.calls[0].args, ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config']);
     assert.deepEqual(result.usage, { input_tokens: 5, output_tokens: 2 });
+  });
+});
+
+describe('CLAUDE-CHILD-MCP-CONTEXT — T1–T6', () => {
+  it('T1: both frozen argv constants pin strict MCP isolation without an explicit config', () => {
+    assert.deepEqual(claudeCode.EXTRACT_MODE_ARGV,
+      ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config']);
+    assert.deepEqual(claudeCode.JUDGE_MODE_ARGV,
+      ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config']);
+    assert.ok(Object.isFrozen(claudeCode.EXTRACT_MODE_ARGV));
+    assert.ok(Object.isFrozen(claudeCode.JUDGE_MODE_ARGV));
+  });
+
+  it('T2: both actual model spawns end in --strict-mcp-config and pass no --mcp-config', async () => {
+    for (const mode of ['extract', 'judge']) {
+      const replies = mode === 'extract' ? [authJson(true)] : [];
+      replies.push({ status: 0, stdout: JSON.stringify({ type: 'result', result: 'OK' }), stderr: '' });
+      const stub = spawnQueue(replies);
+      const result = await claudeCode.runModel({ mode, prompt: 'fixture', claudeBin: 'claude', spawnSyncImpl: stub.spawnSyncImpl });
+      assert.equal(result.ok, true);
+      const modelCall = stub.calls.find(call => call.args[0] === '-p');
+      assert.equal(modelCall.args.at(-1), '--strict-mcp-config');
+      assert.ok(!modelCall.args.includes('--mcp-config'));
+    }
+  });
+
+  it('T3: child env disables inherited account connectors and retains the literal billing scrub', () => {
+    const scrubbed = [
+      'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL',
+      'ANTHROPIC_CUSTOM_HEADERS', 'CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_PROFILE',
+      'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY',
+      'CLAUDE_CODE_USE_MANTLE', 'CLAUDE_CODE_SKIP_BEDROCK_AUTH', 'CLAUDE_CODE_SKIP_MANTLE_AUTH',
+      'ANTHROPIC_BEDROCK_BASE_URL', 'ANTHROPIC_BEDROCK_MANTLE_BASE_URL',
+      'ANTHROPIC_VERTEX_BASE_URL', 'ANTHROPIC_VERTEX_PROJECT_ID',
+      'ANTHROPIC_FOUNDRY_RESOURCE', 'ANTHROPIC_FOUNDRY_API_KEY',
+      'ANTHROPIC_FOUNDRY_AUTH_TOKEN', 'ANTHROPIC_FOUNDRY_BASE_URL',
+      'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN', 'AWS_PROFILE',
+      'AWS_REGION', 'AWS_BEARER_TOKEN_BEDROCK', 'GOOGLE_APPLICATION_CREDENTIALS', 'CLOUD_ML_REGION',
+    ];
+    const originalEnv = process.env;
+    process.env = { ...originalEnv, ENABLE_CLAUDEAI_MCP_SERVERS: 'true',
+      ...Object.fromEntries(scrubbed.map(key => [key, 'fixture-secret'])) };
+    try {
+      const env = claudeCode.claudeChildEnv();
+      assert.equal(env.ENABLE_CLAUDEAI_MCP_SERVERS, 'false');
+      assert.equal(env.AUXILO_EXTRACTING, '1');
+      for (const key of scrubbed) assert.equal(env[key], undefined, key);
+      assert.equal(process.env.ENABLE_CLAUDEAI_MCP_SERVERS, 'true');
+    } finally { process.env = originalEnv; }
+  });
+
+  it('T4: judge accepts one result plus SDK noise without returning the noise', async () => {
+    const noise = 'Client.listTools() called but server does not advertise tools capability - returning empty list';
+    const wrapper = { type: 'result', result: '{"decisions":[]}', is_error: false,
+      usage: { input_tokens: 5, cache_creation_input_tokens: 7, cache_read_input_tokens: 3, output_tokens: 2 } };
+    for (const stdout of [JSON.stringify(wrapper) + '\n' + noise + '\n', noise + '\n' + JSON.stringify(wrapper)]) {
+      const stub = spawnQueue([{ status: 0, stdout, stderr: '' }]);
+      const result = await claudeCode.runModel({ mode: 'judge', claudeBin: 'claude', spawnSyncImpl: stub.spawnSyncImpl });
+      assert.equal(result.ok, true);
+      assert.equal(result.text, wrapper.result);
+      assert.deepEqual(result.usage, { input_tokens: 15, output_tokens: 2 });
+      assert.ok(!JSON.stringify(result).includes(noise));
+    }
+  });
+
+  it('T5: judge noise recovery rejects extra JSON of any type and non-result wrappers', async () => {
+    const resultLine = JSON.stringify({ type: 'result', result: 'OK' });
+    const other = '{"type":"system","subtype":"init"}';
+    const invalid = [resultLine + '\n' + resultLine, resultLine + '\n' + other, other + '\n' + resultLine,
+      ...['42', 'null', 'true', '[]', '"text"'].map(line => resultLine + '\n' + line),
+      'SDK noise\nmore noise', other + '\nSDK noise', 'null\nSDK noise'];
+    for (const stdout of invalid) {
+      const stub = spawnQueue([{ status: 0, stdout, stderr: '' }]);
+      const result = await claudeCode.runModel({ mode: 'judge', claudeBin: 'claude', spawnSyncImpl: stub.spawnSyncImpl });
+      assert.equal(result.ok, false, stdout);
+      assert.equal(result.reasonCode, 'model-error', stdout);
+      assert.equal(result.reason, 'local judge returned malformed JSON wrapper', stdout);
+    }
+  });
+
+  it('T6: enterprise MCP refusal is bounded, post-spawn, uncached, and requires a non-zero exit', async () => {
+    const phrase = 'You cannot use --strict-mcp-config when an enterprise MCP config is present';
+    for (const mode of ['extract', 'judge']) {
+      for (const stream of ['stdout', 'stderr']) {
+        const replies = [];
+        for (let i = 0; i < 2; i += 1) {
+          if (mode === 'extract') replies.push(authJson(true));
+          replies.push({ status: 1, stdout: '', stderr: '', [stream]: phrase + ' PRIVATE-MARKER' });
+        }
+        const stub = spawnQueue(replies);
+        for (let i = 0; i < 2; i += 1) {
+          const result = await claudeCode.runModel({ mode, claudeBin: 'claude', spawnSyncImpl: stub.spawnSyncImpl });
+          assert.equal(result.ok, false);
+          assert.equal(result.text, '');
+          assert.equal(result.reasonCode, 'isolation-unverified');
+          assert.ok(!JSON.stringify(result).includes(phrase));
+          assert.ok(!JSON.stringify(result).includes('PRIVATE-MARKER'));
+          const lines = [];
+          require('../scripts/extract-local.js').logProviderRunSummary(
+            { log: line => lines.push(line) }, 'mcp-refused',
+            { ...result, extractionModel: { provider: 'claude-code' } }, null);
+          assert.match(lines[0], /finder=ran/);
+        }
+        assert.equal(stub.calls.filter(call => call.args[0] === '-p').length, 2);
+      }
+      const replies = mode === 'extract' ? [authJson(true)] : [];
+      replies.push({ status: 0, stdout: mode === 'extract' ? phrase : JSON.stringify({ type: 'result', result: phrase }), stderr: phrase });
+      const stub = spawnQueue(replies);
+      assert.equal((await claudeCode.runModel({ mode, claudeBin: 'claude', spawnSyncImpl: stub.spawnSyncImpl })).ok, true);
+    }
   });
 });
 

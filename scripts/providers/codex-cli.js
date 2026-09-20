@@ -380,6 +380,13 @@ function invoke(opts, mode) {
     const stdout = String(res.stdout || '');
     const stderr = String(res.stderr || '');
     const events = parseJsonlEvents(stdout);
+    if (eventAuthMessages(events).some(message => message.includes('invalid_json_schema'))) {
+      return {
+        ok: false, text: '', usage: null,
+        reason: 'codex rejected the output schema (invalid_json_schema)',
+        reasonCode: 'output-schema-rejected', authStatus: 'unknown',
+      };
+    }
     if (AUTH_FAILURE_RE.test(stderr) || eventAuthMessages(events).some((message) => AUTH_FAILURE_RE.test(message))) {
       return { ok: false, text: '', usage: null, reason: 'codex CLI reported it is not authenticated', reasonCode: 'cli-unauthenticated', authStatus: 'unknown' };
     }

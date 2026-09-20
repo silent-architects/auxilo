@@ -61,7 +61,7 @@
  *   are not required to estimate on the caller's behalf.
  * @property {string} [reasonCode] - Machine-matchable failure/skip classifier
  *   (e.g. 'cli-unauthenticated', 'cli-billing-helper-configured', 'model-error',
- *   'isolation-precondition', 'isolation-unverified', 'isolation-violation',
+ *   'isolation-precondition', 'isolation-unverified', 'isolation-violation', 'output-schema-rejected',
  *   'unknown'). Present on both success and failure paths where applicable.
  * @property {string|null} [reason] - Human-readable reason, present when !ok.
  * @property {string} [authStatus] - 'logged-in' | 'logged-out' | 'unknown', when

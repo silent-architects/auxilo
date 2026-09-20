@@ -161,13 +161,13 @@ describe('codex-cli.js — output-schema hint files', () => {
   it('extraction-envelope.schema.json validates a real parseExtractionOutput envelope (object form and bare-array form)', () => {
     const extractLocal = require('../scripts/extract-local.js');
     const schema = JSON.parse(fs.readFileSync(codexCli.EXTRACTION_SCHEMA_PATH, 'utf8'));
-    const learningDef = schema.definitions.learning;
+    const learningDef = schema.$defs.learning;
 
     function assertLearningMatchesSchema(l) {
       assert.equal(typeof l.title, 'string');
-      assert.ok(l.title.length >= learningDef.properties.title.minLength);
+      assert.ok(l.title.length >= 10); // semantic constraint stays in the parser
       assert.equal(typeof l.body, 'string');
-      assert.ok(l.body.length >= learningDef.properties.body.minLength);
+      assert.ok(l.body.length >= 50);
       assert.ok(learningDef.properties.category.enum.includes(l.category));
       assert.ok(learningDef.properties.outcome.enum.includes(l.outcome));
     }
@@ -206,6 +206,112 @@ describe('codex-cli.js — output-schema hint files', () => {
       assert.equal(typeof d.duplicate, 'boolean');
       assert.equal(typeof d.matched_index_id, 'string');
     }
+  });
+});
+
+describe('CODEX-OUTPUT-SCHEMA-REJECTED — TB1–TB5', () => {
+  const schemaPaths = [
+    path.join(__dirname, '../scripts/providers/schemas/extraction-envelope.schema.json'),
+    path.join(__dirname, '../scripts/providers/schemas/judge-decisions.schema.json'),
+  ];
+
+  it('TB1: both schemas have object roots, closed required fields, allowed keywords and resolving $defs refs', () => {
+    const allowed = ['$schema', '$comment', 'type', 'properties', 'required', 'additionalProperties', 'items', 'enum', '$ref', '$defs'];
+    for (const filename of schemaPaths) {
+      const schema = JSON.parse(fs.readFileSync(filename, 'utf8'));
+      assert.equal(schema.type, 'object');
+      const visit = (node) => {
+        assert.ok(node && typeof node === 'object' && !Array.isArray(node));
+        for (const key of Object.keys(node)) assert.ok(allowed.includes(key), `unexpected schema keyword ${key}`);
+        const types = Array.isArray(node.type) ? node.type : [node.type];
+        if (types.includes('object')) {
+          assert.equal(node.additionalProperties, false);
+          assert.deepEqual(node.required, Object.keys(node.properties).sort());
+        }
+        if (node.$ref !== undefined) {
+          assert.match(node.$ref, /^#\/\$defs\//);
+          const segments = node.$ref.slice(2).split('/').map(key => key.replace(/~1/g, '/').replace(/~0/g, '~'));
+          let target = schema;
+          for (const key of segments) {
+            assert.ok(Object.hasOwn(target, key), `unresolved ${node.$ref}`);
+            target = target[key];
+          }
+          assert.ok(target && typeof target === 'object');
+        }
+        // Property and definition names are map keys, not schema keywords.
+        for (const child of Object.values(node.properties || {})) visit(child);
+        for (const child of Object.values(node.$defs || {})) visit(child);
+        if (node.items) visit(node.items);
+      };
+      visit(schema);
+    }
+  });
+
+  it('TB2: neither schema contains the removed union, length, definition or unconstrained-item forms', () => {
+    for (const filename of schemaPaths) {
+      const raw = fs.readFileSync(filename, 'utf8');
+      for (const forbidden of ['oneOf', 'minLength', 'definitions', '"items": {}']) {
+        assert.ok(!raw.includes(forbidden), `${filename}: ${forbidden}`);
+      }
+    }
+  });
+
+  it('TB3: nullable optional extraction fields normalize identically in envelopes and bare arrays', () => {
+    const { parseExtractionOutput } = require('../scripts/extract-local.js');
+    const learning = { title: 'A valid fixture learning', body: 'This fixture body exceeds fifty characters for parser validation.',
+      category: 'code-execution', tags: null, task_context: null, outcome: null, quality_self_assessment: null };
+    const expected = { learnings: [{ title: learning.title, body: learning.body, category: 'code-execution',
+      tags: [], task_context: '', outcome: 'success' }], prompt_drops: [] };
+    for (const value of [{ learnings: [learning], dedup_drops: [] }, [learning]]) {
+      assert.deepEqual(parseExtractionOutput(JSON.stringify(value), { scoreExtraction: true }), expected);
+    }
+  });
+
+  it('TB4: nonduplicate judge decisions treat a null matched id exactly like omission', () => {
+    const { parseJudgeDecisions } = require('../scripts/extract-local.js');
+    const candidates = [{ title: 'candidate' }];
+    const rankings = [[{ id: 'row-1' }]];
+    const decision = { candidate_index: 0, duplicate: false };
+    const parse = d => parseJudgeDecisions(JSON.stringify({ decisions: [d] }), candidates, rankings);
+    assert.deepEqual(parse({ ...decision, matched_index_id: null }), parse(decision));
+    assert.deepEqual(parse(decision), { ok: true, decisions: [{ duplicate: false, matched: null }] });
+    assert.equal(parse({ ...decision, duplicate: true, matched_index_id: null }).ok, false);
+  });
+
+  it('TB5: every schema-error event shape returns a fixed post-spawn failure in both modes', async () => {
+    const home = withAuthJson(tempDir('auxilo-schema-rejected-'));
+    const message = 'PRIVATE-EVENT-MARKER invalid_json_schema /fixture/private-path';
+    const events = [
+      { type: 'error', message },
+      { type: 'turn.failed', error: { message } },
+      { type: 'item.completed', item: { type: 'error', message } },
+    ];
+    try {
+      for (const mode of ['extract', 'judge']) {
+        for (const event of events) {
+          for (const status of [1, 0]) {
+            const stub = spawnQueue([{ status, stdout: JSON.stringify(event), stderr: 'PRIVATE-STDERR' }]);
+            const result = await codexCli.runModel({ mode, homeDir: home, codexBin: 'codex', spawnSyncImpl: stub.spawnSyncImpl });
+            assert.equal(result.ok, false);
+            assert.equal(result.text, '');
+            assert.equal(result.reasonCode, 'output-schema-rejected');
+            assert.equal(result.reason, 'codex rejected the output schema (invalid_json_schema)');
+            for (const secret of ['PRIVATE-EVENT-MARKER', '/fixture/private-path', 'PRIVATE-STDERR']) {
+              assert.ok(!JSON.stringify(result).includes(secret));
+            }
+            assert.ok(!providers.NON_RETRYABLE_FOR_THIS_PROVIDER.has(result.reasonCode));
+            const extractLocal = require('../scripts/extract-local.js');
+            const lines = [];
+            extractLocal.logProviderRunSummary({ log: line => lines.push(line) }, 'schema-rejected',
+              { ...result, extractionModel: { provider: 'codex-cli' } }, null);
+            assert.match(lines[0], /finder=ran/);
+          }
+        }
+        const stub = spawnQueue([{ status: 1, stdout: '{"type":"error","message":"unrelated failure"}', stderr: '' }]);
+        const result = await codexCli.runModel({ mode, homeDir: home, codexBin: 'codex', spawnSyncImpl: stub.spawnSyncImpl });
+        assert.equal(result.reasonCode, 'model-error');
+      }
+    } finally { cleanupTempDirs(); }
   });
 });
 

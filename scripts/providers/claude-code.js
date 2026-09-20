@@ -218,8 +218,9 @@ const SCRUBBED_CLIENT_ENV_VARS = Object.freeze([
 // of the identical contents. 0.9.15 (EXTRACTION-CHILD-HOOKS) appends
 // SETTING_SOURCES_ARGS to both — the child loads none of user/project/local
 // settings, so the operator's own SessionStart hooks never fire.
-const EXTRACT_MODE_ARGV = Object.freeze(['-p', '--no-session-persistence', '--tools', '', ...SETTING_SOURCES_ARGS]);
-const JUDGE_MODE_ARGV = Object.freeze(['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', ...SETTING_SOURCES_ARGS]);
+// Strict mode with no --mcp-config also excludes account-connected MCP servers.
+const EXTRACT_MODE_ARGV = Object.freeze(['-p', '--no-session-persistence', '--tools', '', ...SETTING_SOURCES_ARGS, '--strict-mcp-config']);
+const JUDGE_MODE_ARGV = Object.freeze(['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', ...SETTING_SOURCES_ARGS, '--strict-mcp-config']);
 
 /**
  * Build the subscription-auth-only environment shared by BOTH the extraction and
@@ -228,7 +229,21 @@ const JUDGE_MODE_ARGV = Object.freeze(['-p', '--output-format', 'json', '--no-se
 function claudeChildEnv() {
   const childEnv = { ...process.env, AUXILO_EXTRACTING: '1' };
   for (const key of SCRUBBED_CLIENT_ENV_VARS) delete childEnv[key];
+  childEnv.ENABLE_CLAUDEAI_MCP_SERVERS = 'false';
   return childEnv;
+}
+
+// A managed-config refusal is observed after spawn. Keep it out of the
+// pre-spawn skip and provider-fallback sets; never expose the CLI's message.
+function enterpriseMcpRefusal(res, authStatus) {
+  if (!Number.isInteger(res.status) || res.status === 0) return null;
+  const phrase = 'You cannot use --strict-mcp-config when an enterprise MCP config is present';
+  if (![res.stdout, res.stderr].some(value => String(value || '').includes(phrase))) return null;
+  return {
+    ok: false, text: '', usage: null,
+    reason: 'Claude Code refused MCP isolation with managed configuration',
+    reasonCode: 'isolation-unverified', authStatus,
+  };
 }
 
 // ─── Billing-helper detector ────────────────────────────────────────────────
@@ -489,6 +504,8 @@ function runExtractMode(opts) {
   if (res.error) {
     return { ok: false, text: '', usage: null, reason: `spawn failed (${bin}): ${res.error.message}`, reasonCode: 'unknown', authStatus, argv, cliVersion };
   }
+  const mcpRefusal = enterpriseMcpRefusal(res, authStatus);
+  if (mcpRefusal) return { ...mcpRefusal, argv, cliVersion };
   // Claude prints auth failures ("API Error: 401 ... Please run /login") to stdout.
   if (/Please run \/login|authentication_error|401/i.test(out) || /Please run \/login|authentication_error/i.test(String(res.stderr || ''))) {
     return {
@@ -570,6 +587,8 @@ function runJudgeMode(opts) {
   if (res.error) {
     return { ok: false, text: '', usage: null, reason: `judge spawn failed (${bin}): ${res.error.message}`, reasonCode: 'unknown', authStatus: 'unknown', argv, cliVersion };
   }
+  const mcpRefusal = enterpriseMcpRefusal(res, 'unknown');
+  if (mcpRefusal) return { ...mcpRefusal, argv, cliVersion };
   if (/Please run \/login|authentication_error|401/i.test(stdout) || /Please run \/login|authentication_error/i.test(String(res.stderr || ''))) {
     return { ok: false, text: '', usage: null, reason: 'local judge model is not authenticated', reasonCode: 'cli-unauthenticated', authStatus: 'unknown', argv, cliVersion };
   }
@@ -589,7 +608,18 @@ function runJudgeMode(opts) {
   try {
     wrapper = JSON.parse(stdout);
   } catch {
-    return { ok: false, text: '', usage: null, reason: 'local judge returned malformed JSON wrapper', reasonCode: 'model-error', authStatus: 'unknown', argv, cliVersion };
+    // Some CLI builds append a non-JSON MCP SDK diagnostic to stdout. Recover
+    // only a single result value; an extra JSON value of ANY type is ambiguous.
+    const values = [];
+    for (const rawLine of stdout.split('\n')) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      try { values.push(JSON.parse(line)); } catch { /* discard non-JSON noise */ }
+    }
+    if (values.length !== 1 || !values[0] || typeof values[0] !== 'object' || values[0].type !== 'result') {
+      return { ok: false, text: '', usage: null, reason: 'local judge returned malformed JSON wrapper', reasonCode: 'model-error', authStatus: 'unknown', argv, cliVersion };
+    }
+    [wrapper] = values;
   }
   if (!wrapper || typeof wrapper.result !== 'string' || wrapper.is_error === true) {
     return { ok: false, text: '', usage: null, reason: 'local judge returned no successful result', reasonCode: 'model-error', authStatus: 'unknown', argv, cliVersion };

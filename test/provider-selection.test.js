@@ -479,6 +479,38 @@ describe('EXTRACT-PER-CLIENT W1 P1: a working provider that merely failed once d
   });
 });
 
+describe('CLAUDE-CHILD-MCP-CONTEXT — provider selection', () => {
+  it('T6: enterprise MCP refusal never falls through to an available Codex route', async () => {
+    const home = tempDir('auxilo-mcp-refusal-selection-');
+    withCodexAuth(home);
+    const codexBin = withCodexBin(home);
+    try {
+      assert.equal(codexCli.detect({ homeDir: home }), true);
+      for (const mode of ['extract', 'judge']) {
+        let codexCalls = 0;
+        let claudeModelCalls = 0;
+        const result = await providers.runModel({
+          env: {}, providerCache: {}, mode, prompt: 'fixture', homeDir: home, cwd: home,
+          claudeBin: 'claude', providersStatePath: path.join(home, 'providers.json'),
+          existsSync: p => p === codexBin,
+          spawnSyncImpl: (bin, args) => {
+            if (path.basename(bin) === 'codex') {
+              codexCalls += 1;
+              return { status: 1, stdout: '', stderr: 'unexpected fallback' };
+            }
+            if (args[0] === 'auth') return { status: 0, stdout: '{"loggedIn":true}', stderr: '' };
+            claudeModelCalls += 1;
+            return { status: 1, stdout: '', stderr: 'You cannot use --strict-mcp-config when an enterprise MCP config is present' };
+          },
+        });
+        assert.equal(result.reasonCode, 'isolation-unverified');
+        assert.equal(claudeModelCalls, 1);
+        assert.equal(codexCalls, 0);
+      }
+    } finally { cleanupTempDirs(); }
+  });
+});
+
 describe('EXTRACT-PER-CLIENT W1 P1: NON_RETRYABLE_FOR_THIS_PROVIDER — the exact fall-through set', () => {
   it('is exactly the six named reasonCodes, no more, no less (EXTRACTION-CHILD-HOOKS 0.9.15 adds cli-settings-isolation-unsupported)', () => {
     assert.deepEqual(

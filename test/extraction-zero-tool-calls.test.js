@@ -79,17 +79,17 @@ const claudeCode = require('../scripts/providers/claude-code.js');
 // ─── (i) STATIC — byte-pinned spawn argv ────────────────────────────────────
 
 describe('extraction-zero-tool-calls — STATIC: byte-pinned spawn argv (scripts/providers/claude-code.js)', () => {
-  it("finder (extract mode) argv is exactly ['-p','--no-session-persistence','--tools','','--setting-sources','']", () => {
+  it("finder (extract mode) argv is exactly ['-p','--no-session-persistence','--tools','','--setting-sources','','--strict-mcp-config']", () => {
     assert.deepEqual(
       claudeCode.EXTRACT_MODE_ARGV,
-      ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', ''],
+      ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config'],
     );
   });
 
-  it("judge (dedup) argv is exactly ['-p','--output-format','json','--no-session-persistence','--tools','','--setting-sources','']", () => {
+  it("judge (dedup) argv is exactly ['-p','--output-format','json','--no-session-persistence','--tools','','--setting-sources','','--strict-mcp-config']", () => {
     assert.deepEqual(
       claudeCode.JUDGE_MODE_ARGV,
-      ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--setting-sources', ''],
+      ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config'],
     );
   });
 
@@ -103,13 +103,11 @@ describe('extraction-zero-tool-calls — STATIC: byte-pinned spawn argv (scripts
     assert.equal(judge[toolsIdx(judge) + 1], '');
   });
 
-  it("both argvs end in the literal pair --setting-sources '' (0.9.15 EXTRACTION-CHILD-HOOKS isolation — the child loads no user/project/local settings)", () => {
+  it("both argvs end in --setting-sources '' --strict-mcp-config (settings and MCP isolation)", () => {
     const finder = claudeCode.EXTRACT_MODE_ARGV;
     const judge = claudeCode.JUDGE_MODE_ARGV;
-    assert.equal(finder[finder.length - 2], '--setting-sources');
-    assert.equal(finder[finder.length - 1], '');
-    assert.equal(judge[judge.length - 2], '--setting-sources');
-    assert.equal(judge[judge.length - 1], '');
+    assert.deepEqual(finder.slice(-3), ['--setting-sources', '', '--strict-mcp-config']);
+    assert.deepEqual(judge.slice(-3), ['--setting-sources', '', '--strict-mcp-config']);
   });
 
   it('both argv constants are frozen (Object.freeze) — a mutation attempt is a no-op, not a silent drift vector', () => {
@@ -245,7 +243,8 @@ describe('extraction-zero-tool-calls — LIVE: real claude CLI trace (gated, opt
         assert.ok(resultEvent.num_turns <= 2, `expected num_turns <= 2, got ${resultEvent.num_turns}`);
       }
 
-      // Record-not-assert per the task: log, don't gate on, these two.
+      assert.deepEqual(initEvent.mcp_servers, [], 'strict MCP isolation must load zero servers');
+      assert.ok(!initEvent.tools.some(tool => tool.startsWith('mcp__')), 'MCP tools must not be exposed');
       const mcpServersLen = Array.isArray(initEvent.mcp_servers) ? initEvent.mcp_servers.length : null;
       const claudeCodeVersion = initEvent.claude_code_version
         || initEvent.version
