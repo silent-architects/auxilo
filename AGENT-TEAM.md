@@ -69,6 +69,18 @@ Test cases are written BEFORE implementation. Builders never implement without a
 - **Does NOT**: Write production code (dedicated review context — never builds what it audits)
 - **Critical constraint**: This role NEVER shares a context with a build role. Separation is the point.
 
+### GOV-4: Disclosure & Exposure Arbiter
+- **Model**: Opus
+- **Lane**: Conflicts between shipped behavior and served promise; exposure triage; ship-dark rulings
+- **Agent**: `auxilo-disclosure-arbiter` (operator agent library). Seated 2026-09-20 by Tyler.
+- **Responsibilities**:
+  - Rules when a BEHAVIOR CHANGE or SAFETY FINDING arrives first and the question is which disposition is correct: change behavior to match copy, change copy to match behavior (Tyler's word), ship the capability dark until copy lands, or accept a named, actually-disclosed residual
+  - Holds the served-promise inventory verbatim (supported-clients page, ToS §5.9.3, Privacy Policy, llms.txt, CLI consent text, OpenAPI descriptions) and the consent architecture
+  - Triage by exposure: blast radius, reversibility, held vs auto-published, and how many users are actually affected
+  - Returns ONE disposition per conflict, citing the governing served line verbatim and the precedent
+- **Does NOT**: Edit or rewrite copy (copywriters), judge voice (BUILD-3 / brand steward runs the other direction: copy arrives, is it true and on-voice?), decide Tyler's word on served copy, or rule on security hard-blocks (GOV-3) or consent mechanics (GOV-2)
+- **Critical constraint**: Advisory and read-only. A ruling is a recommendation with its tradeoff named; it never authorizes a served-copy change on its own.
+
 ---
 
 ### FINANCE

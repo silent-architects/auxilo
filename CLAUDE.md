@@ -99,7 +99,7 @@ Every change goes through gate-based reviews before merge/deploy. See PUNCH-LIST
 
 **Gate A (every deploy):** Engineering (BUILD-1), Code Inspection (BUILD-4), Security (GOV-3), Documentation (GOV-1).
 
-**Gate B (scope-triggered):** Crypto/Payment (SPEC-1), Agent UX (SPEC-2), Builder UX (SPEC-3), Legal/Compliance (GOV-2), Brand/Narrative (BUILD-3), SEO (BUILD-3), GEO (SPEC-2).
+**Gate B (scope-triggered):** Crypto/Payment (SPEC-1), Agent UX (SPEC-2), Builder UX (SPEC-3), Legal/Compliance (GOV-2), Disclosure/Exposure (GOV-4), Brand/Narrative (BUILD-3), SEO (BUILD-3), GEO (SPEC-2).
 
 **Gate C (milestone deep dives):** Competitive, Catalog Health, Infrastructure, Financial, Full UX Audit.
 
@@ -119,6 +119,7 @@ When Tyler asks a question that falls within an established Auxilo domain, route
 | Crypto / on-chain / wallets / x402 | SPEC-1 | `lib/earnings.js`, `server.js` wallet routes, `contracts/README.md` (router/rail state), `docs/MONEY-TRANSMISSION-ANALYSIS.md` |
 | Compliance, ToS, Privacy, risk | GOV-2 | `docs/TERMS-OF-SERVICE.md`, `docs/PRIVACY-POLICY.md`, `docs/RISK-REGISTER.md`, `docs/LEGAL-READINESS-REVIEW.md` |
 | Security, threat model, auth | GOV-3 | `SECURITY-AUDIT.md`, `docs/SECURITY-READINESS-REVIEW.md` |
+| Behavior-vs-served-promise conflicts, exposure triage, ship-dark rulings | GOV-4 | `docs/SUPPORTED-CLIENTS.md`, `docs/TERMS-OF-SERVICE.md` §5.9.3, `docs/PRIVACY-POLICY.md`, `lib/clean-lane.js` |
 | Architecture, system design, spec authoring | BUILD-1 | `specs/`, `agents/architect/` |
 | QA, test coverage, regression | BUILD-4 | `tests/`, `specs/TEST-A-SERIES.md` |
 | Brand, voice, public copy | BUILD-3 | `BRAND_GUIDELINES.md`, `public/` |

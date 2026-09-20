@@ -374,11 +374,12 @@ Every planned enhancement, optimization, or addon gets a line item in PUNCH-LIST
 
 | Gate | Trigger | Owner | Pass Criteria |
 |------|---------|-------|---------------|
-| **Financial Integrity** | Any file in outputs/, financial model, investor deck, pricing assumptions, revenue projections | GOV-4 (CFO) | Every number traces to FOUNDATION.md, FOUNDATION.lock hash valid, no stale assumptions, cross-file sync verified |
+| **Financial Integrity** | Any file in outputs/, financial model, investor deck, pricing assumptions, revenue projections | CFO-1 (CFO) | Every number traces to FOUNDATION.md, FOUNDATION.lock hash valid, no stale assumptions, cross-file sync verified |
 | **Crypto/Payment** | Wallets, x402, pricing, payouts | SPEC-1 (Crypto Auditor) | Payment dedup intact, price bounds enforced, no fund loss paths |
 | **Agent UX** | API responses, MCP tools, discovery, search | SPEC-2 (Agent UX) | Backward-compatible, agent can discover/query/unlock without breaking, error messages actionable |
 | **Builder UX** | Onboarding, earnings, dashboard, API keys | SPEC-3 (Builder UX) | Flow completable end-to-end, earnings visible, no dead ends |
 | **Legal/Compliance** | Terms, privacy, data handling, public claims, payments | GOV-2 (Compliance) | ToS/Privacy consistent, GENIUS Act compliant, no unapproved data collection |
+| **Disclosure/Exposure** | A behavior change, safety finding or capability that contradicts a served promise (supported-clients page, ToS, Privacy, llms.txt, CLI consent text, OpenAPI descriptions) | GOV-4 (Disclosure Arbiter) | One disposition per conflict (change behavior / change copy via Tyler / ship dark / named disclosed residual), governing served line cited verbatim, exposure counted, precedent named |
 | **Brand/Narrative** | Copy, messaging, external-facing text, landing page | BUILD-3 (Brand) | Voice consistent with BRAND_GUIDELINES.md, no jargon drift, ICP messaging intact |
 | **SEO** | Page content, meta tags, URLs, sitemap | BUILD-3 (Brand) | Title/description tags present, structured data valid, canonical URLs, no broken links |
 | **GEO (Generative Engine Optimization)** | llms.txt, agent.json, MCP descriptions, OpenAPI spec, instructions field | SPEC-2 (Agent UX) | Agent-discoverable, tool descriptions accurate, OpenAPI paths match live routes, llms.txt current |
