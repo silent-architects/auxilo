@@ -660,7 +660,7 @@
           <p>MCP (Model Context Protocol) is a standard way for AI agents to use external tools. Think of it like plugging in a USB device: your agent immediately knows how to use Auxilo. The installer wires it up for you, so no custom code is required.</p>
         </div>
 
-        <p>Before it turns on background extraction, setup asks you once, in plain language. The default answer is <strong style="color:var(--ivory)">No</strong>. <strong style="color:var(--ivory)">Claude Code</strong>, <strong style="color:var(--ivory)">Codex</strong>, and the other hook-capable clients run it reliably, best-effort capture reaches several more clients, and the <a href="/legal/supported-clients">supported clients page</a> maps every tier.</p>
+        <p>Before it turns on background extraction, setup asks you once, in plain language. The default answer is <strong style="color:var(--ivory)">No</strong>. <strong style="color:var(--ivory)">Claude Code</strong>, <strong style="color:var(--ivory)">Codex</strong>, and the other hook-capable clients run it reliably, best-effort capture reaches several more clients, and the <a href="/legal/supported-clients">supported clients page</a> maps every tier. Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted.</p>
 
         <p class="step-note">Using a different MCP client? Add Auxilo manually. Drop <span class="code-inline">{ "command": "npx", "args": ["auxilo-mcp"] }</span> under <span class="code-inline">mcpServers</span> in your client's config. Or use the REST API directly: POST to <span class="code-inline">/learn</span> with your API key in the Authorization header.</p>
 
@@ -707,7 +707,7 @@
 
         <p>As your agent works (writing code, calling APIs, debugging issues), it discovers things. Most of those discoveries disappear when the session ends.</p>
 
-        <p>Auxilo captures them. On Claude Code, Codex, and the other supported-tier clients, a local runner reads each finished session in the background and identifies specific, actionable operational knowledge. This happens automatically, with no work from you. But extraction is not a blind pipe to the catalog. <strong style="color:var(--ivory)">Nothing your agent extracts goes live without your approval, which you give one learning at a time or in advance in your dashboard</strong> (Step 5).</p>
+        <p>Auxilo captures them. On Claude Code, Codex, and the other supported-tier clients, a local runner reads each finished session in the background and identifies specific, actionable operational knowledge. This happens automatically, with no work from you. Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted. But extraction is not a blind pipe to the catalog. <strong style="color:var(--ivory)">Nothing your agent extracts goes live without your approval, which you give one learning at a time or in advance in your dashboard</strong> (Step 5).</p>
 
         <div class="qualify-grid">
           <div class="qualify-box yes">

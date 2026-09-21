@@ -16,11 +16,9 @@
  *      RIDER-2026-09-06.md rev 2e, on the published auxilo-mcp@0.9.13
  *      tarball): the What-is-read cell, the What-runs-where cell (Stage A +
  *      Stage B shipped together), and the row label render verbatim.
- *      Supersedes the earlier 2026-09-06 reading of Tyler's ruling ("no
- *      mention of a specific Claude Code requirement") — the ruling barred a
- *      Claude-Code REQUIREMENT, not disclosure of the shipped selection
- *      order, per the rider's own binds. Asserted as: "Claude Code" appears
- *      exactly once, inside the selection-order sentence, never as "any
+ *      D-1 (2026-09-20) removes Codex from automatic drafting while keeping
+ *      Codex capture claims intact. Asserted as: "Claude Code" appears
+ *      exactly once in this page's local-drafting disclosure, never as "any
  *      client" wording.
  *   6. sitemap.xml lists the route; llms.txt carries the spec's Quick-start
  *      line.
@@ -49,6 +47,10 @@ const SERVER_SRC = fs.readFileSync(path.join(REPO, 'server.js'), 'utf8');
 const SITEMAP = fs.readFileSync(path.join(REPO, 'public', 'sitemap.xml'), 'utf8');
 const LLMS_TXT = fs.readFileSync(path.join(REPO, 'public', 'llms.txt'), 'utf8');
 const TRUST_HTML = fs.readFileSync(path.join(REPO, 'public', 'how-submissions-work.html'), 'utf8');
+const SUPPORTED_CLIENTS_MD = fs.readFileSync(path.join(REPO, 'docs', 'SUPPORTED-CLIENTS.md'), 'utf8');
+const BUILDERS_HTML = fs.readFileSync(path.join(REPO, 'public', 'for-builders.html'), 'utf8');
+const AGENTS_HTML = fs.readFileSync(path.join(REPO, 'public', 'for-agents.html'), 'utf8');
+const HOW_IT_WORKS_HTML = fs.readFileSync(path.join(REPO, 'public', 'how-it-works.html'), 'utf8');
 
 const TITLE = 'What Stands Between a Submission and the Public Catalog | Auxilo';
 const DESCRIPTION = "Auxilo is a marketplace for what agents learn. What every new submission passes before it reaches the public catalog, what Auxilo does not claim, and where the catalog stands today.";
@@ -94,7 +96,10 @@ const S7_UNLOCKS_LABEL = "unlocks recorded"; // packet 15 rev 3a caption change 
 // tarball; both stages ship together). Strings copied verbatim for byte
 // comparison against the served page.
 const S2B_WHAT_IS_READ = "Session transcripts on your machine, from the coding clients Auxilo has an adapter for. Where a client fires a capture hook, the hook hands over the transcript. Where it does not, a local sweep reads that client's own session files on a schedule. The current list is at <a href=\"/legal/supported-clients\">auxilo.io/legal/supported-clients</a>. The runner looks for those session files and for its own state under ~/.auxilo. It does not search the rest of your disk. What the model itself can read on each path is in the row What runs where, below.";
-const S2B_WHAT_RUNS_WHERE = "Drafting runs on your machine, never through Auxilo's. It uses the first model client you are signed in to, Claude Code first and then Codex, and only one runs at a time. If neither is signed in, you can set a provider key of your own. It stays on this machine, readable only by your user account, and Auxilo never receives it. A run with your key sends the scrubbed transcript only to that provider, under your own account. The model reads nothing on your machine. Any use is charged to that account, never to Auxilo. Run auxilo provider clear to remove it. The scrubbed transcript goes to that client's model provider under your own agreement with them. Before the run, Auxilo removes the provider's billing variables from the run. On the Claude path the model has no tools and receives no hooks, no project instructions, and no settings files from your environment. On the Codex path the model cannot write to your files, but it can read what its sandbox allows. Which clients Auxilo can capture sessions from is listed at auxilo.io/legal/supported-clients.";
+const S2B_WHAT_RUNS_WHERE = "Drafting runs on your machine, never through Auxilo's. It uses Claude Code, when you are signed in to it. If it is not signed in, you can set a provider key of your own. It stays on this machine, readable only by your user account, and Auxilo never receives it. A run with your key sends the scrubbed transcript only to that provider, under your own account. The model reads nothing on your machine. Any use is charged to that account, never to Auxilo. Run auxilo provider clear to remove it. The scrubbed transcript goes to that client's model provider under your own agreement with them. Before the run, Auxilo removes the provider's billing variables from the run. On the Claude path the model has no tools and receives no hooks, no project instructions, and no settings files from your environment. Which clients Auxilo can capture sessions from is listed at auxilo.io/legal/supported-clients.";
+const D1_DOCS_OVERVIEW = "Today the runner drafts learnings through the model client you are signed in to on your machine, Claude Code, for every client it captures. Without one, captured sessions are held and nothing is submitted. Or set a provider key of your own with auxilo provider set. It stays on your machine and Auxilo never receives it. Per-client model paths are being built.";
+const D1_DOCS_LOCAL_EXTRACTION = "4. **Local extraction**: Claude Code, when you are signed in to it, or a provider key you set yourself, drafts learnings from the scrubbed text. The transcript, raw or scrubbed, is never sent to Auxilo.";
+const D1_BOUNDARY = "Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted.";
 const S2B_ROW_LABEL = "If no model client is signed in and no key is set";
 // SITE-RESTRUCTURE-W3 item D (SITE-RESTRUCTURE-W3-SPEC-2026-09-07.md §D,
 // Tyler-approved 2026-09-08, all three gates PASSED): the Claude-path
@@ -114,6 +119,30 @@ function tpStaticCell(html, id) {
   const m = html.match(new RegExp(`id="${id}"[^>]*>([^<]*)<`));
   assert.ok(m, `${id} cell present`);
   return m[1];
+}
+
+function publicHtmlText(dir) {
+  return fs.readdirSync(dir, { withFileTypes: true }).map((entry) => {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) return publicHtmlText(fullPath);
+    return entry.isFile() && entry.name.endsWith('.html') ? fs.readFileSync(fullPath, 'utf8') : '';
+  }).join('\n');
+}
+
+function countLiteral(haystack, needle) {
+  return haystack.split(needle).length - 1;
+}
+
+function stripHtml(value) {
+  return value.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function renderedFaqAnswer(html, question) {
+  const questionIndex = html.indexOf(`<span>${question}</span>`);
+  assert.ok(questionIndex >= 0, `rendered FAQ question present: ${question}`);
+  const answerMatch = html.slice(questionIndex).match(/<div class="faq-answer-inner">([\s\S]*?)<\/div>/);
+  assert.ok(answerMatch, `rendered FAQ answer present: ${question}`);
+  return stripHtml(answerMatch[1]);
 }
 
 describe('Trust page: route, redirects, head tags, h1, forbidden strings', { timeout: 180_000 }, () => {
@@ -238,9 +267,7 @@ describe('Trust page: route, redirects, head tags, h1, forbidden strings', { tim
     assert.ok(runsWhereStatement.includes(S2B_CLAUDE_PATH_SENTENCE_NEW), 'new sentence is inside the "What runs where" row\'s statement cell');
     assert.ok(!runsWhereStatement.includes(S2B_CLAUDE_PATH_SENTENCE_OLD), 'old sentence is not inside the "What runs where" row\'s statement cell');
 
-    // The Codex-path sentence in the same row is unchanged (spec: "no change
-    // to the Codex-path sentence").
-    assert.ok(runsWhereStatement.includes('On the Codex path the model cannot write to your files, but it can read what its sandbox allows.'), 'Codex-path sentence unchanged in the same row');
+    assert.ok(!runsWhereStatement.includes('On the Codex path'), 'retired automatic Codex drafting-path sentence is absent from the same row');
   });
 
   it('§2b: "How the runner updates itself" row present once, placed directly after "What runs where" (0.9.16 disclosure, AUTO-UPDATE-DISCLOSURE-2026-09-07.md)', () => {
@@ -268,9 +295,72 @@ describe('Trust page: route, redirects, head tags, h1, forbidden strings', { tim
     assert.ok(rowRe.test(TRUST_HTML), 'new row uses the same <tr><td>label</td><td>statement</td></tr> markup as sibling rows');
   });
 
-  it('"Claude Code" appears exactly once, naming the shipped selection order in §2b (not a requirement) — supersedes the 2026-09-06 "no Claude Code" ban per TRUST-PAGE-WHAT-RUNS-WHERE-RIDER-2026-09-06.md rev 2e binds ("Tyler\'s approval bars a Claude Code requirement, not the disclosure of the order")', () => {
+  it('"Claude Code" appears exactly once, naming the remaining automatic local-drafting client in §2b', () => {
     const claudeCodeMatches = TRUST_HTML.match(/Claude Code/g) || [];
-    assert.equal(claudeCodeMatches.length, 1, 'exactly one "Claude Code" occurrence, inside the §2b What-runs-where selection-order sentence');
+    assert.equal(claudeCodeMatches.length, 1, 'exactly one "Claude Code" occurrence, inside the §2b What-runs-where drafting sentence');
+  });
+
+  it('D1 T1: the approved drafting boundary appears exactly eight times across public HTML, and the docs-only "Without one" form stays out of public HTML', () => {
+    const publicText = publicHtmlText(path.join(REPO, 'public'));
+    assert.equal(countLiteral(publicText, D1_BOUNDARY), 8, 'approved boundary appears exactly eight times across public HTML');
+    assert.equal(countLiteral(publicText, 'Without one, captured sessions are held and nothing is submitted.'), 0, 'docs-only "Without one" form is absent from public HTML');
+    assert.equal(countLiteral(SUPPORTED_CLIENTS_MD, 'Without one, captured sessions are held and nothing is submitted.'), 1, 'docs-only "Without one" form remains exactly once in SUPPORTED-CLIENTS');
+  });
+
+  it('D1 T2: the trust page retires every automatic-Codex drafting phrase', () => {
+    for (const retired of ['On the Codex path', 'only one runs at a time', 'Claude Code first and then Codex']) {
+      assert.ok(!TRUST_HTML.includes(retired), `retired trust-page phrase absent: ${retired}`);
+    }
+  });
+
+  it('D1 T3: SUPPORTED-CLIENTS carries both approved literals and no old provider-order phrase', () => {
+    assert.ok(SUPPORTED_CLIENTS_MD.includes(D1_DOCS_OVERVIEW), 'approved runner overview is present verbatim');
+    assert.ok(SUPPORTED_CLIENTS_MD.includes(D1_DOCS_LOCAL_EXTRACTION), 'approved Local extraction step is present verbatim');
+    assert.ok(!SUPPORTED_CLIENTS_MD.includes('Claude Code first and then Codex'), 'old provider-order phrase is absent');
+  });
+
+  it('D1 T4: every capture claim that names Codex survives byte for byte', () => {
+    const captures = [
+      [BUILDERS_HTML, 'Extraction then runs in the background on hook-capable clients, Claude Code and Codex among them.', 1],
+      [AGENTS_HTML, 'Background extraction runs on <strong style="color:var(--slate-text)">Claude Code</strong>, <strong style="color:var(--slate-text)">Codex</strong>, and the other clients with a supported extraction hook. Best-effort capture covers several more, and the <a href="/legal/supported-clients">supported clients page</a> maps every tier.', 1],
+      [HOW_IT_WORKS_HTML, '<strong style="color:var(--ivory)">Claude Code</strong>, <strong style="color:var(--ivory)">Codex</strong>, and the other hook-capable clients run it reliably, best-effort capture reaches several more clients, and the <a href="/legal/supported-clients">supported clients page</a> maps every tier.', 1],
+      [HOW_IT_WORKS_HTML, 'Auxilo captures them. On Claude Code, Codex, and the other supported-tier clients, a local runner reads each finished session in the background and identifies specific, actionable operational knowledge. This happens automatically, with no work from you.', 1],
+      [AGENTS_HTML, 'Background extraction, which turns finished sessions into learnings, runs on Claude Code, Codex, and the other clients with a supported extraction hook.', 2],
+      [AGENTS_HTML, 'Background extraction, the hands-free contribution engine, runs on Claude Code, Codex, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue.', 1],
+      [AGENTS_HTML, 'Background extraction, the hands-free contribution engine, runs on <strong style="color:var(--ivory)">Claude Code</strong>, <strong style="color:var(--ivory)">Codex</strong>, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue.', 1],
+    ];
+    for (const [html, literal, expected] of captures) {
+      assert.equal(countLiteral(html, literal), expected, `capture claim preserved exactly ${expected} time(s): ${stripHtml(literal).slice(0, 72)}...`);
+    }
+  });
+
+  it('D1 T5: both FAQ pairs retain their claim and boundary after tag stripping, and every JSON-LD block parses', () => {
+    const blocks = [...AGENTS_HTML.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)];
+    assert.ok(blocks.length > 0, 'at least one JSON-LD block found');
+    const parsedBlocks = blocks.map((match) => JSON.parse(match[1]));
+    const jsonLdNodes = parsedBlocks.flatMap((block) => [block, ...(block['@graph'] || [])]);
+    const faqEntries = jsonLdNodes.flatMap((node) => node['@type'] === 'FAQPage' ? node.mainEntity || [] : []);
+    const pairs = [
+      ['How do I connect my AI agent to Auxilo?', 'Background extraction, which turns finished sessions into learnings, runs on Claude Code, Codex, and the other clients with a supported extraction hook.'],
+      ['What kind of agents can connect?', 'Background extraction, the hands-free contribution engine, runs on Claude Code, Codex, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue.'],
+    ];
+    for (const [question, claim] of pairs) {
+      const jsonEntry = faqEntries.find((entry) => entry.name === question);
+      assert.ok(jsonEntry, `JSON-LD FAQ entry present: ${question}`);
+      const jsonAnswer = stripHtml(jsonEntry.acceptedAnswer.text);
+      const visibleAnswer = renderedFaqAnswer(AGENTS_HTML, question);
+      for (const [surface, answer] of [['JSON-LD', jsonAnswer], ['visible', visibleAnswer]]) {
+        assert.ok(answer.includes(claim), `${surface} answer retains claim: ${question}`);
+        assert.ok(answer.includes(D1_BOUNDARY), `${surface} answer carries boundary: ${question}`);
+      }
+    }
+  });
+
+  it('D1 T6: every approved changed-text literal contains no em/en dash and no bare marketplace claim', () => {
+    for (const changed of [D1_DOCS_OVERVIEW, D1_DOCS_LOCAL_EXTRACTION, S2B_WHAT_RUNS_WHERE, D1_BOUNDARY]) {
+      assert.ok(!/[—–]/.test(changed), 'changed text contains no em dash or en dash');
+      assert.ok(!/\bmarketplace\b/i.test(changed), 'changed text contains no bare marketplace claim');
+    }
   });
 
   it('sitemap.xml lists /how-submissions-work; llms.txt carries the spec\'s Quick-start line', () => {

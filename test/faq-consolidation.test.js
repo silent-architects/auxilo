@@ -259,21 +259,21 @@ describe('FAQ consolidation: positive control for the moved question', () => {
     assert.equal(jsonLd.indexOf(MOVED_QUESTION), jsonLd.length - 1, 'must be the last JSON-LD question');
   });
 
-  it('carries byte-identical answer text on its new home, matching the pre-move source exactly', () => {
+  it('keeps the moved capture claim byte-identical and appends the D1 drafting boundary in both answer forms', () => {
     const html = readPublic('for-agents.html');
     // Rendered answer (verbatim from the pre-move /for-builders markup, incl. inline <strong>/<a>).
     assert.ok(
       html.includes(
-        '<div class="faq-answer-inner">Background extraction, the hands-free contribution engine, runs on <strong style="color:var(--ivory)">Claude Code</strong>, <strong style="color:var(--ivory)">Codex</strong>, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue. Best-effort capture covers several more clients, and any other MCP-compatible client can connect manually to search, unlock, and contribute from inside the client. See <a href="/legal/supported-clients">supported clients</a> for the full tier map.</div>'
+        '<div class="faq-answer-inner">Background extraction, the hands-free contribution engine, runs on <strong style="color:var(--ivory)">Claude Code</strong>, <strong style="color:var(--ivory)">Codex</strong>, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue. Best-effort capture covers several more clients, and any other MCP-compatible client can connect manually to search, unlock, and contribute from inside the client. See <a href="/legal/supported-clients">supported clients</a> for the full tier map. Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted.</div>'
       ),
-      'rendered answer on /for-agents must be byte-identical to the pre-move /for-builders answer'
+      'rendered answer on /for-agents retains the pre-move claim and appends the approved boundary'
     );
     // JSON-LD answer text (verbatim from the pre-move /for-builders JSON-LD).
     assert.ok(
       html.includes(
-        '"text": "Background extraction, the hands-free contribution engine, runs on Claude Code, Codex, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue. Best-effort capture covers several more clients, and any other MCP-compatible client can connect manually to search, unlock, and contribute from inside the client. See https://auxilo.io/legal/supported-clients for the full tier map."'
+        '"text": "Background extraction, the hands-free contribution engine, runs on Claude Code, Codex, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue. Best-effort capture covers several more clients, and any other MCP-compatible client can connect manually to search, unlock, and contribute from inside the client. See https://auxilo.io/legal/supported-clients for the full tier map. Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted."'
       ),
-      'JSON-LD answer text on /for-agents must be byte-identical to the pre-move /for-builders JSON-LD answer'
+      'JSON-LD answer on /for-agents retains the pre-move claim and appends the approved boundary'
     );
     assert.ok(html.includes(MOVED_ANSWER_SUBSTRING), 'sanity: answer substring present');
   });
