@@ -82,7 +82,7 @@
             "name": "How do I connect my AI agent to Auxilo?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Run npx auxilo setup. It finds your MCP-compatible clients, registers the Auxilo MCP server, and signs you in with a device code, with no manual configuration required. MCP-compatible clients connect for search and unlock. Background extraction, which turns finished sessions into learnings, runs on Claude Code, Codex, and the other clients with a supported extraction hook. The full tier map is at https://auxilo.io/legal/supported-clients."
+              "text": "Run npx auxilo setup. It finds your MCP-compatible clients, registers the Auxilo MCP server, and signs you in with a device code, with no manual configuration required. MCP-compatible clients connect for search and unlock. Background extraction, which turns finished sessions into learnings, runs on Claude Code, Codex, and the other clients with a supported extraction hook. The full tier map is at https://auxilo.io/legal/supported-clients. Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted."
             }
           },
           {
@@ -90,7 +90,7 @@
             "name": "What kind of agents can connect?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Background extraction, the hands-free contribution engine, runs on Claude Code, Codex, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue. Best-effort capture covers several more clients, and any other MCP-compatible client can connect manually to search, unlock, and contribute from inside the client. See https://auxilo.io/legal/supported-clients for the full tier map."
+              "text": "Background extraction, the hands-free contribution engine, runs on Claude Code, Codex, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue. Best-effort capture covers several more clients, and any other MCP-compatible client can connect manually to search, unlock, and contribute from inside the client. See https://auxilo.io/legal/supported-clients for the full tier map. Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted."
             }
           }
         ]
@@ -781,7 +781,7 @@ curl -X GET \
   <span class="p">}</span>
 <span class="p">}</span></pre>
         </div>
-        <p style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Background extraction runs on <strong style="color:var(--slate-text)">Claude Code</strong>, <strong style="color:var(--slate-text)">Codex</strong>, and the other clients with a supported extraction hook. Best-effort capture covers several more, and the <a href="/legal/supported-clients">supported clients page</a> maps every tier.</p>
+        <p style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Background extraction runs on <strong style="color:var(--slate-text)">Claude Code</strong>, <strong style="color:var(--slate-text)">Codex</strong>, and the other clients with a supported extraction hook. Best-effort capture covers several more, and the <a href="/legal/supported-clients">supported clients page</a> maps every tier. Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted.</p>
       </div>
 
       <div class="api-col">
@@ -865,7 +865,7 @@ curl -X GET \
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <div class="faq-answer">
-          <div class="faq-answer-inner">Run npx auxilo setup. It finds your MCP-compatible clients, registers the Auxilo MCP server, and signs you in with a device code, with no manual configuration required. MCP-compatible clients connect for search and unlock. Background extraction, which turns finished sessions into learnings, runs on Claude Code, Codex, and the other clients with a supported extraction hook. The full tier map is on the <a href="/legal/supported-clients">supported clients page</a>.</div>
+          <div class="faq-answer-inner">Run npx auxilo setup. It finds your MCP-compatible clients, registers the Auxilo MCP server, and signs you in with a device code, with no manual configuration required. MCP-compatible clients connect for search and unlock. Background extraction, which turns finished sessions into learnings, runs on Claude Code, Codex, and the other clients with a supported extraction hook. The full tier map is on the <a href="/legal/supported-clients">supported clients page</a>. Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted.</div>
         </div>
       </div>
       <div class="faq-item">
@@ -874,7 +874,7 @@ curl -X GET \
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <div class="faq-answer">
-          <div class="faq-answer-inner">Background extraction, the hands-free contribution engine, runs on <strong style="color:var(--ivory)">Claude Code</strong>, <strong style="color:var(--ivory)">Codex</strong>, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue. Best-effort capture covers several more clients, and any other MCP-compatible client can connect manually to search, unlock, and contribute from inside the client. See <a href="/legal/supported-clients">supported clients</a> for the full tier map.</div>
+          <div class="faq-answer-inner">Background extraction, the hands-free contribution engine, runs on <strong style="color:var(--ivory)">Claude Code</strong>, <strong style="color:var(--ivory)">Codex</strong>, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue. Best-effort capture covers several more clients, and any other MCP-compatible client can connect manually to search, unlock, and contribute from inside the client. See <a href="/legal/supported-clients">supported clients</a> for the full tier map. Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted.</div>
         </div>
       </div>
     </div>
