@@ -4108,7 +4108,7 @@ function renderUnlockEmailPrefsPage(state, token) {
 
   // A5a: `<main>` landmark — every other page on the site wraps its content
   // in one; this route was the only one missing it.
-  return `<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Stop Unlock Emails | Auxilo</title><link rel="stylesheet" href="/styles.css?v=80b44c53"/>${styleBlock}</head><body><main class="unsub-wrap">${logoRow}${body}</main></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Stop Unlock Emails | Auxilo</title><link rel="stylesheet" href="/styles.css?v=5974206b"/>${styleBlock}</head><body><main class="unsub-wrap">${logoRow}${body}</main></body></html>`;
 }
 
 app.get('/account/email-prefs/unsubscribe', (c) => {
@@ -12994,7 +12994,7 @@ function serveLegalPage(c, filename, title, seo) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>${title} | Auxilo</title>
   ${seoTags}
-  <link rel="stylesheet" href="/styles.css?v=80b44c53"/>
+  <link rel="stylesheet" href="/styles.css?v=5974206b"/>
   <style>
     .legal-wrap{max-width:720px;margin:0 auto;padding:120px 24px 80px;color:#E5E5E3}
     .legal-wrap h1{color:#FAFAF8;font-size:32px;margin-bottom:24px}

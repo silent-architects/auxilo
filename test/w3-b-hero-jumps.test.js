@@ -139,114 +139,18 @@ describe('W3-B static: hero jump buttons and target ids present in markup', () =
     assert.ok(re.test(HTML), 'expected a page-scoped rule giving both jump targets scroll-margin-top: var(--header-h)');
   });
 
-  it('styles.css differs from origin/main by nothing beyond the two LAYOUT-SHEET 2026-09-26 edits (item 5 .hero-ledger justify-content, item 8 .pull-stat-caption/.hero-ledger-label uppercase removal) -- this build (W3-B) itself still touched no shared CSS', (t) => {
-    // Environment-independent by design: this compares against origin/main
-    // rather than a local branch name (e.g. agent/w3-a), which only exists
-    // on a developer's machine and is absent on the CI runner (CI only has
-    // origin/main and the checked-out sha). Skips gracefully, never throws,
-    // if origin/main can't be resolved.
-    //
-    // W3-B (this file's own build item) never touched styles.css -- that
-    // invariant held as a byte-identical comparison until LAYOUT-SHEET
-    // 2026-09-26 items 5 and 8 landed two DELIBERATE, documented, cross-
-    // file-authorized shared-CSS edits (site/launch-wave-0926, a separate
-    // build unit). Freezing this test at full-file equality forever would
-    // make it fail on every future legitimate styles.css change, which
-    // isn't this test's job -- its job is to catch UNDOCUMENTED scope
-    // creep into shared CSS from a page-scoped build like this one. So it
-    // now reverts exactly those two known, named edits before comparing,
-    // and fails loudly (via the two indexOf assertions) if either
-    // expected block ever goes missing or changes shape, rather than
-    // silently passing on a no-op revert.
-    const { execFileSync } = require('node:child_process');
-    let baseStyles;
-    try {
-      execFileSync('git', ['rev-parse', '--verify', 'origin/main'], {
-        cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'ignore', 'ignore'],
-      });
-    } catch (e) {
-      t.skip('origin/main is not resolvable in this environment; cannot verify styles.css against a base ref');
-      return;
-    }
-    try {
-      baseStyles = execFileSync('git', ['show', 'origin/main:public/styles.css'], { cwd: REPO, encoding: 'utf8' });
-    } catch (e) {
-      t.skip(`could not read public/styles.css from origin/main: ${e.message}`);
-      return;
-    }
-    const currentStyles = fs.readFileSync(path.join(PUBLIC_DIR, 'styles.css'), 'utf8');
-
-    const CAPTION_NEW = `/* LAYOUT-SHEET 2026-09-26 item 8: uppercase transform dropped -- the
-   markup is already authored in sentence case underneath it, and
-   multi-word labels ("direct share (60% via discovery)") were measurably
-   harder to scan uppercased at phone width. Letter-spacing tuned down to
-   match: 0.08em was set for tracked uppercase and reads unnaturally
-   spaced-out on sentence case at 13px. Do not touch .code-block-lang --
-   that is the ruled eyebrow signature, a different component. */
-span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.pull-stat-caption {
-  font-size: 13px;
-  letter-spacing: 0.02em;
-  color: var(--slate);
-  margin-top: 8px;
-}`;
-    const CAPTION_OLD = `span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.pull-stat-caption {
-  font-size: 13px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--slate);
-  margin-top: 8px;
-}`;
-
-    const HERO_LEDGER_NEW = `.hero-ledger {
-  display: flex;
-  visibility: hidden;
-  min-height: 26px;
-  margin: 20px auto 0;
-  align-items: baseline;
-  /* LAYOUT-SHEET 2026-09-26 item 5: was justify-content: center. The sole
-     live consumer today (how-it-works.html) is now left-aligned by
-     ruling; flex-start holds that. */
-  justify-content: flex-start;
-  gap: 10px;
-}
-.hero-ledger.is-live { visibility: visible; } /* justify-content below centers it regardless of parent text-align; its sole current consumer (how-it-works.html) is left-aligned by design now (LAYOUT-SHEET 2026-09-26 item 5) -- a future page reaching for .hero-ledger should not assume the old centered default */`;
-    const HERO_LEDGER_OLD = `.hero-ledger {
-  display: flex;
-  visibility: hidden;
-  min-height: 26px;
-  margin: 20px auto 0;
-  align-items: baseline;
-  justify-content: center;
-  gap: 10px;
-}
-.hero-ledger.is-live { visibility: visible; } /* justify-content:center below centers it regardless of parent text-align */`;
-
-    const LABEL_NEW = `/* LAYOUT-SHEET 2026-09-26 item 8: same two edits as .pull-stat-caption
-   above (same visual role, different component) -- uppercase dropped,
-   letter-spacing tuned down for sentence case. */
-.hero-ledger .hero-ledger-label {
-  font-size: 12px;
-  letter-spacing: 0.02em;
-  color: var(--slate);
-}`;
-    const LABEL_OLD = `.hero-ledger .hero-ledger-label {
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--slate);
-}`;
-
-    assert.ok(currentStyles.includes(CAPTION_NEW), 'expected the LAYOUT-SHEET item 8 .pull-stat-caption block, unchanged in shape');
-    assert.ok(currentStyles.includes(HERO_LEDGER_NEW), 'expected the LAYOUT-SHEET item 5 .hero-ledger block, unchanged in shape');
-    assert.ok(currentStyles.includes(LABEL_NEW), 'expected the LAYOUT-SHEET item 8 .hero-ledger-label block, unchanged in shape');
-
-    const reverted = currentStyles
-      .replace(CAPTION_NEW, CAPTION_OLD)
-      .replace(HERO_LEDGER_NEW, HERO_LEDGER_OLD)
-      .replace(LABEL_NEW, LABEL_OLD);
-
-    assert.equal(reverted, baseStyles, 'public/styles.css should be unchanged from origin/main once the two named, authorized edits are reverted -- this build (W3-B) itself must still add no shared CSS of its own');
-  });
+  // The former "styles.css differs from origin/main by nothing beyond the
+  // two LAYOUT-SHEET 2026-09-26 edits" test case was deleted here
+  // (FIX-UNIT H2, 2026-09-26). It compared the working tree's styles.css,
+  // with a fixed list of named edits reverted, against origin/main's copy
+  // byte-for-byte. That comparison goes red on main the moment
+  // site/launch-wave-0926 merges, because origin/main then already
+  // contains the edits it expects to revert -- it would fail on every
+  // run on main forever after, CI included. It was a scope check for the
+  // W3-B build ("this build touches no shared CSS"); W3-B shipped long
+  // ago and the real invariant it was written to protect -- the
+  // page-scoped scroll-margin-top rule above -- is asserted directly by
+  // the test just above this comment.
 });
 
 // ─── Rendering / scroll checks (needs playwright) ───────────────────────

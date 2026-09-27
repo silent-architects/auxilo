@@ -126,9 +126,11 @@ describe('affirmation sentence parity with lib/clean-lane.js', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe('dashboard card: Auto-publish clean learnings', () => {
   it('sits directly ABOVE the API Keys card (no other card between) -- LW3 reorder: Pending now sits before Earnings/Payouts, so Auto-publish\'s neighbor is API Keys', () => {
-    const cardTitle = '<div class="dash-card-title">Auto-publish clean learnings</div>';
+    // FIX-UNIT A5b (2026-09-26): .dash-card-title is now an <h2> (was a
+    // <div>); the class is unchanged so it still locates the card.
+    const cardTitle = '<h2 class="dash-card-title">Auto-publish clean learnings</h2>';
     const cardIdx = DASHBOARD_HTML.indexOf(cardTitle);
-    const apiKeysIdx = DASHBOARD_HTML.indexOf('<div class="dash-card-title">API Keys');
+    const apiKeysIdx = DASHBOARD_HTML.indexOf('<h2 class="dash-card-title">API Keys');
     assert.ok(cardIdx > -1 && apiKeysIdx > -1);
     assert.ok(cardIdx < apiKeysIdx, 'card must precede the API Keys card');
     const between = DASHBOARD_HTML.slice(cardIdx + cardTitle.length, apiKeysIdx);

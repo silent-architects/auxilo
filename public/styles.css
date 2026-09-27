@@ -416,6 +416,9 @@ section h2 {
 .hero-cta-link {
   display: inline-flex;
   align-items: center;
+  /* FIX-UNIT A6+L8: 44px touch target. Already inline-flex/align-items:center,
+     so the text stays centered in place and simply gets more box around it. */
+  min-height: 44px;
   color: var(--ivory);
   font-family: var(--sans);
   font-size: 15px;
@@ -561,13 +564,6 @@ section h2 {
 #how-it-works h2 {
   /* font-size/weight/letter-spacing/color now come from the shared section h2 rule */
   margin-bottom: 20px;
-}
-
-.how-intro {
-  color: var(--slate-text);
-  font-size: 16px;
-  max-width: 560px;
-  margin-bottom: 72px;
 }
 
 .steps {
@@ -793,21 +789,6 @@ section h2 {
   margin-bottom: 20px;
   max-width: 480px;
 }
-
-.feature-list {
-  list-style: none;
-  margin: 32px 0 40px;
-}
-
-.feature-list li {
-  padding: 10px 0 10px 14px;
-  font-size: 15px;
-  color: var(--ivory);
-  border-bottom: 1px solid rgba(229,229,227,0.06);
-  border-left: 2px solid var(--aurum-border);
-}
-
-.feature-list li:last-child { border-bottom: none; }
 
 /* ── For Agents ────────────────────────────────────────────────────────────── */
 #for-agents { background: var(--obsidian); }
@@ -1591,6 +1572,21 @@ footer {
 .reveal { transition: opacity 0.55s ease, transform 0.55s ease; }
 
 /* ── Accessibility ───────────────────────────────────────────────── */
+/* FIX-UNIT A1: shared utility for an off-screen polite live region (the
+   copy-button "copied!" announcement). Standard clip-based hiding -- stays
+   in the accessibility tree and audible to a screen reader, invisible and
+   with no layout footprint for sighted users. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .skip-to-content {
   position: absolute;
   top: -100%;
@@ -2123,41 +2119,6 @@ abbr[title] {
   color: var(--slate-text);
 }
 
-.hero-trust {
-  list-style: none;
-  margin: 10px 0 0;
-  padding: 0;
-}
-
-.hero-trust li {
-  position: relative;
-  padding: 6px 0 6px 22px;
-  font-size: 13.5px;
-  line-height: 1.55;
-  color: var(--slate-text);
-}
-
-.hero-trust li::before {
-  content: '';
-  position: absolute;
-  left: 2px;
-  top: 13px;
-  width: 8px;
-  height: 8px;
-  background: none;
-  border: 1.5px solid var(--aurum-border);
-  transform: rotate(45deg);
-}
-
-.hero-trust code {
-  font-family: var(--mono);
-  font-size: 12.5px;
-  color: var(--ash);
-  background: rgba(255,255,255,0.05);
-  padding: 1px 5px;
-  border-radius: 4px;
-}
-
 @media (max-width: 600px) {
   .hero-install { max-width: 100%; }
   .hero-install .hero-setup-block pre { font-size: 17px; padding: 18px 18px; }
@@ -2232,7 +2193,7 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   justify-content: flex-start;
   gap: 10px;
 }
-.hero-ledger.is-live { visibility: visible; } /* justify-content below centers it regardless of parent text-align; its sole current consumer (how-it-works.html) is left-aligned by design now (LAYOUT-SHEET 2026-09-26 item 5) -- a future page reaching for .hero-ledger should not assume the old centered default */
+.hero-ledger.is-live { visibility: visible; } /* FIX-UNIT L10: comment corrected -- justify-content above is flex-start (not center) as of LAYOUT-SHEET 2026-09-26 item 5, so this positions the ledger left, regardless of parent text-align; its sole current consumer (how-it-works.html) is left-aligned by design. A future page reaching for .hero-ledger should not assume the old centered default. */
 .hero-ledger .hero-ledger-num {
   font-family: var(--mono);
   font-size: 22px;

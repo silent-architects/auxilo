@@ -20,7 +20,7 @@
   <meta name="theme-color" content="#0A0A0A" />
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=80b44c53" />
+  <link rel="stylesheet" href="/styles.css?v=5974206b" />
   <style>
     /* Page-scoped styles only (SITE-PM packet 13 rev 2 build bind: no touch
        to styles.css). Base tokens + .page-title / .page-intro match the
@@ -179,6 +179,9 @@
   </style>
 </head>
 <body>
+    <!-- FIX-UNIT A1: shared polite live region for the copy-button "copied!"
+         announcement (see copyCode() below). -->
+    <span id="copy-status" role="status" aria-live="polite" class="visually-hidden"></span>
     <nav id="main-nav" aria-label="Main navigation">
     <div class="nav-row">
       <a href="/" class="nav-logo" id="nav-logo">
@@ -308,15 +311,28 @@
 
     // ── Copy-to-clipboard for the install command (shared behavior with
     //    index.html's hero install control; copyCode() reused verbatim). ──
+    // FIX-UNIT A1: aria-label now updates together with the visible text,
+    // and the shared #copy-status live region announces the change once;
+    // the reset after the timeout clears the live region (never
+    // re-announced) and restores the original aria-label.
     function copyCode(preId, btnId) {
       const pre = document.getElementById(preId);
       const btn = document.getElementById(btnId);
       if (!pre || !btn) return;
       const text = pre.innerText || pre.textContent;
+      const status = document.getElementById('copy-status');
+      const originalLabel = btn.getAttribute('aria-label');
       const done = () => {
         btn.textContent = 'copied!';
+        btn.setAttribute('aria-label', 'copied!');
         btn.classList.add('copied');
-        setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 1800);
+        if (status) status.textContent = 'copied!';
+        setTimeout(() => {
+          btn.textContent = 'copy';
+          if (originalLabel) btn.setAttribute('aria-label', originalLabel);
+          btn.classList.remove('copied');
+          if (status) status.textContent = '';
+        }, 1800);
       };
       navigator.clipboard.writeText(text).then(done).catch(() => {
         const ta = document.createElement('textarea');

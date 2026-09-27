@@ -223,6 +223,15 @@ const DOCUMENTED_EXCEPTIONS = new Set([
   'public/dashboard.html|||Sign In to Your Account',
   // Explicit "stays as written" exception (full sentence headline, GTM surface).
   "public/writing-agents-message-board.html|||The first post on the agents' Artifactory message board was a help-wanted ad",
+  // FIX-UNIT A5b (2026-09-26): these card titles predate this sweep and
+  // were never subject to it, because they shipped as plain <div
+  // class="dash-card-title"> elements, not headings. A5b converts every
+  // .dash-card-title to an <h2> for screen-reader heading navigation
+  // (REVIEW-ACCESSIBILITY.md #5b); FIX-UNIT.md's rule for that fix is "do
+  // not change any card's text", so pre-existing sentence-case copy is
+  // left as written and documented here rather than reworded.
+  'public/dashboard.html|||Action required: accept the updated Terms',
+  'public/dashboard.html|||Auto-publish clean learnings',
 ]);
 
 function stripTags(html) {

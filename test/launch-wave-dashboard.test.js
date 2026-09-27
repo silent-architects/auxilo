@@ -38,6 +38,7 @@ const {
 const REPO = path.join(__dirname, '..');
 const DASHBOARD_PATH = path.join(REPO, 'public', 'dashboard.html');
 const DASHBOARD_HTML = fs.readFileSync(DASHBOARD_PATH, 'utf8');
+const STYLES_CSS = fs.readFileSync(path.join(REPO, 'public', 'styles.css'), 'utf8');
 const SESSION_SECRET = 'launch-wave-dashboard-session-secret-32b';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -90,7 +91,7 @@ async function fetchJson(url, options) {
   return { status: response.status, ok: response.ok, text, body };
 }
 
-async function startDashboardFixture(t) {
+async function startDashboardFixture(t, seed) {
   let nodeModulesDir;
   try {
     const honoEntry = require.resolve('hono', { paths: [REPO] });
@@ -128,8 +129,12 @@ async function startDashboardFixture(t) {
       copyDirs: ['lib', 'public', 'prompts', 'config'],
     });
 
-    fs.writeFileSync(path.join(dataDir, 'learnings.json'), JSON.stringify([], null, 2));
-    fs.writeFileSync(path.join(dataDir, 'accounts.json'), JSON.stringify({}, null, 2));
+    // Optional seed (FIX-UNIT M2's private-learning fixture): written BEFORE
+    // boot, since the server loads these files into memory at startup and a
+    // post-boot fs.writeFileSync is never picked up. Defaults reproduce the
+    // pre-existing empty-state behavior every other test in this file relies on.
+    fs.writeFileSync(path.join(dataDir, 'learnings.json'), JSON.stringify((seed && seed.learnings) || [], null, 2));
+    fs.writeFileSync(path.join(dataDir, 'accounts.json'), JSON.stringify((seed && seed.accounts) || {}, null, 2));
     fs.writeFileSync(path.join(dataDir, 'earnings.json'), JSON.stringify({}, null, 2));
     fs.writeFileSync(path.join(dataDir, 'magic_links.json'), JSON.stringify({}, null, 2));
 
@@ -164,12 +169,15 @@ describe('LW3: card order after the terms gate', () => {
       'id="terms-gate"',
       'id="welcome-card"',
       'id="pending-review-card"',
-      '<div class="dash-card-title">Earnings</div>',
-      '<div class="dash-card-title">Payouts</div>',
-      '<div class="dash-card-title">Auto-publish clean learnings</div>',
-      '<div class="dash-card-title">API Keys</div>',
-      '<div class="dash-card-title">Credits</div>',
-      '<div class="dash-card-title">Credit Purchase History</div>',
+      // FIX-UNIT A5b: every .dash-card-title is now an <h2> (was a <div>).
+      // The class is unchanged, so these markers are updated to the new
+      // element name per BUILDER-RULES.
+      '<h2 class="dash-card-title">Earnings</h2>',
+      '<h2 class="dash-card-title">Payouts</h2>',
+      '<h2 class="dash-card-title">Auto-publish clean learnings</h2>',
+      '<h2 class="dash-card-title">API Keys</h2>',
+      '<h2 class="dash-card-title">Credits</h2>',
+      '<h2 class="dash-card-title">Credit Purchase History</h2>',
     ];
     const positions = indexOfAll(DASHBOARD_HTML, markers);
     for (let i = 1; i < positions.length; i += 1) {
@@ -177,20 +185,87 @@ describe('LW3: card order after the terms gate', () => {
     }
     // Exactly one Pending Review Queue card in the file (the old location was removed).
     assert.strictEqual(
-      (DASHBOARD_HTML.match(/<div class="dash-card-title">Pending Review Queue/g) || []).length,
+      (DASHBOARD_HTML.match(/<h2 class="dash-card-title">Pending Review Queue/g) || []).length,
       1,
       'exactly one Pending Review Queue card remains -- the old location must be gone, not duplicated',
     );
   });
 
   it('the summary bar sits directly under the header, above the alert area and every card', () => {
-    const [headerCloseIdx] = indexOfAll(DASHBOARD_HTML, ['<div class="dash-title">Account Dashboard</div>']);
+    // FIX-UNIT A5b: .dash-title is now an <h1> (was a <div>); text/class unchanged.
+    const [headerCloseIdx] = indexOfAll(DASHBOARD_HTML, ['<h1 class="dash-title">Account Dashboard</h1>']);
     const summaryIdx = DASHBOARD_HTML.indexOf('id="dash-summary-bar"');
     const alertIdx = DASHBOARD_HTML.indexOf('id="dash-alert"');
     const termsIdx = DASHBOARD_HTML.indexOf('id="terms-gate"');
     assert.ok(headerCloseIdx < summaryIdx, 'summary bar follows the header');
     assert.ok(summaryIdx < alertIdx, 'summary bar precedes the global alert');
     assert.ok(alertIdx < termsIdx, 'summary bar (and alert) precede every card');
+  });
+});
+
+// ─── FIX-UNIT L11: summary bar never starts with a stray separator ─────────
+//
+// REVIEW-CODE-SECURITY.md L11: the " · " separator lived as static leading
+// text inside the pending/earnings segment spans. If the Published segment
+// (the first one, loaded by loadWelcomeCard()) failed to load while a later
+// segment succeeded, the bar rendered " · Pending review N" -- a stray
+// leading separator. Fix: each separator is its own hidden span
+// (summary-pending-sep / summary-earnings-sep), shown only when a segment
+// earlier in the fixed order is already visible.
+
+describe('FIX-UNIT L11: summary bar never starts with a stray separator', () => {
+  it('the markup gives the 2nd and 3rd segments their own separator span, hidden by default, ahead of the segment it separates', () => {
+    const bar = sliceBetween(DASHBOARD_HTML, 'id="dash-summary-bar"', '<!-- Global alert -->');
+    const order = indexOfAll(bar, [
+      'id="summary-published"',
+      'id="summary-pending-sep"',
+      'id="summary-pending"',
+      'id="summary-earnings-sep"',
+      'id="summary-earnings"',
+    ]);
+    for (let i = 1; i < order.length; i += 1) {
+      assert.ok(order[i] > order[i - 1], 'summary bar elements must appear in fixed order');
+    }
+    assert.match(bar, /<span id="summary-pending-sep" style="display:none"> · <\/span>/, 'pending separator ships hidden');
+    assert.match(bar, /<span id="summary-earnings-sep" style="display:none"> · <\/span>/, 'earnings separator ships hidden');
+    // The old bug: a separator baked as static leading text inside the
+    // segment span itself, so it could render before the segment's own
+    // figure had ever loaded successfully.
+    assert.ok(!/id="summary-pending" style="display:none"> ·/.test(bar), 'the pending segment must not carry its own baked-in leading separator');
+    assert.ok(!/id="summary-earnings" style="display:none"> ·/.test(bar), 'the earnings segment must not carry its own baked-in leading separator');
+  });
+
+  it("updateSummarySeparators()'s algorithm matches a standalone mirror across every load-order combination, including the bug's exact repro (first segment fails, a later one loads)", () => {
+    // Mirror of public/dashboard.html's updateSummarySeparators().
+    function mirrorSeparators(visibility) {
+      const order = ['published', 'pending', 'earnings'];
+      let seenVisible = false;
+      const seps = {};
+      for (let i = 0; i < order.length; i += 1) {
+        const visible = !!visibility[order[i]];
+        if (i > 0) seps[order[i]] = visible && seenVisible;
+        if (visible) seenVisible = true;
+      }
+      return seps;
+    }
+
+    // The exact bug this fixes: the first segment (published) never loads,
+    // a later one does -- its separator must stay hidden (no stray leading " · ").
+    assert.deepEqual(mirrorSeparators({ published: false, pending: true, earnings: false }), { pending: false, earnings: false });
+    assert.deepEqual(mirrorSeparators({ published: false, pending: false, earnings: true }), { pending: false, earnings: false });
+    // All three load -- both separators show.
+    assert.deepEqual(mirrorSeparators({ published: true, pending: true, earnings: true }), { pending: true, earnings: true });
+    // First and last load, middle fails -- earnings still gets a separator (something visible precedes it).
+    assert.deepEqual(mirrorSeparators({ published: true, pending: false, earnings: true }), { pending: false, earnings: true });
+    // Only the first loads -- no separator needed at all.
+    assert.deepEqual(mirrorSeparators({ published: true, pending: false, earnings: false }), { pending: false, earnings: false });
+
+    const fn = sliceBetween(DASHBOARD_HTML, 'function updateSummarySeparators() {', 'function setSummarySegment(');
+    assert.match(fn, /var seenVisible = false;/, 'source tracks whether an earlier segment has been seen visible');
+    assert.match(fn, /sep\.style\.display = \(visible && seenVisible\) \? '' : 'none';/, 'source shows a separator only when its own segment is visible AND an earlier one already is');
+
+    const setSummarySegmentFn = sliceBetween(DASHBOARD_HTML, 'function setSummarySegment(wrapId, figureId, text) {', '\n  }');
+    assert.match(setSummarySegmentFn, /updateSummarySeparators\(\);/, 'setSummarySegment must recompute separators every time a segment is shown');
   });
 });
 
@@ -342,6 +417,133 @@ describe('LW3: unlock-email setting (D-80/D-81)', () => {
   });
 });
 
+// ─── FIX-UNIT A3: notification checkbox help text is associated ───────────
+//
+// REVIEW-ACCESSIBILITY.md #3: #unlock-email-toggle's clarifying <p> was a
+// plain sibling with no id/aria-describedby link. Fix: the <p> gets an id
+// and the checkbox points at it.
+
+describe('FIX-UNIT A3: notification checkbox help text is associated via aria-describedby', () => {
+  it('#unlock-email-help exists on the clarifying paragraph and #unlock-email-toggle points at it', () => {
+    assert.match(DASHBOARD_HTML, /<p id="unlock-email-help"[^>]*>Get an email when another agent unlocks one of your learnings\. Sign-in and account emails still arrive when this is off\.<\/p>/, 'the help text keeps its exact wording and gains an id');
+    assert.match(DASHBOARD_HTML, /<input type="checkbox" id="unlock-email-toggle" aria-describedby="unlock-email-help"/, 'the checkbox references the help text by id');
+  });
+});
+
+// ─── FIX-UNIT A2: dashboard alert areas announce errors ────────────────────
+//
+// REVIEW-ACCESSIBILITY.md #2: #dash-alert and its siblings carried neither
+// role="alert"/role="status" nor aria-live, so showAlert()'s text was never
+// announced to a screen reader. Fix: role="alert" on all five.
+
+describe('FIX-UNIT A2: dashboard alert areas get role="alert"', () => {
+  it('all five alert containers carry role="alert"', () => {
+    const alertIds = ['login-alert', 'dash-alert', 'terms-gate-alert', 'pending-alert', 'clean-lane-alert'];
+    assert.ok(alertIds.length === 5, 'sanity: 5 alert ids expected');
+    for (const id of alertIds) {
+      const re = new RegExp(`<div id="${id}" class="alert" role="alert"`);
+      assert.match(DASHBOARD_HTML, re, `#${id} must carry role="alert"`);
+    }
+  });
+});
+
+// ─── FIX-UNIT A5b: dashboard card titles are real headings ─────────────────
+//
+// REVIEW-ACCESSIBILITY.md #5b: every .dash-card-title shipped as a <div>,
+// so a screen-reader user could not jump between cards by heading
+// navigation, and the signed-in view had no <h1>. Fix: every
+// .dash-card-title becomes an <h2> (class kept, text unchanged), and the
+// signed-in page title becomes an <h1>.
+
+describe('FIX-UNIT A5b: dashboard card titles are headings', () => {
+  it('every .dash-card-title is an <h2>, with the class kept and no <div class="dash-card-title"> left', () => {
+    const count = (DASHBOARD_HTML.match(/<h2 class="dash-card-title">/g) || []).length;
+    assert.equal(count, 10, 'expected 10 dash-card-title headings (terms gate, welcome A, welcome B, pending, earnings, payouts, auto-publish, api keys, credits, purchase history)');
+    assert.ok(!/<div class="dash-card-title">/.test(DASHBOARD_HTML), 'no dash-card-title div should remain');
+  });
+
+  it('the signed-in dashboard has an <h1> page title ("Account Dashboard")', () => {
+    assert.match(DASHBOARD_HTML, /<h1 class="dash-title">Account Dashboard<\/h1>/);
+  });
+
+  it('.dash-title and .dash-card-title reset their new heading-level default margins so they still look identical to the old div', () => {
+    const titleRule = sliceBetween(DASHBOARD_HTML, '.dash-title {', '.dash-email {');
+    assert.match(titleRule, /margin:\s*0;/, '.dash-title must reset the default h1 margin');
+    const cardTitleRule = sliceBetween(DASHBOARD_HTML, '.dash-card-title {', '/* ── Earnings grid');
+    assert.match(cardTitleRule, /margin-top:\s*0;/, '.dash-card-title must reset the default h2 top margin');
+    assert.match(cardTitleRule, /margin-bottom:\s*20px;/, '.dash-card-title keeps its existing bottom margin');
+  });
+
+  it('heading order, signed-out view (#login-view): exactly one <h1>, no <h2>-<h6>', () => {
+    const view = sliceBetween(DASHBOARD_HTML, '<div id="login-view"', '<!-- ── Dashboard view');
+    const headings = [...view.matchAll(/<h([1-6])[^>]*>/g)].map((m) => Number(m[1]));
+    assert.deepEqual(headings, [1], 'signed-out view must have exactly one heading, an h1, and nothing deeper');
+  });
+
+  it('heading order, signed-in view (#dash-view): exactly one <h1> followed only by <h2>s, no skipped level, in DOM order', () => {
+    const view = sliceBetween(DASHBOARD_HTML, '<div id="dash-view"', '<!-- AD sheet 9 / packet 3 rev 2: site footer link row');
+    const headings = [...view.matchAll(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/g)].map((m) => ({
+      level: Number(m[1]),
+      text: m[2].replace(/<[^>]*>/g, '').trim(),
+    }));
+    assert.ok(headings.length > 1, 'sanity: expected more than one heading in the signed-in view');
+    assert.equal(headings.filter((h) => h.level === 1).length, 1, 'exactly one h1 in the signed-in view');
+    assert.equal(headings[0].level, 1, 'the first heading must be the h1 (page title)');
+    for (let i = 1; i < headings.length; i += 1) {
+      assert.equal(headings[i].level, 2, `heading #${i} ("${headings[i].text}") must be an h2 -- no h3+ used, no skipped level`);
+    }
+    // Confirms the DOM order this fix ships, in the reader's own words.
+    assert.deepEqual(headings.map((h) => `h${h.level}: ${h.text}`), [
+      'h1: Account Dashboard',
+      'h2: Action required: accept the updated Terms',
+      'h2: Start Here',
+      'h2: Your Learnings Are Waiting',
+      'h2: Pending Review Queue 0',
+      'h2: Earnings',
+      'h2: Payouts',
+      'h2: Auto-publish clean learnings',
+      'h2: API Keys',
+      'h2: Credits',
+      'h2: Credit Purchase History',
+    ]);
+  });
+});
+
+// ─── FIX-UNIT A6+L8 (dashboard half): 44px touch targets ───────────────────
+//
+// REVIEW-ACCESSIBILITY.md #6/L8: the welcome-card link (116x24), the
+// Refresh button (76x28), and the notification checkbox's label row were
+// under the site's own 44px intent. Fix: min-height:44px + inline-flex
+// alignment on each, so the text does not move.
+
+describe('FIX-UNIT A6+L8: dashboard 44px touch targets', () => {
+  it('.hero-cta-link (the welcome-card "See How It Works" link) carries min-height:44px, inline-flex, centered', () => {
+    // .hero-cta-link is defined once, in the shared stylesheet, and reused
+    // here (dashboard.html) and on the homepage hero.
+    const sharedRule = sliceBetween(STYLES_CSS, '.hero-cta-link {', '}');
+    assert.match(sharedRule, /display:\s*inline-flex;/);
+    assert.match(sharedRule, /align-items:\s*center;/);
+    assert.match(sharedRule, /min-height:\s*44px;/);
+    assert.ok(DASHBOARD_HTML.includes('class="hero-cta-link"'), 'sanity: dashboard.html still consumes this shared class');
+  });
+
+  it('#pending-refresh-btn (the Pending Review Queue "Refresh" button) has its own scoped 44px rule, and no other .btn-sm instance is touched', () => {
+    assert.match(DASHBOARD_HTML, /<button class="btn btn-ghost btn-sm" id="pending-refresh-btn" onclick="loadPendingQueue\(\)"/, 'the button gains an id to target it specifically');
+    const rule = sliceBetween(DASHBOARD_HTML, '#pending-refresh-btn {', '}');
+    assert.match(rule, /display:\s*inline-flex;/);
+    assert.match(rule, /align-items:\s*center;/);
+    assert.match(rule, /min-height:\s*44px;/);
+    // Sign out / Turn off / I've reviewed these -- not named in the brief -- keep plain .btn-sm, no id, no override.
+    assert.ok(!/<button class="btn btn-ghost btn-sm" onclick="signOut\(\)"[^>]*id=/.test(DASHBOARD_HTML), 'Sign out must not have gained an id/override');
+  });
+
+  it('the notification checkbox\'s label row carries min-height:44px', () => {
+    const label = sliceBetween(DASHBOARD_HTML, '<div id="unlock-email-setting"', '<span>Unlock emails</span>');
+    assert.match(label, /min-height:44px;/, 'the label row (checkbox + "Unlock emails" text) must reach 44px');
+    assert.match(label, /display:flex;align-items:flex-start;/, 'alignment is unchanged (flex-start, matching the checkbox\'s own top offset) so the text does not move');
+  });
+});
+
 // ─── 8. No innerHTML with an interpolated value (regression guard) ────────
 
 describe('LW3: XSS-safe DOM helper invariant', () => {
@@ -379,7 +581,17 @@ describe('LW3: GOV-2 A6, Credits card untouched', () => {
     const marker = '<!-- Credits (CREDITS-CONTROL PART 1). GOV-2 A6: no string, layout, or';
     const oldBlock = sliceBetween(originMain, marker, '<!-- Purchase history -->');
     const newBlock = sliceBetween(DASHBOARD_HTML, marker, '<!-- Purchase history -->');
-    assert.strictEqual(newBlock, oldBlock, "the Credits card (comment through its closing </div>) must not change one byte");
+
+    // FIX-UNIT A5b (2026-09-26): the ONE authorized change to this card is
+    // its title becoming a heading, like every other card title ("its
+    // title becomes a heading element under fix A5b like every other card
+    // title" -- FIX-UNIT.md). Revert that one named edit before comparing,
+    // so this test still proves nothing else in the Credits card moved.
+    const TITLE_OLD = '<div class="dash-card-title">Credits</div>';
+    const TITLE_NEW = '<h2 class="dash-card-title">Credits</h2>';
+    assert.ok(newBlock.includes(TITLE_NEW), 'expected the Credits card title converted to <h2 class="dash-card-title"> (FIX-UNIT A5b)');
+    const revertedNewBlock = newBlock.replace(TITLE_NEW, TITLE_OLD);
+    assert.strictEqual(revertedNewBlock, oldBlock, "the Credits card (comment through its closing </div>) must not change one byte beyond the A5b heading conversion");
   });
 });
 
@@ -434,6 +646,66 @@ describe('BUILD-SPEC test case 28: published-count API + welcome-card visibility
 
     const updateWelcomeCardFn = sliceBetween(DASHBOARD_HTML, 'function updateWelcomeCard() {', 'function loadWelcomeCard() {');
     assert.match(updateWelcomeCardFn, /if \(_welcomePublishedTotal !== 0\) \{ hide\('welcome-card'\); return; \}/, 'source conditional matches the mirrored predicate: shown only when the total is exactly 0');
+  });
+});
+
+// ─── FIX-UNIT M2: private learnings must not count as "Published" ──────────
+//
+// REVIEW-CODE-SECURITY.md M2: the dashboard's published-count call used
+// status=approved with no visibility filter, and a learning kept private is
+// also status: 'approved' (server.js resolves visibility on recall/private
+// submissions to 'private' while leaving status 'approved'). A builder whose
+// only learning was kept private therefore saw "Published 1" and never saw
+// the welcome card, even though the card's own copy says private items are
+// "never published". Fix: loadWelcomeCard() now calls
+// /account/learnings?status=approved&visibility=public&limit=1.
+
+describe('FIX-UNIT M2: dashboard published-count excludes private learnings', () => {
+  it("loadWelcomeCard() source calls the endpoint with visibility=public", () => {
+    const fn = sliceBetween(DASHBOARD_HTML, 'function loadWelcomeCard() {', 'window.copyDashSetupCode');
+    assert.match(
+      fn,
+      /apiFetch\('\/account\/learnings\?status=approved&visibility=public&limit=1'\)/,
+      'loadWelcomeCard must request visibility=public so private learnings are excluded from the Published figure',
+    );
+  });
+
+  it('a private-only account gets total: 0 from the dashboard\'s own (visibility=public) call, though the old status-only call would have miscounted it as 1', async (t) => {
+    // Seeded BEFORE boot (see startDashboardFixture's seed param) -- the
+    // server loads learnings.json/accounts.json into memory at startup, so
+    // writing them after the fixture is already running is never observed.
+    const fixture = await startDashboardFixture(t, {
+      accounts: {
+        acc_priv: { id: 'acc_priv', email: 'priv@example.com', created_at: new Date().toISOString(), api_keys: [] },
+      },
+      learnings: [{
+        id: 'L_PRIV',
+        title: 'kept private',
+        body: 'body text',
+        category: 'code-execution',
+        tags: [],
+        status: 'approved',
+        visibility: 'private',
+        contributor_account_id: 'acc_priv',
+        quality: { unlocks: 0 },
+        created_at: new Date().toISOString(),
+      }],
+    });
+    if (!fixture) return;
+    const token = await sessionToken('acc_priv', 'priv@example.com');
+
+    const withoutVisibilityFilter = await fetchJson(`${fixture.baseUrl}/account/learnings?status=approved&limit=1`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert.equal(withoutVisibilityFilter.status, 200);
+    assert.equal(withoutVisibilityFilter.body.total, 1, 'sanity control: the private learning is status=approved, so the pre-fix call would have counted it as Published');
+
+    const dashboardCall = await fetchJson(`${fixture.baseUrl}/account/learnings?status=approved&visibility=public&limit=1`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert.equal(dashboardCall.status, 200);
+    assert.equal(dashboardCall.body.total, 0, 'Published must read 0 for an account whose only learning is private');
+    assert.deepEqual(dashboardCall.body.learnings, []);
   });
 });
 

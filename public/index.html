@@ -29,7 +29,7 @@
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono500.0ecb6352.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=80b44c53" />
+  <link rel="stylesheet" href="/styles.css?v=5974206b" />
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: Organization + FAQPage -->
@@ -287,6 +287,13 @@
     @media (max-width: 600px) {
       #install.hero-install { max-width: 100%; margin-bottom: 0; }
       #install .hero-setup-block pre { font-size: 17px; padding: 18px 18px; }
+      /* FIX-UNIT A6+L8: raising .hero-cta-link (shared styles.css) to a
+         44px min-height (was 24px) adds 20px below the command block at
+         this width -- .hero-install-row's own 20px gap (styles.css) is the
+         only spacing left to give it back (see the note above this block),
+         so it's zeroed here, page-scoped to #hero, restoring the fold
+         margin the layout-sheet addendum measured. */
+      #hero .hero-install-row { gap: 0; }
     }
 
     /* ── AD sheet 1, item 2: the fold's one gold fill lands on the install
@@ -353,6 +360,11 @@
       text-decoration: underline;
       grid-column: 1 / -1;
       margin-top: 8px;
+      /* FIX-UNIT A6+L8: 44px touch target -- inline-flex/align-items:center
+         keeps the text where it is; the link's own box just grows. */
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
     }
     #works-with-band .ww-band-link:hover { color: var(--ash); }
 
@@ -364,6 +376,9 @@
 </head>
 <body>
 <a href="#main" class="skip-to-content">Skip to content</a>
+<!-- FIX-UNIT A1: shared polite live region for the copy-button "copied!"
+     announcement (see copyCode() below). -->
+<span id="copy-status" role="status" aria-live="polite" class="visually-hidden"></span>
 
 <!-- ━━━ Navigation ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <nav id="main-nav" aria-label="Main navigation">
@@ -678,15 +693,28 @@
 <!-- ━━━ Minimal JS: copy-to-clipboard ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <script>
 // ── Copy-to-clipboard ──────────────────────────────────────────────
+// FIX-UNIT A1: the accessible name (aria-label) now updates together with
+// the visible text, and a shared polite live region (#copy-status)
+// announces the change once. The reset after the timeout clears the live
+// region (never re-announced) and restores the original aria-label.
 function copyCode(preId, btnId) {
   const pre = document.getElementById(preId);
   const btn = document.getElementById(btnId);
   if (!pre || !btn) return;
   const text = pre.innerText || pre.textContent;
+  const status = document.getElementById('copy-status');
+  const originalLabel = btn.getAttribute('aria-label');
   const done = () => {
     btn.textContent = 'copied!';
+    btn.setAttribute('aria-label', 'copied!');
     btn.classList.add('copied');
-    setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 1800);
+    if (status) status.textContent = 'copied!';
+    setTimeout(() => {
+      btn.textContent = 'copy';
+      if (originalLabel) btn.setAttribute('aria-label', originalLabel);
+      btn.classList.remove('copied');
+      if (status) status.textContent = '';
+    }, 1800);
   };
   navigator.clipboard.writeText(text).then(done).catch(() => {
     const ta = document.createElement('textarea');

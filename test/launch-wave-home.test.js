@@ -137,6 +137,42 @@ describe('LAUNCH-WAVE-0926: works-with client band (register M-30)', () => {
   });
 });
 
+// ─── FIX-UNIT A6+L8 (homepage half): 44px touch targets ────────────────────
+//
+// REVIEW-ACCESSIBILITY.md #6/L8: the hero "See How It Works" link (116x24)
+// and the works-with-band link cell (335x24) were under the site's own
+// 44px intent. Fix: min-height:44px + inline-flex alignment on each, so
+// the text does not move; raising the hero link's height pushes its
+// bottom edge down at 375px, so the mobile hero row's own gap is zeroed
+// (page-scoped) to give the fold margin back.
+
+describe('FIX-UNIT A6+L8: homepage 44px touch targets', () => {
+  it('the shared .hero-cta-link rule (styles.css) reaches 44px via inline-flex + align-items:center, and index.html still consumes it', () => {
+    const stylesCss = fs.readFileSync(path.join(REPO, 'public', 'styles.css'), 'utf8');
+    const rule = (/\.hero-cta-link\s*\{[^}]*\}/.exec(stylesCss) || [''])[0];
+    assert.ok(rule, '.hero-cta-link rule found in styles.css');
+    assert.match(rule, /display:\s*inline-flex;/);
+    assert.match(rule, /align-items:\s*center;/);
+    assert.match(rule, /min-height:\s*44px;/);
+    assert.match(html, /<a href="\/how-it-works" id="hero-cta-secondary" class="hero-cta-link">See How It Works<\/a>/);
+  });
+
+  it('#works-with-band .ww-band-link (page-scoped) reaches 44px via inline-flex + align-items:center, spanning its own full-width row', () => {
+    const rule = (/#works-with-band \.ww-band-link\s*\{[^}]*\}/.exec(html) || [''])[0];
+    assert.ok(rule, '#works-with-band .ww-band-link rule found');
+    assert.match(rule, /grid-column:\s*1 \/ -1;/, 'still spans the full row (LAYOUT-SHEET item 2), unaffected by the touch-target change');
+    assert.match(rule, /display:\s*inline-flex;/);
+    assert.match(rule, /align-items:\s*center;/);
+    assert.match(rule, /min-height:\s*44px;/);
+  });
+
+  it('the <=600px hero override zeroes .hero-install-row\'s gap, giving back the 20px the taller CTA link added, so the fold measurement still holds', () => {
+    const mobileBlock = (/@media \(max-width: 600px\) \{[\s\S]*?\n {4}\}\n/.exec(html) || [''])[0];
+    assert.ok(mobileBlock.includes('#install.hero-install'), 'sanity: this is the right mobile hero block');
+    assert.match(mobileBlock, /#hero \.hero-install-row\s*\{\s*gap:\s*0;\s*\}/, 'the row gap must be zeroed at this tier to compensate for the taller CTA link');
+  });
+});
+
 describe('LAUNCH-WAVE-0926: earnings disclaimer (register M-04, amended scope)', () => {
   it('step 03 ("You Earn When Agents Unlock") carries the earnings disclaimer verbatim', () => {
     const stepMatch = html.match(/<h3>You Earn When Agents Unlock<\/h3>\s*<p>([\s\S]*?)<\/p>/);

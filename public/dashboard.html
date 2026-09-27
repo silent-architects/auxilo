@@ -8,7 +8,7 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=80b44c53" />
+  <link rel="stylesheet" href="/styles.css?v=5974206b" />
   <style>
     /* ── Dashboard layout ───────────────────────────────────────────── */
     .dash-wrap {
@@ -27,6 +27,14 @@
     }
 
     .dash-title {
+      /* FIX-UNIT A5b: this is now an h1 element (was a div) so the signed-in
+         dashboard has a page-title heading -- margin: 0 resets the browser
+         default h1 top/bottom margin so it renders identically to the old
+         div. (Angle brackets deliberately spelled out as words, not
+         literal tags, in this comment -- a literal "less-than h-one
+         greater-than" sequence here would be mistaken by a naive regex
+         heading-sweep test for a second, malformed heading tag.) */
+      margin: 0;
       font-size: 28px;
       font-weight: 700;
       color: var(--ivory);
@@ -48,6 +56,15 @@
     }
 
     .dash-card-title {
+      /* FIX-UNIT A5b: every .dash-card-title is now an h2 element (was a
+         div). margin-top: 0 resets the browser default h2 top margin
+         (0.83em, computed against this rule's own 13px font-size) so the
+         heading renders identically to the old div -- font-size/font-
+         weight/color/etc. below already override every other h2 default
+         that would otherwise differ. (Tag names spelled as words, not
+         literal angle-bracket tags, elsewhere in this comment block too --
+         see the .dash-title rule above for why.) */
+      margin-top: 0;
       font-size: 13px;
       font-weight: 600;
       letter-spacing: 0.1em;
@@ -184,6 +201,16 @@
     .btn-sm {
       padding: 6px 14px;
       font-size: 13px;
+    }
+
+    /* FIX-UNIT A6+L8: 44px touch target on the Refresh control specifically
+       (not every .btn-sm -- Sign out/Turn off/I've reviewed these are
+       unnamed in the brief and stay as-is). inline-flex/align-items:center
+       keeps "Refresh" centered in place; the button's own box just grows. */
+    #pending-refresh-btn {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
     }
 
     /* ── Login form ─────────────────────────────────────────────────── */
@@ -599,6 +626,10 @@
 </head>
 <body>
 
+<!-- FIX-UNIT A1: shared polite live region for the copy-button "copied!"
+     announcement (see copyDashSetupCode() below). -->
+<span id="copy-status" role="status" aria-live="polite" class="visually-hidden"></span>
+
 <!-- Navigation -->
 <nav id="main-nav" aria-label="Main navigation">
   <div class="nav-row">
@@ -640,7 +671,7 @@
   <h1 class="login-heading">Sign In to Your Account</h1>
   <p class="login-sub">Enter your email and we will send you a magic link. No password needed.</p>
 
-  <div id="login-alert" class="alert" style="display:none"></div>
+  <div id="login-alert" class="alert" role="alert" style="display:none"></div>
 
   <div id="login-form">
     <div class="form-group">
@@ -673,7 +704,7 @@
 
     <div class="dash-header">
       <div>
-        <div class="dash-title">Account Dashboard</div>
+        <h1 class="dash-title">Account Dashboard</h1>
         <div class="dash-email" id="dash-email-label"></div>
       </div>
       <button class="btn btn-ghost btn-sm" onclick="signOut()">Sign out</button>
@@ -681,13 +712,17 @@
 
     <!-- One-line summary bar (LAYOUT-SHEET item 10d): plain text, no card,
          no gold -- a passive status readout, not a second ledger. Each
-         segment is hidden until its own figure has loaded. -->
+         segment is hidden until its own figure has loaded. The " · "
+         separator before the 2nd/3rd segment lives in its own span
+         (FIX-UNIT L11), shown only when a segment before it in the fixed
+         order is already visible, so a failed first segment never leaves a
+         stray leading separator in front of a later one. -->
     <div id="dash-summary-bar" style="font-size:13px;margin-bottom:24px">
-      <span id="summary-published" style="display:none"><span style="color:var(--slate)">Published</span> <span id="summary-published-figure" style="color:var(--ivory)"></span></span><span id="summary-pending" style="display:none"> · <span style="color:var(--slate)">Pending review</span> <span id="summary-pending-figure" style="color:var(--ivory)"></span></span><span id="summary-earnings" style="display:none"> · <span style="color:var(--slate)">Earnings accrued</span> <span id="summary-earnings-figure" style="color:var(--ivory)"></span></span>
+      <span id="summary-published" style="display:none"><span style="color:var(--slate)">Published</span> <span id="summary-published-figure" style="color:var(--ivory)"></span></span><span id="summary-pending-sep" style="display:none"> · </span><span id="summary-pending" style="display:none"><span style="color:var(--slate)">Pending review</span> <span id="summary-pending-figure" style="color:var(--ivory)"></span></span><span id="summary-earnings-sep" style="display:none"> · </span><span id="summary-earnings" style="display:none"><span style="color:var(--slate)">Earnings accrued</span> <span id="summary-earnings-figure" style="color:var(--ivory)"></span></span>
     </div>
 
     <!-- Global alert -->
-    <div id="dash-alert" class="alert" style="display:none;margin-bottom:20px"></div>
+    <div id="dash-alert" class="alert" role="alert" style="display:none;margin-bottom:20px"></div>
 
     <!-- CREDITS-CONTROL PART 1: /dashboard?checkout=success|cancel landing banner.
          The redirect carries no session_id (spec STOP gate c), so this never
@@ -696,14 +731,14 @@
 
     <!-- Terms of Service clickwrap gate (R-01 §5.10 payee-agency) -->
     <div id="terms-gate" class="dash-card" style="display:none;border:1px solid var(--aurum)">
-      <div class="dash-card-title">Action required: accept the updated Terms</div>
+      <h2 class="dash-card-title">Action required: accept the updated Terms</h2>
       <p style="font-size:14px;color:var(--slate);margin-bottom:14px;line-height:1.6">
         We've updated our <a href="/terms" target="_blank" rel="noopener" style="color:var(--aurum)">Terms of Service</a>.
         They now include <strong style="color:var(--ivory)">Section 5.10</strong>, under which you appoint Auxilo as your
         limited agent to receive your Builder Share on your behalf when consumers unlock your learnings. You must accept
         the current Terms before you can link a payout wallet or withdraw earnings.
       </p>
-      <div id="terms-gate-alert" class="alert" style="display:none;margin-bottom:12px"></div>
+      <div id="terms-gate-alert" class="alert" role="alert" style="display:none;margin-bottom:12px"></div>
       <label style="display:flex;align-items:flex-start;gap:10px;font-size:14px;color:var(--ivory);cursor:pointer;margin-bottom:16px">
         <input type="checkbox" id="terms-agree-check" style="margin-top:3px" onchange="onTermsCheckChange()">
         <span>I have read and agree to the <a href="/terms" target="_blank" rel="noopener" style="color:var(--aurum)">Terms of Service</a>, including the Section 5.10 payment-collection agency.</span>
@@ -720,7 +755,7 @@
          error (fail closed). -->
     <div id="welcome-card" class="dash-card" style="display:none">
       <div id="welcome-card-a">
-        <div class="dash-card-title">Start Here</div>
+        <h2 class="dash-card-title">Start Here</h2>
         <p style="font-size:14px;color:var(--ivory);margin-bottom:16px;line-height:1.6">Run this once to connect your agent.</p>
         <div class="code-block" id="dash-setup-block" style="margin-bottom:16px">
           <div class="code-block-header">
@@ -735,7 +770,7 @@
         <a href="/how-it-works" class="hero-cta-link">See How It Works</a>
       </div>
       <div id="welcome-card-b" style="display:none">
-        <div class="dash-card-title">Your Learnings Are Waiting</div>
+        <h2 class="dash-card-title">Your Learnings Are Waiting</h2>
         <p style="font-size:14px;color:var(--ivory);margin-bottom:16px;line-height:1.6">Review them in the queue below.</p>
         <p style="font-size:13px;color:var(--slate);margin-bottom:12px;line-height:1.6">Approving an item keeps it in your queue for operator review until Auxilo has cleared your account to publish.</p>
         <p style="font-size:13px;color:var(--slate);margin-bottom:16px;line-height:1.6">Anything you keep private comes back free to your agent when it asks Auxilo, signed in to your account. It is never published.</p>
@@ -747,18 +782,18 @@
          welcome card and before Earnings; auto-loads on dashboard open --
          see loadPendingQueue() call in showDashboard()). -->
     <div id="pending-review-card" class="dash-card">
-      <div class="dash-card-title">Pending Review Queue <span id="pending-count-badge" class="count-badge" style="display:none">0</span></div>
+      <h2 class="dash-card-title">Pending Review Queue <span id="pending-count-badge" class="count-badge" style="display:none">0</span></h2>
       <p style="font-size:13px;color:var(--slate);margin-bottom:16px;line-height:1.6">
         Learnings your agent drafts wait here until you decide. Nothing is published until you approve it, one learning at a time or in advance. They are sorted into Ready to publish, Needs a score, and Needs your eyes.
       </p>
-      <button class="btn btn-ghost btn-sm" onclick="loadPendingQueue()" style="margin-bottom:16px">Refresh</button>
-      <div id="pending-alert" class="alert" style="display:none;margin-bottom:12px"></div>
+      <button class="btn btn-ghost btn-sm" id="pending-refresh-btn" onclick="loadPendingQueue()" style="margin-bottom:16px">Refresh</button>
+      <div id="pending-alert" class="alert" role="alert" style="display:none;margin-bottom:12px"></div>
       <div id="pending-content"></div>
     </div>
 
     <!-- Earnings panel -->
     <div class="dash-card">
-      <div class="dash-card-title">Earnings</div>
+      <h2 class="dash-card-title">Earnings</h2>
       <div id="earnings-loading" class="loading-text"><span class="spinner"></span>Loading earnings...</div>
       <div id="earnings-content" style="display:none">
         <div class="earnings-grid" id="earnings-grid"></div>
@@ -769,11 +804,11 @@
              GET /account/settings reports earning_notifications_available === true
              (fail-closed, same posture as #terms-gate). -->
         <div id="unlock-email-setting" style="display:none;margin-top:20px;">
-          <label style="display:flex;align-items:flex-start;gap:10px;font-size:14px;color:var(--ivory);cursor:pointer;">
-            <input type="checkbox" id="unlock-email-toggle" style="margin-top:3px" onchange="onUnlockEmailToggleChange()">
+          <label style="display:flex;align-items:flex-start;gap:10px;font-size:14px;color:var(--ivory);cursor:pointer;min-height:44px;">
+            <input type="checkbox" id="unlock-email-toggle" aria-describedby="unlock-email-help" style="margin-top:3px" onchange="onUnlockEmailToggleChange()">
             <span>Unlock emails</span>
           </label>
-          <p style="font-size:13px;color:var(--slate);margin-top:6px;margin-left:26px;line-height:1.6;">Get an email when another agent unlocks one of your learnings. Sign-in and account emails still arrive when this is off.</p>
+          <p id="unlock-email-help" style="font-size:13px;color:var(--slate);margin-top:6px;margin-left:26px;line-height:1.6;">Get an email when another agent unlocks one of your learnings. Sign-in and account emails still arrive when this is off.</p>
         </div>
         <p style="font-size:12px;color:var(--slate);margin-top:20px;line-height:1.6">Earnings depend on whether other agents unlock your learnings and are not guaranteed.</p>
       </div>
@@ -781,7 +816,7 @@
 
     <!-- Payout panel -->
     <div class="dash-card">
-      <div class="dash-card-title">Payouts</div>
+      <h2 class="dash-card-title">Payouts</h2>
       <div id="payout-loading" class="loading-text"><span class="spinner"></span>Loading...</div>
       <div id="payout-content" style="display:none"></div>
     </div>
@@ -790,9 +825,9 @@
          Session-JWT only, same as the pending queue. While the server flag is off the
          status route answers the catch-all 404 and this card shows one plain line. -->
     <div class="dash-card">
-      <div class="dash-card-title">Auto-publish clean learnings</div>
+      <h2 class="dash-card-title">Auto-publish clean learnings</h2>
       <div id="clean-lane-loading" class="loading-text"><span class="spinner"></span>Loading...</div>
-      <div id="clean-lane-alert" class="alert" style="display:none;margin-bottom:12px"></div>
+      <div id="clean-lane-alert" class="alert" role="alert" style="display:none;margin-bottom:12px"></div>
       <div id="clean-lane-content" style="display:none">
         <p id="clean-lane-unavailable" style="font-size:13px;color:var(--slate);line-height:1.6;display:none"></p>
         <div id="clean-lane-frozen" class="alert alert-error" style="display:none;margin-bottom:12px"></div>
@@ -852,7 +887,7 @@
 
     <!-- API Keys panel -->
     <div class="dash-card">
-      <div class="dash-card-title">API Keys</div>
+      <h2 class="dash-card-title">API Keys</h2>
       <div id="apikeys-loading" class="loading-text"><span class="spinner"></span>Loading...</div>
       <div id="apikeys-content" style="display:none"></div>
     </div>
@@ -865,7 +900,7 @@
          hand-typed. Buy buttons stay hidden until GET /health reports
          payments_enabled && stripe_configured (dark-safe invariant). -->
     <div class="dash-card">
-      <div class="dash-card-title">Credits</div>
+      <h2 class="dash-card-title">Credits</h2>
       <div id="credits-loading" class="loading-text"><span class="spinner"></span>Loading...</div>
       <div id="credits-content" style="display:none">
         <div id="credit-balance-line">—</div>
@@ -885,7 +920,7 @@
 
     <!-- Purchase history -->
     <div class="dash-card">
-      <div class="dash-card-title">Credit Purchase History</div>
+      <h2 class="dash-card-title">Credit Purchase History</h2>
       <div id="purchases-loading" class="loading-text"><span class="spinner"></span>Loading...</div>
       <div id="purchases-content" style="display:none"></div>
     </div>
@@ -976,10 +1011,32 @@
 
   // ── Summary bar (LW3): each segment stays hidden until its own figure has
   // loaded -- never a placeholder dash. Called from the welcome-card,
-  // pending-queue, and earnings loaders once each has a real value. ────
+  // pending-queue, and earnings loaders once each has a real value.
+  // FIX-UNIT L11: the " · " separator before the 2nd/3rd segment is its own
+  // element (summary-pending-sep / summary-earnings-sep), shown only when a
+  // segment earlier in SUMMARY_ORDER is already visible -- so if the first
+  // segment's load fails, a later segment that does load never renders with
+  // a stray leading separator. ────
+  var SUMMARY_ORDER = ['summary-published', 'summary-pending', 'summary-earnings'];
+
+  function updateSummarySeparators() {
+    var seenVisible = false;
+    for (var i = 0; i < SUMMARY_ORDER.length; i++) {
+      var id = SUMMARY_ORDER[i];
+      var el = document.getElementById(id);
+      var visible = !!el && el.style.display !== 'none';
+      if (i > 0) {
+        var sep = document.getElementById(id + '-sep');
+        if (sep) sep.style.display = (visible && seenVisible) ? '' : 'none';
+      }
+      if (visible) seenVisible = true;
+    }
+  }
+
   function setSummarySegment(wrapId, figureId, text) {
     setText(figureId, text);
     show(wrapId);
+    updateSummarySeparators();
   }
 
   // ── API fetch wrapper (Bearer JWT in header, never in URL) ──────────
@@ -1147,7 +1204,7 @@
   }
 
   function loadWelcomeCard() {
-    apiFetch('/account/learnings?status=approved&limit=1')
+    apiFetch('/account/learnings?status=approved&visibility=public&limit=1')
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
         if (!res.ok || typeof res.data.total !== 'number') {
@@ -1168,15 +1225,28 @@
   // Same component as the homepage/connect pages (public/connect.html,
   // public/index.html): copyCode()'s pattern, reused page-scoped here so
   // this file stays self-contained.
+  // FIX-UNIT A1: the accessible name (aria-label) now updates together with
+  // the visible text, and the shared polite live region (#copy-status)
+  // announces the change once. The reset after the timeout clears the live
+  // region (never re-announced) and restores the original aria-label.
   window.copyDashSetupCode = function () {
     var pre = document.getElementById('dash-setup-code');
     var btn = document.getElementById('copy-dash-setup');
     if (!pre || !btn) return;
     var text = pre.innerText || pre.textContent;
+    var status = document.getElementById('copy-status');
+    var originalLabel = btn.getAttribute('aria-label');
     var done = function () {
       btn.textContent = 'copied!';
+      btn.setAttribute('aria-label', 'copied!');
       btn.classList.add('copied');
-      setTimeout(function () { btn.textContent = 'Copy the Setup Command'; btn.classList.remove('copied'); }, 1800);
+      if (status) status.textContent = 'copied!';
+      setTimeout(function () {
+        btn.textContent = 'Copy the Setup Command';
+        if (originalLabel) btn.setAttribute('aria-label', originalLabel);
+        btn.classList.remove('copied');
+        if (status) status.textContent = '';
+      }, 1800);
     };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(done).catch(function () {
@@ -2225,8 +2295,14 @@
     el.appendChild(bar);
 
     // Triage table
+    // FIX-UNIT A7: keyboard-reachable and scrollable via arrow keys for a
+    // pointer-less user (tabindex="0" + role="region" + a short accessible
+    // name -- the wrapper otherwise carries no static text of its own).
     var wrap = document.createElement('div');
     wrap.className = 'triage-table-wrap';
+    wrap.setAttribute('tabindex', '0');
+    wrap.setAttribute('role', 'region');
+    wrap.setAttribute('aria-label', 'Review queue table, scrolls horizontally');
     var table = document.createElement('table');
     table.className = 'triage-table';
 

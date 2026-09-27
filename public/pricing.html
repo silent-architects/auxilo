@@ -29,7 +29,7 @@
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono500.0ecb6352.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=80b44c53" />
+  <link rel="stylesheet" href="/styles.css?v=5974206b" />
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: Organization + Product + FAQPage -->
@@ -475,12 +475,12 @@
     @media (max-width: 600px) {
       .economics-grid { grid-template-columns: 1fr; }
     }
-    /* .pricing-hero-stats: LAYOUT-SHEET 2026-09-26 item 5 removed the
-       margin-left/right: auto centering this rule used to force on the
-       grid (as a counter to the header's then-ambient text-align:center)
-       -- now that .pricing-page-header is left-aligned, those auto
-       side-margins would strand this grid centered on its own against a
-       left-aligned h1. text-align: left is a no-op now but harmless. */
+    /* FIX-UNIT L10: the base .pricing-hero-stats rule this comment used to
+       describe (margin-left/right: auto centering the grid against the
+       header's then-ambient text-align:center) was removed outright under
+       LAYOUT-SHEET 2026-09-26 item 5, once .pricing-page-header became
+       left-aligned and the counter-centering was no longer needed. Only
+       the narrow-width max-width override below remains. */
     @media (max-width: 600px) {
       .pricing-hero-stats { max-width: 320px; }
     }

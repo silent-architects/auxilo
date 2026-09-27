@@ -29,7 +29,7 @@
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono500.0ecb6352.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=80b44c53" />
+  <link rel="stylesheet" href="/styles.css?v=5974206b" />
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: Organization + FAQPage -->
@@ -439,6 +439,14 @@
        tier the other components on this page use. */
     @media (max-width: 1099px) {
       .flow-track { grid-template-columns: repeat(3, 1fr); }
+      /* FIX-UNIT L9: at 3 columns, row 2 holds only steps 04-05, leaving an
+         empty tinted 6th cell (REVIEW-CODE-SECURITY.md L9,
+         flow-track-1000.png). Step 05 spans the row's last two columns so
+         the row is filled -- reverses the addendum's original "no spanning
+         trick" call for this specific defect. Reset back to grid-column:
+         auto in the <=600px single-column block below, so it never spans
+         beyond the one column that exists there. */
+      .flow-step:last-child { grid-column: span 2; }
     }
     @media (max-width: 900px) {
       .auth-compare-grid { grid-template-columns: 1fr; }
@@ -472,6 +480,7 @@
     }
     @media (max-width: 600px) {
       .flow-track { grid-template-columns: 1fr; }
+      .flow-step:last-child { grid-column: auto; }
       /* AD sheet 9: --hero-pad-mobile replaces the hardcoded pair. */
       .page-hero { padding: var(--hero-pad-mobile); }
       .page-hero-ctas { flex-direction: column; }
@@ -498,6 +507,9 @@
 </head>
 <body>
 <a href="#main" class="skip-to-content">Skip to content</a>
+<!-- FIX-UNIT A1: shared polite live region for the copy-button "copied!"
+     announcement (see copyCode() below). -->
+<span id="copy-status" role="status" aria-live="polite" class="visually-hidden"></span>
 
 <!-- ━━━ Navigation ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <nav id="main-nav" aria-label="Main navigation">
@@ -948,16 +960,32 @@ curl -X GET \
 <!-- ━━━ JS: copy-to-clipboard + hamburger ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <script>
   // Copy-to-clipboard
+  // FIX-UNIT A1: the accessible name (aria-label) now updates together with
+  // the visible text, and a shared polite live region (#copy-status)
+  // announces the change once. The reset after the timeout clears the live
+  // region (never re-announced) and restores the original aria-label. The
+  // success handling (previously duplicated identically in .then() and
+  // .catch()) is now one shared `done` closure.
   function copyCode(preId, btnId) {
     const pre = document.getElementById(preId);
     const btn = document.getElementById(btnId);
     if (!pre || !btn) return;
     const text = pre.innerText || pre.textContent;
-    navigator.clipboard.writeText(text).then(() => {
+    const status = document.getElementById('copy-status');
+    const originalLabel = btn.getAttribute('aria-label');
+    const done = () => {
       btn.textContent = 'copied!';
+      btn.setAttribute('aria-label', 'copied!');
       btn.classList.add('copied');
-      setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 1800);
-    }).catch(() => {
+      if (status) status.textContent = 'copied!';
+      setTimeout(() => {
+        btn.textContent = 'copy';
+        if (originalLabel) btn.setAttribute('aria-label', originalLabel);
+        btn.classList.remove('copied');
+        if (status) status.textContent = '';
+      }, 1800);
+    };
+    navigator.clipboard.writeText(text).then(done).catch(() => {
       const ta = document.createElement('textarea');
       ta.value = text;
       ta.style.position = 'absolute'; ta.style.left = '-9999px';
@@ -965,9 +993,7 @@ curl -X GET \
       ta.select();
       document.execCommand('copy');
       document.body.removeChild(ta);
-      btn.textContent = 'copied!';
-      btn.classList.add('copied');
-      setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 1800);
+      done();
     });
   }
 

@@ -29,7 +29,7 @@
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono500.0ecb6352.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=80b44c53" />
+  <link rel="stylesheet" href="/styles.css?v=5974206b" />
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: FAQPage -->
@@ -443,6 +443,9 @@
 </head>
 <body>
 <a href="#main" class="skip-to-content">Skip to content</a>
+<!-- FIX-UNIT A1: shared polite live region for the copy-button "copied!"
+     announcement (see copyCode() below). -->
+<span id="copy-status" role="status" aria-live="polite" class="visually-hidden"></span>
 
 <!-- ━━━ Navigation ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <nav id="main-nav" aria-label="Main navigation">
@@ -849,16 +852,32 @@ curl -X POST \
 <!-- ━━━ JS: copy-to-clipboard, email form, hamburger nav ━━━━━━━━━━━━━━━━━━━━ -->
 <script>
   // Copy-to-clipboard
+  // FIX-UNIT A1: the accessible name (aria-label) now updates together with
+  // the visible text, and a shared polite live region (#copy-status)
+  // announces the change once. The reset after the timeout clears the live
+  // region (never re-announced) and restores the original aria-label. The
+  // success handling (previously duplicated identically in .then() and
+  // .catch()) is now one shared `done` closure.
   function copyCode(preId, btnId) {
     const pre = document.getElementById(preId);
     const btn = document.getElementById(btnId);
     if (!pre || !btn) return;
     const text = pre.innerText || pre.textContent;
-    navigator.clipboard.writeText(text).then(() => {
+    const status = document.getElementById('copy-status');
+    const originalLabel = btn.getAttribute('aria-label');
+    const done = () => {
       btn.textContent = 'copied!';
+      btn.setAttribute('aria-label', 'copied!');
       btn.classList.add('copied');
-      setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 1800);
-    }).catch(() => {
+      if (status) status.textContent = 'copied!';
+      setTimeout(() => {
+        btn.textContent = 'copy';
+        if (originalLabel) btn.setAttribute('aria-label', originalLabel);
+        btn.classList.remove('copied');
+        if (status) status.textContent = '';
+      }, 1800);
+    };
+    navigator.clipboard.writeText(text).then(done).catch(() => {
       // Fallback
       const ta = document.createElement('textarea');
       ta.value = text;
@@ -867,9 +886,7 @@ curl -X POST \
       ta.select();
       document.execCommand('copy');
       document.body.removeChild(ta);
-      btn.textContent = 'copied!';
-      btn.classList.add('copied');
-      setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 1800);
+      done();
     });
   }
 
