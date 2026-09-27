@@ -1588,7 +1588,7 @@ const { loadCredits } = require('./lib/credits.js'); // AC-2: referee novelty ch
 // shortfall hold), and the dollar-lot ledger operations + refund/dispute
 // support.
 const { checkBalanceCap, checkDailyCap } = require('./lib/credit-caps.js');
-const { isAccountHeld, holdAccount, getAccountHold, clearAccountHold } = require('./lib/account-holds.js');
+const { isAccountHeld, holdAccount, getAccountHold, clearAccountHold, appendHoldClearLog } = require('./lib/account-holds.js');
 const {
     addDollarLot,
     refundDollarDraw,
@@ -1616,7 +1616,7 @@ const { reverseLotFunding: reverseCreditLotFunding } = require('./lib/earnings-r
 const { shouldCountAndRecord: shouldCountUnlockForRanking, unrecord: unrecordUnlockCounterGate } = require('./lib/unlock-counter-gate.js');
 // M3: each Checkout session is recorded when created so the caps can count
 // unpaid, unexpired sessions, not only completed purchases.
-const { recordPendingSession, clearPendingSession } = require('./lib/checkout-sessions.js');
+const { acquireCheckoutLock, reservePendingSession, promoteReservation, clearPendingSession } = require('./lib/checkout-sessions.js');
 // P2.1a: extractLearnings import moved to line 22 (with sanitizeLearningBody, scoreLearning, VALID_CATEGORIES)
 const { processMemoryFiles, DEFAULT_ADAPTER_CONFIG } = require('./lib/openclaw-adapter.js');
 
@@ -4729,24 +4729,42 @@ app.post('/checkout/session', requireAuth, async (c) => {
 
     // The $2,000 balance cap and the $2,000 daily purchase cap, checked
     // BEFORE any Stripe call — a legal ceiling on prepaid stored value.
+    //
+    // M3 residual: both checks, and the reservation that makes a passing
+    // check STICK, run together under a per-account lock. Checking the caps
+    // and only afterward recording anything left a gap parallel requests
+    // could all run through: each one's check would pass before any of them
+    // had recorded a thing. The lock closes that gap -- a placeholder
+    // reservation (a local id, the amount, the time) is recorded here,
+    // BEFORE the Stripe call below, so a second request's check (waiting on
+    // the same lock) always sees it. It is replaced with the real session on
+    // success, or deleted on any failure, outside the lock (never held
+    // across the Stripe network round trip).
     const packPrice = PACKS[pack].price_usd;
-    const balanceCheck = checkBalanceCap(accountId, packPrice);
-    if (!balanceCheck.ok) {
-        return c.json({
-            error: `This purchase would push your account's stored value to $${balanceCheck.projected.toFixed(2)}, above the $${balanceCheck.limit.toFixed(2)} balance cap. Current balance: $${balanceCheck.current.toFixed(2)}.`,
-            code: 'BALANCE_CAP_EXCEEDED',
-            current_usd: balanceCheck.current,
-            limit_usd: balanceCheck.limit,
-        }, 400);
-    }
-    const dailyCheck = checkDailyCap(accountId, packPrice);
-    if (!dailyCheck.ok) {
-        return c.json({
-            error: `This purchase would push your purchases in the last 24 hours to $${dailyCheck.projected.toFixed(2)}, above the $${dailyCheck.limit.toFixed(2)} daily purchase cap. Purchased in the last 24 hours: $${dailyCheck.current.toFixed(2)}.`,
-            code: 'DAILY_PURCHASE_CAP_EXCEEDED',
-            current_usd: dailyCheck.current,
-            limit_usd: dailyCheck.limit,
-        }, 400);
+    const releaseCheckoutLock = await acquireCheckoutLock(accountId);
+    let reservationId = null;
+    try {
+        const balanceCheck = checkBalanceCap(accountId, packPrice);
+        if (!balanceCheck.ok) {
+            return c.json({
+                error: `This purchase would push your account's stored value to $${balanceCheck.projected.toFixed(2)}, above the $${balanceCheck.limit.toFixed(2)} balance cap. Current balance: $${balanceCheck.current.toFixed(2)}.`,
+                code: 'BALANCE_CAP_EXCEEDED',
+                current_usd: balanceCheck.current,
+                limit_usd: balanceCheck.limit,
+            }, 400);
+        }
+        const dailyCheck = checkDailyCap(accountId, packPrice);
+        if (!dailyCheck.ok) {
+            return c.json({
+                error: `This purchase would push your purchases in the last 24 hours to $${dailyCheck.projected.toFixed(2)}, above the $${dailyCheck.limit.toFixed(2)} daily purchase cap. Purchased in the last 24 hours: $${dailyCheck.current.toFixed(2)}.`,
+                code: 'DAILY_PURCHASE_CAP_EXCEEDED',
+                current_usd: dailyCheck.current,
+                limit_usd: dailyCheck.limit,
+            }, 400);
+        }
+        reservationId = reservePendingSession(accountId, packPrice);
+    } finally {
+        releaseCheckoutLock();
     }
 
     // CREDITS-CONFIG-USABLE: the dark-safe invariant is "usable", not
@@ -4758,6 +4776,7 @@ app.post('/checkout/session', requireAuth, async (c) => {
     notifyStripeCheckoutAttempt();
     const stripeStatus = getStripeStatus();
     if (!stripeStatus.configured) {
+        clearPendingSession(reservationId); // M3: delete the reservation on this failure
         return c.json({
             error: 'Payment system unavailable',
             code: 'stripe_unusable',
@@ -4769,13 +4788,13 @@ app.post('/checkout/session', requireAuth, async (c) => {
 
     try {
         const session = await createCheckoutSession(accountId, pack, baseUrl);
-        // M3: record this session (id, amount, created time) so both
-        // purchase caps count it while it is open and unpaid -- opening
-        // several sessions while under the cap must not let their combined
-        // payment cross it later.
-        recordPendingSession(session.session_id, accountId, packPrice);
-        return c.json(session);
+        // M3/N2: replace the placeholder with the real session, counted from
+        // here on under the expiry Stripe itself confirmed for it (not the
+        // reservation's own short bound, and not a fixed local window).
+        promoteReservation(reservationId, session.session_id, accountId, packPrice, session.expires_at);
+        return c.json({ url: session.url, session_id: session.session_id });
     } catch (err) {
+        clearPendingSession(reservationId); // M3: delete the reservation on this failure
         console.error('[stripe] Checkout session error:', err.message);
         if (err.message === 'Stripe not configured') {
             return c.json({ error: 'Payment system unavailable', code: 'stripe_unusable', reason: 'not-configured' }, 503);
@@ -9493,8 +9512,21 @@ app.get('/knowledge/:id', async (c) => {
   // money. Short-circuited: the 30-day gate is only consulted, and only
   // records a new count, when the unlock would otherwise be credited.
   const drewPaidDollars = accrualBasis > 0;
-  const countersCredited = !isSelfUnlock && drewPaidDollars
-    && shouldCountUnlockForRanking(buyerAccountId, id);
+  // N4: this gate's own file write can throw (a full volume, a permissions
+  // change, a read-only mount) -- and by this point the buyer has already
+  // been charged (the debit inside dualAuthDynamic, above, before this
+  // line). The counter gate can never fail an unlock: on any failure here,
+  // simply do not count this one toward ranking/demand, log it once, and
+  // let delivery carry on as if the 30-day window had not yet counted it.
+  let countersCredited = false;
+  if (!isSelfUnlock && drewPaidDollars) {
+    try {
+      countersCredited = shouldCountUnlockForRanking(buyerAccountId, id);
+    } catch (gateErr) {
+      console.error('[unlock-counter-gate] write failed -- not counting this unlock toward ranking/demand (non-fatal):', gateErr && gateErr.message);
+      countersCredited = false;
+    }
+  }
 
   // AUD19-10: compensation state. The buyer's balance was already debited
   // inside dualAuthDynamic; every mutation from here to the response is
@@ -9777,13 +9809,14 @@ app.get('/knowledge/:id', async (c) => {
         platform_amount: platformEarned,
         ts: activeEntry.last_updated,
       });
-      // M2: a refund or lost dispute can land in the narrow window between
-      // the debit (already drawn, above) and this call recording the
-      // funding history -- recordLotFunding detects that (the lot is
-      // stamped `removed_at`) and hands back the entry marked
-      // pending_reversal instead of quietly recording it. Reverse it on
-      // the spot, under the SAME earnings lock a withdrawal would take
-      // (ruling M8), then finalize it durably (ruling L6) per affected lot.
+      // M2/N1: a refund or lost/partial dispute can land in the narrow
+      // window between the debit (already drawn, above) and this call
+      // recording the funding history -- recordLotFunding detects that (the
+      // lot still carries an uncovered amount) and hands back this share
+      // marked pending_reversal, reversed only up to that amount, instead of
+      // quietly recording it. Reverse it on the spot, under the SAME
+      // earnings lock a withdrawal would take (ruling M8), then finalize it
+      // durably (ruling L6) per affected lot.
       if (fundResult && fundResult.needsReversal && fundResult.needsReversal.length > 0) {
         const { totalReversed } = await reverseCreditLotFunding(earnings, fundResult.needsReversal);
         if (totalReversed > 0) safeWrite(EARNINGS_FILE, earnings);
@@ -10009,8 +10042,11 @@ app.get('/knowledge/:id', async (c) => {
     //    from (ruling M1) -- `creditDollarDraws` is the exact draws array
     //    debitDollarLots returned for this debit, the same one recorded
     //    (now, after commitWal — see above) as this unlock's funding
-    //    history. Any draw whose lot a refund has since removed is skipped
-    //    (refundDollarDraw's own guard) -- that money already left Auxilo.
+    //    history. Ruling N1: any part of a lot's uncovered amount (money a
+    //    refund's excess already reached past, before this draw had a
+    //    funding record to reverse) is paid down first, out of what this
+    //    restore would otherwise hand back — only what is left over reaches
+    //    the buyer's spendable balance (refundDollarDraw's own guard).
     try {
       await refundDollarDraw(buyerAccountId, c.get('creditDollarDraws') || []);
       console.error(`[AUD19-10] credit refunded to ${buyerAccountId} for failed unlock of ${id}`);
@@ -11203,11 +11239,17 @@ app.post('/admin/account-holds/:accountId/clear', adminAuth('admin'), async (c) 
     return c.json({ error: 'Failed to clear hold' }, 500);
   }
   const clearedAt = new Date().toISOString();
+  const adminScope = c.get('adminScope') || 'admin';
   sendOpsAlert(
     'Account hold cleared (admin)',
-    `account=${accountId} reason=${hold.reason} held_at=${hold.held_at} cleared_at=${clearedAt} scope=${c.get('adminScope') || 'admin'}`,
+    `account=${accountId} reason=${hold.reason} held_at=${hold.held_at} cleared_at=${clearedAt} scope=${adminScope}`,
     { category: 'credits-hold-cleared' }
   ).catch(() => {});
+  // N9: the alert above is rate-limited (at most one per 5 minutes per
+  // category) and a no-op when alerting is unconfigured, so it is not on
+  // its own a durable record of who cleared this hold and when. Append a
+  // line to the durable log every time, regardless of the alert.
+  appendHoldClearLog({ accountId, reason: hold.reason, clearedAt, adminScope });
   return c.json({
     cleared: true,
     account_id: accountId,

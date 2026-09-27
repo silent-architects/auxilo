@@ -117,6 +117,24 @@ function signedWebhookEvent(payloadObj) {
 
 function writeJson(file, value) { fs.writeFileSync(file, JSON.stringify(value, null, 2)); }
 
+// Reads checkout-sessions.json straight off disk (the same file
+// lib/checkout-sessions.js reads/writes) and sums amount_usd for one
+// account's unexpired entries -- used to prove nothing is left dangling
+// after a burst of requests all resolve.
+function checkoutSessionsTotalFor(dataDir, accountId) {
+  const file = path.join(dataDir, 'checkout-sessions.json');
+  if (!fs.existsSync(file)) return 0;
+  const state = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const now = Date.now();
+  let total = 0;
+  for (const s of Object.values(state)) {
+    if (!s || s.account_id !== accountId) continue;
+    if (typeof s.expires_at === 'number' && now >= s.expires_at) continue;
+    total += s.amount_usd || 0;
+  }
+  return Math.round((total + Number.EPSILON) * 1e6) / 1e6;
+}
+
 async function postJson(url, body, headers = {}) {
   const res = await fetch(url, {
     method: 'POST',
@@ -432,12 +450,13 @@ describe('FIX-UNIT-MONEY ruling L10: webhook branches + second cap check, ruling
     const token = await new SignJWT({ accountId: sessAccount, email: accounts[sessAccount].email })
       .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('24h').sign(Buffer.from(SESSION_SECRET));
 
-    // Seed 19 unpaid, unexpired $100 sessions directly (what recordPendingSession
-    // would have written the moment each Checkout session was created) --
-    // $1,900 pending, none of it a real dollar lot yet.
+    // Seed 19 unpaid, unexpired $100 sessions directly (what reservePendingSession
+    // / promoteReservation would have written the moment each Checkout
+    // session was created or confirmed -- ruling N2's own expires_at, not a
+    // fixed window) -- $1,900 pending, none of it a real dollar lot yet.
     const sessions = {};
     for (let i = 0; i < 19; i++) {
-      sessions[`cs_fum_pending_${i}`] = { account_id: sessAccount, amount_usd: 100, created_at: Date.now() };
+      sessions[`cs_fum_pending_${i}`] = { account_id: sessAccount, amount_usd: 100, created_at: Date.now(), expires_at: Date.now() + 35 * 60 * 1000 };
     }
     writeJson(path.join(dataDir, 'checkout-sessions.json'), sessions);
 
@@ -446,11 +465,13 @@ describe('FIX-UNIT-MONEY ruling L10: webhook branches + second cap check, ruling
     const atCap = await postJson(`${baseUrl}/checkout/session`, { pack: 'pro' }, { Authorization: `Bearer ${token}` });
     // This will proceed to the Stripe-usability check next (Stripe is
     // deliberately unconfigured in this boot) and 503 there -- proving the
-    // cap check itself did NOT refuse it.
+    // cap check itself did NOT refuse it. Ruling M3: the reservation this
+    // request placed before that 503 is deleted on the failure, so it does
+    // not linger and double-count.
     assert.notEqual(atCap.status, 400, 'exactly at the cap must not be refused by the cap check');
 
     // One more pending session pushes it over -- refused BEFORE any Stripe call.
-    sessions.cs_fum_pending_19 = { account_id: sessAccount, amount_usd: 100, created_at: Date.now() };
+    sessions.cs_fum_pending_19 = { account_id: sessAccount, amount_usd: 100, created_at: Date.now(), expires_at: Date.now() + 35 * 60 * 1000 };
     writeJson(path.join(dataDir, 'checkout-sessions.json'), sessions);
     const overCap = await postJson(`${baseUrl}/checkout/session`, { pack: 'starter' }, { Authorization: `Bearer ${token}` });
     assert.equal(overCap.status, 400);
@@ -496,11 +517,109 @@ describe('FIX-UNIT-MONEY ruling L10: webhook branches + second cap check, ruling
     const holds = JSON.parse(fs.readFileSync(path.join(dataDir, 'account-holds.json'), 'utf8'));
     assert.equal(holdAccount in holds, false);
 
+    // ruling N9: the durable log gets a line too, not just the (rate-limited,
+    // possibly-unconfigured) ops alert.
+    const logPath = path.join(dataDir, 'hold-clear-log.jsonl');
+    assert.ok(fs.existsSync(logPath), 'the hold-clear log is created on first use');
+    const logRows = fs.readFileSync(logPath, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+    const ourRow = logRows.find((r) => r.account_id === holdAccount);
+    assert.ok(ourRow, 'a durable row exists for this clear');
+    assert.equal(ourRow.reason, 'cap_overage');
+    assert.equal(ourRow.admin_scope, 'admin');
+    assert.ok(ourRow.cleared_at, 'the time is recorded');
+
     // A second clear on an already-cleared account finds nothing.
     const secondClear = await fetch(`${baseUrl}/admin/account-holds/${holdAccount}/clear`, {
       method: 'POST',
       headers: { Authorization: 'Bearer fum-admin-test-token-0000000000000000' },
     });
     assert.equal(secondClear.status, 404);
+  });
+
+  // ── ruling M3: real concurrent requests exercise the SAME route order,
+  // reservation included -- see the note below on why the pass/refuse split
+  // itself is proved at the lib level, not by asserting on HTTP status here ──
+
+  it('[ruling M3] 50 REAL parallel POST /checkout/session requests each reserve or refuse under the SAME per-account lock the route uses, never crossing the cap', async (t) => {
+    if (liveSkipReason) { t.skip(liveSkipReason); return; }
+    // NOTE on method: this staged boot deliberately keeps Stripe unusable
+    // (malformed key, ruling: no live probe, no network) so every request
+    // that PASSES the cap check clears its own reservation again on the
+    // very next line (the stripe_unusable 503 arm), all synchronously, with
+    // no real await gap the way a genuine Stripe round trip would leave.
+    // That collapses the race window this ruling closes back down to
+    // nothing observable over HTTP -- the reservation is created and
+    // cleared before a second concurrent request's continuation ever gets
+    // a turn, which is a property of THIS test harness (no live Stripe),
+    // not of the fix. The genuine 50-parallel/20-accepted proof therefore
+    // lives in test/fix-unit-money-2.test.js ("[ruling M3] acquireCheckoutLock
+    // serializes..."), calling the exact same acquireCheckoutLock /
+    // reservePendingSession / getPendingSessionsTotalUsd the route calls,
+    // with no clear-immediately step to erase the window. What THIS test
+    // proves instead, through the real route: firing 50 requests at once
+    // never leaves the pending-sessions ledger in a state that reports MORE
+    // than the $2,000 cap was ever counted for a single request, and every
+    // response is one of exactly the two documented outcomes.
+    const parAccount = 'acc_fum_par_' + crypto.randomBytes(4).toString('hex');
+    const accounts = JSON.parse(fs.readFileSync(path.join(dataDir, 'accounts.json'), 'utf8'));
+    accounts[parAccount] = {
+      id: parAccount, email: `${parAccount}@test.local`, created_at: FIXED_AT,
+      tos_version: CURRENT_TOS_VERSION, accepted_at: Date.now(), accepted_affirmed: true,
+    };
+    writeJson(path.join(dataDir, 'accounts.json'), accounts);
+    const token = await new SignJWT({ accountId: parAccount, email: accounts[parAccount].email })
+      .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('24h').sign(Buffer.from(SESSION_SECRET));
+
+    const results = await Promise.all(Array.from({ length: 50 }, () =>
+      postJson(`${baseUrl}/checkout/session`, { pack: 'pro' }, { Authorization: `Bearer ${token}` })));
+    for (const r of results) {
+      const isCapRefusal = r.status === 400 && r.body && r.body.code === 'BALANCE_CAP_EXCEEDED';
+      const isStripeUnusable = r.status === 503 && r.body && r.body.code === 'stripe_unusable';
+      assert.ok(isCapRefusal || isStripeUnusable, `every response is one of the two documented outcomes, got ${r.status} ${JSON.stringify(r.body)}`);
+      if (isCapRefusal) assert.ok(r.body.current_usd <= 2000, 'a refusal never reports counting past the cap for this single check');
+    }
+    // No reservation is left dangling on the account once every request has
+    // resolved (every path -- accepted-then-503, or refused outright --
+    // ends with nothing counted for this account).
+    assert.equal(checkoutSessionsTotalFor(dataDir, parAccount), 0);
+  });
+
+  // ── ruling N7: a corrupt checkout-sessions.json refuses a NEW purchase, never a purchase already paid ──
+
+  it('[ruling N7] a corrupt checkout-sessions.json refuses the pre-check on a new purchase, but never touches money already credited', async (t) => {
+    if (liveSkipReason) { t.skip(liveSkipReason); return; }
+    const n7Account = 'acc_fum_n7_' + crypto.randomBytes(4).toString('hex');
+    const accounts = JSON.parse(fs.readFileSync(path.join(dataDir, 'accounts.json'), 'utf8'));
+    accounts[n7Account] = {
+      id: n7Account, email: `${n7Account}@test.local`, created_at: FIXED_AT,
+      tos_version: CURRENT_TOS_VERSION, accepted_at: Date.now(), accepted_affirmed: true,
+    };
+    writeJson(path.join(dataDir, 'accounts.json'), accounts);
+    const token = await new SignJWT({ accountId: n7Account, email: accounts[n7Account].email })
+      .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('24h').sign(Buffer.from(SESSION_SECRET));
+
+    // A real purchase, paid and credited BEFORE the file is corrupted.
+    const paidRes = await postWebhook(baseUrl, {
+      id: 'evt_fum_n7', type: 'checkout.session.completed',
+      data: { object: { id: 'cs_fum_n7', payment_intent: 'pi_fum_n7', metadata: { account_id: n7Account, pack_id: 'starter' } } },
+    });
+    assert.equal(paidRes.status, 200, paidRes.text);
+    assert.equal(paidRes.body.processed, true);
+
+    const sessionsFile = path.join(dataDir, 'checkout-sessions.json');
+    const goodSessions = fs.existsSync(sessionsFile) ? fs.readFileSync(sessionsFile, 'utf8') : '{}';
+    fs.writeFileSync(sessionsFile, '{ not valid json');
+    t.after(() => { fs.writeFileSync(sessionsFile, goodSessions); });
+
+    // A NEW purchase is refused -- it never reaches Stripe.
+    const newPurchase = await postJson(`${baseUrl}/checkout/session`, { pack: 'starter' }, { Authorization: `Bearer ${token}` });
+    assert.equal(newPurchase.status, 500, 'the corrupt file refuses the pre-check rather than silently reading as no pending sessions');
+
+    // The purchase already paid is untouched -- the balance the webhook
+    // credited before the corruption is exactly what /account/credits still
+    // reports (a route that never reads checkout-sessions.json at all).
+    const balance = await getJson(`${baseUrl}/account/credits`, { Authorization: `Bearer ${token}` });
+    assert.equal(balance.status, 200, balance.text);
+    assert.equal(balance.body.credit_balance.total_usd, 10, 'the already-paid $10 pack is untouched');
   });
 });

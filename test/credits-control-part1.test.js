@@ -124,7 +124,9 @@ describe('T3 createCheckoutSession: fake-Stripe call-args assertions', () => {
           sessions: {
             create: async (args) => {
               capturedArgs = args;
-              return { id: 'cs_test_fake123', url: 'https://checkout.stripe.test/fake123' };
+              // N2: Stripe's own confirmed expiry, echoed back exactly as
+              // real Stripe would (seconds since epoch).
+              return { id: 'cs_test_fake123', url: 'https://checkout.stripe.test/fake123', expires_at: Math.floor(Date.now() / 1000) + 35 * 60 };
             },
           },
         };
@@ -147,15 +149,16 @@ describe('T3 createCheckoutSession: fake-Stripe call-args assertions', () => {
     }
   });
 
-  it('createCheckoutSession({pack: "starter"}) resolves {url, session_id} unchanged shape (spec test 2)', async () => {
+  it('createCheckoutSession({pack: "starter"}) resolves {url, session_id, expires_at} (spec test 2; ruling N2 adds expires_at)', async () => {
     const priorKey = process.env.STRIPE_SECRET_KEY;
     process.env.STRIPE_SECRET_KEY = 'sk_test_fake_for_this_suite_only';
     try {
       const stripeLib = require('../lib/stripe.js');
       const result = await stripeLib.createCheckoutSession('acc_test_ccp1', 'starter', 'https://auxilo.test');
-      assert.deepEqual(Object.keys(result).sort(), ['session_id', 'url'].sort());
+      assert.deepEqual(Object.keys(result).sort(), ['expires_at', 'session_id', 'url'].sort());
       assert.equal(result.url, 'https://checkout.stripe.test/fake123');
       assert.equal(result.session_id, 'cs_test_fake123');
+      assert.equal(typeof result.expires_at, 'number', 'ruling N2: the caller counts a pending session against the caps until Stripe\'s OWN confirmed expiry, not a fixed local window');
     } finally {
       if (priorKey === undefined) delete process.env.STRIPE_SECRET_KEY;
       else process.env.STRIPE_SECRET_KEY = priorKey;
@@ -257,8 +260,14 @@ describe('T7 /checkout/session: current-Terms-acceptance gate', () => {
   // validation and Stripe-usability/session-creation. The markers, the
   // ordering asserted, and the terms-gate/stripe-usability assertions are
   // all unchanged.
+  //
+  // FIX-UNIT-MONEY-2 M3/N2 (2026-09-27): widened again, to 7000 — the two
+  // cap checks and the reservation that makes a passing check stick now run
+  // under a per-account lock (ruling M3), adding code between pack
+  // validation and the Stripe-usability check without moving any of the
+  // markers below.
   it('gates on hasAcceptedCurrentTos before pack validation / session creation, after paymentsEnabled', () => {
-    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 5200);
+    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 7000);
     const paymentsIdx = h.indexOf('if (!paymentsEnabled())');
     const termsIdx = h.indexOf('if (!hasAcceptedCurrentTos(checkoutAccount))');
     const packIdx = h.indexOf('const { pack } = body');
@@ -271,7 +280,7 @@ describe('T7 /checkout/session: current-Terms-acceptance gate', () => {
     assert.ok(h.includes('return termsNotAcceptedResponse(c);'));
   });
   it('gates on Stripe usability (CREDITS-CONFIG-USABLE) after pack validation, before session creation', () => {
-    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 5200);
+    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 7000);
     const packIdx = h.indexOf('const { pack } = body');
     const stripeIdx = h.indexOf('if (!stripeStatus.configured)');
     const createIdx = h.indexOf('createCheckoutSession(');
@@ -300,7 +309,7 @@ describe('T7 /checkout/session: current-Terms-acceptance gate', () => {
   // stay as a fast source-level regression guard for where the checks sit
   // relative to each other, not as the only proof they work.
   it('checks the balance cap and the daily purchase cap after pack validation, before Stripe usability [AUD-CAC]', () => {
-    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 5200);
+    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 7000);
     const packIdx = h.indexOf('const { pack } = body');
     const balanceIdx = h.indexOf('checkBalanceCap(accountId, packPrice)');
     const dailyIdx = h.indexOf('checkDailyCap(accountId, packPrice)');
@@ -313,7 +322,7 @@ describe('T7 /checkout/session: current-Terms-acceptance gate', () => {
     assert.ok(h.includes("code: 'DAILY_PURCHASE_CAP_EXCEEDED',"));
   });
   it('refuses a held account before pack validation, with a 403 and code ACCOUNT_HELD [AUD-CAC]', () => {
-    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 5200);
+    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 7000);
     const termsIdx = h.indexOf('if (!hasAcceptedCurrentTos(checkoutAccount))');
     const heldIdx = h.indexOf('if (isAccountHeld(accountId))');
     const packIdx = h.indexOf('const { pack } = body');
@@ -385,14 +394,19 @@ describe('T9 webhook idempotency: isSessionProcessed (unchanged behavior, re-ass
 // ─── 10. Dashboard render: no "Queries" column, credits card wired ──────────
 
 describe('T10 dashboard.html: Queries column retired, Credits card wired', () => {
-  it('the purchase-history header array no longer includes Queries', () => {
-    assert.ok(DASHBOARD_HTML.includes("['Date', 'Pack', 'Amount', 'Unlocks'].forEach"));
+  it('the purchase-history header array no longer includes Queries or Unlocks', () => {
+    // N11 (FIX-UNIT-MONEY-2): the "Unlocks" column is retired alongside
+    // "Queries" -- the table reads Date, Pack, Amount only.
+    assert.ok(DASHBOARD_HTML.includes("['Date', 'Pack', 'Amount'].forEach"));
     assert.ok(!DASHBOARD_HTML.includes("['Date', 'Pack', 'Amount', 'Queries', 'Unlocks']"));
+    assert.ok(!DASHBOARD_HTML.includes("['Date', 'Pack', 'Amount', 'Unlocks']"));
   });
-  it('no qTd / queries_added cell is built in the purchases table', () => {
+  it('no qTd / queries_added cell, and no uTd / unlocks_added cell, is built in the purchases table', () => {
     const h = sliceAt(DASHBOARD_HTML, 'function renderPurchases(data, el) {', 2200);
     assert.ok(!h.includes('qTd'));
     assert.ok(!h.includes('p.queries_added'), 'no cell must read p.queries_added anymore (a nearby comment may still name the field — that is fine)');
+    assert.ok(!h.includes('uTd'));
+    assert.ok(!h.includes('p.unlocks_added'), 'no cell must read p.unlocks_added anymore (ruling N11)');
   });
   // RETIRED-AND-REPLACED (credits-as-cash follow-up, SITE-PM 2026-09-27):
   // the old test asserted unlocks_added was STILL returned; F-7 removes it

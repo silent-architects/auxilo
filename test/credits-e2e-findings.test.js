@@ -254,6 +254,9 @@ describe('CREDITS-E2E-FINDINGS 2b: purchase-history Pack column wiring (source)'
   });
 
   it('the Pack column header is unchanged (no new/renamed column, no queries column reintroduced)', () => {
-    assert.ok(DASHBOARD_HTML.includes("['Date', 'Pack', 'Amount', 'Unlocks'].forEach"));
+    // N11 (FIX-UNIT-MONEY-2): the "Unlocks" column is retired -- the table
+    // now reads Date, Pack, Amount only.
+    assert.ok(DASHBOARD_HTML.includes("['Date', 'Pack', 'Amount'].forEach"));
+    assert.ok(!DASHBOARD_HTML.includes("['Date', 'Pack', 'Amount', 'Unlocks']"));
   });
 });

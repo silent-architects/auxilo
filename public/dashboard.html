@@ -3074,7 +3074,10 @@
     // D11 (CREDITS-CONTROL PART 1): no query-credit benefit anywhere, including
     // this purchase-history table — the "Queries" column is retired (queries_added
     // stays in the API response and purchases.jsonl; only the rendered column goes).
-    ['Date', 'Pack', 'Amount', 'Unlocks'].forEach(function (h) {
+    // N11: the "Unlocks" column is retired the same way — unlocks_added is a
+    // unit-model field the server no longer returns (dollars only now); the
+    // table shows the date, the pack and the amount.
+    ['Date', 'Pack', 'Amount'].forEach(function (h) {
       var th = document.createElement('th');
       th.textContent = h;
       headRow.appendChild(th);
@@ -3104,10 +3107,6 @@
       var amtTd = document.createElement('td');
       amtTd.textContent = fmt(p.amount_usd); // textContent -- safe
       tr.appendChild(amtTd);
-
-      var uTd = document.createElement('td');
-      uTd.textContent = p.unlocks_added != null ? String(p.unlocks_added) : ''; // textContent -- safe
-      tr.appendChild(uTd);
 
       tbody.appendChild(tr);
     });

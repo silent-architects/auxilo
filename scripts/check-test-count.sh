@@ -379,7 +379,20 @@ cd "${REPO_ROOT}"
 # Verified against the actual discovered count: 3865 -> 3925, 0 fail, 7
 # skipped (pre-existing, environment-dependent sandbox skips — unrelated to
 # this unit).
-EXPECTED_TEST_COUNT=3925
+# FIX-UNIT-MONEY-2 (2026-09-27): the confirm-pass fix unit (N1/N2/N3/N4/N5/
+# N6/N7/N8/N9/N10/N11/N13/M3/X1) added two new files
+# (test/fix-unit-money-2.test.js, test/fix-unit-money-2-route.test.js), two
+# new it()s in test/fix-unit-money-webhook.test.js (a real-route N7 corrupt-
+# file test and a real-route M3 concurrency test), and one new it() in
+# test/credits-as-cash-lots.test.js (the ruling N1 "bigger than the
+# uncovered amount" case); every other touched file only renames/re-asserts
+# an existing pin (wave1-money-closures, wave2b-ops-hardening,
+# dr8-self-unlock-free, credits-e2e-findings, credits-control-part1,
+# credits-config-usable) for the N4 try/catch reshape or the N11 column
+# removal — no it() count change there. Verified against the actual
+# discovered count: 3925 -> 3951, 0 fail, 7 skipped (same pre-existing
+# sandbox skips, unrelated to this unit).
+EXPECTED_TEST_COUNT=3951
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

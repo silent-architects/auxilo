@@ -397,13 +397,13 @@
           },
           "options": {
             "type": "object",
-            "description": "Auth options envelope (merged, additive \u2014 AUD19-5). api_key: { header, format, obtain, how_to_authenticate }; x402_payment: { header, price_usd, description, protocol }; reset_at on the insufficient-balance shape."
+            "description": "Auth options envelope (merged, additive \u2014 AUD19-5). api_key: { header, format, obtain, how_to_authenticate }; x402_payment: { header, price_usd, description, protocol }."
           },
           "content_advisory": {
             "$ref": "#/components/schemas/UntrustedPreviewAdvisory"
           }
         },
-        "description": "x402 payment challenge. On unauthenticated requests to payable resources the challenge is MERGED with the auth options envelope (additive keys: error, message, options.api_key { header, format, obtain, how_to_authenticate }, options.x402_payment { header, price_usd, description, protocol }); on the insufficient-balance API-key path the envelope instead carries error: \"Credits exhausted\", credits, and options.reset_at. In router (non-custodial) mode accepts[0] carries payTo = the router contract and an extra.router hint."
+        "description": "x402 payment challenge. On unauthenticated requests to payable resources the challenge is MERGED with the auth options envelope (additive keys: error, message, options.api_key { header, format, obtain, how_to_authenticate }, options.x402_payment { header, price_usd, description, protocol }); on the insufficient-balance API-key path the envelope instead carries error: \"Credits exhausted\" and credits. In router (non-custodial) mode accepts[0] carries payTo = the router contract and an extra.router hint."
       },
       "Error": {
         "type": "object",
@@ -1513,7 +1513,7 @@
             }
           },
           "402": {
-            "description": "Payment required. Three shapes, ALL carrying the x402 accepts[] descriptor: (1) no X-API-Key and no X-Payment header \u2014 x402Version + accepts[] merged with { error: \"Payment required\", message, options: { api_key: { header, format, obtain, how_to_authenticate }, x402_payment: { header, price_usd, description, protocol } } } (header X-Payment-Required: true); (2) API-key path with too little balance \u2014 { x402Version, accepts, error: \"Credits exhausted\", message, credits, options: { x402_payment, reset_at } }; (3) an X-Payment header that failed verification \u2014 { error, accepts }.",
+            "description": "Payment required. Three shapes, ALL carrying the x402 accepts[] descriptor: (1) no X-API-Key and no X-Payment header \u2014 x402Version + accepts[] merged with { error: \"Payment required\", message, options: { api_key: { header, format, obtain, how_to_authenticate }, x402_payment: { header, price_usd, description, protocol } } } (header X-Payment-Required: true); (2) API-key path with too little balance \u2014 { x402Version, accepts, error: \"Credits exhausted\", message, credits, options: { x402_payment } }; (3) an X-Payment header that failed verification \u2014 { error, accepts }.",
             "content": {
               "application/json": {
                 "schema": {

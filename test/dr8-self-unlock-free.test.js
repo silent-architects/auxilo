@@ -200,10 +200,18 @@ describe('DR-8 leaves the paid path intact', () => {
   // dollars actually drawn and a 30-day per-(buyer, learning) ranking-only
   // window (test/credits-as-cash-unlock.test.js "[ruling M9]" proves the
   // behavior against a real server) — it still starts from `!isSelfUnlock`.
+  //
+  // FIX-UNIT-MONEY-2 N4 (2026-09-27): the gate call is wrapped in try/catch
+  // so a write failure on its own file (the buyer is already charged by
+  // this point) never fails the unlock — countersCredited is now `let
+  // ... = false;`, only conditionally assigned inside the SAME
+  // `!isSelfUnlock && drewPaidDollars` guard, instead of one `const`
+  // expression.
   it('M-2 wash guard intact as the post-payment backstop (header claims + anonymous x402 still pay, still accrue nothing)', () => {
     assert.ok(h.includes('const isSelfUnlock ='), 'M-2 predicate present');
     assert.ok(h.includes('if (isSelfUnlock) {'), 'M-2 branch present');
-    assert.ok(h.includes('const countersCredited = !isSelfUnlock && drewPaidDollars'),
+    assert.ok(h.includes('let countersCredited = false;'), 'countersCredited declared, defaulting to not-counted');
+    assert.ok(h.includes('if (!isSelfUnlock && drewPaidDollars) {'),
       'CAT-1 §5 counter gating still starts from the M-2 wash guard');
     assert.ok(h.includes('shouldCountUnlockForRanking(buyerAccountId, id)'),
       'ruling M9: gated at most once per (buyer, learning) per 30 days, counters only');

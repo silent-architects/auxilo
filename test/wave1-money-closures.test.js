@@ -181,23 +181,25 @@ describe('[ruling M1] refundDollarDraw restores the exact draws onto the SAME lo
     assert.equal(balance.paid_usd, 0);
   });
 
-  it('a draw whose lot a refund has since removed is skipped, not fabricated onto a phantom lot', async () => {
+  it('ruling N1: a draw whose lot carries an uncovered amount is paid down first, not fabricated onto a phantom lot', async () => {
     const acct = 'acc_w1_refund_removed';
     const lot = await credits.addDollarLot(acct, 'dollar_paid', 10, { stripe_payment_intent: 'pi_w1_removed' });
     const d1 = await credits.deductCredit(acct, 'unlock', 4);
     assert.equal(d1.success, true);
-    // Simulate the lot having already been refunded away entirely (what
-    // removeDollarLotRemainder stamps) BEFORE the delivery-failure
-    // compensation runs.
+    // Simulate a refund whose excess already reached past this draw before
+    // any funding record existed for it (what removeDollarLotRemainder
+    // leaves as the lot's uncovered amount -- ruling N1) BEFORE the
+    // delivery-failure compensation runs.
     const credsBefore = credits.loadCredits();
-    credsBefore[acct].dollar_lots[0].removed_at = new Date().toISOString();
+    credsBefore[acct].dollar_lots[0].uncovered_usd = 4;
     credsBefore[acct].dollar_lots[0].remaining_usd = 0;
     credits.saveCredits(credsBefore);
 
     const r = await credits.refundDollarDraw(acct, d1.draws);
-    assert.equal(r.paid_restored, 0, 'the removed lot must not receive money back');
+    assert.equal(r.paid_restored, 0, 'the uncovered amount consumes the whole restore -- nothing fabricated onto the buyer\'s balance');
     assert.equal(r.skipped_usd, 4, 'that money already left Auxilo by way of the refund');
     assert.equal(credits.loadCredits()[acct].dollar_lots[0].remaining_usd, 0);
+    assert.equal(credits.loadCredits()[acct].dollar_lots[0].uncovered_usd, 0, 'fully consumed');
     void lot;
   });
 });

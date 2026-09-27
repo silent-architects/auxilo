@@ -525,15 +525,25 @@ describe('CAT-1 (b): unlock counters credited only for real unlocks', () => {
   // (test/credits-as-cash-unlock.test.js "[ruling M9]" proves the behavior
   // against a real server) — it still starts from `!isSelfUnlock`, hoisted
   // above the counter bumps.
-  it('countersCredited = !isSelfUnlock && drewPaidDollars && shouldCountUnlockForRanking(...), computed before the bumps', () => {
-    const predAt = h.indexOf('const countersCredited = !isSelfUnlock && drewPaidDollars');
+  //
+  // FIX-UNIT-MONEY-2 N4 (2026-09-27): the gate's own file write can throw
+  // (the buyer is already charged by this point) — wrapped so a write
+  // failure only ever means "do not count this one", never a failed
+  // unlock. countersCredited is declared, then conditionally assigned
+  // inside the SAME `!isSelfUnlock && drewPaidDollars` guard as before.
+  it('countersCredited gates on !isSelfUnlock && drewPaidDollars && shouldCountUnlockForRanking(...), wrapped so a gate failure never fails the unlock (ruling N4), computed before the bumps', () => {
+    const declAt = h.indexOf('let countersCredited = false;');
     const selfAt = h.indexOf('const isSelfUnlock =');
     const bumpAt = h.indexOf('learning.quality.unlocks_total =');
-    assert.ok(predAt !== -1 && selfAt !== -1 && bumpAt !== -1);
-    assert.ok(selfAt < predAt && predAt < bumpAt,
+    assert.ok(declAt !== -1 && selfAt !== -1 && bumpAt !== -1);
+    assert.ok(selfAt < declAt && declAt < bumpAt,
       'wash-guard decision hoisted above the counter bumps');
-    assert.ok(h.includes('shouldCountUnlockForRanking(buyerAccountId, id)'),
+    assert.ok(h.includes('if (!isSelfUnlock && drewPaidDollars) {'),
+      'the same predicate gates whether the gate is even consulted');
+    assert.ok(h.includes('countersCredited = shouldCountUnlockForRanking(buyerAccountId, id);'),
       'ruling M9: the 30-day per-(buyer, learning) gate is part of the same predicate');
+    assert.ok(h.includes('} catch (gateErr) {') && /catch \(gateErr\) \{[\s\S]{0,300}countersCredited = false;/.test(h),
+      'ruling N4: a counter-gate write failure is caught and just does not count this one');
   });
 
   it('credited counter + demand bump only under the predicate; raw total always bumps', () => {

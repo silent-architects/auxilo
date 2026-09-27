@@ -255,18 +255,36 @@ describe('refundDollarDraw: restores drawn amounts onto the SAME lots (ruling M1
     assert.equal(balance.paid_usd, 1);
   });
 
-  it('skips a draw whose lot a refund has since removed (removed_at set)', async () => {
+  it('ruling N1: a failed-delivery restore pays down the lot\'s uncovered amount FIRST, never handing back money a refund already took', async () => {
     const id = uid();
     const lot = await addDollarLot(id, 'dollar_paid', 10, { stripe_payment_intent: pi() });
-    // Simulate the lot having been fully refunded already (removeDollarLotRemainder stamps removed_at).
+    // Simulate a refund whose excess already reached PAST this draw before
+    // any funding record existed for it to reverse (removeDollarLotRemainder
+    // leaves this as the lot's uncovered amount -- ruling N1 replaces the
+    // old blanket `removed_at` stamp with this running, consumable figure).
     const credits = loadCredits();
-    credits[id].dollar_lots[0].removed_at = new Date().toISOString();
+    credits[id].dollar_lots[0].uncovered_usd = 5;
     credits[id].dollar_lots[0].remaining_usd = 0;
     saveCredits(credits);
     const result = await refundDollarDraw(id, [{ lot_id: lot.lot_id, kind: 'dollar_paid', amount: 5 }]);
-    assert.equal(result.paid_restored, 0, 'a removed lot must not receive money back');
+    assert.equal(result.paid_restored, 0, 'the uncovered amount consumes the whole restore -- nothing reaches the buyer');
     assert.equal(result.skipped_usd, 5);
-    assert.equal(loadCredits()[id].dollar_lots[0].remaining_usd, 0, 'the removed lot stays at 0 -- the money already left Auxilo by the refund');
+    assert.equal(loadCredits()[id].dollar_lots[0].remaining_usd, 0, 'the lot stays at 0 -- the money already left Auxilo by the refund');
+    assert.equal(loadCredits()[id].dollar_lots[0].uncovered_usd, 0, 'fully consumed by this one restore');
+  });
+
+  it('ruling N1: a restore bigger than the uncovered amount pays it down and hands the REST back to the buyer', async () => {
+    const id = uid();
+    const lot = await addDollarLot(id, 'dollar_paid', 10, { stripe_payment_intent: pi() });
+    const credits = loadCredits();
+    credits[id].dollar_lots[0].uncovered_usd = 2;
+    credits[id].dollar_lots[0].remaining_usd = 0;
+    saveCredits(credits);
+    const result = await refundDollarDraw(id, [{ lot_id: lot.lot_id, kind: 'dollar_paid', amount: 5 }]);
+    assert.equal(result.paid_restored, 3, '5 - 2 uncovered');
+    assert.equal(result.skipped_usd, 2);
+    assert.equal(loadCredits()[id].dollar_lots[0].remaining_usd, 3);
+    assert.equal(loadCredits()[id].dollar_lots[0].uncovered_usd, 0);
   });
 });
 

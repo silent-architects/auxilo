@@ -442,8 +442,12 @@ describe('/checkout/session wiring: fails closed on usability with a machine-rea
   // of the Stripe usability probe (see test/credits-control-part1.test.js
   // T7 for the full ordering pin). The marker and every assertion here are
   // unchanged.
+  //
+  // FIX-UNIT-MONEY-2 M3 (2026-09-27): widened again, to 7000 — the caps now
+  // run under a per-account lock with a reservation recorded before the
+  // Stripe call (see T7's comment for the same widening).
   it('gates on stripeStatus.configured and returns code + reason in the 503 body', () => {
-    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 5200);
+    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 7000);
     assert.ok(h.includes('notifyStripeCheckoutAttempt();'), 'must arm/trigger the reprobe on every attempt');
     assert.ok(h.includes('const stripeStatus = getStripeStatus();'));
     assert.ok(h.includes('if (!stripeStatus.configured)'));
