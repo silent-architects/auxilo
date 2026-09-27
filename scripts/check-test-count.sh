@@ -300,7 +300,19 @@ cd "${REPO_ROOT}"
 # it() blocks added or removed. Verified against the actual `npm test`
 # discovered count, run twice, identical both times: 3495 -> 3551, 0 fail,
 # 6 skipped (pre-existing, unrelated).
-EXPECTED_TEST_COUNT=3551
+#
+# EMAIL-FONT-REGRESSION fix (PM-found, on top of committed FIX-UNIT-2/2B,
+# base 3551): renderEmail() (lib/email.js) set font-family only on the
+# wordmark cell and the button, so every email's heading/body/footer fell
+# back to the mail client's serif default. Fixed by adding font-family to
+# <body>, the content cell, the heading <p>, and the footer cell. +4 tests,
+# all in the one new file test/launch-wave-email-font.test.js (static
+# per-body font-family assertions across all five rendered emails, a
+# rendered/Playwright check with network fully blocked, and a positive
+# control proving that check can fail). 0 removed. Verified against the
+# actual `npm test` discovered count: 3551 -> 3555, 0 fail, 6 skipped
+# (pre-existing, unrelated).
+EXPECTED_TEST_COUNT=3555
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
