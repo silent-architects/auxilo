@@ -414,7 +414,20 @@ cd "${REPO_ROOT}"
 # + 1 sweep-worked sanity + 257 per-tracked-file checks under test/+scripts/
 # + 1 EXCEPTIONS-still-tracked check). Verified: 3966 -> 4226 (-1 + 261 = 260
 # net), 0 fail, 7 skipped (same pre-existing sandbox skips).
-EXPECTED_TEST_COUNT=4226
+#
+# PM follow-up 2 (2026-09-27): a guard that lists files from `git ls-files`
+# only sees TRACKED files -- this pin was set from an uncommitted working
+# tree where the guard's own 4 new files (itself included) were not yet
+# tracked, so it never scanned them. Once committed (b349732), `git
+# ls-files test/ scripts/` reports 4 more files, adding 4 more per-file
+# checks (257 -> 261 in the guard's own count), and the guard found its OWN
+# search-pattern literals in its own source -- fixed by assembling those
+# patterns (and the positive control's sample paths) from string parts at
+# runtime, never as a complete literal in the file (see the guard's header
+# comment). Verified against a git-add--N-staged run (git ls-files sees
+# every changed file as a fresh clone/CI would, without committing):
+# 4226 -> 4230, 0 fail, 7 skipped.
+EXPECTED_TEST_COUNT=4230
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
