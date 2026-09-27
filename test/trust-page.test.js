@@ -320,8 +320,19 @@ describe('Trust page: route, redirects, head tags, h1, forbidden strings', { tim
   });
 
   it('D1 T4: every capture claim that names Codex survives byte for byte', () => {
+    // LAUNCH-WAVE-FOR-BUILDERS (2026-09-26, GOV-4-ruled): the /for-builders
+    // step 01 sentence that named Codex here ("Extraction then runs in the
+    // background on hook-capable clients, Claude Code and Codex among
+    // them.") is cut by REGISTER-B-REV2 row B-03 — step 01's body is
+    // replaced outright, and the page's per-client capture detail now lives
+    // behind a single link to /works-with (row B-07) instead of being
+    // restated inline. "Codex" no longer appears anywhere in
+    // public/for-builders.html (confirmed: zero occurrences) — there is no
+    // surviving capture claim on this page for this test to pin, so the
+    // BUILDERS_HTML row is removed rather than left to fail. See
+    // test/launch-wave-for-builders.test.js for the positive control on the
+    // /works-with link and the page's Codex-free state.
     const captures = [
-      [BUILDERS_HTML, 'Extraction then runs in the background on hook-capable clients, Claude Code and Codex among them.', 1],
       [AGENTS_HTML, 'Background extraction runs on <strong style="color:var(--slate-text)">Claude Code</strong>, <strong style="color:var(--slate-text)">Codex</strong>, and the other clients with a supported extraction hook. Best-effort capture covers several more, and the <a href="/legal/supported-clients">supported clients page</a> maps every tier.', 1],
       [HOW_IT_WORKS_HTML, '<strong style="color:var(--ivory)">Claude Code</strong>, <strong style="color:var(--ivory)">Codex</strong>, and the other hook-capable clients run it reliably, best-effort capture reaches several more clients, and the <a href="/legal/supported-clients">supported clients page</a> maps every tier.', 1],
       [HOW_IT_WORKS_HTML, 'Auxilo captures them. On Claude Code, Codex, and the other supported-tier clients, a local runner reads each finished session in the background and identifies specific, actionable operational knowledge. This happens automatically, with no work from you.', 1],
