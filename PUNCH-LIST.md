@@ -996,50 +996,43 @@ Tyler, 2026-08-29: **distinct objective from the §33 infrastructure decommissio
 | KNW-2 | Upload path ruling: the 2 gap items can only enter via manual `auxilo_contribute`, which the standing organic-pipeline-only rule (Tyler 2026-07-26) forbids from this machine. | P2 | Tyler | CLOSED — one-time curated waiver ruled 2026-08-29 (does not generalize) |
 | KNW-3 | Execute per KNW-2 and verify. | P2 | PM + CAT-1 | ✅ 2026-08-29 — both gap items submitted as ONE coherent learning (`lrn_b5ff7e47`, "Conway Cloud VM: files written to /tmp are cleaned — deploy application code to /app instead"; carries the `apiKey`-not-`api_key` config quirk and the don't-provision-a-VM-per-small-service lesson, with an explicit staleness/provenance caveat). Account-attributed (`contributor_wallet: null`) per the retired-wallet rule. Verified live and searchable; quality 20.0, dynamic price $3.28. **DEVIATION TO NOTE: it auto-approved to `public` rather than landing in the pending-review queue** — the seamless-publish path took it (self-assessment 17/20, above floor, system+symptom anchored), so the review-gate expectation stated at approval time did not hold. Content re-checked post-publish: no credentials, no private paths, generalized — nothing requiring retraction. Retraction remains available (`DELETE /learn/:id`) at Tyler's word. | CLOSED — 2026-08-29, lrn_b5ff7e47 submitted + verified live/searchable |
 
-## 37. Site Launch Wave (2026-09-26)
+## 37. Launch Release (2026-09-27)
 
-Tyler, 2026-09-26: SITE-PM manages the site launch build in parallel with TECH-PM's platform build. Built on branch `site/launch-wave-0926`, cut from main `39a30dd`. Nothing is merged or deployed. Deploy is Tyler's word. Rows marked (H) carry their detail in the private wave handoff, not here.
+Tyler, 2026-09-26 and 2026-09-27: SITE-PM manages the launch release in parallel with TECH-PM's platform build. The release carries the site, the launch copy, the money model and the amended Terms. Rows marked (H) carry their detail in the private handoff.
+
+The money model: a balance is held in dollars, a pack adds what was paid, an unlock debits the listed price, and the builder earns 70% of the listed price, or 60% when Auxilo search surfaced the learning.
 
 | ID | Item | Priority | Owner | Status |
 |---|---|---|---|---|
-| SLW-1 | Site copy and layout wave: homepage, /for-builders, /for-agents, /how-it-works, /pricing, /about, reference pages, agent card, llms.txt, two openapi.json strings. Every rate sentence now carries its basis (what the buyer paid). Copy gated by brand, positioning and disclosure seats. | P1 | SITE-PM | BUILT on branch, awaiting deploy word |
-| SLW-2 | Dashboard: new card order, welcome card, summary line, empty states, review queue loads on open, accessibility fixes (headings, alerts, copy button announcements, 44px targets). `Published` counts public learnings only. | P1 | SITE-PM | BUILT on branch, awaiting deploy word |
-| SLW-3 | Emails: shared template, welcome email, unlock notification with an off setting and an opt-out link. Both new emails are off unless their flag is exactly `true` (`WELCOME_EMAIL_ENABLED`, `EARNING_NOTIFICATIONS_ENABLED`). | P1 | SITE-PM | BUILT dark, awaiting deploy word |
-| SLW-4 | Share basis decision: keep the economics and make every statement true, accrue on listed price, or sell credits as a dollar balance. (H) | P0 decision | Tyler | OPEN |
-| SLW-5 | /for-builders math block: choose the true worked example, the version with no example, or keep the current block in his own words. Patches for the first two are prepared. | P1 | Tyler | OPEN, decided before deploy |
-| SLW-6 | `You Control What Publishes`: narrow the approval sentence to what extraction produces. The scoped form is already served on /how-it-works. | P1 | Tyler | OPEN |
-| SLW-7 | Privacy policy: one sentence naming the welcome email, the unlock notification and the off setting, plus a retention line for the notification queue. | P1 | Tyler + GOV-2 | OPEN, needed before either email flag is set, not for deploy |
-| SLW-8 | Review approval record for accounts not yet cleared to publish. (H) | P1 | TECH-PM | OPEN, before any outside account is cleared |
-| SLW-9 | Terms and code: six points for counsel on the share basis. (H) | P1 | Tyler + GOV-2 | OPEN |
-| SLW-10 | Live catalog fill should match an element's opening tag only. The page side is fixed in this wave and guarded by `test/launch-wave-ssr-markers.test.js`. | P2 | TECH-PM | OPEN |
-| SLW-11 | `quality.score` is written on two scales. llms.txt documents the symptom for agents. | P2 | TECH-PM | OPEN |
-| SLW-12 | Keyed agent with an empty credit balance and the x402 path. Not verified end to end. (H) | P2 | TECH-PM | OPEN |
-| SLW-13 | Payment dispute and refund events. (H) | P2 | TECH-PM | OPEN, before real card volume |
-| SLW-14 | Strings that ride an npm release: the CLI consent sentence on the repeat cap (the cap applies only when the buyer pays with credits), two MCP tool descriptions and the `/api/info` unlock string (each needs the basis). | P2 | TECH-PM | OPEN |
-| SLW-15 | `GET /categories`: add a `learning_categories` array with the six learning categories. | P2 | TECH-PM | OPEN |
-| SLW-16 | Supported clients: verify the GitHub Copilot VS Code agent leg on a machine without the CLI, then restore the broader name on the homepage band. | P2 | TECH-PM | OPEN |
-| SLW-17 | Repeat cap and zero-cost unlocks. (H) | P3 | TECH-PM | OPEN |
-| SLW-18 | openapi.json: internal ticket codes in description strings, with a guard test so they do not return. | P3 | TECH-PM | OPEN |
-| SLW-19 | Unlock notification before scale: stateless signed opt-out link, async queue writes. | P3 | TECH-PM | OPEN |
-| SLW-20 | Dashboard review table is clipped at phone width (predates the wave; the wave made the region keyboard reachable). | P3 | SITE-PM | OPEN |
-| SLW-21 | Parked copy for Tyler: footer tagline, two legal card titles on the dashboard, one /pricing heading, /works-with meta description, /about biography facts. | P3 | Tyler | OPEN |
-| SLW-22 | Ledger numbers on /for-builders and /pricing: keep them, zeros included, or show none on those two pages as on the homepage, with the full ledger staying on the trust page. A cold builder read named the zero counters as the one reason not to sign up. Removing only the zero cells is ruled out as dressing. | P1 decision | Tyler | OPEN |
-| SLW-23 | The catalog preview block shows human visitors the untrusted-content advisory written for agents. Keep it for agents and decide how a human should see it. | P3 | TECH-PM + GOV-3 | OPEN |
-| SLW-24 | Unlock notification: bounce and complaint handling, and a suppression list, before the first real send. | P2 | TECH-PM | OPEN, before the email flag is set |
-
-**Gates and reviews run (SITE-PM, 2026-09-26 and 09-27).** Copy: brand steward four rounds, positioning strategist two, disclosure arbiter four, legal memo on the emails, financial brief on the share basis. Build: adversarial code and security review (0 blockers, every high and medium fixed on the branch), accessibility audit (7 findings, all fixed), agent behavioural test before and after, final visual review at three widths (7 findings, 6 fixed, 1 accepted), cold builder read of the finished site. Full battery on the branch is green at 3555 tests and predeploy passes.
+| SLW-1 | Site, launch copy and dashboard: homepage, /for-builders, /for-agents, /how-it-works, /pricing, /about, reference pages, agent card, llms.txt, openapi.json. Accessibility fixes. A guard test fails if a retired phrase returns to a served file. | P1 | SITE-PM | IN THE LAUNCH RELEASE |
+| SLW-2 | Money model: dollar balance, caps on balance and daily purchases, refund and dispute handling, builder share reversal. `lib/earnings.js` unchanged. Adversarial review run, every finding ruled and fixed. | P1 | SITE-PM | IN THE LAUNCH RELEASE |
+| SLW-3 | Terms of Service and privacy policy, version `2026-09-27-credit-balance-a2`. | P1 | SITE-PM + GOV-2 | IN THE LAUNCH RELEASE |
+| SLW-4 | Stripe webhook subscribes to the refund and dispute events, so that handling runs. | P1 | Tyler | OPEN, before the first outside purchase |
+| SLW-5 | npm release carrying the launch wording in the CLI consent text and the MCP tool descriptions. | P1 | TECH-PM | OPEN |
+| SLW-6 | Review approval record for accounts not yet cleared to publish. (H) | P1 | TECH-PM | OPEN, before any outside account is cleared |
+| SLW-7 | Before withdrawals open. (H) | P1 | TECH-PM + Tyler | OPEN |
+| SLW-8 | Welcome email and unlock notification are built and off (`WELCOME_EMAIL_ENABLED`, `EARNING_NOTIFICATIONS_ENABLED`, each on only when exactly `true`). The privacy policy names both before either is set. | P1 | Tyler + GOV-2 | OPEN |
+| SLW-9 | Live catalog fill should match an element's opening tag only. The pages are guarded by `test/launch-wave-ssr-markers.test.js`. | P2 | TECH-PM | OPEN |
+| SLW-10 | `quality.score` is written on two scales. | P2 | TECH-PM | OPEN |
+| SLW-11 | A signed-in agent short of balance, and the x402 path. (H) | P2 | TECH-PM | OPEN |
+| SLW-12 | `GET /categories`: add a `learning_categories` array with the six learning categories. | P2 | TECH-PM | OPEN |
+| SLW-13 | Supported clients: verify the GitHub Copilot VS Code agent leg on a machine without the CLI, then restore the broader name on the homepage band. | P2 | TECH-PM | OPEN |
+| SLW-14 | Unlock notification, before its flag is set: bounce and complaint handling, a signed opt-out link, async queue writes. | P2 | TECH-PM | OPEN |
+| SLW-15 | The catalog preview block shows human visitors the advisory written for agents. | P3 | TECH-PM + GOV-3 | OPEN |
+| SLW-16 | openapi.json: internal ticket codes in description strings, with a guard test so they do not return. | P3 | TECH-PM | OPEN |
+| SLW-17 | Dashboard review table is clipped at phone width. | P3 | SITE-PM | OPEN |
 
 ## Counts
 
 | Priority | Open | On Hold | Deferred | Done/Verified | Total |
 |----------|------|---------|----------|---------------|-------|
-| P0 (blocks launch) | **2** | 0 | 0 | **34** | 36 |
-| P1 (blocks real money / production) | **25** | 6 | 2 | 81 | 114 |
-| P2 (blocks scale) | **35** | 1 | 0 | 30 | 66 |
-| P3 (polish) | **10** | 0 | 0 | 5 | 15 |
-| **Total** | **72** | **7** | **2** | **150** | **231** |
+| P0 (blocks launch) | **1** | 0 | 0 | **34** | 35 |
+| P1 (blocks real money / production) | **24** | 6 | 2 | 81 | 113 |
+| P2 (blocks scale) | **33** | 1 | 0 | 30 | 64 |
+| P3 (polish) | **7** | 0 | 0 | 5 | 12 |
+| **Total** | **65** | **7** | **2** | **150** | **224** |
 
-> **Section 37 added (SITE-PM, 2026-09-26, extended 09-27).** The table now includes the 24 rows SLW-1 to SLW-24 (1 P0 decision, 9 P1, 8 P2, 6 P3), all counted open. SLW-1 to SLW-3 are built on a branch and stay open until deployed.
+> **Section 37 (SITE-PM, 2026-09-27).** The table includes the 17 rows SLW-1 to SLW-17 (8 P1, 6 P2, 3 P3), all counted open. SLW-1 to SLW-3 close when the launch release is verified live.
 
 > **Counts caveat (PM, 2026-08-28).** The table above now includes the nine §34 rows and the fifteen §35 rows (AD-1..AD-15: 3 P1, 11 P2, 1 P3). It still does NOT include `R13-CLOSE` and `GTM-HF` (§29) — their statuses have not been re-derived, so the totals remain understated by at least those two rows and want a full recount by whoever owns them.
 
