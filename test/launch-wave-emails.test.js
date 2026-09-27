@@ -41,6 +41,21 @@ function stripTags(html) {
     .trim();
 }
 
+// CH-7: this helper is declared here (module scope, not inside any
+// describe()) so its assert calls are only ever reached when the function
+// is actually CALLED from inside an it() body (both call sites below are).
+// Declared inside a describe() callback, the CH-7 scanner cannot tell a
+// function DEFINITION (never executes until called) from code that runs
+// immediately at collection time, and mis-flags it as a describe-body
+// assert even though it only ever runs inside test bodies.
+function slice(source, startMarker, endMarker, from = 0) {
+  const start = source.indexOf(startMarker, from);
+  assert.notEqual(start, -1, `missing marker: ${startMarker}`);
+  const end = source.indexOf(endMarker, start);
+  assert.notEqual(end, -1, `missing marker: ${endMarker}`);
+  return source.slice(start, end);
+}
+
 describe('LAUNCH-WAVE-EMAILS: welcome email content', () => {
   it('contains no 70%, no "earn", no "accrue", and no promotion', () => {
     const { text, html } = email_.buildWelcomeEmailBodies('https://auxilo.io/connect');
@@ -156,6 +171,7 @@ describe('LAUNCH-WAVE-EMAILS: earning-notification content (single + digest)', (
     assert.ok(!/[\r\n]/.test(bodyParagraphMatch[1]), 'no raw CR/LF inside the rendered title segment');
     // Every <a href= only ever points at the dashboard URL or prefsUrl, never at anything derived from the title.
     const hrefs = [...html.matchAll(/<a href="([^"]*)"/g)].map((m) => m[1]);
+    assert.ok(hrefs.length > 0, 'sanity: at least one <a href> found to check (an empty list would make the loop below vacuous)');
     for (const href of hrefs) {
       assert.ok(
         href === 'https://auxilo.io/dashboard' || href === 'https://auxilo.io/status' ||
@@ -413,14 +429,6 @@ describe('LAUNCH-WAVE-EMAILS: lib/earning-notifications.js queue', () => {
 describe('LAUNCH-WAVE-EMAILS: source-inspection wiring checks', () => {
   const SERVER_SRC = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
   const ACCOUNTS_SRC = fs.readFileSync(path.join(ROOT, 'lib', 'accounts.js'), 'utf8');
-
-  function slice(source, startMarker, endMarker, from = 0) {
-    const start = source.indexOf(startMarker, from);
-    assert.notEqual(start, -1, `missing marker: ${startMarker}`);
-    const end = source.indexOf(endMarker, start);
-    assert.notEqual(end, -1, `missing marker: ${endMarker}`);
-    return source.slice(start, end);
-  }
 
   it('the W3 earning-notification queue block sits after unlockResponsePayload is built and immediately before the return, past both early-return branches, past commitWal, and is never awaited on the response path', () => {
     // The unlock route is GET /knowledge/:id (not a separate /learn/:id/unlock

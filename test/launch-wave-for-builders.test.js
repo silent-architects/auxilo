@@ -72,6 +72,25 @@ function renderedFaqAnswer(html, question) {
   return answerMatch[1];
 }
 
+// CH-7: non-asserting core. Used directly in a describe() body (block 8
+// below) purely to generate that block's per-entry dynamic it()s — describe
+// scope must never assert (a failure there is silently swallowed under the
+// npm-test flags), so this variant returns [] on any parse problem instead
+// of throwing/asserting. The REAL, asserting validation of this same parse
+// runs via faqJsonLdEntries() below, always from inside an it() body.
+function faqJsonLdEntriesCore(html) {
+  try {
+    const scriptMatch = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+    if (!scriptMatch) return [];
+    const data = JSON.parse(scriptMatch[1]);
+    const graph = data['@graph'] || [];
+    const faqNode = graph.find((n) => n['@type'] === 'FAQPage');
+    return (faqNode && faqNode.mainEntity) || [];
+  } catch {
+    return [];
+  }
+}
+
 function faqJsonLdEntries(html) {
   const scriptMatch = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
   assert.ok(scriptMatch, 'FAQPage JSON-LD script present');
@@ -271,8 +290,16 @@ describe('LAUNCH-WAVE /for-builders: new tests (write-first, per BUILDER-RULES)'
   });
 
   describe('8. Every FAQPage answer stating 70%/60% carries the disclaimer + rail, never ends on the disclaimer, and matches its visible twin', () => {
-    const entries = faqJsonLdEntries(STATIC_HTML);
+    // CH-7: the tolerant core (never asserts/throws) is used here purely to
+    // generate this block's per-entry dynamic it()s at describe time. The
+    // real, asserting parse (faqJsonLdEntries, which can genuinely fail
+    // loud) is exercised below inside an it() body.
+    const entries = faqJsonLdEntriesCore(STATIC_HTML);
     const rateEntries = entries.filter((e) => /70%|60%/.test(e.acceptedAnswer.text));
+
+    it('the FAQPage JSON-LD is present and parses to a mainEntity array (faqJsonLdEntries succeeds)', () => {
+      assert.equal(faqJsonLdEntries(STATIC_HTML).length, entries.length, 'the asserting parse agrees with the tolerant describe-scope parse used to generate this block\'s tests');
+    });
 
     it('at least one FAQ answer states a rate (sanity: the test has something to check)', () => {
       assert.ok(rateEntries.length >= 2, `expected >=2 rate-stating FAQ answers, found ${rateEntries.length}`);
@@ -387,6 +414,7 @@ describe('LAUNCH-WAVE /for-builders: new tests (write-first, per BUILDER-RULES)'
 
     it('outside the note, every FAQPage JSON-LD answer text carries no draft or write-up word (machine-readable surface, separate from visible text)', () => {
       const entries = faqJsonLdEntries(STATIC_HTML);
+      assert.ok(entries.length > 0, 'sanity: at least one FAQ entry to check (an empty list would make the loop below vacuous)');
       for (const entry of entries) {
         assert.doesNotMatch(entry.acceptedAnswer.text, DRAFT_WORDS, `${entry.name}: no draft word in JSON-LD`);
         assert.doesNotMatch(entry.acceptedAnswer.text, WRITE_UP, `${entry.name}: no write-up in JSON-LD`);

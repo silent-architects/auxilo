@@ -32,7 +32,7 @@
  * Runner: node --test test/launch-wave-for-agents.test.js
  */
 
-const { describe, it } = require('node:test');
+const { describe, it, before } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -73,11 +73,18 @@ describe('LAUNCH-WAVE-0926 /for-agents: hero sub (B-30)', () => {
 });
 
 describe('LAUNCH-WAVE-0926 /for-agents: five-step flow (B-46, LAYOUT-SHEET-ADDENDUM item 1)', () => {
-  const trackMatch = html.match(/<div class="flow-track">([\s\S]*?)<\/div>\s*<\/div>\s*<\/section>/);
-  assert.ok(trackMatch, '.flow-track block found');
-  const track = trackMatch[1];
-  const steps = [...track.matchAll(/<div class="flow-step">([\s\S]*?)<\/div>\s*(?=<!--|<div class="flow-step">|$)/g)]
-    .map((m) => m[1]);
+  // CH-7: this parse is shared by both it() blocks below, so it runs once in
+  // a before() hook (a real test-harness frame that fails loud) rather than
+  // directly in the describe body (which would silently swallow a failure).
+  let steps;
+
+  before(() => {
+    const trackMatch = html.match(/<div class="flow-track">([\s\S]*?)<\/div>\s*<\/div>\s*<\/section>/);
+    assert.ok(trackMatch, '.flow-track block found');
+    const track = trackMatch[1];
+    steps = [...track.matchAll(/<div class="flow-step">([\s\S]*?)<\/div>\s*(?=<!--|<div class="flow-step">|$)/g)]
+      .map((m) => m[1]);
+  });
 
   it('has exactly five steps, numbered 01 to 05', () => {
     assert.equal(steps.length, 5, 'expected exactly five .flow-step blocks in .flow-track');
@@ -184,6 +191,7 @@ describe('LAUNCH-WAVE-0926 /for-agents: no purchase affordance for humans', () =
     assert.ok(!/href="[^"]*checkout[^"]*"/i.test(html), 'no href contains "checkout"');
     const buttonTexts = [...html.matchAll(/<(?:a|button)[^>]*class="[^"]*btn[^"]*"[^>]*>([\s\S]*?)<\/(?:a|button)>/g)]
       .map((m) => visibleTextOf(m[1]));
+    assert.ok(buttonTexts.length > 0, 'sanity: at least one button/link found to check (an empty list would make the loop below vacuous)');
     for (const text of buttonTexts) {
       assert.ok(!/\bBuy\b/i.test(text), `button/link text "${text}" must not contain "Buy"`);
     }

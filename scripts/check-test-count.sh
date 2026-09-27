@@ -260,7 +260,25 @@ cd "${REPO_ROOT}"
 # D1-SITE-COPY: +6 tests (T1–T6) for boundary placement, retired Codex-drafting
 # wording, approved docs literals, preserved capture claims, FAQ parity/JSON-LD,
 # and punctuation/marketplace exclusions.
-EXPECTED_TEST_COUNT=3169
+#
+# CH-7 (site/launch-wave-0926 integration, base 3169): the wave's four new
+# test files (launch-wave-emails/for-agents/for-builders/home.test.js) each
+# had a describe-body assert or describe-scope assert-bearing-helper call
+# flagged by test/ch7-describe-body-guard.test.js (silently swallowed under
+# npm test's flags — fail 0/exit 0 even when the assertion is false). Fixed
+# by relocating each into a real test-harness frame (a before() hook for
+# data shared by static it() blocks; a module-scope function declaration for
+# the emails.test.js `slice` helper, since it is only ever CALLED from
+# inside it() bodies and a plain function DEFINITION never executes at
+# describe time; a non-asserting `faqJsonLdEntriesCore` for for-builders.
+# test.js's per-entry dynamic-it()-generation loop, paired with a new it()
+# that exercises the real asserting `faqJsonLdEntries`) — net +1 test.
+# Also added 3 sanity guards (assert an array is non-empty before a loop
+# that is the test's only assertion) against the same silent-pass class the
+# guard does not scan for. Verified against the actual `npm test` discovered
+# count, run twice, identical both times: 3169 -> 3436, 0 fail, 6 skipped
+# (pre-existing, unrelated).
+EXPECTED_TEST_COUNT=3436
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

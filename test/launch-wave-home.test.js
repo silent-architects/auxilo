@@ -36,7 +36,7 @@
  * Runner: node --test test/launch-wave-home.test.js
  */
 
-const { describe, it } = require('node:test');
+const { describe, it, before } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -67,9 +67,16 @@ function visibleTextOf(fragment) {
 }
 
 describe('LAUNCH-WAVE-0926: homepage hero + #setup-detail section', () => {
-  const heroMatch = html.match(/<section id="hero"[\s\S]*?<\/section>/);
-  assert.ok(heroMatch, '#hero section must exist');
-  const hero = heroMatch[0];
+  // CH-7: shared by both it() blocks below; a before() hook is a real
+  // test-harness frame (fails loud) whereas the same assert directly in the
+  // describe body would silently swallow a failure.
+  let hero;
+
+  before(() => {
+    const heroMatch = html.match(/<section id="hero"[\s\S]*?<\/section>/);
+    assert.ok(heroMatch, '#hero section must exist');
+    hero = heroMatch[0];
+  });
 
   it('#hero contains no element with class "hero-trust" and no element with class "hero-figure"', () => {
     assert.ok(!/class="hero-trust"/.test(hero), 'hero-trust must be gone from #hero (moved to #setup-detail as a plain paragraph)');
@@ -164,6 +171,7 @@ describe('LAUNCH-WAVE-0926: FAQ visible text equals its JSON-LD mirror', () => {
     assert.ok(faqNode, 'FAQPage node found in @graph');
 
     const answerInnerMatches = [...html.matchAll(/<div class="faq-answer-inner">([\s\S]*?)<\/div>/g)];
+    assert.ok(faqNode.mainEntity.length > 0, 'sanity: at least one FAQ answer to check (both being empty would make the count check below vacuous)');
     assert.equal(answerInnerMatches.length, faqNode.mainEntity.length, 'same number of rendered answers as JSON-LD answers');
 
     faqNode.mainEntity.forEach((q, i) => {
