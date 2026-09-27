@@ -65,8 +65,12 @@ describe('T1 capability manifest: pack field + queries retired', () => {
     const matches = SERVER_SRC.match(/Create a Stripe checkout session to purchase credits\. Body: \{ pack \}/g) || [];
     assert.equal(matches.length, 2, 'both /skills-manifest occurrences must advertise { pack }');
   });
+  // AUD-CAC (credits-as-cash, 2026-09-27): the span widened from 1400 to
+  // 2200 — the route gained the account-hold check ahead of pack
+  // validation (spec §2 test 16/§8 test 26); the marker and the assertion
+  // are unchanged.
   it('the route itself destructures { pack } (manifest matches reality)', () => {
-    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session'", 1400);
+    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session'", 2200);
     assert.ok(h.includes('const { pack } = body'));
   });
 });
@@ -74,10 +78,22 @@ describe('T1 capability manifest: pack field + queries retired', () => {
 // ─── 2. lib/stripe.js: description fix + consent_collection (spec §3 req 2, 10) ─
 
 describe('T2 lib/stripe.js: Checkout description + consent_collection (source)', () => {
+  // AUD-CAC (credits-as-cash, 2026-09-27): createCheckoutSession now takes a
+  // 4th `lotKind` argument and computes `description` as a ternary (unit vs
+  // dollar-lot wording — ruling L4/L5, the ONE exception to "no
+  // flag-rendered copy": the pack description Stripe's own Checkout page
+  // shows the buyer). Before: the literal property assignment
+  // `description: \`${pack.unlocks} unlocks\`,` appeared verbatim. After: the
+  // unit-lot branch of the ternary still computes that exact string, and a
+  // default `lotKind = 'unit'` keeps every caller that doesn't pass a 4th
+  // argument byte-identical in OUTPUT (see T3 below, unchanged).
   it('product_data.description no longer references queries', () => {
     assert.ok(!STRIPE_LIB_SRC.includes('${pack.queries} queries'),
       'the false "queries" claim must not reach Stripe\'s hosted page/receipt');
-    assert.ok(STRIPE_LIB_SRC.includes('description: `${pack.unlocks} unlocks`'));
+    assert.ok(STRIPE_LIB_SRC.includes('`${pack.unlocks} unlocks`'),
+      'the unit-lot description wording must still compute the pre-AUD-CAC string');
+    assert.ok(STRIPE_LIB_SRC.includes("description,"),
+      'product_data now takes the pre-computed description (unit or dollar-lot wording)');
   });
   it('consent_collection.terms_of_service is required on the Session', () => {
     assert.ok(STRIPE_LIB_SRC.includes("consent_collection: { terms_of_service: 'required' }"));
@@ -245,8 +261,14 @@ describe('T6 /account/connect-stripe: same paused-rail 503 shape as /withdraw/st
 // ─── 7. POST /checkout/session: Terms gate (GOV-2 A3, blocking) ────────────
 
 describe('T7 /checkout/session: current-Terms-acceptance gate', () => {
+  // AUD-CAC (credits-as-cash, 2026-09-27): both spans widened from 2500 to
+  // 5200 — the route gained the account-hold check (spec §2 test 16/§8 test
+  // 26) and the two purchase caps (spec §2, ruling L6) between pack
+  // validation and Stripe-usability/session-creation. The markers, the
+  // ordering asserted, and the terms-gate/stripe-usability assertions are
+  // all unchanged.
   it('gates on hasAcceptedCurrentTos before pack validation / session creation, after paymentsEnabled', () => {
-    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 2500);
+    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 5200);
     const paymentsIdx = h.indexOf('if (!paymentsEnabled())');
     const termsIdx = h.indexOf('if (!hasAcceptedCurrentTos(checkoutAccount))');
     const packIdx = h.indexOf('const { pack } = body');
@@ -259,7 +281,7 @@ describe('T7 /checkout/session: current-Terms-acceptance gate', () => {
     assert.ok(h.includes('return termsNotAcceptedResponse(c);'));
   });
   it('gates on Stripe usability (CREDITS-CONFIG-USABLE) after pack validation, before session creation', () => {
-    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 2500);
+    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 5200);
     const packIdx = h.indexOf('const { pack } = body');
     const stripeIdx = h.indexOf('if (!stripeStatus.configured)');
     const createIdx = h.indexOf('createCheckoutSession(');
@@ -268,6 +290,43 @@ describe('T7 /checkout/session: current-Terms-acceptance gate', () => {
       'usability check must run after pack validation and before session creation');
     assert.ok(h.includes("code: 'stripe_unusable',"));
     assert.ok(h.includes('reason: stripeStatus.reason,'));
+  });
+  // AUD-CAC: the two purchase caps (spec §2, ruling L6) sit between pack
+  // validation and the Stripe-usability check, always checked regardless of
+  // CREDITS_AS_CASH_ENABLED.
+  it('checks the balance cap and the daily purchase cap after pack validation, before Stripe usability [AUD-CAC]', () => {
+    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 5200);
+    const packIdx = h.indexOf('const { pack } = body');
+    const balanceIdx = h.indexOf('checkBalanceCap(accountId, packPrice)');
+    const dailyIdx = h.indexOf('checkDailyCap(accountId, packPrice)');
+    const stripeIdx = h.indexOf('if (!stripeStatus.configured)');
+    assert.notEqual(balanceIdx, -1, 'the balance cap must be checked');
+    assert.notEqual(dailyIdx, -1, 'the daily purchase cap must be checked');
+    assert.ok(packIdx < balanceIdx && balanceIdx < dailyIdx && dailyIdx < stripeIdx,
+      'both caps must be checked after pack validation and before the Stripe usability probe');
+    assert.ok(h.includes("code: 'BALANCE_CAP_EXCEEDED',"));
+    assert.ok(h.includes("code: 'DAILY_PURCHASE_CAP_EXCEEDED',"));
+  });
+  it('refuses a held account before pack validation, with a 403 and code ACCOUNT_HELD [AUD-CAC]', () => {
+    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 5200);
+    const termsIdx = h.indexOf('if (!hasAcceptedCurrentTos(checkoutAccount))');
+    const heldIdx = h.indexOf('if (isAccountHeld(accountId))');
+    const packIdx = h.indexOf('const { pack } = body');
+    assert.notEqual(heldIdx, -1, 'the route must check isAccountHeld');
+    assert.ok(termsIdx < heldIdx && heldIdx < packIdx, 'the hold check must sit after the Terms gate and before pack validation');
+    assert.ok(h.includes("code: 'ACCOUNT_HELD',"));
+  });
+  it('the flag is read exactly here, at session creation, never inside the webhook [AUD-CAC ruling L4]', () => {
+    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 5200);
+    assert.ok(h.includes('const lotKind = creditsAsCashEnabled()'),
+      'the checkout route decides the lot kind from the flag');
+    const createIdx = h.indexOf('createCheckoutSession(accountId, pack, baseUrl, lotKind)');
+    assert.notEqual(createIdx, -1, 'the decided lotKind must be passed into session creation');
+    const webhookSlice = sliceAt(SERVER_SRC, "app.post('/webhook/stripe'", 3200);
+    assert.ok(!webhookSlice.includes('creditsAsCashEnabled('),
+      'the webhook must read only the session metadata, never the flag');
+    assert.ok(webhookSlice.includes('lot_kind } = metadata;'),
+      'the webhook reads the fixed lot_kind the session promised the buyer');
   });
 });
 
@@ -637,8 +696,13 @@ describe('T16 CREDITS-QUERIES-RESIDUAL: packs grant unlocks only', () => {
       'unlock counts must be untouched');
   });
 
-  it('the webhook no longer destructures/parses pack_queries and always passes 0 to addPurchasedCredits', () => {
-    const h = sliceAt(SERVER_SRC, "event.type === 'checkout.session.completed'", 1500);
+  // AUD-CAC (credits-as-cash, 2026-09-27): span widened from 1500 to 2800 —
+  // the webhook gained a lot_kind branch (unit vs dollar-lot, ruling L4) and
+  // the second cap check (spec §2 test 16) ahead of this call site. The
+  // marker and the unit-lot-branch assertion are unchanged: addPurchasedCredits
+  // is still called with the identical arguments, now inside an `else` arm.
+  it('the webhook no longer destructures/parses pack_queries and always passes 0 to addPurchasedCredits (unit-lot branch)', () => {
+    const h = sliceAt(SERVER_SRC, "event.type === 'checkout.session.completed'", 2800);
     assert.ok(!h.includes('pack_queries'), 'pack_queries must not be read from the webhook metadata anymore');
     assert.ok(h.includes('addPurchasedCredits(account_id, 0, unlocks, { unlock_unit_price_usd: unlockUnitPrice })'),
       'the webhook must always grant 0 queries — packs sell unlocks only');

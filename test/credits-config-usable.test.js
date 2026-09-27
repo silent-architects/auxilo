@@ -437,8 +437,13 @@ describe('/health wiring: stripe_configured/stripe_reason/stripe_mode from getSt
 // ─── 7. POST /checkout/session: 503 + reason code when unusable ────────────
 
 describe('/checkout/session wiring: fails closed on usability with a machine-readable reason', () => {
+  // AUD-CAC (credits-as-cash, 2026-09-27): span widened from 2500 to 5200 —
+  // the route gained the account-hold check and the two purchase caps ahead
+  // of the Stripe usability probe (see test/credits-control-part1.test.js
+  // T7 for the full ordering pin). The marker and every assertion here are
+  // unchanged.
   it('gates on stripeStatus.configured and returns code + reason in the 503 body', () => {
-    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 2500);
+    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 5200);
     assert.ok(h.includes('notifyStripeCheckoutAttempt();'), 'must arm/trigger the reprobe on every attempt');
     assert.ok(h.includes('const stripeStatus = getStripeStatus();'));
     assert.ok(h.includes('if (!stripeStatus.configured)'));

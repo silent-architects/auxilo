@@ -341,7 +341,14 @@ cd "${REPO_ROOT}"
 # offset.test.js's EXPECTED_1440_H1_TOP map, not a count change). Verified
 # against the actual `npm test` discovered count: 3646 -> 3649, 0 fail, 6
 # skipped (pre-existing, unrelated).
-EXPECTED_TEST_COUNT=3649
+# AUD-CAC / credits-as-cash (2026-09-27): +71 across four test files —
+# test/credits-as-cash-lots.test.js (48, lot schema/caps/holds/flag/never-do),
+# test/credits-as-cash-unlock.test.js (8, staged-server dollar-lot accrual
+# math), test/credits-as-cash-refunds.test.js (12, Part 2 refunds/disputes),
+# and 3 new assertions in test/credits-control-part1.test.js (cap check,
+# account-hold gate, flag-read-once wiring). Verified against the actual
+# discovered count: 3649 -> 3720, 0 fail, 6 skipped (pre-existing, unrelated).
+EXPECTED_TEST_COUNT=3720
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

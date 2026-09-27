@@ -236,9 +236,16 @@ describe('server.js: accrual basis = min(list, credit unit price), credit path o
   // CH-7: computed in before() — a failed slice exits 1, never fail-0/exit-0.
   before(() => { h = unlockHandlerSlice(); });
 
-  it('basis is min(UNLOCK_PRICE, creditUnit) on the credit path, UNLOCK_PRICE otherwise (x402/router unchanged)', () => {
-    assert.ok(/const accrualBasis = \(fundingSource === 'credit_pack'\)\s*\n\s*\? Math\.min\(UNLOCK_PRICE,/.test(h),
-      'credit path takes min(list, unit)');
+  // AUD-CAC (credits-as-cash, 2026-09-27): a credit-path unlock can now be
+  // funded by a unit lot OR a dollar lot. Before this build the credit path
+  // always took min(list, creditUnit) unconditionally; it now branches on
+  // creditLotKind first — the unit-lot sub-branch is byte-identical to the
+  // old formula, and a dollar-lot draw's basis becomes the paid-drawn
+  // portion of the debit (never the promo portion — ruling L2).
+  it('basis branches on creditLotKind: dollar draws use the paid-drawn portion, unit draws keep min(UNLOCK_PRICE, creditUnit), x402/router stay UNLOCK_PRICE [AUD-CAC]', () => {
+    assert.ok(/const accrualBasis = \(fundingSource === 'credit_pack'\)\s*\n\s*\? \(creditLotKind === 'dollar'/.test(h),
+      'credit path now branches on which kind of lot funded the unlock');
+    assert.ok(/: Math\.min\(UNLOCK_PRICE,/.test(h), 'the unit-lot sub-branch still takes min(list, unit)');
     assert.ok(/: UNLOCK_PRICE;/.test(h), 'x402/router basis stays the list price by construction');
   });
 
@@ -269,8 +276,12 @@ describe('server.js: per-(buyer, learning) accrual cap wiring', () => {
   let h;
   before(() => { h = unlockHandlerSlice(); });
 
-  it('cap consulted only on the credit path with a known buyer', () => {
-    assert.ok(/const accrualCapped = \(fundingSource === 'credit_pack'\) && !!buyerAccountId\s*\n\s*&& isAccrualCapped\(buyerAccountId, id\);/.test(h));
+  // AUD-CAC: the 30-day repeat cap now applies to a unit-lot-funded
+  // credit-path unlock only (ruling L3, design 2) — a dollar-lot-funded
+  // unlock is never capped, so the definition gained a `creditLotKind !==
+  // 'dollar'` guard.
+  it('cap consulted only on a unit-lot credit path with a known buyer [AUD-CAC]', () => {
+    assert.ok(/const accrualCapped = \(fundingSource === 'credit_pack'\) && creditLotKind !== 'dollar' && !!buyerAccountId\s*\n\s*&& isAccrualCapped\(buyerAccountId, id\);/.test(h));
   });
 
   it('capped repeat serves content, accrues $0, writes no WAL', () => {
@@ -292,11 +303,13 @@ describe('server.js: per-(buyer, learning) accrual cap wiring', () => {
       'ranking counter + demand increments are gated on countersCredited');
   });
 
-  it('the accrual is recorded against the cap BEFORE the WAL write (crash-conservative)', () => {
+  // AUD-CAC: the recordAccrual guard picked up the same creditLotKind !==
+  // 'dollar' condition as accrualCapped above, for the same reason (design 2).
+  it('the accrual is recorded against the cap BEFORE the WAL write (crash-conservative) [AUD-CAC guard updated]', () => {
     const rec = h.indexOf('recordAccrual(buyerAccountId, id);');
     const wal = h.indexOf("createWalEntry('unlock'");
     assert.ok(rec !== -1 && wal !== -1 && rec < wal);
-    assert.ok(/if \(fundingSource === 'credit_pack' && buyerAccountId\) \{\s*\n\s*recordAccrual\(buyerAccountId, id\);/.test(h),
+    assert.ok(/if \(fundingSource === 'credit_pack' && creditLotKind !== 'dollar' && buyerAccountId\) \{\s*\n\s*recordAccrual\(buyerAccountId, id\);/.test(h),
       'recorded only for credit-path accruals');
   });
 
