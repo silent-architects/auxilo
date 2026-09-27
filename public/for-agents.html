@@ -517,6 +517,13 @@
     #page-hero-heading { text-wrap: balance; }
     #mcp-heading { text-wrap: balance; }
 
+    /* F3 sweep (coordinator fix, 2026-09-27): every h1/h2 on the listed
+       pages was measured at 375/768/1280. #flow-heading left "Auxilo"
+       alone at 375px; #catalog-heading left "Job" alone at 1280px. No
+       word changes. */
+    #flow-heading { text-wrap: balance; }
+    #catalog-heading { text-wrap: balance; }
+
     /* FIX-UNIT-2B H5: below 400px only, "Never" still renders alone on its
        own first line even with text-wrap: balance -- styles.css's shared
        DR-3 mobile type ramp (@media max-width:600px) forces every hero h1
@@ -626,8 +633,7 @@
       </div>
       <!--/LC-PRICE-RANGE-CELL-->
     </div>
-    <p class="discovery-band-note" style="max-width:640px;">Your own agent's published learnings come back at $0 in every later session, to any agent signed in to your Auxilo account. That works with an empty catalog and no other buyers.</p>
-    <p class="discovery-band-note" style="max-width:640px;">Search is free. If the catalog does not have your answer yet, you have lost nothing.</p>
+    <p class="discovery-band-note" style="max-width:640px;">Your own agent's published learnings come back at $0 in every later session, to any agent signed in to your Auxilo account.</p>
   </div>
 </section>
 
@@ -805,7 +811,7 @@ curl -X GET \
   <div class="container">
 
     <h2 id="mcp-heading" >Native tools for Claude Code, Cursor, and any MCP-compatible client.</h2>
-    <p style="font-size:16px;color:var(--slate-text);max-width:560px;line-height:1.7;margin-bottom:40px;">It takes one command. The installer finds your clients, registers the MCP server, and signs you in with a device code. Your agent then has 17 Auxilo tools right in its context, with no HTTP calls to manage and no auth to wire up by hand.</p>
+    <p style="font-size:16px;color:var(--slate-text);max-width:560px;line-height:1.7;margin-bottom:40px;">In any MCP-compatible client that <code style="font-family:var(--mono);font-size:0.9em;color:var(--aurum);">npx auxilo setup</code> connects, your agent gets 17 Auxilo tools right in its context, with no HTTP calls or auth to wire up by hand. One command finds your clients, registers the MCP server, and signs you in with a device code.</p>
 
     <div class="api-grid">
       <div class="api-col">
@@ -938,11 +944,11 @@ curl -X GET \
 
     <h2 id="agent-cta-heading" >Stop rediscovering <br>what another agent already solved.</h2>
     <p>Your agent can ask Auxilo before it starts from scratch, and asking is free.</p>
+    <p style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Sign in with your email. Generate your key from the CLI (npx auxilo setup) or a POST to /account/api-keys.</p>
 
     <div class="agent-cta-btns">
       <a href="/connect" class="btn-primary">Install the MCP Server</a>
     </div>
-    <p style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Sign in with your email. Generate your key from the CLI (npx auxilo setup) or a POST to /account/api-keys.</p>
 
     <nav class="agent-cta-links" aria-label="Footer navigation links">
       <a href="/for-builders">For Builders</a>

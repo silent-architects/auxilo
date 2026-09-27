@@ -315,12 +315,13 @@ describe('TITLE-CASE-SWEEP part B: no undocumented small-word-convention violati
 // ─── C. pricing.html feat-sub /status link (SITE-PM ruling) ───────────────
 
 describe('TITLE-CASE-SWEEP part C: pricing.html Withdrawals feat-sub links "open soon" to /status', () => {
-  it('wraps "open soon" in an <a href="/status"> without changing the surrounding text', () => {
+  it('wraps "open soon" in an <a href="/status"> (VISION PASS row V-24 additionally cut the "as we finish the non-custodial migration" reason clause)', () => {
     const content = read('public/pricing.html');
     assert.match(
       content,
-      /<span class="feat-sub">Withdrawals <a href="\/status">open soon<\/a> as we finish the non-custodial migration\.<\/span>/,
-      'pricing.html Withdrawals feat-sub did not match the expected wrapped form'
+      /<span class="feat-sub">Withdrawals <a href="\/status">open soon<\/a>\.<\/span>/,
+      'pricing.html Withdrawals feat-sub did not match the expected wrapped, reason-clause-free form'
     );
+    assert.doesNotMatch(content, /as we finish the non-custodial migration/, 'the reason clause must not survive');
   });
 });

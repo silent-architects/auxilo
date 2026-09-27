@@ -23,17 +23,9 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
 
 const REPO = path.join(__dirname, '..');
 const STATIC_HTML = fs.readFileSync(path.join(REPO, 'public', 'for-builders.html'), 'utf8');
-
-let ORIGIN_MAIN_HTML = null;
-try {
-  ORIGIN_MAIN_HTML = execFileSync('git', ['show', 'origin/main:public/for-builders.html'], { cwd: REPO, encoding: 'utf8' });
-} catch {
-  ORIGIN_MAIN_HTML = null;
-}
 
 // ─── Normalization helpers (per BUILDER-RULES: strip tags, decode entities,
 // collapse whitespace, collapse space before punctuation) ──────────────────
@@ -114,6 +106,19 @@ function wordCount(str) {
   return normalize(str).split(/\s+/).filter(Boolean).length;
 }
 
+// CH-7: module scope, not describe scope (an assert-bearing helper declared
+// inside a describe() body is the same silent-failure class as a literal
+// describe-body assert — see test/ch7-describe-body-guard.test.js).
+function mathBlock(html) {
+  const start = html.indexOf('<h3>The Math (per Unlock)</h3>');
+  assert.ok(start > -1, 'math block heading found');
+  const footnoteStart = html.indexOf('<p id="math-footnote"', start);
+  assert.ok(footnoteStart > start, 'math footnote found');
+  const footnoteEnd = html.indexOf('</p>', footnoteStart);
+  assert.ok(footnoteEnd > footnoteStart, 'math footnote close tag found');
+  return html.slice(start, footnoteEnd + '</p>'.length);
+}
+
 // ─── Register text (verbatim, from REGISTER-B-REV2.md / REGISTER-F /
 // REGISTER-B-REV3-FOR-BUILDERS.md) ──────────────────────────────────────────
 
@@ -124,10 +129,12 @@ const R3_STEP02_BODY = 'Once extraction is on, it runs in the background while y
 const DRAFTING_BOUNDARY = 'Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted.';
 const R3_STEP03_TEXT_NORMALIZED = 'When another agent unlocks your learning, 70% of what they paid accrues to your Auxilo account, or 60% when Auxilo search surfaced it. Earnings depend on whether other agents unlock your learnings and are not guaranteed. Earnings accrue now. Withdrawals open soon.';
 const TWO_PATH_STATEMENT = 'An agent paying with x402 pays the listed price. An agent paying with credits pays one credit, currently $0.125 on the Starter pack and $0.10 on the Growth and Pro packs, whatever the listed price.';
-const OPTION_C_PARAGRAPH = `What the buyer paid depends on how they pay. ${TWO_PATH_STATEMENT}`;
 const NOT_GUARANTEED = 'Earnings depend on whether other agents unlock your learnings and are not guaranteed.';
-const B09_HEADING = 'Live Numbers';
-const B10_TEXT = "Auxilo launched on September 5, 2026. What you published comes back free when your agent asks Auxilo, signed in to your account. That works today and needs no buyers.";
+// VISION PASS (BUILD-BRIEF-VISION.md, REGISTER-V-VISION.md rows V-02/V-03):
+// the "Live Numbers" heading and its B-10 callout are retired. V-02 is the
+// new heading, V-03 the new callout body.
+const B09_HEADING = "Your Agent's Fixes Keep Working for You";
+const B10_TEXT = 'Your agent gets a fix you publish back free when it asks Auxilo, signed in to your account. Other agents can unlock it again and again. You earn a share when another agent unlocks it.';
 
 const FEATURE_LIST_ITEMS = [
   'Automatic extraction from agent conversations and memory files',
@@ -199,21 +206,30 @@ describe('LAUNCH-WAVE /for-builders: new tests (write-first, per BUILDER-RULES)'
     });
   });
 
-  describe('4. The drafting boundary pair (R3: back in the note, exactly once; step 02 carries none; FIX-UNIT-2B Part A adds a second served location, in both its visible and JSON-LD forms)', () => {
+  describe('4. The drafting boundary pair (R3: back in the note, exactly once; step 02 carries none; FIX-UNIT-2B Part A adds a second served location, in both its visible and JSON-LD forms; VISION PASS row V-12 prepends a new first sentence to the note)', () => {
+    const V12_SENTENCE = 'To turn captured sessions into learnings, sign in to Claude Code or set your own model API key with <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo provider set</code>.';
+
     it('the boundary pair appears exactly three times in the raw served file: the JSON-LD mirror of the new FAQ answer (head), the note under the steps (body), and the new FAQ answer\'s visible text (body) — FIX-UNIT-2B Part A, Q-01 REV 2 requires it verbatim in both the visible answer and its JSON-LD twin', () => {
       assert.equal(countOccurrences(STATIC_HTML, DRAFTING_BOUNDARY), 3, 'boundary pair appears exactly three times: new-FAQ JSON-LD + the note + new-FAQ visible answer');
       const noteIdx = STATIC_HTML.indexOf('<p class="drafting-note">');
       assert.ok(noteIdx > -1, 'note located');
-      const noteOccurrenceIdx = noteIdx + '<p class="drafting-note">'.length;
-      assert.equal(STATIC_HTML.slice(noteOccurrenceIdx, noteOccurrenceIdx + DRAFTING_BOUNDARY.length), DRAFTING_BOUNDARY, 'the boundary pair is still the first text inside the note');
+      const noteOccurrenceIdx = noteIdx + '<p class="drafting-note">'.length + V12_SENTENCE.length + 1;
+      assert.equal(STATIC_HTML.slice(noteOccurrenceIdx, noteOccurrenceIdx + DRAFTING_BOUNDARY.length), DRAFTING_BOUNDARY, 'the boundary pair is the first text inside the note after V-12\'s new sentence');
     });
 
-    it('the note under the three steps reads the boundary pair followed by the /works-with link sentence', () => {
+    it('V-12: the note opens on the new sentence, with the command rendered as code, verbatim', () => {
+      assert.equal(countOccurrences(STATIC_HTML, V12_SENTENCE), 1, 'V-12 sentence appears exactly once');
+      const noteIdx = STATIC_HTML.indexOf('<p class="drafting-note">');
+      const openIdx = noteIdx + '<p class="drafting-note">'.length;
+      assert.equal(STATIC_HTML.slice(openIdx, openIdx + V12_SENTENCE.length), V12_SENTENCE, 'V-12 sentence is the very first text inside the note');
+    });
+
+    it('the note under the three steps reads V-12\'s sentence, then the boundary pair, then the /works-with link sentence', () => {
       const noteMatch = STATIC_HTML.match(/<p class="drafting-note">([\s\S]*?)<\/p>/);
       assert.ok(noteMatch, '.drafting-note paragraph present');
       assert.equal(countOccurrences(STATIC_HTML, 'class="drafting-note"'), 1, 'exactly one drafting-note paragraph');
-      const expected = `${DRAFTING_BOUNDARY} <a href="/works-with">See what Auxilo captures on each client</a>.`;
-      assert.equal(noteMatch[1], expected, 'the note is the boundary pair then the linked sentence, period outside the link');
+      const expected = `${V12_SENTENCE} ${DRAFTING_BOUNDARY} <a href="/works-with">See what Auxilo captures on each client</a>.`;
+      assert.equal(noteMatch[1], expected, 'the note is V-12\'s sentence, then the boundary pair, then the linked sentence, period outside the link');
     });
 
     it('the note sits directly after .steps closes, inside #how-it-earns .container', () => {
@@ -224,17 +240,22 @@ describe('LAUNCH-WAVE /for-builders: new tests (write-first, per BUILDER-RULES)'
     });
   });
 
-  describe('4b. The two-path statement (R3: moved to the new Option C paragraph above the math block, exactly once)', () => {
-    it('appears exactly once on the page, in the Option C paragraph directly above the math block', () => {
-      assert.equal(countOccurrences(STATIC_HTML, TWO_PATH_STATEMENT), 1, 'two-path statement appears exactly once');
+  describe('4b. The two-path statement and its Option C paragraph are CUT (VISION PASS row V-06): the credit-path arithmetic now lives inside the math block itself (V-08-T/V-09-T)', () => {
+    it('the two-path statement is gone from the page entirely, not relocated', () => {
+      assert.equal(countOccurrences(STATIC_HTML, TWO_PATH_STATEMENT), 0, 'two-path statement must not survive anywhere on the page');
       const bodyCopyParas = [...STATIC_HTML.matchAll(/<p class="body-copy">([\s\S]*?)<\/p>/g)];
-      const optionCPara = bodyCopyParas.find((m) => normalize(m[1]) === OPTION_C_PARAGRAPH);
-      assert.ok(optionCPara, 'Option C paragraph found as a .body-copy paragraph, verbatim');
-      const paraIdx = STATIC_HTML.indexOf(optionCPara[0]);
+      assert.ok(!bodyCopyParas.some((m) => normalize(m[1]).startsWith('What the buyer paid depends on how they pay')), 'the Option C paragraph itself is gone, not just reworded');
+      // Positive control: the connect paragraph right before it (untouched by
+      // this row) is still there, proving the extraction still finds real text.
+      assert.ok(bodyCopyParas.some((m) => normalize(m[1]).startsWith('Set it up once with')), 'positive control: the connect paragraph is still present');
+    });
+
+    it('the math block sits directly after the connect paragraph, with nothing in between', () => {
       const scenarioIdx = STATIC_HTML.indexOf('<div class="earnings-scenario">');
       const connectParaIdx = STATIC_HTML.indexOf('Set it up once with');
       assert.ok(connectParaIdx > -1 && scenarioIdx > -1, 'connect paragraph and math block located');
-      assert.ok(paraIdx > connectParaIdx && paraIdx < scenarioIdx, 'Option C paragraph sits below the connect paragraph and above the math block');
+      const between = STATIC_HTML.slice(STATIC_HTML.indexOf('</p>', connectParaIdx) + 4, scenarioIdx);
+      assert.equal(normalize(between), '', 'no paragraph text sits between the connect paragraph and the math block now that V-06 cut the Option C paragraph');
     });
   });
 
@@ -318,20 +339,46 @@ describe('LAUNCH-WAVE /for-builders: new tests (write-first, per BUILDER-RULES)'
     }
   });
 
-  describe("9. The math block's visible text is byte-for-byte unchanged from origin/main", () => {
-    it('the block from "The Math (per Unlock)" through the end of its footnote is untouched', { skip: !ORIGIN_MAIN_HTML }, () => {
-      function mathBlock(html) {
-        const start = html.indexOf('<h3>The Math (per Unlock)</h3>');
-        assert.ok(start > -1, 'math block heading found');
-        const footnoteStart = html.indexOf('<p id="math-footnote"', start);
-        assert.ok(footnoteStart > start, 'math footnote found');
-        const footnoteEnd = html.indexOf('</p>', footnoteStart);
-        assert.ok(footnoteEnd > footnoteStart, 'math footnote close tag found');
-        return html.slice(start, footnoteEnd + '</p>'.length);
-      }
-      const currentBlock = mathBlock(STATIC_HTML);
-      const originBlock = mathBlock(ORIGIN_MAIN_HTML);
-      assert.equal(normalize(currentBlock), normalize(originBlock), 'math block visible text matches origin/main exactly');
+  describe('9. The math block (VISION PASS rows V-07/V-08-T/V-09-T, REV 3, TRUE TODAY): heading unchanged, body and footnote rewritten to the register\'s exact strings', () => {
+    // REV 2/REV 3 correction (charter V7): the math block STAYS — the owner
+    // ruled this twice on 2026-09-06 and the register says do not
+    // re-litigate. What changes is that every figure is made true against
+    // the code and the credit-path outcome sits in the body with equal
+    // weight (V-08-T), and the footnote carries the tightened, true-today
+    // explanation (V-09-T). This block replaces the old "byte-for-byte
+    // unchanged from origin/main" pin, which is no longer the rule.
+    const MATH_BODY = 'A learning listed at $1.00* earns you $0.70 (70%) when another agent pays the listed price to unlock it, or $0.07 to $0.0875 when another agent pays with a credit. You earn again* on the same learning when another agent unlocks it, and nothing you publish expires while it stays in the catalog.';
+    const MATH_FOOTNOTE = '*Example price. An agent signed in to an Auxilo account pays with credits. A credit from a pack costs $0.10 to $0.125, whatever the listed price, and you earn 70% of the credit or the listed price, whichever is lower (60% when Auxilo search surfaced it). A repeat unlock by the same buyer within 30 days earns nothing when the buyer pays with credits. Some unlocks are issued as $0.00 promotional grants and earn nothing. Earnings accrue now. Withdrawals open soon.';
+
+    it('the heading "The Math (per Unlock)" is unchanged (V-07: no change)', () => {
+      assert.equal(countOccurrences(STATIC_HTML, '<h3>The Math (per Unlock)</h3>'), 1);
+    });
+
+    it('the body paragraph equals the V-08-T text verbatim (normalized), and both figures carry the same earnings-highlight treatment', () => {
+      const block = mathBlock(STATIC_HTML);
+      const bodyMatch = block.match(/<p>([\s\S]*?)<\/p>/);
+      assert.ok(bodyMatch, 'body paragraph found');
+      assert.equal(normalize(bodyMatch[1]), MATH_BODY, 'body paragraph equals V-08-T verbatim');
+      const hasHighlight07 = /<span class="earnings-highlight">\$0\.70<\/span>/.test(bodyMatch[1]);
+      const hasHighlightCredit = /<span class="earnings-highlight">\$0\.07 to \$0\.0875<\/span>/.test(bodyMatch[1]);
+      assert.equal(hasHighlight07, hasHighlightCredit, '$0.70 and $0.07 to $0.0875 must carry the same earnings-highlight treatment (both or neither)');
+      assert.ok(hasHighlight07 && hasHighlightCredit, 'both figures are wrapped in earnings-highlight');
+      assert.equal((bodyMatch[1].match(/<sup aria-describedby="math-footnote">\*<\/sup>/g) || []).length, 2, 'both sup asterisks are present');
+    });
+
+    it('the footnote equals the tightened V-09-T text verbatim (normalized), sits directly beneath the body in the same parent, and links "Withdrawals open soon" to /status', () => {
+      const block = mathBlock(STATIC_HTML);
+      const footnoteMatch = block.match(/<p id="math-footnote"[^>]*>([\s\S]*?)<\/p>/);
+      assert.ok(footnoteMatch, 'footnote paragraph found');
+      assert.equal(normalize(footnoteMatch[1]), MATH_FOOTNOTE, 'footnote equals V-09-T (tightened) verbatim');
+      assert.match(footnoteMatch[1], /<a href="\/status">Withdrawals open soon<\/a>/, '"Withdrawals open soon" links to /status');
+    });
+
+    it('the block carries none of the retired footnote strings (illustrative-at-a-common-price-point, auxilo.io/status inline, Auxilo is early)', () => {
+      const block = mathBlock(STATIC_HTML);
+      assert.doesNotMatch(block, /illustrative, at a common price point/);
+      assert.doesNotMatch(block, /auxilo\.io\/status shows where things stand/);
+      assert.doesNotMatch(block, /Auxilo is early/);
     });
   });
 

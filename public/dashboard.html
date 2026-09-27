@@ -813,7 +813,7 @@
       <div id="earnings-loading" class="loading-text"><span class="spinner"></span>Loading earnings...</div>
       <div id="earnings-content" style="display:none">
         <div class="earnings-grid" id="earnings-grid"></div>
-        <p id="earnings-empty-note" style="display:none;font-size:13px;color:var(--slate);margin-top:16px;line-height:1.6">Nothing has accrued yet. When another agent unlocks one of your published learnings, your share accrues and shows here.</p>
+        <p id="earnings-empty-note" style="display:none;font-size:13px;color:var(--slate);margin-top:16px;line-height:1.6">When another agent unlocks one of your published learnings, your share accrues and shows here.</p>
         <!-- LAYOUT-SHEET-ADDENDUM item 5(a): reuses the page's own consent-checkbox
              pattern (terms-gate, clean-lane-agree). Native, unstyled checkbox --
              no accent-color, no gold. Ships hidden; revealed only once
@@ -1542,7 +1542,7 @@
     cryptoHead.style.color = 'var(--ivory)';
     cryptoHead.style.display = 'block';
     cryptoHead.style.marginBottom = '6px';
-    cryptoHead.textContent = 'Wallet (USDC on Base): coming soon';
+    cryptoHead.textContent = 'Wallet (USDC on Base)';
     cryptoWrap.appendChild(cryptoHead);
 
     if (data && data.wallet) {
@@ -1557,14 +1557,14 @@
       var note = document.createElement('div');
       note.style.marginTop = '8px';
       note.style.fontSize = '12px';
-      note.textContent = 'USDC withdrawals on Base are paused while our non-custodial rail rolls out. Bank withdrawals via Stripe open soon as well. The withdrawals section below shows where things stand. Your wallet stays linked and ready.';
+      note.textContent = 'Your wallet is linked and ready for USDC withdrawals on Base when they open. Bank withdrawals via Stripe open soon. The withdrawals section below shows where things stand.';
 
       cryptoWrap.appendChild(linkedLine);
       cryptoWrap.appendChild(addrSpan);
       cryptoWrap.appendChild(note);
     } else {
       var noWallet = document.createElement('div');
-      noWallet.textContent = 'No wallet linked. USDC withdrawals on Base are rolling out on our non-custodial rail (coming soon). You can link a wallet now through your agent. Verify it with auxilo_verify_wallet, then link it with auxilo_link_wallet. Linking asks the wallet to sign a one-time challenge proving you control it. Bank withdrawals via Stripe open soon as well. The withdrawals section below shows where things stand.';
+      noWallet.textContent = 'No wallet linked. Link one now through your agent so it is ready when USDC withdrawals on Base open. Verify it with auxilo_verify_wallet, then link it with auxilo_link_wallet. Linking asks the wallet to sign a one-time challenge proving you control it. Bank withdrawals via Stripe open soon. The withdrawals section below shows where things stand.';
       cryptoWrap.appendChild(noWallet);
     }
 

@@ -121,14 +121,14 @@ describe('Wave E fix F2: for-builders hero stat rule scoped to #builders-hero, n
     );
   });
 
-  it('for-builders.html: the top hero strip lives inside #builders-hero and the second strip does not', () => {
+  it('for-builders.html: the top hero strip lives inside #builders-hero; the second (ledger) strip with lc-unlocks is gone entirely (VISION PASS V-04, superseding this row\'s original premise)', () => {
     const html = readPublic('for-builders.html');
     const heroSection = html.match(/<section id="builders-hero"[\s\S]*?<\/section>/);
     assert.ok(heroSection, '#builders-hero section found');
     assert.match(heroSection[0], /class="builders-hero-stats"/, 'the top strip is inside #builders-hero');
-    const secondStripIdx = html.indexOf('id="lc-unlocks"');
-    const heroSectionEndIdx = html.indexOf(heroSection[0]) + heroSection[0].length;
-    assert.ok(secondStripIdx > heroSectionEndIdx, 'the second (ledger) strip with lc-unlocks lives after #builders-hero closes');
+    assert.ok(!html.includes('id="lc-unlocks"'), 'the second (ledger) strip no longer exists anywhere on the page — VISION PASS row V-04 cut it, not just moved it');
+    // Positive control: the top strip's own stat cells are still there.
+    assert.equal((heroSection[0].match(/class="builders-hero-stat"/g) || []).length, 3, 'positive control: the top strip\'s three stat cells are still present');
   });
 });
 

@@ -312,7 +312,36 @@ cd "${REPO_ROOT}"
 # control proving that check can fail). 0 removed. Verified against the
 # actual `npm test` discovered count: 3551 -> 3555, 0 fail, 6 skipped
 # (pre-existing, unrelated).
-EXPECTED_TEST_COUNT=3555
+#
+# VISION PASS (SITE-PM, 2026-09-27, BUILD-BRIEF-VISION.md): the excuse/
+# usage-number cut across /, /for-builders, /for-agents, /how-it-works,
+# /pricing, and the dashboard. New: test/vision-pass-guard.test.js (the
+# brief's Part B guard, plus the S-3 non-empty-ledger proof) and
+# test/vision-dashboard-payout-panel.test.js (V-27/V-28/V-33, the payout
+# panel's non-paused branch, driven via a network mock per the brief).
+# Updated in place (net test-count deltas, not just re-pins): launch-wave-
+# for-builders.test.js (+2: V-12's new sentence gets its own check, and the
+# math block section grows from one byte-for-byte pin into four V-07/V-08-T/
+# V-09-T checks), builders-strip-zeros.test.js (net +5: the retired ledger-
+# strip suite is replaced by absence + S-2-no-longer-fires checks, plus new
+# V-29/P-3 checks), site-restructure-w3-c.test.js and pricing-live-range.
+# test.js (the pricing hero ledger tile's presence checks become absence
+# checks, same test count), wave-e-fix.test.js and launch-wave-dashboard.
+# test.js and title-case-sweep.test.js (pin updates only, same count),
+# strip-date-hook.test.js (the retired as-of suite replaced by absence
+# checks, same count). Verified against the actual `npm test` discovered
+# count: 3555 -> 3646, 0 fail, 6 skipped (pre-existing, unrelated).
+#
+# Coordinator fixes F1-F4 (2026-09-27), same wave: +3, all in
+# test/vision-pass-guard.test.js's new F4 describe block (the two
+# reference-line reason-clause checks, api.html and llms.txt, plus one
+# sanity test that openapi.json/status.html/the trust page are untouched).
+# F1/F2/F3 changed CSS/markup only, no test added or removed for those three
+# (F1's hero-padding change updated one existing pin in test/mobile-header-
+# offset.test.js's EXPECTED_1440_H1_TOP map, not a count change). Verified
+# against the actual `npm test` discovered count: 3646 -> 3649, 0 fail, 6
+# skipped (pre-existing, unrelated).
+EXPECTED_TEST_COUNT=3649
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

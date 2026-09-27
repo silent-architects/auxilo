@@ -50,6 +50,15 @@
  * absence checks — marked inline below. Item 2 (Value Tiers EXAMPLE
  * column) is untouched by item C and its guard still holds unchanged.
  *
+ * SECOND RETIREMENT NOTE (VISION PASS, SITE-PM, 2026-09-27, register rows
+ * V-20/V-21/V-22): item C moved id="lc-learnings" and id="lc-categories"
+ * into a live-ledger hero tile after cutting "The Numbers"; this pass cuts
+ * that WHOLE hero tile in turn (usage numbers leave the sales surfaces,
+ * charter ruling V1), including the marker comments, lc-learnings, and
+ * lc-categories. The behavioral test's "renders id="lc-learnings"/
+ * id="lc-categories" live in the hero" assertions are converted to
+ * absence checks below.
+ *
  * Runner: node --test test/pricing-live-range.test.js
  */
 
@@ -182,8 +191,8 @@ function expectedDisplayPrice(learning, catalog) {
   return Math.min(50, Math.max(0.05, Number(p) || DEFAULT_UNLOCK_PRICE));
 }
 
-describe('behavioral: GET /pricing renders the live hero stats, no lc-price-range, no EXAMPLE column (SITE-RESTRUCTURE-W3 item C3)', () => {
-  it('renders id="lc-learnings"/id="lc-categories" live in the hero, carries no id="lc-price-range" anywhere, and zero example-text cells', { timeout: 90_000 }, async (t) => {
+describe('behavioral: GET /pricing carries no lc-learnings/lc-categories/lc-price-range anywhere (VISION PASS V-20/V-21/V-22 cut the whole hero tile), no EXAMPLE column', () => {
+  it('carries no id="lc-learnings", no id="lc-categories", no id="lc-price-range", no LC-PRICING-LEDGER-TILE marker, and zero example-text cells', { timeout: 90_000 }, async (t) => {
     let nodeModulesDir;
     try {
       const honoEntry = require.resolve('hono', { paths: [REPO_ROOT] });
@@ -246,20 +255,17 @@ describe('behavioral: GET /pricing renders the live hero stats, no lc-price-rang
       assert.equal(html.split('Current Unlock Price Range').length - 1, 0,
         'the retired "Current Unlock Price Range" label must not appear in the rendered HTML');
 
-      // The 3 live-ledger stats that replaced it, now in the hero, still
-      // bind from the SAME fixture catalog — derived the same way
-      // renderLiveCatalogStats derives them (count = visible.length,
-      // cats = distinct categories), not hand-typed.
-      const expectedCount = String(catalog.length);
-      const expectedCats = String(new Set(catalog.map((l) => l.category)).size);
-      const learningsMatch = html.match(/id="lc-learnings"[^>]*>([^<]*)</);
-      const categoriesMatch = html.match(/id="lc-categories"[^>]*>([^<]*)</);
-      assert.ok(learningsMatch, 'id="lc-learnings" element must be present in the rendered HTML (moved to the hero)');
-      assert.equal(learningsMatch[1], expectedCount,
-        `live learnings count must reflect the fixture catalog (expected ${expectedCount})`);
-      assert.ok(categoriesMatch, 'id="lc-categories" element must be present in the rendered HTML (moved to the hero)');
-      assert.equal(categoriesMatch[1], expectedCats,
-        `live categories count must reflect the fixture catalog (expected ${expectedCats})`);
+      // VISION PASS (V-20/V-21/V-22): the whole hero ledger tile — the 3
+      // live-ledger stats item C moved here, plus the as-of span — is CUT
+      // with no replacement (charter ruling V1: usage numbers leave the
+      // sales surfaces). Assert absence, not a live-computed value.
+      assert.ok(!html.includes('id="lc-learnings"'), 'id="lc-learnings" must not appear anywhere in the rendered /pricing HTML');
+      assert.ok(!html.includes('id="lc-categories"'), 'id="lc-categories" must not appear anywhere in the rendered /pricing HTML');
+      assert.ok(!html.includes('id="lc-asof"'), 'id="lc-asof" must not appear anywhere in the rendered /pricing HTML');
+      assert.ok(!html.includes('LC-PRICING-LEDGER-TILE'), 'the LC-PRICING-LEDGER-TILE marker pair must not survive');
+      // Positive control: the hero's own h1 still renders, proving this is
+      // a real fetched page, not an empty response.
+      assert.ok(html.includes('Search free. Pay only when you unlock, from $0.05.'), 'positive control: hero h1 text present');
 
       // Item 2: EXAMPLE column absent from the live-rendered page too.
       assert.ok(!html.includes('example-text'), 'no example-text cells in the served HTML');

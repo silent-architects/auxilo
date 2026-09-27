@@ -360,10 +360,11 @@ describe('LW3: Earnings card D-31 disclaimer', () => {
     assert.strictEqual((DASHBOARD_HTML.match(new RegExp(sentence.replace(/[.]/g, '\\.'), 'g')) || []).length, 1, 'D-31 appears exactly once');
   });
 
-  it('D-30 (real zeros are stated) is present and the $0.00 grid items are unconditional', () => {
+  it('D-30 (real zeros are stated) is present and the $0.00 grid items are unconditional (VISION PASS row V-26 cut the "Nothing has accrued yet." excuse; the rest of the sentence stands alone)', () => {
+    assert.ok(!DASHBOARD_HTML.includes('Nothing has accrued yet. When another agent unlocks'), 'V-26: the old excuse-prefixed sentence must not survive');
     assert.ok(DASHBOARD_HTML.includes(
-      'Nothing has accrued yet. When another agent unlocks one of your published learnings, your share accrues and shows here.',
-    ), 'D-30');
+      'id="earnings-empty-note" style="display:none;font-size:13px;color:var(--slate);margin-top:16px;line-height:1.6">When another agent unlocks one of your published learnings, your share accrues and shows here.<',
+    ), 'D-30, V-26: the note now opens directly on "When another agent unlocks..."');
     const renderEarningsFn = sliceBetween(DASHBOARD_HTML, 'function renderEarnings(data) {', '// ── Payout panel');
     // REGISTER-B2-REV2.md ruling: "The $0.00 cells stay" -- the four-item grid
     // is NOT replaced by the empty state (a deviation from BUILD-SPEC-W3's

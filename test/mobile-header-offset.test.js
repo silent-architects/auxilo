@@ -120,7 +120,13 @@ const EXPECTED_1440_H1_TOP = {
   'public/connect.html': 130,
   'public/dashboard.html': 208.8,
   'public/for-agents.html': 140,
-  'public/for-builders.html': 250,
+  // F1 (coordinator fix, 2026-09-27, VISION PASS): #builders-hero's desktop
+  // padding-top cut 140px -> 96px (44px) so the first screen at 1280x800
+  // holds the whole gold primary button beneath the new P-3 step line.
+  // h1.top drops by the same 44px at every non-mobile width, including
+  // 1440 -- deliberate, not drift; re-measured against the fixed hero (was
+  // 250). --hero-pad-mobile (<=600px) is untouched, so mobile is unaffected.
+  'public/for-builders.html': 206,
   'public/how-it-works.html': 140,
   'public/how-submissions-work.html': 140,
   // LAUNCH-WAVE-0926: the hero's own two-column grid (h1 head-row, copy+figure

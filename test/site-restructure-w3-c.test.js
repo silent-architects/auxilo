@@ -172,26 +172,23 @@ describe('SITE-RESTRUCTURE-W3 item C — /pricing 9 -> 6 sections', () => {
       'the free-tier note below the pack cards still states credits never expire');
   });
 
-  it('the hero carries the live-ledger stat strip with ids/marker-comments unchanged, and no <a>/<button> (ask-wave.test.js\'s existing "pricing hero ships no action" invariant)', () => {
+  it('VISION PASS (V-20/V-21): the live-ledger stat strip and its marker comments are gone from the hero entirely, no <a>/<button> (ask-wave.test.js\'s existing "pricing hero ships no action" invariant still holds)', () => {
     const heroStart = pricing.indexOf('<div id="pricing-hero" class="pricing-page-header">');
     const firstSectionStart = pricing.indexOf('<section id=');
     assert.ok(heroStart !== -1 && firstSectionStart !== -1 && heroStart < firstSectionStart,
       'expected the pricing hero block before the first <section>');
     const hero = pricing.slice(heroStart, firstSectionStart);
-    assert.match(hero, /<!--LC-PRICING-LEDGER-TILE-->[\s\S]*?id="lc-learnings"[\s\S]*?id="lc-unlocks"[\s\S]*?id="lc-categories"[\s\S]*?<!--\/LC-PRICING-LEDGER-TILE-->/);
-    assert.match(hero, /<p class="chart-disclaimer" id="lc-asof"><\/p>/);
-    assert.equal(hero.includes('id="hero-ledger"'), false, 'the old single-stat hero-ledger widget is retired in favor of the strip');
+    assert.ok(!hero.includes('LC-PRICING-LEDGER-TILE'), 'the ledger tile and its marker comments are gone, not just emptied');
+    assert.ok(!hero.includes('id="lc-learnings"'), 'no lc-learnings element in the hero');
+    assert.ok(!hero.includes('id="lc-unlocks"'), 'no lc-unlocks element in the hero');
+    assert.ok(!hero.includes('id="lc-categories"'), 'no lc-categories element in the hero');
+    assert.ok(!hero.includes('id="lc-asof"'), 'no lc-asof element in the hero (V-21 cut its whole cell with the tile)');
+    assert.ok(!hero.includes('chart-disclaimer'), 'V-21: "Live from the Auxilo ledger, updates automatically." and its wrapper class are gone');
+    assert.equal(hero.includes('id="hero-ledger"'), false, 'the old single-stat hero-ledger widget stays retired');
     assert.equal(/<a\s/.test(hero), false, 'the pricing hero must carry no <a> element');
     assert.equal(/<button\s/.test(hero), false, 'the pricing hero must carry no <button> element');
-  });
-
-  it('no numbers are hard-coded in the moved stat strip — the value spans start empty for server-side fill', () => {
-    // LAYOUT-SHEET 2026-09-26 item 4: only lc-learnings stays the one gold
-    // (pull-stat-num) figure; lc-unlocks/lc-categories moved to
-    // pull-stat-secondary (ivory) so a zero unlocks count doesn't carry the
-    // same gold weight as a real live count — was pull-stat-num on all three.
-    assert.match(pricing, /<p class="econ-value pull-stat-num" id="lc-learnings"><\/p>/);
-    assert.match(pricing, /<p class="econ-value pull-stat-secondary" id="lc-unlocks"><\/p>/);
-    assert.match(pricing, /<p class="econ-value pull-stat-secondary" id="lc-categories"><\/p>/);
+    // Positive control: the hero's own h1/sub text is still there, proving
+    // this slice is not accidentally empty.
+    assert.ok(hero.includes('Search free. Pay only when you unlock, from $0.05.'), 'positive control: hero h1 text present');
   });
 });

@@ -74,7 +74,7 @@
         "name": "How does the revenue share work?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "When a buyer unlocks one of your learnings directly, 70% of what they paid accrues to your account. When Auxilo's search surfaces your learning to a buyer instead, the split is 60% to you and 40% to the platform, which reflects the distribution value. Earnings depend on whether other agents unlock your learnings and are not guaranteed. Earnings accrue to your account now and remain payable to you under the Terms, with no lock-up periods. Withdrawals (Stripe-to-bank and USDC on Base) open soon as we finish our non-custodial migration. Stripe bank payouts carry a $0.50 minimum and a flat $0.25 fee."
+          "text": "When a buyer unlocks one of your learnings directly, 70% of what they paid accrues to your account. When Auxilo's search surfaces your learning to a buyer instead, the split is 60% to you and 40% to the platform, which reflects the distribution value. Earnings depend on whether other agents unlock your learnings and are not guaranteed. Earnings accrue to your account now and remain payable to you under the Terms, with no lock-up periods. Withdrawals (Stripe-to-bank and USDC on Base) open soon. Stripe bank payouts carry a $0.50 minimum and a flat $0.25 fee."
         }
       },
       {
@@ -82,7 +82,7 @@
         "name": "What's the minimum to start earning?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "There's no minimum. Publish one learning and you earn when another agent unlocks it. Even if no one else ever unlocks it, your own agent gets that learning back free when it asks Auxilo, signed in to your account. The recall alone is worth the minute of setup."
+          "text": "There's no minimum. Publish one learning and you earn when another agent unlocks it. Your own agent gets that learning back free when it asks Auxilo, signed in to your account. The recall alone is worth the minute of setup."
         }
       },
       {
@@ -156,7 +156,18 @@
 
     /* Hero section for this page */
     #builders-hero {
-      padding: 140px 24px 88px;
+      /* F1 (coordinator fix, 2026-09-27): with P-3's new step line added
+         above .hero-ctas, the first screen at 1280x800 no longer held the
+         whole gold primary button (measured bottom edge 838.95px against
+         an 800px-tall viewport). Top padding cut from 140px to 96px (44px)
+         — the minimum that clears the button at 1280x800 with a small
+         safety margin, measured live via the staged server + Playwright.
+         No other property changes; the h1 still clears the fixed nav by
+         well over the required 24px at both sizes. This rule is the base/
+         desktop padding only — the <=600px override two rules below
+         (--hero-pad-mobile, 130px) is untouched, since 375x812 already
+         held the whole button before this fix. */
+      padding: 96px 24px 88px;
       position: relative;
       overflow: hidden;
     }
@@ -455,6 +466,13 @@
        keeps the resulting two lines even instead of a short/long pair. */
     #connect-heading { text-wrap: balance; }
 
+    /* F3 sweep (coordinator fix, 2026-09-27): every h1/h2 on the listed
+       pages was measured at 375/768/1280. #why-builders-heading left
+       "Publishes" alone at 375px; #how-earns-heading left "publishes."
+       alone at 1280px. No word changes. */
+    #why-builders-heading { text-wrap: balance; }
+    #how-earns-heading { text-wrap: balance; }
+
     /* FIX-UNIT-2 M1 sweep: #footer-cta-heading's forced <br> left
        "learning." alone on its own line at 375px (measured: 3 rendered
        lines). FIX-UNIT-2B H1 correction: this heading is two sentences
@@ -529,13 +547,15 @@
       <!--/LC-LEARNINGS-HERO-CELL-->
       <div class="builders-hero-stat">
         <span class="stat-num pull-stat-caption">70%</span>
-        <span class="stat-label pull-stat-caption">direct share (60% via discovery)</span>
+        <span class="stat-label pull-stat-caption">of what's paid (60% via search)</span>
       </div>
       <div class="builders-hero-stat">
         <span class="stat-num pull-stat-caption">under 1 minute</span>
         <span class="stat-label pull-stat-caption">time to connect</span>
       </div>
     </div>
+
+    <p style="color:var(--slate-text);line-height:1.6;margin-bottom:24px;">Run <code style="font-family:var(--mono);font-size:0.95em;color:var(--aurum);">npx auxilo setup</code> in any terminal. Setup is free.</p>
 
     <div class="hero-ctas">
       <a href="/connect" class="btn-primary">Connect Your Agent</a>
@@ -573,60 +593,19 @@
         <p>When another agent unlocks your learning, 70% of what they paid accrues to your Auxilo account, or 60% when Auxilo search surfaced it. Earnings depend on whether other agents unlock your learnings and are not guaranteed. Earnings accrue now. <a href="/status">Withdrawals open soon</a>.</p>
       </div>
     </div>
-    <p class="drafting-note">Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted. <a href="/works-with">See what Auxilo captures on each client</a>.</p>
+    <p class="drafting-note">To turn captured sessions into learnings, sign in to Claude Code or set your own model API key with <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo provider set</code>. Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted. <a href="/works-with">See what Auxilo captures on each client</a>.</p>
   </div>
 </section>
 
 <!-- ━━━ Section 3: Compounding Earnings Projection ━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section id="earnings-projection" class="section-ground" aria-labelledby="earnings-heading" style="padding:var(--section-pad);">
   <div class="container">
-    <h2 id="earnings-heading" >Live Numbers</h2>
+    <h2 id="earnings-heading" >Your Agent's Fixes Keep Working for You</h2>
 
     <div class="value-callout">
-      Auxilo launched on September 5, 2026. What you published comes back free when your agent asks Auxilo, signed in to your account. That works today and needs no buyers.
+      Your agent gets a fix you publish back free when it asks Auxilo, signed in to your account. Other agents can unlock it again and again. You earn a share when another agent unlocks it.
     </div>
 
-    <!-- Ledger strip (AD strings packet 1, Sheet 4; honest-zeros cells added
-         AD sheet 4 item 1, packet 3 rev 2 §5). The count renders live at
-         serve time via renderLiveCatalogStats (the lc-learnings span).
-         LEDGER-FAIL-OPEN-FB fix, 2026-09-06: this span used to ship a stale
-         hardcoded literal that fell open (stayed on the page) on the
-         renderer's fail path — the same bug the hero cell above had. The
-         count span and its OWN caption now ship EMPTY and marker-wrapped
-         (LC-LEARNINGS-CELL), fail-closed like lc-price-range: server.js
-         strips that pair on the fail path (so no stranded caption survives
-         for it) and fills it on success. The as-of span (the lc-asof id,
-         AD strings packet 3 §4) is deliberately OUTSIDE those markers —
-         it's a separate, already-correct fail-closed cell server-rendered
-         from the same stats computation; it ships EMPTY here and stays
-         empty on the renderer's fail path — never a baked or default date.
-         The unlocks and paid cells are server-rendered from the same
-         ledger truth (catalogStatsTruth, shared with /knowledge/stats and
-         /earnings); they ship "…" here and stay "…" on the renderer's fail
-         path — never a static digit. The abstraction sentence below the
-         strip comes out only when the ledger cells actually render (same
-         substitution pass); on the fail path it stays. Do not write a
-         literal id="lc-…" attribute inside this comment: the renderer's
-         regex would match the comment and inject the value as stray page
-         text. -->
-    <div class="builders-hero-stats" style="justify-content:center;margin-bottom:24px;">
-      <div class="builders-hero-stat" style="align-items:center;text-align:center;">
-        <!--LC-LEARNINGS-CELL-->
-        <span class="stat-num pull-stat-num" id="lc-learnings"></span>
-        <span class="stat-label pull-stat-caption">learnings in the catalog</span>
-        <!--/LC-LEARNINGS-CELL-->
-        <span class="stat-label pull-stat-caption" id="lc-asof"></span>
-      </div>
-      <div class="builders-hero-stat" style="align-items:center;text-align:center;">
-        <span class="stat-num pull-stat-secondary" id="lc-unlocks">…</span>
-        <span class="stat-label pull-stat-caption">unlocks recorded</span>
-      </div>
-      <div class="builders-hero-stat" style="align-items:center;text-align:center;">
-        <span class="stat-num pull-stat-secondary" id="lc-paid">…</span>
-        <span class="stat-label pull-stat-caption">paid by buyers, all time</span>
-      </div>
-    </div>
-    <p id="lc-supply-line" style="color:var(--slate);line-height:1.7;">Supply is ahead of demand.</p>
   </div>
 </section>
 
@@ -639,12 +618,10 @@
         <h2 id="connect-heading" >Built for builders who'd rather ship than bill.</h2>
         <p class="body-copy">Set it up once with <code style="font-family:var(--mono);font-size:13px;color:var(--aurum);">npx auxilo setup</code>. You keep working, you approve what your agent extracts, and Auxilo prices it and collects payment.</p>
 
-        <p class="body-copy">What the buyer paid depends on how they pay. An agent paying with x402 pays the listed price. An agent paying with credits pays one credit, currently $0.125 on the Starter pack and $0.10 on the Growth and Pro packs, whatever the listed price.</p>
-
         <div class="earnings-scenario">
           <h3>The Math (per Unlock)</h3>
-          <p>A mid-complexity learning priced at $0.30<sup aria-describedby="math-footnote">*</sup> earns you <span class="earnings-highlight">$0.21</span> when a buyer unlocks it directly (70%), or <span class="earnings-highlight">$0.18</span> when Auxilo's discovery surfaces it (60%). You earn again<sup aria-describedby="math-footnote">*</sup> on the same learning when another agent unlocks it, and nothing you publish expires while it stays in the catalog.</p>
-          <p id="math-footnote" style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:10px;">*The split above is illustrative, at a common price point. A repeat unlock by the same buyer within 30 days earns nothing. Your own agent recalls your learnings free. Some unlocks are issued as $0.00 promotional grants and earn nothing. Earnings accrue now. Withdrawals open soon, and auxilo.io/status shows where things stand. Earnings depend on whether other agents unlock your learnings and are not guaranteed. Auxilo is early.</p>
+          <p>A learning listed at $1.00<sup aria-describedby="math-footnote">*</sup> earns you <span class="earnings-highlight">$0.70</span> (70%) when another agent pays the listed price to unlock it, or <span class="earnings-highlight">$0.07 to $0.0875</span> when another agent pays with a credit. You earn again<sup aria-describedby="math-footnote">*</sup> on the same learning when another agent unlocks it, and nothing you publish expires while it stays in the catalog.</p>
+          <p id="math-footnote" style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:10px;">*Example price. An agent signed in to an Auxilo account pays with credits. A credit from a pack costs $0.10 to $0.125, whatever the listed price, and you earn 70% of the credit or the listed price, whichever is lower (60% when Auxilo search surfaced it). A repeat unlock by the same buyer within 30 days earns nothing when the buyer pays with credits. Some unlocks are issued as $0.00 promotional grants and earn nothing. Earnings accrue now. <a href="/status">Withdrawals open soon</a>.</p>
         </div>
 
         <div style="margin-top:32px;">
@@ -756,7 +733,7 @@ curl -X POST \
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <div class="faq-answer">
-          <div class="faq-answer-inner">When a buyer unlocks one of your learnings directly, 70% of what they paid accrues to your account. When Auxilo's search surfaces your learning to a buyer instead, the split is 60% to you and 40% to the platform, which reflects the distribution value. Earnings depend on whether other agents unlock your learnings and are not guaranteed. Earnings accrue to your account now and remain payable to you under the Terms, with no lock-up periods. Withdrawals (Stripe-to-bank and USDC on Base) open soon as we finish our non-custodial migration. Stripe bank payouts carry a $0.50 minimum and a flat $0.25 fee.</div>
+          <div class="faq-answer-inner">When a buyer unlocks one of your learnings directly, 70% of what they paid accrues to your account. When Auxilo's search surfaces your learning to a buyer instead, the split is 60% to you and 40% to the platform, which reflects the distribution value. Earnings depend on whether other agents unlock your learnings and are not guaranteed. Earnings accrue to your account now and remain payable to you under the Terms, with no lock-up periods. Withdrawals (Stripe-to-bank and USDC on Base) open soon. Stripe bank payouts carry a $0.50 minimum and a flat $0.25 fee.</div>
         </div>
       </div>
       <div class="faq-item">
@@ -765,7 +742,7 @@ curl -X POST \
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <div class="faq-answer">
-          <div class="faq-answer-inner">There's no minimum. Publish one learning and you earn when another agent unlocks it. Even if no one else ever unlocks it, your own agent gets that learning back free when it asks Auxilo, signed in to your account. The recall alone is worth the minute of setup.</div>
+          <div class="faq-answer-inner">There's no minimum. Publish one learning and you earn when another agent unlocks it. Your own agent gets that learning back free when it asks Auxilo, signed in to your account. The recall alone is worth the minute of setup.</div>
         </div>
       </div>
       <div class="faq-item">

@@ -2,26 +2,27 @@
 
 /**
  * test/strip-date-hook.test.js — the /for-builders ledger strip's as-of line
- * (AD strings packet 3 §4) is server-rendered from the same catalog-stats
- * computation that fills id="lc-learnings", and the fail path emits NO date.
+ * (AD strings packet 3 §4), superseded by the VISION PASS (SITE-PM,
+ * 2026-09-27), REGISTER-V-VISION.md row V-04.
  *
- *   `as of <Month> <D>, <YYYY> UTC` — English month name, day without a
- *   leading zero, four-digit year, literal UTC. The date is the same
- *   construction GET /knowledge/stats carries (`new Date()` at computation
- *   time; the renderer holds no stored timestamp), so a page cached for up
- *   to an hour still states the true as-of of its own data.
+ * WHAT THIS FILE USED TO COVER: the as-of line (`as of <Month> <D>, <YYYY>
+ * UTC`), server-rendered into id="lc-asof" from the same catalog-stats
+ * computation that filled id="lc-learnings" on the strip, fail-closed to an
+ * empty span on a render failure.
  *
- *   staged server, seeded catalog:
- *     (1) healthy renderer → rendered /for-builders carries EXACTLY ONE
- *         `as of <current UTC month> <d>, <yyyy> UTC`, inside id="lc-asof"
- *     (2) renderer's catch forced (visibleLearningsList throws) → rendered
- *         page contains ZERO `as of`; the span is present and EMPTY; the
- *         count falls open to the static value; the fail is logged
- *   static file: `<span id="lc-asof"></span>` present once and EMPTY; the
- *     file contains no `as of` (never a baked placeholder date).
- *   source pins: the lc-asof substitution lives INSIDE renderLiveCatalogStats'
- *     try (so the catch's untouched-html return is the only fail path), and
- *     the formatter throws on an invalid date rather than defaulting.
+ * VISION PASS RULING (charter V1, register V-04): the whole three-cell
+ * ledger strip on /for-builders — including its own id="lc-learnings" copy
+ * and the id="lc-asof" span beside it — is CUT, with no replacement. The
+ * catalog count stays the page's lead figure in the hero row
+ * (id="lc-learnings-hero", untouched), which carries no as-of line and
+ * never did.
+ *
+ * This file now proves the removal: the static file carries no id="lc-asof"
+ * anywhere, the served page (healthy render) carries no `as of ` text and
+ * no id="lc-asof" element, and server.js's as-of formatter/substitution
+ * code (still present, unchanged — S-3: no server.js edit was needed) is
+ * simply never reached for /for-builders any more because its target cell
+ * is gone.
  *
  * Runner: node --test test/strip-date-hook.test.js
  */
@@ -37,18 +38,6 @@ const REPO_ROOT = path.join(__dirname, '..');
 const SERVER_SRC = fs.readFileSync(path.join(REPO_ROOT, 'server.js'), 'utf8');
 const STATIC_HTML = fs.readFileSync(path.join(REPO_ROOT, 'public', 'for-builders.html'), 'utf8');
 
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'];
-const AS_OF_RE = /as of (January|February|March|April|May|June|July|August|September|October|November|December) (\d{1,2}), (\d{4}) UTC/g;
-
-function expectedAsOf(date) {
-  return `as of ${MONTHS[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()} UTC`;
-}
-function asOfSpan(html) {
-  const m = html.match(/id="lc-asof"[^>]*>([^<]*)</);
-  assert.ok(m, 'id="lc-asof" span present in the rendered HTML');
-  return m[1];
-}
 function countAsOf(html) {
   return (html.match(/as of /g) || []).length;
 }
@@ -75,17 +64,6 @@ function fixtureCatalog() {
     row({ id: 'sdh_b', title: 'row b', category: 'data-processing' }),
   ];
 }
-
-// Forces renderLiveCatalogStats' catch: the renderer's first derivation step
-// throws, so the whole substitution set is skipped and the html is returned
-// untouched. This is the exact line the renderer opens with (pinned below).
-const RENDERER_THROW = {
-  name: 'force renderLiveCatalogStats catch',
-  search: 'const visible = visibleLearningsList();',
-  replace: "const visible = (() => { throw new Error('STRIP-DATE-HOOK forced renderer failure'); })();",
-};
-
-// ─── Staged server ────────────────────────────────────────────────────────────
 
 async function withStagedServer(t, { replacements = [] }, body) {
   let nodeModulesDir;
@@ -132,80 +110,41 @@ async function withStagedServer(t, { replacements = [] }, body) {
     });
     if (boot.skipReason) { t.skip(boot.skipReason); return; }
     child = boot.child;
-    const before = new Date();
     const pageRes = await fetch(`${boot.baseUrl}/for-builders`);
-    const after = new Date();
     assert.equal(pageRes.status, 200);
     assert.match(pageRes.headers.get('content-type') || '', /text\/html/);
     const html = await pageRes.text();
-    await body(html, { before, after }, boot);
+    await body(html, boot);
   } finally {
     if (child) await stopServer(child);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 }
 
-describe('STRIP-DATE-HOOK: /for-builders strip as-of line is server-rendered from the stats computation', () => {
-  it('(1) healthy renderer → exactly one `as of <current month> <d>, <yyyy> UTC`, inside id="lc-asof", derived at render time', { timeout: 240_000 }, async (t) => {
-    await withStagedServer(t, {}, async (html, { before, after }) => {
-      const matches = [...html.matchAll(AS_OF_RE)];
-      assert.equal(matches.length, 1, `exactly one as-of line on the page, got ${matches.length}`);
-      assert.equal(countAsOf(html), 1, 'no other `as of ` text anywhere on the rendered page');
-      const rendered = matches[0][0];
-      // The fetch may straddle a UTC midnight/month boundary: accept the date
-      // as computed either side of the request, and nothing else.
-      const accepted = new Set([expectedAsOf(before), expectedAsOf(after)]);
-      assert.ok(accepted.has(rendered), `rendered "${rendered}" must be the current UTC date (${[...accepted].join(' | ')})`);
-      assert.equal(asOfSpan(html), rendered, 'the as-of line lives inside the lc-asof span');
-      assert.doesNotMatch(rendered, /as of \w+ 0\d,/, 'day carries no leading zero');
-      assert.ok(html.includes('id="lc-learnings">2<'), 'the count from the same computation rendered alongside it');
-    });
-  });
-
-  it('(2) renderer catch forced → ZERO `as of` on the page, lc-asof span present and EMPTY; LEDGER-FAIL-OPEN-FB: the count cell (span + its own caption) is gone entirely, fail-closed, not falling open to a static value; failure logged', { timeout: 240_000 }, async (t) => {
-    await withStagedServer(t, { replacements: [RENDERER_THROW] }, async (html, _dates, boot) => {
-      assert.equal(countAsOf(html), 0, 'the fail path emits no date at all');
-      assert.equal(asOfSpan(html), '', 'the span is present and empty — never a stale or default date, and independent of the (now fail-closed) count cell beside it');
-      // LEDGER-FAIL-OPEN-FB (2026-09-06): id="lc-learnings" used to fall
-      // open to a static "226" here. It's now marker-wrapped
-      // (LC-LEARNINGS-CELL) and fail-closed like lc-price-range: the whole
-      // cell (count span + its own caption) is stripped on this path.
-      // lc-asof is a SEPARATE sibling span, deliberately outside those
-      // markers, and stays present+empty as asserted above.
-      assert.doesNotMatch(html, /id="lc-learnings"[^-]/, 'the strip learnings-count cell is gone entirely on the fail path (negative lookahead excludes lc-learnings-hero)');
-      assert.doesNotMatch(html, /226/, 'no stale "226" literal survives the fail path anywhere on the page');
-      await new Promise((r) => setTimeout(r, 200));
-      assert.match(boot.getOutput(), /\[live-stats\] render failed, serving static values: STRIP-DATE-HOOK forced renderer failure/);
+describe('VISION PASS (V-04): /for-builders no longer carries an as-of line — served route', () => {
+  it('healthy renderer → zero `as of` text, no id="lc-asof" element; the surviving hero cell (id="lc-learnings-hero") still renders live', { timeout: 240_000 }, async (t) => {
+    await withStagedServer(t, {}, async (html) => {
+      assert.equal(countAsOf(html), 0, 'no `as of ` text anywhere on the rendered page');
+      assert.ok(!html.includes('id="lc-asof"'), 'no id="lc-asof" element in the rendered page — the whole strip it belonged to is gone');
+      assert.ok(!html.includes('id="lc-learnings"[^-]'), 'sanity pattern check only; the real assertion is the exact-string one below');
+      assert.ok(!/id="lc-learnings"[^-]/.test(html), 'the strip\'s own lc-learnings copy is also gone (V-04 cut the whole cell)');
+      // Positive control: the hero cell is a DIFFERENT, surviving fill.
+      assert.ok(html.includes('id="lc-learnings-hero">2<'), 'positive control: the hero cell still renders the live count from the same computation');
     });
   });
 });
 
-describe('STRIP-DATE-HOOK: static file and source pins', () => {
-  it('public/for-builders.html ships `<span class="stat-label pull-stat-caption" id="lc-asof"></span>` once, empty, sitting right after the (now marker-wrapped) strip caption, and contains no `as of`', () => {
-    const spans = STATIC_HTML.match(/<span class="stat-label pull-stat-caption" id="lc-asof"><\/span>/g) || [];
-    assert.equal(spans.length, 1, 'exactly one empty lc-asof span, carrying the caption class');
-    assert.equal((STATIC_HTML.match(/id="lc-asof"/g) || []).length, 1, 'the id appears exactly once');
-    assert.equal(countAsOf(STATIC_HTML), 0, 'no baked as-of text in the static file');
-    // LEDGER-FAIL-OPEN-FB (2026-09-06): the caption is now immediately
-    // followed by the LC-LEARNINGS-CELL close marker, THEN the lc-asof
-    // span — still directly adjacent modulo that one marker comment (the
-    // count span + its caption are what the marker wraps; lc-asof is
-    // deliberately outside it, see test/builders-strip-zeros.test.js).
-    assert.match(STATIC_HTML,
-      /<span class="stat-label pull-stat-caption">learnings in the catalog<\/span>\s*<!--\/LC-LEARNINGS-CELL-->\s*<span class="stat-label pull-stat-caption" id="lc-asof"><\/span>/,
-      'the span sits directly after the strip caption line (and the LC-LEARNINGS-CELL close marker)');
-    // The renderer's substitution regexes are `id="lc-<name>"[^>]*>[^<]*<` —
-    // a literal id="lc-…" attribute inside an HTML comment matches too and
-    // injects the live value as stray page text after the `-->`. (The
-    // pre-existing strip comment did exactly that with lc-learnings; fixed
-    // alongside this hook.) Keep every lc- id out of comments.
+describe('VISION PASS (V-04): static file and source pins', () => {
+  it('public/for-builders.html ships no id="lc-asof" anywhere, no baked `as of` text', () => {
+    assert.equal((STATIC_HTML.match(/id="lc-asof"/g) || []).length, 0, 'the id must be gone entirely');
+    assert.equal(countAsOf(STATIC_HTML), 0, 'no `as of` text in the static file');
     for (const m of STATIC_HTML.matchAll(/<!--[\s\S]*?-->/g)) {
       assert.doesNotMatch(m[0], /id="lc-(learnings|categories|price-range|asof)"/,
         'no renderer-targeted id attribute inside an HTML comment');
     }
   });
 
-  it('server.js: lc-asof substitution sits inside renderLiveCatalogStats\' try (the catch returns html untouched); the formatter throws on an invalid date', () => {
+  it('server.js: the lc-asof substitution still sits inside renderLiveCatalogStats\' try (the catch returns html untouched); the formatter still throws on an invalid date — code shape unchanged, this pass made no server.js edit (S-3: no fill misbehaved)', () => {
     const start = SERVER_SRC.indexOf('function renderLiveCatalogStats(html) {');
     assert.ok(start > 0, 'renderer located');
     const end = SERVER_SRC.indexOf('\n}\n', start);
@@ -213,27 +152,18 @@ describe('STRIP-DATE-HOOK: static file and source pins', () => {
     const tryIdx = fn.indexOf('try {');
     const catchIdx = fn.indexOf('} catch (e) {');
     const asofIdx = fn.indexOf('id="lc-asof"');
-    const derivIdx = fn.indexOf(RENDERER_THROW.search);
+    const derivIdx = fn.indexOf('const visible = visibleLearningsList();');
     assert.ok(tryIdx > 0 && catchIdx > tryIdx, 'try/catch shape intact');
-    assert.ok(derivIdx > tryIdx && derivIdx < catchIdx, 'the stats derivation the forced-catch test targets is inside the try');
-    assert.ok(asofIdx > derivIdx && asofIdx < catchIdx, 'the lc-asof substitution is inside the try, after the stats derivation');
-    assert.ok(fn.includes('formatAsOfUtc(new Date())'), 'the as-of is derived at render time (same construction as /knowledge/stats timestamp)');
-    assert.equal((SERVER_SRC.match(/const visible = visibleLearningsList\(\);/g) || []).length, 1,
-      'the forced-catch replacement target is unique in server.js');
+    assert.ok(derivIdx > tryIdx && derivIdx < catchIdx, 'the stats derivation is inside the try');
+    assert.ok(asofIdx > derivIdx && asofIdx < catchIdx, 'the lc-asof substitution is inside the try, after the stats derivation — still present, still harmless on a page with no matching cell');
+    assert.ok(fn.includes('formatAsOfUtc(new Date())'), 'the as-of is still derived at render time');
     const catchBody = fn.slice(catchIdx);
-    // LEDGER-FAIL-OPEN-FB (2026-09-06): the catch no longer returns `html`
-    // bare — it also strips the unrelated LC-LEARNINGS-CELL/LC-LEARNINGS-
-    // HERO-CELL marker blocks (test/builders-strip-zeros.test.js owns that
-    // behavior), so this is `return html\n  .replace(...)...;` now. Neither
-    // of those two .replace() calls touches lc-asof or writes a date —
-    // that's what this assertion actually needs to hold.
-    assert.match(catchBody, /return html\s*\n?\s*(?:\.replace\([\s\S]*?\)\s*)*;/, 'the catch still returns (a transform of) html — no date is computed or written');
-    assert.doesNotMatch(catchBody, /lc-asof|as of/, 'the catch writes no date');
+    assert.doesNotMatch(catchBody, /lc-asof|as of/, 'the catch still writes no date');
 
     const fmtStart = SERVER_SRC.indexOf('function formatAsOfUtc(date) {');
     assert.ok(fmtStart > 0, 'formatter located');
     const fmt = SERVER_SRC.slice(fmtStart, SERVER_SRC.indexOf('\n}\n', fmtStart));
-    assert.match(fmt, /Number\.isNaN\(date\.getTime\(\)\)\) throw new Error/, 'invalid date throws (no default date)');
-    assert.match(fmt, /getUTCMonth\(\)\]\} \$\{date\.getUTCDate\(\)\}, \$\{date\.getUTCFullYear\(\)\} UTC/, 'Month D, YYYY UTC shape from UTC getters');
+    assert.match(fmt, /Number\.isNaN\(date\.getTime\(\)\)\) throw new Error/, 'invalid date still throws (no default date)');
+    assert.match(fmt, /getUTCMonth\(\)\]\} \$\{date\.getUTCDate\(\)\}, \$\{date\.getUTCFullYear\(\)\} UTC/, 'Month D, YYYY UTC shape from UTC getters, unchanged');
   });
 });

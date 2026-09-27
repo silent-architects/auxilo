@@ -177,6 +177,12 @@
        ~130px fixed header. --header-h is a fixed value (not width-
        dependent), so this now applies unconditionally at every width. */
     main { padding-top: var(--header-h); }
+
+    /* F3 sweep (coordinator fix, 2026-09-27): every h1/h2 on the listed
+       pages was measured at 375/768/1280. This page's second step heading
+       left "Sessions" alone at 375px. No word changes; #connect-step2-
+       heading is a new id added only so this rule can target it. */
+    #connect-step2-heading { text-wrap: balance; }
   </style>
 </head>
 <body>
@@ -230,7 +236,7 @@
       </li>
 
       <li>
-        <h2>Choose Whether to Capture Sessions</h2>
+        <h2 id="connect-step2-heading">Choose Whether to Capture Sessions</h2>
         <p>Extraction is off by default. Turn it on and, on the clients that support capture, a finished session is drafted into a learning on your machine through a single signed-in model client. Decline it and every Auxilo tool still works. <a href="/works-with">See what Auxilo captures on each client</a></p>
       </li>
 
