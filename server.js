@@ -148,7 +148,11 @@ const { rescreenVerifiedWallets } = require('./lib/ofac-rescreen.js');
 // removeWaitlistEmail (GOV2-DEL account-deletion purge) and waitlistCount
 // (GET /waitlist/count aggregate reporting).
 const { removeWaitlistEmail, waitlistCount } = require('./lib/waitlist.js');
-const { sendDeletionConfirmation } = require('./lib/email.js');
+const { sendDeletionConfirmation, sendEarningNotification, emailEnabled: emailDeliveryEnabled, redactEmail } = require('./lib/email.js');
+// W3 (dark behind EARNING_NOTIFICATIONS_ENABLED): the earning-notification
+// digest queue. See the hook in the unlock handler and the hourly sweep near
+// the pricing cron below.
+const earningNotifications = require('./lib/earning-notifications.js');
 // Quiet phase: inert-by-default analytics readiness (Plausible). Everything is
 // a no-op unless ANALYTICS_DOMAIN is set; see lib/analytics.js.
 const { resolveAnalyticsDomain, injectAnalytics, buildContentSecurityPolicy } = require('./lib/analytics.js');
@@ -1275,6 +1279,10 @@ async function executeAccountDeletion({ accountId = null, wallet = null, method 
         rebuildKeyIndex(nextAccounts);
         counts.magic_links = removeMagicLinksForEmail(account.email);
         counts.waitlist = removeWaitlistEmail(account.email);
+        // GOV-2 (email memo Q5.4): retention must cover the notification
+        // queue file — a deleted account's queued learning titles/amounts
+        // must not survive the account.
+        earningNotifications.removeAccount(accountId);
       }
 
       if (effectiveWallet && verifiedWallets[effectiveWallet]) {
@@ -4027,6 +4035,129 @@ app.post('/account/delete-confirm', async (c) => {
   if (!signatureValid) return c.json({ error: 'Deletion signature verification failed' }, 401);
   const { accountId, account } = deletionAccountForWallet(body.wallet);
   return c.json(await executeAccountDeletion({ accountId, wallet: body.wallet, method: 'wallet' }));
+});
+
+// ── GOV-2 (email memo Q5.4): timestamped opt-out record ─────────────────────
+// Every change to earning_notifications_enabled, from either surface
+// (dashboard PATCH or this email-link route), appends a record — not just
+// the boolean — so a future "you kept emailing me after I unsubscribed"
+// dispute has evidence. Bounded to the last 20 entries so the account
+// object cannot grow unbounded; lives ON the account record (deleted with
+// the account). Never logs or stores the email address.
+const EARNING_EMAIL_PREF_LOG_MAX = 20;
+function appendEarningEmailPrefRecord(account, accountId, value, source) {
+  if (!Array.isArray(account.earning_email_pref_log)) account.earning_email_pref_log = [];
+  account.earning_email_pref_log.push({
+    account_id: accountId,
+    value: !!value,
+    source, // 'dashboard' | 'email_link'
+    at: new Date().toISOString(),
+  });
+  if (account.earning_email_pref_log.length > EARNING_EMAIL_PREF_LOG_MAX) {
+    account.earning_email_pref_log = account.earning_email_pref_log.slice(-EARNING_EMAIL_PREF_LOG_MAX);
+  }
+}
+
+// ── Unlock-email opt-out page (D-83 to D-88) ────────────────────────────────
+// Reached from the {unsubscribe_url} link in the earning-notification email.
+// Structure per LAYOUT-SHEET-ADDENDUM.md item 5(b): the legal-page /styles.css
+// pattern (server.js's serveLegalPage, NOT the bare account-deletion shell),
+// a small scoped <style> block, no site nav, no footer — just a wordmark row
+// linking home. Every string is REGISTER-B2-REV2.md D-83 to D-88, placed
+// exactly. `?v=80b44c53` is the SAME current styles.css content-hash literal
+// serveLegalPage uses (scripts/asset-versions.js scans server.js as a whole
+// for this pattern, so this must be bumped in lockstep with that literal —
+// never run asset-versions.js --write from this seat).
+function renderUnlockEmailPrefsPage(state, token) {
+  const styleBlock = `<style>
+    .unsub-wrap { max-width: 400px; margin: 0 auto; padding: 140px 24px 80px; }
+    .unsub-logo { display: flex; align-items: center; gap: 10px; margin-bottom: 40px; }
+    .unsub-logo .wordmark { font-size: 18px; font-weight: 700; color: var(--ivory); }
+    .unsub-heading { font-size: 24px; font-weight: 700; color: var(--ivory); margin-bottom: 8px; letter-spacing: -0.02em; }
+    .unsub-sub { font-size: 14px; color: var(--slate); line-height: 1.6; margin-bottom: 28px; }
+    .unsub-done { font-size: 14px; color: var(--ivory); line-height: 1.6; }
+  </style>`;
+
+  const logoRow = `<a href="/" class="unsub-logo">
+    <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <polygon points="16,2 30,28 2,28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
+      <line x1="16" y1="17" x2="30" y2="17" stroke="currentColor" stroke-width="1.8"/>
+    </svg>
+    <span class="wordmark">auxilo</span>
+  </a>`;
+
+  let body;
+  if (state === 'done') {
+    // D-86 — never reveals whose account the token belonged to.
+    body = `<h1 class="unsub-heading">Stop Unlock Emails</h1>
+    <p class="unsub-done">Unlock emails are off. You can turn them back on in your dashboard.</p>`;
+  } else if (state === 'expired') {
+    // D-88 — same non-disclosure rule.
+    body = `<h1 class="unsub-heading">Stop Unlock Emails</h1>
+    <p class="unsub-sub">This link has expired. You can turn unlock emails off in your dashboard.</p>`;
+  } else {
+    // D-83/D-84/D-85 — a POST form, never a bare-GET action, so an email
+    // client's link-prefetch cannot silently flip the setting.
+    body = `<h1 class="unsub-heading">Stop Unlock Emails</h1>
+    <p class="unsub-sub">This stops the email you get when another agent unlocks one of your learnings.</p>
+    <form method="post" action="/account/email-prefs/unsubscribe">
+      <input type="hidden" name="token" value="${escapeHtmlText(token || '')}">
+      <button type="submit" class="btn btn-primary" style="min-height:44px;">Turn Off Unlock Emails</button>
+    </form>`;
+  }
+
+  return `<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Stop Unlock Emails | Auxilo</title><link rel="stylesheet" href="/styles.css?v=80b44c53"/>${styleBlock}</head><body><div class="unsub-wrap">${logoRow}${body}</div></body></html>`;
+}
+
+app.get('/account/email-prefs/unsubscribe', (c) => {
+  const token = c.req.query('token') || '';
+  c.header('Cache-Control', 'no-store');
+  if (!/^[A-Za-z0-9_-]{43}$/.test(token)) {
+    return c.html(renderUnlockEmailPrefsPage('expired'), 400);
+  }
+  return c.html(renderUnlockEmailPrefsPage('form', token));
+});
+
+app.post('/account/email-prefs/unsubscribe', async (c) => {
+  c.header('Cache-Control', 'no-store');
+  let body;
+  const contentType = c.req.header('content-type') || '';
+  try {
+    // Same body-decode shape as POST /account/delete-confirm: the S-3
+    // body-cap middleware already read the body once, so Hono cannot
+    // rebuild formData() — decode the page's urlencoded form from text().
+    body = contentType.includes('application/json')
+      ? await c.req.json()
+      : Object.fromEntries(new URLSearchParams(await c.req.text()));
+  } catch {
+    return c.html(renderUnlockEmailPrefsPage('expired'), 400);
+  }
+
+  // Purpose-bound and single-use: consumePurposeMagicLink's own purpose
+  // check means a 'delete-account' token can never be redeemed here, and
+  // vice versa — and this token is deleted from the store on this call
+  // whether it succeeds or not, so a second POST with the same token always
+  // lands in this same branch.
+  const confirmation = consumePurposeMagicLink(body && body.token, 'earning-emails-off');
+  if (!confirmation) return c.html(renderUnlockEmailPrefsPage('expired'), 401);
+
+  const email = normalizedEmail(confirmation.email);
+  const match = Object.entries(loadAccounts()).find(([, account]) => normalizedEmail(account.email) === email);
+  if (!match) return c.html(renderUnlockEmailPrefsPage('expired'), 401);
+  const [accountId] = match;
+
+  const releaseAccountLock = await acquireAccountLock(accountId);
+  try {
+    const accounts = loadAccounts();
+    const account = accounts[accountId];
+    if (!account) return c.html(renderUnlockEmailPrefsPage('expired'), 401);
+    account.earning_notifications_enabled = false;
+    appendEarningEmailPrefRecord(account, accountId, false, 'email_link');
+    saveAccounts(accounts);
+  } finally {
+    releaseAccountLock();
+  }
+  return c.html(renderUnlockEmailPrefsPage('done'));
 });
 
 // ── GET /account/api-keys — list key metadata (D2: scoped keys) ──────────────
@@ -8422,6 +8553,13 @@ app.get('/account/settings', requireSessionOrApiKey('read'), (c) => {
   if (!account) return c.json({ error: 'Account not found' }, 404);
   return c.json({
     autonomous_extraction_mode: account.autonomous_extraction_mode || 'off',
+    // W3: earning_notifications_available reflects the global dark flag
+    // (EARNING_NOTIFICATIONS_ENABLED); earning_notifications_enabled is the
+    // account's own preference, default true when unset — the PATCH below
+    // accepts this field regardless of whether the flag is on, so a
+    // preference can be set before the feature is turned on.
+    earning_notifications_available: process.env.EARNING_NOTIFICATIONS_ENABLED === 'true',
+    earning_notifications_enabled: account.earning_notifications_enabled !== false,
   }, 200);
 });
 
@@ -8484,6 +8622,21 @@ app.patch('/account/settings', requireAuth, async (c) => {
       }
     }
 
+    // W3: the Unlock-emails preference (D-80/D-81). Works whether or not
+    // EARNING_NOTIFICATIONS_ENABLED is on — the PATCH is not itself gated on
+    // the dark flag, only the send path is (GET /account/settings reports
+    // earning_notifications_available separately). Every change appends a
+    // timestamped opt-out record (GOV-2 email memo Q5.4), not just the flip.
+    if (body.earning_notifications_enabled !== undefined) {
+      if (typeof body.earning_notifications_enabled !== 'boolean') {
+        return c.json({ error: 'earning_notifications_enabled must be a boolean' }, 400);
+      }
+      const oldEnabled = account.earning_notifications_enabled !== false;
+      account.earning_notifications_enabled = body.earning_notifications_enabled;
+      changes.earning_notifications_enabled = { from: oldEnabled, to: body.earning_notifications_enabled };
+      appendEarningEmailPrefRecord(account, accountId, body.earning_notifications_enabled, 'dashboard');
+    }
+
     // CLEAN-LANE-FLIP Phase B (notice hardening; GOV-2 counsel draft §6 read
     // #2): the standing-consent acknowledgement cursor. The dashboard's
     // "I've reviewed these" button PATCHes it to now; GET /account/clean-lane
@@ -8519,6 +8672,7 @@ app.patch('/account/settings', requireAuth, async (c) => {
       changes,
       current: {
         autonomous_extraction_mode: account.autonomous_extraction_mode || 'off',
+        earning_notifications_enabled: account.earning_notifications_enabled !== false,
         standing_consent_ack_at: typeof account.standing_consent_ack_at === 'string' ? account.standing_consent_ack_at : null,
       },
     }, 200);
@@ -9528,7 +9682,18 @@ app.get('/knowledge/:id', async (c) => {
     ...publicLearning
   } = learning;
 
-  return c.json({
+  // W3 (dark behind EARNING_NOTIFICATIONS_ENABLED, default OFF): the response
+  // envelope is built into a local BEFORE it is queued or returned. GOV-4
+  // read the AUD19-10 compensation path (the `catch (deliveryErr)` block
+  // below) and found a throw anywhere in this try block — including after
+  // commitWal(walId) — still rolls the in-memory ledger back, cancels the
+  // WAL, and refunds the credit. Queuing a notification before that point
+  // could announce an accrual that gets rolled back a moment later. Building
+  // the payload first (constructing it can itself throw, e.g. inside
+  // serializeRevenue/stripOwnerOnlyFields) and queuing only once that
+  // succeeds — right before the return — is the smallest change that puts
+  // the queue past every remaining failure point in this handler.
+  const unlockResponsePayload = {
     ...stripOwnerOnlyFields(publicLearning),
     quality: stripOpsCounters(publicLearning.quality),
     // LW-3(a): untrusted-content envelope. `body` above stays RAW (programmatic
@@ -9551,7 +9716,42 @@ app.get('/knowledge/:id', async (c) => {
       } : {})
     }),
     timestamp: new Date().toISOString()
-  });
+  };
+
+  // Queue an earning-notification digest entry for the contributor.
+  // Fire-and-forget; must never fail or slow this response.
+  // contribAccountId is already null for platform-owned and
+  // wallet-only-no-account contributors (normalizeCreditingContributorAccountId),
+  // so both are naturally excluded — no extra filtering needed. Self-unlock
+  // and accrual-capped paths already returned above this line and never
+  // reach here. Explicit guards this build adds:
+  //   - contributorEarned > 0 (never a zero-value grant)
+  //   - agencyInForce (GOV-4 Q10: a receipt held pending Terms acceptance,
+  //     CP-6 unassented_pending, does not notify — queue only when the
+  //     accrual actually landed in pending_balance)
+  //   - fundingSource !== 'router' / !routerSettlement (GOV-4 ruling: a
+  //     router-settled share paid the contributor's own wallet on-chain and
+  //     never touched the Auxilo account's accrued balance — the email's
+  //     "accrued to your Auxilo account" line would be false on that path)
+  if (process.env.EARNING_NOTIFICATIONS_ENABLED === 'true' && contribAccountId
+    && agencyInForce && contributorEarned > 0 && fundingSource !== 'router' && !routerSettlement) {
+    try {
+      earningNotifications.queueAccrual(contribAccountId, {
+        learningId: id,
+        title: learning.title,
+        amountUsd: contributorEarned,
+      });
+      // Opportunistic immediate check for this one account — an active
+      // builder gets their digest promptly instead of always waiting for
+      // the hourly sweep. The guaranteed path is the hourly sweep below.
+      flushDueEarningDigestFor(contribAccountId).catch((e) =>
+        console.error('[earning-digest] immediate flush failed (will retry hourly):', e && e.message));
+    } catch (e) {
+      console.error('[earning-digest] queue failed (non-fatal):', e && e.message);
+    }
+  }
+
+  return c.json(unlockResponsePayload);
 
   } catch (deliveryErr) {
     // AUD19-10: delivery failed AFTER payment was taken. Two arms:
@@ -10215,6 +10415,99 @@ const _pricingCronStartup = setTimeout(runDailyPricingCron, 30000);
 if (_pricingCronStartup.unref) _pricingCronStartup.unref();
 const _pricingCronInterval = setInterval(runDailyPricingCron, 24 * 60 * 60 * 1000);
 if (_pricingCronInterval.unref) _pricingCronInterval.unref();
+
+// ── W3: earning-notification digest sweep (dark behind EARNING_NOTIFICATIONS_ENABLED) ──
+//
+// Batching rule: at most one email per contributor account per rolling 24h,
+// carrying every accrual queued since the last send. Two triggers drive an
+// actual send — flushDueEarningDigestFor(accountId) fires opportunistically
+// right after the unlock hook queues an entry (so an active builder gets
+// their digest promptly), and this interval is the guaranteed backstop for
+// an account whose only unlock in a while was hours ago, with no later
+// unlock to opportunistically trigger a check.
+
+// PM review (post-ship defect #1): the opt-out link in the email must still
+// work when the builder reads the email hours or days later — the ordinary
+// 15-minute magic-link TTL (TOKEN_EXPIRY_MS in lib/accounts.js) is far too
+// short for this one purpose. saveMagicLinks' prune-on-write is driven
+// entirely by the stored expires_at (never a hardcoded 15-minute
+// assumption), so a longer-lived entry here is never pruned early.
+const EARNING_EMAILS_OFF_TOKEN_TTL_MS = 60 * 24 * 60 * 60 * 1000; // 60 days
+
+// PM review (post-ship defect #3): the opportunistic flush (right after an
+// unlock) and the hourly sweep can both observe the same due account before
+// either has marked it sent — as can two unlocks for the same contributor
+// arriving close together. earningNotifications.withAccountLock is the
+// single chokepoint that serializes a flush per account within this
+// process; a second concurrent call for an account already in flight is a
+// silent no-op (see lib/earning-notifications.js).
+async function sendEarningDigestForAccount(accountId, items) {
+  await earningNotifications.withAccountLock(accountId, async () => {
+    try {
+      const account = loadAccounts()[accountId];
+      if (!account) { earningNotifications.markSent(accountId); return; } // deleted since queued
+      if (account.earning_notifications_enabled === false) {
+        // Preference is off: drain without sending, never accumulate forever.
+        earningNotifications.markSent(accountId);
+        return;
+      }
+      // The unsubscribe token is minted regardless of dev/prod (same posture as
+      // the account-deletion flow's issuePurposeMagicLink call) — it is never
+      // emailed in dev mode, only logged, mirroring the existing magic-link dev
+      // fallback (lib/accounts.js), which also logs its full token URL in dev
+      // mode. redactEmail still keeps the account's address out of the log.
+      const totalAccrued = (earnings[accountId] && earnings[accountId].pending_balance) || 0;
+      const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+      const prefsToken = issuePurposeMagicLink(account.email, 'earning-emails-off', EARNING_EMAILS_OFF_TOKEN_TTL_MS);
+      const prefsUrl = `${baseUrl}/account/email-prefs/unsubscribe?token=${encodeURIComponent(prefsToken)}`;
+      if (!emailDeliveryEnabled()) {
+        console.log(`[earning-digest] dev mode: ${items.length} item(s) for ${redactEmail(account.email)}: ${prefsUrl}`);
+        earningNotifications.markSent(accountId);
+        return;
+      }
+      // PM review (post-ship defect #2): sendEmail (and therefore
+      // sendEarningNotification) never throws — it always resolves to
+      // {ok, error?}. attemptSend reads that result: ok:true drains normally;
+      // a fixture-domain/no-items refusal drains without retrying (it can
+      // never be delivered); any other failure leaves the items queued and
+      // bumps the attempt counter, draining only once MAX_SEND_ATTEMPTS is
+      // reached, so a permanently failing address cannot retry forever.
+      const outcome = await earningNotifications.attemptSend(
+        accountId,
+        items,
+        () => sendEarningNotification(account.email, { items, totalAccrued, prefsUrl })
+      );
+      if (outcome.drained && !outcome.sent) {
+        console.error(`[earning-digest] permanently dropped after ${outcome.attempts} attempt(s), no address logged: ${outcome.reason}`);
+      }
+    } catch (e) {
+      // Deliberately do NOT markSent on failure — retried on the next sweep
+      // (opportunistic or hourly) rather than silently dropped.
+      console.error('[earning-digest] send failed for account (non-fatal, retried next sweep):', e && e.message);
+    }
+  });
+}
+
+async function flushDueEarningDigestFor(accountId) {
+  const due = earningNotifications.dueForDigest().find((d) => d.accountId === accountId);
+  if (!due) return;
+  await sendEarningDigestForAccount(due.accountId, due.items);
+}
+
+async function flushDueEarningDigests() {
+  for (const { accountId, items } of earningNotifications.dueForDigest()) {
+    await sendEarningDigestForAccount(accountId, items);
+  }
+}
+
+// Only started when the flag is on — a dark feature runs no interval at all.
+if (process.env.EARNING_NOTIFICATIONS_ENABLED === 'true') {
+  const _earningDigestInterval = setInterval(
+    () => flushDueEarningDigests().catch((e) => console.error('[earning-digest] sweep error:', e && e.message)),
+    60 * 60 * 1000
+  );
+  if (_earningDigestInterval.unref) _earningDigestInterval.unref();
+}
 
 // Base L2 gas estimate for ERC-20 transfers (USDC). Configurable via GAS_ESTIMATE_USD env var.
 // Falls back to $0.005 with a warning if the value is invalid (NaN, negative, or > $1.00).
