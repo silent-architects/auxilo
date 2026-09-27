@@ -175,6 +175,10 @@ node mcp-server.js   # the MCP server (stdio)
 
 The live API runs on [Fly.io](https://fly.io) from the repo `Dockerfile`.
 
+### One machine
+
+The money ledgers are guarded by locks held in memory in one running process. The server is meant to run as one machine with one data volume. Do not run a second machine against the same data, and do not start an overlapping deploy where the old and new process both run against the same files at once — the locks on one machine cannot see or coordinate with a second one, so two processes writing the same ledger files at the same time can corrupt them or double-spend a balance. This must not change until the ledgers move to a shared store that more than one process can safely coordinate through.
+
 ## Links
 
 - Site: [auxilo.io](https://auxilo.io)

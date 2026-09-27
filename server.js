@@ -1596,6 +1596,9 @@ const {
     recordLotFunding,
     replayLotFundingFromWalEntry,
     finalizePendingReversals,
+    // N19: boot-only synchronous pair -- see completePendingReversalsAtBoot below.
+    finalizePendingReversalsSync,
+    findAllLotsWithPendingReversal,
     round6,
 } = require('./lib/credits.js');
 // AUD-CAC Part 2: refunds and disputes (spec §4, ruling L10). Each handler
@@ -1611,7 +1614,11 @@ const {
 // and its recordLotFunding call. lib/earnings.js is NOT imported here or
 // anywhere new by this build -- this is the same reversal module the
 // webhook handlers already use.
-const { reverseLotFunding: reverseCreditLotFunding } = require('./lib/earnings-reversal.js');
+const {
+    reverseLotFunding: reverseCreditLotFunding,
+    // N19: boot-only synchronous variant -- see completePendingReversalsAtBoot below.
+    reverseLotFundingSync,
+} = require('./lib/earnings-reversal.js');
 // M9: the ranking/demand counters count an unlock only when it drew paid
 // dollars, and at most once per buyer account per learning per 30 days --
 // its own small module, its own data file, gates the counters only.
@@ -1755,15 +1762,23 @@ function replayUnlock(entry) {
         // Vanishingly rare compound window (a refund/dispute for the SAME
         // pack landed exactly while this unlock was crashed mid-flight):
         // the funding record above is still written and marked
-        // pending_reversal on the lot -- durable, on disk -- so the next
-        // refund or lost-dispute event for this payment intent finds and
-        // reverses it exactly as removeDollarLotRemainder already does for
-        // any other pending entry on that lot. No earnings mutation
-        // happens here at boot -- recovery must never become a second
-        // place a share can be reversed.
-        console.warn(`[wal-recovery] ${entry.id}: lot funding recorded with an uncovered amount already on the lot -- ${replay.needsReversal.length} entr${replay.needsReversal.length === 1 ? 'y' : 'ies'} left pending_reversal for the next refund/dispute event to complete.`);
+        // pending_reversal on the lot -- durable, on disk. No earnings
+        // mutation happens HERE, inside WAL replay itself -- replayUnlock
+        // must never become a second place a share can be reversed. N19:
+        // completePendingReversalsAtBoot(), called once right after
+        // recoverWalEntries() finishes (below), is the one place that
+        // completes it -- whether the next refund/dispute event for this
+        // payment intent ever arrives or not.
+        console.warn(`[wal-recovery] ${entry.id}: lot funding recorded with an uncovered amount already on the lot -- ${replay.needsReversal.length} entr${replay.needsReversal.length === 1 ? 'y' : 'ies'} left pending_reversal, to be completed once WAL recovery finishes.`);
       }
-      console.log(`[wal-recovery] ${entry.id}: lot funding replayed.`);
+      // L-d: log only when this replay actually recorded something new --
+      // a WAL entry whose step marker was merely missing (the funding had
+      // already landed, live, moments before the crash) records nothing
+      // (replay.recorded is false), and logging "replayed" for it would
+      // misreport a boot that changed nothing.
+      if (replay.recorded) {
+        console.log(`[wal-recovery] ${entry.id}: lot funding replayed.`);
+      }
     }
   }
   // All steps done — nothing to replay; commitWal will clean up.
@@ -1835,6 +1850,54 @@ function recoverWalEntries() {
     } catch (err) {
       console.error(`[wal-recovery] Failed to replay ${entry.id}: ${err.message}. Entry preserved on disk for manual review.`);
       // WAL file is intentionally left intact.
+    }
+  }
+}
+
+/**
+ * N19: after WAL crash recovery has replayed every unlock, some lot may
+ * still carry a funded_unlocks entry marked pending_reversal -- money a
+ * refund or lost dispute already removed from the lot (or from the WAL
+ * payload replayed just above), whose earnings-side reversal never landed,
+ * because the process crashed before it did, or because the refund/dispute
+ * event that would normally complete it already got its 200 before an
+ * EARLIER crash, and Stripe never sends the same event twice. Left alone,
+ * that share sits reversed on the lot but un-reversed in earnings.json
+ * forever -- nothing else was ever going to complete it.
+ *
+ * Runs synchronously, once, right after recoverWalEntries() and before any
+ * request handling begins -- the same reasoning as recordLotFundingSync
+ * (lib/credits.js): there is no concurrent caller for these earnings keys
+ * yet, so the locks the live webhook/unlock paths take would only add a
+ * needless async hop to a synchronous boot path. Idempotent: reverseLot-
+ * FundingSync dedupes by each entry's own id (ruling N3) and finalizePending-
+ * ReversalsSync clears the marker it just completed, so a second boot over
+ * the same data (or a second call reusing an entry another path already
+ * reversed) reverses and finalizes nothing further.
+ *
+ * On any error this logs once and returns -- it must never stop the server
+ * from starting. An entry left pending_reversal because of an error here
+ * (a corrupt credits.json or earnings.json) is retried on the next boot;
+ * it is never lost, only delayed.
+ */
+function completePendingReversalsAtBoot() {
+  let pendingLots;
+  try {
+    pendingLots = findAllLotsWithPendingReversal();
+  } catch (err) {
+    console.error(`[wal-recovery] pending-reversal scan failed (left for next boot): ${err && err.message}`);
+    return;
+  }
+  if (pendingLots.length === 0) return;
+  console.log(`[wal-recovery] Found ${pendingLots.length} lot(s) with a pending reversal left from an earlier crash. Completing...`);
+  for (const { accountId, lot_id, funded_unlocks } of pendingLots) {
+    try {
+      const { totalReversed } = reverseLotFundingSync(earnings, funded_unlocks);
+      safeWrite(EARNINGS_FILE, earnings);
+      finalizePendingReversalsSync(accountId, lot_id);
+      console.log(`[wal-recovery] lot ${lot_id}: completed ${funded_unlocks.length} pending reversal${funded_unlocks.length === 1 ? '' : 's'} (-${totalReversed.toFixed(6)} from the builder share${funded_unlocks.length === 1 ? '' : 's'} it funded).`);
+    } catch (err) {
+      console.error(`[wal-recovery] lot ${lot_id}: pending-reversal completion failed (left for next boot): ${err && err.message}`);
     }
   }
 }
@@ -2324,6 +2387,7 @@ function savePipelines() {
 const _startupBegin = Date.now();
 
 recoverWalEntries();       // 1a. WAL crash recovery (SPEC-A2 C3)
+completePendingReversalsAtBoot(); // 1a2. N19: finish any reversal WAL recovery left pending
 
 // --- Withdrawal WAL recovery (SPEC-A1) ---
 const pendingWalEntries = getPendingWalEntries();
@@ -4973,9 +5037,17 @@ app.post('/webhook/stripe', async (c) => {
     // holdAccount is ever reached, not only inside it. Either failure must
     // never fail a webhook whose credit has already landed: alert once,
     // carry on to the referral grant below regardless.
+    //
+    // L-b: tolerateMissingPendingSessions — unlike the pre-Checkout check
+    // (N7, fail closed: no money moved yet), the money here is ALREADY
+    // collected. A corrupt checkout-sessions.json must not skip this check
+    // outright (the pre-fix behavior: the whole call threw straight into
+    // the catch below, and an account over the cap on its recorded balance
+    // alone got no hold at all) -- fall back to 0 pending sessions and still
+    // evaluate the recorded balance/purchases.
     try {
-        const postBalance = checkBalanceCap(account_id, 0);
-        const postDaily = checkDailyCap(account_id, 0);
+        const postBalance = checkBalanceCap(account_id, 0, Date.now(), { tolerateMissingPendingSessions: true });
+        const postDaily = checkDailyCap(account_id, 0, Date.now(), { tolerateMissingPendingSessions: true });
         if (!postBalance.ok || !postDaily.ok) {
             holdAccount(account_id, 'cap_overage', {
                 balance_usd: postBalance.current,
@@ -9923,7 +9995,17 @@ app.get('/knowledge/:id', async (c) => {
       // durably (ruling L6) per affected lot.
       if (fundResult && fundResult.needsReversal && fundResult.needsReversal.length > 0) {
         const { totalReversed } = await reverseCreditLotFunding(earnings, fundResult.needsReversal);
-        if (totalReversed > 0) safeWrite(EARNINGS_FILE, earnings);
+        // L-c: save unconditionally, exactly like the webhook path's
+        // _reverseAndAlert (lib/stripe-refund-handlers.js) -- a racing
+        // refund/dispute delivery can have already applied THIS SAME
+        // entry's id in memory (reverseCreditLotFunding then correctly
+        // reports totalReversed 0, nothing NEW this call), but that other
+        // call's own save may not have reached disk yet. Skipping the save
+        // here whenever this call found nothing new let finalizePending-
+        // Reversals mark the entry durably done below while earnings.json
+        // never received the change -- gating on totalReversed > 0 was
+        // gating on the wrong thing.
+        safeWrite(EARNINGS_FILE, earnings);
         const affectedLotIds = [...new Set(fundResult.needsReversal.map(e => e.lot_id))];
         for (const affectedLotId of affectedLotIds) {
           await finalizePendingReversals(buyerAccountId, affectedLotId);

@@ -31,16 +31,28 @@
  * data folder that has never taken a purchase or a payout.
  *
  * Per PACK payment (a dollar_paid lot), reports:
- *   - the paid dollars spent (the total basis of every share ever recorded
- *     against this lot, kept or reversed)
- *   - the shares recorded as funded by it (same figure -- kept it a
- *     separate line for readability, since "recorded" is the historical
- *     fact and "spent" is the money-flow framing of the same number)
+ *   - the money actually spent (L-a: original price, less what remains
+ *     unspent, less whatever a refund/lost dispute removed directly from
+ *     the remaining balance -- lot.removed_usd, tracked by
+ *     lib/credits.js removeDollarLotRemainder) -- what the lot's OWN
+ *     numbers say was drawn, independent of what funded_unlocks records
+ *   - the shares recorded as funded by it (the total basis -- contributor
+ *     plus platform -- of every funded_unlocks entry ever written for this
+ *     lot). "Money actually spent" and "shares recorded" should always
+ *     agree; a spend with no funding record (the N16/N19 class) or a
+ *     funding record with no matching spend leaves them apart, and a pack
+ *     is flagged when they do
  *   - the shares reversed (the basis of every entry marked reversed)
- *   - the shares kept (recorded minus reversed) against 70% of the money
- *     still collected for the pack (original price minus everything
- *     refunded and lost to disputes) -- the invariant every fix in this
- *     unit protects
+ *   - the shares kept (recorded minus reversed, for reference) alongside
+ *     what builders actually keep (the contributor's cut alone, across
+ *     every un-reversed entry), which is flagged over the invariant every
+ *     fix in this unit protects when it exceeds 70% of what this pack's
+ *     OWN unlocks still hold (money still collected for the pack, minus
+ *     the buyer's own still-unspent remaining balance -- an unspent
+ *     balance is not money any builder share has been promised against)
+ *   - flagged separately when inflight_usd or uncovered_usd sits above
+ *     zero, or a funded_unlocks entry is still marked pending_reversal --
+ *     none of the three should ever be true of an idle lot
  *
  * Then cross-checks the two ledgers: for every contributor who appears in
  * ANY pack's funded_unlocks, sums the shares they currently keep across
@@ -95,6 +107,21 @@ function moneyStillCollected(lot) {
   return round6(Math.max(0, (lot.original_usd || 0) - refunded - disputeLost));
 }
 
+// L-a: what a lot ACTUALLY spent on unlocks -- its price, less what still
+// remains unspent, less whatever a refund or lost dispute took out of
+// remaining_usd directly (lot.removed_usd, tracked by lib/credits.js
+// removeDollarLotRemainder since this fix). "sharesRecorded" (the sum of
+// funded_unlocks' own bases, below) is a SEPARATE figure: what the ledger
+// SAYS it funded. The two should always agree -- a spend with no funding
+// record (N16/N19) or a funding record with no matching spend leaves them
+// apart, and that gap is exactly the class the old "paid dollars spent"
+// figure (which was just sharesRecorded again, reconcile-ledgers.js's own
+// prior bug) could never see.
+function moneyActuallySpent(lot) {
+  const removed = (typeof lot.removed_usd === 'number') ? lot.removed_usd : 0;
+  return round6(Math.max(0, (lot.original_usd || 0) - (lot.remaining_usd || 0) - removed));
+}
+
 function reconcile(dataDir) {
   const credits = loadJsonOrEmpty(path.join(dataDir, 'credits.json'), {});
   const earnings = loadJsonOrEmpty(path.join(dataDir, 'earnings.json'), {});
@@ -106,21 +133,54 @@ function reconcile(dataDir) {
     for (const lot of lots) {
       if (!lot || lot.kind !== 'dollar_paid') continue;
       const funded = Array.isArray(lot.funded_unlocks) ? lot.funded_unlocks : [];
-      let recorded = 0, reversed = 0;
+      // L-a: `recorded`/`kept` stay the FULL basis (contributor + platform)
+      // -- the historical "how much did this pack's ledger ever say it
+      // funded" figure, unchanged. `contributorKept` is the SEPARATE figure
+      // the 70% cap actually protects: what builders keep, which is always
+      // the contributor's own cut alone, never the platform's.
+      let recorded = 0, reversed = 0, contributorKept = 0, pendingReversalCount = 0;
       for (const entry of funded) {
         const basis = shareBasis(entry);
         recorded = round6(recorded + basis);
-        if (entry.reversed) reversed = round6(reversed + basis);
+        if (entry.reversed) {
+          reversed = round6(reversed + basis);
+        } else {
+          contributorKept = round6(contributorKept + (entry.contributor_amount || 0));
+        }
+        if (entry.pending_reversal) pendingReversalCount++;
       }
       const kept = round6(recorded - reversed);
       const held = moneyStillCollected(lot);
+      const remaining = lot.remaining_usd || 0;
+      const spent = moneyActuallySpent(lot);
+      // L-a: the invariant is "builders keep at most 0.7x the money Auxilo
+      // still holds FROM THIS PACK'S UNLOCKS" -- that money is `held` minus
+      // whatever of it is still just the buyer's own unspent balance
+      // (`remaining`), never `held` alone (which an unspent balance inflates
+      // with headroom nothing has promised a builder yet).
+      const capBase = round6(Math.max(0, held - remaining));
+      const inFlightOrUncovered = (lot.inflight_usd || 0) > 1e-9 || (lot.uncovered_usd || 0) > 1e-9;
+      const spendMismatch = Math.abs(spent - recorded) > 1e-6;
+      const over70pct = contributorKept > round6(0.7 * capBase) + 1e-6;
+      const flagReasons = [];
+      if (over70pct) flagReasons.push(`builders keep $${contributorKept.toFixed(6)} > 70% of the $${capBase.toFixed(6)} this pack's unlocks still hold`);
+      if (spendMismatch) flagReasons.push(`money actually spent ($${spent.toFixed(6)}) does not match shares recorded ($${recorded.toFixed(6)})`);
+      if (inFlightOrUncovered) flagReasons.push('money is still marked in flight or uncovered on this lot');
+      if (pendingReversalCount > 0) flagReasons.push(`${pendingReversalCount} reversal${pendingReversalCount === 1 ? ' is' : 's are'} still pending on this lot`);
       packs.push({
-        paidDollarsSpent: recorded, // every dollar a share was ever recorded against, spent from this pack
+        paidDollarsSpent: spent, // L-a: money actually drawn from the lot, not just what the ledger recorded
         sharesRecorded: recorded,
         sharesReversed: reversed,
         sharesKept: kept,
         moneyStillCollected: held,
-        over70pct: kept > round6(0.7 * held) + 1e-6,
+        contributorKept,
+        capBase,
+        over70pct,
+        spendMismatch,
+        inFlightOrUncovered,
+        pendingReversalCount,
+        flagged: flagReasons.length > 0,
+        flagReasons,
       });
     }
   }
@@ -183,11 +243,41 @@ function formatReport(dataDir, { packs, contributorRows }) {
   });
   lines.push('');
 
+  // L-a: a pack is flagged for any of four reasons. Each gets its own
+  // count and list, since a pack can trip more than one.
   const overCap = packs.filter((p) => p.over70pct);
   lines.push(`Packs where shares kept exceed 70% of money still collected: ${overCap.length}`);
   overCap.forEach((p) => {
     const idx = packs.indexOf(p) + 1;
-    lines.push(`  Pack #${idx}: kept $${p.sharesKept.toFixed(6)} > 70% of held $${p.moneyStillCollected.toFixed(6)} (70% = $${round6(0.7 * p.moneyStillCollected).toFixed(6)})`);
+    // L-a: displays the figures the fixed check actually compares --
+    // what builders keep (the contributor's cut alone) against 70% of
+    // what THIS PACK'S unlocks still hold (money still collected, minus
+    // the buyer's own unspent remaining balance).
+    lines.push(`  Pack #${idx}: builders keep $${p.contributorKept.toFixed(6)} > 70% of $${p.capBase.toFixed(6)} this pack's unlocks still hold (70% = $${round6(0.7 * p.capBase).toFixed(6)})`);
+  });
+  lines.push('');
+
+  const mismatched = packs.filter((p) => p.spendMismatch);
+  lines.push(`Packs where money actually spent does not match shares recorded: ${mismatched.length}`);
+  mismatched.forEach((p) => {
+    const idx = packs.indexOf(p) + 1;
+    lines.push(`  Pack #${idx}: spent $${p.paidDollarsSpent.toFixed(6)} vs recorded $${p.sharesRecorded.toFixed(6)}`);
+  });
+  lines.push('');
+
+  const inFlight = packs.filter((p) => p.inFlightOrUncovered);
+  lines.push(`Packs with money still marked in flight or uncovered: ${inFlight.length}`);
+  inFlight.forEach((p) => {
+    const idx = packs.indexOf(p) + 1;
+    lines.push(`  Pack #${idx}`);
+  });
+  lines.push('');
+
+  const stillPending = packs.filter((p) => p.pendingReversalCount > 0);
+  lines.push(`Packs with a reversal still pending: ${stillPending.length}`);
+  stillPending.forEach((p) => {
+    const idx = packs.indexOf(p) + 1;
+    lines.push(`  Pack #${idx}: ${p.pendingReversalCount} pending`);
   });
   lines.push('');
 
@@ -215,4 +305,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { reconcile, formatReport, moneyStillCollected, shareBasis };
+module.exports = { reconcile, formatReport, moneyStillCollected, moneyActuallySpent, shareBasis };

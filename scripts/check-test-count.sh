@@ -427,7 +427,18 @@ cd "${REPO_ROOT}"
 # comment). Verified against a git-add--N-staged run (git ls-files sees
 # every changed file as a fresh clone/CI would, without committing):
 # 4226 -> 4230, 0 fail, 7 skipped.
-EXPECTED_TEST_COUNT=4230
+#
+# MONEYFIX4 (2026-09-27): +20 it()s -- test/fix-unit-money-4.test.js (17: N20
+# x3, L-d x5, L-b x3, L-a x3, L-c x2, W1 x1) and test/fix-unit-money-4-
+# route.test.js (3: N19 Walk F2 through the real staged boot sequence, an
+# idle boot, a corrupt-credits.json boot) -- plus +2 from the no-local-paths
+# guard's own per-tracked-file sweep (git-add--N-staged run, its 2 new files
+# counted the same way PM follow-up 2 above describes). test/fix-unit-
+# money-3-route.test.js's N17 test gained new assertions (ruling L-b changed
+# what it proves) but no new it() count. 20 + 2 = 22 net. Verified against a
+# git-add--N-staged run: 4230 -> 4252, 0 fail, 7 skipped (same pre-existing
+# sandbox skips).
+EXPECTED_TEST_COUNT=4252
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

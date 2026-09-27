@@ -185,18 +185,21 @@ describe('FIX-UNIT-MONEY-3 ruling N17: post-credit webhook bookkeeping never fai
     assert.equal(credits[accountId].dollar_lots.length, piCount, 'no duplicate lot for any single payment_intent');
 
     // checkBalanceCap/checkDailyCap themselves read checkout-sessions.json
-    // (pending sessions count toward the cap too) -- with the file corrupt,
-    // the cap check itself cannot complete, so no hold is placed THIS
-    // delivery (the exact residual server.js's ops alert names). What N17
-    // actually guarantees, and what matters here, is that this failure is
-    // CONTAINED: execution still reaches every later step (the referral
-    // grant, the response) instead of the whole webhook dying with a 500 --
-    // proved by every one of the 21 deliveries above returning 200 with the
-    // credit landed. The companion test below (corrupt account-holds.json,
-    // a healthy sessions file) proves the cap check running to completion
-    // and correctly placing a hold.
+    // (pending sessions count toward the cap too). Ruling L-b: the
+    // webhook's post-credit check now tolerates that read failing -- it
+    // falls back to 0 pending sessions and still evaluates the account's
+    // recorded balance/purchases alone, rather than skipping the check
+    // outright. $2,100 of recorded balance already crosses the $2,000 cap
+    // on its own (with zero pending sessions counted), so the hold still
+    // gets placed even though the sessions file stayed corrupt for every
+    // delivery. What N17 guarantees, and what matters here too, is that
+    // none of this is allowed to fail the webhook itself: execution still
+    // reaches every later step (the referral grant, the response) instead
+    // of dying with a 500 -- proved by every one of the 21 deliveries above
+    // returning 200 with the credit landed.
     const holds = readAccountHolds();
-    assert.equal(holds[accountId], undefined, 'no hold is placed while the cap check itself cannot read the corrupt sessions file -- an accepted, alerted residual, not a crash');
+    assert.ok(holds[accountId], 'L-b: the cap overage is still caught and held even with checkout-sessions.json corrupt for every delivery');
+    assert.equal(holds[accountId].reason, 'cap_overage');
 
     // A Stripe retry of the FIRST event (already processed) also returns
     // 200, not 500 -- the already-processed branch's own clearPendingSession
