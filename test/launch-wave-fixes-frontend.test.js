@@ -45,6 +45,8 @@ const FOR_BUILDERS_HTML = read('for-builders.html');
 const DASHBOARD_HTML = read('dashboard.html');
 const STYLES_CSS = read('styles.css');
 const PRICING_HTML = read('pricing.html');
+const API_HTML = read('api.html');
+const HOW_IT_WORKS_HTML = read('how-it-works.html');
 
 function sliceBetween(source, startMarker, endMarker, fromIndex) {
   const start = source.indexOf(startMarker, fromIndex || 0);
@@ -63,9 +65,9 @@ function sliceBetween(source, startMarker, endMarker, fromIndex) {
 // scope: the aria-label now updates together with the visible text, and a
 // shared polite live region (#copy-status) announces the change once. The
 // reset after the timeout clears the live region (never re-announced).
-// api.html and how-it-works.html carry the identical pre-existing pattern
-// but are NOT in this builder's file scope (see FIX-UNIT.md) and are left
-// unfixed; reported separately.
+// api.html and how-it-works.html carried the identical pre-existing pattern
+// and were reported as out of an earlier builder's file scope; this wave
+// closes them out with the same fix, extending the coverage below.
 
 describe('FIX-UNIT A1: copy buttons announce their result', () => {
   const pages = [
@@ -99,10 +101,22 @@ describe('FIX-UNIT A1: copy buttons announce their result', () => {
       fnStartMarker: 'window.copyDashSetupCode = function () {',
       fnEndMarker: 'function legacyCopy(text, done) {',
     },
+    {
+      name: 'api.html',
+      html: API_HTML,
+      fnStartMarker: 'function copyCode(preId, btnId) {',
+      fnEndMarker: '// Response-envelope expand toggle (Wave E3 item 2)',
+    },
+    {
+      name: 'how-it-works.html',
+      html: HOW_IT_WORKS_HTML,
+      fnStartMarker: 'function copyCode(preId, btnId) {',
+      fnEndMarker: '</script>',
+    },
   ];
 
   it('sanity: the page list under test is not empty', () => {
-    assert.ok(pages.length === 5, `expected 5 pages in scope, got ${pages.length}`);
+    assert.ok(pages.length === 7, `expected 7 pages in scope, got ${pages.length}`);
   });
 
   it('every in-scope page carries the shared #copy-status polite live region, off-screen via .visually-hidden', () => {
@@ -127,13 +141,17 @@ describe('FIX-UNIT A1: copy buttons announce their result', () => {
     }
   });
 
-  it('api.html and how-it-works.html (out of this builder\'s file scope) still carry the pre-fix pattern -- confirms the defect is real and unfixed there, not silently fine', () => {
-    const outOfScope = [
-      fs.readFileSync(path.join(PUBLIC_DIR, 'api.html'), 'utf8'),
-      fs.readFileSync(path.join(PUBLIC_DIR, 'how-it-works.html'), 'utf8'),
-    ];
-    for (const html of outOfScope) {
-      assert.ok(!/id="copy-status"/.test(html), 'expected no live region yet on the out-of-scope pages (documents current state, not a request to leave it broken)');
+  it('every copy button on api.html and how-it-works.html keeps its own pre-existing accessible name (no homogenizing to a single generic label)', () => {
+    const buttonLabelRe = /class="copy-btn" id="[^"]+"[^>]*aria-label="([^"]+)"/g;
+    for (const p of [
+      { name: 'api.html', html: API_HTML },
+      { name: 'how-it-works.html', html: HOW_IT_WORKS_HTML },
+    ]) {
+      const labels = [...p.html.matchAll(buttonLabelRe)].map((m) => m[1]);
+      assert.ok(labels.length > 0, `${p.name}: expected at least one .copy-btn with an aria-label`);
+      for (const label of labels) {
+        assert.ok(label.length > 0, `${p.name}: every copy-btn aria-label must be non-empty`);
+      }
     }
   });
 });

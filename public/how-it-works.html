@@ -520,6 +520,9 @@
 </head>
 <body>
 <a href="#main" class="skip-to-content">Skip to content</a>
+<!-- FIX-UNIT A1: shared polite live region for the copy-button "copied!"
+     announcement (see copyCode() below). -->
+<span id="copy-status" role="status" aria-live="polite" class="visually-hidden"></span>
 
 <!-- ━━━ Navigation ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <nav id="main-nav" aria-label="Main navigation">
@@ -1145,18 +1148,28 @@ npx auxilo review --all-reject</pre>
   }
 
   // ── Copy code ──
+  // FIX-UNIT A1: the accessible name (aria-label) now updates together with
+  // the visible text, and a shared polite live region (#copy-status)
+  // announces the change once. The reset after the timeout clears the live
+  // region (never re-announced) and restores the original aria-label.
   function copyCode(preId, btnId) {
     var pre = document.getElementById(preId);
     var btn = document.getElementById(btnId);
     if (!pre || !btn) return;
     var text = pre.textContent;
+    var status = document.getElementById('copy-status');
+    var originalLabel = btn.getAttribute('aria-label');
     navigator.clipboard.writeText(text).then(function() {
-      btn.textContent = 'copied';
+      btn.textContent = 'copied!';
+      btn.setAttribute('aria-label', 'copied!');
       btn.classList.add('copied');
+      if (status) status.textContent = 'copied!';
       setTimeout(function() {
         btn.textContent = 'copy';
+        if (originalLabel) btn.setAttribute('aria-label', originalLabel);
         btn.classList.remove('copied');
-      }, 2000);
+        if (status) status.textContent = '';
+      }, 1800);
     });
   }
 

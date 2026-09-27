@@ -489,12 +489,27 @@ describe('LAUNCH-WAVE-EMAILS: source-inspection wiring checks', () => {
     assert.doesNotMatch(hookBlock, /matchedEntry\.email\}`\);[\s\S]*console\.error/, 'sanity: catch body logs, does not rethrow');
   });
 
-  it('the unlock-email opt-out routes (D-83 to D-88) use the legal-page /styles.css?v= literal, not the bare account-deletion shell, and never reveal whose account a token belonged to', () => {
+  it('the unlock-email opt-out routes (D-83 to D-88) use the current shipped /styles.css?v= literal, not the bare account-deletion shell, and never reveal whose account a token belonged to', () => {
     const routeStart = SERVER_SRC.indexOf("app.get('/account/email-prefs/unsubscribe'");
     const routeEnd = SERVER_SRC.indexOf("app.get('/account/api-keys'", routeStart);
     assert.notEqual(routeStart, -1);
     const routeBlock = SERVER_SRC.slice(SERVER_SRC.lastIndexOf('function renderUnlockEmailPrefsPage', routeStart), routeEnd);
-    assert.match(routeBlock, /href="\/styles\.css\?v=80b44c53"/);
+
+    // Derived, not pinned: a hardcoded hash here goes stale on every CSS
+    // change (it did -- this literal used to read ?v=80b44c53, years behind
+    // the shipped pages, per test/legal-page-styles-version.test.js's same
+    // fix for serveLegalPage). Read the real value off a shipped page at
+    // test time instead, so this test tracks whatever the site currently
+    // ships rather than a snapshot of one commit.
+    const indexHtml = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
+    const pageMatch = indexHtml.match(/href="\/styles\.css\?v=([0-9a-f]+)"/);
+    assert.ok(pageMatch, 'public/index.html must link /styles.css?v=N');
+    // Positive control: an empty/near-empty capture must not silently pass.
+    assert.match(pageMatch[1], /^[0-9a-f]{8}$/,
+      `expected an 8-hex-char asset hash, got ${JSON.stringify(pageMatch[1])}`);
+
+    assert.match(routeBlock, new RegExp(`href="/styles\\.css\\?v=${pageMatch[1]}"`),
+      `opt-out page must ship the same /styles.css?v=${pageMatch[1]} as the rest of the site`);
     assert.doesNotMatch(routeBlock, /Stop Unlock Emails[\s\S]{0,400}account_id/i);
   });
 });

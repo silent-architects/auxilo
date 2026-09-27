@@ -278,7 +278,11 @@ cd "${REPO_ROOT}"
 # guard does not scan for. Verified against the actual `npm test` discovered
 # count, run twice, identical both times: 3169 -> 3436, 0 fail, 6 skipped
 # (pre-existing, unrelated).
-EXPECTED_TEST_COUNT=3436
+#
+# site/launch-wave-0926 close-out: f4329cb (+30/-1) and 5021755 (+12), both
+# already on this branch, bring the pin to 3436 -> 3477; A1's api.html/
+# how-it-works.html fix nets 0 (one assertion replaced). Verified twice: 3477.
+EXPECTED_TEST_COUNT=3477
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
