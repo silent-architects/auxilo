@@ -115,7 +115,12 @@ const EXPECTED_1440_H1_TOP = {
   'public/for-builders.html': 250,
   'public/how-it-works.html': 140,
   'public/how-submissions-work.html': 140,
-  'public/index.html': 100,
+  // LAUNCH-WAVE-0926: the hero's own two-column grid (h1 head-row, copy+figure
+  // below) was removed along with the figure it existed to place (AD layout
+  // sheet item 1) -- #hero's flex-centered content is now shorter, so its
+  // vertically centered h1 sits lower in the viewport. Deliberate, not drift;
+  // re-measured against the rebuilt hero (was 100).
+  'public/index.html': 168.359375,
   'public/pricing.html': 140,
   'public/status.html': 140,
   'public/works-with.html': 96,

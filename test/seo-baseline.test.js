@@ -363,13 +363,13 @@ describe('Hero wave (AD-STRINGS-PACKET-12 rev 3a): H1 B, title/og/twitter, meta 
     assert.ok(!/remembers/i.test(m[1]), 'no "remembers" in the H1');
   });
 
-  it('hero sub carries "asks Auxilo", "signed in to your account", "the answer you published"; the new block carries "ask Auxilo" (packet §7.2)', () => {
+  it('hero sub carries "ask Auxilo", "Signed in to your account", "you published back"; the new block carries "ask Auxilo" (LAUNCH-WAVE-0926 register A-01/A-05)', () => {
     const subMatch = INDEX_HTML.match(/<p class="hero-sub">([\s\S]*?)<\/p>/);
     assert.ok(subMatch, 'hero-sub paragraph found');
     const sub = subMatch[1];
-    assert.ok(sub.includes('asks Auxilo'), 'sub has "asks Auxilo"');
-    assert.ok(sub.includes('signed in to your account'), 'sub has the account condition');
-    assert.ok(sub.includes('the answer you published'), 'sub has "the answer you published"');
+    assert.ok(sub.includes('ask Auxilo'), 'sub has "ask Auxilo"');
+    assert.ok(sub.includes('Signed in to your account'), 'sub has the account condition');
+    assert.ok(sub.includes('the fix you published'), 'sub has "the fix you published"');
 
     const blockMatch = INDEX_HTML.match(/<h2 id="learning-explainer-heading">[\s\S]*?<\/section>/);
     assert.ok(blockMatch, 'learning-explainer block found');
@@ -391,10 +391,10 @@ describe('Hero wave (AD-STRINGS-PACKET-12 rev 3a): H1 B, title/og/twitter, meta 
     assert.ok(m && /your ai/i.test(m[1]), 'the one "your AI" occurrence is inside #hero-heading');
   });
 
-  it('the single-player recall paragraph carries the account condition (packet §7.4, "index:394")', () => {
+  it('the single-player recall paragraph carries the account condition (LAUNCH-WAVE-0926 register A-06)', () => {
     assert.ok(
       INDEX_HTML.includes(
-        'When your agent asks Auxilo the same question in a later session, signed in to your account, the answer you published comes back at no cost.'
+        'When your agent asks Auxilo in a later session, signed in to your account, the answer you published comes back at no cost.'
       ),
       'recall paragraph carries "signed in to your account"'
     );
@@ -416,17 +416,21 @@ describe('Hero wave (AD-STRINGS-PACKET-12 rev 3a): H1 B, title/og/twitter, meta 
     );
   });
 
-  it('bullet 351 (packet 11): hero-trust bullet reads "every Auxilo tool still works"', () => {
+  it('bullet 351 (packet 11): "every Auxilo tool still works" survives, now in step 01 (LAUNCH-WAVE-0926 register A-08 moved it out of the hero-trust bullet it originated in)', () => {
     assert.ok(
       INDEX_HTML.includes('Decline extraction and every Auxilo tool still works.'),
       'naming-sweep fix for the hero-trust bullet is applied'
     );
   });
 
-  it('step 01 already reads "On the clients that support capture"', () => {
+  it('step 01 no longer reads "On the clients that support capture" (LAUNCH-WAVE-0926 register A-08 drops the capture-support claim entirely, GOV-4 Q2)', () => {
     assert.ok(
-      INDEX_HTML.includes('On the clients that support capture it can also extract learnings in the background'),
-      'step 01 capture-clients line present'
+      !INDEX_HTML.includes('On the clients that support capture it can also extract learnings in the background'),
+      'step 01 capture-clients line removed'
+    );
+    assert.ok(
+      INDEX_HTML.includes('It finds the supported clients on your machine, registers Auxilo, and signs you in.'),
+      'step 01 carries the A-08 replacement text'
     );
   });
 

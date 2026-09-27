@@ -106,8 +106,8 @@ describe('SITE-PERFECT-W2 A: homepage "market" section cut', () => {
     assert.ok(count >= 1, `expected >= 1 occurrence of the marketplace sentence, found ${count}`);
   });
 
-  it('the homepage <main id="main"> now has exactly 8 top-level sections (was 9 before the cut)', () => {
+  it('the homepage <main id="main"> now has exactly 9 top-level sections (was 8 after this cut, before LAUNCH-WAVE-0926 added #setup-detail)', () => {
     const html = readIndexHtml();
-    assert.equal(countTopLevelMainSections(html), 8);
+    assert.equal(countTopLevelMainSections(html), 9);
   });
 });

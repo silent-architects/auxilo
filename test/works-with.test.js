@@ -10,7 +10,9 @@
  *      public/logos/, and is a valid SVG with no <script>, no <image>
  *      (raster embed), and no external href/src.
  *   3. Homepage band: public/index.html carries the band eyebrow line and
- *      the corrected step 01 string ("On the clients that support capture").
+ *      (LAUNCH-WAVE-0926 update) the six ruled client names; step 01 no
+ *      longer claims capture support at all (register A-08 drops the
+ *      clause, not just its old two-client form).
  *   4. OpenClaw: public/works-with.html's OpenClaw cell carries the note
  *      text (the matrix's own words) and no check mark; docs/SUPPORTED-
  *      CLIENTS.md's OpenClaw row has the same correction (status cell
@@ -206,22 +208,29 @@ describe('WORKS-WITH: structural — public/works-with.html, public/index.html b
     assert.ok(INDEX_HTML.includes('<a href="/works-with" class="ww-band-link">See what Auxilo captures on each client</a>'), 'band link present verbatim, pointing at /works-with');
   });
 
-  it('public/index.html band lists only the eleven capture clients (no OpenClaw, no probabilistic clients)', () => {
+  it('public/index.html band lists only the six ruled capture clients (LAUNCH-WAVE-0926 register M-30: no Cline/Roo Code/Continue.dev, no OpenClaw, no probabilistic clients)', () => {
     const bandStart = INDEX_HTML.indexOf('id="works-with-band"');
     const bandEnd = INDEX_HTML.indexOf('</section>', bandStart);
     const bandBlock = INDEX_HTML.slice(bandStart, bandEnd);
-    const expectedNames = ['Claude Code', 'Cursor', 'Devin Desktop', 'GitHub Copilot', 'Codex', 'Antigravity', 'Cline', 'Roo Code', 'Continue.dev'];
+    const expectedNames = ['Claude Code', 'Cursor', 'GitHub Copilot CLI', 'Codex', 'Antigravity', 'Devin Desktop'];
     for (const name of expectedNames) {
       assert.ok(bandBlock.includes(`>${name}<`), `band carries ${name}`);
     }
+    assert.ok(!bandBlock.includes('>Cline<'), 'band excludes Cline (register M-30)');
+    assert.ok(!bandBlock.includes('>Roo Code<'), 'band excludes Roo Code (register M-30)');
+    assert.ok(!bandBlock.includes('>Continue.dev<'), 'band excludes Continue.dev (register M-30)');
+    assert.ok(!bandBlock.includes('>GitHub Copilot<'), 'band names the client "GitHub Copilot CLI", not bare "GitHub Copilot"');
     assert.ok(!bandBlock.includes('OpenClaw'), 'band excludes OpenClaw (sweep paused)');
     assert.ok(!bandBlock.includes('Gemini CLI'), 'band excludes Gemini CLI (unverified, pulled 2026-09-12)');
     assert.ok(!bandBlock.includes('Claude Desktop'), 'band excludes probabilistic clients');
   });
 
-  it('public/index.html step 01 reads the corrected capture-support sentence, never the old two-client claim', () => {
-    assert.ok(INDEX_HTML.includes(STEP01_NEW), 'step 01 carries the corrected phrase');
+  it('public/index.html step 01 no longer claims background extraction support (LAUNCH-WAVE-0926 register A-08, GOV-4 Q2), and carries the new connect-step text verbatim', () => {
+    const STEP01_A08 = 'Run <code style="font-family:var(--mono);font-size:13px;color:var(--aurum);">npx auxilo setup</code>. It finds the supported clients on your machine, registers Auxilo, and signs you in. Decline extraction and every Auxilo tool still works.';
+    assert.ok(INDEX_HTML.includes(STEP01_A08), 'step 01 carries the A-08 register text verbatim');
     assert.ok(!INDEX_HTML.includes(STEP01_OLD), 'step 01 no longer names exactly two clients');
+    assert.ok(!INDEX_HTML.includes('extract learnings in the background'), 'step 01 no longer makes the background-extraction output claim (A-08 supersedes it)');
+    assert.ok(!INDEX_HTML.includes(STEP01_NEW), 'step 01 no longer claims capture support at all (A-08 drops the clause entirely, not just its old two-client form)');
   });
 
   it('public/logos/SOURCES.md lists every logo file actually shipped under public/logos/*.svg', () => {

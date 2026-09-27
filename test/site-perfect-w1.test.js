@@ -84,6 +84,11 @@ function startStaticServer(root) {
 // test/site-perfect-w2-a.test.js for the regression asserting its absence.
 // This file's section list and count were updated to match (9 -> 8).
 //
+// LAUNCH-WAVE-0926 (advertising-copywriter/AD layout sheet, 2026-09-26):
+// #setup-detail is new, inserted directly after #hero and before
+// #learning-explainer (the hero's trust bullets + exchange figure moved
+// there). Count updated to match (8 -> 9).
+//
 // #hero is deliberately excluded from the "everything computes 120px" invariant:
 // public/styles.css's `#hero { padding: 0 24px; ... min-height: 100vh; }` is a
 // full-viewport hero with its own layout system (flex-centered content, no
@@ -91,6 +96,7 @@ function startStaticServer(root) {
 // this fix, not part of the --section-pad rhythm the other 7 sections share.
 const HOMEPAGE_SECTIONS = [
   { id: 'hero', label: 'hero (Hero heading)', expectPad: false },
+  { id: 'setup-detail', label: 'You Control What Publishes', expectPad: true },
   { id: 'learning-explainer', label: 'What a Learning Is, and Why Another Agent Would Use It', expectPad: true },
   { id: 'works-with-band', label: '(unheaded) works-with logo band', expectPad: true },
   { id: 'own-learnings-free', label: 'Never watch your agent solve the same problem twice.', expectPad: true },
@@ -187,7 +193,7 @@ describe('SITE-PERFECT-W1 item 4: every top-level homepage section computes padd
     if (server) server.close();
   });
 
-  it('index.html <main id="main"> declares exactly the 8 expected top-level sections (no drift)', async (t) => {
+  it('index.html <main id="main"> declares exactly the 9 expected top-level sections (no drift)', async (t) => {
     if (!ok) { t.skip('playwright not resolvable'); return; }
     const found = await page.evaluate(() =>
       Array.from(document.querySelectorAll('#main > section')).map((s) => s.id || `.${s.className}`)
