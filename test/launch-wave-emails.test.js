@@ -440,16 +440,19 @@ describe('LAUNCH-WAVE-EMAILS: source-inspection wiring checks', () => {
     assert.notEqual(end, -1);
     const handler = SERVER_SRC.slice(start, end);
 
+    // AUD-CAC (credits-as-cash follow-up, SITE-PM 2026-09-27): the
+    // capped-repeat early-return branch is gone (F-5 removes the 30-day
+    // repeat-accrual cap) — the self-unlock branch is now the only
+    // early-return before commitWal.
     const selfUnlockReturn = handler.indexOf('if (isSelfUnlock) {');
-    const cappedReturn = handler.indexOf('if (accrualCapped) {');
     const commitWalIdx = handler.indexOf('commitWal(walId);');
     const payloadBuildIdx = handler.indexOf('const unlockResponsePayload = {');
     const queueBlockIdx = handler.indexOf("if (process.env.EARNING_NOTIFICATIONS_ENABLED === 'true' && contribAccountId");
     const returnIdx = handler.indexOf('return c.json(unlockResponsePayload);');
     const catchIdx = handler.indexOf('} catch (deliveryErr) {');
 
-    assert.ok(selfUnlockReturn !== -1 && cappedReturn > selfUnlockReturn);
-    assert.ok(commitWalIdx > cappedReturn, 'commitWal runs after both early-return branches');
+    assert.ok(selfUnlockReturn !== -1 && commitWalIdx > selfUnlockReturn,
+      'commitWal runs after the early-return branch');
     assert.ok(payloadBuildIdx > commitWalIdx, 'response payload is built after commitWal');
     assert.ok(queueBlockIdx > payloadBuildIdx,
       'the queue block runs AFTER the response payload is already built successfully — the smallest change that puts the queue past every remaining AUD19-10 rollback point in this handler');

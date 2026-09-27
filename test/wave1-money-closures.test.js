@@ -7,8 +7,8 @@
  *   1.1 AUD19-15 — discovery-premium attribution reads the POST-auth identity
  *       (the pre-auth read left the 60% share dead on the API-key path).
  *   1.2 AUD19-10 — compensating credit refund on post-deduction delivery
- *       failure: abortWal + in-memory rollback + refundCredit (count AND lot)
- *       + unrecordAccrual.
+ *       failure: abortWal + in-memory rollback + refundDollarDraw (restores
+ *       the exact paid/promo split the debit drew).
  *   1.3 LW-7 — rating requires auth + proof of prior unlock via the durable
  *       purchase ledger; cooldowns re-keyed from IP to account.
  *   1.4 AUD19-13 rem. — static dualAuth (+ its only dependency x402Gate)
@@ -33,12 +33,10 @@ const os = require('os');
 // ─── Env-file isolation (must precede the lib requires) ──────────────────────
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'auxilo-wave1-'));
 process.env.AUXILO_CREDITS_FILE = path.join(TMP, 'credits.json');
-process.env.AUXILO_UNLOCK_ATTRIBUTION_FILE = path.join(TMP, 'unlock-attribution.json');
 process.env.AUXILO_PURCHASE_LEDGER_FILE = path.join(TMP, 'purchase-ledger.json');
 process.env.AUXILO_WAL_DIR = path.join(TMP, 'wal');
 
 const credits = require('../lib/credits.js');
-const attribution = require('../lib/unlock-attribution.js');
 const ledger = require('../lib/purchase-ledger.js');
 const wal = require('../lib/wal.js');
 const opsAlert = require('../lib/ops-alert.js');
@@ -128,59 +126,49 @@ describe('AUD19-15: discovery-premium cache read uses the POST-auth identity', (
 // 1.2 AUD19-10 — compensating refund machinery (pure lib tests)
 // ════════════════════════════════════════════════════════════════════════════
 
-describe('AUD19-10: refundCredit restores count AND lot at the consumed unit price', () => {
-  it('paid credit round-trip: deduct → refund → next deduct sees the same unit price', async () => {
+// RETIRED (credits-as-cash follow-up, SITE-PM 2026-09-27): all three tests
+// here pinned refundCredit()'s unit-lot restore at "the consumed unit
+// price" — refundCredit and addPurchasedCredits are both deleted (F-3, F-4).
+// A delivery-failure refund now always restores the exact paid/promo split
+// the debit drew, via refundDollarDraw, proved fresh below.
+describe('AUD19-10: refundDollarDraw restores the exact paid/promo split drawn', () => {
+  it('paid balance round-trip: deduct → delivery-failure restore → next deduct sees the same balance', async () => {
     const acct = 'acc_w1_refund_paid';
-    await credits.addPurchasedCredits(acct, 0, 1, { unlock_unit_price_usd: 0.40 });
-    const d1 = await credits.deductCredit(acct, 'unlock');
+    await credits.addDollarLot(acct, 'dollar_paid', 0.40);
+    const d1 = await credits.deductCredit(acct, 'unlock', 0.40);
     assert.equal(d1.success, true);
-    assert.equal(d1.unit_price_usd, 0.40);
-    assert.equal(d1.remaining, 0);
+    assert.equal(d1.paid_drawn, 0.40);
+    assert.equal(credits.loadCredits()[acct].dollar_lots[0].remaining_usd, 0);
 
-    const r = await credits.refundCredit(acct, 'unlock', d1.unit_price_usd);
+    const r = await credits.refundDollarDraw(acct, d1.paid_drawn, d1.promo_drawn);
     assert.equal(r.success, true);
-    assert.equal(r.remaining, 1);
 
-    const rec = credits.loadCredits()[acct];
-    assert.equal(rec.purchased_unlocks, 1);
-    assert.equal(rec.unlocks_used, 0, 'usage counter must be reversed');
+    const balance = credits.summarizeCreditBalance(credits.loadCredits()[acct]);
+    assert.equal(balance.paid_usd, 0.40, 'the restored balance must carry the original paid amount — basis accounting cannot drift');
 
-    const d2 = await credits.deductCredit(acct, 'unlock');
+    const d2 = await credits.deductCredit(acct, 'unlock', 0.40);
     assert.equal(d2.success, true);
-    assert.equal(d2.unit_price_usd, 0.40, 'the restored lot must carry the original unit price — basis accounting cannot drift');
+    assert.equal(d2.paid_drawn, 0.40);
   });
 
-  it('a refunded $0 grant credit comes back at $0, not the default rate', async () => {
+  it('a refunded promotional draw comes back as promotional, not paid', async () => {
     const acct = 'acc_w1_refund_grant';
-    await credits.addPurchasedCredits(acct, 0, 1, { unlock_unit_price_usd: 0 });
-    const d1 = await credits.deductCredit(acct, 'unlock');
-    assert.equal(d1.unit_price_usd, 0);
-    await credits.refundCredit(acct, 'unlock', d1.unit_price_usd);
-    const d2 = await credits.deductCredit(acct, 'unlock');
-    assert.equal(d2.unit_price_usd, 0, 'grant lots refund at $0');
+    await credits.addDollarLot(acct, 'dollar_promo', 1);
+    const d1 = await credits.deductCredit(acct, 'unlock', 1);
+    assert.equal(d1.promo_drawn, 1);
+    assert.equal(d1.paid_drawn, 0);
+    await credits.refundDollarDraw(acct, d1.paid_drawn, d1.promo_drawn);
+    const balance = credits.summarizeCreditBalance(credits.loadCredits()[acct]);
+    assert.equal(balance.promo_usd, 1, 'a promotional draw refunds as promotional');
+    assert.equal(balance.paid_usd, 0);
   });
 
-  it('defensive: refund with no prior record creates one; used counter floors at 0', async () => {
+  it('defensive: a refund against an account with no prior record creates one', async () => {
     const acct = 'acc_w1_refund_fresh';
-    const r = await credits.refundCredit(acct, 'unlock', 0.10);
+    const r = await credits.refundDollarDraw(acct, 0.10, 0);
     assert.equal(r.success, true);
-    const rec = credits.loadCredits()[acct];
-    assert.equal(rec.purchased_unlocks, 1);
-    assert.equal(rec.unlocks_used, 0, 'never negative');
-  });
-});
-
-describe('AUD19-10: unrecordAccrual un-arms the cap this request armed', () => {
-  it('record → capped; unrecord → uncapped; unrecord of a missing key is a no-op', () => {
-    const acct = 'acc_w1_cap';
-    const lrn = 'lrn_w1_cap';
-    assert.equal(attribution.isAccrualCapped(acct, lrn), false);
-    attribution.recordAccrual(acct, lrn);
-    assert.equal(attribution.isAccrualCapped(acct, lrn), true);
-    attribution.unrecordAccrual(acct, lrn);
-    assert.equal(attribution.isAccrualCapped(acct, lrn), false, 'a refunded failure must not cost the retry its accrual');
-    attribution.unrecordAccrual(acct, 'lrn_never_recorded'); // must not throw
-    attribution.unrecordAccrual(null, lrn); // must not throw
+    const balance = credits.summarizeCreditBalance(credits.loadCredits()[acct]);
+    assert.equal(balance.paid_usd, 0.10);
   });
 });
 
@@ -206,22 +194,21 @@ describe('AUD19-10: unlock handler compensation wiring (source)', () => {
       'x402/router arm is separated');
     assert.ok(catchBlock.includes('throw deliveryErr;'),
       'x402/router path rethrows — the WAL replay is the designed recovery for settled money');
-    assert.ok(catchBlock.includes("refundCredit(buyerAccountId, 'unlock'"), 'credit path refunds');
-    assert.ok(catchBlock.includes('unrecordAccrual(buyerAccountId, id)'), 'cap un-armed on refund');
+    assert.ok(catchBlock.includes('refundDollarDraw(buyerAccountId,'), 'credit path restores the drawn balance');
     assert.ok(catchBlock.includes('credit_refunded: true'), 'buyer told the credit came back');
   });
 
   it('WAL is cancelled FIRST, and a failed abort refuses the refund (never double-pay)', () => {
     const catchBlock = h.slice(h.indexOf('} catch (deliveryErr) {'));
     const abortAt = catchBlock.indexOf('abortWal(walId)');
-    const refundAt = catchBlock.indexOf('refundCredit(');
+    const refundAt = catchBlock.indexOf('refundDollarDraw(');
     assert.ok(abortAt !== -1 && refundAt !== -1 && abortAt < refundAt,
       'abort must precede refund');
     assert.ok(catchBlock.includes('if (!walCancelled) {'), 'failed abort is a distinct arm');
     const noRefundArm = catchBlock.slice(catchBlock.indexOf('if (!walCancelled) {'), catchBlock.indexOf('// 2.'));
     assert.ok(noRefundArm.includes('credit_refunded: false'),
       'when the WAL survives, the credit is NOT refunded (replay will land the accrual)');
-    assert.ok(!noRefundArm.includes('refundCredit('), 'no refund call in the abort-failed arm');
+    assert.ok(!noRefundArm.includes('refundDollarDraw('), 'no refund call in the abort-failed arm');
   });
 
   it('the error path never crashes: refund failure logs + ops-alerts in its own category', () => {
@@ -231,11 +218,10 @@ describe('AUD19-10: unlock handler compensation wiring (source)', () => {
       'both ops-alerts (abort-failed + refund-failed) use the unlock-refund category');
   });
 
-  it('the accrual-cap un-arm is gated on this request having armed it', () => {
-    assert.ok(h.includes('accrualArmed = true;'), 'arm flag set at the recordAccrual site');
-    assert.ok(h.includes('if (accrualArmed) unrecordAccrual(buyerAccountId, id);'),
-      'un-arm only when this request recorded the accrual');
-  });
+  // RETIRED (credits-as-cash follow-up, SITE-PM 2026-09-27): 'the
+  // accrual-cap un-arm is gated on this request having armed it' pinned
+  // accrualArmed/unrecordAccrual — lib/unlock-attribution.js is deleted
+  // (F-5); there is no repeat-accrual cap left to un-arm.
 
   it('in-memory ledger rollback exists (phantom accruals cannot flush later)', () => {
     assert.ok(h.includes('_rb.earningsSnapshot'), 'earnings entry snapshot taken');
@@ -302,11 +288,17 @@ describe('LW-7: rating endpoint requires auth + proof of prior unlock (source)',
     assert.ok(r.includes('rater_account_id: raterAccountId'));
   });
 
-  it('unlock handler records purchases on delivery success only (main + capped, never self-unlock)', () => {
+  // AUD-CAC (credits-as-cash follow-up, SITE-PM 2026-09-27): the capped-repeat
+  // branch (and its own recordPurchase call) is gone — F-5 removes the
+  // 30-day repeat-accrual cap, so there is only the one main-path recording
+  // site left. The self-unlock exclusion and the post-commit ordering it
+  // proved still hold and are re-asserted against the real remaining
+  // boundaries.
+  it('unlock handler records purchases on delivery success only (main path, never self-unlock)', () => {
     const h = unlockHandlerSlice();
-    assert.equal(h.split('recordPurchase(buyerAccountId, id)').length - 1, 2,
-      'exactly two recording sites: main path + capped repeat');
-    const selfBlock = h.slice(h.indexOf('if (isSelfUnlock) {'), h.indexOf('if (accrualCapped) {'));
+    assert.equal(h.split('recordPurchase(buyerAccountId, id)').length - 1, 1,
+      'exactly one recording site: the main path');
+    const selfBlock = h.slice(h.indexOf('if (isSelfUnlock) {'), h.indexOf('learning.earnings.gross_usd'));
     assert.ok(!selfBlock.includes('recordPurchase('),
       'self-unlocks never mint rating rights — contributors cannot rate their own learnings');
     const commitAt = h.indexOf('commitWal(walId);');

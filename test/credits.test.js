@@ -75,7 +75,7 @@ after(() => {
 const credits = require('../lib/credits.js');
 const {
     deductCredit,
-    addPurchasedCredits,
+    addDollarLot,
     getCreditStatus,
     loadCredits,
     saveCredits,
@@ -120,11 +120,10 @@ function deleteRecord(accountId) {
 // 1. New Account Initialization (no free tier)
 // ---------------------------------------------------------------------------
 
-test('New account: starts with 0 purchased credits', () => {
+test('New account: starts with a zero dollar balance', () => {
     const id = uid();
     const status = getCreditStatus(id);
-    assert.equal(status.unlocks.purchased, 0);
-    assert.equal(status.unlocks.used, 0);
+    assert.deepEqual(status.credit_balance, { paid_usd: 0, promo_usd: 0, total_usd: 0 });
     deleteRecord(id);
 });
 
@@ -160,17 +159,18 @@ test('Deduction: creditType "query" is rejected even when purchased_queries > 0'
     deleteRecord(id);
 });
 
-test('Deduction: legacy purchased_queries/queries_used fields survive unrelated unlock deductions untouched', async () => {
+test('Deduction: legacy purchased_queries/purchased_unlocks fields survive a real dollar-lot deduction untouched', async () => {
     const id = uid();
     writeRecord(id, { purchased_queries: 10, purchased_unlocks: 5 });
+    await addDollarLot(id, 'dollar_paid', 1);
 
-    const r = await deductCredit(id, 'unlock');
+    const r = await deductCredit(id, 'unlock', 1);
     assert.equal(r.success, true);
 
     const store = loadCredits();
     assert.equal(store[id].purchased_queries, 10, 'legacy query balance is read-only now, never touched');
-    assert.equal(store[id].queries_used, 0, 'legacy queries_used is read-only now, never touched');
-    assert.equal(store[id].purchased_unlocks, 4, 'unlock pool still deducts normally');
+    assert.equal(store[id].purchased_unlocks, 5, 'legacy unlock count is read-only now, never touched');
+    assert.equal(store[id].dollar_lots[0].remaining_usd, 0, 'the real dollar balance still deducts normally');
 
     deleteRecord(id);
 });
@@ -178,12 +178,11 @@ test('Deduction: legacy purchased_queries/queries_used fields survive unrelated 
 test('getOrInitCredits: a pre-existing record carrying only legacy query fields still loads without error', () => {
     const id = uid();
     // Simulate a pre-retirement record shape: purchased_queries/queries_used
-    // present, no unlock_lots yet. Must be readable, not migrated/stripped.
+    // present, no dollar_lots yet. Must be readable, not migrated/stripped.
     writeRecord(id, { purchased_queries: 7, queries_used: 3, purchased_unlocks: 0 });
 
     const status = getCreditStatus(id);
-    assert.equal(status.unlocks.purchased, 0);
-    assert.equal(status.unlocks.used, 0);
+    assert.deepEqual(status.credit_balance, { paid_usd: 0, promo_usd: 0, total_usd: 0 });
 
     const store = loadCredits();
     assert.equal(store[id].purchased_queries, 7, 'legacy field survives a read cycle unchanged');
@@ -194,131 +193,39 @@ test('getOrInitCredits: a pre-existing record carrying only legacy query fields 
 
 // 3. Purchased Credits — Unlocks
 // ---------------------------------------------------------------------------
-
-test('Deduction: purchased unlock credit decrements and increments unlocks_used', async () => {
-    const id = uid();
-    writeRecord(id, { purchased_unlocks: 5 });
-
-    const r = await deductCredit(id, 'unlock');
-    assert.equal(r.success, true);
-    assert.equal(r.remaining, 4);
-    assert.equal(r.source, 'purchased');
-
-    const store = loadCredits();
-    assert.equal(store[id].purchased_unlocks, 4);
-    assert.equal(store[id].unlocks_used, 1);
-    assert.equal(store[id].purchased_queries, 0, 'Query pool untouched');
-
-    deleteRecord(id);
-});
-
-test('Deduction: unlock deduction succeeds regardless of a legacy purchased_queries balance', async () => {
-    const id = uid();
-    writeRecord(id, { purchased_queries: 3, purchased_unlocks: 5 });
-
-    const r = await deductCredit(id, 'unlock');
-    assert.equal(r.success, true, 'Unlock deduction is unaffected by the retired query pool');
-
-    const store = loadCredits();
-    assert.equal(store[id].purchased_queries, 3, 'legacy query balance untouched');
-    assert.equal(store[id].purchased_unlocks, 4);
-
-    deleteRecord(id);
-});
+//
+// RETIRED (credits-as-cash follow-up, SITE-PM 2026-09-27): both tests here
+// pinned deductCredit() spending a unit lot off purchased_unlocks — that
+// path is gone. The unlock path debits the account's dollar balance only
+// (test/credits-as-cash-lots.test.js, test/credits-one-balance.test.js).
+//   - 'Deduction: purchased unlock credit decrements and increments
+//     unlocks_used'
+//   - 'Deduction: unlock deduction succeeds regardless of a legacy
+//     purchased_queries balance'
 
 // 4. Purchased Credits — Add and Accumulate
 // ---------------------------------------------------------------------------
-// addPurchasedCredits() keeps its generic (queries, unlocks) signature at the
-// lib layer — no production caller passes a nonzero queries count anymore
-// (the Stripe webhook always passes 0; see test/aud19-2-econ.test.js), but
-// the lib function itself is not the enforcement point, so these tests still
-// exercise it directly to prove the field stays writable/readable.
-
-test('addPurchasedCredits: adds queries and unlocks to the account', async () => {
-    const id = uid();
-    writeRecord(id);
-
-    const r = await addPurchasedCredits(id, 100, 20);
-    assert.equal(r.success, true);
-    assert.equal(r.purchased_queries, 100);
-    assert.equal(r.purchased_unlocks, 20);
-
-    const store = loadCredits();
-    assert.equal(store[id].purchased_queries, 100);
-    assert.equal(store[id].purchased_unlocks, 20);
-
-    deleteRecord(id);
-});
-
-test('addPurchasedCredits: accumulates across multiple calls', async () => {
-    const id = uid();
-    writeRecord(id, { purchased_queries: 10, purchased_unlocks: 5 });
-
-    await addPurchasedCredits(id, 50, 10);
-    const store = loadCredits();
-    assert.equal(store[id].purchased_queries, 60);
-    assert.equal(store[id].purchased_unlocks, 15);
-
-    deleteRecord(id);
-});
-
-test('addPurchasedCredits: production call shape (0 queries, N unlocks) only credits unlocks', async () => {
-    const id = uid();
-    writeRecord(id);
-
-    // Mirrors the webhook's actual call: addPurchasedCredits(account_id, 0, unlocks, opts)
-    const r = await addPurchasedCredits(id, 0, 80, { unlock_unit_price_usd: 0.125 });
-    assert.equal(r.success, true);
-    assert.equal(r.purchased_queries, 0, 'a pack purchase grants unlocks only');
-    assert.equal(r.purchased_unlocks, 80);
-
-    deleteRecord(id);
-});
-
-test('Purchased credits are deducted correctly', async () => {
-    const id = uid();
-    writeRecord(id, { purchased_unlocks: 10 });
-
-    const r = await deductCredit(id, 'unlock');
-    assert.equal(r.success, true);
-    assert.equal(r.source, 'purchased');
-    assert.equal(r.remaining, 9);
-
-    deleteRecord(id);
-});
-
-test('getCreditStatus: shows purchased credits in the status response', async () => {
-    const id = uid();
-    writeRecord(id, { purchased_queries: 5, purchased_unlocks: 2 });
-
-    const status = getCreditStatus(id);
-    assert.equal(status.unlocks.purchased, 2);
-
-    deleteRecord(id);
-});
+//
+// RETIRED (credits-as-cash follow-up): addPurchasedCredits() is deleted — no
+// code path creates a unit lot anymore (F-3). All four tests here called it
+// directly or relied on it having run:
+//   - 'addPurchasedCredits: adds queries and unlocks to the account'
+//   - 'addPurchasedCredits: accumulates across multiple calls'
+//   - 'addPurchasedCredits: production call shape (0 queries, N unlocks)
+//     only credits unlocks'
+//   - 'Purchased credits are deducted correctly'
+//   - 'getCreditStatus: shows purchased credits in the status response' —
+//     also asserted status.unlocks.purchased, a field F-7 removes from
+//     GET /account/credits.
 
 // 5. Period Reset
 // ---------------------------------------------------------------------------
-
-test('Period reset: purchased credits are NOT reset across periods', async () => {
-    const id = uid();
-    writeRecord(id, {
-        purchased_queries: 25,
-        purchased_unlocks: 8,
-        period_start:      '2020-01-01T00:00:00.000Z',
-        period_end:        '2020-02-01T00:00:00.000Z',
-    });
-
-    await deductCredit(id, 'unlock'); // triggers reset + deduction
-    const store = loadCredits();
-    assert.equal(store[id].purchased_unlocks, 7,
-        'purchased_unlocks must survive the period reset (minus 1 deduction)');
-    assert.equal(store[id].purchased_queries, 25,
-        'legacy purchased_queries must survive the period reset untouched (retired currency, still readable)');
-
-    deleteRecord(id);
-});
-
+//
+// RETIRED (credits-as-cash follow-up): 'Period reset: purchased credits are
+// NOT reset across periods' drove its assertion through deductCredit(),
+// which no longer reads or spends purchased_unlocks — the "minus 1
+// deduction" it expected never happens. resetIfNewPeriod's own field-survival
+// behavior is proved directly below, unaffected by this build.
 test('resetIfNewPeriod: updates period_start, period_end and clears used counters', () => {
     const record = {
         queries_used: 45,
@@ -367,14 +274,17 @@ test('Deduction: fails gracefully when purchased unlock credits exhausted', asyn
     deleteRecord(id);
 });
 
-test('Deduction: credits never go below zero', async () => {
+test('Deduction: repeated deductions with no dollar balance never go negative', async () => {
     const id = uid();
     writeRecord(id, {
         purchased_unlocks: 1,
     });
 
-    await deductCredit(id, 'unlock'); // consumes the last one
-    const r2 = await deductCredit(id, 'unlock'); // must fail, not go negative
+    // purchased_unlocks is a leftover field the dollar-only unlock path
+    // never reads or spends (F-6) — with no dollar lot on the account,
+    // every deduction fails, and nothing here can ever go negative.
+    await deductCredit(id, 'unlock');
+    const r2 = await deductCredit(id, 'unlock');
     assert.equal(r2.success, false);
 
     const store = loadCredits();
@@ -401,26 +311,11 @@ test('Deduction: rejected-query message differs from unlock-exhaustion message',
 
 // 7. Concurrency — mutex prevents over-deduction
 // ---------------------------------------------------------------------------
-
-test('Concurrency: simultaneous deductions do not over-deduct (mutex)', async () => {
-    const id = uid();
-    const AVAILABLE = 3;
-    writeRecord(id, {
-        purchased_unlocks: AVAILABLE,
-    });
-
-    const TOTAL = 10;
-    const results = await Promise.all(
-        Array.from({ length: TOTAL }, () => deductCredit(id, 'unlock'))
-    );
-
-    const successes = results.filter(r => r.success).length;
-    const failures  = results.filter(r => !r.success).length;
-    assert.equal(successes, AVAILABLE, `Exactly ${AVAILABLE} deductions must succeed`);
-    assert.equal(failures,  TOTAL - AVAILABLE);
-
-    const store = loadCredits();
-    assert.equal(store[id].purchased_unlocks, 0);
-
-    deleteRecord(id);
-});
+//
+// RETIRED (credits-as-cash follow-up, SITE-PM 2026-09-27): 'Concurrency:
+// simultaneous deductions do not over-deduct (mutex)' sized a unit lot
+// (purchased_unlocks: 3) and expected exactly 3 of 10 concurrent deductions
+// to succeed — the unlock path no longer spends purchased_unlocks, so every
+// deduction here would fail instead. The account-lock mutex is proved
+// against a real dollar balance in test/credits-as-cash-lots.test.js
+// ('concurrency: two simultaneous unlocks against an exact dollar balance').

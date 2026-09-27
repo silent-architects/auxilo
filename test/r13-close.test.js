@@ -456,12 +456,15 @@ describe('R13 field-neutral preview advisories', () => {
     assert.match(MCP_SRC.slice(knowledgeStart, unlockStart), /fencePreviewPayload\('knowledge'/);
   });
 
-  it('adds the field-neutral advisory to pre-payment unlock challenges and all five raw-body success branches', () => {
+  // AUD-CAC (credits-as-cash follow-up, SITE-PM 2026-09-27): the
+  // capped-repeat success branch is gone (F-5 removes the 30-day
+  // repeat-accrual cap), dropping the raw-body success branch count from 5 to 4.
+  it('adds the field-neutral advisory to pre-payment unlock challenges and all four raw-body success branches', () => {
     const unlockStart = SERVER_SRC.indexOf("app.get('/knowledge/:id'");
     const unlockEnd = SERVER_SRC.indexOf("app.post('/knowledge/:id/rate'", unlockStart);
     const unlock = SERVER_SRC.slice(unlockStart, unlockEnd);
     assert.match(unlock.slice(0, unlock.indexOf('await dualAuthDynamic') + 300), /UNTRUSTED_PREVIEW_ADVISORY/);
-    assert.equal((unlock.match(/content_advisory:\s*UNTRUSTED_CONTENT_ADVISORY/g) || []).length, 5);
+    assert.equal((unlock.match(/content_advisory:\s*UNTRUSTED_CONTENT_ADVISORY/g) || []).length, 4);
     assert.match(MCP_SRC, /fencePaymentChallenge/);
   });
 

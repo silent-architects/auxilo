@@ -236,14 +236,13 @@ describe('ENVELOPE-0831 pure projections and route wiring', () => {
       'if (dr8OwnerAccountId) {',
       '// R-01 router mode'
     );
+    // AUD-CAC (credits-as-cash follow-up, SITE-PM 2026-09-27): the
+    // capped-repeat branch (and its own serialized revenue envelope) is gone
+    // — F-5 removes the 30-day repeat-accrual cap. paidSelf now runs
+    // straight into the gross-booking comment that used to sit after it.
     const paidSelf = sourceSlice(
       unlock,
       'if (isSelfUnlock) {',
-      '// AUD19-2: capped repeat unlock'
-    );
-    const cappedRepeat = sourceSlice(
-      unlock,
-      'if (accrualCapped) {',
       '// AUD19-2: gross books'
     );
     const paidPublic = sourceSlice(
@@ -259,7 +258,6 @@ describe('ENVELOPE-0831 pure projections and route wiring', () => {
 
     for (const [label, block] of [
       ['paid self', paidSelf],
-      ['capped repeat', cappedRepeat],
       ['paid public', paidPublic],
     ]) {
       assert.match(block, /stripOwnerOnlyFields\(/, `${label} uses the shared buyer projection`);
@@ -274,7 +272,6 @@ describe('ENVELOPE-0831 pure projections and route wiring', () => {
       ['private owner', privateOwner],
       ['DR-8 public owner', publicOwner],
       ['paid self', paidSelf],
-      ['capped repeat', cappedRepeat],
       ['paid public', paidPublic],
       ['private owner search', privateSearch],
     ]) {
@@ -286,8 +283,8 @@ describe('ENVELOPE-0831 pure projections and route wiring', () => {
     }
     assert.equal(
       (unlock.match(/_revenue:\s*serializeRevenue\(\{/g) || []).length,
-      5,
-      'the unlock route has exactly five serialized success envelopes'
+      4,
+      'the unlock route has exactly four serialized success envelopes'
     );
   });
 });
@@ -477,11 +474,23 @@ function fixtureCredits() {
       queries_used: 0,
       unlocks_used: 0,
       purchased_queries: 0,
-      purchased_unlocks: 3,
-      unlock_lots: [{
-        unit_price_usd: 1.41,
-        remaining: 3,
-        added_at: Date.parse(FIXED_AT),
+      purchased_unlocks: 0,
+      // Two real unlocks of PUBLIC_ID happen against this account below (the
+      // paid-public-buyer case and the X-Wallet-Address self-unlock case),
+      // each debiting the listed price of 1.41 — sized to land at exactly
+      // 0.00 once both have run, the same "fully spent" fixture intent the
+      // old unit lot carried.
+      dollar_lots: [{
+        lot_id: 'lot_envelope0831fixture01',
+        kind: 'dollar_paid',
+        purchase_id: null,
+        stripe_payment_intent: null,
+        purchased_at: FIXED_AT,
+        last_activity_at: FIXED_AT,
+        frozen: false, frozen_at: null, frozen_reason: null,
+        original_usd: 2.82,
+        remaining_usd: 2.82,
+        funded_unlocks: [],
       }],
       period_start: '2026-08-01T00:00:00.000Z',
       period_end: '2099-09-01T00:00:00.000Z',
@@ -746,27 +755,11 @@ describe('ENVELOPE-0831 staged live response envelopes', { timeout: 180_000 }, (
     });
   });
 
-  it('serves a capped repeat through the same strip and marks its zero-accrual revenue envelope', async (t) => {
-    if (liveSkipReason) {
-      t.skip(liveSkipReason);
-      return;
-    }
-    const payload = await getJson(
-      `${baseUrl}/knowledge/${PUBLIC_ID}`,
-      { 'X-API-Key': RAW_BUYER_KEY },
-      getServerOutput
-    );
-
-    assertFieldsAbsent(payload, OWNER_ONLY_FIELDS, 'capped repeat envelope');
-    assertFieldsAbsent(payload, MODERATION_FIELDS, 'capped repeat envelope');
-    assert.deepEqual(payload._revenue, {
-      unlock_price_usd: 1.41,
-      amount_paid_usd: 1.41,
-      contributor_earned_usd: 0,
-      platform_earned_usd: 0,
-      accrual_capped: true,
-    });
-  });
+  // RETIRED (credits-as-cash follow-up, SITE-PM 2026-09-27): 'serves a
+  // capped repeat through the same strip and marks its zero-accrual revenue
+  // envelope' pinned the retired 30-day repeat-accrual cap (F-5). A repeat
+  // unlock now earns the builder's share in full, the same as x402 —
+  // proved in test/credits-as-cash-unlock.test.js (test 34b).
 
   it('treats a matching bare X-Wallet-Address as a paid buyer view and strips owner-only fields', async (t) => {
     if (liveSkipReason) {
@@ -789,7 +782,8 @@ describe('ENVELOPE-0831 staged live response envelopes', { timeout: 180_000 }, (
     const credits = JSON.parse(
       fs.readFileSync(path.join(tmpDir, 'data', 'credits.json'), 'utf8')
     );
-    assert.equal(credits[BUYER_ACCOUNT_ID].purchased_unlocks, 0, 'claimed-wallet self path paid one credit');
+    assert.equal(credits[BUYER_ACCOUNT_ID].dollar_lots[0].remaining_usd, 0,
+      'claimed-wallet self path paid the full listed price — the balance is fully spent');
   });
 
   it('keeps all three owner-only fields on a provable DR-8 public owner recall', async (t) => {

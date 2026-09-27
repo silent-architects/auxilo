@@ -268,7 +268,7 @@ describe('payments-switch: server gates (all five money-movement surfaces)', () 
     const gate = wh.indexOf('if (!paymentsEnabled())');
     assert.ok(gate !== -1 && gate < wh.indexOf('verifyWebhookSignature('),
       'webhook gate sits before signature work — 503 makes Stripe retry (self-healing)');
-    assert.ok(gate < wh.indexOf('addPurchasedCredits('), 'no credits granted while disabled');
+    assert.ok(gate < wh.indexOf('addDollarLot('), 'no credits granted while disabled');
   });
 
   it('both withdraw rails are gated ABOVE the custodial sentinel', () => {
@@ -516,8 +516,11 @@ describe('CAT-1 (a): public analytics count only servable learnings', () => {
 describe('CAT-1 (b): unlock counters credited only for real unlocks', () => {
   const h = unlockHandlerSlice();
 
-  it('countersCredited = !accrualCapped && !isSelfUnlock, computed before the bumps', () => {
-    const predAt = h.indexOf('const countersCredited = !accrualCapped && !isSelfUnlock;');
+  // AUD-CAC (credits-as-cash follow-up, SITE-PM 2026-09-27): F-5 removes the
+  // 30-day repeat-accrual cap — countersCredited now gates on the M-2 wash
+  // guard alone.
+  it('countersCredited = !isSelfUnlock, computed before the bumps', () => {
+    const predAt = h.indexOf('const countersCredited = !isSelfUnlock;');
     const selfAt = h.indexOf('const isSelfUnlock =');
     const bumpAt = h.indexOf('learning.quality.unlocks_total =');
     assert.ok(predAt !== -1 && selfAt !== -1 && bumpAt !== -1);
@@ -573,12 +576,10 @@ describe('Wave-1 carry-ins in the unlock compensation path', () => {
       'original timestamp — the retry rides the original discovery window');
   });
 
-  it('F2: the accrual cap is un-armed BEFORE the refund await (capped-race closed)', () => {
-    const unarmAt = catchBlock.indexOf('if (accrualArmed) unrecordAccrual(buyerAccountId, id);');
-    const refundAt = catchBlock.indexOf('await refundCredit(');
-    assert.ok(unarmAt !== -1 && refundAt !== -1 && unarmAt < refundAt,
-      'un-arm precedes the await so a concurrent same-buyer unlock cannot read a stale armed cap');
-  });
+  // RETIRED (credits-as-cash follow-up, SITE-PM 2026-09-27): 'F2: the
+  // accrual cap is un-armed BEFORE the refund await (capped-race closed)'
+  // pinned accrualArmed/unrecordAccrual — lib/unlock-attribution.js is
+  // deleted (F-5); there is no repeat-accrual cap left to race.
 });
 
 describe('F4: purchase-ledger writes serialize under the store-level mutex', () => {
@@ -601,10 +602,13 @@ describe('F4: purchase-ledger writes serialize under the store-level mutex', () 
     assert.ok(src.includes('FUTURE:'), 'compaction/sharding noted as future work');
   });
 
-  it('unlock-handler call sites are fire-and-forget with rejection handling', () => {
+  // AUD-CAC (credits-as-cash follow-up, SITE-PM 2026-09-27): the
+  // capped-repeat delivery-success site is gone (F-5 removes the 30-day
+  // repeat-accrual cap) — only the main path's recordPurchase call remains.
+  it('unlock-handler call site is fire-and-forget with rejection handling', () => {
     const h = unlockHandlerSlice();
-    assert.equal(h.split('recordPurchase(buyerAccountId, id).catch(').length - 1, 2,
-      'both delivery-success sites handle the async rejection without awaiting');
+    assert.equal(h.split('recordPurchase(buyerAccountId, id).catch(').length - 1, 1,
+      'the delivery-success site handles the async rejection without awaiting');
   });
 });
 

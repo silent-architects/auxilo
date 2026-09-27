@@ -31,7 +31,6 @@ const assert = require('node:assert/strict');
 const credits = require('../lib/credits.js');
 const {
   deductCredit,
-  addPurchasedCredits,
   addDollarLot,
   refundDollarDraw,
   recordLotFunding,
@@ -47,7 +46,6 @@ const {
   removeDollarLotRemainder,
   round6,
 } = credits;
-const { creditsAsCashEnabled } = require('../lib/credits-flag.js');
 const {
   BALANCE_CAP_USD,
   DAILY_PURCHASE_CAP_USD,
@@ -73,46 +71,16 @@ function pi() { return 'pi_' + Math.random().toString(36).slice(2, 10); }
 
 // ─── 1. Lot schema unification (spec test 28, ruling R-F) ───────────────────
 
+// RETIRED (credits-as-cash follow-up, SITE-PM 2026-09-27): two tests pinned
+// unit-lot provenance stamping via addPurchasedCredits (deleted — pins a
+// model the product no longer has). Reasons:
+//   - 'a unit lot from a real purchase carries the real ids; a free-grant
+//     unit lot carries null for both' — called addPurchasedCredits, which
+//     created a unit lot; no code path creates a unit lot anymore.
+//   - 'last_activity_at updates on the next spend (unit lot)' — same.
+// Dollar-lot provenance (the only lot kind left) is proved below and is
+// unaffected by this build.
 describe('lot schema: every lot carries purchase_id, stripe_payment_intent, purchased_at, last_activity_at [spec test 28]', () => {
-  it('a unit lot from a real purchase carries the real ids; a free-grant unit lot carries null for both', async () => {
-    const id = uid();
-    await addPurchasedCredits(id, 0, 5, { unlock_unit_price_usd: 0.10, purchase_id: 'pur_test1', stripe_payment_intent: 'pi_test1' });
-    await addPurchasedCredits(id, 0, 2, { unlock_unit_price_usd: 0 }); // free grant, no purchase
-
-    const record = loadCredits()[id];
-    const purchaseLot = record.unlock_lots.find(l => l.purchase_id === 'pur_test1');
-    const grantLot = record.unlock_lots.find(l => l.unit_price_usd === 0);
-
-    assert.ok(purchaseLot, 'the purchase-backed lot must exist');
-    assert.equal(purchaseLot.stripe_payment_intent, 'pi_test1');
-    assert.ok(purchaseLot.purchased_at, 'purchased_at must be stamped');
-    assert.ok(purchaseLot.last_activity_at, 'last_activity_at must be stamped');
-    assert.equal(purchaseLot.frozen, false);
-
-    assert.ok(grantLot, 'the free-grant lot must exist');
-    assert.equal(grantLot.purchase_id, null);
-    assert.equal(grantLot.stripe_payment_intent, null);
-    assert.ok(grantLot.purchased_at, 'a free grant still stamps purchased_at');
-  });
-
-  it('last_activity_at updates on the next spend (unit lot)', async () => {
-    const id = uid();
-    await addPurchasedCredits(id, 0, 1, { unlock_unit_price_usd: 0.10, purchase_id: 'pur_test2', stripe_payment_intent: 'pi_test2' });
-    const before = loadCredits()[id].unlock_lots[0].last_activity_at;
-    await new Promise(r => setTimeout(r, 2));
-    await deductCredit(id, 'unlock', 0.10);
-    // the lot is fully consumed and spliced out on exhaustion, so re-derive
-    // freshness a different way: consume from a 2-unit lot instead.
-    const id2 = uid();
-    await addPurchasedCredits(id2, 0, 2, { unlock_unit_price_usd: 0.10 });
-    const before2 = loadCredits()[id2].unlock_lots[0].last_activity_at;
-    await new Promise(r => setTimeout(r, 2));
-    await deductCredit(id2, 'unlock', 0.10);
-    const after2 = loadCredits()[id2].unlock_lots[0].last_activity_at;
-    assert.ok(new Date(after2).getTime() >= new Date(before2).getTime(), 'last_activity_at must not go backward');
-    assert.notEqual(before, undefined);
-  });
-
   it('a dollar lot (paid or promo) carries purchase_id, stripe_payment_intent, purchased_at, last_activity_at, and updates on spend', async () => {
     const id = uid();
     const paymentIntent = pi();
@@ -144,45 +112,28 @@ describe('lot schema: every lot carries purchase_id, stripe_payment_intent, purc
 
 // ─── 2. Unified spending across both lot kinds (spec §6, tests 1-8) ─────────
 
-describe('unified spend: unit lots first, then dollar (paid before promo)', () => {
-  it('[test 1] a unit lot unlock behaves exactly as today: whole unit, own price', async () => {
-    const id = uid();
-    await addPurchasedCredits(id, 0, 1, { unlock_unit_price_usd: 0.125 });
-    const r = await deductCredit(id, 'unlock', 0.86);
-    assert.equal(r.success, true);
-    assert.equal(r.lot_kind, 'unit');
-    assert.equal(r.unit_price_usd, 0.125);
-    assert.equal(loadCredits()[id].purchased_unlocks, 0);
-  });
-
-  it('[test 2] an account with both a unit lot and a dollar lot spends the unit lot first, dollar lot untouched', async () => {
-    const id = uid();
-    await addPurchasedCredits(id, 0, 1, { unlock_unit_price_usd: 0.125 });
-    await addDollarLot(id, 'dollar_paid', 10);
-    const r = await deductCredit(id, 'unlock', 0.86);
-    assert.equal(r.lot_kind, 'unit');
-    const record = loadCredits()[id];
-    assert.equal(record.purchased_unlocks, 0, 'unit lot consumed');
-    assert.equal(record.dollar_lots[0].remaining_usd, 10, 'dollar lot untouched');
-  });
-
-  it('[test 3] once the last unit lot empties, the next unlock draws the dollar lot at the listed price', async () => {
-    const id = uid();
-    await addPurchasedCredits(id, 0, 1, { unlock_unit_price_usd: 0.125 });
-    await addDollarLot(id, 'dollar_paid', 10);
-    await deductCredit(id, 'unlock', 0.86); // consumes the unit lot
-    const r = await deductCredit(id, 'unlock', 0.86); // now draws the dollar lot
-    assert.equal(r.lot_kind, 'dollar');
-    assert.equal(r.paid_drawn, 0.86);
-    assert.equal(r.promo_drawn, 0);
-    assert.equal(loadCredits()[id].dollar_lots[0].remaining_usd, 9.14);
-  });
-
+// RETIRED (credits-as-cash follow-up, SITE-PM 2026-09-27): four tests pinned
+// the retired unit-lot-before-dollar-lot spending order:
+//   - '[test 1] a unit lot unlock behaves exactly as today: whole unit, own
+//     price' — spent a unit lot via addPurchasedCredits/deductCredit; no
+//     unit lot spend path exists anymore.
+//   - '[test 2] an account with both a unit lot and a dollar lot spends the
+//     unit lot first, dollar lot untouched' — same; there is one balance.
+//   - '[test 3] once the last unit lot empties, the next unlock draws the
+//     dollar lot at the listed price' — same; every unlock draws the
+//     dollar balance directly, there is no unit lot to empty first.
+//   - 'a frozen unit lot is skipped — spend falls through to dollar lots as
+//     though it had zero remaining' — froze a unit lot to prove a fallback
+//     order that no longer exists.
+// Dollar-only spending (tests 4/6/7/8 and the paid-before-promo FIFO test)
+// is unaffected by this build and stays below, unchanged except that
+// deductCredit no longer returns a lot_kind field (there is one kind left).
+describe('unified spend: dollar lots, paid before promo', () => {
   it('[test 4] paid dollar lot, direct unlock: debits the listed price from the paid lot', async () => {
     const id = uid();
     await addDollarLot(id, 'dollar_paid', 10);
     const r = await deductCredit(id, 'unlock', 0.86);
-    assert.equal(r.lot_kind, 'dollar');
+    assert.equal(r.success, true);
     assert.equal(r.paid_drawn, 0.86);
     assert.equal(loadCredits()[id].dollar_lots[0].remaining_usd, 9.14);
   });
@@ -191,7 +142,7 @@ describe('unified spend: unit lots first, then dollar (paid before promo)', () =
     const id = uid();
     await addDollarLot(id, 'dollar_promo', 5);
     const r = await deductCredit(id, 'unlock', 1.16);
-    assert.equal(r.lot_kind, 'dollar');
+    assert.equal(r.success, true);
     assert.equal(r.paid_drawn, 0);
     assert.equal(r.promo_drawn, 1.16);
     assert.equal(round6(loadCredits()[id].dollar_lots[0].remaining_usd), 3.84);
@@ -202,7 +153,7 @@ describe('unified spend: unit lots first, then dollar (paid before promo)', () =
     await addDollarLot(id, 'dollar_paid', 0.30);
     await addDollarLot(id, 'dollar_promo', 5);
     const r = await deductCredit(id, 'unlock', 0.86);
-    assert.equal(r.lot_kind, 'dollar');
+    assert.equal(r.success, true);
     assert.equal(r.paid_drawn, 0.30, 'only what the paid lot actually had');
     assert.equal(round6(r.promo_drawn), 0.56, 'the rest comes from promo');
     const record = loadCredits()[id];
@@ -226,33 +177,18 @@ describe('unified spend: unit lots first, then dollar (paid before promo)', () =
     assert.equal(r.paid_drawn, 1);
     assert.equal(r.promo_drawn, 0);
   });
-
-  it('a frozen unit lot is skipped — spend falls through to dollar lots as though it had zero remaining [mirrors spec test 21]', async () => {
-    const id = uid();
-    await addPurchasedCredits(id, 0, 1, { unlock_unit_price_usd: 0.125 });
-    await addDollarLot(id, 'dollar_paid', 10);
-    const record = loadCredits()[id];
-    record.unlock_lots[0].frozen = true;
-    saveCredits({ ...loadCredits(), [id]: record });
-    const r = await deductCredit(id, 'unlock', 0.86);
-    assert.equal(r.lot_kind, 'dollar', 'the frozen unit lot must be skipped');
-  });
 });
 
 // ─── 3. Reporting: two real numbers, never one derived from the other [spec test 32, ruling L8] ─
 
+// RETIRED (credits-as-cash follow-up, SITE-PM 2026-09-27): 'reports a real
+// unit count and a real dollar balance side by side' called addPurchasedCredits
+// and asserted status.unlocks.purchased — the unlocks field is gone from
+// GET /account/credits (F-7); '[L12] an account with no dollar lot reports a
+// zero credit_balance, byte-shape unchanged otherwise' pinned ruling L12's
+// switch-off byte-identical promise, itself retired with the switch. Fresh
+// coverage of the dollar-only shape is in test/credits-one-balance.test.js.
 describe('reporting: GET-account/credits shape (getCreditStatus)', () => {
-  it('reports a real unit count and a real dollar balance side by side', async () => {
-    const id = uid();
-    await addPurchasedCredits(id, 0, 12, { unlock_unit_price_usd: 0.10 });
-    await addDollarLot(id, 'dollar_paid', 3.5);
-    const status = getCreditStatus(id);
-    assert.equal(status.unlocks.purchased, 12);
-    assert.equal(status.credit_balance.total_usd, 3.5);
-    assert.equal(status.credit_balance.paid_usd, 3.5);
-    assert.equal(status.credit_balance.promo_usd, 0);
-  });
-
   it('summarizeCreditBalance never derives one figure from the other', async () => {
     const id = uid();
     await addDollarLot(id, 'dollar_paid', 1.5);
@@ -263,37 +199,25 @@ describe('reporting: GET-account/credits shape (getCreditStatus)', () => {
     assert.equal(balance.promo_usd, 0.75);
     assert.equal(balance.total_usd, 2.25);
   });
-
-  it('[L12] an account with no dollar lot reports a zero credit_balance, byte-shape unchanged otherwise', () => {
-    const id = uid();
-    const status = getCreditStatus(id);
-    assert.deepEqual(status.credit_balance, { paid_usd: 0, promo_usd: 0, total_usd: 0 });
-    assert.equal(status.unlocks.purchased, 0);
-    assert.equal(status.plan, 'funded');
-  });
 });
 
-// ─── 4. Insufficient balance messaging [ruling L9, L12] ─────────────────────
-
-describe('insufficient balance: byte-identical to today with no dollar lot, dollar-aware otherwise', () => {
-  it('no dollar lot ever existed: the EXACT legacy message and status shape [L12]', async () => {
+// ─── 4. Insufficient balance messaging ──────────────────────────────────────
+//
+// RETIRED (credits-as-cash follow-up): both tests here pinned ruling L12's
+// two-shape promise (a legacy exhaustion message and status when no dollar
+// lot ever existed, a dollar-aware one otherwise) — that promise existed
+// only to keep the switch-off state byte-identical to the pre-cash product.
+// There is one model now: every insufficient-balance response describes a
+// dollar shortfall. Fresh coverage is in test/credits-one-balance.test.js.
+describe('insufficient balance: one shape, always a dollar shortfall', () => {
+  it('describes the dollar shortfall and the account\'s real balance', async () => {
     const id = uid();
     const r = await deductCredit(id, 'unlock', 0.86);
     assert.equal(r.success, false);
-    assert.equal(r.message, 'All unlock credits exhausted. Buy a credit pack or pay per-call via x402.');
-    assert.deepEqual(Object.keys(r.status).sort(), ['period_end', 'purchased_queries', 'purchased_unlocks', 'queries_used', 'unlocks_used'].sort());
-  });
-
-  it('a dollar lot exists (even exhausted): describes a dollar shortfall, never the flat legacy exhaustion wording', async () => {
-    const id = uid();
-    await addDollarLot(id, 'dollar_paid', 0.10);
-    await deductCredit(id, 'unlock', 0.10); // drain it
-    const r = await deductCredit(id, 'unlock', 0.86);
-    assert.equal(r.success, false);
-    assert.notEqual(r.message, 'All unlock credits exhausted. Buy a credit pack or pay per-call via x402.');
-    assert.match(r.message, /balance/i);
-    assert.equal(r.status.credit_balance.total_usd, 0);
-    assert.equal(r.status.unlocks.purchased, 0);
+    assert.match(r.message, /Insufficient balance/);
+    assert.match(r.message, /x402/);
+    assert.deepEqual(Object.keys(r.status).sort(), ['credit_balance', 'period_end'].sort());
+    assert.deepEqual(r.status.credit_balance, { paid_usd: 0, promo_usd: 0, total_usd: 0 });
   });
 });
 
@@ -440,27 +364,15 @@ describe('purchase caps: balance cap and daily cap', () => {
     assert.equal(check.ok, true);
   });
 
-  it('[test 15] balance cap counts a unit lot\'s notional value, not only a dollar lot', async () => {
-    const id = uid();
-    await addPurchasedCredits(id, 0, 15000, { unlock_unit_price_usd: 0.125 }); // 1,875.00 notional
-    const allowed = checkBalanceCap(id, 25); // Growth pack: 1875 + 25 = 1900, under the cap
-    assert.equal(allowed.ok, true);
-    assert.equal(allowed.current, 1875);
-    // The growth pack actually lands (a real dollar lot), then stacking the
-    // Pro pack ($100) on top would push total stored value to 1975 + ... —
-    // use a purchase large enough to actually cross $2,000 this time.
-    await addDollarLot(id, 'dollar_paid', 25);
-    const afterGrowth = checkBalanceCap(id, 100); // 1900 + 100 = 2000 exactly — still allowed
-    assert.equal(afterGrowth.ok, true, 'exactly at the cap is still allowed');
-    const overCap = checkBalanceCap(id, 100.000001);
-    assert.equal(overCap.ok, false, 'one cent over the cap is refused');
-    assert.equal(overCap.current, 1900);
-  });
+  // RETIRED (credits-as-cash follow-up, SITE-PM 2026-09-27): '[test 15]
+  // balance cap counts a unit lot's notional value, not only a dollar lot'
+  // pinned unit-lot valuation in the cap. F-9 removes it — the balance cap
+  // now counts dollar lots only (there is nothing else to count).
 
   it('[test 14] daily purchase cap refuses a purchase that would push the trailing-24h total over $2,000', () => {
     const id = uid();
     const now = Date.now();
-    appendPurchase({ id: 'pur_a', account_id: id, pack_id: 'pro', amount_usd: 1950, unlocks_added: 0, stripe_session_id: 'cs_a', stripe_payment_intent: null, timestamp: new Date(now - 60_000).toISOString() });
+    appendPurchase({ id: 'pur_a', account_id: id, pack_id: 'pro', amount_usd: 1950, stripe_session_id: 'cs_a', stripe_payment_intent: null, timestamp: new Date(now - 60_000).toISOString() });
     const check = checkDailyCap(id, 100, now); // 1950 + 100 = 2050, over the cap
     assert.equal(check.ok, false);
     assert.equal(check.current, 1950);
@@ -469,7 +381,7 @@ describe('purchase caps: balance cap and daily cap', () => {
   it('a purchase older than 24h does not count toward the daily cap', () => {
     const id = uid();
     const now = Date.now();
-    appendPurchase({ id: 'pur_b', account_id: id, pack_id: 'pro', amount_usd: 1950, unlocks_added: 0, stripe_session_id: 'cs_b', stripe_payment_intent: null, timestamp: new Date(now - 25 * 60 * 60 * 1000).toISOString() });
+    appendPurchase({ id: 'pur_b', account_id: id, pack_id: 'pro', amount_usd: 1950, stripe_session_id: 'cs_b', stripe_payment_intent: null, timestamp: new Date(now - 25 * 60 * 60 * 1000).toISOString() });
     const check = checkDailyCap(id, 25, now);
     assert.equal(check.ok, true);
     assert.equal(check.current, 0);
@@ -502,91 +414,15 @@ describe('account holds: cap-overage and dispute-shortfall blocks new purchases 
   });
 });
 
-// ─── 10. The flag [spec §3, ruling L4] ───────────────────────────────────────
-
-describe('creditsAsCashEnabled: off by default, on only when exactly "true"', () => {
-  const saved = process.env.CREDITS_AS_CASH_ENABLED;
-  after(() => {
-    if (saved === undefined) delete process.env.CREDITS_AS_CASH_ENABLED;
-    else process.env.CREDITS_AS_CASH_ENABLED = saved;
-  });
-
-  it('absent, empty, or any non-"true" value is off', () => {
-    delete process.env.CREDITS_AS_CASH_ENABLED;
-    assert.equal(creditsAsCashEnabled(), false);
-    for (const v of ['false', '1', 'TRUE', 'yes', 'on', '']) {
-      process.env.CREDITS_AS_CASH_ENABLED = v;
-      assert.equal(creditsAsCashEnabled(), false, `'${v}' must not enable the flag`);
-    }
-  });
-
-  it('exactly "true" is on', () => {
-    process.env.CREDITS_AS_CASH_ENABLED = 'true';
-    assert.equal(creditsAsCashEnabled(), true);
-  });
-
-  it('reads fresh every call — never cached', () => {
-    process.env.CREDITS_AS_CASH_ENABLED = 'true';
-    assert.equal(creditsAsCashEnabled(), true);
-    process.env.CREDITS_AS_CASH_ENABLED = 'false';
-    assert.equal(creditsAsCashEnabled(), false);
-  });
-});
-
-// ─── 11. createCheckoutSession: lotKind decides metadata + description
-// [spec test 29's premise — the session's fate is fixed by what it was
-// created with, never by the flag's later value; the webhook reads only
-// the metadata this proves gets stamped] ─────────────────────────────────
-
-describe('createCheckoutSession: lotKind stamps metadata.lot_kind and the Stripe-visible description', () => {
-  const stripeModulePath = require.resolve('stripe');
-  const stripeLibPath = require.resolve('../lib/stripe.js');
-  let capturedArgs = null;
-  let originalStripeCacheEntry;
-
-  before(() => {
-    originalStripeCacheEntry = require.cache[stripeModulePath];
-    delete require.cache[stripeModulePath];
-    delete require.cache[stripeLibPath];
-    class FakeStripe {
-      constructor() {
-        this.checkout = { sessions: { create: async (args) => { capturedArgs = args; return { id: 'cs_test_fake', url: 'https://checkout.stripe.test/fake' }; } } };
-      }
-    }
-    require.cache[stripeModulePath] = { id: stripeModulePath, filename: stripeModulePath, loaded: true, exports: FakeStripe };
-  });
-  after(() => {
-    delete require.cache[stripeLibPath];
-    if (originalStripeCacheEntry) require.cache[stripeModulePath] = originalStripeCacheEntry;
-    else delete require.cache[stripeModulePath];
-  });
-
-  it('lotKind omitted (default) behaves exactly like today: metadata.lot_kind "unit", unit-count description', async () => {
-    const priorKey = process.env.STRIPE_SECRET_KEY;
-    process.env.STRIPE_SECRET_KEY = 'sk_test_fake_aud_cac';
-    try {
-      const lib = require('../lib/stripe.js');
-      await lib.createCheckoutSession('acc_cac_default', 'starter', 'https://auxilo.test');
-      assert.equal(capturedArgs.metadata.lot_kind, 'unit');
-      assert.equal(capturedArgs.line_items[0].price_data.product_data.description, '80 unlocks');
-    } finally {
-      if (priorKey === undefined) delete process.env.STRIPE_SECRET_KEY; else process.env.STRIPE_SECRET_KEY = priorKey;
-    }
-  });
-
-  it('lotKind "dollar_paid": metadata.lot_kind "dollar_paid", dollar-balance description', async () => {
-    const priorKey = process.env.STRIPE_SECRET_KEY;
-    process.env.STRIPE_SECRET_KEY = 'sk_test_fake_aud_cac';
-    try {
-      const lib = require('../lib/stripe.js');
-      await lib.createCheckoutSession('acc_cac_dollar', 'starter', 'https://auxilo.test', 'dollar_paid');
-      assert.equal(capturedArgs.metadata.lot_kind, 'dollar_paid');
-      assert.equal(capturedArgs.line_items[0].price_data.product_data.description, '$10.00 added to your Auxilo balance');
-    } finally {
-      if (priorKey === undefined) delete process.env.STRIPE_SECRET_KEY; else process.env.STRIPE_SECRET_KEY = priorKey;
-    }
-  });
-});
+// RETIRED IN FULL (credits-as-cash follow-up, SITE-PM 2026-09-27):
+//   - section 10, 'creditsAsCashEnabled: off by default, on only when
+//     exactly "true"' (3 tests) — lib/credits-flag.js is deleted; there is
+//     no flag.
+//   - section 11, 'createCheckoutSession: lotKind stamps metadata.lot_kind
+//     and the Stripe-visible description' (2 tests) — createCheckoutSession
+//     takes no lotKind argument anymore; every session's description always
+//     states the dollar amount added to the balance (proved in
+//     test/credits-one-balance.test.js and test/credits-control-part1.test.js).
 
 // ─── 12. Concurrency [spec test 33] ──────────────────────────────────────────
 
@@ -617,8 +453,6 @@ describe('structural: a balance can never move between accounts [test 17]', () =
     // declared signature.
     const mutators = [
       'async function deductCredit(accountId, creditType, listedPriceUsd)',
-      'async function refundCredit(accountId, creditType, unitPriceUsd)',
-      'async function addPurchasedCredits(accountId, queries, unlocks, opts = {})',
       'async function addDollarLot(accountId, kind, amountUsd, opts = {})',
       'async function refundDollarDraw(accountId, paidUsd, promoUsd)',
       'async function recordLotFunding(accountId, draws, info)',
@@ -660,26 +494,28 @@ describe('structural: a balance can never spend on anything but an unlock [test 
 });
 
 describe('structural: a balance can never be loaded from a crypto payment [test 19]', () => {
-  it('addDollarLot has exactly one call site in server.js — the webhook\'s checkout.session.completed branch', () => {
+  // RETIRED (credits-as-cash follow-up, SITE-PM 2026-09-27): the old
+  // assertion pinned addDollarLot to exactly ONE call site (the webhook) —
+  // that was true only while referral grants still called the now-deleted
+  // addPurchasedCredits. F-2 moves those grants onto addDollarLot too, so
+  // the count is now three, none of them crypto or router code. The
+  // three-call-site count is also proved in test/credits-one-balance.test.js.
+  it('addDollarLot has exactly three call sites in server.js — the webhook and the two referral grants — never loaded from crypto', () => {
     const callSites = (SERVER_SRC.match(/await addDollarLot\(/g) || []).length;
-    assert.equal(callSites, 1, 'addDollarLot must have exactly one call site');
-    const callIdx = SERVER_SRC.indexOf('await addDollarLot(');
+    assert.equal(callSites, 3, 'addDollarLot must have exactly three call sites');
     const webhookStart = SERVER_SRC.indexOf("app.post('/webhook/stripe'");
     const webhookEnd = SERVER_SRC.indexOf("app.get('/account/purchases'");
-    assert.ok(callIdx > webhookStart && callIdx < webhookEnd, 'the one call site must sit inside the webhook route');
-  });
-  it('addPurchasedCredits has exactly three call sites — the webhook\'s unit-lot branch and the two referral grant sites — never x402 or router code', () => {
-    const callSites = (SERVER_SRC.match(/addPurchasedCredits\(/g) || []).length;
-    assert.equal(callSites, 3);
+    const webhookSlice = SERVER_SRC.slice(webhookStart, webhookEnd);
+    assert.equal((webhookSlice.match(/await addDollarLot\(/g) || []).length, 1,
+      'exactly one of the three call sites sits inside the webhook route');
     // None of the three sites sits inside verifyPaymentOrReject or the
     // router settlement branch of the unlock handler.
     const routerFnStart = SERVER_SRC.indexOf('async function verifyPaymentOrReject(');
     const routerFnEnd = SERVER_SRC.indexOf('\n}', routerFnStart);
     const routerSlice = SERVER_SRC.slice(routerFnStart, routerFnEnd);
-    assert.ok(!routerSlice.includes('addPurchasedCredits('), 'verifyPaymentOrReject (x402) must never credit a lot');
+    assert.ok(!routerSlice.includes('addDollarLot('), 'verifyPaymentOrReject (x402) must never credit a lot');
   });
-  it('neither lot-credit function is reachable from x402Router settlement code', () => {
-    assert.ok(!/x402Router\.[a-zA-Z]+\([^)]*\)[^;]*addPurchasedCredits/.test(SERVER_SRC));
+  it('the lot-credit function is not reachable from x402Router settlement code', () => {
     assert.ok(!/x402Router\.[a-zA-Z]+\([^)]*\)[^;]*addDollarLot/.test(SERVER_SRC));
   });
 });
@@ -693,7 +529,7 @@ describe('structural: a balance can never be cashed out [test 20]', () => {
     for (const [label, slice] of [['withdraw/stripe', SERVER_SRC.slice(w1Start, w1End)], ['withdraw', SERVER_SRC.slice(w2Start, w2End)]]) {
       assert.ok(!slice.includes("require('./lib/credits.js')"), `${label} must not require the credits module`);
       assert.ok(!slice.includes('credits.json'), `${label} must not reference credits.json`);
-      assert.ok(!slice.includes('deductCredit(') && !slice.includes('addDollarLot(') && !slice.includes('addPurchasedCredits('),
+      assert.ok(!slice.includes('deductCredit(') && !slice.includes('addDollarLot('),
         `${label} must not call any credits-module function`);
     }
   });

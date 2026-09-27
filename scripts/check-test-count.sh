@@ -348,7 +348,24 @@ cd "${REPO_ROOT}"
 # and 3 new assertions in test/credits-control-part1.test.js (cap check,
 # account-hold gate, flag-read-once wiring). Verified against the actual
 # discovered count: 3649 -> 3720, 0 fail, 6 skipped (pre-existing, unrelated).
-EXPECTED_TEST_COUNT=3720
+# CREDITS-FOLLOWUP-ONE-BALANCE (2026-09-27): the switch and the old
+# unit-credit model are removed (lib/credits-flag.js, lib/unlock-attribution.js
+# deleted; addPurchasedCredits/refundCredit/ensureUnlockLots/consumeUnlockLot/
+# deriveLegacyUnitPrice deleted from lib/credits.js). test/credits.test.js,
+# test/aud19-2-econ.test.js, test/credits-as-cash-lots.test.js,
+# test/credits-as-cash-unlock.test.js, test/credits-control-part1.test.js,
+# test/wave1-money-closures.test.js, test/dr8-self-unlock-free.test.js,
+# test/wave2b-ops-hardening.test.js, test/launch-wave-emails.test.js,
+# test/envelope-0831.test.js, test/ci5-scope-enforcement.test.js,
+# test/r13-close.test.js, test/spec3-e1-account-vocab-runtime.test.js,
+# test/spec3-f1-neardup-runtime.test.js and test/spec3-g1-private-visibility.test.js
+# each retire or update the tests that pinned that model (unit-lot spend/grant,
+# the 30-day repeat-accrual cap, and the capped-repeat projection's own
+# buyer-facing strip site, each named in its file with its reason); a new
+# test/credits-one-balance.test.js (18 tests) proves the one-balance final
+# state fresh. Verified against the actual discovered count: 3720 -> 3677,
+# 0 fail, 6 skipped (pre-existing, unrelated).
+EXPECTED_TEST_COUNT=3677
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

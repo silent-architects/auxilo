@@ -310,17 +310,27 @@ function unlockAccounts() {
   };
 }
 
+// AUD-CAC (credits-as-cash follow-up, SITE-PM 2026-09-27): the balance is
+// dollars now — a $0.10 dollar_paid lot funds the one $0.10 unlock this
+// fixture drives, in place of the retired unit lot.
 function unlockCredits() {
   return {
     [BUYER_ACCOUNT_ID]: {
       queries_used: 0,
       unlocks_used: 0,
       purchased_queries: 0,
-      purchased_unlocks: 1,
-      unlock_lots: [{
-        unit_price_usd: 0.1,
-        remaining: 1,
-        added_at: Date.parse(FIXED_AT),
+      purchased_unlocks: 0,
+      dollar_lots: [{
+        lot_id: 'lot_seedattrfixture01',
+        kind: 'dollar_paid',
+        purchase_id: null,
+        stripe_payment_intent: null,
+        purchased_at: FIXED_AT,
+        last_activity_at: FIXED_AT,
+        frozen: false, frozen_at: null, frozen_reason: null,
+        original_usd: 0.1,
+        remaining_usd: 0.1,
+        funded_unlocks: [],
       }],
       period_start: '2026-09-01T00:00:00.000Z',
       period_end: '2099-09-01T00:00:00.000Z',

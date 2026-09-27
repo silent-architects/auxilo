@@ -458,10 +458,6 @@
             "type": "number",
             "description": "Amount paid in USD"
           },
-          "unlocks_added": {
-            "type": "integer",
-            "description": "Unlock credits added"
-          },
           "timestamp": {
             "type": "string",
             "format": "date-time",

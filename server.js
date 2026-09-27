@@ -1553,11 +1553,7 @@ const { createWalEntry, markStepComplete, updateWalPayload, commitWal, abortWal,
 const { acquireWalletLock, getActiveLockCount } = require('./lib/wallet-lock.js');
 
 // ─── Phase 0.3: Credit System (SPEC-P0.3) ──────────────────────────────────
-const { deductCredit, refundCredit, getCreditStatus } = require('./lib/credits.js');
-// AUD19-2: per-(buyer, learning) accrual cap — 1 credited accrual / 30 days.
-// AUD19-10: unrecordAccrual un-arms the cap when a refunded delivery failure
-// was the request that armed it.
-const { isAccrualCapped, recordAccrual, unrecordAccrual } = require('./lib/unlock-attribution.js');
+const { deductCredit, getCreditStatus } = require('./lib/credits.js');
 // LW-7: durable purchaser ledger — rating eligibility (proof of prior unlock).
 const { recordPurchase, hasPurchase } = require('./lib/purchase-ledger.js');
 // STATS-TRUTH: /knowledge/stats derivations — contributors as distinct
@@ -1587,14 +1583,10 @@ const {
     initStripeStatusProbing,
     notifyStripeCheckoutAttempt,
 } = require('./lib/stripe.js');
-const { addPurchasedCredits } = require('./lib/credits.js');
 const { loadCredits } = require('./lib/credits.js'); // AC-2: referee novelty check
-// AUD-CAC (credits-as-cash): the flag (read ONCE, at Checkout session
-// creation, spec §3/ruling L4), the purchase caps (spec §2/ruling L6), the
-// account-hold store (webhook-race defense + dispute shortfall hold), and
-// the dollar-lot ledger operations (spec §1/§2, Part 1) + refund/dispute
-// support (spec §4, Part 2).
-const { creditsAsCashEnabled } = require('./lib/credits-flag.js');
+// The purchase caps, the account-hold store (webhook-race defense + dispute
+// shortfall hold), and the dollar-lot ledger operations + refund/dispute
+// support.
 const { checkBalanceCap, checkDailyCap } = require('./lib/credit-caps.js');
 const { isAccountHeld, holdAccount, getAccountHold } = require('./lib/account-holds.js');
 const {
@@ -3461,10 +3453,8 @@ async function dualAuthDynamic(c, price_usd, description, creditType, requiredSc
 
         // Credit check (Phase 0.3)
         if (creditType) {
-            // AUD-CAC: price_usd is passed through so a unified deduction can
-            // fall back to the account's dollar lots once every unit lot is
-            // exhausted (or frozen), debiting the listed price rather than a
-            // flat "1 unit" (spec §6, ruling L1/L3).
+            // price_usd is passed through so the deduction debits the listed
+            // price from the account's dollar balance, paid before promotional.
             const creditResult = await deductCredit(result.accountId, creditType, price_usd);
             if (!creditResult.success) {
                 // AUD19-5 (§3.3-2): include the x402 accepts[] challenge so a
@@ -3496,24 +3486,12 @@ async function dualAuthDynamic(c, price_usd, description, creditType, requiredSc
                     ...(previewAdvisory && { content_advisory: previewAdvisory }),
                 }, 402);
             }
-            // AUD19-2: expose the consumed credit's pro-rata unit price so the
-            // unlock handler can accrue on the amount the buyer actually paid.
-            if (typeof creditResult.unit_price_usd === 'number') {
-                c.set('creditUnitPrice', creditResult.unit_price_usd);
-            }
-            // AUD-CAC: which kind of lot funded this credit-path unlock (unit
-            // or dollar) — and, for a dollar draw, the paid/promo split and
-            // the specific lots touched, so the unlock handler can compute the
-            // accrual basis on the PAID portion only (ruling L1/L2) and record
-            // funding history for a later reversal (Part 2).
-            if (creditResult.lot_kind) {
-                c.set('creditLotKind', creditResult.lot_kind);
-            }
-            if (creditResult.lot_kind === 'dollar') {
-                c.set('creditPaidDrawn', creditResult.paid_drawn);
-                c.set('creditPromoDrawn', creditResult.promo_drawn);
-                c.set('creditDollarDraws', creditResult.draws);
-            }
+            // The paid/promo split and the specific lots drawn, so the unlock
+            // handler can compute the accrual basis on the PAID portion only
+            // and record funding history for a later refund or dispute.
+            c.set('creditPaidDrawn', creditResult.paid_drawn);
+            c.set('creditPromoDrawn', creditResult.promo_drawn);
+            c.set('creditDollarDraws', creditResult.draws);
         }
 
         return null;  // Same contract as verifyPaymentOrReject
@@ -4736,11 +4714,8 @@ app.post('/checkout/session', requireAuth, async (c) => {
         }, 400);
     }
 
-    // AUD-CAC (spec §2, ruling L6): the $2,000 balance cap and the $2,000
-    // daily purchase cap, checked BEFORE any Stripe call. Both apply
-    // regardless of CREDITS_AS_CASH_ENABLED and count unit lots and dollar
-    // lots together — they answer a legal ceiling on prepaid stored value,
-    // not a product choice.
+    // The $2,000 balance cap and the $2,000 daily purchase cap, checked
+    // BEFORE any Stripe call — a legal ceiling on prepaid stored value.
     const packPrice = PACKS[pack].price_usd;
     const balanceCheck = checkBalanceCap(accountId, packPrice);
     if (!balanceCheck.ok) {
@@ -4779,14 +4754,8 @@ app.post('/checkout/session', requireAuth, async (c) => {
 
     const baseUrl = process.env.BASE_URL || `https://${c.req.header('host')}`;
 
-    // AUD-CAC (ruling L4/R-B): the flag is read HERE, in exactly this one
-    // place, at the moment a brand-new session is created — never again
-    // later. The decision is stamped into the session's own metadata
-    // (lib/stripe.js); the webhook reads only that metadata, never this flag.
-    const lotKind = creditsAsCashEnabled() ? 'dollar_paid' : 'unit';
-
     try {
-        const session = await createCheckoutSession(accountId, pack, baseUrl, lotKind);
+        const session = await createCheckoutSession(accountId, pack, baseUrl);
         return c.json(session);
     } catch (err) {
         console.error('[stripe] Checkout session error:', err.message);
@@ -4831,11 +4800,7 @@ app.post('/webhook/stripe', async (c) => {
 
     const session = event.data.object;
     const metadata = session.metadata || {};
-    // AUD-CAC: lot_kind is this session's fixed fate, decided once at
-    // Checkout creation (ruling L4/R-B). Absent on an older in-flight
-    // session (minted before this build shipped) defaults to 'unit' —
-    // exactly what that session actually promised the buyer.
-    const { account_id, pack_id, pack_unlocks, lot_kind } = metadata;
+    const { account_id, pack_id } = metadata;
 
     if (!account_id || !pack_id) {
         console.warn('[stripe] Webhook missing metadata:', { account_id, pack_id });
@@ -4848,33 +4813,15 @@ app.post('/webhook/stripe', async (c) => {
         return c.json({ received: true, already_processed: true });
     }
 
-    const isDollarLot = lot_kind === 'dollar_paid';
-    // A dollar-lot purchase grants no unlock credits at all (spec §7: a
-    // purchase that bought a dollar lot reports unlocks_added zero/blank).
-    const unlocks = isDollarLot ? 0 : (parseInt(pack_unlocks, 10) || 0);
     const purchaseId = generatePurchaseId();
 
-    let creditResult;
-    if (isDollarLot) {
-      // AUD-CAC: the ONE call site for the dollar-lot credit function —
-      // never x402, never the router, never a wallet.
-      creditResult = await addDollarLot(account_id, 'dollar_paid', PACKS[pack_id]?.price_usd || 0, {
+    // The ONE call site for the dollar-lot credit function — never x402,
+    // never the router, never a wallet. A pack purchase always adds dollars
+    // to the buyer's balance.
+    const creditResult = await addDollarLot(account_id, 'dollar_paid', PACKS[pack_id]?.price_usd || 0, {
         purchase_id: purchaseId,
         stripe_payment_intent: session.payment_intent || null,
-      });
-    } else {
-      // AUD19-2: lot the unlocks at the pack's pro-rata unit price (pack price
-      // attributes 100% to unlocks — ratified design). Unknown pack falls back
-      // to the credits.js default rather than a fabricated price.
-      const unlockUnitPrice = (PACKS[pack_id] && unlocks > 0)
-          ? PACKS[pack_id].price_usd / unlocks
-          : undefined;
-      // CREDITS-QUERIES-RESIDUAL: query credits are retired — packs grant
-      // unlocks only. addPurchasedCredits still accepts a queries argument
-      // (the ledger field stays readable for pre-retirement balances) but this
-      // webhook always passes 0 now that nothing sells query credits.
-      creditResult = await addPurchasedCredits(account_id, 0, unlocks, { unlock_unit_price_usd: unlockUnitPrice });
-    }
+    });
     if (!creditResult.success) {
         console.error('[stripe] Failed to add credits for', account_id);
         // Still return 200 to prevent Stripe retries — log for manual review
@@ -4887,7 +4834,6 @@ app.post('/webhook/stripe', async (c) => {
         account_id,
         pack_id,
         amount_usd: PACKS[pack_id]?.price_usd || 0,
-        unlocks_added: unlocks,
         stripe_session_id: session.id,
         stripe_payment_intent: session.payment_intent || null,
         timestamp: new Date().toISOString(),
@@ -4925,7 +4871,7 @@ app.post('/webhook/stripe', async (c) => {
       vestReferrerCredits(account_id).catch(err => console.error('[referral] vestReferrerCredits error:', err.message));
     }
 
-    console.log(`[stripe] Credited account ${account_id}: +${unlocks} unlocks (${pack_id})`);
+    console.log(`[stripe] Credited account ${account_id}: +$${(PACKS[pack_id]?.price_usd || 0).toFixed(2)} (${pack_id})`);
     return c.json({ received: true, processed: true, purchase_id: purchase.id });
   } else if (event.type === 'charge.dispute.created') {
     // AUD-CAC (spec §4, Part 2, test 21/26): freeze the disputed dollar lot.
@@ -4971,7 +4917,6 @@ app.get('/account/purchases', requireAuth, (c) => {
         id: p.id,
         pack_id: p.pack_id,
         amount_usd: p.amount_usd,
-        unlocks_added: p.unlocks_added,
         timestamp: p.timestamp,
     }));
 
@@ -9433,21 +9378,14 @@ app.get('/knowledge/:id', async (c) => {
   const fundingSource = routerSettlement ? 'router'
     : (c.get('authMethod') === 'api_key' ? 'credit_pack' : 'x402');
   // Accrue on the amount the buyer actually paid, never the list price.
-  // Credit path: min(list, credit unit price) — the pro-rata pack rate the
-  // consumed credit actually cost ($0.00 for referral/free-grant lots).
+  // Credit path: the PAID portion of the debit — the sub-portion that is
+  // real collected revenue and therefore the only part a builder share is
+  // ever computed on. A promotional draw funds delivery but earns nothing.
   // x402/router: the buyer pays full list on-chain — basis = list by construction.
-  const creditUnit = c.get('creditUnitPrice');
-  // AUD-CAC: which kind of lot funded a credit-path unlock, and (dollar path
-  // only) how much of the debit came from a PAID lot — the sub-portion that
-  // is real collected revenue and therefore the only part a builder share
-  // is ever computed on (ruling L2; spec invariant walk #2-4).
-  const creditLotKind = c.get('creditLotKind'); // 'unit' | 'dollar' | undefined (x402/router)
   const creditPaidDrawn = c.get('creditPaidDrawn');
   const creditPromoDrawn = c.get('creditPromoDrawn'); // AUD19-10 refund-path use only
   const accrualBasis = (fundingSource === 'credit_pack')
-    ? (creditLotKind === 'dollar'
-        ? ((typeof creditPaidDrawn === 'number' && Number.isFinite(creditPaidDrawn)) ? creditPaidDrawn : 0)
-        : Math.min(UNLOCK_PRICE, (typeof creditUnit === 'number' && Number.isFinite(creditUnit)) ? creditUnit : UNLOCK_PRICE))
+    ? ((typeof creditPaidDrawn === 'number' && Number.isFinite(creditPaidDrawn)) ? creditPaidDrawn : 0)
     : UNLOCK_PRICE;
 
   // AUD19-15: discovery-premium attribution, decided on the POST-auth identity.
@@ -9464,19 +9402,6 @@ app.get('/knowledge/:id', async (c) => {
   if (isFromSearch) searchSourceCache.delete(discoveryCacheKey); // single-use
   const source = isFromSearch ? 'search' : 'direct';
   const CONTRIBUTOR_SHARE = (source === 'search') ? CONTRIBUTOR_SHARE_DISCOVERY : CONTRIBUTOR_SHARE_STANDARD;
-
-  // AUD19-2: per-(buyer, learning) accrual cap — 1 credited accrual per buyer
-  // account per learning per 30 days, applied at the ACCRUAL decision only.
-  // The buyer still gets the content (their credit still burns); the
-  // contributor just doesn't accrue again. Account (credit) path only:
-  // anonymous x402 settles real money at full list price (revenue-backed).
-  // AUD-CAC (ruling L3, design 2): the 30-day repeat cap applies to a
-  // UNIT-lot-funded credit-path unlock only, exactly as it does today. A
-  // dollar-lot-funded unlock is never capped — a repeat is charged the
-  // listed price and the builder earns the share in full, the same as x402
-  // today (x402 has no such cap).
-  const accrualCapped = (fundingSource === 'credit_pack') && creditLotKind !== 'dollar' && !!buyerAccountId
-    && isAccrualCapped(buyerAccountId, id);
 
   // SEED-ATTR: platform-account attribution is legibility-only. Normalize it to
   // the pre-attribution null-account shape once, before every crediting branch,
@@ -9509,25 +9434,23 @@ app.get('/knowledge/:id', async (c) => {
     (buyerAccountId && contribAccountId && buyerAccountId === contribAccountId) ||
     (callerWallet && contribWalletLower && callerWallet === contribWalletLower);
 
-  // CAT-1 §5 / task-#13(b): counters are CREDITED only for a real, non-self,
-  // first-in-window unlock. quality.unlocks feeds computeScore → search
-  // ranking, buyer-facing quality.score, /knowledge/stats total_unlocks and
-  // the public top_learnings leaderboard — so capped repeats and self-unlocks
-  // must not buy ranking (20 repeat self-unlocks previously bought +40 ranking
-  // points). The demand bump gates on the SAME predicate (self-unlocks could
-  // still pump the one-day +37.8% price spike before this). Raw volume stays
-  // observable in quality.unlocks_total (ops-only: read by no scorer, no
-  // public stat, and excluded from search projections by their explicit field
-  // lists). Residual, accepted by CAT-1: anonymous x402 sybil demand bumps —
+  // CAT-1 §5 / task-#13(b): counters are CREDITED only for a real, non-self
+  // unlock. quality.unlocks feeds computeScore → search ranking, buyer-facing
+  // quality.score, /knowledge/stats total_unlocks and the public
+  // top_learnings leaderboard — so self-unlocks must not buy ranking. The
+  // demand bump gates on the SAME predicate (self-unlocks could still pump
+  // the one-day +37.8% price spike before this). Raw volume stays observable
+  // in quality.unlocks_total (ops-only: read by no scorer, no public stat,
+  // and excluded from search projections by their explicit field lists).
+  // Residual, accepted by CAT-1: anonymous x402 sybil demand bumps —
   // unaddressable without identity on that path.
-  const countersCredited = !accrualCapped && !isSelfUnlock;
+  const countersCredited = !isSelfUnlock;
 
-  // AUD19-10: compensation state. The buyer's credit was already burned inside
-  // dualAuthDynamic; every mutation from here to the response is tracked so a
-  // failed delivery can cancel the WAL, roll the in-memory ledger back, and
-  // refund the credit (+ its consumed lot) in the same request.
+  // AUD19-10: compensation state. The buyer's balance was already debited
+  // inside dualAuthDynamic; every mutation from here to the response is
+  // tracked so a failed delivery can cancel the WAL, roll the in-memory
+  // ledger back, and restore the drawn balance in the same request.
   let walId = null;
-  let accrualArmed = false;
   const _rb = {
     qualityUnlocks: learning.quality.unlocks || 0,
     unlocksTotal: learning.quality.unlocks_total || 0,
@@ -9626,49 +9549,6 @@ app.get('/knowledge/:id', async (c) => {
     });
   }
 
-  // AUD19-2: capped repeat unlock — serve the content, accrue NOTHING. Exact
-  // mirror of the M-2 shape: no revenue counters, no earnings entry, no WAL.
-  // Only the ops-only unlocks_total (bumped above) persists for volume
-  // observability; the ranking counter and demand windows were deliberately
-  // NOT bumped (CAT-1 §5 gating).
-  if (accrualCapped) {
-    safeWrite(LEARNINGS_FILE, learnings);
-    // LW-7: a capped repeat still DELIVERED content — it proves purchase for
-    // rating eligibility even though it accrues nothing. Best-effort +
-    // fire-and-forget (F4: recordPurchase is now async under the ledger's
-    // write mutex): a ledger write failure must never fail a paid delivery.
-    recordPurchase(buyerAccountId, id).catch((e) => {
-      console.error('[LW-7] purchase-ledger write failed (capped path):', e && e.message);
-    });
-    const {
-      injection_flags: _ifc, possible_duplicate_of: _pdc,
-      possible_duplicate_similarity: _psc, moderation: _modc,
-      near_duplicate_evidence: _ndec, near_duplicate_why: _ndwc,
-      malicious_verdict: _mvc, malicious_reason: _mrc,
-      platform_hold_reasons: _phc, report_auto_hidden_at: _rahc,
-      report_auto_hide_distinct_count: _rahcc,
-      sensitivity_signals: _ssc, sensitivity_source: _ssrcc,
-      sensitivity_evidence: _sec, learning_type: _ltc,
-      sanitized_from: _sfc, sanitized_to: _stc,
-      ...cappedLearning
-    } = learning;
-    return c.json({
-      ...stripOwnerOnlyFields(cappedLearning),
-      quality: stripOpsCounters(cappedLearning.quality),
-      content_advisory: UNTRUSTED_CONTENT_ADVISORY,
-      _revenue: serializeRevenue({
-        unlock_price_usd: UNLOCK_PRICE,
-        amount_paid_usd: accrualBasis,
-        contributor_earned_usd: 0,
-        platform_earned_usd: 0,
-        // 1 credited accrual per (buyer, learning) per 30 days — repeat
-        // unlocks inside the window serve content without a new accrual.
-        accrual_capped: true,
-      }),
-      timestamp: new Date().toISOString()
-    });
-  }
-
   // AUD19-2: gross books the amount actually paid (the accrual basis) — the
   // ledger is cash-true from cutover. UNLOCK_PRICE remains the displayed /
   // charged price and the x402 settle amount.
@@ -9756,12 +9636,12 @@ app.get('/knowledge/:id', async (c) => {
   }
   activeEntry.last_updated = new Date().toISOString();
 
-  // AUD-CAC: record which dollar lot(s) funded this unlock's builder share,
+  // Record which dollar lot(s) funded this unlock's builder share,
   // proportioned across a mixed draw — the exact history a later refund or
-  // lost dispute needs to reverse (spec §4, Part 2). Best-effort: a failure
-  // here never blocks delivery (the money accounting above already landed
-  // in activeEntry); it would only make a future reversal coarser.
-  if (creditLotKind === 'dollar' && buyerAccountId) {
+  // lost dispute needs to reverse. Best-effort: a failure here never blocks
+  // delivery (the money accounting above already landed in activeEntry); it
+  // would only make a future reversal coarser.
+  if (fundingSource === 'credit_pack' && buyerAccountId) {
     try {
       await recordLotFunding(buyerAccountId, c.get('creditDollarDraws') || [], {
         learning_id: id,
@@ -9772,16 +9652,8 @@ app.get('/knowledge/:id', async (c) => {
         ts: activeEntry.last_updated,
       });
     } catch (fundErr) {
-      console.error('[AUD-CAC] recordLotFunding failed (non-fatal):', fundErr && fundErr.message);
+      console.error('[recordLotFunding] failed (non-fatal):', fundErr && fundErr.message);
     }
-  }
-
-  // AUD19-2: arm the per-(buyer, learning) accrual cap BEFORE the WAL write —
-  // a crash from here is replayed from the WAL (the accrual WILL land), so the
-  // cap must already cover the next attempt.
-  if (fundingSource === 'credit_pack' && creditLotKind !== 'dollar' && buyerAccountId) {
-    recordAccrual(buyerAccountId, id);
-    accrualArmed = true; // AUD19-10: THIS request armed the cap — safe to un-arm on refund
   }
 
   // SPEC-A2 C3: WAL-protected dual write — crash-safe atomicity
@@ -9963,10 +9835,10 @@ app.get('/knowledge/:id', async (c) => {
       throw deliveryErr;
     }
 
-    // Credit arm — the buyer's credit burned with no content delivered.
-    // Compensate in-request: cancel the WAL, roll the in-memory ledger back,
-    // refund the credit + consumed lot, un-arm the accrual cap. This block
-    // must NEVER throw (it is the error path).
+    // Credit arm — the buyer's balance was debited with no content
+    // delivered. Compensate in-request: cancel the WAL, roll the in-memory
+    // ledger back, restore the drawn balance. This block must NEVER throw
+    // (it is the error path).
     console.error(`[AUD19-10] unlock delivery failed for ${id} (account ${buyerAccountId}):`,
       deliveryErr && deliveryErr.message);
 
@@ -9979,8 +9851,8 @@ app.get('/knowledge/:id', async (c) => {
       sendOpsAlert('unlock delivery failed — WAL abort failed, credit NOT refunded',
         `learning=${id} account=${buyerAccountId} wal=${walId}\n` +
         `Delivery error: ${deliveryErr && deliveryErr.message}\n` +
-        `The WAL entry survives and will replay the accrual; the buyer's credit was NOT refunded ` +
-        `(refunding would double-pay). Manually restore 1 unlock credit after confirming the replay.`,
+        `The WAL entry survives and will replay the accrual; the buyer's balance was NOT restored ` +
+        `(restoring it would double-pay). Manually restore the drawn balance after confirming the replay.`,
         { category: 'unlock-refund' }).catch(() => {});
       return c.json({
         error: 'Unlock delivery failed. Your credit could not be automatically refunded — support has been alerted.',
@@ -10021,29 +9893,12 @@ app.get('/knowledge/:id', async (c) => {
       console.error('[AUD19-10] in-memory rollback failed (continuing to refund):', rbErr && rbErr.message);
     }
 
-    // 3. Un-arm the accrual cap iff THIS request armed it (see
-    //    unrecordAccrual's safety argument) so the buyer's retry accrues
-    //    normally instead of $0. F2 (Wave-1 review carry-in): un-arm BEFORE
-    //    the refund await — during that await a concurrent same-buyer unlock
-    //    could read the still-armed cap and serve a $0-accrual capped unlock
-    //    for a delivery that was refunded. If the refund below then fails,
-    //    staying un-armed is still correct: the WAL is already aborted, so no
-    //    accrual landed and the retry SHOULD accrue.
-    //    4. Refund the credit + its consumed lot at the unit price it carried.
+    // 3. Restore the exact paid/promo split the debit drew, as fresh lots
+    //    (the same "push a new lot" idiom for either kind).
     try {
-      if (accrualArmed) unrecordAccrual(buyerAccountId, id);
-      // AUD-CAC: a dollar-lot-funded unlock restores the exact paid/promo
-      // split it drew (as fresh lots, the same "push a new lot" idiom
-      // refundCredit already uses for a unit lot) rather than the unit-lot
-      // refund path.
-      if (creditLotKind === 'dollar') {
-        await refundDollarDraw(buyerAccountId,
-          (typeof creditPaidDrawn === 'number' && Number.isFinite(creditPaidDrawn)) ? creditPaidDrawn : 0,
-          (typeof creditPromoDrawn === 'number' && Number.isFinite(creditPromoDrawn)) ? creditPromoDrawn : 0);
-      } else {
-        await refundCredit(buyerAccountId, 'unlock',
-          (typeof creditUnit === 'number' && Number.isFinite(creditUnit)) ? creditUnit : undefined);
-      }
+      await refundDollarDraw(buyerAccountId,
+        (typeof creditPaidDrawn === 'number' && Number.isFinite(creditPaidDrawn)) ? creditPaidDrawn : 0,
+        (typeof creditPromoDrawn === 'number' && Number.isFinite(creditPromoDrawn)) ? creditPromoDrawn : 0);
       console.error(`[AUD19-10] credit refunded to ${buyerAccountId} for failed unlock of ${id}`);
       return c.json({
         error: 'Unlock delivery failed — your credit has been refunded. Please retry.',
@@ -10056,7 +9911,7 @@ app.get('/knowledge/:id', async (c) => {
         `learning=${id} account=${buyerAccountId}\n` +
         `Delivery error: ${deliveryErr && deliveryErr.message}\n` +
         `Refund error: ${refundErr && refundErr.message}\n` +
-        `WAL cancelled: yes. Manually restore 1 unlock credit (unit price ${creditUnit}).`,
+        `WAL cancelled: yes. Manually restore the drawn balance (paid ${creditPaidDrawn}, promo ${creditPromoDrawn}).`,
         { category: 'unlock-refund' }).catch(() => {});
       return c.json({
         error: 'Unlock delivery failed. Your credit could not be automatically refunded — support has been alerted.',
@@ -12958,12 +12813,7 @@ function renderPackData(html) {
       price_usd: PACKS[k].price_usd,
       unlocks: PACKS[k].unlocks,
     }));
-    // AUD-CAC (ruling L5): no flag-rendered copy mechanism is built here —
-    // this is a plain boolean global, injected in the same place pack data
-    // already is, for a later copy unit's client-side JS to read when it
-    // labels pack rows. Dark/unused until that JS ships.
-    const script = `<script>window.__AUXILO_PACKS__ = ${JSON.stringify(packData)};` +
-      `window.__AUXILO_CREDITS_AS_CASH__ = ${creditsAsCashEnabled() ? 'true' : 'false'};</script>\n`;
+    const script = `<script>window.__AUXILO_PACKS__ = ${JSON.stringify(packData)};</script>\n`;
     return html.replace('</head>', `${script}</head>`);
   } catch (e) {
     console.error('[pack-data] render failed:', e.message);
@@ -13867,9 +13717,10 @@ function isNovelRefereeAccount(account, accountId) {
   try {
     const rec = loadCredits()[accountId];
     if (rec) {
-      const prior = (rec.queries_used || 0) + (rec.unlocks_used || 0)
+      const priorLegacy = (rec.queries_used || 0) + (rec.unlocks_used || 0)
         + (rec.purchased_queries || 0) + (rec.purchased_unlocks || 0);
-      if (prior > 0) return false;
+      const priorDollar = Array.isArray(rec.dollar_lots) && rec.dollar_lots.length > 0;
+      if (priorLegacy > 0 || priorDollar) return false;
     }
   } catch { /* if credits unreadable, fail closed on novelty below */ }
   return true;
@@ -13999,10 +13850,9 @@ app.post('/referral/track', requireSession, async (c) => {
     console.error(`[AC-2] Failed to stamp referral IP hashes: ${e.message}`);
   }
 
-  // Credit referee immediately ($5 credit)
-  // AUD19-2: referral grants are $0-revenue mints — their unlock lots carry a
-  // $0.00 unit price so they accrue $0 contributor share when spent.
-  await addPurchasedCredits(referee_account_id, 0, 40, { unlock_unit_price_usd: 0 }); // ~$5 worth
+  // Credit referee immediately: a promotional dollar lot. Nothing was
+  // collected for it, so it accrues $0 contributor share when spent.
+  await addDollarLot(referee_account_id, 'dollar_promo', REFEREE_CREDIT_USD);
 
   saveReferrals();
 
@@ -14040,9 +13890,8 @@ async function vestReferrerCredits(refereeAccountId) {
     return null;
   }
 
-  // Credit referrer ($5)
-  // AUD19-2: $0-revenue grant lot — accrues $0 contributor share when spent.
-  await addPurchasedCredits(referrerId, 0, 40, { unlock_unit_price_usd: 0 }); // ~$5 worth
+  // Credit referrer: a promotional dollar lot, accrues $0 when spent.
+  await addDollarLot(referrerId, 'dollar_promo', REFERRER_CREDIT_USD);
 
   // Fix C: Mark this referee as vested to prevent re-vesting on duplicate webhooks
   if (!referrerData.vested_referees) referrerData.vested_referees = [];

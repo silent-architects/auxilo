@@ -195,10 +195,13 @@ describe('SPEC3-E1 Phase 1 account_vocab runtime', () => {
     assert.equal((SERVER_SRC.match(/await evaluateContentSensitivity\(/g) || []).length, 3);
   });
 
+  // AUD-CAC (credits-as-cash follow-up, SITE-PM 2026-09-27): the
+  // capped-repeat destructure (`sensitivity_evidence: _sec`) is gone —
+  // F-5 removes the 30-day repeat-accrual cap and its own projection site.
   it('keeps account_vocab evidence contributor-only while all four buyer strips stay pinned', () => {
     assert.match(SELF_REVIEW_SRC, /row\.sensitivity_evidence = vocabEvidence/);
     assert.equal((SERVER_SRC.match(/sensitivity_evidence: _se\b/g) || []).length, 2);
-    assert.equal((SERVER_SRC.match(/sensitivity_evidence: _sec\b/g) || []).length, 1);
+    assert.equal((SERVER_SRC.match(/sensitivity_evidence: _sec\b/g) || []).length, 0);
     assert.equal((SERVER_SRC.match(
       /moderation, sensitivity_signals, sensitivity_source, sensitivity_evidence, learning_type/g
     ) || []).length, 1);

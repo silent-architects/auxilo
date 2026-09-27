@@ -180,7 +180,11 @@ describe('SPEC3-F1 Phase 1 near-duplicate runtime', () => {
     assert.doesNotMatch(route, /extractNearDup\.verdict === 'reject'/);
   });
 
-  it('strips the exact 17-field moderation set from all six established projections', () => {
+  // AUD-CAC (credits-as-cash follow-up, SITE-PM 2026-09-27): the
+  // cappedLearning projection is gone (F-5 removes the 30-day
+  // repeat-accrual cap and its own destructure site) — five projections
+  // remain established.
+  it('strips the exact 17-field moderation set from all five established projections', () => {
     const moderationFields = [
       'injection_flags',
       'possible_duplicate_of',
@@ -204,7 +208,7 @@ describe('SPEC3-F1 Phase 1 near-duplicate runtime', () => {
     const searchEnd = SERVER_SOURCE.indexOf('...rest }) => ({', searchStart);
     assert.ok(searchStart !== -1 && searchEnd !== -1, 'search projection exists');
     const projections = [SERVER_SOURCE.slice(searchStart, searchEnd)];
-    for (const name of ['privateLearning', 'ownerLearning', 'selfLearning', 'cappedLearning', 'publicLearning']) {
+    for (const name of ['privateLearning', 'ownerLearning', 'selfLearning', 'publicLearning']) {
       const end = SERVER_SOURCE.indexOf(`...${name}`);
       const start = SERVER_SOURCE.lastIndexOf('const {', end);
       assert.ok(start !== -1 && end !== -1, `${name} projection exists`);

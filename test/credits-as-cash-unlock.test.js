@@ -309,29 +309,11 @@ describe('AUD-CAC dollar-lot unlock economics (staged live server)', { timeout: 
     assert.equal(credits[SELF_ID].dollar_lots[0].remaining_usd, 10 - 1.16, 'the FULL listed price is still debited even though the builder share is zero');
   });
 
-  it('[test 34a] unit-lot repeat unlock inside 30 days still gets capped (unchanged from today)', async (t) => {
-    if (liveSkipReason) { t.skip(liveSkipReason); return; }
-    // A unit lot with two credits — spend the first, then spend again within
-    // the 30-day window and expect the SECOND to accrue nothing.
-    const credits = JSON.parse(fs.readFileSync(path.join(dataDir, 'credits.json'), 'utf8'));
-    credits[BUYER_ID] = credits[BUYER_ID] || {
-      queries_used: 0, unlocks_used: 0, purchased_queries: 0, purchased_unlocks: 0,
-      period_start: '2026-09-01T00:00:00.000Z', period_end: '2099-01-01T00:00:00.000Z',
-      created_at: Date.now(), last_deducted_at: null,
-    };
-    credits[BUYER_ID].purchased_unlocks = 2;
-    credits[BUYER_ID].unlock_lots = [{ unit_price_usd: 0.86, remaining: 2, added_at: Date.now() }];
-    writeJson(path.join(dataDir, 'credits.json'), credits);
-
-    const first = await getJson(`${baseUrl}/knowledge/lrn_cac_t34a`, { headers: { 'X-API-Key': RAW_BUYER_KEY } }, getServerOutput);
-    assert.equal(first.status, 200, first.text);
-    assert.equal(first.body._revenue.contributor_earned_usd, 0.602);
-
-    const second = await getJson(`${baseUrl}/knowledge/lrn_cac_t34a`, { headers: { 'X-API-Key': RAW_BUYER_KEY } }, getServerOutput);
-    assert.equal(second.status, 200, second.text);
-    assert.equal(second.body._revenue.contributor_earned_usd, 0, 'unit-lot repeat inside 30 days accrues nothing — the rule stays exactly as it is today');
-    assert.equal(second.body._revenue.accrual_capped, true);
-  });
+  // RETIRED (credits-as-cash follow-up, SITE-PM 2026-09-27): '[test 34a]
+  // unit-lot repeat unlock inside 30 days still gets capped' pinned the
+  // 30-day repeat-accrual cap and the unit-lot spend path — both removed.
+  // There is one model now and no repeat cap (F-5): test 34b below already
+  // proves a repeat unlock from a balance earns the share both times.
 
   it('[test 34b, ruling L3 design 2] dollar-lot repeat unlock inside 30 days is NOT capped — full share both times', async (t) => {
     if (liveSkipReason) { t.skip(liveSkipReason); return; }

@@ -576,9 +576,12 @@ describe('CI-7: server screen wiring (structural pins)', () => {
     // the strip is intact and STRONGER; the pin tracks the new shape.
     // DR-8: the free owner-recall projection is a fifth buyer-facing site and
     // strips the same internals (`learning_type: _lto` matches the prefix).
+    // AUD-CAC (credits-as-cash follow-up, SITE-PM 2026-09-27): the
+    // capped-repeat projection site is gone (F-5 removes the 30-day
+    // repeat-accrual cap), dropping the count from 6 to 5.
     const strips = (SERVER_SRC.match(/learning_type: _lt/g) || []).length +
       (SERVER_SRC.match(/sensitivity_evidence, learning_type, sanitized_from, sanitized_to, \.\.\.rest/g) || []).length;
-    assert.equal(strips, 6, 'private recall + search-map + owner-recall + self-unlock + capped + paid-unlock projections must all strip it');
+    assert.equal(strips, 5, 'private recall + search-map + owner-recall + self-unlock + paid-unlock projections must all strip it');
   });
 
   it('the summary flag filter accepts process_advice', () => {

@@ -275,15 +275,19 @@ describe('B2: contributor projections carry evidence; triage rows carry why', ()
   });
 });
 
+// AUD-CAC (credits-as-cash follow-up, SITE-PM 2026-09-27): the capped-repeat
+// projection (`_sec`/`_ndec`/`_sfc` destructures) is gone — F-5 removes the
+// 30-day repeat-accrual cap and its own buyer-facing site. Three buyer sites
+// (self-unlock + paid-unlock + search-map) remain, not four.
 describe('B2: buyer projections NEVER carry evidence or lineage (count-pinned strips)', () => {
-  it('sensitivity_evidence, including account_vocab, is stripped at exactly 4 buyer sites', () => {
+  it('sensitivity_evidence, including account_vocab, is stripped at exactly 3 buyer sites', () => {
     assert.match(SELF_REVIEW_SRC, /row\.sensitivity_evidence = vocabEvidence/,
       'account_vocab uses the contributor-only sensitivity_evidence field');
     const named = (SERVER_SRC.match(/sensitivity_evidence: _se\b/g) || []).length; // self-unlock + paid unlock
-    const capped = (SERVER_SRC.match(/sensitivity_evidence: _sec\b/g) || []).length; // capped repeat
+    const capped = (SERVER_SRC.match(/sensitivity_evidence: _sec\b/g) || []).length; // retired: capped repeat
     const searchMap = (SERVER_SRC.match(/moderation, sensitivity_signals, sensitivity_source, sensitivity_evidence, learning_type/g) || []).length;
     assert.equal(named, 2, 'self-unlock + paid-unlock destructures must strip sensitivity_evidence');
-    assert.equal(capped, 1, 'capped-repeat destructure must strip sensitivity_evidence');
+    assert.equal(capped, 0, 'the capped-repeat destructure no longer exists');
     assert.equal(searchMap, 1, 'search-map destructure must strip sensitivity_evidence');
 
     const nearNamed = (SERVER_SRC.match(/near_duplicate_evidence: _nde\b/g) || []).length;
@@ -292,16 +296,16 @@ describe('B2: buyer projections NEVER carry evidence or lineage (count-pinned st
       /possible_duplicate_similarity, near_duplicate_evidence, near_duplicate_why,/g,
     ) || []).length;
     assert.equal(nearNamed, 2, 'self-unlock + paid-unlock strip duplicate evidence');
-    assert.equal(nearCapped, 1, 'capped-repeat strips duplicate evidence');
+    assert.equal(nearCapped, 0, 'the capped-repeat destructure no longer exists');
     assert.equal(nearSearch, 1, 'search-map strips duplicate evidence');
   });
 
-  it('sanitize lineage stripped at the same 4 buyer sites', () => {
+  it('sanitize lineage stripped at the same 3 buyer sites', () => {
     const named = (SERVER_SRC.match(/sanitized_from: _sf\b/g) || []).length;
     const capped = (SERVER_SRC.match(/sanitized_from: _sfc\b/g) || []).length;
     const searchMap = (SERVER_SRC.match(/learning_type, sanitized_from, sanitized_to, \.\.\.rest/g) || []).length;
     assert.equal(named, 2);
-    assert.equal(capped, 1);
+    assert.equal(capped, 0, 'the capped-repeat destructure no longer exists');
     assert.equal(searchMap, 1);
   });
 

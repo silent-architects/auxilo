@@ -60,13 +60,28 @@ function apiKeyEntry(raw, id, label, scope) {
   };
 }
 
+// AUD-CAC (credits-as-cash follow-up, SITE-PM 2026-09-27): the balance is
+// dollars now — this grants a dollar_paid lot sized to cover `unlocks`
+// unlocks at `unitPrice` each (the fixture learnings below are all priced
+// at $1 by default), rather than a unit lot. Call-site shape unchanged.
 function creditRecord(unlocks, unitPrice = 1) {
   return {
     queries_used: 0,
     unlocks_used: 0,
     purchased_queries: 0,
-    purchased_unlocks: unlocks,
-    unlock_lots: [{ unit_price_usd: unitPrice, remaining: unlocks, added_at: Date.parse(FIXED_AT) }],
+    purchased_unlocks: 0,
+    dollar_lots: [{
+      lot_id: 'lot_lwe_fixture_' + Math.random().toString(36).slice(2, 8),
+      kind: 'dollar_paid',
+      purchase_id: null,
+      stripe_payment_intent: null,
+      purchased_at: FIXED_AT,
+      last_activity_at: FIXED_AT,
+      frozen: false, frozen_at: null, frozen_reason: null,
+      original_usd: unlocks * unitPrice,
+      remaining_usd: unlocks * unitPrice,
+      funded_unlocks: [],
+    }],
     period_start: '2026-08-01T00:00:00.000Z',
     period_end: '2099-09-01T00:00:00.000Z',
     created_at: Date.parse(FIXED_AT),
@@ -284,7 +299,6 @@ describe('LAUNCH-WAVE-EMAILS-E2E: both flags ON', { timeout: 180_000 }, () => {
 
   const BUYER_NORMAL = 'acc_lwe_buyer_normal';
   const BUYER_SELF = 'acc_lwe_buyer_self';
-  const BUYER_CAP = 'acc_lwe_buyer_cap';
   const BUYER_PLATFORM = 'acc_lwe_buyer_platform';
   const BUYER_HELD = 'acc_lwe_buyer_held';
   const BUYER_DIGEST_A = 'acc_lwe_buyer_digest_a';
@@ -297,7 +311,6 @@ describe('LAUNCH-WAVE-EMAILS-E2E: both flags ON', { timeout: 180_000 }, () => {
   const RAW = (n) => `axl_${n.repeat(40)}`;
   const RAW_BUYER_NORMAL = RAW('1');
   const RAW_BUYER_SELF = RAW('2');
-  const RAW_BUYER_CAP = RAW('3');
   const RAW_BUYER_PLATFORM = RAW('4');
   const RAW_BUYER_HELD = RAW('5');
   const RAW_BUYER_DIGEST_A = RAW('6');
@@ -309,7 +322,6 @@ describe('LAUNCH-WAVE-EMAILS-E2E: both flags ON', { timeout: 180_000 }, () => {
 
   const LEARNING_NORMAL = 'lrn_lwe_normal';
   const LEARNING_SELF = 'lrn_lwe_self';
-  const LEARNING_CAP = 'lrn_lwe_cap';
   const LEARNING_PLATFORM = 'lrn_lwe_platform';
   const LEARNING_HELD = 'lrn_lwe_held';
   const LEARNING_DIGEST_A = 'lrn_lwe_digest_a';
@@ -356,7 +368,6 @@ describe('LAUNCH-WAVE-EMAILS-E2E: both flags ON', { timeout: 180_000 }, () => {
         },
         [BUYER_NORMAL]: buyerAccount(BUYER_NORMAL, 'lwe-buyer-normal@test.local', RAW_BUYER_NORMAL, 'buyer-normal'),
         [BUYER_SELF]: buyerAccount(BUYER_SELF, 'lwe-buyer-self@test.local', RAW_BUYER_SELF, 'buyer-self'),
-        [BUYER_CAP]: buyerAccount(BUYER_CAP, 'lwe-buyer-cap@test.local', RAW_BUYER_CAP, 'buyer-cap'),
         [BUYER_PLATFORM]: buyerAccount(BUYER_PLATFORM, 'lwe-buyer-platform@test.local', RAW_BUYER_PLATFORM, 'buyer-platform'),
         [BUYER_HELD]: buyerAccount(BUYER_HELD, 'lwe-buyer-held@test.local', RAW_BUYER_HELD, 'buyer-held'),
         [BUYER_DIGEST_A]: buyerAccount(BUYER_DIGEST_A, 'lwe-buyer-digest-a@test.local', RAW_BUYER_DIGEST_A, 'buyer-digest-a'),
@@ -369,7 +380,6 @@ describe('LAUNCH-WAVE-EMAILS-E2E: both flags ON', { timeout: 180_000 }, () => {
       learnings: [
         fixtureLearning(LEARNING_NORMAL, { contributorAccountId: CONTRIB_NORMAL, contributorWallet: CONTRIB_NORMAL_WALLET }),
         fixtureLearning(LEARNING_SELF, { contributorAccountId: CONTRIB_NORMAL, contributorWallet: CONTRIB_NORMAL_WALLET }),
-        fixtureLearning(LEARNING_CAP, { contributorAccountId: CONTRIB_NORMAL, contributorWallet: CONTRIB_NORMAL_WALLET }),
         fixtureLearning(LEARNING_PLATFORM, { contributorAccountId: null, contributorWallet: null }),
         fixtureLearning(LEARNING_HELD, { contributorAccountId: CONTRIB_HELD, contributorWallet: CONTRIB_HELD_WALLET }),
         fixtureLearning(LEARNING_DIGEST_A, { contributorAccountId: CONTRIB_DIGEST, contributorWallet: CONTRIB_DIGEST_WALLET }),
@@ -379,7 +389,6 @@ describe('LAUNCH-WAVE-EMAILS-E2E: both flags ON', { timeout: 180_000 }, () => {
       credits: {
         [BUYER_NORMAL]: creditRecord(1),
         [BUYER_SELF]: creditRecord(1),
-        [BUYER_CAP]: creditRecord(2),
         [BUYER_PLATFORM]: creditRecord(1),
         [BUYER_HELD]: creditRecord(1),
         [BUYER_DIGEST_A]: creditRecord(1),
@@ -424,20 +433,12 @@ describe('LAUNCH-WAVE-EMAILS-E2E: both flags ON', { timeout: 180_000 }, () => {
     assert.ok(!/earning-digest/.test(newOutput), 'self-unlock must never queue or flush a digest');
   });
 
-  it('an accrual-capped repeat unlock (same buyer + learning within 30 days) queues nothing on the second call', async () => {
-    if (ctx.skipReason) return;
-    const first = await getJson(`${ctx.baseUrl}/knowledge/${LEARNING_CAP}`, { 'X-API-Key': RAW_BUYER_CAP });
-    assert.equal(first.status, 200, JSON.stringify(first.body));
-    assert.equal(first.body._revenue.contributor_earned_usd, 0.7);
-
-    const before = ctx.getOutput().length;
-    const second = await getJson(`${ctx.baseUrl}/knowledge/${LEARNING_CAP}`, { 'X-API-Key': RAW_BUYER_CAP });
-    assert.equal(second.status, 200, JSON.stringify(second.body));
-    assert.equal(second.body._revenue.contributor_earned_usd, 0, 'capped repeat accrues nothing');
-    assert.equal(second.body._revenue.accrual_capped, true);
-    const newOutput = ctx.getOutput().slice(before);
-    assert.ok(!/earning-digest/.test(newOutput), 'a capped repeat must never queue or flush a digest');
-  });
+  // RETIRED (credits-as-cash follow-up, SITE-PM 2026-09-27): 'an
+  // accrual-capped repeat unlock (same buyer + learning within 30 days)
+  // queues nothing on the second call' pinned the retired 30-day
+  // repeat-accrual cap (F-5) — a repeat unlock now earns the builder's
+  // share and queues a digest entry like any other real unlock. The
+  // BUYER_CAP/LEARNING_CAP fixtures existed only for this test.
 
   it('an unlock of a platform-owned learning (no contributor_account_id) queues nothing', async () => {
     if (ctx.skipReason) return;

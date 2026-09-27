@@ -192,18 +192,19 @@ describe('DR-8 leaves the paid path intact', () => {
       'same credit type, scope, and router context plus the additive R13 challenge advisory');
   });
 
+  // AUD-CAC (credits-as-cash follow-up, SITE-PM 2026-09-27): F-5 removes the
+  // 30-day repeat-accrual cap — countersCredited now gates on the M-2 wash
+  // guard alone.
   it('M-2 wash guard intact as the post-payment backstop (header claims + anonymous x402 still pay, still accrue nothing)', () => {
     assert.ok(h.includes('const isSelfUnlock ='), 'M-2 predicate present');
     assert.ok(h.includes('if (isSelfUnlock) {'), 'M-2 branch present');
-    assert.ok(h.includes('const countersCredited = !accrualCapped && !isSelfUnlock;'),
+    assert.ok(h.includes('const countersCredited = !isSelfUnlock;'),
       'CAT-1 §5 counter gating unchanged');
   });
 
-  it('accrual cap (AUD19-2) untouched and still AFTER the M-2 guard', () => {
-    const selfAt = h.indexOf('if (isSelfUnlock) {');
-    const capAt = h.indexOf('if (accrualCapped) {');
-    assert.ok(selfAt !== -1 && capAt !== -1 && selfAt < capAt, 'ordering preserved');
-  });
+  // RETIRED (credits-as-cash follow-up): 'accrual cap (AUD19-2) untouched
+  // and still AFTER the M-2 guard' pinned the retired accrualCapped branch
+  // and its ordering relative to the M-2 guard — that branch is gone.
 
   it('LW-7 purchase ledger still written on the real paid path only', () => {
     const paidTail = h.slice(h.indexOf('commitWal(walId);'));

@@ -228,8 +228,11 @@ describe('SPEC3-G1 private learnings acceptance pins', () => {
     }
   });
 
+  // AUD-CAC (credits-as-cash follow-up, SITE-PM 2026-09-27): the
+  // capped-repeat projection's own stripOpsCounters call is gone (F-5
+  // removes the 30-day repeat-accrual cap), dropping the count from 6 to 5.
   it('16. preserves the exact four buyer quality-strip projections', () => {
-    assert.equal((SERVER.match(/quality:\s*stripOpsCounters\(/g) || []).length, 6);
+    assert.equal((SERVER.match(/quality:\s*stripOpsCounters\(/g) || []).length, 5);
     const privateSearch = route("app.post('/knowledge'", '// Gate-A W2B-2');
     assert.match(privateSearch, /quality:\s*stripOpsCounters\(/);
   });

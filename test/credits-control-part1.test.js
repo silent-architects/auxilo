@@ -78,23 +78,12 @@ describe('T1 capability manifest: pack field + queries retired', () => {
 // ─── 2. lib/stripe.js: description fix + consent_collection (spec §3 req 2, 10) ─
 
 describe('T2 lib/stripe.js: Checkout description + consent_collection (source)', () => {
-  // AUD-CAC (credits-as-cash, 2026-09-27): createCheckoutSession now takes a
-  // 4th `lotKind` argument and computes `description` as a ternary (unit vs
-  // dollar-lot wording — ruling L4/L5, the ONE exception to "no
-  // flag-rendered copy": the pack description Stripe's own Checkout page
-  // shows the buyer). Before: the literal property assignment
-  // `description: \`${pack.unlocks} unlocks\`,` appeared verbatim. After: the
-  // unit-lot branch of the ternary still computes that exact string, and a
-  // default `lotKind = 'unit'` keeps every caller that doesn't pass a 4th
-  // argument byte-identical in OUTPUT (see T3 below, unchanged).
-  it('product_data.description no longer references queries', () => {
-    assert.ok(!STRIPE_LIB_SRC.includes('${pack.queries} queries'),
-      'the false "queries" claim must not reach Stripe\'s hosted page/receipt');
-    assert.ok(STRIPE_LIB_SRC.includes('`${pack.unlocks} unlocks`'),
-      'the unit-lot description wording must still compute the pre-AUD-CAC string');
-    assert.ok(STRIPE_LIB_SRC.includes("description,"),
-      'product_data now takes the pre-computed description (unit or dollar-lot wording)');
-  });
+  // RETIRED (credits-as-cash follow-up, SITE-PM 2026-09-27): 'product_data.
+  // description no longer references queries' pinned the unit-lot
+  // description branch (`${pack.unlocks} unlocks`) — that branch, and the
+  // lotKind switch that selected it, are both gone. A pack purchase always
+  // states the dollar amount added to the balance now (proved below and in
+  // test/credits-one-balance.test.js).
   it('consent_collection.terms_of_service is required on the Session', () => {
     assert.ok(STRIPE_LIB_SRC.includes("consent_collection: { terms_of_service: 'required' }"));
   });
@@ -102,8 +91,7 @@ describe('T2 lib/stripe.js: Checkout description + consent_collection (source)',
     assert.ok(STRIPE_LIB_SRC.includes('unit_amount: pack.price_cents,'));
     const metadataBlock = sliceAt(STRIPE_LIB_SRC, 'metadata: {', 200);
     assert.ok(!metadataBlock.includes('pack_queries'),
-      'the metadata object must no longer carry a pack_queries key — packs grant unlocks only now (a code comment nearby may still name the retired field for context, which is fine)');
-    assert.ok(metadataBlock.includes("pack_unlocks: String(pack.unlocks),"));
+      'the metadata object must no longer carry a pack_queries key — a purchase adds dollars only now');
   });
   it('success_url stays byte-identical (still carries session_id — the ROUTE strips it before the browser sees it)', () => {
     assert.ok(STRIPE_LIB_SRC.includes(
@@ -171,13 +159,12 @@ describe('T3 createCheckoutSession: fake-Stripe call-args assertions', () => {
     }
   });
 
-  it('the captured Stripe call carries consent_collection + a queries-free description (spec test 3, 7)', () => {
+  it('the captured Stripe call carries consent_collection + a dollar-balance description (spec test 3, 7)', () => {
     assert.ok(capturedArgs, 'checkout.sessions.create must have been called');
     assert.deepEqual(capturedArgs.consent_collection, { terms_of_service: 'required' });
     const desc = capturedArgs.line_items[0].price_data.product_data.description;
     assert.ok(!/queries/i.test(desc), `description must not mention queries: "${desc}"`);
-    assert.ok(/unlocks/i.test(desc), `description must state the unlock count: "${desc}"`);
-    assert.equal(desc, '80 unlocks');
+    assert.equal(desc, '$10.00 added to your Auxilo balance');
     // success_url keeps Stripe's own ?session_id={CHECKOUT_SESSION_ID} template
     // (spec: "success_url stays byte-identical") — Stripe substitutes the real
     // id here server-side; it is OUR /checkout/success route (T8 below) that
@@ -316,18 +303,10 @@ describe('T7 /checkout/session: current-Terms-acceptance gate', () => {
     assert.ok(termsIdx < heldIdx && heldIdx < packIdx, 'the hold check must sit after the Terms gate and before pack validation');
     assert.ok(h.includes("code: 'ACCOUNT_HELD',"));
   });
-  it('the flag is read exactly here, at session creation, never inside the webhook [AUD-CAC ruling L4]', () => {
-    const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 5200);
-    assert.ok(h.includes('const lotKind = creditsAsCashEnabled()'),
-      'the checkout route decides the lot kind from the flag');
-    const createIdx = h.indexOf('createCheckoutSession(accountId, pack, baseUrl, lotKind)');
-    assert.notEqual(createIdx, -1, 'the decided lotKind must be passed into session creation');
-    const webhookSlice = sliceAt(SERVER_SRC, "app.post('/webhook/stripe'", 3200);
-    assert.ok(!webhookSlice.includes('creditsAsCashEnabled('),
-      'the webhook must read only the session metadata, never the flag');
-    assert.ok(webhookSlice.includes('lot_kind } = metadata;'),
-      'the webhook reads the fixed lot_kind the session promised the buyer');
-  });
+  // RETIRED (credits-as-cash follow-up, SITE-PM 2026-09-27): 'the flag is
+  // read exactly here...' pinned CREDITS_AS_CASH_ENABLED — lib/credits-flag.js
+  // is deleted, there is no flag to read. Every checkout session creates a
+  // dollar_paid lot unconditionally (test/credits-one-balance.test.js).
 });
 
 // ─── 8. /checkout/success + /checkout/cancel: 302, no session_id (STOP gate c) ─
@@ -397,10 +376,14 @@ describe('T10 dashboard.html: Queries column retired, Credits card wired', () =>
     assert.ok(!h.includes('qTd'));
     assert.ok(!h.includes('p.queries_added'), 'no cell must read p.queries_added anymore (a nearby comment may still name the field — that is fine)');
   });
-  it('CREDITS-QUERIES-RESIDUAL: queries_added no longer appears in the /account/purchases response contract', () => {
+  // RETIRED-AND-REPLACED (credits-as-cash follow-up, SITE-PM 2026-09-27):
+  // the old test asserted unlocks_added was STILL returned; F-7 removes it
+  // — /account/purchases reports dollars only now.
+  it('/account/purchases no longer returns queries_added or unlocks_added — dollars only', () => {
     const h = sliceAt(SERVER_SRC, "app.get('/account/purchases'", 900);
     assert.ok(!h.includes('queries_added'), '/account/purchases must not return queries_added anymore');
-    assert.ok(h.includes('unlocks_added: p.unlocks_added,'), 'unlocks_added must still be returned');
+    assert.ok(!h.includes('unlocks_added'), '/account/purchases must not return unlocks_added anymore');
+    assert.ok(h.includes('amount_usd: p.amount_usd,'), 'the dollar amount is still returned');
   });
   it('loadCredits() is wired into showDashboard()', () => {
     const h = sliceAt(DASHBOARD_HTML, 'function showDashboard(email) {', 600);
@@ -696,39 +679,49 @@ describe('T16 CREDITS-QUERIES-RESIDUAL: packs grant unlocks only', () => {
       'unlock counts must be untouched');
   });
 
-  // AUD-CAC (credits-as-cash, 2026-09-27): span widened from 1500 to 2800 —
-  // the webhook gained a lot_kind branch (unit vs dollar-lot, ruling L4) and
-  // the second cap check (spec §2 test 16) ahead of this call site. The
-  // marker and the unit-lot-branch assertion are unchanged: addPurchasedCredits
-  // is still called with the identical arguments, now inside an `else` arm.
-  it('the webhook no longer destructures/parses pack_queries and always passes 0 to addPurchasedCredits (unit-lot branch)', () => {
+  // RETIRED (credits-as-cash follow-up, SITE-PM 2026-09-27): 'the webhook no
+  // longer destructures/parses pack_queries and always passes 0 to
+  // addPurchasedCredits (unit-lot branch)' pinned the retired unit-lot
+  // webhook branch — addPurchasedCredits is deleted; the webhook always
+  // calls addDollarLot (test/credits-one-balance.test.js).
+  it('the webhook no longer destructures/parses pack_queries', () => {
     const h = sliceAt(SERVER_SRC, "event.type === 'checkout.session.completed'", 2800);
     assert.ok(!h.includes('pack_queries'), 'pack_queries must not be read from the webhook metadata anymore');
-    assert.ok(h.includes('addPurchasedCredits(account_id, 0, unlocks, { unlock_unit_price_usd: unlockUnitPrice })'),
-      'the webhook must always grant 0 queries — packs sell unlocks only');
   });
 
-  it('the purchase record written to purchases.jsonl no longer carries queries_added', () => {
+  // RETIRED (credits-as-cash follow-up): 'the purchase record written to
+  // purchases.jsonl no longer carries queries_added' asserted unlocks_added
+  // was STILL present; F-7 removes it too — a purchase record carries the
+  // dollar amount only.
+  it('the purchase record written to purchases.jsonl carries no unit field, dollars only', () => {
     const h = sliceAt(SERVER_SRC, 'const purchase = {', 400);
     assert.ok(!h.includes('queries_added'), 'new purchase records must not carry queries_added');
-    assert.ok(h.includes('unlocks_added: unlocks,'));
+    assert.ok(!h.includes('unlocks_added'), 'new purchase records must not carry unlocks_added');
+    assert.ok(h.includes('amount_usd: PACKS[pack_id]?.price_usd || 0,'));
   });
 
-  it('the credited-account server log line no longer mentions queries', () => {
+  // RETIRED (credits-as-cash follow-up): 'the credited-account server log
+  // line no longer mentions queries' pinned the old "+N unlocks" log
+  // wording — a purchase credits a dollar amount now, not an unlock count.
+  it('the credited-account server log line reports the dollar amount, never queries or unlocks', () => {
     const h = sliceAt(SERVER_SRC, '[stripe] Credited account', 200);
     assert.ok(!/queries/i.test(h), 'the log line must not claim a queries grant anymore');
-    assert.ok(h.includes('+${unlocks} unlocks (${pack_id})'),
-      'the log line must still report the unlocks grant and pack id');
+    assert.ok(!/unlocks/i.test(h), 'the log line must not claim an unlocks grant anymore');
+    assert.ok(h.includes('+$${(PACKS[pack_id]?.price_usd || 0).toFixed(2)} (${pack_id})'),
+      'the log line must report the dollar amount and pack id');
   });
 
-  it('openapi.json: CreditPack has no "queries" property and Purchase has no "queries_added" property', () => {
+  // RETIRED (credits-as-cash follow-up): the old test asserted
+  // Purchase.unlocks_added STILL existed in openapi.json; F-7/F-8 remove it
+  // — the purchase schema now matches the dollars-only response.
+  it('openapi.json: CreditPack has no "queries" property and Purchase has no queries_added or unlocks_added property', () => {
     const openapi = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'openapi.json'), 'utf-8'));
     const creditPack = openapi.components.schemas.CreditPack.properties;
     const purchase = openapi.components.schemas.Purchase.properties;
     assert.ok(!Object.prototype.hasOwnProperty.call(creditPack, 'queries'), 'CreditPack.queries must be removed');
     assert.ok(Object.prototype.hasOwnProperty.call(creditPack, 'unlocks'), 'CreditPack.unlocks must remain');
     assert.ok(!Object.prototype.hasOwnProperty.call(purchase, 'queries_added'), 'Purchase.queries_added must be removed');
-    assert.ok(Object.prototype.hasOwnProperty.call(purchase, 'unlocks_added'), 'Purchase.unlocks_added must remain');
+    assert.ok(!Object.prototype.hasOwnProperty.call(purchase, 'unlocks_added'), 'Purchase.unlocks_added must be removed');
   });
 
   it('lib/credits.js: deductCredit() rejects creditType "query" (real behavior, not just source)', async () => {
