@@ -26,7 +26,6 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
 const { SignJWT } = require('jose');
 const {
   bootServer,
@@ -563,67 +562,11 @@ describe('LW3: XSS-safe DOM helper invariant', () => {
   });
 });
 
-// ─── 9. Credits card byte-identical to origin/main ─────────────────────────
-
-describe('LW3: GOV-2 A6, Credits card untouched', () => {
-  it("the Credits card's markup is byte-identical to origin/main", () => {
-    let originMain;
-    try {
-      originMain = execFileSync('git', ['show', 'origin/main:public/dashboard.html'], { cwd: REPO, encoding: 'utf8' });
-    } catch (e) {
-      // No network/origin remote available in this environment -- fall back
-      // to the wave's own captured copy (scratchpad/build/regb/om/dashboard.html
-      // is a verified byte-for-byte copy of origin/main at 39a30dd, confirmed
-      // identical except the styles.css ?v= hash, which sits outside this
-      // slice).
-      const fallback = '/private/tmp/claude-501/-Users-iamtylerkelley-dev-auxilo/774f5f5e-685e-4402-972a-94889e73de0d/scratchpad/build/regb/om/dashboard.html';
-      if (!fs.existsSync(fallback)) throw e;
-      originMain = fs.readFileSync(fallback, 'utf8');
-    }
-
-    const marker = '<!-- Credits (CREDITS-CONTROL PART 1). GOV-2 A6: no string, layout, or';
-    const oldBlock = sliceBetween(originMain, marker, '<!-- Purchase history -->');
-    const newBlock = sliceBetween(DASHBOARD_HTML, marker, '<!-- Purchase history -->');
-
-    // FIX-UNIT A5b (2026-09-26) + credits-as-cash register C (2026-09-27):
-    // two waves of named, authorized edits to this card's static markup.
-    // A5b converted the title <div> to an <h2>. credits-as-cash rewrote the
-    // card's dollar-balance language (register rows C-38, C-41, C-42, C-43,
-    // C-45 -- C-33/C-44's clickwrap line is unchanged by design, per the
-    // build brief's correction table). Revert every named edit before
-    // comparing, so this test still proves nothing ELSE in the card moved.
-    const NAMED_EDITS = [
-      // A5b (title becomes a heading element) composed with C-38 (the card
-      // names what the account holds, dollars not credits): one revert step
-      // from the current markup straight back to the origin/main div.
-      ['<h2 class="dash-card-title">Balance</h2>', '<div class="dash-card-title">Credits</div>'],
-      // C-41: same fact, the one word.
-      ['<div id="credit-balance-sub">Your balance never expires.</div>', '<div id="credit-balance-sub">Credits do not expire.</div>'],
-      // C-42: "it" is the balance named in the line above.
-      ['Your agent spends it through an API key you generate.', 'Your agent spends credits through an API key you generate.'],
-      // C-43: the replacement sentence, as on /pricing (C-28).
-      ['An unlock takes the listed price from your balance.', 'One credit unlocks one learning, whatever its listed price.'],
-      // C-45: the posted Terms section 7.2/7.3 text, verbatim (revision 3).
-      [
-        'Credits are non-refundable except as these Terms provide. Credits are non-transferable. Credits have no cash value outside the Platform and cannot be withdrawn or redeemed for currency, except where applicable law requires it. Credits do not expire. All transactions on the Platform are final.',
-        'Prepaid credits are non-refundable and non-transferable. Credits have no cash value outside the Platform and cannot be redeemed for currency. All transactions on the Platform are final.',
-      ],
-      // FIX-UNIT-MONEY D2 (2026-09-27): a new line under the headline,
-      // hidden by default, shown only when frozen_usd is above zero.
-      // origin/main never had it -- reverting means removing it entirely.
-      [
-        '<div id="credit-balance-line">—</div>\n        <div id="credit-balance-frozen" style="display:none;font-size:13px;color:var(--slate);margin-top:2px"></div>',
-        '<div id="credit-balance-line">—</div>',
-      ],
-    ];
-    let revertedNewBlock = newBlock;
-    for (const [now, was] of NAMED_EDITS) {
-      assert.ok(revertedNewBlock.includes(now), `expected the named edit to be present: ${JSON.stringify(now)}`);
-      revertedNewBlock = revertedNewBlock.replace(now, was);
-    }
-    assert.strictEqual(revertedNewBlock, oldBlock, "the Credits card (comment through its closing </div>) must not change one byte beyond the A5b heading conversion and the credits-as-cash register C edits");
-  });
-});
+// ─── 9. (retired) ───────────────────────────────────────────────────────────
+// LW3 "the Credits card's markup is byte-identical to origin/main" retired
+// (2026-09-27): pins a state the product no longer has -- the Credits card
+// it protected was rebuilt on purpose into the Balance card, and origin/main
+// itself now carries that rebuild.
 
 // ─── 10. No em dash / en dash in anything added ────────────────────────────
 

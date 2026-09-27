@@ -392,7 +392,29 @@ cd "${REPO_ROOT}"
 # removal — no it() count change there. Verified against the actual
 # discovered count: 3925 -> 3951, 0 fail, 7 skipped (same pre-existing
 # sandbox skips, unrelated to this unit).
-EXPECTED_TEST_COUNT=3951
+#
+# FIX-UNIT-MONEY-3 (2026-09-27): +15 it()s -- test/fix-unit-money-3.test.js
+# (13: N14 Walk C/variant/dispute-first/p26-mirror, N15, N16 x3, N18 x2, R1
+# x3) and test/fix-unit-money-3-route.test.js (2: N17 corrupt-sessions-file
+# and corrupt-account-holds-file, through the real staged webhook route).
+# Verified against the actual discovered count: 3951 -> 3966, 1 pre-existing
+# unrelated fail (LW3 Credits-card-vs-origin/main, public/dashboard.html --
+# out of this unit's scope, forbidden to touch), 7 skipped (same
+# pre-existing sandbox skips).
+#
+# PM follow-up (2026-09-27): origin/main advanced (the release merged and
+# pushed) so the LW3 case now pins a state the product no longer has --
+# RETIRED (-1 it(), see test/launch-wave-dashboard.test.js). Also: CI-1
+# (test/vision-dashboard-payout-panel.test.js loses its two machine-local
+# screenshot writes, no it() count change), CI-2 (test/launch-wave-fixes-
+# visual.test.js's V8 skip-link case stops reading a computed style mid-
+# transition, no it() count change), CI-3 (a scratchpad-path comment reworded
+# in test/launch-wave-fixes-frontend.test.js, no it() count change) plus the
+# new guard test/no-local-paths-guard.test.js (+261 it()s: 2 positive-control
+# + 1 sweep-worked sanity + 257 per-tracked-file checks under test/+scripts/
+# + 1 EXCEPTIONS-still-tracked check). Verified: 3966 -> 4226 (-1 + 261 = 260
+# net), 0 fail, 7 skipped (same pre-existing sandbox skips).
+EXPECTED_TEST_COUNT=4226
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

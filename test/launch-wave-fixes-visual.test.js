@@ -256,6 +256,13 @@ describe('FIX-UNIT-2: dashboard + email-prefs (staged server)', { timeout: 180_0
     const page = await ctx.newPage();
     try {
       await page.goto(`${baseUrl}/dashboard`, { waitUntil: 'networkidle' });
+      // CI-2: the skip link's `top` moves from -100% to 0 on focus via a CSS
+      // transition -- reading the computed value the instant after focus()
+      // can land mid-transition on a slower machine (observed in CI as
+      // top=-900px where 0px was expected). Turning transitions and
+      // animations off page-wide makes the post-focus read land on the
+      // settled end value deterministically, on any machine.
+      await page.addStyleTag({ content: '*, *::before, *::after { transition: none !important; animation: none !important; }' });
       const info = await page.evaluate(() => {
         const body = document.body;
         let firstEl = body.firstElementChild;

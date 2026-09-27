@@ -1592,7 +1592,9 @@ const { isAccountHeld, holdAccount, getAccountHold, clearAccountHold, appendHold
 const {
     addDollarLot,
     refundDollarDraw,
+    markDrawsInFlight,
     recordLotFunding,
+    replayLotFundingFromWalEntry,
     finalizePendingReversals,
     round6,
 } = require('./lib/credits.js');
@@ -1732,6 +1734,36 @@ function replayUnlock(entry) {
     } catch (evtErr) {
       console.error(`[wal-recovery] ${entry.id}: unlock-event replay failed (analytics only):`,
         evtErr && evtErr.message);
+    }
+  }
+
+  // N16: replay the lot-funding record when a crash (or an earlier ordinary
+  // failure server.js chose not to commit past) landed between the
+  // unlock's commit and this bookkeeping step. lib/credits.js's
+  // replayLotFundingFromWalEntry does the actual work (idempotent on this
+  // entry's own id, req'd 'credit_pack' funding, using the draws this SAME
+  // entry's payload carried before any commit) — the identical function
+  // test/fix-unit-money-3.test.js exercises directly, so this call site and
+  // its test proof are the SAME code. A throw here propagates out of
+  // replayUnlock, which recoverWalEntries treats like any other replay
+  // failure: the WAL entry is NOT committed, and survives for the next
+  // restart to try again.
+  if (!steps.includes('lot_funding_recorded')) {
+    const replay = replayLotFundingFromWalEntry(entry);
+    if (replay.applicable && !replay.already_done) {
+      if (replay.needsReversal.length > 0) {
+        // Vanishingly rare compound window (a refund/dispute for the SAME
+        // pack landed exactly while this unlock was crashed mid-flight):
+        // the funding record above is still written and marked
+        // pending_reversal on the lot -- durable, on disk -- so the next
+        // refund or lost-dispute event for this payment intent finds and
+        // reverses it exactly as removeDollarLotRemainder already does for
+        // any other pending entry on that lot. No earnings mutation
+        // happens here at boot -- recovery must never become a second
+        // place a share can be reversed.
+        console.warn(`[wal-recovery] ${entry.id}: lot funding recorded with an uncovered amount already on the lot -- ${replay.needsReversal.length} entr${replay.needsReversal.length === 1 ? 'y' : 'ies'} left pending_reversal for the next refund/dispute event to complete.`);
+      }
+      console.log(`[wal-recovery] ${entry.id}: lot funding replayed.`);
     }
   }
   // All steps done — nothing to replay; commitWal will clean up.
@@ -3506,6 +3538,21 @@ async function dualAuthDynamic(c, price_usd, description, creditType, requiredSc
             c.set('creditPaidDrawn', creditResult.paid_drawn);
             c.set('creditPromoDrawn', creditResult.promo_drawn);
             c.set('creditDollarDraws', creditResult.draws);
+            // N18 (the one LOW finding, "count in-flight draws as newest"):
+            // mark these draws in flight on their lots right away -- a
+            // refund or lost dispute's excess must treat a draw that is
+            // debited but not yet funding-recorded as the NEWEST thing on
+            // the lot (Terms 7.6 item 3), not the last resort it would
+            // otherwise fall to. Ordering-only bookkeeping: a failure here
+            // never blocks the unlock, it only costs this one draw's
+            // ordering guarantee, never the money itself.
+            if (creditResult.draws && creditResult.draws.length > 0) {
+                try {
+                    await markDrawsInFlight(result.accountId, creditResult.draws);
+                } catch (e) {
+                    console.error('[markDrawsInFlight] failed (non-fatal, ordering only):', e && e.message);
+                }
+            }
         }
 
         return null;  // Same contract as verifyPaymentOrReject
@@ -4849,7 +4896,22 @@ app.post('/webhook/stripe', async (c) => {
         console.log('[stripe] Duplicate webhook for session:', session.id);
         // M3: self-healing -- clear it here too, in case an earlier
         // delivery credited the account but never reached the clear below.
-        clearPendingSession(session.id);
+        // N17: bookkeeping AFTER a purchase already paid must never fail
+        // this webhook -- a corrupt checkout-sessions.json throwing here
+        // would return 500 forever on every Stripe retry for an account
+        // that is already correctly credited, with no way to recover
+        // short of fixing the file (which does not stop the retries that
+        // already happened). Wrap, alert once, still report processed.
+        try {
+            clearPendingSession(session.id);
+        } catch (clearErr) {
+            console.error('[stripe] clearPendingSession failed on an already-processed session (non-fatal):', clearErr && clearErr.message);
+            sendOpsAlert(
+                'checkout-sessions.json bookkeeping failed (already-processed webhook)',
+                `session=${session.id} account=${account_id || 'unknown'} error=${clearErr && clearErr.message}`,
+                { category: 'webhook-bookkeeping' }
+            ).catch(() => {});
+        }
         return c.json({ received: true, already_processed: true });
     }
 
@@ -4882,7 +4944,19 @@ app.post('/webhook/stripe', async (c) => {
 
     // M3: this session's money is now a real dollar lot and a real
     // purchase record -- stop counting it as a pending, unpaid session.
-    clearPendingSession(session.id);
+    // N17: never fails the webhook -- the credit above already landed;
+    // this is bookkeeping after the money, wrapped and alerted like the
+    // already-processed branch above.
+    try {
+        clearPendingSession(session.id);
+    } catch (clearErr) {
+        console.error('[stripe] clearPendingSession failed after crediting a purchase (non-fatal):', clearErr && clearErr.message);
+        sendOpsAlert(
+            'checkout-sessions.json bookkeeping failed (post-credit)',
+            `session=${session.id} account=${account_id} purchase=${purchaseId} error=${clearErr && clearErr.message}`,
+            { category: 'webhook-bookkeeping' }
+        ).catch(() => {});
+    }
 
     // AUD-CAC (spec §2, ruling L6): defense in depth. Two sessions started
     // within seconds of each other can each pass the pre-Checkout cap check
@@ -4892,19 +4966,36 @@ app.post('/webhook/stripe', async (c) => {
     // taken from someone's card is worse than a rare, logged overage.
     // Instead: an ops alert fires, and the account is held from starting
     // any FURTHER purchase until a human clears it (spec test 16).
-    const postBalance = checkBalanceCap(account_id, 0);
-    const postDaily = checkDailyCap(account_id, 0);
-    if (!postBalance.ok || !postDaily.ok) {
-        holdAccount(account_id, 'cap_overage', {
-            balance_usd: postBalance.current,
-            daily_usd: postDaily.current,
-        });
+    //
+    // N17: the WHOLE cap-check-and-hold sequence is wrapped — checkBalanceCap
+    // /checkDailyCap themselves read checkout-sessions.json (pending, unpaid
+    // sessions count toward the cap too), so a corrupt file can throw before
+    // holdAccount is ever reached, not only inside it. Either failure must
+    // never fail a webhook whose credit has already landed: alert once,
+    // carry on to the referral grant below regardless.
+    try {
+        const postBalance = checkBalanceCap(account_id, 0);
+        const postDaily = checkDailyCap(account_id, 0);
+        if (!postBalance.ok || !postDaily.ok) {
+            holdAccount(account_id, 'cap_overage', {
+                balance_usd: postBalance.current,
+                daily_usd: postDaily.current,
+            });
+            sendOpsAlert(
+                'Credits cap overage',
+                `account=${account_id} balance_usd=${postBalance.current.toFixed(6)} daily_usd=${postDaily.current.toFixed(6)} ` +
+                `(caps ${postBalance.limit.toFixed(2)} / ${postDaily.limit.toFixed(2)}). Purchase already credited — Stripe already ` +
+                `collected the money. Account held from further purchases until this is reviewed and cleared.`,
+                { category: 'credits-cap-overage' }
+            ).catch(() => {});
+        }
+    } catch (capErr) {
+        console.error('[stripe] the post-credit cap check / hold failed (non-fatal):', capErr && capErr.message);
         sendOpsAlert(
-            'Credits cap overage',
-            `account=${account_id} balance_usd=${postBalance.current.toFixed(6)} daily_usd=${postDaily.current.toFixed(6)} ` +
-            `(caps ${postBalance.limit.toFixed(2)} / ${postDaily.limit.toFixed(2)}). Purchase already credited — Stripe already ` +
-            `collected the money. Account held from further purchases until this is reviewed and cleared.`,
-            { category: 'credits-cap-overage' }
+            'Post-credit cap check / hold bookkeeping failed',
+            `account=${account_id} pack=${pack_id} error=${capErr && capErr.message}. Purchase already credited — Stripe already ` +
+            `collected the money. The cap could not be checked this delivery; review credits.json for this account manually.`,
+            { category: 'webhook-bookkeeping' }
         ).catch(() => {});
     }
 
@@ -9758,6 +9849,13 @@ app.get('/knowledge/:id', async (c) => {
     settlement_tx: routerSettlement ? routerSettlement.txHash : null,
     settlement_bps: routerSettlement ? routerSettlement.contributorBps : null,
     agency_in_force: agencyInForce, // CP-6: replayUnlock re-applies the accrual gate decision
+    // N16: the exact lots this unlock drew from, written into the WAL
+    // payload BEFORE the commit below -- a crash between the commit and
+    // the funding-record step (below) leaves this entry on disk with
+    // everything startup recovery needs to redo that one step from
+    // (replayUnlock / lib/credits.js replayLotFundingFromWalEntry), rather
+    // than losing the funding record for good.
+    dollar_draws: (fundingSource === 'credit_pack') ? (c.get('creditDollarDraws') || []) : [],
   });
 
   safeWrite(LEARNINGS_FILE, learnings);
@@ -9788,17 +9886,22 @@ app.get('/knowledge/:id', async (c) => {
   }
   markStepComplete(walId, 'unlock_event_appended');
 
-  commitWal(walId);
-
-  // M1: record which dollar lot(s) funded this unlock's builder share --
+  // N16: record which dollar lot(s) funded this unlock's builder share --
   // the exact history a later refund or lost dispute needs to reverse --
-  // only AFTER the unlock is committed. Recording it earlier (as this used
-  // to) meant a delivery failure that rolled the WAL and the credit back
-  // could still leave a funding record on the lot: a later refund of that
-  // pack would then reverse a share the builder never actually kept.
-  // Best-effort: a failure here never blocks delivery (the money accounting
-  // above already landed in activeEntry); it would only make a future
-  // reversal coarser.
+  // BEFORE the WAL commits. The draws are already sitting in THIS entry's
+  // own payload (dollar_draws, stamped above, before any commit). Keeping
+  // the WAL entry uncommitted until this step lands (rather than committing
+  // it first, the old order) means a crash here -- or any ordinary failure
+  // this catch swallows -- leaves the entry on disk instead of deleting it:
+  // startup recovery (replayUnlock) finds 'lot_funding_recorded' missing
+  // and completes it from the SAME payload, idempotent on this unlock's own
+  // WAL id, rather than losing the funding record for good (the defect
+  // this closes: a builder kept a share Auxilo no longer held, because
+  // nothing survived to redo the bookkeeping). Never blocks delivery: the
+  // money accounting above already landed in activeEntry regardless of
+  // this step's outcome, and recordLotFunding's own failure never reaches
+  // the delivery-failure compensation arm below (contained in this try).
+  let lotFundingDurable = true;
   if (fundingSource === 'credit_pack' && buyerAccountId) {
     try {
       const fundResult = await recordLotFunding(buyerAccountId, c.get('creditDollarDraws') || [], {
@@ -9808,6 +9911,7 @@ app.get('/knowledge/:id', async (c) => {
         contributor_amount: contributorEarned,
         platform_amount: platformEarned,
         ts: activeEntry.last_updated,
+        unlock_id: walId, // N16: idempotent replay key
       });
       // M2/N1: a refund or lost/partial dispute can land in the narrow
       // window between the debit (already drawn, above) and this call
@@ -9830,9 +9934,15 @@ app.get('/knowledge/:id', async (c) => {
           { category: 'credits-refund' }
         ).catch(() => {});
       }
+      markStepComplete(walId, 'lot_funding_recorded');
     } catch (fundErr) {
-      console.error('[recordLotFunding] failed (non-fatal):', fundErr && fundErr.message);
+      console.error(`[recordLotFunding] failed for WAL ${walId} -- entry kept pending for retry at next restart (non-fatal to this delivery):`, fundErr && fundErr.message);
+      lotFundingDurable = false;
     }
+  }
+
+  if (lotFundingDurable) {
+    commitWal(walId);
   }
 
   // LW-7: delivery succeeded — record proof of purchase for rating eligibility.

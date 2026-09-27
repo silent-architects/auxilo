@@ -163,8 +163,6 @@ describe('VISION PASS (V-27/V-28/V-33): dashboard payout panel, non-paused branc
         return head ? head.textContent : null;
       });
       assert.equal(headingText, 'Wallet (USDC on Base)', 'V-33: heading carries no colon, no "coming soon"');
-
-      await page.screenshot({ path: '/private/tmp/claude-501/-Users-iamtylerkelley-dev-auxilo/774f5f5e-685e-4402-972a-94889e73de0d/scratchpad/build/shots-vision/dashboard-payout-linked-wallet.png', fullPage: false });
     } finally {
       await browser.close();
     }
@@ -200,8 +198,6 @@ describe('VISION PASS (V-27/V-28/V-33): dashboard payout panel, non-paused branc
       const payoutText = await page.evaluate(() => document.getElementById('payout-content').textContent.replace(/\s+/g, ' ').trim());
       assert.ok(payoutText.includes('No wallet linked. Link one now through your agent so it is ready when USDC withdrawals on Base open. Verify it with auxilo_verify_wallet, then link it with auxilo_link_wallet. Linking asks the wallet to sign a one-time challenge proving you control it. Bank withdrawals via Stripe open soon. The withdrawals section below shows where things stand.'), `V-28 text not found, got: ${payoutText}`);
       assert.ok(!payoutText.includes('coming soon'), '"coming soon" must not survive anywhere in the payout panel');
-
-      await page.screenshot({ path: '/private/tmp/claude-501/-Users-iamtylerkelley-dev-auxilo/774f5f5e-685e-4402-972a-94889e73de0d/scratchpad/build/shots-vision/dashboard-payout-no-wallet.png', fullPage: false });
     } finally {
       await browser.close();
     }

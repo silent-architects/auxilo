@@ -176,10 +176,9 @@ describe('FIX-UNIT A7: review-queue scroll region is keyboard reachable', () => 
 // ─── L9: /for-agents five-step grid, no empty tile at 601-1099px ───────────
 //
 // REVIEW-CODE-SECURITY.md L9: at 3 columns (601-1099px), row 2 holds only
-// steps 04-05, leaving the 6th cell an empty tinted tile
-// (scratchpad/review/flow-track-1000.png). Fix: step 05 spans the row's
-// last two columns at that width, and is reset to auto at <=600px so it
-// never spans beyond the single column that exists there.
+// steps 04-05, leaving the 6th cell an empty tinted tile. Fix: step 05
+// spans the row's last two columns at that width, and is reset to auto at
+// <=600px so it never spans beyond the single column that exists there.
 
 describe('FIX-UNIT L9: /for-agents five-step grid has no empty tile between 601 and 1099px', () => {
   it('the 1099px tier gives .flow-step:last-child grid-column: span 2, and the 600px tier resets it to auto', () => {
