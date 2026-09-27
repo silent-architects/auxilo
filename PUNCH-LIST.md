@@ -1004,9 +1004,9 @@ The money model: a balance is held in dollars, a pack adds what was paid, an unl
 
 | ID | Item | Priority | Owner | Status |
 |---|---|---|---|---|
-| SLW-1 | Site, launch copy and dashboard: homepage, /for-builders, /for-agents, /how-it-works, /pricing, /about, reference pages, agent card, llms.txt, openapi.json. Accessibility fixes. A guard test fails if a retired phrase returns to a served file. | P1 | SITE-PM | IN THE LAUNCH RELEASE |
-| SLW-2 | Money model: dollar balance, caps on balance and daily purchases, refund and dispute handling, builder share reversal. `lib/earnings.js` unchanged. Adversarial review run, every finding ruled and fixed. | P1 | SITE-PM | IN THE LAUNCH RELEASE |
-| SLW-3 | Terms of Service and privacy policy, version `2026-09-27-credit-balance-a2`. | P1 | SITE-PM + GOV-2 | IN THE LAUNCH RELEASE |
+| SLW-1 | Site, launch copy and dashboard: homepage, /for-builders, /for-agents, /how-it-works, /pricing, /about, reference pages, agent card, llms.txt, openapi.json. Accessibility fixes. A guard test fails if a retired phrase returns to a served file. | P1 | SITE-PM | SHIPPED 2026-09-27, verified live |
+| SLW-2 | Money model: dollar balance, caps on balance and daily purchases, refund and dispute handling, builder share reversal. `lib/earnings.js` unchanged. Adversarial review run, every finding ruled and fixed. | P1 | SITE-PM | SHIPPED 2026-09-27, verified live |
+| SLW-3 | Terms of Service and privacy policy, version `2026-09-27-credit-balance-a2`. | P1 | SITE-PM + GOV-2 | SHIPPED 2026-09-27, verified live |
 | SLW-4 | Stripe webhook subscribes to the refund and dispute events, so that handling runs. | P1 | Tyler | OPEN, before the first outside purchase |
 | SLW-5 | npm release carrying the launch wording in the CLI consent text and the MCP tool descriptions. | P1 | TECH-PM | OPEN |
 | SLW-6 | Review approval record for accounts not yet cleared to publish. (H) | P1 | TECH-PM | OPEN, before any outside account is cleared |
@@ -1027,12 +1027,12 @@ The money model: a balance is held in dollars, a pack adds what was paid, an unl
 | Priority | Open | On Hold | Deferred | Done/Verified | Total |
 |----------|------|---------|----------|---------------|-------|
 | P0 (blocks launch) | **1** | 0 | 0 | **34** | 35 |
-| P1 (blocks real money / production) | **24** | 6 | 2 | 81 | 113 |
+| P1 (blocks real money / production) | **21** | 6 | 2 | 84 | 113 |
 | P2 (blocks scale) | **33** | 1 | 0 | 30 | 64 |
 | P3 (polish) | **7** | 0 | 0 | 5 | 12 |
-| **Total** | **65** | **7** | **2** | **150** | **224** |
+| **Total** | **62** | **7** | **2** | **153** | **224** |
 
-> **Section 37 (SITE-PM, 2026-09-27).** The table includes the 17 rows SLW-1 to SLW-17 (8 P1, 6 P2, 3 P3), all counted open. SLW-1 to SLW-3 close when the launch release is verified live.
+> **Section 37 (SITE-PM, 2026-09-27).** The table includes the 17 rows SLW-1 to SLW-17 (8 P1, 6 P2, 3 P3). SLW-1 to SLW-3 shipped on 2026-09-27 and are counted done. The other 14 are open.
 
 > **Counts caveat (PM, 2026-08-28).** The table above now includes the nine §34 rows and the fifteen §35 rows (AD-1..AD-15: 3 P1, 11 P2, 1 P3). It still does NOT include `R13-CLOSE` and `GTM-HF` (§29) — their statuses have not been re-derived, so the totals remain understated by at least those two rows and want a full recount by whoever owns them.
 
