@@ -679,6 +679,13 @@
       <button class="btn btn-ghost btn-sm" onclick="signOut()">Sign out</button>
     </div>
 
+    <!-- One-line summary bar (LAYOUT-SHEET item 10d): plain text, no card,
+         no gold -- a passive status readout, not a second ledger. Each
+         segment is hidden until its own figure has loaded. -->
+    <div id="dash-summary-bar" style="font-size:13px;margin-bottom:24px">
+      <span id="summary-published" style="display:none"><span style="color:var(--slate)">Published</span> <span id="summary-published-figure" style="color:var(--ivory)"></span></span><span id="summary-pending" style="display:none"> · <span style="color:var(--slate)">Pending review</span> <span id="summary-pending-figure" style="color:var(--ivory)"></span></span><span id="summary-earnings" style="display:none"> · <span style="color:var(--slate)">Earnings accrued</span> <span id="summary-earnings-figure" style="color:var(--ivory)"></span></span>
+    </div>
+
     <!-- Global alert -->
     <div id="dash-alert" class="alert" style="display:none;margin-bottom:20px"></div>
 
@@ -704,12 +711,71 @@
       <button class="btn btn-primary" id="terms-accept-btn" onclick="acceptTerms()" disabled>Accept and continue</button>
     </div>
 
+    <!-- Welcome card (LW3, new). Same neutral .dash-card box as every other
+         card -- no gold border, no gold button except the shared
+         copy-command control the homepage/connect pages already use. Hidden
+         by default; shown client-side only for an account with zero
+         published learnings, in variant A (zero pending) or B (>=1
+         pending); hidden again once a learning publishes, or on any fetch
+         error (fail closed). -->
+    <div id="welcome-card" class="dash-card" style="display:none">
+      <div id="welcome-card-a">
+        <div class="dash-card-title">Start Here</div>
+        <p style="font-size:14px;color:var(--ivory);margin-bottom:16px;line-height:1.6">Run this once to connect your agent.</p>
+        <div class="code-block" id="dash-setup-block" style="margin-bottom:16px">
+          <div class="code-block-header">
+            <span class="code-block-lang">One command. Any terminal.</span>
+            <button class="copy-btn" id="copy-dash-setup" onclick="copyDashSetupCode()" aria-label="Copy command">Copy the Setup Command</button>
+          </div>
+          <pre id="dash-setup-code">npx auxilo setup</pre>
+        </div>
+        <p style="font-size:13px;color:var(--slate);margin-bottom:12px;line-height:1.6">Setup is free and takes one command. Extraction stays off until you turn it on.</p>
+        <p style="font-size:13px;color:var(--slate);margin-bottom:12px;line-height:1.6">Anything your agent extracts waits in your review queue below until you approve it, one learning at a time or in advance in your dashboard.</p>
+        <p style="font-size:13px;color:var(--slate);margin-bottom:16px;line-height:1.6">Once a learning is published, your agent gets it back free when it asks Auxilo, signed in to your account.</p>
+        <a href="/how-it-works" class="hero-cta-link">See How It Works</a>
+      </div>
+      <div id="welcome-card-b" style="display:none">
+        <div class="dash-card-title">Your Learnings Are Waiting</div>
+        <p style="font-size:14px;color:var(--ivory);margin-bottom:16px;line-height:1.6">Review them in the queue below.</p>
+        <p style="font-size:13px;color:var(--slate);margin-bottom:12px;line-height:1.6">Approving an item keeps it in your queue for operator review until Auxilo has cleared your account to publish.</p>
+        <p style="font-size:13px;color:var(--slate);margin-bottom:16px;line-height:1.6">Anything you keep private comes back free to your agent when it asks Auxilo, signed in to your account. It is never published.</p>
+        <a href="/how-it-works" class="hero-cta-link">See How It Works</a>
+      </div>
+    </div>
+
+    <!-- Pending review queue (LW3: reordered to sit here, right after the
+         welcome card and before Earnings; auto-loads on dashboard open --
+         see loadPendingQueue() call in showDashboard()). -->
+    <div id="pending-review-card" class="dash-card">
+      <div class="dash-card-title">Pending Review Queue <span id="pending-count-badge" class="count-badge" style="display:none">0</span></div>
+      <p style="font-size:13px;color:var(--slate);margin-bottom:16px;line-height:1.6">
+        Learnings your agent drafts wait here until you decide. Nothing is published until you approve it, one learning at a time or in advance. They are sorted into Ready to publish, Needs a score, and Needs your eyes.
+      </p>
+      <button class="btn btn-ghost btn-sm" onclick="loadPendingQueue()" style="margin-bottom:16px">Refresh</button>
+      <div id="pending-alert" class="alert" style="display:none;margin-bottom:12px"></div>
+      <div id="pending-content"></div>
+    </div>
+
     <!-- Earnings panel -->
     <div class="dash-card">
       <div class="dash-card-title">Earnings</div>
       <div id="earnings-loading" class="loading-text"><span class="spinner"></span>Loading earnings...</div>
       <div id="earnings-content" style="display:none">
         <div class="earnings-grid" id="earnings-grid"></div>
+        <p id="earnings-empty-note" style="display:none;font-size:13px;color:var(--slate);margin-top:16px;line-height:1.6">Nothing has accrued yet. When another agent unlocks one of your published learnings, your share accrues and shows here.</p>
+        <!-- LAYOUT-SHEET-ADDENDUM item 5(a): reuses the page's own consent-checkbox
+             pattern (terms-gate, clean-lane-agree). Native, unstyled checkbox --
+             no accent-color, no gold. Ships hidden; revealed only once
+             GET /account/settings reports earning_notifications_available === true
+             (fail-closed, same posture as #terms-gate). -->
+        <div id="unlock-email-setting" style="display:none;margin-top:20px;">
+          <label style="display:flex;align-items:flex-start;gap:10px;font-size:14px;color:var(--ivory);cursor:pointer;">
+            <input type="checkbox" id="unlock-email-toggle" style="margin-top:3px" onchange="onUnlockEmailToggleChange()">
+            <span>Unlock emails</span>
+          </label>
+          <p style="font-size:13px;color:var(--slate);margin-top:6px;margin-left:26px;line-height:1.6;">Get an email when another agent unlocks one of your learnings. Sign-in and account emails still arrive when this is off.</p>
+        </div>
+        <p style="font-size:12px;color:var(--slate);margin-top:20px;line-height:1.6">Earnings depend on whether other agents unlock your learnings and are not guaranteed.</p>
       </div>
     </div>
 
@@ -777,22 +843,11 @@
             <button class="btn btn-ghost btn-sm" id="clean-lane-ack-btn" onclick="ackCleanLanePublications()">I've reviewed these</button>
           </div>
           <!-- Gate-A 2026-09-06 (N4): static runner hint; plain text, no claim beyond it. -->
-          <p id="clean-lane-runner-hint" style="font-size:13px;color:var(--slate);margin-bottom:12px;line-height:1.6">If nothing is publishing, update your runner: run npx auxilo setup</p>
+          <p id="clean-lane-runner-hint" style="font-size:13px;color:var(--slate);margin-bottom:12px;line-height:1.6">If nothing is publishing, run npx auxilo setup to update your runner.</p>
           <div style="font-size:13px;color:var(--ivory);margin-bottom:8px">Published under standing consent</div>
           <div id="clean-lane-published"></div>
         </div>
       </div>
-    </div>
-
-    <!-- Pending review queue -->
-    <div class="dash-card">
-      <div class="dash-card-title">Pending Review Queue <span id="pending-count-badge" class="count-badge" style="display:none">0</span></div>
-      <p style="font-size:13px;color:var(--slate);margin-bottom:16px;line-height:1.6">
-        Learnings extracted by your agents land here before going public. Nothing is published until you approve it, one learning at a time or in advance. The server sorts them into Ready to publish, Needs a score, and Needs your eyes so the safe bulk action and the exceptions stay distinct.
-      </p>
-      <button class="btn btn-ghost btn-sm" onclick="loadPendingQueue()" style="margin-bottom:16px">Load queue</button>
-      <div id="pending-alert" class="alert" style="display:none;margin-bottom:12px"></div>
-      <div id="pending-content"></div>
     </div>
 
     <!-- API Keys panel -->
@@ -919,6 +974,14 @@
     if (el) el.style.display = 'none';
   }
 
+  // ── Summary bar (LW3): each segment stays hidden until its own figure has
+  // loaded -- never a placeholder dash. Called from the welcome-card,
+  // pending-queue, and earnings loaders once each has a real value. ────
+  function setSummarySegment(wrapId, figureId, text) {
+    setText(figureId, text);
+    show(wrapId);
+  }
+
   // ── API fetch wrapper (Bearer JWT in header, never in URL) ──────────
   function apiFetch(path, opts) {
     var token = getToken();
@@ -994,9 +1057,11 @@
     loadEarnings();
     loadApiKeys();
     loadPurchases();
-    loadCredits();       // CREDITS-CONTROL PART 1: balance + pack controls
-    loadPendingBadge(); // auto-review: surface the pending count without a click
-    loadCleanLane();    // standing-consent card (404 while the flag is dark → one plain line)
+    loadCredits();          // CREDITS-CONTROL PART 1: balance + pack controls
+    loadAccountSettings();  // LW3: extraction mode (pending empty-state copy) + unlock-email setting
+    window.loadPendingQueue(); // LW3 (replaces the old badge-only loader): same-cost call, full triage renders directly
+    loadWelcomeCard();      // LW3: published count -- also feeds the welcome card and summary bar
+    loadCleanLane();        // standing-consent card (404 while the flag is dark → one plain line)
     // Payout loads after earnings to know the balance
   }
 
@@ -1054,6 +1119,144 @@
       .catch(function () {
         showAlert('terms-gate-alert', 'Network error. Please try again.', 'error');
         if (btn) { btn.disabled = false; btn.textContent = 'Accept and continue'; }
+      });
+  };
+
+  // ── Welcome card (LW3) ───────────────────────────────────────────────
+  // Variant A (zero published, zero pending) vs variant B (zero published,
+  // >=1 pending); hidden once one learning is published, and hidden on any
+  // fetch error (fail closed). _welcomePublishedTotal is null until the
+  // published-count call resolves, -1 on error/fail-closed, else the count.
+  // _welcomePendingCount is set from loadPendingQueue()'s own response, so
+  // no extra request is made for it.
+  var _welcomePublishedTotal = null;
+  var _welcomePendingCount = null;
+
+  function updateWelcomeCard() {
+    if (_welcomePublishedTotal === null) return; // published count not in yet
+    if (_welcomePublishedTotal !== 0) { hide('welcome-card'); return; }
+    if (_welcomePendingCount === null) return; // wait for the pending queue to resolve
+    if (_welcomePendingCount > 0) {
+      hide('welcome-card-a');
+      show('welcome-card-b');
+    } else {
+      show('welcome-card-a');
+      hide('welcome-card-b');
+    }
+    show('welcome-card');
+  }
+
+  function loadWelcomeCard() {
+    apiFetch('/account/learnings?status=approved&limit=1')
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (!res.ok || typeof res.data.total !== 'number') {
+          _welcomePublishedTotal = -1;
+          hide('welcome-card');
+          return;
+        }
+        _welcomePublishedTotal = res.data.total;
+        setSummarySegment('summary-published', 'summary-published-figure', String(res.data.total));
+        updateWelcomeCard();
+      })
+      .catch(function () {
+        _welcomePublishedTotal = -1;
+        hide('welcome-card'); // fail closed -- never show on a network error
+      });
+  }
+
+  // Same component as the homepage/connect pages (public/connect.html,
+  // public/index.html): copyCode()'s pattern, reused page-scoped here so
+  // this file stays self-contained.
+  window.copyDashSetupCode = function () {
+    var pre = document.getElementById('dash-setup-code');
+    var btn = document.getElementById('copy-dash-setup');
+    if (!pre || !btn) return;
+    var text = pre.innerText || pre.textContent;
+    var done = function () {
+      btn.textContent = 'copied!';
+      btn.classList.add('copied');
+      setTimeout(function () { btn.textContent = 'Copy the Setup Command'; btn.classList.remove('copied'); }, 1800);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(function () {
+        legacyCopy(text, done);
+      });
+    } else {
+      legacyCopy(text, done);
+    }
+  };
+
+  function legacyCopy(text, done) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'absolute';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (_) {}
+    document.body.removeChild(ta);
+    done();
+  }
+
+  // ── Account settings (LW3): extraction mode drives the pending queue's
+  // empty-state copy (D-51/D-52); earning_notifications_available/enabled
+  // drives the Earnings card's unlock-email toggle. One shared call. ─────
+  var _accountAutonomousMode = null; // null = unknown/failed -> not-off (D-51)
+  var _pendingEmptyEl = null;        // the currently-rendered pending empty-state node, if any
+
+  function pendingEmptyText() {
+    return _accountAutonomousMode === 'off'
+      ? 'Nothing is waiting. Extraction is off, so your agent is not drafting learnings yet. Run npx auxilo setup and say yes to turn it on.'
+      : "Your queue is clear. After your agent's next session, anything waiting for your decision lands here. If nothing arrives, run npx auxilo status to check your setup.";
+  }
+
+  function applyUnlockEmailSetting(res) {
+    if (res && res.ok && res.data.earning_notifications_available === true) {
+      var box = document.getElementById('unlock-email-toggle');
+      if (box) box.checked = res.data.earning_notifications_enabled !== false;
+      show('unlock-email-setting');
+    } else {
+      hide('unlock-email-setting');
+    }
+  }
+
+  function loadAccountSettings() {
+    apiFetch('/account/settings')
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        _accountAutonomousMode = (res.ok && typeof res.data.autonomous_extraction_mode === 'string')
+          ? res.data.autonomous_extraction_mode
+          : null;
+        if (_pendingEmptyEl) _pendingEmptyEl.textContent = pendingEmptyText();
+        applyUnlockEmailSetting(res);
+      })
+      .catch(function () {
+        _accountAutonomousMode = null;
+        if (_pendingEmptyEl) _pendingEmptyEl.textContent = pendingEmptyText();
+        hide('unlock-email-setting');
+      });
+  }
+
+  window.onUnlockEmailToggleChange = function () {
+    var box = document.getElementById('unlock-email-toggle');
+    if (!box) return;
+    var newVal = box.checked;
+    var prevVal = !newVal;
+    apiFetch('/account/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ earning_notifications_enabled: newVal }),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (!res.ok) {
+          box.checked = prevVal;
+          showAlert('dash-alert', (res.data && res.data.error) || 'Could not save your setting. Please try again.', 'error');
+        }
+      })
+      .catch(function () {
+        box.checked = prevVal;
+        showAlert('dash-alert', 'Network error. Please try again.', 'error');
       });
   };
 
@@ -1129,7 +1332,7 @@
     var items = [
       { label: 'Your share (accrued)', value: fmt(data.pending_balance), highlight: true },
       { label: 'Lifetime gross', value: fmt(data.total_gross_usd || data.total_gross || 0) },
-      { label: 'Your revenue share (70%, earned to date)', value: fmt(data.total_contributor) },
+      { label: 'Your revenue share, earned to date', value: fmt(data.total_contributor) },
       { label: 'Total withdrawn', value: fmt(data.total_withdrawn) },
     ];
 
@@ -1173,6 +1376,14 @@
       grid.appendChild(wrap);
     });
 
+    // D-30: real zeros are stated -- the $0.00 cells above stay, this is a
+    // plain sentence underneath, shown only while nothing has accrued yet.
+    var totalContributor = (data && typeof data.total_contributor === 'number') ? data.total_contributor : 0;
+    var emptyNote = document.getElementById('earnings-empty-note');
+    if (emptyNote) emptyNote.style.display = totalContributor === 0 ? '' : 'none';
+
+    setSummarySegment('summary-earnings', 'summary-earnings-figure', fmt(data.pending_balance));
+
     show('earnings-content');
   }
 
@@ -1193,28 +1404,27 @@
       var pausedWrap = document.createElement('div');
       pausedWrap.className = 'wallet-note';
 
+      // D-40: the dashboard's one paused-rail statement -- "Earnings accrue
+      // now." as plain heading text, then "Withdrawals open soon." as the
+      // /status link (link on that clause only, not the whole sentence).
       var pausedHead = document.createElement('strong');
       pausedHead.style.color = 'var(--ivory)';
       pausedHead.style.display = 'block';
       pausedHead.style.marginBottom = '6px';
-      pausedHead.textContent = 'Withdrawals are opening soon';
+      pausedHead.appendChild(document.createTextNode('Earnings accrue now. '));
+      var pausedHeadLink = document.createElement('a');
+      pausedHeadLink.href = '/status';
+      pausedHeadLink.style.color = 'var(--aurum)';
+      pausedHeadLink.textContent = 'Withdrawals open soon.';
+      pausedHead.appendChild(pausedHeadLink);
       pausedWrap.appendChild(pausedHead);
 
       var pausedBody = document.createElement('p');
       pausedBody.style.fontSize = '13px';
       pausedBody.style.color = 'var(--slate)';
       pausedBody.style.margin = '0';
-      pausedBody.textContent = 'Both withdrawal rails (Stripe-to-bank and USDC on Base) are paused while we complete our non-custodial migration. Your earnings accrue now and remain payable to you under the Terms; they become withdrawable as soon as the non-custodial rail goes live. No lock-ups, no expiry.';
+      pausedBody.textContent = 'Your share accrues to your Auxilo account and remains payable to you under the Terms. When withdrawals open, your payout options appear here.';
       pausedWrap.appendChild(pausedBody);
-
-      var pausedStatus = document.createElement('a');
-      pausedStatus.href = '/status';
-      pausedStatus.textContent = 'See where things stand';
-      pausedStatus.style.fontSize = '13px';
-      pausedStatus.style.color = 'var(--aurum)';
-      pausedStatus.style.display = 'inline-block';
-      pausedStatus.style.marginTop = '8px';
-      pausedWrap.appendChild(pausedStatus);
 
       if (data.wallet) {
         var pausedWallet = document.createElement('p');
@@ -1791,18 +2001,16 @@
 
   function pendingBadgeSet(count) {
     var badge = document.getElementById('pending-count-badge');
-    if (!badge) return;
-    badge.textContent = String(count);
-    badge.style.display = count > 0 ? '' : 'none';
-  }
-
-  function loadPendingBadge() {
-    apiFetch('/account/pending/summary')
-      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
-      .then(function (res) {
-        if (res.ok && typeof res.data.pending_count === 'number') pendingBadgeSet(res.data.pending_count);
-      })
-      .catch(function () {});
+    if (badge) {
+      badge.textContent = String(count);
+      badge.style.display = count > 0 ? '' : 'none';
+    }
+    // Pending-card signal (AD ruling): a 3px gold LEFT border only, present
+    // when the queue holds one or more items and absent when it is empty --
+    // not the full gold border the technical spec suggested. The card's
+    // other three sides keep the ordinary .dash-card border from the class.
+    var card = document.getElementById('pending-review-card');
+    if (card) card.style.borderLeft = count > 0 ? '3px solid var(--aurum)' : '';
   }
 
   window.loadPendingQueue = function () {
@@ -1831,7 +2039,11 @@
         _triageRows = res.data.items || [];
         _triageBodies = null;
         _triageSelected = {};
-        pendingBadgeSet(res.data.pending_count || 0);
+        var pendingCountVal = res.data.pending_count || 0;
+        pendingBadgeSet(pendingCountVal);
+        setSummarySegment('summary-pending', 'summary-pending-figure', String(pendingCountVal));
+        _welcomePendingCount = pendingCountVal;
+        updateWelcomeCard();
         renderTriage(res.data);
       })
       .catch(function () {
@@ -1902,12 +2114,19 @@
 
     var rows = summary.items || [];
     if (!rows.length) {
+      // D-51/D-52: chosen by autonomous_extraction_mode (GET /account/settings);
+      // 'off' selects D-52, anything else (including not-yet-loaded or a
+      // failed settings fetch) selects D-51. _pendingEmptyEl lets
+      // loadAccountSettings() patch this text in place if its response
+      // arrives after this render.
       var empty = document.createElement('div');
       empty.className = 'empty-state';
-      empty.textContent = 'No pending learnings. Your queue is clear.';
+      empty.textContent = pendingEmptyText();
       el.appendChild(empty);
+      _pendingEmptyEl = empty;
       return;
     }
+    _pendingEmptyEl = null;
 
     var laneView = AuxiloReviewLanes.groupRows(summary);
     var ready = laneView.groups.ready_to_publish;
@@ -2721,7 +2940,7 @@
     if (!purchases.length) {
       var empty = document.createElement('div');
       empty.className = 'empty-state';
-      empty.textContent = 'No credit purchases yet.';
+      empty.textContent = 'No credit purchases yet. Packs you buy show up here.';
       el.appendChild(empty);
       return;
     }

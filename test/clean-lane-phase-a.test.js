@@ -125,13 +125,13 @@ describe('affirmation sentence parity with lib/clean-lane.js', () => {
 // B. Dashboard card markup + inline script (structural)
 // ─────────────────────────────────────────────────────────────────────────────
 describe('dashboard card: Auto-publish clean learnings', () => {
-  it('sits directly ABOVE the Pending Review Queue card (no other card between)', () => {
+  it('sits directly ABOVE the API Keys card (no other card between) -- LW3 reorder: Pending now sits before Earnings/Payouts, so Auto-publish\'s neighbor is API Keys', () => {
     const cardTitle = '<div class="dash-card-title">Auto-publish clean learnings</div>';
     const cardIdx = DASHBOARD_HTML.indexOf(cardTitle);
-    const pendingIdx = DASHBOARD_HTML.indexOf('<div class="dash-card-title">Pending Review Queue');
-    assert.ok(cardIdx > -1 && pendingIdx > -1);
-    assert.ok(cardIdx < pendingIdx, 'card must precede the pending queue');
-    const between = DASHBOARD_HTML.slice(cardIdx + cardTitle.length, pendingIdx);
+    const apiKeysIdx = DASHBOARD_HTML.indexOf('<div class="dash-card-title">API Keys');
+    assert.ok(cardIdx > -1 && apiKeysIdx > -1);
+    assert.ok(cardIdx < apiKeysIdx, 'card must precede the API Keys card');
+    const between = DASHBOARD_HTML.slice(cardIdx + cardTitle.length, apiKeysIdx);
     assert.ok(!between.includes('dash-card-title'), 'no other card between the two');
   });
 
