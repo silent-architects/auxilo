@@ -211,6 +211,10 @@ describe('LAUNCH-WAVE-0926: FAQ rate-answer disclosure pairing (test 4)', () => 
         const jsonText = normalize(entry.text);
         assert.ok(jsonText.includes(DISCLAIMER), 'JSON-LD answer must carry the disclaimer verbatim');
         assert.ok(/open soon/i.test(jsonText), 'JSON-LD answer must carry "open soon"');
+        assert.ok(
+          jsonText.includes('of what the buyer paid') || jsonText.includes('of what they paid'),
+          'JSON-LD answer must state the earnings basis'
+        );
         assert.equal(
           jsonText.endsWith(DISCLAIMER),
           false,
@@ -223,6 +227,24 @@ describe('LAUNCH-WAVE-0926: FAQ rate-answer disclosure pairing (test 4)', () => 
       });
     }
   }
+});
+
+// ─── Test 4b: register P grant sentence + purchased-pack retirement ────────
+
+describe('LAUNCH-WAVE-0926 register P: /pricing grant sentence + /api purchased-pack removal (test 4b)', () => {
+  it('pricing.html contains the grant sentence exactly once', () => {
+    const GRANT_SENTENCE = 'Some unlocks are issued as $0.00 promotional grants and earn nothing.';
+    assert.equal(count(RAW['pricing.html'], GRANT_SENTENCE), 1, 'grant sentence must appear exactly once on /pricing');
+  });
+
+  it('api.html visible text and JSON-LD contain no "from a purchased pack"', () => {
+    const html = RAW['api.html'];
+    assert.equal(bodyText(html).includes('from a purchased pack'), false, '/api visible text must not say "from a purchased pack"');
+    const ldText = faqJsonLd(html).map((e) => e.text).join(' ');
+    assert.equal(ldText.includes('from a purchased pack'), false, '/api JSON-LD must not say "from a purchased pack"');
+    // Positive control: the phrase detector itself works.
+    assert.ok('as one credit from a purchased pack'.includes('from a purchased pack'), 'positive control: substring check works');
+  });
 });
 
 // ─── Test 5: /works-with carries no em dash or en dash in visible text ─────

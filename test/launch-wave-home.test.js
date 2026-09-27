@@ -174,6 +174,42 @@ describe('LAUNCH-WAVE-0926: FAQ visible text equals its JSON-LD mirror', () => {
   });
 });
 
+describe('LAUNCH-WAVE-0926 register P: homepage FAQ rate-answer disclosure (P-01)', () => {
+  const NOT_GUARANTEED_THIRD = "Earnings depend on whether other agents unlock the builder's learnings and are not guaranteed.";
+
+  const ldMatch = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+  const data = JSON.parse(ldMatch[1]);
+  const faqNode = (data['@graph'] || []).find((n) => n['@type'] === 'FAQPage');
+  const answerInnerMatches = [...html.matchAll(/<div class="faq-answer-inner">([\s\S]*?)<\/div>/g)];
+  const entries = faqNode.mainEntity
+    .map((q, i) => ({ q, i }))
+    .filter(({ q }) => q.acceptedAnswer.text.includes('70%') || q.acceptedAnswer.text.includes('60%'));
+
+  it('at least one homepage FAQ answer states the rate (positive control)', () => {
+    assert.ok(entries.length > 0, 'index.html must carry at least one 70%/60% FAQ answer to test');
+  });
+
+  for (const { q, i } of entries) {
+    it(`FAQ "${q.name}" carries the disclaimer, "open soon", the rate basis, is not disclaimer-terminal, and equals its rendered twin`, () => {
+      const jsonText = normalize(q.acceptedAnswer.text);
+      assert.ok(jsonText.includes('not guaranteed'), 'JSON-LD answer must state earnings are not guaranteed');
+      assert.ok(/open soon/i.test(jsonText), 'JSON-LD answer must carry "open soon"');
+      assert.ok(
+        jsonText.includes('of what the buyer paid') || jsonText.includes('of what they paid'),
+        'JSON-LD answer must state the earnings basis'
+      );
+      assert.equal(
+        jsonText.endsWith(NOT_GUARANTEED_THIRD),
+        false,
+        'the disclaimer must not be the last sentence of the answer'
+      );
+
+      const rendered = visibleTextOf(answerInnerMatches[i][1]);
+      assert.equal(rendered, jsonText, 'rendered answer must equal its JSON-LD twin after normalization');
+    });
+  }
+});
+
 describe('LAUNCH-WAVE-0926: no em dash / en dash in homepage visible text', () => {
   it('the rendered <body> text contains no U+2014 (em dash) and no U+2013 (en dash)', () => {
     const bodyMatch = html.match(/<body>([\s\S]*)<\/body>/);

@@ -98,6 +98,28 @@ describe('BOT-01: agent.json top-level description naming', () => {
   });
 });
 
+describe('Register P (P-05): agent.json top-level description carries the disclaimer + paused-rail statement once', () => {
+  const NOT_GUARANTEED = 'Earnings depend on whether other agents unlock the builder\'s learnings and are not guaranteed.';
+
+  it('contains "not guaranteed" exactly once', () => {
+    const matches = agent.description.match(/not guaranteed/g) || [];
+    assert.equal(matches.length, 1, 'description must state "not guaranteed" exactly once');
+  });
+
+  it('contains "Withdrawals open soon" exactly once', () => {
+    const matches = agent.description.match(/Withdrawals open soon/g) || [];
+    assert.equal(matches.length, 1, 'description must state "Withdrawals open soon" exactly once');
+  });
+
+  it('does not end with the not-guaranteed sentence (the paused-rail statement follows it)', () => {
+    assert.equal(
+      agent.description.trim().endsWith(NOT_GUARANTEED),
+      false,
+      'the disclaimer must not be the last sentence of the description'
+    );
+  });
+});
+
 describe('BOT-02: agent.json authentication shape guard (regression guard)', () => {
   it('authentication.methods is an array of exactly two objects', () => {
     assert.ok(agent.authentication, 'authentication object must exist');
@@ -209,6 +231,28 @@ describe('BOT-06/07: llms.txt accrual guard (positive controls included)', () =>
       llmsTxt.includes('Builder split: when another agent unlocks a learning, the builder accrues 70% of what that buyer paid, or 60% when Auxilo search surfaced it.'),
       'BOT-07 line must be present verbatim'
     );
+  });
+});
+
+describe('Register P (P-06): llms.txt Pricing section carries the disclaimer exactly once, directly after the Builder split line', () => {
+  const DISCLAIMER = 'Earnings depend on whether other agents unlock your learnings and are not guaranteed.';
+  const BUILDER_SPLIT = '- Builder split: when another agent unlocks a learning, the builder accrues 70% of what that buyer paid, or 60% when Auxilo search surfaced it.';
+  const ACCRUE_LINE = '- Earnings accrue to your Auxilo account now and remain payable to you under the Terms.';
+
+  it('contains the disclaimer exactly once', () => {
+    const count = llmsTxt.split(DISCLAIMER).length - 1;
+    assert.equal(count, 1, 'llms.txt must carry the disclaimer exactly once');
+  });
+
+  it('the new disclaimer line sits directly after the Builder split line and before the accrue line', () => {
+    const iSplit = llmsTxt.indexOf(BUILDER_SPLIT);
+    const iDisclaimer = llmsTxt.indexOf('- ' + DISCLAIMER);
+    const iAccrue = llmsTxt.indexOf(ACCRUE_LINE);
+    assert.ok(iSplit > -1 && iDisclaimer > -1 && iAccrue > -1, 'all three anchor lines must be present');
+    assert.ok(iSplit < iDisclaimer, 'disclaimer line must follow the Builder split line');
+    assert.ok(iDisclaimer < iAccrue, 'disclaimer line must precede the accrue line');
+    const between = llmsTxt.slice(iSplit + BUILDER_SPLIT.length, iDisclaimer).trim();
+    assert.equal(between, '', 'the disclaimer line must sit directly after the Builder split line with no other bullet between them');
   });
 });
 
