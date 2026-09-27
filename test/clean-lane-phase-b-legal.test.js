@@ -48,7 +48,7 @@ const F_LEAD = '**(f) Audit log.**';
 const G2_LEAD = 'The quality threshold in effect for a Builder is the one that Builder selected';
 const S41_CLAUSE = 'is then either held in the Builder\'s review queue for the Builder\'s approval or published to the catalog on submission, depending on the screening result, the submission channel, and whether the Builder has activated standing publication consent under Section 5.9.3(g); a new account\'s first Learning is additionally held for operator review.';
 const CHAPEAU_CLAUSE = 'until the Builder publishes them, except as provided in subsection (g).';
-const LAST_UPDATED = '**Last Updated: September 6, 2026**';
+const LAST_UPDATED = '**Last Updated: September 27, 2026**';
 
 /** The (g) paragraph and the ratchet paragraph, as markdown, sliced out of the Terms. */
 function termsParagraphs() {
@@ -121,12 +121,12 @@ describe('Terms of Service: §5.9.3(g), ratchet paragraph, §4.1 clause, chapeau
     assert.ok(!TOS.includes('until the Builder publishes them. Session transcripts'), 'the unqualified promise is gone');
   });
 
-  it('header: Last Updated bumped, the acceptance version (Current Amendment id) UNCHANGED and equal to CURRENT_TOS_VERSION', () => {
+  it('header: Last Updated bumped, the acceptance version (Current Amendment id) equal to CURRENT_TOS_VERSION', () => {
     assert.ok(TOS.includes(LAST_UPDATED));
     assert.ok(!TOS.includes('**Last Updated: September 5, 2026**'));
     const current = /Current Amendment: `([^`]+)`/.exec(TOS);
     assert.ok(current, 'Current Amendment banner still present');
-    assert.equal(current[1], '2026-07-04-payee-agency-a1', 'acceptance version stays — Non-Material change (draft §4)');
+    assert.equal(current[1], '2026-09-27-credit-balance-a2', 'acceptance version equals the credit-as-cash amendment (revision 3)');
     const server = /CURRENT_TOS_VERSION\s*=\s*'([^']+)'/.exec(ACCOUNTS_SRC);
     assert.ok(server);
     assert.equal(current[1], server[1], 'predeploy-check invariant: the first Current Amendment id equals the server version');

@@ -192,11 +192,11 @@ describe('VISION PASS GUARD 4: every surface stating the 70%/60% rate carries th
 // ─── Item 5: the /for-builders math block ──────────────────────────────────
 
 describe('VISION PASS GUARD 5: the /for-builders math block exists whole, in one view, with no click', () => {
-  it('the heading, both dollar amounts, and the footnote are all present, and the footnote sits in the same parent uncollapsed', () => {
+  it('the heading, the one dollar amount, and the footnote are all present, and the footnote sits in the same parent uncollapsed (credits-as-cash C-07 cuts the second, credit-path figure)', () => {
     const html = STATIC['for-builders.html'];
     assert.ok(html.includes('<h3>The Math (per Unlock)</h3>'), 'heading "The Math (per Unlock)" present');
-    assert.ok(html.includes('$0.70'), 'contains $0.70');
-    assert.ok(html.includes('$0.07 to $0.0875'), 'contains $0.07 to $0.0875');
+    assert.ok(html.includes('$0.70'), 'contains $0.70 (positive control for the dollar-figure check below)');
+    assert.ok(!html.includes('$0.07 to $0.0875'), 'the credit-path second dollar figure is gone — one balance, one price');
 
     const scenarioMatch = html.match(/<div class="earnings-scenario">([\s\S]*?)<\/div>\s*<\/div>/);
     assert.ok(scenarioMatch, '.earnings-scenario block found');

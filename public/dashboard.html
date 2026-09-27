@@ -916,17 +916,17 @@
          hand-typed. Buy buttons stay hidden until GET /health reports
          payments_enabled && stripe_configured (dark-safe invariant). -->
     <div class="dash-card">
-      <h2 class="dash-card-title">Credits</h2>
+      <h2 class="dash-card-title">Balance</h2>
       <div id="credits-loading" class="loading-text"><span class="spinner"></span>Loading...</div>
       <div id="credits-content" style="display:none">
         <div id="credit-balance-line">—</div>
-        <div id="credit-balance-sub">Credits do not expire.</div>
-        <p style="font-size:13px;color:var(--ivory);margin-bottom:2px">Your agent spends credits through an API key you generate.</p>
-        <p style="font-size:13px;color:var(--slate);margin-bottom:20px">One credit unlocks one learning, whatever its listed price.</p>
+        <div id="credit-balance-sub">Your balance never expires.</div>
+        <p style="font-size:13px;color:var(--ivory);margin-bottom:2px">Your agent spends it through an API key you generate.</p>
+        <p style="font-size:13px;color:var(--slate);margin-bottom:20px">An unlock takes the listed price from your balance.</p>
         <div id="credit-pack-rows"></div>
         <div id="purchase-disclosures" class="purchase-disclosures" style="display:none">
           <p>By continuing, you agree to the <a href="/terms" target="_blank" rel="noopener">Terms of Service</a>, including that credits are non-refundable and do not expire.</p>
-          <blockquote class="purchase-legal">Prepaid credits are non-refundable and non-transferable. Credits have no cash value outside the Platform and cannot be redeemed for currency. All transactions on the Platform are final.</blockquote>
+          <blockquote class="purchase-legal">Credits are non-refundable except as these Terms provide. Credits are non-transferable. Credits have no cash value outside the Platform and cannot be withdrawn or redeemed for currency, except where applicable law requires it. Credits do not expire. All transactions on the Platform are final.</blockquote>
           <p>Questions about a purchase go to support@auxilo.io. <a href="/terms" target="_blank" rel="noopener">Refund and dispute policy</a></p>
           <p>Prices are in USD and exclude any applicable taxes.</p>
           <p style="font-size:12px;color:var(--slate)">Powered by Stripe</p>
@@ -936,7 +936,7 @@
 
     <!-- Purchase history -->
     <div class="dash-card">
-      <h2 class="dash-card-title">Credit Purchase History</h2>
+      <h2 class="dash-card-title">Purchase History</h2>
       <div id="purchases-loading" class="loading-text"><span class="spinner"></span>Loading...</div>
       <div id="purchases-content" style="display:none"></div>
     </div>
@@ -1462,7 +1462,7 @@
         heldNote.style.fontSize = '11px';
         heldNote.style.color = 'var(--slate)';
         heldNote.style.marginTop = '4px';
-        heldNote.textContent = 'Receipts recorded before you accepted the current Terms. Not part of your balance or accrued share. Accepting the Terms above releases them to your accrued share immediately.';
+        heldNote.textContent = 'Receipts recorded before you accepted the current Terms. Not part of your accrued share. Accepting the Terms above releases them to your accrued share immediately.';
         wrap.appendChild(heldNote);
       }
 
@@ -2763,12 +2763,12 @@
   // window.__AUXILO_PACKS__ (server-injected from lib/stripe.js PACKS by
   // renderPackData) — never hand-typed here.
   var _stripeReady = false;
-  // CREDITS-E2E-FINDINGS: last-known purchased-unlock balance, kept in sync by
-  // renderCreditBalance. Stashed to sessionStorage right before a Stripe
-  // redirect (auxiloBuyCredits) so the post-checkout poll has a true
-  // pre-purchase baseline instead of inferring one from its own first fetch
-  // (which can already reflect the webhook if it lands before the browser
-  // returns from Stripe -- the race behind the false "not appeared" banner).
+  // CREDITS-E2E-FINDINGS: last-known dollar balance (credit_balance.total_usd),
+  // kept in sync by renderCreditBalance. Stashed to sessionStorage right
+  // before a Stripe redirect (auxiloBuyCredits) so the post-checkout poll has
+  // a true pre-purchase baseline instead of inferring one from its own first
+  // fetch (which can already reflect the webhook if it lands before the
+  // browser returns from Stripe -- the race behind the false "not updated" banner).
   var _creditsBalanceCache = null;
 
   function stashPrebuyBalance() {
@@ -2804,13 +2804,11 @@
   function renderCreditBalance(data) {
     var line = document.getElementById('credit-balance-line');
     if (!line) return;
-    var purchased = data && data.unlocks && typeof data.unlocks.purchased === 'number'
-      ? data.unlocks.purchased : null;
-    _creditsBalanceCache = purchased;
-    // D4 (Terms §7.2 verbatim), never adjacent to the Earnings card's numbers (GOV-2 A6).
-    line.textContent = purchased !== null
-      ? purchased.toLocaleString('en-US') + ' unlock credits'
-      : '— unlock credits';
+    var total = data && data.credit_balance && typeof data.credit_balance.total_usd === 'number'
+      ? data.credit_balance.total_usd : null;
+    _creditsBalanceCache = total;
+    // One balance, in dollars, never adjacent to the Earnings card's numbers (GOV-2 A6).
+    line.textContent = total !== null ? fmt(total) : '—';
   }
 
   function renderCreditPackRows() {
@@ -2828,9 +2826,8 @@
       name.textContent = p.name; // textContent -- safe
       var detail = document.createElement('div');
       detail.className = 'cpr-detail';
-      // D2 (dashboard only — /pricing's card already states the count under the
-      // "unlocks" unit name, so this line would say it twice under two names there).
-      detail.textContent = 'This pack grants ' + Number(p.unlocks).toLocaleString('en-US') + ' unlock credits.'; // textContent -- safe
+      // Same words as the /pricing cards: dollars in, from the pack's own price.
+      detail.textContent = 'Adds $' + p.price_usd + ' to your balance.'; // textContent -- safe
       left.appendChild(name);
       left.appendChild(detail);
 
@@ -2846,7 +2843,7 @@
       btn.className = 'btn btn-primary btn-sm credit-buy-btn pack-buy-btn';
       btn.setAttribute('data-pack', p.id);
       btn.style.display = 'none'; // dark-safe default; checkStripeConfigured() reveals it
-      btn.textContent = 'Buy credits';
+      btn.textContent = 'Buy pack';
       btn.onclick = function () { auxiloBuyCredits(p.id, btn); };
       right.appendChild(price);
       right.appendChild(btn);
@@ -2888,7 +2885,7 @@
           window.location = res.data.url;
           return;
         }
-        if (btn) { btn.disabled = false; btn.textContent = 'Buy credits'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Buy pack'; }
         // CREDITS-CONTROL PART 1 micro-fix (should-fix 2): a TERMS_NOT_ACCEPTED
         // 403 has a real route to resolution on this page — the existing
         // #terms-gate clickwrap card — so surface that instead of a dead-end
@@ -2904,7 +2901,7 @@
         showAlert('dash-alert', (res.data && res.data.error) || 'Could not start checkout. Please try again.', 'error');
       })
       .catch(function () {
-        if (btn) { btn.disabled = false; btn.textContent = 'Buy credits'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Buy pack'; }
         showAlert('dash-alert', 'Could not start checkout. Check your connection and try again.', 'error');
       });
   };
@@ -2938,12 +2935,12 @@
 
   function showCheckoutBanner(state) {
     if (state === 'success') {
-      showAlert('checkout-banner', 'Your credits appear here as soon as the purchase lands.', 'info');
+      showAlert('checkout-banner', 'Your balance updates here as soon as the purchase lands.', 'info');
       var priorBalance = null;
       try {
         var stashed = sessionStorage.getItem('auxilo_prebuy_unlock_balance');
         sessionStorage.removeItem('auxilo_prebuy_unlock_balance');
-        if (stashed !== null && stashed !== '') priorBalance = parseInt(stashed, 10);
+        if (stashed !== null && stashed !== '') priorBalance = parseFloat(stashed);
       } catch (_) { /* sessionStorage unavailable -- falls back to the first poll's own reading */ }
       pollForCreditIncrease(0, priorBalance);
     } else if (state === 'cancel') {
@@ -2962,7 +2959,8 @@
     apiFetch('/account/credits')
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
-        var balance = (res.ok && res.data && res.data.unlocks) ? res.data.unlocks.purchased : null;
+        var balance = (res.ok && res.data && res.data.credit_balance && typeof res.data.credit_balance.total_usd === 'number')
+          ? res.data.credit_balance.total_usd : null;
         // No stashed pre-purchase baseline (sessionStorage unavailable, or the
         // checkout link was opened outside auxiloBuyCredits) -- fall back to
         // this first reading, same as before this fix.
@@ -2975,14 +2973,14 @@
           return;
         }
         if (outcome === 'exhausted') {
-          showAlert('checkout-banner', 'Credits have not appeared yet. If they do not show in a few minutes, write to support@auxilo.io.', 'info');
+          showAlert('checkout-banner', 'Your balance has not updated yet. If nothing changes in a few minutes, write to support@auxilo.io.', 'info');
           return;
         }
         setTimeout(function () { pollForCreditIncrease(attempt + 1, priorBalance); }, 3000);
       })
       .catch(function () {
         if (attempt >= CHECKOUT_POLL_MAX_ATTEMPTS) {
-          showAlert('checkout-banner', 'Credits have not appeared yet. If they do not show in a few minutes, write to support@auxilo.io.', 'info');
+          showAlert('checkout-banner', 'Your balance has not updated yet. If nothing changes in a few minutes, write to support@auxilo.io.', 'info');
         }
       });
   }
@@ -3039,7 +3037,7 @@
     if (!purchases.length) {
       var empty = document.createElement('div');
       empty.className = 'empty-state';
-      empty.textContent = 'No credit purchases yet. Packs you buy show up here.';
+      empty.textContent = 'No purchases yet. Packs you buy show up here.';
       el.appendChild(empty);
       return;
     }

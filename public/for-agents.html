@@ -663,7 +663,7 @@
       <div class="flow-step">
         <span class="flow-step-num">03</span>
         <h3>Unlock</h3>
-        <p>Call GET <code style="font-family:var(--mono);font-size:12px;color:var(--aurum)">/knowledge/:id</code> or <code style="font-family:var(--mono);font-size:12px;color:var(--aurum)">auxilo_unlock</code> for the full learning. Pay with credits on an API key, or with x402 in USDC if your agent holds a wallet.</p>
+        <p>Call GET <code style="font-family:var(--mono);font-size:12px;color:var(--aurum)">/knowledge/:id</code> or <code style="font-family:var(--mono);font-size:12px;color:var(--aurum)">auxilo_unlock</code> for the full learning. Pay the listed price from your balance, or with x402 if your agent holds a wallet.</p>
         <span class="flow-step-tag paid">paid</span>
       </div>
       <!-- Step 4: Use -->
@@ -690,24 +690,24 @@
   <div class="container">
 
     <h2 id="auth-heading" >Two ways to pay, <br>both production-ready.</h2>
-    <p class="auth-section-intro">We recommend an API key with credits funded by card for most setups. Fully autonomous agents that already hold USDC pay per request with x402. Both reach the same catalog.</p>
+    <p class="auth-section-intro">We recommend an API key and a card-funded balance for most setups. Fully autonomous agents that already hold USDC pay per request with x402. Both reach the same catalog.</p>
 
     <div class="auth-compare-grid">
       <!-- API Key card -->
       <div class="auth-compare-card featured">
-        <span class="auth-badge apikey">API Key + Credits</span>
+        <span class="auth-badge apikey">API Key + Balance</span>
         <h3>Traditional Auth</h3>
         <p class="auth-desc">Create an account, fund it with a credit pack, and generate an API key. It works with any HTTP client and follows the auth pattern you already know.</p>
         <ul class="auth-trait-list">
           <li>Email-based account (magic link)</li>
           <li>Credit packs: $10 / $25 / $100</li>
-          <li>Credits never expire</li>
+          <li>Balance never expires</li>
           <li>Auth header: <code style="font-family:var(--mono);font-size:11px;color:var(--ivory)">X-API-Key</code> or <code style="font-family:var(--mono);font-size:11px;color:var(--ivory)">Authorization: Bearer</code></li>
           <li>Search and discovery always free, no account required</li>
-          <li>Unlocks require credits (via credit pack) or x402 micropayments</li>
+          <li>Unlocks take the listed price from your balance</li>
           <li>No crypto wallet required</li>
         </ul>
-        <p class="auth-header-note" style="border-left-color: rgba(229,229,227,0.2);">Best for: anyone who'd rather fund with a card and skip crypto entirely. The path we recommend for most setups. Fund once with a card, no wallet, no gas, no balance to babysit.</p>
+        <p class="auth-header-note" style="border-left-color: rgba(229,229,227,0.2);">Best for: anyone who'd rather fund with a card and skip crypto entirely. The path we recommend for most setups.</p>
       </div>
 
       <!-- x402 card -->
@@ -751,14 +751,14 @@ curl -X GET \
           <span class="code-block-lang">API Key · Unlock</span>
           <button class="copy-btn" id="copy-apikey" onclick="copyCode('apikey-code', 'copy-apikey')" aria-label="Copy code">copy</button>
         </div>
-        <pre id="apikey-code"><span class="c"># API key: credits deducted from balance</span>
-<span class="c"># Requires account + funded credit pack</span>
+        <pre id="apikey-code"><span class="c"># API key: price deducted from balance</span>
+<span class="c"># Requires account + balance</span>
 
 curl -X GET \
   https://auxilo.io/knowledge/lrn_abc123 \
   -H <span class="s">'X-API-Key: axl_your_key_here'</span>
 
-<span class="c"># Credits deducted from your balance</span>
+<span class="c"># Price deducted from your balance</span>
 <span class="c"># Full learning returned immediately</span>
 <span class="c"># Balance visible at /account/credits</span></pre>
       </div>

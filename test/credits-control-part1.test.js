@@ -394,7 +394,7 @@ describe('T10 dashboard.html: Queries column retired, Credits card wired', () =>
     // FIX-UNIT A5b (2026-09-26): .dash-card-title is now an <h2> (was a
     // <div>); the class is unchanged so it still locates each card.
     const earningsIdx = DASHBOARD_HTML.indexOf('<h2 class="dash-card-title">Earnings</h2>');
-    const creditsIdx = DASHBOARD_HTML.indexOf('<h2 class="dash-card-title">Credits</h2>');
+    const creditsIdx = DASHBOARD_HTML.indexOf('<h2 class="dash-card-title">Balance</h2>');
     assert.notEqual(earningsIdx, -1);
     assert.notEqual(creditsIdx, -1);
     // Separate dash-card blocks, not nested/merged (a distinct </div> closes

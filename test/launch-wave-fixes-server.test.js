@@ -236,11 +236,11 @@ describe('LAUNCH-WAVE-FIXES-SERVER: B1 openapi.json unlock_price + /learn accrua
     assert.ok(spec.paths && spec.paths['/learn'] && spec.paths['/learn'].post, 'sanity: /learn POST is still present');
   });
 
-  it('unlock_price description states the x402/credit split and the 60% discovery rate, and drops the flat "70% of the unlock price" overclaim', () => {
+  it('unlock_price description states one price on both payment paths and the 60% discovery rate (credits-as-cash C-74), and drops the flat "70% of the unlock price" overclaim', () => {
     const unlockPriceSchema = spec.paths['/learn'].post.requestBody.content['application/json'].schema.properties.unlock_price;
     assert.equal(
       unlockPriceSchema.description,
-      'Price in USD to unlock this learning, kept between $0.05 and $50. A buyer paying with x402 pays this price. A buyer paying with credits pays one credit, whatever this price. The builder accrues 70% of what the buyer paid, or 60% when Auxilo search surfaced the learning.'
+      'Price in USD to unlock this learning, kept between $0.05 and $50. A buyer pays this price with x402 or from an Auxilo balance. The builder behind a learning earns 70% of its listed price when another agent unlocks it, or 60% when Auxilo search surfaced it.'
     );
     assert.doesNotMatch(unlockPriceSchema.description, /Contributors earn 70% of the unlock price/);
   });

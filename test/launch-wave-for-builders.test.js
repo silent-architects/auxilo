@@ -127,7 +127,10 @@ const R3_STEP01_BODY = 'One command does it. npx auxilo setup detects your clien
 const R3_STEP02_HEADING = 'Keep Working';
 const R3_STEP02_BODY = 'Once extraction is on, it runs in the background while you work. Nothing your agent extracts goes live without your approval, which you give one learning at a time or in advance in your dashboard.';
 const DRAFTING_BOUNDARY = 'Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted.';
-const R3_STEP03_TEXT_NORMALIZED = 'When another agent unlocks your learning, 70% of what they paid accrues to your Auxilo account, or 60% when Auxilo search surfaced it. Earnings depend on whether other agents unlock your learnings and are not guaranteed. Earnings accrue now. Withdrawals open soon.';
+// credits-as-cash (register C, row C-06, revision 3) rewrites the rate
+// sentence on the new one-balance basis. See test/launch-wave-for-builders.test.js
+// section 3 below.
+const R3_STEP03_TEXT_NORMALIZED = 'When another agent unlocks your learning, you earn 70% of the listed price, or 60% when Auxilo search surfaced it. Earnings depend on whether other agents unlock your learnings and are not guaranteed. Earnings accrue now. Withdrawals open soon.';
 const TWO_PATH_STATEMENT = 'An agent paying with x402 pays the listed price. An agent paying with credits pays one credit, currently $0.125 on the Starter pack and $0.10 on the Growth and Pro packs, whatever the listed price.';
 const NOT_GUARANTEED = 'Earnings depend on whether other agents unlock your learnings and are not guaranteed.';
 // VISION PASS (BUILD-BRIEF-VISION.md, REGISTER-V-VISION.md rows V-02/V-03):
@@ -193,12 +196,12 @@ describe('LAUNCH-WAVE /for-builders: new tests (write-first, per BUILDER-RULES)'
     });
   });
 
-  describe("3. Step 03's body (R3-05: rate condensed, two-path statement moved out)", () => {
-    it('equals the R3-05 text (normalized), contains "of what they paid", the not-guaranteed sentence, ends on "Withdrawals open soon.", and does not carry the two-path statement', () => {
+  describe("3. Step 03's body (credits-as-cash C-06: rate condensed to the one-balance sentence, two-path statement moved out)", () => {
+    it('equals the C-06 text (normalized), contains "of the listed price", the not-guaranteed sentence, ends on "Withdrawals open soon.", and does not carry the two-path statement', () => {
       const { body } = step(STATIC_HTML, '03');
       const norm = normalize(body);
-      assert.equal(norm, R3_STEP03_TEXT_NORMALIZED, "step 03's body equals the R3-05 text verbatim");
-      assert.match(norm, /of what they paid/);
+      assert.equal(norm, R3_STEP03_TEXT_NORMALIZED, "step 03's body equals the C-06 text verbatim");
+      assert.match(norm, /of the listed price/);
       assert.ok(norm.includes(NOT_GUARANTEED), 'contains the not-guaranteed disclaimer');
       const sentences = norm.split(/(?<=[.!?])\s+/).filter(Boolean);
       assert.equal(sentences[sentences.length - 1], 'Withdrawals open soon.', 'last sentence is "Withdrawals open soon."');
@@ -342,35 +345,35 @@ describe('LAUNCH-WAVE /for-builders: new tests (write-first, per BUILDER-RULES)'
   describe('9. The math block (VISION PASS rows V-07/V-08-T/V-09-T, REV 3, TRUE TODAY): heading unchanged, body and footnote rewritten to the register\'s exact strings', () => {
     // REV 2/REV 3 correction (charter V7): the math block STAYS — the owner
     // ruled this twice on 2026-09-06 and the register says do not
-    // re-litigate. What changes is that every figure is made true against
-    // the code and the credit-path outcome sits in the body with equal
-    // weight (V-08-T), and the footnote carries the tightened, true-today
-    // explanation (V-09-T). This block replaces the old "byte-for-byte
-    // unchanged from origin/main" pin, which is no longer the rule.
-    const MATH_BODY = 'A learning listed at $1.00* earns you $0.70 (70%) when another agent pays the listed price to unlock it, or $0.07 to $0.0875 when another agent pays with a credit. You earn again* on the same learning when another agent unlocks it, and nothing you publish expires while it stays in the catalog.';
-    const MATH_FOOTNOTE = '*Example price. An agent signed in to an Auxilo account pays with credits. A credit from a pack costs $0.10 to $0.125, whatever the listed price, and you earn 70% of the credit or the listed price, whichever is lower (60% when Auxilo search surfaced it). A repeat unlock by the same buyer within 30 days earns nothing when the buyer pays with credits. Some unlocks are issued as $0.00 promotional grants and earn nothing. Earnings accrue now. Withdrawals open soon.';
+    // re-litigate. credits-as-cash (register C, rows C-07/C-08, revision 3)
+    // replaces this block again: credits are the same as cash now, so the
+    // body's second (credit-path) dollar figure is cut — one balance, one
+    // price, one highlighted figure — and the footnote drops the credit-pack
+    // cost/repeat-cap caveats a dollar balance no longer has (build ruling
+    // L3). This block replaces the prior V-08-T/V-09-T pin.
+    const MATH_BODY = 'A learning listed at $1.00* earns you $0.70 (70%) when another agent pays to unlock it. You earn again* on the same learning when another agent unlocks it, and nothing you publish expires while it stays in the catalog.';
+    const MATH_FOOTNOTE = '*Example price. You earn 60% when Auxilo search surfaced it. Some unlocks are issued as $0.00 promotional grants and earn nothing. Earnings accrue now. Withdrawals open soon.';
 
     it('the heading "The Math (per Unlock)" is unchanged (V-07: no change)', () => {
       assert.equal(countOccurrences(STATIC_HTML, '<h3>The Math (per Unlock)</h3>'), 1);
     });
 
-    it('the body paragraph equals the V-08-T text verbatim (normalized), and both figures carry the same earnings-highlight treatment', () => {
+    it('the body paragraph equals the C-07 text verbatim (normalized), exactly one dollar figure highlighted, on $0.70', () => {
       const block = mathBlock(STATIC_HTML);
       const bodyMatch = block.match(/<p>([\s\S]*?)<\/p>/);
       assert.ok(bodyMatch, 'body paragraph found');
-      assert.equal(normalize(bodyMatch[1]), MATH_BODY, 'body paragraph equals V-08-T verbatim');
-      const hasHighlight07 = /<span class="earnings-highlight">\$0\.70<\/span>/.test(bodyMatch[1]);
-      const hasHighlightCredit = /<span class="earnings-highlight">\$0\.07 to \$0\.0875<\/span>/.test(bodyMatch[1]);
-      assert.equal(hasHighlight07, hasHighlightCredit, '$0.70 and $0.07 to $0.0875 must carry the same earnings-highlight treatment (both or neither)');
-      assert.ok(hasHighlight07 && hasHighlightCredit, 'both figures are wrapped in earnings-highlight');
+      assert.equal(normalize(bodyMatch[1]), MATH_BODY, 'body paragraph equals C-07 verbatim');
+      assert.equal((bodyMatch[1].match(/<span class="earnings-highlight">/g) || []).length, 1, 'exactly one earnings-highlight span');
+      assert.match(bodyMatch[1], /<span class="earnings-highlight">\$0\.70<\/span>/, '$0.70 is the one highlighted figure');
+      assert.doesNotMatch(bodyMatch[1], /\$0\.07 to \$0\.0875/, 'the credit-path second dollar figure is cut (credits-as-cash)');
       assert.equal((bodyMatch[1].match(/<sup aria-describedby="math-footnote">\*<\/sup>/g) || []).length, 2, 'both sup asterisks are present');
     });
 
-    it('the footnote equals the tightened V-09-T text verbatim (normalized), sits directly beneath the body in the same parent, and links "Withdrawals open soon" to /status', () => {
+    it('the footnote equals the C-08 text verbatim (normalized), sits directly beneath the body in the same parent, and links "Withdrawals open soon" to /status', () => {
       const block = mathBlock(STATIC_HTML);
       const footnoteMatch = block.match(/<p id="math-footnote"[^>]*>([\s\S]*?)<\/p>/);
       assert.ok(footnoteMatch, 'footnote paragraph found');
-      assert.equal(normalize(footnoteMatch[1]), MATH_FOOTNOTE, 'footnote equals V-09-T (tightened) verbatim');
+      assert.equal(normalize(footnoteMatch[1]), MATH_FOOTNOTE, 'footnote equals C-08 verbatim');
       assert.match(footnoteMatch[1], /<a href="\/status">Withdrawals open soon<\/a>/, '"Withdrawals open soon" links to /status');
     });
 

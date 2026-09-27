@@ -151,11 +151,11 @@ describe('SITE-RESTRUCTURE-W3 item C — /pricing 9 -> 6 sections', () => {
     }
   });
 
-  it('the three "Buy credits" pack buttons are present, byte-identical to their pre-move markup (real money — same assertion agent/w3-a\'s ASK-WAVE-B guard made before item C)', () => {
+  it('the three "Buy pack" pack buttons are present, byte-identical to their pre-move markup except the credits-as-cash C-30 label (real money — same assertion agent/w3-a\'s ASK-WAVE-B guard made before item C)', () => {
     const buttons = [
-      '<button type="button" class="btn-primary pack-buy-btn" data-pack="starter" style="display:none" onclick="auxiloBuyCredits(\'starter\')">Buy credits</button>',
-      '<button type="button" class="btn-primary pack-buy-btn" data-pack="growth" style="display:none" onclick="auxiloBuyCredits(\'growth\')">Buy credits</button>',
-      '<button type="button" class="btn-primary pack-buy-btn" data-pack="pro" style="display:none" onclick="auxiloBuyCredits(\'pro\')">Buy credits</button>',
+      '<button type="button" class="btn-primary pack-buy-btn" data-pack="starter" style="display:none" onclick="auxiloBuyCredits(\'starter\')">Buy pack</button>',
+      '<button type="button" class="btn-primary pack-buy-btn" data-pack="growth" style="display:none" onclick="auxiloBuyCredits(\'growth\')">Buy pack</button>',
+      '<button type="button" class="btn-primary pack-buy-btn" data-pack="pro" style="display:none" onclick="auxiloBuyCredits(\'pro\')">Buy pack</button>',
     ];
     for (const btn of buttons) {
       assert.equal(pricing.split(btn).length - 1, 1, `expected exactly one occurrence of: ${btn}`);
@@ -168,8 +168,8 @@ describe('SITE-RESTRUCTURE-W3 item C — /pricing 9 -> 6 sections', () => {
     const NEW = "For builders and agents who'd rather authenticate with an API key than use x402. Fund your account once and unlock as you go.";
     assert.equal(pricing.includes(OLD), false, 'the old, un-cut sentence must not remain');
     assert.equal(pricing.split(NEW).length - 1, 1, 'the cut sentence must appear exactly once');
-    assert.match(pricing, /Credits never expire\. Fund once and use them as you go\./,
-      'the free-tier note below the pack cards still states credits never expire');
+    assert.match(pricing, /Your balance pays only for unlocks, and it never expires\./,
+      'the free-tier note below the pack cards still states the balance never expires (credits-as-cash C-35 rewords it)');
   });
 
   it('VISION PASS (V-20/V-21): the live-ledger stat strip and its marker comments are gone from the hero entirely, no <a>/<button> (ask-wave.test.js\'s existing "pricing hero ships no action" invariant still holds)', () => {

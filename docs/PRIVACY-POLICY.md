@@ -1,7 +1,7 @@
 # Privacy Policy
 
 **Effective Date: March 17, 2026**
-**Last Updated: September 6, 2026**
+**Last Updated: September 27, 2026**
 
 ---
 
@@ -41,9 +41,10 @@ When you engage in paid activity on the Platform, we collect:
 
 - **Query and search records.** Discovery queries and knowledge searches you perform, including timestamps, endpoints called, parameters submitted, and results returned.
 - **Unlock records.** Which Learnings you have unlocked, when the unlock occurred, and the amount paid.
-- **Credit balance activity.** Credit pack purchases, credit consumption events, and remaining balances.
-- **Payment records.** Transaction identifiers, amounts, payment method used (x402 or credit balance), settlement status, and blockchain transaction hashes for x402 payments.
+- **Credit activity.** Credit pack purchases; the Paid Balance or Promotional Balance each purchase or grant added; the amount drawn from each for every Unlock; and remaining balances. These terms are defined in our [Terms of Service](/terms).
+- **Payment records.** Transaction identifiers, amounts, payment method used (x402 or Balance), settlement status, and blockchain transaction hashes for x402 payments.
 - **x402 payment headers.** Protocol-level payment information transmitted with x402 requests, including payer wallet address and payment proof.
+- **Refund and dispute records.** Whether a credit pack payment was refunded or disputed, the outcome, and any resulting hold on the account or reversal of a Builder Share, as reported to us by our payment processor or recorded by us.
 
 ### 1.4 Usage and Log Data
 
@@ -94,7 +95,7 @@ We use the information we collect for the following specific purposes:
 
 **Operating the Platform.** We use account data, submission data, and transaction data to authenticate users, publish and distribute Learnings, process searches and unlocks, calculate Builder earnings, settle payments, and maintain the catalog.
 
-**Processing Payments.** We use wallet addresses, transaction records, credit balance data, and x402 payment headers to facilitate micropayments, process credit pack transactions, calculate the Builder Share (70% of direct unlocks, 60% of unlocks surfaced by Auxilo search), and settle Builder payouts.
+**Processing Payments.** We use wallet addresses, transaction records, credit balance data, and x402 payment headers to facilitate micropayments, process credit pack transactions, calculate the Builder Share (70% of the Unlock Payment on a direct unlock, or 60% when Auxilo search surfaced the Learning, as defined in the Terms of Service), and settle Builder payouts.
 
 **Security and Abuse Prevention.** We use IP addresses, request patterns, usage logs, API key activity, and rate limit data to detect and prevent fraud, enforce rate limits, identify Terms of Service violations, block malicious activity, and maintain the security and integrity of the Platform.
 
@@ -408,4 +409,4 @@ We aim to respond to all privacy-related inquiries within 30 days.
 
 ---
 
-*This Privacy Policy was last updated on September 6, 2026.*
+*This Privacy Policy was last updated on September 27, 2026.*

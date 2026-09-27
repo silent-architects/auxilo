@@ -239,8 +239,8 @@ describe('LAUNCH-WAVE-0926 register P: homepage FAQ rate-answer disclosure (P-01
       assert.ok(jsonText.includes('not guaranteed'), 'JSON-LD answer must state earnings are not guaranteed');
       assert.ok(/open soon/i.test(jsonText), 'JSON-LD answer must carry "open soon"');
       assert.ok(
-        jsonText.includes('of what the buyer paid') || jsonText.includes('of what they paid'),
-        'JSON-LD answer must state the earnings basis'
+        jsonText.includes('of what the buyer paid') || jsonText.includes('of what they paid') || jsonText.includes('of its listed price'),
+        'JSON-LD answer must state the earnings basis (credits-as-cash C-01 restates it as "of its listed price")'
       );
       assert.equal(
         jsonText.endsWith(NOT_GUARANTEED_THIRD),

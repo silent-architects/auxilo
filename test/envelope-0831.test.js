@@ -45,7 +45,7 @@ const PRIVATE_ID = 'lrn_envelope_0831_private';
 const FLOAT_ID_A = 'lrn_envelope_0831_float_a';
 const FLOAT_ID_B = 'lrn_envelope_0831_float_b';
 const FIXED_AT = '2026-08-31T12:00:00.000Z';
-const CURRENT_TOS_VERSION = '2026-07-04-payee-agency-a1';
+const CURRENT_TOS_VERSION = '2026-09-27-credit-balance-a2';
 
 const OWNER_ONLY_FIELDS = [
   'earnings',

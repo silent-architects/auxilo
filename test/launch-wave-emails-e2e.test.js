@@ -33,7 +33,7 @@ const {
 const ROOT = path.join(__dirname, '..');
 const SESSION_SECRET = 'launch-wave-emails-e2e-session-secret-32b';
 const FIXED_AT = '2026-08-01T00:00:00.000Z';
-const CURRENT_TOS_VERSION = '2026-07-04-payee-agency-a1';
+const CURRENT_TOS_VERSION = '2026-09-27-credit-balance-a2';
 const ROUTER_ADDRESS = '0x3333333333333333333333333333333333333333';
 
 function sha256(value) {

@@ -215,12 +215,12 @@ describe('VISION PASS (V-04/V-05): server.js is unchanged — the honest-zero fi
 });
 
 describe('VISION PASS (V-29/P-3): the surviving hero row — new caption text, no $0.05 cell, and the new setup line above the buttons', () => {
-  it('the 70% caption reads the V-29 text ("of what\'s paid (60% via search)"), the old "direct share (60% via discovery)" is gone, "under 1 minute" is untouched', () => {
+  it('the 70% caption reads the credits-as-cash text ("of the price (60% via search)"), the old "direct share (60% via discovery)" is gone, "under 1 minute" is untouched', () => {
     assert.doesNotMatch(STATIC_HTML, /direct share \(60% via discovery\)/, 'the old caption must be gone');
     assert.match(
       STATIC_HTML,
-      /<span class="stat-num pull-stat-caption">70%<\/span>\s*<span class="stat-label pull-stat-caption">of what's paid \(60% via search\)<\/span>/,
-      'V-29: the 70% cell\'s caption is the new text, verbatim'
+      /<span class="stat-num pull-stat-caption">70%<\/span>\s*<span class="stat-label pull-stat-caption">of the price \(60% via search\)<\/span>/,
+      'C-05: the 70% cell\'s caption is the new text, verbatim'
     );
     assert.match(
       STATIC_HTML,

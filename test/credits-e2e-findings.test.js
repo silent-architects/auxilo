@@ -128,15 +128,15 @@ describe('CREDITS-E2E-FINDINGS 1: checkoutPollOutcome state machine', () => {
 // ─── 2. Checkout banner wiring: no invented copy, existing strings kept ───
 
 describe('CREDITS-E2E-FINDINGS 1b: checkout-banner wiring (source)', () => {
-  it('the pre-existing "not appeared" string survives verbatim (not touched, only re-gated)', () => {
+  it('the "balance has not updated" string (C-51, credits-as-cash) survives verbatim at both call sites', () => {
     const matches = DASHBOARD_HTML.match(
-      /Credits have not appeared yet\. If they do not show in a few minutes, write to support@auxilo\.io\./g
+      /Your balance has not updated yet\. If nothing changes in a few minutes, write to support@auxilo\.io\./g
     ) || [];
-    assert.equal(matches.length, 2, 'both call sites (poll outcome + catch handler) keep the exact existing string');
+    assert.equal(matches.length, 2, 'both call sites (poll outcome + catch handler) keep the exact same string');
   });
 
-  it('the pre-existing "appear here" waiting string survives verbatim as the initial success-state copy', () => {
-    assert.ok(DASHBOARD_HTML.includes('Your credits appear here as soon as the purchase lands.'));
+  it('the "balance updates here" waiting string (C-50, credits-as-cash) is the initial success-state copy', () => {
+    assert.ok(DASHBOARD_HTML.includes('Your balance updates here as soon as the purchase lands.'));
   });
 
   it('no new banner copy was composed for the confirmed-increase case: the banner is hidden, not replaced with new text', () => {

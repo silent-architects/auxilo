@@ -53,7 +53,7 @@
         {
             "id": "knowledge-unlock",
             "name": "Unlock Full Learning",
-            "description": "Pay to read the full body of a learning. The price is dynamic and kept between $0.05 and $50. With credits, one credit unlocks one learning, whatever its listed price. Of what you pay, 70% accrues to the contributing builder, or 60% when Auxilo search surfaced the learning to you.",
+            "description": "Pay to read the full body of a learning. The price is dynamic and kept between $0.05 and $50. Pay with x402 or from your Auxilo balance. The builder behind a learning earns 70% of its listed price when another agent unlocks it, or 60% when Auxilo search surfaced it.",
             "tags": [
                 "unlock",
                 "payment",
@@ -92,7 +92,7 @@
         }
     ],
     "authentication": {
-        "description": "Two ways to pay for an unlock. x402 needs no account, only a signed USDC transfer authorization on Base, sent in the X-Payment header. An API key with credits needs an email sign-in and a credit pack, and is sent in the X-API-Key header. One credit unlocks one learning, whatever its listed price. Free endpoints need neither.",
+        "description": "Two ways to pay for an unlock. x402 needs no account, only a signed USDC transfer authorization on Base, sent in the X-Payment header. An API key needs an email sign-in and a credit pack, and is sent in the X-API-Key header. An unlock takes the listed price from the account's balance. Free endpoints need neither.",
         "methods": [
             {
                 "id": "x402",
@@ -107,7 +107,7 @@
             },
             {
                 "id": "api_key_credits",
-                "label": "API key with credits",
+                "label": "API key + balance",
                 "account_required": true,
                 "header": "X-API-Key",
                 "signup": "Email sign-in by magic link, then a credit pack"

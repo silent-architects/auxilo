@@ -175,20 +175,23 @@ describe('LAUNCH-WAVE-0926: /how-submissions-work M-51 sentence (test 2)', () =>
 describe('LAUNCH-WAVE-0926: /pricing credits + builder basis (test 3)', () => {
   const html = RAW['pricing.html'];
 
-  it('Credit Packs intro contains the ratified credits sentence', () => {
+  it('Credit Packs intro contains the credits-as-cash sentence (register C, row C-28)', () => {
     assert.match(
       html,
-      /Fund your account once and unlock as you go\. One credit unlocks one learning, whatever its listed price\./
+      /Fund your account once and unlock as you go\. An unlock takes the listed price from your balance\./
     );
   });
 
-  it('the builder section states the earnings basis ("of what they paid" / "what the buyer paid")', () => {
+  it('the builder section states the earnings basis ("of the listed price" / "of what they paid" / "what the buyer paid")', () => {
     const buildersSection = html.slice(
       html.indexOf('id="for-builders-pricing"'),
       html.indexOf('</section>', html.indexOf('id="for-builders-pricing"'))
     );
     const hasBasis =
-      buildersSection.includes('of what they paid') || buildersSection.includes('what the buyer paid');
+      buildersSection.includes('of what they paid') ||
+      buildersSection.includes('what the buyer paid') ||
+      buildersSection.includes('of the listed price') ||
+      buildersSection.includes('to the listed price');
     assert.ok(hasBasis, 'the /pricing builder section must state the earnings basis');
   });
 });
@@ -212,8 +215,8 @@ describe('LAUNCH-WAVE-0926: FAQ rate-answer disclosure pairing (test 4)', () => 
         assert.ok(jsonText.includes(DISCLAIMER), 'JSON-LD answer must carry the disclaimer verbatim');
         assert.ok(/open soon/i.test(jsonText), 'JSON-LD answer must carry "open soon"');
         assert.ok(
-          jsonText.includes('of what the buyer paid') || jsonText.includes('of what they paid'),
-          'JSON-LD answer must state the earnings basis'
+          jsonText.includes('of what the buyer paid') || jsonText.includes('of what they paid') || jsonText.includes('of its listed price') || jsonText.includes('of the listed price'),
+          'JSON-LD answer must state the earnings basis (credits-as-cash restates it as "of its/the listed price")'
         );
         assert.equal(
           jsonText.endsWith(DISCLAIMER),
@@ -309,8 +312,11 @@ describe('LAUNCH-WAVE-0926: colon rows applied, old form gone, new form present 
       file: 'pricing.html',
       old:
         'The account and credits path is the one we recommend for most setups: fund once with a card, no wallet, no gas, no balance to babysit.',
+      // credits-as-cash (register C, row C-27, revision 3) rewrites this
+      // callout again: this path now holds a balance, so "no balance to
+      // babysit" is false and is cut.
       now:
-        'The account and credits path is the one we recommend for most setups. You fund once with a card, with no wallet, no gas, and no balance to babysit.',
+        'The API key path is the one we recommend for most setups. You fund once with a card, with no wallet and no gas.',
     },
   ];
 

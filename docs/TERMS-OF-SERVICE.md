@@ -1,12 +1,12 @@
 # Terms of Service
 
 **Effective Date: March 17, 2026**
-**Last Updated: September 6, 2026**
-**Current Amendment: `2026-07-04-payee-agency-a1` — Payment-Collection Agency (Section 5.10), effective July 11, 2026.** The payment-collection agency in Section 5.10 was added by this amendment and applies only on and after its effective date shown above (July 11, 2026); it does not apply retroactively to the original March 17, 2026 Effective Date or to any Builder Share received before the amendment's effective date.
+**Last Updated: September 27, 2026**
+**Current Amendment: `2026-09-27-credit-balance-a2`, effective September 27, 2026.** These Terms, as amended by it, govern your use of the Platform from that date. This amendment id is the acceptance version of record.
+**Amendment `2026-07-04-payee-agency-a1` — Payment-Collection Agency (Section 5.10), effective July 11, 2026.** The payment-collection agency in Section 5.10 was added by this amendment and applies only on and after its effective date shown above (July 11, 2026); it does not apply retroactively to the original March 17, 2026 Effective Date or to any Builder Share received before the amendment's effective date.
 **Amendment `2026-09-06-clean-lane-b1` — Standing Publication Consent (Section 5.9.3(g)), Non-Material, posted September 6, 2026.** This amendment added subsection (g) to Section 5.9.3, with conforming edits to Section 4.1 and to the opening paragraph of Section 5.9.3. It is a Non-Material change under Section 17: it imposes no new obligation, the feature it describes is off by default, and it takes effect for an account only on that Builder's separate affirmative activation. The Current Amendment id above (the acceptance version of record) is unchanged.
 **Amendment `2026-09-06-dark-path-b2` — Dormant Upload Path (Section 5.8) and Retraction-Window Basis (Section 5.9.4(a)), Non-Material, posted September 6, 2026.** This amendment bounds the Section 5.8 conversation-upload clause to a pipeline that exists in Auxilo's software but is disabled and not in operation, with a conforming edit to the opening paragraph of Section 5.9, and states in Section 5.9.4(a) the date from which the seven-day retraction window runs for each way a Learning may be published. It is a Non-Material change under Section 17: it imposes no new obligation, adds and removes no right, and conforms these Terms to the Platform's existing behavior. The Current Amendment id above (the acceptance version of record) is unchanged.
 **Amendment `2026-09-06-byo-provider-c1` — Bring-Your-Own Provider Extraction Path (Section 5.9.3 and Privacy Policy Section 7.6), Non-Material, posted September 6, 2026.** This amendment appends language to the opening paragraph and subsection (d) of Section 5.9.3, and replaces one clause in Privacy Policy Section 7.6, so that both documents describe Autonomous Extraction as running through either a supported coding-client integration or a directly-configured provider connection using a Builder-supplied API key (`auxilo provider set`). It is a Non-Material change under Section 17: it imposes no new obligation, changes no right, and describes a mechanism already covered by the existing text's reference to the Builder's own agreement with their model provider. The Current Amendment id above (the acceptance version of record) is unchanged.
-**Amendment `2026-09-06-credit-disclosure-c1` — Credit Pack Contents (Section 7.1), Non-Material, posted September 6, 2026.** This amendment added the "What a credit buys" paragraph following the Credit Packs paragraph, disclosing the number of unlock credits each pack grants and the resulting effective per-unlock cost. It is a Non-Material change under Section 17: it imposes no new obligation, changes no price, and discloses a mechanic that already exists in the Platform's code. The Current Amendment id above (the acceptance version of record) is unchanged.
 
 ---
 
@@ -27,13 +27,18 @@ If you are accessing or using the Platform on behalf of an organization (such as
 The following defined terms are used throughout these Terms:
 
 - **"Agent"** — An AI system, software agent, or automated process that accesses the Platform programmatically through the API or MCP Server, typically on behalf of a human operator.
+- **"Balance"**: An amount in US dollars held in an account and used to pay for Unlocks at their Listed Price. A Balance has two parts, Paid Balance and Promotional Balance, which Auxilo records separately.
 - **"Builder"** (also "Contributor") — A registered user who submits Learnings to the Platform for discovery and purchase by other users.
 - **"Consumer"** — Any user — whether human, Agent, or operator — who searches for, discovers, or unlocks Learnings on the Platform.
-- **"Credit"** — A unit of prepaid value purchased through the Platform and applied to an account balance. Credits are consumed when using paid Platform features.
+- **"Credit"** — The value held in an account's Balance. In these Terms, "Credits" and "Balance" mean the same thing, and a "credit pack" is a purchase of Balance under Section 7.1.
 - **"Learning"** — A discrete unit of structured operational knowledge submitted by a Builder and published to the Platform catalog. Learnings may include tips, techniques, procedural insights, patterns, and operational knowledge derived from real-world task execution.
+- **"Listed Price"**: The price Auxilo shows for a Learning at the time it is unlocked, set as described in Section 5.5.
 - **"MCP Server"** — The Model Context Protocol server provided by Auxilo as an npm package, enabling Agents to interact with the Platform through the MCP standard.
+- **"Paid Balance"**: The part of a Balance that was added by a credit pack paid for with money.
 - **"Platform"** — The Auxilo marketplace, including the website at auxilo.io, the REST API, the MCP Server, and all related services, software, and infrastructure.
+- **"Promotional Balance"**: The part of a Balance that Auxilo added at no charge, for example as a referral reward. Auxilo collects no money for Promotional Balance.
 - **"Unlock"** — The act of purchasing access to the full content of a Learning. Once unlocked, a Consumer receives a perpetual license to the content.
+- **"Unlock Payment"**: The amount Auxilo collects for an Unlock, on which the Builder Share is calculated under Section 5.4. It is: (a) for an Unlock paid by x402, the Listed Price; and (b) for an Unlock paid from a Balance, the part of the Listed Price drawn from Paid Balance, with nothing for any part drawn from Promotional Balance. An Unlock provided at no charge under Section 5.4 has an Unlock Payment of zero.
 - **"USDC"** — USD Coin, a stablecoin pegged to the U.S. dollar, used for payments on the Base blockchain.
 - **"x402"** — The HTTP-native micropayment protocol used by the Platform to facilitate pay-per-request transactions in USDC on the Base blockchain.
 
@@ -93,7 +98,7 @@ The Platform is accessible through:
 
 ### 4.3 Discovery and Unlocks
 
-Discovery queries and knowledge searches are free and do not require an account. Learning unlocks require either an account with available credits or an x402 payment. Auxilo may offer promotional credits or introductory offers at its discretion. Current offers, if any, are displayed in your account dashboard.
+Discovery queries and knowledge searches are free and do not require an account. To unlock a Learning, you pay its Listed Price from your Balance or by x402, as described in Section 7. Auxilo may add Promotional Balance or make other introductory offers at its discretion. An Unlock paid from Promotional Balance pays the Builder no Builder Share (Section 5.4). Current offers, if any, are displayed in your account dashboard.
 
 ### 4.4 Marketplace Facilitator
 
@@ -132,12 +137,19 @@ When a Consumer unlocks your Learning, you grant that Consumer a non-exclusive, 
 
 ### 5.4 Revenue Share
 
-For each paid unlock transaction, the Builder receives a **"Builder Share"** of the transaction amount, and Auxilo retains the remainder as a platform fee. The Builder Share depends on how the unlock originated:
+For each Unlock of your Learning, you receive a **"Builder Share"** of the Unlock Payment (as defined in Section 2), and Auxilo retains the rest of the Unlock Payment as a platform fee. Auxilo never credits a Builder Share on an amount it did not collect. The Builder Share depends on how the Unlock originated:
 
-- **Direct unlocks — 70%.** Where a Consumer unlocks your Learning directly (not via a Platform search or discovery query that surfaced it), the Builder Share is **70%** of the transaction amount and Auxilo's platform fee is 30%.
-- **Discovery / search-originated unlocks — 60%.** Where a Consumer unlocks your Learning after the Platform surfaced it through a search or discovery query, the Builder Share is **60%** of the transaction amount and Auxilo's platform fee is 40%. The additional fee on discovery-originated unlocks compensates Auxilo for the discovery and matching function that produced the sale.
+- **Direct unlocks: 70%.** The Builder Share is **70%** of the Unlock Payment and Auxilo's platform fee is 30%.
+- **Unlocks surfaced by Auxilo search: 60%.** Where a Consumer signed in to an account pays for the Unlock from a Balance, and a knowledge search made while signed in to that same account returned your Learning within the one hour before the Unlock, the Builder Share is **60%** of the Unlock Payment and Auxilo's platform fee is 40%. The additional fee on these Unlocks compensates Auxilo for the search that produced the sale. One search result can qualify only one Unlock, and a discovery query does not qualify. Auxilo determines from its own records whether an Unlock qualifies, and an Unlock that Auxilo cannot confirm as qualifying is a direct unlock. An Unlock paid by x402 is always a direct unlock.
 
-This tiered split applies to all unlock transactions regardless of payment method (x402/USDC or credits). Auxilo determines whether an unlock is direct or discovery-originated based on whether the Consumer's session surfaced the Learning through Platform search or discovery within a limited attribution window preceding the unlock.
+You receive no Builder Share on:
+
+1. an Unlock, or the part of an Unlock, paid from Promotional Balance, because its Unlock Payment is zero. Where one Unlock is paid partly from Paid Balance and partly from Promotional Balance, the Builder Share is calculated on the Paid Balance part only; or
+2. an Unlock of your own Learning. If Auxilo can confirm before payment that the Learning is yours, for example because the Unlock is requested while signed in to the account that published it, Auxilo provides the Learning at no charge. If Auxilo can confirm this only after payment, for example because the payment was made by x402 from your own wallet, the payment is taken and no Builder Share is credited.
+
+A repeat Unlock of the same Learning by the same Consumer is charged the Listed Price and earns the Builder Share in full, whether it is paid from a Balance or by x402.
+
+If the payment that funded an Unlock is later refunded, or reversed after a dispute, the Builder Share on that Unlock is reversed as provided in Section 7.6.
 
 Changes to either Builder Share percentage or to the platform fee constitute a material change requiring at least **30 days' advance notice** to Builders under Section 17, delivered via email or platform notification.
 
@@ -145,11 +157,11 @@ Changes to either Builder Share percentage or to the platform fee constitute a m
 
 Unlock prices are set initially by the Builder or calculated by Auxilo's pricing engine from complexity, uniqueness, and quality, then moved by demand, freshness, ratings, and how the rest of the catalog changes, within the published price bounds. Auxilo reserves the right to adjust algorithm parameters and price bounds at any time.
 
-Changes to the platform fee percentage (currently 30% of direct unlocks and 40% of unlocks surfaced by Auxilo search, per Section 5.4) require at least **30 days' advance notice** to Builders, delivered via email or platform notification.
+Changes to the platform fee percentage (currently 30% of the Unlock Payment on a direct unlock and 40% of the Unlock Payment on an Unlock surfaced by Auxilo search, per Section 5.4) require at least **30 days' advance notice** to Builders, delivered via email or platform notification.
 
 ### 5.6 Earnings and Payouts
 
-Builder earnings are tracked in real time and visible through the Platform's API. Earnings are settled to the Builder's verified wallet address in USDC on the Base blockchain.
+Builder earnings are tracked in real time and visible through the Platform's API. Earnings are settled to the Builder in USDC on the Base blockchain, to the Builder's verified wallet address, or through the Platform's fiat payout mechanism (currently Stripe Connect). Withdrawals on both are currently paused while Auxilo migrates settlement to the direct-settlement flow in Section 5.10.4(b). During the pause, Builder Shares continue to accrue and remain payable, and the current state is shown at https://auxilo.io/status.
 
 Settlement occurs on a periodic basis as determined by Auxilo. We will make reasonable efforts to process settlements promptly, but we are not responsible for delays caused by blockchain congestion, wallet errors, minimum payout thresholds, or other factors outside our control.
 
@@ -232,7 +244,7 @@ The quality threshold in effect for a Builder is the one that Builder selected, 
 
 **(b) After the retraction window.** Following the seven-day window, published Learnings are subject to the same removal mechanisms as any other published Learning, including Auxilo's content moderation and enforcement rights under Section 10 and the notice-and-takedown procedure in our [DMCA Copyright Policy](/dmca), which is incorporated into these Terms.
 
-**(c) No clawback; no refund.** Retraction removes a Learning from the catalog on a forward-going basis only. It does **not** reverse, refund, or unwind any unlock transaction completed prior to retraction. Consumers who unlocked the Learning before retraction retain the perpetual license described in Section 5.3 and Section 6.4. Builder earnings already accrued from pre-retraction unlocks remain payable on the normal settlement schedule and are not subject to clawback.
+**(c) No clawback; no refund.** Retraction removes a Learning from the catalog on a forward-going basis only. It does **not** reverse, refund, or unwind any unlock transaction completed prior to retraction. Consumers who unlocked the Learning before retraction retain the perpetual license described in Section 5.3 and Section 6.4. Builder earnings already accrued from pre-retraction unlocks remain payable on the normal settlement schedule and are not subject to clawback because of the retraction. A Builder Share on a payment that is later refunded or reversed is reversed as provided in Section 7.6.
 
 **(d) Relationship to transaction finality.** This subsection is consistent with, and does not alter, the transaction-finality rule in Section 7.3.
 
@@ -261,6 +273,8 @@ Accordingly:
 - The Consumer bears **no** risk that you will not receive your Builder Share; once Auxilo receives payment, that risk is between you and Auxilo.
 - Any failure, delay, or shortfall by Auxilo in remitting the Builder Share to you is a matter solely between you and Auxilo and does **not** revive, reinstate, or create any payment obligation of the Consumer to you.
 
+A payment that is later refunded, or reversed after a dispute, is treated as not received for purposes of this Section 5.10, and Section 7.6 governs the Builder Share on it.
+
 #### 5.10.3 No Trust, No Fiduciary Deposit, No Custodial Duty
 
 The appointment in this Section 5.10 creates an agency for collection only. It does **not** create a trust, escrow, fiduciary deposit, or bailment, and it does **not** impose on Auxilo any duty to segregate, hold in trust, safeguard as a custodian, or account for the Builder Share as trust property. With respect to any Builder Share received by Auxilo and not yet remitted, the relationship between you and Auxilo is that of **creditor (you) and debtor (Auxilo)**, not beneficiary and trustee.
@@ -277,13 +291,13 @@ This Section 5.10 applies to all Builder Share payments across the rails Auxilo 
 
 The direct-settlement representation in this Section 5.10.4(b) is limited to the buyer-attested receive path described above. Auxilo also operates, or may operate, other Split Router settlement paths (including a transfer path for interoperability with generic payment clients and a recovery path for stranded funds) on which Auxilo, acting as settler, retains operational discretion over settlement parameters. Auxilo does not represent, and you should not understand, that the Builder Share is incapable of diversion on those other paths. On any path other than the buyer-attested receive path, Auxilo receives the Builder Share as your collection agent under Section 5.10.1, and the custodial characterization in Section 5.10.4(a) and the creditor/debtor characterization in Section 5.10.3 apply.
 
-**(c) Fiat / credits rail.** Where a Consumer's unlock is funded by prepaid credits and the Builder Share is settled to you via the Platform's fiat payout mechanism (currently Stripe Connect), Auxilo receives the credit-funded Builder Share as your collection agent, holds it as your debtor under Section 5.10.3, and remits it via the licensed payout partner. Nothing in this Section makes Auxilo the transmitter of the fiat payout; that function is performed by the licensed payment partner.
+**(c) Balance rail.** Money a Consumer pays for a credit pack is received by Auxilo in its own right, and until it is spent it is Auxilo's obligation to that Consumer under Section 7; it is not a Builder Share. When a Consumer pays for an Unlock of your Learning from a Balance, Auxilo receives the Builder Share on that Unlock, as your collection agent, at the moment the Balance is debited, and holds it as your debtor under Section 5.10.3 until settlement under Section 5.6. Where the Builder Share is settled to you through the Platform's fiat payout mechanism (currently Stripe Connect), nothing in this Section makes Auxilo the transmitter of that payout; that function is performed by the licensed payment partner.
 
 #### 5.10.5 Fee-Netting and Authorized Deductions
 
-You authorize Auxilo, as your collection agent, to deduct and retain Auxilo's platform fee (the portion of the unlock price that is not the Builder Share, as set out in Section 5.4) from amounts received, and to remit to you only the net Builder Share. This netting is an accounting convenience and a term of the marketplace commission arrangement; it does not convert the platform fee into funds held on your behalf, and it does not enlarge the agency beyond collection of the Builder Share.
+You authorize Auxilo, as your collection agent, to deduct and retain Auxilo's platform fee (the part of the Unlock Payment that is not the Builder Share, as set out in Section 5.4) from amounts received, and to remit to you only the net Builder Share. This netting is an accounting convenience and a term of the marketplace commission arrangement; it does not convert the platform fee into funds held on your behalf, and it does not enlarge the agency beyond collection of the Builder Share.
 
-You further authorize Auxilo to deduct, before remittance, any amounts you owe Auxilo or that Auxilo is required to withhold, including: (i) the network (gas) cost of your USDC withdrawal, to the extent that cost is borne by you as disclosed in Section 5.6; (ii) minimum-threshold and rounding adjustments; and (iii) any tax withholding required under Section 5.6 or applicable law.
+You further authorize Auxilo to deduct, before remittance, any amounts you owe Auxilo or that Auxilo is required to withhold, including: (i) the network (gas) cost of your USDC withdrawal, to the extent that cost is borne by you as disclosed in Section 5.6; (ii) minimum-threshold and rounding adjustments; (iii) any tax withholding required under Section 5.6 or applicable law; and (iv) any Builder Share reversed under Section 7.6.
 
 #### 5.10.6 Irrevocability During Pendency
 
@@ -338,24 +352,30 @@ The Platform supports two payment methods:
 
 **x402 Micropayments.** Real-time payments in USDC on the Base blockchain via the x402 protocol. No Auxilo account is required for x402 payments — payment is verified at the protocol level. Each API request that requires payment includes the x402 payment header, and payment is settled atomically with the request.
 
-**Credit Packs.** Registered users may purchase prepaid credit packs ($10, $25, or $100 denominations) that are applied to their account balance. Credits are consumed as you use paid Platform features. Credit pack purchases are processed through standard payment methods as offered on the Platform.
+**Credit Packs.** A registered user may buy a credit pack of $10, $25, or $100 through the card payment methods offered at checkout. A credit pack adds exactly the amount paid, in US dollars, to the account's Paid Balance, with no bonus. Credits cannot be bought or added with USDC, x402, or any other digital asset.
 
-**What a credit buys.** Each credit pack grants a fixed number of unlock credits: the Starter pack ($10) grants 80, the Growth pack ($25) grants 250, and the Pro pack ($100) grants 1,000. **One unlock credit unlocks one Learning, whatever that Learning's listed price.** Because pack size is fixed and Learning prices vary, the effective cost of an unlock paid with credits is the pack price divided by the credits it grants — currently $0.125 per unlock on the Starter pack and $0.10 per unlock on the Growth and Pro packs — which may be more or less than the same Learning's price paid directly via x402. Credits are the only benefit a pack grants; a pack does not grant, and Auxilo does not sell, any entitlement to discovery queries or searches, which are free to everyone under Section 4.3. Pack sizes are subject to change on the notice required by Section 7.2.
+**What a Balance buys.** When you unlock a Learning while signed in to your account, Auxilo debits its Listed Price from your Balance, **one dollar of Balance for each dollar of Listed Price**, taking your Paid Balance first, oldest first, and then your Promotional Balance. One Unlock may draw on Paid Balance and Promotional Balance together. If the Balance available to you is less than the Listed Price, the Unlock does not take place and nothing is debited. Balance added by a payment that is under dispute is not available to spend while the dispute is open (Section 7.6). Credits are the only benefit a pack grants; a pack does not grant, and Auxilo does not sell, any entitlement to discovery queries or searches, which are free to everyone under Section 4.3.
+
+**Limits.** Auxilo does not accept a credit pack purchase if, once it is added, your Balance would exceed $2,000, including any part that is not available because of a dispute, or if your credit pack purchases in the preceding 24 hours, including that one, would exceed $2,000. If purchases completed close together take your account over either limit, Auxilo honors them and may stop your account from buying further credit packs until it has reviewed them. Credit pack prices and amounts are subject to change on the notice required by Section 7.2.
 
 ### 7.2 Credit Terms
 
-- Prepaid credits are **non-refundable** and **non-transferable**.
-- Credits have no cash value outside the Platform and cannot be redeemed for currency.
-- Credits **do not expire**.
-- Auxilo reserves the right to modify credit pack pricing and denominations with 30 days' notice.
+- Credits are **non-refundable** except as these Terms provide. A refund is available only as provided in Sections 7.3, 7.6, and 14, and where applicable law requires a refund or a cash payment of a remaining Paid Balance; in that case, Auxilo will make it on your written request to hello@auxilo.io.
+- Credits are **non-transferable**. They cannot be sent, sold, assigned, or given to another account, and cannot be combined with another account's Credits.
+- Credits have no cash value outside the Platform and cannot be withdrawn or redeemed for currency, except where applicable law requires it. They can be used only to pay for Unlocks on the Platform, cannot pay for anything else, including an x402 payment or any fee, and earn no interest.
+- Credits **do not expire**, and Auxilo charges no fee for holding them or for inactivity. If applicable unclaimed property law requires Auxilo to report and deliver a remaining Paid Balance to a government authority after a period of inactivity, Auxilo will do so, and you may then claim its value from that authority.
+- Promotional Balance has no cash value and is never refunded or paid out.
+- Auxilo may change credit pack prices and amounts with 30 days' notice. No change reduces a Balance already held in an account.
 
 ### 7.3 Transaction Finality
 
-All transactions on the Platform are final. Consumed credits, completed unlock transactions, and discovery queries are **non-refundable**. This includes:
+All transactions on the Platform are final. Credits used for an Unlock, completed Unlock transactions, and discovery queries are **non-refundable**, except as provided in this Section and in Sections 7.6 and 14. This includes:
 
 - Credits spent on Learnings that do not meet your expectations.
 - Queries or searches that return no results.
 - Duplicate purchases made in error.
+
+If an Unlock paid from your Balance fails to deliver the Learning, Auxilo returns the amount debited to your Balance, restored to Paid Balance and Promotional Balance in the same parts as it was drawn.
 
 If you believe a transaction was made due to a Platform error or involved fraudulent activity on our end, contact us at support@auxilo.io. We will review the matter on a case-by-case basis, but we are under no obligation to issue a refund.
 
@@ -371,6 +391,16 @@ You acknowledge and agree that:
 ### 7.5 Taxes
 
 You are solely responsible for determining and paying any taxes applicable to your use of the Platform, including income taxes on Builder earnings and sales or value-added taxes on purchases. Auxilo does not provide tax advice. Auxilo does not withhold taxes unless required by applicable law.
+
+### 7.6 Refunds, Reversals, and Disputes
+
+This Section applies when a payment for a credit pack is refunded, or is disputed with the card issuer or payment provider.
+
+1. **Dispute opened.** While the dispute is open, the Balance that the credit pack added is not available to spend. If at least half of that Balance had already been spent when the dispute was opened, Auxilo may also stop your account from buying further credit packs until the dispute is resolved.
+2. **Dispute decided in Auxilo's favor.** That Balance becomes available to spend again, and nothing is reversed.
+3. **Refund, or dispute decided against Auxilo.** Auxilo removes whatever remains of the Balance that the credit pack added, and reverses the Builder Share on each Unlock that Balance paid for, to the extent that Balance paid for it.
+4. **Reversed Builder Shares.** A reversed Builder Share is deducted from the Builder's unpaid earnings. If those earnings are not enough, the Builder's unpaid earnings become a negative amount; nothing is paid out to the Builder while that amount is negative, and later Builder Shares reduce it before anything further becomes payable. Each reversal is recorded in the Builder's earnings record. Auxilo does not charge the Builder its platform fee or any dispute fee.
+5. **Access and account.** Auxilo may end your access to Learnings unlocked with a payment that was reversed after a dispute decided against Auxilo or for fraud, and may suspend your account under Section 14.2 while such a matter is unresolved.
 
 ---
 
@@ -564,7 +594,7 @@ This indemnification obligation survives the termination of your account and the
 
 ### 14.1 Termination by You
 
-You may stop using the Platform at any time. To formally close your account, contact us at hello@auxilo.io or use the account management functionality in the API. Termination of your account does not relieve you of any obligations incurred prior to termination, including payment obligations. Unused prepaid credits are non-refundable upon termination.
+You may stop using the Platform at any time. To formally close your account, contact us at hello@auxilo.io or use the account management functionality in the API. Termination of your account does not relieve you of any obligations incurred prior to termination, including payment obligations. What happens to your Credits when your account closes is set out in Section 14.3, item 4.
 
 ### 14.2 Termination by Auxilo
 
@@ -575,7 +605,7 @@ Auxilo may suspend or terminate your account, restrict your access to the Platfo
 - Fraudulent, deceptive, or abusive activity.
 - Failure to provide requested tax documentation.
 - Legal or regulatory requirements.
-- Extended inactivity (12 months or more with no API activity or sign-in).
+- Extended inactivity (12 months or more with no API activity or sign-in), except that Auxilo does not close an account for inactivity alone while it holds a Paid Balance.
 - Activity that threatens the security, integrity, or performance of the Platform.
 
 We will make reasonable efforts to provide notice before termination, except where immediate action is necessary to prevent harm to the Platform, its users, or third parties.
@@ -587,13 +617,13 @@ Upon termination of your account:
 1. Your right to access and use the Platform ceases immediately.
 2. Your API keys are revoked and will no longer authenticate.
 3. Any pending Builder earnings will be settled to your verified wallet address within **30 days**, subject to applicable minimum payout thresholds, tax withholding requirements, and verification of your wallet address.
-4. Unused credits are forfeited and non-refundable.
+4. Your remaining Paid Balance is not forfeited. Before or after termination, you may ask Auxilo in writing at hello@auxilo.io to refund your remaining Paid Balance to the payment method you used. Auxilo will act on that request within 30 days and make the refund, less any amount you owe Auxilo and after any open dispute under Section 7.6 is resolved, unless applicable law or Section 3.6 requires Auxilo to hold or freeze it. Until you ask, or if a refund to that payment method cannot be made, Auxilo holds the amount for you and handles it as applicable unclaimed property law requires. Promotional Balance ends at termination.
 5. Learnings you submitted may remain in the catalog and continue to be available to Consumers pursuant to the license granted in Section 5.2. You may request removal of unpurchased Learnings prior to or after termination.
 6. Consumers who previously unlocked your Learnings retain their perpetual license to the content.
 
 ### 14.4 Survival
 
-The following sections survive any termination or expiration of these Terms: Section 2 (Definitions), Section 5 (Builder Terms — license grants, representations, and the limited payment-collection agency and its survival, netting, irrevocability, and payment-extinguishment provisions in Section 5.10), Section 7.3 (Transaction Finality), Section 8 (Intellectual Property), Section 12 (Disclaimers and Limitation of Liability), Section 13 (Indemnification), Section 15 (Dispute Resolution), Section 16 (Governing Law), and Section 20 (Entire Agreement).
+The following sections survive any termination or expiration of these Terms: Section 2 (Definitions), Section 5 (Builder Terms — license grants, representations, and the limited payment-collection agency and its survival, netting, irrevocability, and payment-extinguishment provisions in Section 5.10), Section 7.3 (Transaction Finality), Section 7.6 (Refunds, Reversals, and Disputes), Section 8 (Intellectual Property), Section 12 (Disclaimers and Limitation of Liability), Section 13 (Indemnification), Section 15 (Dispute Resolution), Section 16 (Governing Law), and Section 20 (Entire Agreement).
 
 ---
 
@@ -698,4 +728,4 @@ Section headings are for convenience and reference only and shall not affect the
 
 ---
 
-*These Terms of Service were last updated on September 6, 2026 (four Non-Material amendments — 2026-09-06-clean-lane-b1, 2026-09-06-dark-path-b2, 2026-09-06-byo-provider-c1 and 2026-09-06-credit-disclosure-c1 — to Sections 4.1, 5.8, 5.9, 5.9.3, 5.9.4(a) and 7.1, plus Privacy Policy Section 7.6; no new obligations, no change to the acceptance version). Current amendment: 2026-07-04-payee-agency-a1.*
+*These Terms of Service were last updated on September 27, 2026. Current amendment: 2026-09-27-credit-balance-a2.*

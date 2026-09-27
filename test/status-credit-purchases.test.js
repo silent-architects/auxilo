@@ -42,7 +42,8 @@ const REPO = path.join(__dirname, '..');
 const STATUS_HTML = fs.readFileSync(path.join(REPO, 'public', 'status.html'), 'utf8');
 
 const LABEL = 'Credit Purchases';
-const DESC = 'Prepaid credit packs bought through Stripe checkout. One credit unlocks one learning.';
+// credits-as-cash (register C, row C-53, revision 3): the new fact, plainly.
+const DESC = "Credit packs bought through Stripe add their price to the buyer's balance.";
 
 // ─── Helpers (mirrors test/credits-e2e-findings.test.js) ──────────────────
 

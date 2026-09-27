@@ -232,10 +232,10 @@ describe('BOT-03/04/04b: agent.json money-language guard (positive controls incl
     }
   });
 
-  it('knowledge-unlock uses "accrues to", not "goes to"', () => {
+  it('knowledge-unlock uses "earns" (tied to the unlock event), not "goes to" (credits-as-cash C-78 unifies the rate sentence on "earns")', () => {
     const skill = agent.skills.find((s) => s.id === 'knowledge-unlock');
     assert.ok(!/\bgoes to\b/.test(skill.description), 'must not use "goes to"');
-    assert.ok(/accrues/.test(skill.description), 'must use an accrual verb');
+    assert.ok(/\bearns\b/.test(skill.description), 'must use an accrual-safe verb, never a settled-payment claim');
   });
 
   it('knowledge-contribute does not carry an unconditioned "earn 70%" rate', () => {
@@ -271,23 +271,23 @@ describe('BOT-06/07: llms.txt accrual guard (positive controls included)', () =>
     }
   });
 
-  it('llms.txt contains the BOT-06 sentence exactly once', () => {
-    const sentence = "The builder behind the contributing agent earns 70% of what the buyer paid on a direct unlock and 60% when Auxilo search surfaced it.";
+  it('llms.txt contains the credits-as-cash C-65 sentence exactly once', () => {
+    const sentence = "The builder behind a learning earns 70% of its listed price when another agent unlocks it, or 60% when Auxilo search surfaced it.";
     const count = llmsTxt.split(sentence).length - 1;
-    assert.equal(count, 1, 'BOT-06 sentence must appear exactly once');
+    assert.equal(count, 1, 'C-65 sentence must appear exactly once');
   });
 
-  it('llms.txt Builder split line uses the conditioned accrual form (BOT-07)', () => {
+  it('llms.txt Builder split line uses the conditioned accrual form (credits-as-cash C-68)', () => {
     assert.ok(
-      llmsTxt.includes('Builder split: when another agent unlocks a learning, the builder accrues 70% of what that buyer paid, or 60% when Auxilo search surfaced it.'),
-      'BOT-07 line must be present verbatim'
+      llmsTxt.includes('Builder split: the builder behind a learning earns 70% of its listed price when another agent unlocks it, or 60% when Auxilo search surfaced it.'),
+      'C-68 line must be present verbatim'
     );
   });
 });
 
 describe('Register P (P-06): llms.txt Pricing section carries the disclaimer exactly once, directly after the Builder split line', () => {
   const DISCLAIMER = 'Earnings depend on whether other agents unlock your learnings and are not guaranteed.';
-  const BUILDER_SPLIT = '- Builder split: when another agent unlocks a learning, the builder accrues 70% of what that buyer paid, or 60% when Auxilo search surfaced it.';
+  const BUILDER_SPLIT = '- Builder split: the builder behind a learning earns 70% of its listed price when another agent unlocks it, or 60% when Auxilo search surfaced it.';
   const ACCRUE_LINE = '- Earnings accrue to your Auxilo account now and remain payable to you under the Terms.';
 
   it('contains the disclaimer exactly once', () => {
@@ -333,10 +333,10 @@ describe('BOT-08/09/10/15/16: llms.txt content guards', () => {
     assert.equal(between, '', 'BOT-15 must sit directly after BOT-10 with no other bullet between them');
   });
 
-  it('contains the BOT-16 credit-pack clarification', () => {
+  it('contains the credits-as-cash C-67 credit-pack clarification', () => {
     assert.ok(
-      llmsTxt.includes('- Credit packs: $10 (Starter), $25 (Growth), $100 (Pro). Credits never expire. One credit unlocks one learning, whatever its listed price.'),
-      'BOT-16 line must be present verbatim'
+      llmsTxt.includes('- Credit packs add $10 (Starter), $25 (Growth) or $100 (Pro) to a balance that pays listed prices and never expires.'),
+      'C-67 line must be present verbatim'
     );
   });
 

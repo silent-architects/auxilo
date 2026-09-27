@@ -241,18 +241,18 @@ describe('ASK wave B — /pricing guard (out of scope, real money)', () => {
   // and stripAuthorizedFaqRegions stay defined above for any future wave
   // that wants to resurrect a scoped diff guard.
 
-  it('its three "Buy credits" pack buttons are present and untouched (positive control)', () => {
+  it('its three "Buy pack" pack buttons are present and untouched (positive control)', () => {
     const pricingSrc = readPublic('pricing.html');
     assert.equal(countOccurrences(pricingSrc, 'class="btn-primary pack-buy-btn"'), 3);
-    assert.equal(countOccurrences(pricingSrc, '>Buy credits<'), 3);
+    assert.equal(countOccurrences(pricingSrc, '>Buy pack<'), 3);
   });
 
   it('normalizer catches a real content change (one mutated copy byte does not disappear into the ?v= normalization)', () => {
     const localBytes = fs.readFileSync(path.join(REPO, 'public', 'pricing.html'));
     const normalizedOriginal = normalizeCacheBust(localBytes);
-    const marker = 'Buy credits';
+    const marker = 'Buy pack';
     const markerIdx = normalizedOriginal.indexOf(marker);
-    assert.notEqual(markerIdx, -1, 'expected to find "Buy credits" copy in pricing.html to mutate');
+    assert.notEqual(markerIdx, -1, 'expected to find "Buy pack" copy in pricing.html to mutate');
     const mutated = Buffer.from(normalizedOriginal); // independent copy
     const flipIdx = markerIdx + marker.indexOf('c'); // mutate one byte of real copy: 'c' -> 'C'
     mutated[flipIdx] = 'C'.charCodeAt(0);

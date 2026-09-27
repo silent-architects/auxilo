@@ -365,7 +365,15 @@ cd "${REPO_ROOT}"
 # test/credits-one-balance.test.js (18 tests) proves the one-balance final
 # state fresh. Verified against the actual discovered count: 3720 -> 3677,
 # 0 fail, 6 skipped (pre-existing, unrelated).
-EXPECTED_TEST_COUNT=3677
+# credits-as-cash pages build (2026-09-27, BUILD-BRIEF-CREDITS-PAGES.md): +188,
+# all from one new file, test/credits-as-cash-copy-guard.test.js (Part D's
+# register-C copy guard, the /for-builders math-block guard, the rate/
+# not-guaranteed/open-soon guard across the eleven files, and the Terms
+# defined-terms + CURRENT_TOS_VERSION guard). Every other touched test file
+# only updates existing pins to the new copy/logic (no it() added or removed).
+# Verified against the actual discovered count: 3677 -> 3865, 0 fail, 7 skipped
+# (pre-existing, environment-dependent sandbox skips — unrelated to this unit).
+EXPECTED_TEST_COUNT=3865
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

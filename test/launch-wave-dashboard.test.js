@@ -176,8 +176,10 @@ describe('LW3: card order after the terms gate', () => {
       '<h2 class="dash-card-title">Payouts</h2>',
       '<h2 class="dash-card-title">Auto-publish clean learnings</h2>',
       '<h2 class="dash-card-title">API Keys</h2>',
-      '<h2 class="dash-card-title">Credits</h2>',
-      '<h2 class="dash-card-title">Credit Purchase History</h2>',
+      // credits-as-cash C-38/C-46: "Credits" -> "Balance", "Credit Purchase
+      // History" -> "Purchase History" (one balance, in dollars).
+      '<h2 class="dash-card-title">Balance</h2>',
+      '<h2 class="dash-card-title">Purchase History</h2>',
     ];
     const positions = indexOfAll(DASHBOARD_HTML, markers);
     for (let i = 1; i < positions.length; i += 1) {
@@ -504,8 +506,8 @@ describe('FIX-UNIT A5b: dashboard card titles are headings', () => {
       'h2: Payouts',
       'h2: Auto-publish clean learnings',
       'h2: API Keys',
-      'h2: Credits',
-      'h2: Credit Purchase History',
+      'h2: Balance',
+      'h2: Purchase History',
     ]);
   });
 });
@@ -583,16 +585,36 @@ describe('LW3: GOV-2 A6, Credits card untouched', () => {
     const oldBlock = sliceBetween(originMain, marker, '<!-- Purchase history -->');
     const newBlock = sliceBetween(DASHBOARD_HTML, marker, '<!-- Purchase history -->');
 
-    // FIX-UNIT A5b (2026-09-26): the ONE authorized change to this card is
-    // its title becoming a heading, like every other card title ("its
-    // title becomes a heading element under fix A5b like every other card
-    // title" -- FIX-UNIT.md). Revert that one named edit before comparing,
-    // so this test still proves nothing else in the Credits card moved.
-    const TITLE_OLD = '<div class="dash-card-title">Credits</div>';
-    const TITLE_NEW = '<h2 class="dash-card-title">Credits</h2>';
-    assert.ok(newBlock.includes(TITLE_NEW), 'expected the Credits card title converted to <h2 class="dash-card-title"> (FIX-UNIT A5b)');
-    const revertedNewBlock = newBlock.replace(TITLE_NEW, TITLE_OLD);
-    assert.strictEqual(revertedNewBlock, oldBlock, "the Credits card (comment through its closing </div>) must not change one byte beyond the A5b heading conversion");
+    // FIX-UNIT A5b (2026-09-26) + credits-as-cash register C (2026-09-27):
+    // two waves of named, authorized edits to this card's static markup.
+    // A5b converted the title <div> to an <h2>. credits-as-cash rewrote the
+    // card's dollar-balance language (register rows C-38, C-41, C-42, C-43,
+    // C-45 -- C-33/C-44's clickwrap line is unchanged by design, per the
+    // build brief's correction table). Revert every named edit before
+    // comparing, so this test still proves nothing ELSE in the card moved.
+    const NAMED_EDITS = [
+      // A5b (title becomes a heading element) composed with C-38 (the card
+      // names what the account holds, dollars not credits): one revert step
+      // from the current markup straight back to the origin/main div.
+      ['<h2 class="dash-card-title">Balance</h2>', '<div class="dash-card-title">Credits</div>'],
+      // C-41: same fact, the one word.
+      ['<div id="credit-balance-sub">Your balance never expires.</div>', '<div id="credit-balance-sub">Credits do not expire.</div>'],
+      // C-42: "it" is the balance named in the line above.
+      ['Your agent spends it through an API key you generate.', 'Your agent spends credits through an API key you generate.'],
+      // C-43: the replacement sentence, as on /pricing (C-28).
+      ['An unlock takes the listed price from your balance.', 'One credit unlocks one learning, whatever its listed price.'],
+      // C-45: the posted Terms section 7.2/7.3 text, verbatim (revision 3).
+      [
+        'Credits are non-refundable except as these Terms provide. Credits are non-transferable. Credits have no cash value outside the Platform and cannot be withdrawn or redeemed for currency, except where applicable law requires it. Credits do not expire. All transactions on the Platform are final.',
+        'Prepaid credits are non-refundable and non-transferable. Credits have no cash value outside the Platform and cannot be redeemed for currency. All transactions on the Platform are final.',
+      ],
+    ];
+    let revertedNewBlock = newBlock;
+    for (const [now, was] of NAMED_EDITS) {
+      assert.ok(revertedNewBlock.includes(now), `expected the named edit to be present: ${JSON.stringify(now)}`);
+      revertedNewBlock = revertedNewBlock.replace(now, was);
+    }
+    assert.strictEqual(revertedNewBlock, oldBlock, "the Credits card (comment through its closing </div>) must not change one byte beyond the A5b heading conversion and the credits-as-cash register C edits");
   });
 });
 
