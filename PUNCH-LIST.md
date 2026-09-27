@@ -1023,20 +1023,23 @@ Tyler, 2026-09-26: SITE-PM manages the site launch build in parallel with TECH-P
 | SLW-19 | Unlock notification before scale: stateless signed opt-out link, async queue writes. | P3 | TECH-PM | OPEN |
 | SLW-20 | Dashboard review table is clipped at phone width (predates the wave; the wave made the region keyboard reachable). | P3 | SITE-PM | OPEN |
 | SLW-21 | Parked copy for Tyler: footer tagline, two legal card titles on the dashboard, one /pricing heading, /works-with meta description, /about biography facts. | P3 | Tyler | OPEN |
+| SLW-22 | Ledger numbers on /for-builders and /pricing: keep them, zeros included, or show none on those two pages as on the homepage, with the full ledger staying on the trust page. A cold builder read named the zero counters as the one reason not to sign up. Removing only the zero cells is ruled out as dressing. | P1 decision | Tyler | OPEN |
+| SLW-23 | The catalog preview block shows human visitors the untrusted-content advisory written for agents. Keep it for agents and decide how a human should see it. | P3 | TECH-PM + GOV-3 | OPEN |
+| SLW-24 | Unlock notification: bounce and complaint handling, and a suppression list, before the first real send. | P2 | TECH-PM | OPEN, before the email flag is set |
 
-**Gates and reviews run (SITE-PM, 2026-09-26).** Copy: brand steward four rounds, positioning strategist two, disclosure arbiter three, legal memo on the emails, financial brief on the share basis. Build: adversarial code and security review (0 blockers, every high and medium fixed on the branch), accessibility audit (7 findings, all fixed), agent behavioural test before and after. Full battery on the branch is green and predeploy passes.
+**Gates and reviews run (SITE-PM, 2026-09-26 and 09-27).** Copy: brand steward four rounds, positioning strategist two, disclosure arbiter four, legal memo on the emails, financial brief on the share basis. Build: adversarial code and security review (0 blockers, every high and medium fixed on the branch), accessibility audit (7 findings, all fixed), agent behavioural test before and after, final visual review at three widths (7 findings, 6 fixed, 1 accepted), cold builder read of the finished site. Full battery on the branch is green at 3551 tests and predeploy passes.
 
 ## Counts
 
 | Priority | Open | On Hold | Deferred | Done/Verified | Total |
 |----------|------|---------|----------|---------------|-------|
 | P0 (blocks launch) | **2** | 0 | 0 | **34** | 36 |
-| P1 (blocks real money / production) | **24** | 6 | 2 | 81 | 113 |
-| P2 (blocks scale) | **34** | 1 | 0 | 30 | 65 |
-| P3 (polish) | **9** | 0 | 0 | 5 | 14 |
-| **Total** | **69** | **7** | **2** | **150** | **228** |
+| P1 (blocks real money / production) | **25** | 6 | 2 | 81 | 114 |
+| P2 (blocks scale) | **35** | 1 | 0 | 30 | 66 |
+| P3 (polish) | **10** | 0 | 0 | 5 | 15 |
+| **Total** | **72** | **7** | **2** | **150** | **231** |
 
-> **Section 37 added (SITE-PM, 2026-09-26).** The table now includes the 21 rows SLW-1 to SLW-21 (1 P0 decision, 8 P1, 7 P2, 5 P3), all counted open. SLW-1 to SLW-3 are built on a branch and stay open until deployed.
+> **Section 37 added (SITE-PM, 2026-09-26, extended 09-27).** The table now includes the 24 rows SLW-1 to SLW-24 (1 P0 decision, 9 P1, 8 P2, 6 P3), all counted open. SLW-1 to SLW-3 are built on a branch and stay open until deployed.
 
 > **Counts caveat (PM, 2026-08-28).** The table above now includes the nine §34 rows and the fifteen §35 rows (AD-1..AD-15: 3 P1, 11 P2, 1 P3). It still does NOT include `R13-CLOSE` and `GTM-HF` (§29) — their statuses have not been re-derived, so the totals remain understated by at least those two rows and want a full recount by whoever owns them.
 
