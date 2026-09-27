@@ -279,6 +279,8 @@ describe('LAUNCH-WAVE-EMAILS-E2E: both flags ON', { timeout: 180_000 }, () => {
   const CONTRIB_HELD_WALLET = '0x' + '7b'.repeat(20);
   const CONTRIB_DIGEST = 'acc_lwe_contrib_digest';
   const CONTRIB_DIGEST_WALLET = '0x' + '7c'.repeat(20);
+  const CONTRIB_OPTOUT = 'acc_lwe_contrib_optout';
+  const CONTRIB_OPTOUT_WALLET = '0x' + '7d'.repeat(20);
 
   const BUYER_NORMAL = 'acc_lwe_buyer_normal';
   const BUYER_SELF = 'acc_lwe_buyer_self';
@@ -290,6 +292,7 @@ describe('LAUNCH-WAVE-EMAILS-E2E: both flags ON', { timeout: 180_000 }, () => {
   const BUYER_SETTINGS = 'acc_lwe_buyer_settings';
   const BUYER_TOKENS = 'acc_lwe_buyer_tokens';
   const BUYER_DELETE_TARGET = 'acc_lwe_buyer_delete_target';
+  const BUYER_OPTOUT = 'acc_lwe_buyer_optout';
 
   const RAW = (n) => `axl_${n.repeat(40)}`;
   const RAW_BUYER_NORMAL = RAW('1');
@@ -302,6 +305,7 @@ describe('LAUNCH-WAVE-EMAILS-E2E: both flags ON', { timeout: 180_000 }, () => {
   const RAW_BUYER_SETTINGS = RAW('8');
   const RAW_BUYER_TOKENS = RAW('9');
   const RAW_BUYER_DELETE_TARGET = RAW('e');
+  const RAW_BUYER_OPTOUT = RAW('f');
 
   const LEARNING_NORMAL = 'lrn_lwe_normal';
   const LEARNING_SELF = 'lrn_lwe_self';
@@ -310,6 +314,7 @@ describe('LAUNCH-WAVE-EMAILS-E2E: both flags ON', { timeout: 180_000 }, () => {
   const LEARNING_HELD = 'lrn_lwe_held';
   const LEARNING_DIGEST_A = 'lrn_lwe_digest_a';
   const LEARNING_DIGEST_B = 'lrn_lwe_digest_b';
+  const LEARNING_OPTOUT = 'lrn_lwe_optout';
 
   function buyerAccount(id, email, rawKey, label) {
     return { id, email, created_at: FIXED_AT, api_keys: [apiKeyEntry(rawKey, `key_${id}`, label, 'read')] };
@@ -341,6 +346,14 @@ describe('LAUNCH-WAVE-EMAILS-E2E: both flags ON', { timeout: 180_000 }, () => {
           created_at: FIXED_AT, tos_version: CURRENT_TOS_VERSION,
           accepted_at: Date.parse(FIXED_AT), accepted_affirmed: true, api_keys: [],
         },
+        // L7: preference is off — the queue write itself must never happen,
+        // so no title/amount is ever stored for this contributor.
+        [CONTRIB_OPTOUT]: {
+          id: CONTRIB_OPTOUT, email: 'lwe-contrib-optout@test.local', wallet: CONTRIB_OPTOUT_WALLET,
+          created_at: FIXED_AT, tos_version: CURRENT_TOS_VERSION,
+          accepted_at: Date.parse(FIXED_AT), accepted_affirmed: true, api_keys: [],
+          earning_notifications_enabled: false,
+        },
         [BUYER_NORMAL]: buyerAccount(BUYER_NORMAL, 'lwe-buyer-normal@test.local', RAW_BUYER_NORMAL, 'buyer-normal'),
         [BUYER_SELF]: buyerAccount(BUYER_SELF, 'lwe-buyer-self@test.local', RAW_BUYER_SELF, 'buyer-self'),
         [BUYER_CAP]: buyerAccount(BUYER_CAP, 'lwe-buyer-cap@test.local', RAW_BUYER_CAP, 'buyer-cap'),
@@ -351,6 +364,7 @@ describe('LAUNCH-WAVE-EMAILS-E2E: both flags ON', { timeout: 180_000 }, () => {
         [BUYER_SETTINGS]: buyerAccount(BUYER_SETTINGS, 'lwe-buyer-settings@test.local', RAW_BUYER_SETTINGS, 'buyer-settings'),
         [BUYER_TOKENS]: buyerAccount(BUYER_TOKENS, 'lwe-buyer-tokens@test.local', RAW_BUYER_TOKENS, 'buyer-tokens'),
         [BUYER_DELETE_TARGET]: buyerAccount(BUYER_DELETE_TARGET, 'lwe-buyer-delete-target@test.local', RAW_BUYER_DELETE_TARGET, 'buyer-delete-target'),
+        [BUYER_OPTOUT]: buyerAccount(BUYER_OPTOUT, 'lwe-buyer-optout@test.local', RAW_BUYER_OPTOUT, 'buyer-optout'),
       },
       learnings: [
         fixtureLearning(LEARNING_NORMAL, { contributorAccountId: CONTRIB_NORMAL, contributorWallet: CONTRIB_NORMAL_WALLET }),
@@ -360,6 +374,7 @@ describe('LAUNCH-WAVE-EMAILS-E2E: both flags ON', { timeout: 180_000 }, () => {
         fixtureLearning(LEARNING_HELD, { contributorAccountId: CONTRIB_HELD, contributorWallet: CONTRIB_HELD_WALLET }),
         fixtureLearning(LEARNING_DIGEST_A, { contributorAccountId: CONTRIB_DIGEST, contributorWallet: CONTRIB_DIGEST_WALLET }),
         fixtureLearning(LEARNING_DIGEST_B, { contributorAccountId: CONTRIB_DIGEST, contributorWallet: CONTRIB_DIGEST_WALLET }),
+        fixtureLearning(LEARNING_OPTOUT, { contributorAccountId: CONTRIB_OPTOUT, contributorWallet: CONTRIB_OPTOUT_WALLET }),
       ],
       credits: {
         [BUYER_NORMAL]: creditRecord(1),
@@ -369,6 +384,7 @@ describe('LAUNCH-WAVE-EMAILS-E2E: both flags ON', { timeout: 180_000 }, () => {
         [BUYER_HELD]: creditRecord(1),
         [BUYER_DIGEST_A]: creditRecord(1),
         [BUYER_DIGEST_B]: creditRecord(1),
+        [BUYER_OPTOUT]: creditRecord(1),
       },
       verifiedWallets: { [CONTRIB_HELD_WALLET.toLowerCase()]: true },
     });
@@ -442,6 +458,18 @@ describe('LAUNCH-WAVE-EMAILS-E2E: both flags ON', { timeout: 180_000 }, () => {
     assert.ok(!/earning-digest/.test(newOutput), 'a held (pre-Terms) accrual must never queue or flush a digest (GOV-4 Q10)');
     const queue = notifQueue();
     assert.ok(!queue[CONTRIB_HELD], 'no queue row was ever created for the held contributor');
+  });
+
+  it('L7: a real, non-self, non-capped unlock for a contributor with earning_notifications_enabled: false queues nothing (no title/amount ever stored)', async () => {
+    if (ctx.skipReason) return;
+    const before = ctx.getOutput().length;
+    const unlock = await getJson(`${ctx.baseUrl}/knowledge/${LEARNING_OPTOUT}`, { 'X-API-Key': RAW_BUYER_OPTOUT });
+    assert.equal(unlock.status, 200, JSON.stringify(unlock.body));
+    assert.equal(unlock.body._revenue.contributor_earned_usd, 0.7, 'the accrual itself still happens — only the notification is skipped');
+    const newOutput = ctx.getOutput().slice(before);
+    assert.ok(!/earning-digest/.test(newOutput), 'an opted-out contributor must never queue or flush a digest');
+    const queue = notifQueue();
+    assert.ok(!queue[CONTRIB_OPTOUT], 'no queue row (and therefore no stored title/amount) was ever created for the opted-out contributor');
   });
 
   it('two real unlocks of two different learnings by the same held-back contributor batch into ONE queued entry with both titles, when a send is not yet due', async () => {
@@ -523,6 +551,8 @@ describe('LAUNCH-WAVE-EMAILS-E2E: both flags ON', { timeout: 180_000 }, () => {
     const res = await getJson(`${ctx.baseUrl}/account/email-prefs/unsubscribe?token=garbage`);
     assert.equal(res.status, 400);
     assert.deepEqual(readJson(path.join(ctx.dataDir, 'accounts.json')), before);
+    // A5a: the 'expired' state wraps its content in <main>.
+    assert.match(res.text, /<main class="unsub-wrap">/);
   });
 
   it('a valid earning-emails-off token flips the flag exactly once via the POST form, appends an email_link opt-out record, and is single-use (a second POST with the same token fails)', async () => {
@@ -538,10 +568,14 @@ describe('LAUNCH-WAVE-EMAILS-E2E: both flags ON', { timeout: 180_000 }, () => {
     assert.match(getPage.text, /Stop Unlock Emails/);
     assert.match(getPage.text, /Turn Off Unlock Emails/);
     assert.match(getPage.text, new RegExp(`value="${rawToken}"`), 'token is placed in the hidden form field');
+    // A5a: the 'form' state wraps its content in <main>.
+    assert.match(getPage.text, /<main class="unsub-wrap">/);
 
     const post1 = await postForm(`${ctx.baseUrl}/account/email-prefs/unsubscribe`, { token: rawToken });
     assert.equal(post1.status, 200);
     assert.match(post1.text, /Unlock emails are off/);
+    // A5a: the 'done' state wraps its content in <main>.
+    assert.match(post1.text, /<main class="unsub-wrap">/);
 
     const accountsAfter = readJson(path.join(ctx.dataDir, 'accounts.json'));
     assert.equal(accountsAfter[BUYER_NORMAL].earning_notifications_enabled, false);
@@ -666,5 +700,70 @@ describe('LAUNCH-WAVE-EMAILS-E2E: both flags ON', { timeout: 180_000 }, () => {
     const after = readJson(notifFile);
     assert.equal(Object.prototype.hasOwnProperty.call(after, BUYER_DELETE_TARGET), false,
       "the deleted account's queued learning titles/amounts must not survive the account");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// L6: EARNING_NOTIFICATIONS_ENABLED on, but RESEND_API_KEY unset, in a
+// production environment — a misconfiguration, not a dev environment. Its
+// own boot (NODE_ENV: 'production') so it never shares state with the
+// dev-mode-logging cases above.
+// ─────────────────────────────────────────────────────────────────────────
+describe('LAUNCH-WAVE-EMAILS-E2E: L6 misconfigured production (flag on, no RESEND_API_KEY)', { timeout: 180_000 }, () => {
+  const CONTRIB_ID = 'acc_lwe_l6_contrib';
+  const CONTRIB_WALLET = '0x' + '9a'.repeat(20);
+  const BUYER_ID = 'acc_lwe_l6_buyer';
+  const RAW_BUYER_KEY = `axl_${'9'.repeat(40)}`;
+  const LEARNING_ID = 'lrn_lwe_l6_1';
+
+  let ctx;
+
+  before(async () => {
+    ctx = await boot({
+      envExtra: { EARNING_NOTIFICATIONS_ENABLED: 'true', NODE_ENV: 'production' },
+      accounts: {
+        [CONTRIB_ID]: {
+          id: CONTRIB_ID, email: 'lwe-l6-contrib@test.local', wallet: CONTRIB_WALLET,
+          created_at: FIXED_AT, tos_version: CURRENT_TOS_VERSION,
+          accepted_at: Date.parse(FIXED_AT), accepted_affirmed: true, api_keys: [],
+        },
+        [BUYER_ID]: {
+          id: BUYER_ID, email: 'lwe-l6-buyer@test.local', created_at: FIXED_AT,
+          api_keys: [apiKeyEntry(RAW_BUYER_KEY, 'key_lwe_l6_buyer', 'buyer', 'read')],
+        },
+      },
+      learnings: [fixtureLearning(LEARNING_ID, { contributorAccountId: CONTRIB_ID, contributorWallet: CONTRIB_WALLET })],
+      credits: { [BUYER_ID]: creditRecord(1) },
+    });
+    if (!ctx.skipReason) {
+      // A due item already sitting in the queue before the unlock below —
+      // proves the branch never drains what it cannot send, on top of the
+      // item the unlock itself queues.
+      const notifFile = path.join(ctx.dataDir, 'earning-notifications.json');
+      writeJson(notifFile, {
+        [CONTRIB_ID]: { pending: [{ learningId: 'lrn_preseeded', title: 'Pre-seeded', amountUsd: 0.7, ts: Date.now() }], lastSentAt: null, attempts: 0 },
+      });
+    }
+  });
+
+  after(async () => { if (ctx && ctx.child) { await stopServer(ctx.child); fs.rmSync(ctx.tmpDir, { recursive: true, force: true }); } });
+
+  it('L6: logs one line with no address/URL/token and leaves every queued item intact (does not drain)', async () => {
+    if (ctx.skipReason) return;
+    const before = ctx.getOutput().length;
+    const unlock = await getJson(`${ctx.baseUrl}/knowledge/${LEARNING_ID}`, { 'X-API-Key': RAW_BUYER_KEY });
+    assert.equal(unlock.status, 200, JSON.stringify(unlock.body));
+    assert.equal(unlock.body._revenue.contributor_earned_usd, 0.7);
+
+    const newOutput = ctx.getOutput().slice(before);
+    assert.match(newOutput, /\[earning-digest\] email delivery not configured in production; leaving queue intact/);
+    assert.ok(!/dev mode:/.test(newOutput), 'the dev-mode log line must never fire in production');
+    assert.ok(!/email-prefs\/unsubscribe\?token=/.test(newOutput), 'no opt-out URL is ever logged');
+    assert.ok(!/lwe-l6-contrib@test\.local/.test(newOutput), 'no address is ever logged');
+
+    const queue = readJson(path.join(ctx.dataDir, 'earning-notifications.json'));
+    assert.ok(queue[CONTRIB_ID], 'the queue row still exists — nothing was drained');
+    assert.equal(queue[CONTRIB_ID].pending.length, 2, 'the pre-seeded item AND the new unlock item are both still queued');
+    assert.equal(queue[CONTRIB_ID].lastSentAt, null, 'lastSentAt is never stamped when nothing was actually sent');
   });
 });

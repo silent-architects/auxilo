@@ -4106,7 +4106,9 @@ function renderUnlockEmailPrefsPage(state, token) {
     </form>`;
   }
 
-  return `<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Stop Unlock Emails | Auxilo</title><link rel="stylesheet" href="/styles.css?v=80b44c53"/>${styleBlock}</head><body><div class="unsub-wrap">${logoRow}${body}</div></body></html>`;
+  // A5a: `<main>` landmark — every other page on the site wraps its content
+  // in one; this route was the only one missing it.
+  return `<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Stop Unlock Emails | Auxilo</title><link rel="stylesheet" href="/styles.css?v=80b44c53"/>${styleBlock}</head><body><main class="unsub-wrap">${logoRow}${body}</main></body></html>`;
 }
 
 app.get('/account/email-prefs/unsubscribe', (c) => {
@@ -9736,16 +9738,22 @@ app.get('/knowledge/:id', async (c) => {
   if (process.env.EARNING_NOTIFICATIONS_ENABLED === 'true' && contribAccountId
     && agencyInForce && contributorEarned > 0 && fundingSource !== 'router' && !routerSettlement) {
     try {
-      earningNotifications.queueAccrual(contribAccountId, {
-        learningId: id,
-        title: learning.title,
-        amountUsd: contributorEarned,
-      });
-      // Opportunistic immediate check for this one account — an active
-      // builder gets their digest promptly instead of always waiting for
-      // the hourly sweep. The guaranteed path is the hourly sweep below.
-      flushDueEarningDigestFor(contribAccountId).catch((e) =>
-        console.error('[earning-digest] immediate flush failed (will retry hourly):', e && e.message));
+      // L7: never queue (and therefore never store a learning title/amount)
+      // for a contributor whose preference is off — checked here, before the
+      // queue write, rather than storing it and dropping it silently later.
+      const notifyingAccount = loadAccounts()[contribAccountId];
+      if (!notifyingAccount || notifyingAccount.earning_notifications_enabled !== false) {
+        earningNotifications.queueAccrual(contribAccountId, {
+          learningId: id,
+          title: learning.title,
+          amountUsd: contributorEarned,
+        });
+        // Opportunistic immediate check for this one account — an active
+        // builder gets their digest promptly instead of always waiting for
+        // the hourly sweep. The guaranteed path is the hourly sweep below.
+        flushDueEarningDigestFor(contribAccountId).catch((e) =>
+          console.error('[earning-digest] immediate flush failed (will retry hourly):', e && e.message));
+      }
     } catch (e) {
       console.error('[earning-digest] queue failed (non-fatal):', e && e.message);
     }
@@ -10441,14 +10449,23 @@ const EARNING_EMAILS_OFF_TOKEN_TTL_MS = 60 * 24 * 60 * 60 * 1000; // 60 days
 // single chokepoint that serializes a flush per account within this
 // process; a second concurrent call for an account already in flight is a
 // silent no-op (see lib/earning-notifications.js).
-async function sendEarningDigestForAccount(accountId, items) {
+async function sendEarningDigestForAccount(accountId) {
   await earningNotifications.withAccountLock(accountId, async () => {
     try {
+      // Review findings H3/M1: the due check and the item list are both
+      // re-read fresh HERE, inside the per-account lock, never trusted from
+      // a snapshot taken before the lock was acquired — that staleness is
+      // exactly how H3's duplicate send and M1's lost item happened. Not
+      // due any more (already sent by another flush moments ago, or
+      // nothing pending) is a silent no-op.
+      const due = earningNotifications.takeDueItems(accountId);
+      if (!due) return;
+      const items = due.items;
       const account = loadAccounts()[accountId];
-      if (!account) { earningNotifications.markSent(accountId); return; } // deleted since queued
+      if (!account) { earningNotifications.markSent(accountId, Date.now(), items.length); return; } // deleted since queued
       if (account.earning_notifications_enabled === false) {
         // Preference is off: drain without sending, never accumulate forever.
-        earningNotifications.markSent(accountId);
+        earningNotifications.markSent(accountId, Date.now(), items.length);
         return;
       }
       // The unsubscribe token is minted regardless of dev/prod (same posture as
@@ -10456,13 +10473,26 @@ async function sendEarningDigestForAccount(accountId, items) {
       // emailed in dev mode, only logged, mirroring the existing magic-link dev
       // fallback (lib/accounts.js), which also logs its full token URL in dev
       // mode. redactEmail still keeps the account's address out of the log.
-      const totalAccrued = (earnings[accountId] && earnings[accountId].pending_balance) || 0;
+      // L1: resolve the running total the same way the unlock path and the
+      // dashboard do, so a legacy wallet-keyed earnings entry can never make
+      // this figure disagree with the ledger.
+      const { entry: totalAccruedEntry } = resolveEarningsEntry(earnings, { account_id: accountId, wallet: account.wallet });
+      const totalAccrued = (totalAccruedEntry && totalAccruedEntry.pending_balance) || 0;
       const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
       const prefsToken = issuePurposeMagicLink(account.email, 'earning-emails-off', EARNING_EMAILS_OFF_TOKEN_TTL_MS);
       const prefsUrl = `${baseUrl}/account/email-prefs/unsubscribe?token=${encodeURIComponent(prefsToken)}`;
       if (!emailDeliveryEnabled()) {
+        if (process.env.NODE_ENV === 'production') {
+          // L6: the flag on with no RESEND_API_KEY in production is a
+          // misconfiguration, not a dev environment — never log the opt-out
+          // URL or any token, and never drain: nothing was sent, so the
+          // items stay queued for the next sweep once email delivery is
+          // actually configured.
+          console.error('[earning-digest] email delivery not configured in production; leaving queue intact');
+          return;
+        }
         console.log(`[earning-digest] dev mode: ${items.length} item(s) for ${redactEmail(account.email)}: ${prefsUrl}`);
-        earningNotifications.markSent(accountId);
+        earningNotifications.markSent(accountId, Date.now(), items.length);
         return;
       }
       // PM review (post-ship defect #2): sendEmail (and therefore
@@ -10489,14 +10519,16 @@ async function sendEarningDigestForAccount(accountId, items) {
 }
 
 async function flushDueEarningDigestFor(accountId) {
-  const due = earningNotifications.dueForDigest().find((d) => d.accountId === accountId);
-  if (!due) return;
-  await sendEarningDigestForAccount(due.accountId, due.items);
+  // Review findings H3/M1: callers pass only the account id — due-ness and
+  // the item list are both re-derived fresh, inside the lock, by
+  // sendEarningDigestForAccount itself (takeDueItems), never from a snapshot
+  // taken out here.
+  await sendEarningDigestForAccount(accountId);
 }
 
 async function flushDueEarningDigests() {
-  for (const { accountId, items } of earningNotifications.dueForDigest()) {
-    await sendEarningDigestForAccount(accountId, items);
+  for (const { accountId } of earningNotifications.dueForDigest()) {
+    await sendEarningDigestForAccount(accountId);
   }
 }
 

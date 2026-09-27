@@ -149,6 +149,15 @@ describe('renderEmail', () => {
         assert.ok(!/<svg[\s>]/i.test(html));
         assert.ok(!/fonts\.googleapis\.com|@font-face/i.test(html));
     });
+
+    it('review finding A4: is a full HTML document — doctype, html lang="en", a head with a charset, and a body', () => {
+        const html = email.renderEmail({ heading: 'H', bodyHtml: '<p>b</p>' });
+        assert.match(html, /^<!doctype html>/i);
+        assert.match(html, /<html lang="en">/);
+        assert.match(html, /<head>[^]*<meta charset="utf-8">[^]*<\/head>/i);
+        assert.match(html, /<body[^>]*>[^]*<\/body>/i);
+        assert.match(html, /<\/html>\s*$/i);
+    });
 });
 
 describe('sign-in (magic-link) email', () => {
@@ -156,7 +165,8 @@ describe('sign-in (magic-link) email', () => {
         const { result, captured } = await captureSend(() => email.sendMagicLink('user@example.com', SAMPLE_URL));
         assert.equal(result.ok, true);
 
-        // plain-text body unchanged
+        // plain-text body: unchanged except L12's added footer line
+        // (REGISTER-B2-REV2.md E-01/E-02).
         assert.equal(
             captured.text,
             [
@@ -167,6 +177,8 @@ describe('sign-in (magic-link) email', () => {
                 SAMPLE_URL,
                 '',
                 "If you didn't request this, you can safely ignore this email.",
+                '',
+                'Sent by Auxilo, auxilo.io. For help, write to support@auxilo.io.',
             ].join('\n')
         );
 
@@ -183,6 +195,9 @@ describe('sign-in (magic-link) email', () => {
         assert.ok(html.includes('Sign in to Auxilo'));
         assert.ok(html.includes('Click the button below to sign in. This link expires in <strong>15 minutes</strong> and can only be used once.'));
         assert.ok(html.includes("If you didn't request this, you can safely ignore this email."));
+        // L12 (REGISTER-B2-REV2.md E-01/E-02): the shared footer line, once.
+        const footerMatches = html.match(/Sent by Auxilo, auxilo\.io\. For help, write to support@auxilo\.io\./g) || [];
+        assert.equal(footerMatches.length, 1, 'the footer sentence appears exactly once');
     });
 });
 
@@ -191,6 +206,8 @@ describe('deletion confirmation email', () => {
         const { result, captured } = await captureSend(() => email.sendDeletionConfirmation('user@example.com', SAMPLE_URL));
         assert.equal(result.ok, true);
 
+        // L12: the plain-text part's "Open the link below" stays unchanged.
+        // The shared footer line (E-01/E-04) is added.
         assert.equal(
             captured.text,
             [
@@ -201,6 +218,8 @@ describe('deletion confirmation email', () => {
                 SAMPLE_URL,
                 '',
                 "If you didn't request this, you can safely ignore this email.",
+                '',
+                'Sent by Auxilo, auxilo.io. For help, write to support@auxilo.io.',
             ].join('\n')
         );
 
@@ -208,8 +227,13 @@ describe('deletion confirmation email', () => {
         assert.match(html, /#B91C1C/);
         assert.ok(!html.includes('#C9A84C'));
         assert.ok(html.includes('Confirm account deletion'));
-        assert.ok(html.includes('Open the button below to confirm deletion of your account data from live Auxilo systems. This link expires in <strong>15 minutes</strong> and can only be used once.'));
+        // L12: "Open the button below" -> "Click the button below" in the HTML part only.
+        assert.ok(html.includes('Click the button below to confirm deletion of your account data from live Auxilo systems. This link expires in <strong>15 minutes</strong> and can only be used once.'));
+        assert.ok(!html.includes('Open the button below'), 'the superseded HTML wording must not survive');
         assert.ok(html.includes("If you didn't request this, you can safely ignore this email."));
+        // L12 (REGISTER-B2-REV2.md E-01/E-04): the shared footer line, once.
+        const footerMatches = html.match(/Sent by Auxilo, auxilo\.io\. For help, write to support@auxilo\.io\./g) || [];
+        assert.equal(footerMatches.length, 1, 'the footer sentence appears exactly once');
     });
 });
 

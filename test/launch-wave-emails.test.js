@@ -630,16 +630,23 @@ describe('LAUNCH-WAVE-EMAILS: attemptSend retry/drain decisions (PM defect #2, r
   });
 
   it('a real provider failure leaves the item queued and increments attempts; the 5th consecutive failure drains it (bounded retry)', async () => {
+    // L4 (this unit) added a retry backoff: attemptSend now declines to even
+    // try again within RETRY_BACKOFF_MS of the account's last failed attempt.
+    // This test asserts the bounded-retry ceiling itself, not the backoff, so
+    // the clock is injected (never a real sleep) and advanced past the
+    // backoff window before each attempt — L4's own backoff behavior is
+    // covered separately in test/launch-wave-fixes-server.test.js.
     process.env.RESEND_API_KEY = 'test-key';
+    let clock = 1_700_000_000_000;
     for (let i = 1; i <= notif.MAX_SEND_ATTEMPTS; i++) {
-      const due = notif.dueForDigest();
+      const due = notif.dueForDigest(clock);
       assert.equal(due.length, 1, `still queued and due before attempt ${i}`);
       const { items } = due[0];
       // eslint-disable-next-line no-await-in-loop
       const outcome = await withMockedFetch(
         async () => ({ ok: false, status: 500 }),
         () => notif.attemptSend(ACCOUNT_ID, items, () =>
-          email_local.sendEarningNotification('builder@real-domain.example', { items, totalAccrued: 1, prefsUrl: 'https://auxilo.io/x' }))
+          email_local.sendEarningNotification('builder@real-domain.example', { items, totalAccrued: 1, prefsUrl: 'https://auxilo.io/x' }), clock)
       );
       assert.equal(outcome.sent, false);
       assert.equal(outcome.attempts, i);
@@ -648,8 +655,9 @@ describe('LAUNCH-WAVE-EMAILS: attemptSend retry/drain decisions (PM defect #2, r
       } else {
         assert.equal(outcome.drained, true, 'the queue is drained once the retry ceiling is reached — a permanently failing address cannot retry forever');
       }
+      clock += notif.RETRY_BACKOFF_MS + 1;
     }
-    assert.deepEqual(notif.dueForDigest(), [], 'nothing left queued after the ceiling');
+    assert.deepEqual(notif.dueForDigest(clock), [], 'nothing left queued after the ceiling');
   });
 });
 
@@ -711,12 +719,18 @@ describe('LAUNCH-WAVE-EMAILS: withAccountLock concurrency guard (PM defect #3)',
 
   it('server.js\'s sendEarningDigestForAccount routes through withAccountLock, not a local ad-hoc Set', () => {
     const serverSrc = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
-    const fnStart = serverSrc.indexOf('async function sendEarningDigestForAccount(accountId, items) {');
+    // H3/M1 (this unit): the caller now passes only the account id — the due
+    // check and the item list are both re-derived fresh, inside the lock,
+    // via earningNotifications.takeDueItems(), never from a snapshot taken
+    // before the lock was acquired.
+    const fnStart = serverSrc.indexOf('async function sendEarningDigestForAccount(accountId) {');
     const fnEnd = serverSrc.indexOf('\nasync function flushDueEarningDigestFor', fnStart);
     assert.notEqual(fnStart, -1);
     assert.notEqual(fnEnd, -1);
     const fnSrc = serverSrc.slice(fnStart, fnEnd);
     assert.match(fnSrc, /earningNotifications\.withAccountLock\(accountId, async \(\) => \{/);
+    assert.match(fnSrc, /earningNotifications\.takeDueItems\(accountId\)/,
+      'the item list is re-read fresh inside the lock, not passed in stale (H3)');
   });
 });
 
