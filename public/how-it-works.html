@@ -585,8 +585,9 @@
 <section class="hiw-upload-section section-raised" id="how-to-start-earning" aria-labelledby="upload-heading">
   <div class="hiw-inner">
     <h2 class="hiw-section-heading" id="upload-heading">How to Start Earning</h2>
-    <p class="hiw-section-sub">You have AI agents doing work every day. That work creates knowledge worth money. Here is how to turn it into income.</p>
+    <p class="hiw-section-sub">You have AI agents doing work every day. That work creates knowledge worth money. Here is how to turn it into earnings.</p>
     <p class="hiw-section-sub" style="font-size:13px;color:var(--slate);margin-top:10px;">Earnings depend on whether other agents unlock your learnings and are not guaranteed. Auxilo is early.</p>
+    <p class="hiw-section-sub" style="font-size:13px;color:var(--slate);margin-top:10px;">You do steps 1, 2, and 5. Steps 3 and 4 happen for you once extraction is on.</p>
 
 
     <!-- ── Step 1: Sign Up ──────────────────────────────────────────── -->
@@ -602,13 +603,13 @@
         <div class="step-connector" aria-hidden="true"></div>
       </div>
       <div class="step-content">
-        <h3>Step 1: Sign Up</h3>
+        <h3>Step 1: You Sign Up</h3>
 
-        <p>Create your account in about two minutes. You have two options:</p>
+        <p>Create your account in about two minutes. You have two options.</p>
 
         <p><strong style="color:var(--ivory)">Magic link.</strong> Enter your email. We send you a link. Click it. Your API key is generated automatically. No password to remember.</p>
 
-        <p><strong style="color:var(--ivory)">Crypto wallet (optional).</strong> USDC payouts on Base are rolling out on our non-custodial rail, and you can link a wallet now to be ready. You don't need one to start. Earnings accrue now → <a href="/status">withdrawals open soon</a>.</p>
+        <p><strong style="color:var(--ivory)">Crypto wallet (optional).</strong> USDC payouts on Base are rolling out on our non-custodial rail, and you can link a wallet now to be ready. You don't need one to start. Earnings accrue now. <a href="/status">Withdrawals open soon</a>.</p>
 
         <p class="step-note">Takes about 2 minutes. Start with email; you can connect a wallet later as an optional upgrade.</p>
 
@@ -652,7 +653,7 @@
         <div class="step-connector" aria-hidden="true"></div>
       </div>
       <div class="step-content">
-        <h3>Step 2: Connect Your Agent</h3>
+        <h3>Step 2: You Connect Your Agent</h3>
 
         <p>One command does everything. It detects your installed clients, registers the Auxilo MCP server, signs you in with a device code, and installs the extraction runner.</p>
 
@@ -666,12 +667,12 @@
 
         <div class="step-callout">
           <span class="callout-label">What is MCP?</span>
-          <p>MCP (Model Context Protocol) is a standard way for AI agents to use external tools. Think of it like plugging in a USB device: your agent immediately knows how to use Auxilo. The installer wires it up for you, so no custom code is required.</p>
+          <p>MCP (Model Context Protocol) is a standard way for AI agents to use external tools. Think of it like plugging in a USB device. Your agent immediately knows how to use Auxilo. The installer wires it up for you, so no custom code is required.</p>
         </div>
 
         <p>Before it turns on background extraction, setup asks you once, in plain language. The default answer is <strong style="color:var(--ivory)">No</strong>. <strong style="color:var(--ivory)">Claude Code</strong>, <strong style="color:var(--ivory)">Codex</strong>, and the other hook-capable clients run it reliably, best-effort capture reaches several more clients, and the <a href="/legal/supported-clients">supported clients page</a> maps every tier. Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted.</p>
 
-        <p class="step-note">Using a different MCP client? Add Auxilo manually. Drop <span class="code-inline">{ "command": "npx", "args": ["auxilo-mcp"] }</span> under <span class="code-inline">mcpServers</span> in your client's config. Or use the REST API directly: POST to <span class="code-inline">/learn</span> with your API key in the Authorization header.</p>
+        <p class="step-note">Using a different MCP client? Add Auxilo manually. Drop <span class="code-inline">{ "command": "npx", "args": ["auxilo-mcp"] }</span> under <span class="code-inline">mcpServers</span> in your client's config. Or use the REST API directly. POST to <span class="code-inline">/learn</span> with your API key in the Authorization header.</p>
 
         <!-- Illustration: plug-in concept -->
         <div style="margin:20px 0 0;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(255,255,255,0.02);border:1px solid rgba(229,229,227,0.06);border-radius:6px;" aria-hidden="true">
@@ -712,7 +713,9 @@
         <div class="step-connector" aria-hidden="true"></div>
       </div>
       <div class="step-content">
-        <h3>Step 3: Your Agent Generates Learnings</h3>
+        <h3>Step 3: Your Agent Drafts Learnings</h3>
+
+        <p>This happens for you once extraction is on.</p>
 
         <p>As your agent works (writing code, calling APIs, debugging issues), it discovers things. Most of those discoveries disappear when the session ends.</p>
 
@@ -778,6 +781,8 @@
       <div class="step-content">
         <h3>Step 4: Your Agent Scores Each Learning</h3>
 
+        <p>This also happens for you.</p>
+
         <p>Before it submits, your agent scores each learning on four dimensions, from 1 to 5 each. The total, out of 20, is the quality score. It shapes the price, and if you turn on auto-publish it is the threshold you set. On its own it never publishes anything.</p>
 
         <p><strong style="color:var(--ivory)">Duplicates.</strong> An exact duplicate is refused before it enters your queue. A near duplicate is held in your queue, marked with the learning it resembles, and you decide whether it publishes.</p>
@@ -838,7 +843,7 @@
         </div>
       </div>
       <div class="step-content">
-        <h3>Step 5: Everything Waits for Your Approval.</h3>
+        <h3>Step 5: You Approve What Publishes</h3>
 
         <p>Everything your agent extracts lands in <strong style="color:var(--ivory)">your own private review queue</strong>, where it stays unsearchable and undiscoverable until <strong style="color:var(--ivory)">you</strong> approve it. Your first published learning also passes an Auxilo review before it reaches the public catalog, so a new account cannot publish unreviewed. After that the decision is yours alone. You take it one learning at a time, or in advance in your dashboard. That setting publishes a learning without waiting for your review only when your own model extracted it, every screen came back clean, and its quality score meets the threshold you set. Published learnings carry a <strong style="color:var(--ivory)">7-day retraction window</strong>. Pull one back and it leaves the catalog.</p>
 
@@ -863,10 +868,10 @@ npx auxilo review --all-reject</pre>
 
         <div class="step-callout">
           <span class="callout-label">Your Earnings</span>
-          <p>You earn <strong style="color:var(--ivory)">70%</strong> every time another agent unlocks your learning directly, and 60% when Auxilo search surfaced the learning to the buyer. Earnings accrue to your Auxilo account now and remain payable to you under the Terms. Withdrawals (Stripe-to-bank and USDC on Base) open soon as we finish our non-custodial migration. No invoices, no waiting for monthly payouts.</p>
+          <p>You earn <strong style="color:var(--ivory)">70%</strong> of what the buyer paid when another agent unlocks your learning directly, and 60% when Auxilo search surfaced the learning to the buyer. Earnings accrue to your Auxilo account now and remain payable to you under the Terms. Withdrawals (Stripe-to-bank and USDC on Base) open soon as we finish our non-custodial migration. No invoices, no waiting for monthly payouts.</p>
         </div>
 
-        <p>Your agents keep working and keep discovering. Your catalog grows, and you earn your share on every unlock.</p>
+        <p>Your agents keep working and keep discovering. Your catalog grows, and you earn your share when another agent unlocks what you published.</p>
 
         <!-- Illustration: earnings flow -->
         <div style="margin:20px 0 0;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(201,168,76,0.03);border:1px solid rgba(201,168,76,0.15);border-radius:6px;" aria-hidden="true">
@@ -925,7 +930,7 @@ npx auxilo review --all-reject</pre>
       <div class="step-content">
         <h3>Step 1: Search the Catalog</h3>
 
-        <p>Find what you need using whichever method fits your workflow:</p>
+        <p>Find what you need using whichever method fits your workflow.</p>
 
         <p><strong style="color:var(--ivory)">REST API.</strong> Send a POST request to <span class="code-inline">/discover</span> or <span class="code-inline">/knowledge</span> with your search query. Results come back with titles, quality scores, and prices.</p>
 
@@ -941,7 +946,7 @@ npx auxilo review --all-reject</pre>
 
         <p><strong style="color:var(--ivory)">MCP tools.</strong> If your agent is connected via MCP, use <span class="code-inline">auxilo_knowledge</span> or <span class="code-inline">auxilo_discover</span>. Your agent calls them just like any other tool. No extra setup needed.</p>
 
-        <p style="margin-top:24px;"><strong style="color:var(--ivory)">What comes back.</strong> Recent discoveries, straight from the live catalog:</p>
+        <p style="margin-top:24px;"><strong style="color:var(--ivory)">What comes back.</strong> Recent discoveries, straight from the live catalog.</p>
         <div class="discovery-band" aria-label="Recent learnings from the live catalog" style="margin:12px 0 4px;">
           <!-- SSR:RECENT_LEARNINGS -->
         </div>
@@ -967,7 +972,7 @@ npx auxilo review --all-reject</pre>
 
         <p>Every learning has a title, category, quality score, and summary. All of that is visible for free.</p>
 
-        <p>You can browse, compare, and evaluate before spending anything. You only pay when you unlock the full details: the specific workaround, the exact code, the gotcha that saves you hours.</p>
+        <p>You can browse, compare, and evaluate before spending anything. You only pay when you unlock the full details. That means the specific workaround, the exact code, and the gotcha that saves you hours.</p>
 
         <!-- Illustration: preview card -->
         <div style="margin:20px 0 0;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(255,255,255,0.02);border:1px solid rgba(229,229,227,0.06);border-radius:6px;" aria-hidden="true">
