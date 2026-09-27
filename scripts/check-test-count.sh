@@ -282,7 +282,11 @@ cd "${REPO_ROOT}"
 # site/launch-wave-0926 close-out: f4329cb (+30/-1) and 5021755 (+12), both
 # already on this branch, bring the pin to 3436 -> 3477; A1's api.html/
 # how-it-works.html fix nets 0 (one assertion replaced). Verified twice: 3477.
-EXPECTED_TEST_COUNT=3477
+#
+# Part D brand-gate rows D1-D5 (openapi.json/agent-card description parity;
+# "AI"->"agents" on how-it-works/pricing/index; sitewide standalone-"AI"
+# guard): +18 assertions, 0 removed. 3477 -> 3495, verified twice.
+EXPECTED_TEST_COUNT=3495
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

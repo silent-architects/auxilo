@@ -40,11 +40,13 @@ const REPO = path.join(__dirname, '..');
 let agent;
 let agentRaw;
 let llmsTxt;
+let openapi;
 
 before(() => {
   agentRaw = fs.readFileSync(path.join(REPO, '.well-known', 'agent.json'), 'utf8');
   agent = JSON.parse(agentRaw);
   llmsTxt = fs.readFileSync(path.join(REPO, 'public', 'llms.txt'), 'utf8');
+  openapi = JSON.parse(fs.readFileSync(path.join(REPO, 'openapi.json'), 'utf8'));
 });
 
 // ─── Dash detector, shared by every section below ──────────────────────────
@@ -94,6 +96,55 @@ describe('BOT-01: agent.json top-level description naming', () => {
     assert.ok(
       !agent.description.includes('Agent Capability Discovery and Knowledge Marketplace'),
       'the retired title-case pseudo-heading must be gone'
+    );
+  });
+});
+
+// ─── D1: openapi.json info.description matches the agent card, carries the
+// disclaimer + paused-rail statement once each, and states the rate basis
+// without the old double-70%/60% opening ────────────────────────────────────
+
+describe('D1: openapi.json info.description equals the agent card description', () => {
+  it("openapi.json's info.description is byte-for-byte equal to agent.json's description", () => {
+    assert.equal(
+      openapi.info.description,
+      agent.description,
+      'openapi.json info.description must equal the agent card description exactly -- they are the same served text'
+    );
+  });
+
+  it('contains "not guaranteed" exactly once', () => {
+    const matches = openapi.info.description.match(/not guaranteed/g) || [];
+    assert.equal(matches.length, 1, 'info.description must state "not guaranteed" exactly once');
+  });
+
+  it('contains "Withdrawals open soon" exactly once', () => {
+    const matches = openapi.info.description.match(/Withdrawals open soon/g) || [];
+    assert.equal(matches.length, 1, 'info.description must state "Withdrawals open soon" exactly once');
+  });
+
+  it('the word "marketplace" appears only inside "Auxilo is a marketplace for what agents learn" (positive control included)', () => {
+    function bareMarketplaceCount(text) {
+      const stripped = text.split('Auxilo is a marketplace for what agents learn').join('');
+      return (stripped.match(/\bmarketplace\b/gi) || []).length;
+    }
+    // Positive control: the detector must still catch a bare use.
+    assert.equal(
+      bareMarketplaceCount('This is a marketplace for everyone.'),
+      1,
+      'positive control: detector must catch an unqualified marketplace claim'
+    );
+    assert.equal(
+      bareMarketplaceCount(openapi.info.description),
+      0,
+      'info.description must carry no "marketplace" outside the ratified opening sentence'
+    );
+  });
+
+  it('does not have the old two-bare-marketplace opening ("Agent Capability Discovery and Knowledge Marketplace")', () => {
+    assert.ok(
+      !openapi.info.description.includes('Agent Capability Discovery and Knowledge Marketplace'),
+      'the retired title-case pseudo-heading must be gone from openapi.json'
     );
   });
 });

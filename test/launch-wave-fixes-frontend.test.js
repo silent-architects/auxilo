@@ -256,3 +256,160 @@ describe('FIX-UNIT L10: dead CSS removed, stale comments fixed', () => {
     assert.ok(!/text-align: left is a no-op/.test(region), 'the old stale wording must be gone');
   });
 });
+
+// ─── D2: public/how-it-works.html body text says "agent", not "AI agent"
+// (house rule) on the two named sentences ───────────────────────────────────
+
+describe('D2: how-it-works.html body text drops "AI" before "agents" on two sentences', () => {
+  it('the section-sub sentence reads "You have agents doing work every day.", exactly once, old form gone', () => {
+    assert.equal(
+      (HOW_IT_WORKS_HTML.match(/You have agents doing work every day\./g) || []).length,
+      1,
+      'new sentence must appear exactly once'
+    );
+    assert.ok(
+      !HOW_IT_WORKS_HTML.includes('You have AI agents doing work every day.'),
+      'old "AI agents" form must be gone'
+    );
+  });
+
+  it('the MCP explainer sentence reads "...a standard way for agents to use external tools.", exactly once, old form gone', () => {
+    assert.equal(
+      (HOW_IT_WORKS_HTML.match(/MCP \(Model Context Protocol\) is a standard way for agents to use external tools\./g) || []).length,
+      1,
+      'new sentence must appear exactly once'
+    );
+    assert.ok(
+      !HOW_IT_WORKS_HTML.includes('MCP (Model Context Protocol) is a standard way for AI agents to use external tools.'),
+      'old "AI agents" form must be gone'
+    );
+  });
+});
+
+// ─── D3: public/pricing.html structured-data description drops "AI" before
+// "agents" (house rule), rest of the string unchanged ───────────────────────
+
+describe('D3: pricing.html structured-data description drops "AI" before "agents"', () => {
+  const NEW_TEXT = 'Operational learnings from agents, unlocked one at a time. Search is free. Unlock prices are set initially by the builder or calculated by the engine, then moved toward what the engine currently computes, and kept between $0.05 and $50.';
+  const OLD_OPENING = 'Operational learnings from AI agents, unlocked one at a time.';
+
+  it('the structured-data description reads the new opening, exactly once, rest of the string unchanged; old opening gone', () => {
+    assert.equal(
+      (PRICING_HTML.match(/Operational learnings from agents, unlocked one at a time\./g) || []).length,
+      1,
+      'new opening must appear exactly once'
+    );
+    assert.ok(!PRICING_HTML.includes(OLD_OPENING), 'old "AI agents" opening must be gone');
+    assert.equal(
+      (PRICING_HTML.match(new RegExp(NEW_TEXT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))) || []).length,
+      1,
+      'the full description string (opening plus the unchanged remainder) must appear exactly once'
+    );
+  });
+});
+
+// ─── D4: public/index.html hero lede, third sentence only -- "it" is
+// disambiguated to "that fix" (the first two sentences are untouched) ───────
+
+describe('D4: index.html hero lede third sentence disambiguates "it" to "that fix"', () => {
+  const FULL_LEDE = 'Next time, your agent can ask Auxilo instead. Signed in to your account, it gets the fix you published back for free. When another agent unlocks that fix, you earn a share.';
+  const FIRST_TWO_SENTENCES = 'Next time, your agent can ask Auxilo instead. Signed in to your account, it gets the fix you published back for free.';
+  const OLD_THIRD_SENTENCE = 'When another agent unlocks it, you earn a share.';
+
+  it('the lede reads the new third sentence, the first two sentences are byte-for-byte unchanged, old third sentence gone', () => {
+    assert.equal(
+      (INDEX_HTML.match(/When another agent unlocks that fix, you earn a share\./g) || []).length,
+      1,
+      'new third sentence must appear exactly once'
+    );
+    assert.ok(!INDEX_HTML.includes(OLD_THIRD_SENTENCE), 'old third sentence ("...unlocks it...") must be gone');
+    assert.ok(INDEX_HTML.includes(FIRST_TWO_SENTENCES), 'the first two lede sentences must be untouched, verbatim');
+    assert.equal(
+      (INDEX_HTML.match(new RegExp(FULL_LEDE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))) || []).length,
+      1,
+      'the full three-sentence lede must appear exactly once, as one contiguous run'
+    );
+  });
+});
+
+// ─── D5: the standalone word "AI" survives in visible text ONLY inside an
+// FAQ question (a search-query mirror, left alone by rule), or -- homepage
+// only -- the h1 and the <title>. Everywhere else it must be gone. This is a
+// standing guard, not a one-time cleanup: it fails the build the moment a
+// future edit reintroduces a bare "AI" outside those two allowances. ───────
+
+describe('D5: standalone "AI" appears only inside an FAQ question, or (homepage only) the h1/title', () => {
+  function normalizeText(str) {
+    return str
+      .replace(/&amp;/g, '&')
+      .replace(/&#x27;/g, "'")
+      .replace(/&quot;/g, '"')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  // FAQ questions render as <span>QUESTION TEXT</span> directly inside a
+  // <button class="faq-question">, the same shape renderedFaqAnswer-style
+  // helpers elsewhere in this suite key off of -- narrow enough that it
+  // cannot accidentally match an unrelated <span>.
+  function faqQuestionSpans(html) {
+    return [...html.matchAll(/<button class="faq-question"[^>]*>\s*<span>([^<]*)<\/span>/g)].map((m) => m[0]);
+  }
+
+  // Visible text, FAQ questions and (optionally, homepage only) the h1/title
+  // excluded, tags/script/style/comments stripped -- same convention as the
+  // visibleText() helper used elsewhere in this repo's test suite.
+  function visibleTextExcluding(html, { excludeHomepageHeadline }) {
+    let raw = html
+      .replace(/<script[\s\S]*?<\/script>/g, ' ')
+      .replace(/<style[\s\S]*?<\/style>/g, ' ')
+      .replace(/<!--[\s\S]*?-->/g, ' ');
+    for (const span of faqQuestionSpans(raw)) {
+      raw = raw.split(span).join(' ');
+    }
+    if (excludeHomepageHeadline) {
+      const titleMatch = raw.match(/<title>[\s\S]*?<\/title>/);
+      if (titleMatch) raw = raw.split(titleMatch[0]).join(' ');
+      const h1Match = raw.match(/<h1 id="hero-heading">[\s\S]*?<\/h1>/);
+      if (h1Match) raw = raw.split(h1Match[0]).join(' ');
+    }
+    return normalizeText(raw.replace(/<[^>]+>/g, ' '));
+  }
+
+  const PAGES = [
+    { name: 'index.html', html: INDEX_HTML, excludeHomepageHeadline: true },
+    { name: 'for-builders.html', html: FOR_BUILDERS_HTML, excludeHomepageHeadline: false },
+    { name: 'for-agents.html', html: FOR_AGENTS_HTML, excludeHomepageHeadline: false },
+    { name: 'how-it-works.html', html: HOW_IT_WORKS_HTML, excludeHomepageHeadline: false },
+    { name: 'pricing.html', html: PRICING_HTML, excludeHomepageHeadline: false },
+    { name: 'api.html', html: API_HTML, excludeHomepageHeadline: false },
+  ];
+
+  it('sanity: the page list under test is not empty', () => {
+    assert.equal(PAGES.length, 6, `expected 6 pages in scope, got ${PAGES.length}`);
+  });
+
+  it('positive control: the homepage h1 does contain the standalone word "AI" (proves the detector matches real text, and that the h1 is the one carrying it)', () => {
+    const h1Match = INDEX_HTML.match(/<h1 id="hero-heading">([\s\S]*?)<\/h1>/);
+    assert.ok(h1Match, 'homepage h1 (#hero-heading) found');
+    assert.match(normalizeText(h1Match[1]), /\bAI\b/, 'positive control: the homepage h1 must contain the word "AI"');
+  });
+
+  it('positive control: at least one FAQ question on the homepage contains "AI" (proves the FAQ-exclusion path is actually exercised, not vacuously true)', () => {
+    const spans = faqQuestionSpans(INDEX_HTML);
+    assert.ok(spans.length > 0, 'sanity: at least one FAQ question span found on the homepage');
+    assert.ok(spans.some((s) => /\bAI\b/.test(s)), 'at least one homepage FAQ question must contain "AI"');
+  });
+
+  for (const p of PAGES) {
+    it(`${p.name}: no standalone "AI" survives in visible text outside an FAQ question${p.excludeHomepageHeadline ? ', the h1, or the title' : ''}`, () => {
+      const text = visibleTextExcluding(p.html, p);
+      assert.doesNotMatch(
+        text,
+        /\bAI\b/,
+        `${p.name}: found a standalone "AI" outside an FAQ question${p.excludeHomepageHeadline ? '/h1/title' : ''} -- see the surrounding text: ${JSON.stringify((text.match(/.{0,60}\bAI\b.{0,60}/) || [''])[0])}`
+      );
+    });
+  }
+});
