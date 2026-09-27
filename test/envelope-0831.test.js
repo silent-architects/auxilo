@@ -761,7 +761,16 @@ describe('ENVELOPE-0831 staged live response envelopes', { timeout: 180_000 }, (
   // unlock now earns the builder's share in full, the same as x402 —
   // proved in test/credits-as-cash-unlock.test.js (test 34b).
 
-  it('treats a matching bare X-Wallet-Address as a paid buyer view and strips owner-only fields', async (t) => {
+  // FIX-UNIT-MONEY L12 (2026-09-27): this test used to be titled "treats a
+  // matching bare X-Wallet-Address as a paid buyer view" and asserted
+  // self_unlock: true with the owner's share zeroed -- that WAS the L12
+  // defect. BUYER_ACCOUNT_ID is not PUBLIC_ID's contributor; it is simply a
+  // different, unrelated buyer sending OWNER_WALLET in a header on the
+  // BALANCE (credit_pack) path, where ownership is now decided by the
+  // signed-in account only. The full listed price is still debited (an
+  // attacker gains nothing), but the owner is now correctly PAID, not
+  // zeroed.
+  it('[ruling L12] a balance unlock with ANOTHER builder\'s wallet in the header still pays that builder — never treated as self_unlock', async (t) => {
     if (liveSkipReason) {
       t.skip(liveSkipReason);
       return;
@@ -775,15 +784,22 @@ describe('ENVELOPE-0831 staged live response envelopes', { timeout: 180_000 }, (
       getServerOutput
     );
 
-    assertFieldsAbsent(payload, OWNER_ONLY_FIELDS, 'paid self envelope');
-    assertFieldsAbsent(payload, MODERATION_FIELDS, 'paid self envelope');
-    assert.equal(payload._revenue.self_unlock, true);
+    assertFieldsAbsent(payload, OWNER_ONLY_FIELDS, 'paid buyer envelope (unrelated to the header claim)');
+    assertFieldsAbsent(payload, MODERATION_FIELDS, 'paid buyer envelope');
+    assert.notEqual(payload._revenue.self_unlock, true,
+      'BUYER_ACCOUNT_ID is not this learning\'s contributor -- the Balance path must never consult the wallet header for ownership');
     assert.equal(Object.hasOwn(payload._revenue, 'owner_recall_free'), false);
+    assert.deepEqual(payload._revenue, {
+      unlock_price_usd: 1.41,
+      amount_paid_usd: 1.41,
+      contributor_earned_usd: 0.987,
+      platform_earned_usd: 0.423,
+    }, 'the owner is paid the normal 70% share, not zeroed by the header claim');
     const credits = JSON.parse(
       fs.readFileSync(path.join(tmpDir, 'data', 'credits.json'), 'utf8')
     );
     assert.equal(credits[BUYER_ACCOUNT_ID].dollar_lots[0].remaining_usd, 0,
-      'claimed-wallet self path paid the full listed price — the balance is fully spent');
+      'claimed-wallet path still pays the full listed price — the balance is fully spent');
   });
 
   it('keeps all three owner-only fields on a provable DR-8 public owner recall', async (t) => {
@@ -847,7 +863,10 @@ describe('ENVELOPE-0831 staged live response envelopes', { timeout: 180_000 }, (
       'total_withdrawn',
       'withdrawal_count',
     ], 'public contributor dashboard');
-    assert.equal(publicDashboard.total_gross_usd, 1.41);
+    // FIX-UNIT-MONEY L12: BOTH of the two preceding unlocks now pay the
+    // owner (the wallet-header claim no longer zeroes the second one) --
+    // 1.41 + 1.41 = 2.82, exactly the fixture's full $2.82 balance.
+    assert.equal(publicDashboard.total_gross_usd, 2.82);
 
     const ownerDashboard = await getJson(
       `${baseUrl}/account/earnings`,
@@ -855,8 +874,8 @@ describe('ENVELOPE-0831 staged live response envelopes', { timeout: 180_000 }, (
       getServerOutput
     );
     assert.ok(ownerDashboard.by_learning && ownerDashboard.by_learning[PUBLIC_ID]);
-    assert.equal(ownerDashboard.by_learning[PUBLIC_ID].gross, 1.41);
-    assert.equal(ownerDashboard.by_learning[PUBLIC_ID].unlocks, 1);
+    assert.equal(ownerDashboard.by_learning[PUBLIC_ID].gross, 2.82);
+    assert.equal(ownerDashboard.by_learning[PUBLIC_ID].unlocks, 2);
 
     const zeroDashboard = await getJson(
       `${baseUrl}/account/earnings`,

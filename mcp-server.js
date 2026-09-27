@@ -77,7 +77,7 @@ function unlockPaymentRequired(status, data, http_endpoint) {
     status: 'payment_required',
     content_advisory: UNTRUSTED_PREVIEW_ADVISORY,
     cost: `${price} USDC on Base (set by contributor)`,
-    how_to_pay: 'Pass an x402 payment via the x_payment argument, or configure an API key with unlock credits (npx auxilo setup).',
+    how_to_pay: 'Pass an x402 payment via the x_payment argument, or configure an API key with a funded balance (npx auxilo setup).',
     http_endpoint,
     payment_details: fencePaymentChallenge(data),
   };

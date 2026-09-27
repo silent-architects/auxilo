@@ -519,13 +519,21 @@ describe('CAT-1 (b): unlock counters credited only for real unlocks', () => {
   // AUD-CAC (credits-as-cash follow-up, SITE-PM 2026-09-27): F-5 removes the
   // 30-day repeat-accrual cap — countersCredited now gates on the M-2 wash
   // guard alone.
-  it('countersCredited = !isSelfUnlock, computed before the bumps', () => {
-    const predAt = h.indexOf('const countersCredited = !isSelfUnlock;');
+  //
+  // FIX-UNIT-MONEY M9 (2026-09-27): countersCredited also gates on paid
+  // dollars drawn and a 30-day per-(buyer, learning) ranking-only window
+  // (test/credits-as-cash-unlock.test.js "[ruling M9]" proves the behavior
+  // against a real server) — it still starts from `!isSelfUnlock`, hoisted
+  // above the counter bumps.
+  it('countersCredited = !isSelfUnlock && drewPaidDollars && shouldCountUnlockForRanking(...), computed before the bumps', () => {
+    const predAt = h.indexOf('const countersCredited = !isSelfUnlock && drewPaidDollars');
     const selfAt = h.indexOf('const isSelfUnlock =');
     const bumpAt = h.indexOf('learning.quality.unlocks_total =');
     assert.ok(predAt !== -1 && selfAt !== -1 && bumpAt !== -1);
     assert.ok(selfAt < predAt && predAt < bumpAt,
       'wash-guard decision hoisted above the counter bumps');
+    assert.ok(h.includes('shouldCountUnlockForRanking(buyerAccountId, id)'),
+      'ruling M9: the 30-day per-(buyer, learning) gate is part of the same predicate');
   });
 
   it('credited counter + demand bump only under the predicate; raw total always bumps', () => {

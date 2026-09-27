@@ -230,7 +230,11 @@ const DOCUMENTED_EXCEPTIONS = new Set([
   // (REVIEW-ACCESSIBILITY.md #5b); FIX-UNIT.md's rule for that fix is "do
   // not change any card's text", so pre-existing sentence-case copy is
   // left as written and documented here rather than reworded.
-  'public/dashboard.html|||Action required: accept the updated Terms',
+  //
+  // FIX-UNIT-MONEY D1 (2026-09-27): the Terms card title changed to "Accept
+  // the Terms", which is itself compliant Title Case (an "Accept the
+  // Terms" heading has no offending word), so it no longer needs an
+  // exception -- removed from this list rather than updated.
   'public/dashboard.html|||Auto-publish clean learnings',
 ]);
 

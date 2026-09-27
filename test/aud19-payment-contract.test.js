@@ -172,9 +172,12 @@ describe('AUD19-5: dualAuthDynamic Path 3 answers 402-first', () => {
       'custodial arm must mint the shared standard challenge entry');
     // The pre-existing body keys survive (additive change).
     for (const key of ["error: 'Credits exhausted'", 'message: creditResult.message',
-      'credits: creditResult.status', 'reset_at: creditResult.status.period_end']) {
+      'credits: creditResult.status']) {
       assert.ok(credits.includes(key), `credits-exhausted body must retain ${key}`);
     }
+    // FIX-UNIT-MONEY L8: reset_at meant nothing for a dollar balance (it
+    // echoed the legacy monthly period_end, not any real reset). Removed.
+    assert.ok(!credits.includes('reset_at:'), 'reset_at must no longer be served in the insufficient-balance body');
   });
 });
 

@@ -747,12 +747,12 @@
 
     <!-- Terms of Service clickwrap gate (R-01 §5.10 payee-agency) -->
     <div id="terms-gate" class="dash-card" style="display:none;border:1px solid var(--aurum)">
-      <h2 class="dash-card-title">Action required: accept the updated Terms</h2>
+      <h2 class="dash-card-title">Accept the Terms</h2>
       <p style="font-size:14px;color:var(--slate);margin-bottom:14px;line-height:1.6">
-        We've updated our <a href="/terms" target="_blank" rel="noopener" style="color:var(--aurum)">Terms of Service</a>.
-        They now include <strong style="color:var(--ivory)">Section 5.10</strong>, under which you appoint Auxilo as your
-        limited agent to receive your Builder Share on your behalf when consumers unlock your learnings. You must accept
-        the current Terms before you can link a payout wallet or withdraw earnings.
+        Our <a href="/terms" target="_blank" rel="noopener" style="color:var(--aurum)">Terms of Service</a> include
+        <strong style="color:var(--ivory)">Section 5.10</strong>, under which you appoint Auxilo as your
+        limited agent to receive your Builder Share on your behalf when consumers unlock your learnings. Accept
+        the current Terms before you link a payout wallet or withdraw earnings.
       </p>
       <div id="terms-gate-alert" class="alert" role="alert" style="display:none;margin-bottom:12px"></div>
       <label style="display:flex;align-items:flex-start;gap:10px;font-size:14px;color:var(--ivory);cursor:pointer;margin-bottom:16px">
@@ -920,6 +920,7 @@
       <div id="credits-loading" class="loading-text"><span class="spinner"></span>Loading...</div>
       <div id="credits-content" style="display:none">
         <div id="credit-balance-line">—</div>
+        <div id="credit-balance-frozen" style="display:none;font-size:13px;color:var(--slate);margin-top:2px"></div>
         <div id="credit-balance-sub">Your balance never expires.</div>
         <p style="font-size:13px;color:var(--ivory);margin-bottom:2px">Your agent spends it through an API key you generate.</p>
         <p style="font-size:13px;color:var(--slate);margin-bottom:20px">An unlock takes the listed price from your balance.</p>
@@ -2809,6 +2810,22 @@
     _creditsBalanceCache = total;
     // One balance, in dollars, never adjacent to the Earnings card's numbers (GOV-2 A6).
     line.textContent = total !== null ? fmt(total) : '—';
+
+    // D2: total_usd already excludes frozen_usd (L3) -- the headline above
+    // stays exactly what it was. A dispute-frozen amount gets its own line
+    // underneath, shown only while frozen_usd is above zero.
+    var frozenEl = document.getElementById('credit-balance-frozen');
+    if (frozenEl) {
+      var frozen = data && data.credit_balance && typeof data.credit_balance.frozen_usd === 'number'
+        ? data.credit_balance.frozen_usd : 0;
+      if (frozen > 0) {
+        frozenEl.textContent = fmt(frozen) + ' is on hold while a payment dispute is open.';
+        frozenEl.style.display = '';
+      } else {
+        frozenEl.textContent = '';
+        frozenEl.style.display = 'none';
+      }
+    }
   }
 
   function renderCreditPackRows() {

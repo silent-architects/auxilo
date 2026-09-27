@@ -498,7 +498,7 @@ describe('FIX-UNIT A5b: dashboard card titles are headings', () => {
     // Confirms the DOM order this fix ships, in the reader's own words.
     assert.deepEqual(headings.map((h) => `h${h.level}: ${h.text}`), [
       'h1: Account Dashboard',
-      'h2: Action required: accept the updated Terms',
+      'h2: Accept the Terms',
       'h2: Start Here',
       'h2: Your Learnings Are Waiting',
       'h2: Pending Review Queue 0',
@@ -607,6 +607,13 @@ describe('LW3: GOV-2 A6, Credits card untouched', () => {
       [
         'Credits are non-refundable except as these Terms provide. Credits are non-transferable. Credits have no cash value outside the Platform and cannot be withdrawn or redeemed for currency, except where applicable law requires it. Credits do not expire. All transactions on the Platform are final.',
         'Prepaid credits are non-refundable and non-transferable. Credits have no cash value outside the Platform and cannot be redeemed for currency. All transactions on the Platform are final.',
+      ],
+      // FIX-UNIT-MONEY D2 (2026-09-27): a new line under the headline,
+      // hidden by default, shown only when frozen_usd is above zero.
+      // origin/main never had it -- reverting means removing it entirely.
+      [
+        '<div id="credit-balance-line">—</div>\n        <div id="credit-balance-frozen" style="display:none;font-size:13px;color:var(--slate);margin-top:2px"></div>',
+        '<div id="credit-balance-line">—</div>',
       ],
     ];
     let revertedNewBlock = newBlock;

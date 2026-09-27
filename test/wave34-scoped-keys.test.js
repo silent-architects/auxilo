@@ -465,9 +465,15 @@ describe('T9b dualAuthDynamic behavioral (kills mutation M3)', () => {
       /* saveAccounts */         () => {},
       /* deductCredit */         async (accountId, creditType) => {
         calls.deductCredit.push({ accountId, creditType });
+        // FIX-UNIT-MONEY L10: the real lib/credits.js deductCredit's success
+        // shape is dollars-only ({success, paid_drawn, promo_drawn,
+        // total_drawn, draws}) -- this scope test only needs `success` to
+        // route past the credit check, but the mock's shape should still
+        // match reality rather than a retired {unit_price_usd} field no
+        // production code has returned since the unit-credit model retired.
         return creditsExhausted
-          ? { success: false, message: 'no credits', status: { remaining: 0, period_end: 0 } }
-          : { success: true, unit_price_usd: 0.08 };
+          ? { success: false, message: 'Insufficient balance.', status: { credit_balance: { paid_usd: 0, promo_usd: 0, total_usd: 0, frozen_usd: 0 }, period_end: 0 } }
+          : { success: true, paid_drawn: 0.08, promo_drawn: 0, total_drawn: 0.08, draws: [{ lot_id: 'lot_test_w34', kind: 'dollar_paid', amount: 0.08 }] };
       },
       /* x402Router */           { routerEnabled: () => false },
       /* _routerAccepts */       () => ({ stub: 'router' }),

@@ -141,6 +141,8 @@ describe('AUD-CAC dollar-lot unlock economics (staged live server)', { timeout: 
       baseLearning('lrn_cac_t34a', 0.86, CONTRIB_ID, CONTRIB_WALLET),
       baseLearning('lrn_cac_t34b', 0.86, CONTRIB_ID, CONTRIB_WALLET),
       baseLearning('lrn_cac_t8', 0.86, CONTRIB_ID, CONTRIB_WALLET),
+      baseLearning('lrn_cac_m9', 1, CONTRIB_ID, CONTRIB_WALLET),
+      baseLearning('lrn_cac_m6', 1, CONTRIB_ID, CONTRIB_WALLET),
       // Owned by CONTRIB_ID, not SELF_ID — so SELF_ID's own API key does
       // NOT match contributor_account_id and DR8's free owner-recall never
       // triggers; only the bare X-Wallet-Address claim at request time
@@ -295,18 +297,32 @@ describe('AUD-CAC dollar-lot unlock economics (staged live server)', { timeout: 
     assert.equal(after, before, 'no share was ever recorded (this suite shares state, so compare the delta, not an absolute null)');
   });
 
-  it('[test 12] paid self-unlock via an unverified wallet claim: full debit, builder share zero', async (t) => {
+  // FIX-UNIT-MONEY L12: this test used to be titled "paid self-unlock via
+  // an unverified wallet claim: full debit, builder share zero" and
+  // asserted the builder's share was zeroed -- that WAS the defect: any
+  // buyer could zero a builder's share by sending that builder's wallet in
+  // X-Wallet-Address, on the BALANCE path, where the caller is always
+  // authenticated and there is no reason to ever consult an unverified
+  // header. SELF_ID is not lrn_cac_self's contributor (CONTRIB_ID is) --
+  // it is simply a different, unrelated buyer account sending CONTRIB_ID's
+  // wallet in the header. Ownership on the Balance path is now decided by
+  // the signed-in account only: the full debit still happens, but the
+  // builder is paid the SAME share it would be paid with no header at all.
+  it('[ruling L12] a balance unlock sending ANOTHER builder\'s wallet in the header still pays that builder the share', async (t) => {
     if (liveSkipReason) { t.skip(liveSkipReason); return; }
     seedDollarLot(SELF_ID, 'dollar_paid', 10);
+    const before = readEarningsFor(CONTRIB_ID)?.pending_balance || 0;
     const res = await getJson(`${baseUrl}/knowledge/lrn_cac_self`, {
       headers: { 'X-API-Key': RAW_SELF_KEY, 'X-Wallet-Address': CONTRIB_WALLET },
     }, getServerOutput);
     assert.equal(res.status, 200, res.text);
-    assert.equal(res.body._revenue.contributor_earned_usd, 0);
-    assert.equal(res.body._revenue.platform_earned_usd, 0);
-    assert.equal(res.body._revenue.self_unlock, true);
+    assert.equal(res.body._revenue.contributor_earned_usd, 0.812, '70% of 1.16 -- the normal direct-unlock share, not zeroed by the header claim');
+    assert.equal(res.body._revenue.platform_earned_usd, 0.348);
+    assert.notEqual(res.body._revenue.self_unlock, true, 'SELF_ID is not lrn_cac_self\'s contributor -- this must never be treated as a self-unlock on the Balance path');
     const credits = JSON.parse(fs.readFileSync(path.join(dataDir, 'credits.json'), 'utf8'));
-    assert.equal(credits[SELF_ID].dollar_lots[0].remaining_usd, 10 - 1.16, 'the FULL listed price is still debited even though the builder share is zero');
+    assert.equal(credits[SELF_ID].dollar_lots[0].remaining_usd, 10 - 1.16, 'the full listed price is debited, same as any other buyer');
+    const after = readEarningsFor(CONTRIB_ID).pending_balance;
+    assert.equal(Math.round((after - before) * 1e6) / 1e6, 0.812, 'the contributor actually received the share -- this suite shares state, so compare the delta');
   });
 
   // RETIRED (credits-as-cash follow-up, SITE-PM 2026-09-27): '[test 34a]
@@ -336,5 +352,68 @@ describe('AUD-CAC dollar-lot unlock economics (staged live server)', { timeout: 
     // not the absolute total.
     const after = readEarningsFor(CONTRIB_ID).pending_balance;
     assert.equal(Math.round((after - before) * 1e6) / 1e6, 1.204, 'both unlocks accrued — the delta reflects two full 0.602 shares');
+  });
+
+  function readLearning(id) {
+    const learnings = JSON.parse(fs.readFileSync(path.join(dataDir, 'learnings.json'), 'utf8'));
+    return learnings.find((l) => l.id === id);
+  }
+
+  it('[ruling M9] a repeat unlock inside 30 days earns the share in full BOTH times, but moves the ranking/demand counters only once', async (t) => {
+    if (liveSkipReason) { t.skip(liveSkipReason); return; }
+    resetDollarLots(BUYER_ID);
+    seedDollarLot(BUYER_ID, 'dollar_paid', 10);
+    const before = readEarningsFor(CONTRIB_ID)?.pending_balance || 0;
+    const beforeUnlocks = readLearning('lrn_cac_m9').quality.unlocks || 0;
+    const beforeDemand = readLearning('lrn_cac_m9').demand.unlocks_7d || 0;
+
+    const first = await getJson(`${baseUrl}/knowledge/lrn_cac_m9`, { headers: { 'X-API-Key': RAW_BUYER_KEY } }, getServerOutput);
+    assert.equal(first.status, 200, first.text);
+    assert.equal(first.body._revenue.contributor_earned_usd, 0.7, 'the charge and the share are money -- M9 never touches either');
+
+    const second = await getJson(`${baseUrl}/knowledge/lrn_cac_m9`, { headers: { 'X-API-Key': RAW_BUYER_KEY } }, getServerOutput);
+    assert.equal(second.status, 200, second.text);
+    assert.equal(second.body._revenue.contributor_earned_usd, 0.7, 'the repeat is charged and earns in full, exactly like test 34b');
+
+    const after = readEarningsFor(CONTRIB_ID).pending_balance;
+    assert.equal(Math.round((after - before) * 1e6) / 1e6, 1.4, 'both unlocks moved real money -- M9 gates counters only, never the charge or the share');
+
+    const learningAfter = readLearning('lrn_cac_m9');
+    assert.equal((learningAfter.quality.unlocks || 0) - beforeUnlocks, 1,
+      'the ranking counter counts this (buyer, learning) pair only ONCE inside the 30-day window, even though it was unlocked and paid for twice');
+    assert.equal((learningAfter.demand.unlocks_7d || 0) - beforeDemand, 1,
+      'the demand counter (price multiplier basis) is gated the same way');
+    assert.equal(learningAfter.quality.unlocks_total >= 2, true,
+      'the ops-only raw counter still bumps on every unlock, uncapped');
+  });
+
+  // FIX-UNIT-MONEY M6: NO CHANGE ruling -- the Terms say one search result
+  // qualifies one Unlock (single-use), so only the FIRST unlock after a
+  // search pays 60%; repeats inside the same hour are direct unlocks (70%).
+  // Pinned per the ruling's own instruction, driven through the real route.
+  it('[ruling M6, NO CHANGE] one search, then three unlocks in the hour: shares 60%, 70%, 70%', async (t) => {
+    if (liveSkipReason) { t.skip(liveSkipReason); return; }
+    resetDollarLots(BUYER_ID);
+    seedDollarLot(BUYER_ID, 'dollar_paid', 10);
+
+    const search = await getJson(`${baseUrl}/knowledge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': RAW_BUYER_KEY },
+      body: JSON.stringify({ query: 'lrn_cac_m6' }),
+    }, getServerOutput);
+    assert.equal(search.status, 200, search.text);
+    assert.ok(search.body.results.some((r) => r.id === 'lrn_cac_m6'));
+
+    const first = await getJson(`${baseUrl}/knowledge/lrn_cac_m6`, { headers: { 'X-API-Key': RAW_BUYER_KEY } }, getServerOutput);
+    assert.equal(first.status, 200, first.text);
+    assert.equal(first.body._revenue.contributor_earned_usd, 0.6, 'the search-qualified unlock pays 60%');
+
+    const second = await getJson(`${baseUrl}/knowledge/lrn_cac_m6`, { headers: { 'X-API-Key': RAW_BUYER_KEY } }, getServerOutput);
+    assert.equal(second.status, 200, second.text);
+    assert.equal(second.body._revenue.contributor_earned_usd, 0.7, 'a repeat inside the hour, with no new search, is a direct unlock -- 70%');
+
+    const third = await getJson(`${baseUrl}/knowledge/lrn_cac_m6`, { headers: { 'X-API-Key': RAW_BUYER_KEY } }, getServerOutput);
+    assert.equal(third.status, 200, third.text);
+    assert.equal(third.body._revenue.contributor_earned_usd, 0.7, 'still 70% -- one search result qualifies exactly one Unlock');
   });
 });

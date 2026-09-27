@@ -371,9 +371,15 @@ cd "${REPO_ROOT}"
 # not-guaranteed/open-soon guard across the eleven files, and the Terms
 # defined-terms + CURRENT_TOS_VERSION guard). Every other touched test file
 # only updates existing pins to the new copy/logic (no it() added or removed).
-# Verified against the actual discovered count: 3677 -> 3865, 0 fail, 7 skipped
-# (pre-existing, environment-dependent sandbox skips — unrelated to this unit).
-EXPECTED_TEST_COUNT=3865
+# FIX-UNIT-MONEY (2026-09-27): the money-path review fix unit (H1/H2/M1-M9/
+# L1-L12/T1/T2/D1/D2) added two new files (test/fix-unit-money.test.js,
+# test/fix-unit-money-webhook.test.js) and new it()s across
+# credits-as-cash-lots/refunds/unlock, wave1-money-closures, and
+# credits-control-part1, plus the M6/L5 NO-CHANGE pins and the L10 fixes.
+# Verified against the actual discovered count: 3865 -> 3925, 0 fail, 7
+# skipped (pre-existing, environment-dependent sandbox skips — unrelated to
+# this unit).
+EXPECTED_TEST_COUNT=3925
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

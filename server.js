@@ -1588,11 +1588,13 @@ const { loadCredits } = require('./lib/credits.js'); // AC-2: referee novelty ch
 // shortfall hold), and the dollar-lot ledger operations + refund/dispute
 // support.
 const { checkBalanceCap, checkDailyCap } = require('./lib/credit-caps.js');
-const { isAccountHeld, holdAccount, getAccountHold } = require('./lib/account-holds.js');
+const { isAccountHeld, holdAccount, getAccountHold, clearAccountHold } = require('./lib/account-holds.js');
 const {
     addDollarLot,
     refundDollarDraw,
     recordLotFunding,
+    finalizePendingReversals,
+    round6,
 } = require('./lib/credits.js');
 // AUD-CAC Part 2: refunds and disputes (spec §4, ruling L10). Each handler
 // takes a constructed Stripe event object; the webhook route below is a
@@ -1602,6 +1604,19 @@ const {
     handleDisputeClosed,
     handleChargeRefunded,
 } = require('./lib/stripe-refund-handlers.js');
+// FIX-UNIT-MONEY M2/M8: on-the-spot reversal when a refund/lost dispute
+// removed a lot's remainder in the narrow window between an unlock's debit
+// and its recordLotFunding call. lib/earnings.js is NOT imported here or
+// anywhere new by this build -- this is the same reversal module the
+// webhook handlers already use.
+const { reverseLotFunding: reverseCreditLotFunding } = require('./lib/earnings-reversal.js');
+// M9: the ranking/demand counters count an unlock only when it drew paid
+// dollars, and at most once per buyer account per learning per 30 days --
+// its own small module, its own data file, gates the counters only.
+const { shouldCountAndRecord: shouldCountUnlockForRanking, unrecord: unrecordUnlockCounterGate } = require('./lib/unlock-counter-gate.js');
+// M3: each Checkout session is recorded when created so the caps can count
+// unpaid, unexpired sessions, not only completed purchases.
+const { recordPendingSession, clearPendingSession } = require('./lib/checkout-sessions.js');
 // P2.1a: extractLearnings import moved to line 22 (with sanitizeLearningBody, scoreLearning, VALID_CATEGORIES)
 const { processMemoryFiles, DEFAULT_ADAPTER_CONFIG } = require('./lib/openclaw-adapter.js');
 
@@ -3481,7 +3496,6 @@ async function dualAuthDynamic(c, price_usd, description, creditType, requiredSc
                             description,
                             protocol: 'x402 (https://www.x402.org)'
                         },
-                        reset_at: creditResult.status.period_end
                     },
                     ...(previewAdvisory && { content_advisory: previewAdvisory }),
                 }, 402);
@@ -4709,7 +4723,6 @@ app.post('/checkout/session', requireAuth, async (c) => {
             valid_packs: Object.keys(PACKS).map(k => ({
                 id: k,
                 price_usd: PACKS[k].price_usd,
-                unlocks: PACKS[k].unlocks,
             })),
         }, 400);
     }
@@ -4756,6 +4769,11 @@ app.post('/checkout/session', requireAuth, async (c) => {
 
     try {
         const session = await createCheckoutSession(accountId, pack, baseUrl);
+        // M3: record this session (id, amount, created time) so both
+        // purchase caps count it while it is open and unpaid -- opening
+        // several sessions while under the cap must not let their combined
+        // payment cross it later.
+        recordPendingSession(session.session_id, accountId, packPrice);
         return c.json(session);
     } catch (err) {
         console.error('[stripe] Checkout session error:', err.message);
@@ -4810,6 +4828,9 @@ app.post('/webhook/stripe', async (c) => {
     // Idempotency check
     if (isSessionProcessed(session.id)) {
         console.log('[stripe] Duplicate webhook for session:', session.id);
+        // M3: self-healing -- clear it here too, in case an earlier
+        // delivery credited the account but never reached the clear below.
+        clearPendingSession(session.id);
         return c.json({ received: true, already_processed: true });
     }
 
@@ -4839,6 +4860,10 @@ app.post('/webhook/stripe', async (c) => {
         timestamp: new Date().toISOString(),
     };
     appendPurchase(purchase);
+
+    // M3: this session's money is now a real dollar lot and a real
+    // purchase record -- stop counting it as a pending, unpaid session.
+    clearPendingSession(session.id);
 
     // AUD-CAC (spec §2, ruling L6): defense in depth. Two sessions started
     // within seconds of each other can each pass the pre-Checkout cap check
@@ -5910,7 +5935,7 @@ app.get('/api/info', (c) => {
       '/withdraw': { price: 'free', method: 'POST', description: 'Withdraw pending USDC earnings to verified wallet. Body: { wallet, signature }. Requires prior challenge + EIP-712 signature.', auth: 'wallet-signed' },
       '/account/link-wallet': { price: 'free', method: 'POST', description: 'Link a verified wallet to the authenticated account. Body: { wallet }', auth: 'session or api-key' },
       '/account/earnings': { price: 'free', method: 'GET', description: 'View contributor earnings for the authenticated account', auth: 'session or api-key' },
-      '/account/credits': { price: 'free', method: 'GET', description: 'View unlock credit balance for the authenticated account', auth: 'session' },
+      '/account/credits': { price: 'free', method: 'GET', description: 'View balance for the authenticated account', auth: 'session' },
       '/account/purchases': { price: 'free', method: 'GET', description: 'View credit purchase history for the authenticated account', auth: 'session' },
       '/checkout/session': { price: 'free', method: 'POST', description: 'Create a Stripe checkout session to purchase credits. Body: { pack }', auth: 'session' },
       '/checkout/success': { price: 'free', method: 'GET', description: 'Stripe payment success landing page (redirect target)' },
@@ -5925,7 +5950,7 @@ app.get('/api/info', (c) => {
       '/account/api-keys': { price: 'free', method: 'POST', description: 'Generate a new axl_ API key. Body: { name? }', auth: 'session' },
       '/account/link-wallet': { price: 'free', method: 'POST', description: 'Link a verified wallet to the authenticated account. Body: { wallet }', auth: 'session or api-key' },
       '/account/earnings': { price: 'free', method: 'GET', description: 'View contributor earnings for the authenticated account', auth: 'session or api-key' },
-      '/account/credits': { price: 'free', method: 'GET', description: 'View unlock credit balance for the authenticated account', auth: 'session' },
+      '/account/credits': { price: 'free', method: 'GET', description: 'View balance for the authenticated account', auth: 'session' },
       '/account/purchases': { price: 'free', method: 'GET', description: 'View credit purchase history for the authenticated account', auth: 'session' },
       '/checkout/session': { price: 'free', method: 'POST', description: 'Create a Stripe checkout session to purchase credits. Body: { pack }', auth: 'session' },
       '/checkout/success': { price: 'free', method: 'GET', description: 'Stripe payment success landing page (redirect target)' },
@@ -9430,9 +9455,23 @@ app.get('/knowledge/:id', async (c) => {
   // AUD19-2: the account arm compares the POST-auth buyerAccountId — a
   // pre-auth capture was always null on the API-key path, which left
   // the account arm of this guard dead against exactly the buyers it targets.
-  const isSelfUnlock =
-    (buyerAccountId && contribAccountId && buyerAccountId === contribAccountId) ||
-    (callerWallet && contribWalletLower && callerWallet === contribWalletLower);
+  //
+  // L12: on the Balance path, ownership is decided by the signed-in account
+  // ONLY, never by a header. A Balance unlock is always authenticated —
+  // there is no reason to ever consult the unverified X-Wallet-Address
+  // header there, and every reason not to: any buyer could send another
+  // builder's wallet in that header and zero their share while still
+  // paying full price (Auxilo keeps all of it — the buyer gains nothing,
+  // but the builder loses the share). The wallet arm is unchanged on the
+  // x402/router path, where the caller may be anonymous and a wallet claim
+  // is the only identity signal available (the M-2 wash guard still zeroes
+  // any self-dealing accrual there post-payment, as documented above).
+  const isSelfUnlock = (fundingSource === 'credit_pack')
+    ? !!(buyerAccountId && contribAccountId && buyerAccountId === contribAccountId)
+    : (
+      (buyerAccountId && contribAccountId && buyerAccountId === contribAccountId) ||
+      (callerWallet && contribWalletLower && callerWallet === contribWalletLower)
+    );
 
   // CAT-1 §5 / task-#13(b): counters are CREDITED only for a real, non-self
   // unlock. quality.unlocks feeds computeScore → search ranking, buyer-facing
@@ -9444,7 +9483,18 @@ app.get('/knowledge/:id', async (c) => {
   // and excluded from search projections by their explicit field lists).
   // Residual, accepted by CAT-1: anonymous x402 sybil demand bumps —
   // unaddressable without identity on that path.
-  const countersCredited = !isSelfUnlock;
+  //
+  // M9: repeat unlocks are always charged and always earn the Builder Share
+  // in full (server.js never reads this gate for money) — but the ranking
+  // and demand counters count an unlock only when it drew paid dollars, and
+  // at most once per buyer account per learning per 30 days. An unlock with
+  // no buyer account (x402/router) always counts on this second predicate —
+  // there is no account to dedupe against, and each is real, distinct paid
+  // money. Short-circuited: the 30-day gate is only consulted, and only
+  // records a new count, when the unlock would otherwise be credited.
+  const drewPaidDollars = accrualBasis > 0;
+  const countersCredited = !isSelfUnlock && drewPaidDollars
+    && shouldCountUnlockForRanking(buyerAccountId, id);
 
   // AUD19-10: compensation state. The buyer's balance was already debited
   // inside dualAuthDynamic; every mutation from here to the response is
@@ -9470,9 +9520,12 @@ app.get('/knowledge/:id', async (c) => {
     learning.demand.unlocks_30d++;
   }
 
-  // Track earnings with source attribution (AUD19-2: on the PAID basis)
-  const contributorEarned = accrualBasis * CONTRIBUTOR_SHARE;
-  const platformEarned = accrualBasis * (1 - CONTRIBUTOR_SHARE);
+  // Track earnings with source attribution (AUD19-2: on the PAID basis).
+  // L1: remainder-allocated -- the platform share is whatever the rounded
+  // contributor share leaves, not its own independent rounding, so the two
+  // always sum to exactly round6(accrualBasis) with no stray sub-cent gap.
+  const contributorEarned = round6(accrualBasis * CONTRIBUTOR_SHARE);
+  const platformEarned = round6(accrualBasis - contributorEarned);
 
   if (isSelfUnlock) {
     // Persist only the ops-only raw counter bumped above (unlocks_total) so
@@ -9576,11 +9629,16 @@ app.get('/knowledge/:id', async (c) => {
 
   const activeEntry = earnings[resolvedEarningsKey];
 
-  // AUD19-10: deep-snapshot the contributor's earnings entry BEFORE mutating it
-  // (a new entry is simply deleted on rollback).
+  // AUD19-10 / L7: track only whether this entry is new (deleted outright
+  // on rollback) — a rolled-back unlock no longer restores a whole-entry
+  // snapshot taken before this mutation. That snapshot would silently
+  // overwrite any OTHER concurrent mutation to the SAME entry (a reversal
+  // from a refund or lost dispute landing during the `await
+  // recordLotFunding` window, for example) that happened between the
+  // snapshot and the rollback. The rollback below instead subtracts this
+  // request's own amounts, leaving any other legitimate mutation intact.
   _rb.earningsKey = resolvedEarningsKey;
   _rb.earningsWasNew = (earningsSource === 'new');
-  _rb.earningsSnapshot = _rb.earningsWasNew ? null : JSON.parse(JSON.stringify(activeEntry));
 
   activeEntry.total_gross += accrualBasis;
   activeEntry.total_contributor += contributorEarned;
@@ -9635,26 +9693,6 @@ app.get('/knowledge/:id', async (c) => {
     }
   }
   activeEntry.last_updated = new Date().toISOString();
-
-  // Record which dollar lot(s) funded this unlock's builder share,
-  // proportioned across a mixed draw — the exact history a later refund or
-  // lost dispute needs to reverse. Best-effort: a failure here never blocks
-  // delivery (the money accounting above already landed in activeEntry); it
-  // would only make a future reversal coarser.
-  if (fundingSource === 'credit_pack' && buyerAccountId) {
-    try {
-      await recordLotFunding(buyerAccountId, c.get('creditDollarDraws') || [], {
-        learning_id: id,
-        contributor_account_id: contribAccountId,
-        contributor_wallet: contribWallet,
-        contributor_amount: contributorEarned,
-        platform_amount: platformEarned,
-        ts: activeEntry.last_updated,
-      });
-    } catch (fundErr) {
-      console.error('[recordLotFunding] failed (non-fatal):', fundErr && fundErr.message);
-    }
-  }
 
   // SPEC-A2 C3: WAL-protected dual write — crash-safe atomicity
   // IMPL-A2-02: payload stores contributor_earned + platform_earned separately (not gross amount)
@@ -9719,6 +9757,50 @@ app.get('/knowledge/:id', async (c) => {
   markStepComplete(walId, 'unlock_event_appended');
 
   commitWal(walId);
+
+  // M1: record which dollar lot(s) funded this unlock's builder share --
+  // the exact history a later refund or lost dispute needs to reverse --
+  // only AFTER the unlock is committed. Recording it earlier (as this used
+  // to) meant a delivery failure that rolled the WAL and the credit back
+  // could still leave a funding record on the lot: a later refund of that
+  // pack would then reverse a share the builder never actually kept.
+  // Best-effort: a failure here never blocks delivery (the money accounting
+  // above already landed in activeEntry); it would only make a future
+  // reversal coarser.
+  if (fundingSource === 'credit_pack' && buyerAccountId) {
+    try {
+      const fundResult = await recordLotFunding(buyerAccountId, c.get('creditDollarDraws') || [], {
+        learning_id: id,
+        contributor_account_id: contribAccountId,
+        contributor_wallet: contribWallet,
+        contributor_amount: contributorEarned,
+        platform_amount: platformEarned,
+        ts: activeEntry.last_updated,
+      });
+      // M2: a refund or lost dispute can land in the narrow window between
+      // the debit (already drawn, above) and this call recording the
+      // funding history -- recordLotFunding detects that (the lot is
+      // stamped `removed_at`) and hands back the entry marked
+      // pending_reversal instead of quietly recording it. Reverse it on
+      // the spot, under the SAME earnings lock a withdrawal would take
+      // (ruling M8), then finalize it durably (ruling L6) per affected lot.
+      if (fundResult && fundResult.needsReversal && fundResult.needsReversal.length > 0) {
+        const { totalReversed } = await reverseCreditLotFunding(earnings, fundResult.needsReversal);
+        if (totalReversed > 0) safeWrite(EARNINGS_FILE, earnings);
+        const affectedLotIds = [...new Set(fundResult.needsReversal.map(e => e.lot_id))];
+        for (const affectedLotId of affectedLotIds) {
+          await finalizePendingReversals(buyerAccountId, affectedLotId);
+        }
+        sendOpsAlert(
+          'Unlock funded a lot a refund already removed — reversed on the spot',
+          `account=${buyerAccountId} learning=${id} reversed_usd=${totalReversed.toFixed(6)} lots=${affectedLotIds.join(',')}`,
+          { category: 'credits-refund' }
+        ).catch(() => {});
+      }
+    } catch (fundErr) {
+      console.error('[recordLotFunding] failed (non-fatal):', fundErr && fundErr.message);
+    }
+  }
 
   // LW-7: delivery succeeded — record proof of purchase for rating eligibility.
   // Sits AFTER the WAL commit so a refunded delivery failure can never mint
@@ -9880,8 +9962,38 @@ app.get('/knowledge/:id', async (c) => {
         learning.earnings = _rb.learningEarnings;
       }
       if (_rb.earningsKey) {
-        if (_rb.earningsWasNew) delete earnings[_rb.earningsKey];
-        else if (_rb.earningsSnapshot) earnings[_rb.earningsKey] = _rb.earningsSnapshot;
+        if (_rb.earningsWasNew) {
+          delete earnings[_rb.earningsKey];
+        } else {
+          // L7: undo by subtracting THIS request's own amounts, not by
+          // restoring a whole-entry snapshot -- see the comment at the
+          // mutation site above.
+          const rbEntry = earnings[_rb.earningsKey];
+          if (rbEntry) {
+            rbEntry.total_gross = round6((rbEntry.total_gross || 0) - accrualBasis);
+            rbEntry.total_contributor = round6((rbEntry.total_contributor || 0) - contributorEarned);
+            rbEntry.total_platform = round6((rbEntry.total_platform || 0) - platformEarned);
+            if (rbEntry.by_learning && rbEntry.by_learning[id]) {
+              const bl = rbEntry.by_learning[id];
+              bl.gross = round6((bl.gross || 0) - accrualBasis);
+              bl.contributor = round6((bl.contributor || 0) - contributorEarned);
+              bl.platform = round6((bl.platform || 0) - platformEarned);
+              bl.unlocks = Math.max(0, (bl.unlocks || 0) - 1);
+            }
+            if (agencyInForce) {
+              rbEntry.pending_balance = round6((rbEntry.pending_balance || 0) - contributorEarned);
+            } else {
+              rbEntry.unassented_pending = round6((rbEntry.unassented_pending || 0) - contributorEarned);
+            }
+          }
+        }
+      }
+      // M9: this request's counter-gate record (if it made one -- only when
+      // countersCredited actually gated the counters above) must not
+      // permanently burn the buyer's 30-day slot for a delivery that never
+      // happened; a retry that actually delivers should still count.
+      if (countersCredited && buyerAccountId) {
+        unrecordUnlockCounterGate(buyerAccountId, id);
       }
       // F1 (Wave-1 review carry-in): the discovery-premium cache entry was
       // consumed (single-use) at the read site above — restore it so the
@@ -9893,12 +10005,14 @@ app.get('/knowledge/:id', async (c) => {
       console.error('[AUD19-10] in-memory rollback failed (continuing to refund):', rbErr && rbErr.message);
     }
 
-    // 3. Restore the exact paid/promo split the debit drew, as fresh lots
-    //    (the same "push a new lot" idiom for either kind).
+    // 3. Restore the exact amounts drawn back onto the SAME lots they came
+    //    from (ruling M1) -- `creditDollarDraws` is the exact draws array
+    //    debitDollarLots returned for this debit, the same one recorded
+    //    (now, after commitWal — see above) as this unlock's funding
+    //    history. Any draw whose lot a refund has since removed is skipped
+    //    (refundDollarDraw's own guard) -- that money already left Auxilo.
     try {
-      await refundDollarDraw(buyerAccountId,
-        (typeof creditPaidDrawn === 'number' && Number.isFinite(creditPaidDrawn)) ? creditPaidDrawn : 0,
-        (typeof creditPromoDrawn === 'number' && Number.isFinite(creditPromoDrawn)) ? creditPromoDrawn : 0);
+      await refundDollarDraw(buyerAccountId, c.get('creditDollarDraws') || []);
       console.error(`[AUD19-10] credit refunded to ${buyerAccountId} for failed unlock of ${id}`);
       return c.json({
         error: 'Unlock delivery failed — your credit has been refunded. Please retry.',
@@ -11066,6 +11180,40 @@ app.get('/admin/settlements', adminAuth('read'), async (c) => {
 // POST /admin/settle — admin scope required (read token rejected)
 app.post('/admin/settle', adminAuth('admin'), async (c) => {
   return c.json({ error: 'Manual settle not fully implemented yet' }, 501);
+});
+
+// ── M4: POST /admin/account-holds/:accountId/clear ─────────────────────────
+// The only AUTOMATIC hold clearance is a dispute resolved in Auxilo's favor
+// (H2, handleDisputeClosed) — everything else (a cap_overage hold, or a
+// dispute_hold left behind by a matter that never reaches 'won' /
+// 'warning_closed') needed a human, and nothing existed to let one clear
+// it. Behind the same admin auth every other admin mutation uses. Records
+// who cleared it and when through the same ops-alert audit channel every
+// other money-path admin action in this codebase uses — nothing about this
+// route, or any hold it clears, is written to a live-data number in this
+// public repo's own source.
+app.post('/admin/account-holds/:accountId/clear', adminAuth('admin'), async (c) => {
+  const accountId = c.req.param('accountId');
+  const hold = getAccountHold(accountId);
+  if (!hold) {
+    return c.json({ error: 'No hold on this account', code: 'NO_HOLD' }, 404);
+  }
+  const cleared = clearAccountHold(accountId);
+  if (!cleared) {
+    return c.json({ error: 'Failed to clear hold' }, 500);
+  }
+  const clearedAt = new Date().toISOString();
+  sendOpsAlert(
+    'Account hold cleared (admin)',
+    `account=${accountId} reason=${hold.reason} held_at=${hold.held_at} cleared_at=${clearedAt} scope=${c.get('adminScope') || 'admin'}`,
+    { category: 'credits-hold-cleared' }
+  ).catch(() => {});
+  return c.json({
+    cleared: true,
+    account_id: accountId,
+    previous_hold_reason: hold.reason,
+    cleared_at: clearedAt,
+  });
 });
 
 // ─── M-F: POST /admin/stage-key — Stage a new private key for next restart ───
@@ -12796,14 +12944,17 @@ function renderLiveCatalogStats(html) {
   }
 }
 
-// CREDITS-CONTROL PART 1: pack sizes/prices (id, name, unlocks, price_usd)
-// injected as a JSON script global at render time, straight from lib/stripe.js
+// CREDITS-CONTROL PART 1: pack sizes/prices (id, name, price_usd) injected
+// as a JSON script global at render time, straight from lib/stripe.js
 // PACKS — the single source of truth. Neither the pricing page's pack-card
-// copy shell nor the dashboard control hand-types a count or a dollar amount;
-// if PACKS ever changes, both pages change with it on the next request, no
-// separate edit required. A page with no consumer of the global (any page
-// this helper runs on that isn't pricing.html/dashboard.html) just carries a
+// copy shell nor the dashboard control hand-types a dollar amount; if PACKS
+// ever changes, both pages change with it on the next request, no separate
+// edit required. A page with no consumer of the global (any page this
+// helper runs on that isn't pricing.html/dashboard.html) just carries a
 // small unused script tag.
+//
+// L8: no unlocks field — a pack adds dollars, one dollar of Balance for
+// each dollar paid; there is no unit-credit count left to serve.
 function renderPackData(html) {
   try {
     if (!html.includes('</head>')) return html;
@@ -12811,7 +12962,6 @@ function renderPackData(html) {
       id: k,
       name: PACKS[k].name,
       price_usd: PACKS[k].price_usd,
-      unlocks: PACKS[k].unlocks,
     }));
     const script = `<script>window.__AUXILO_PACKS__ = ${JSON.stringify(packData)};</script>\n`;
     return html.replace('</head>', `${script}</head>`);

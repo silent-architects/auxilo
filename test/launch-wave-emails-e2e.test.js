@@ -419,18 +419,32 @@ describe('LAUNCH-WAVE-EMAILS-E2E: both flags ON', { timeout: 180_000 }, () => {
     assert.match(ctx.getOutput(), /\[earning-digest\] dev mode: 1 item\(s\) for <redacted>@test\.local/);
   });
 
-  it('a self-unlock (matching X-Wallet-Address claim) queues nothing', async () => {
+  // FIX-UNIT-MONEY L12 (2026-09-27): this test used to be titled "a
+  // self-unlock (matching X-Wallet-Address claim) queues nothing" -- that
+  // WAS the L12 defect. BUYER_SELF is a different account from CONTRIB_NORMAL
+  // (LEARNING_SELF's real contributor); it is simply sending CONTRIB_NORMAL's
+  // wallet in a header on the BALANCE path, where ownership is now decided
+  // by the signed-in account only. This is a real, non-self unlock: it pays
+  // the contributor and queues a digest like any other.
+  it('[ruling L12] a balance unlock with another contributor\'s wallet in the header is never treated as self_unlock -- it pays and queues normally', async () => {
     if (ctx.skipReason) return;
-    const before = ctx.getOutput().length;
     const unlock = await getJson(`${ctx.baseUrl}/knowledge/${LEARNING_SELF}`, {
       'X-API-Key': RAW_BUYER_SELF,
       'X-Wallet-Address': CONTRIB_NORMAL_WALLET,
     });
     assert.equal(unlock.status, 200, JSON.stringify(unlock.body));
-    assert.equal(unlock.body._revenue.self_unlock, true);
-    assert.equal(unlock.body._revenue.contributor_earned_usd, 0);
-    const newOutput = ctx.getOutput().slice(before);
-    assert.ok(!/earning-digest/.test(newOutput), 'self-unlock must never queue or flush a digest');
+    assert.notEqual(unlock.body._revenue.self_unlock, true,
+      'BUYER_SELF is not LEARNING_SELF\'s contributor -- the Balance path must never consult the wallet header for ownership');
+    assert.equal(unlock.body._revenue.contributor_earned_usd, 0.7, 'CONTRIB_NORMAL is paid the normal 70% share, not zeroed by the header claim');
+    // The preceding test already flushed CONTRIB_NORMAL's digest moments
+    // ago, so this accrual queues but is not YET due (DIGEST_WINDOW_MS
+    // cooldown) -- it lands in the persisted queue rather than flushing
+    // immediately. Either way, it is queued like any other real unlock,
+    // which is the whole point: no self-unlock suppression happened.
+    const queue = notifQueue();
+    assert.ok(queue[CONTRIB_NORMAL], 'a queue row must exist for CONTRIB_NORMAL');
+    assert.ok(queue[CONTRIB_NORMAL].pending.some((i) => i.learningId === LEARNING_SELF),
+      'the LEARNING_SELF accrual must be queued -- a self-unlock suppression would have queued nothing');
   });
 
   // RETIRED (credits-as-cash follow-up, SITE-PM 2026-09-27): 'an

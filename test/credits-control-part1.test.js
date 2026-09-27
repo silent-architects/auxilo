@@ -55,9 +55,12 @@ describe('T1 capability manifest: pack field + queries retired', () => {
     assert.ok(!SERVER_SRC.includes('View query and unlock credit balance'),
       'the pre-fix manifest string must be gone everywhere, not just one occurrence');
   });
-  it('/account/credits description reads "View unlock credit balance" (both occurrences)', () => {
-    const matches = SERVER_SRC.match(/View unlock credit balance for the authenticated account/g) || [];
+  // FIX-UNIT-MONEY L8: "unlock credit balance" retired -- there is no unit
+  // credit, only a dollar Balance.
+  it('/account/credits description reads "View balance" (both occurrences), never "unlock credit"', () => {
+    const matches = SERVER_SRC.match(/View balance for the authenticated account/g) || [];
     assert.equal(matches.length, 2, 'both /skills-manifest occurrences must carry the fixed string');
+    assert.equal((SERVER_SRC.match(/View unlock credit balance/g) || []).length, 0);
   });
   it('/checkout/session manifest body field is { pack }, not { pack_id } (both occurrences)', () => {
     assert.ok(!SERVER_SRC.includes('Body: { pack_id }'),
@@ -281,6 +284,21 @@ describe('T7 /checkout/session: current-Terms-acceptance gate', () => {
   // AUD-CAC: the two purchase caps (spec §2, ruling L6) sit between pack
   // validation and the Stripe-usability check, always checked regardless of
   // CREDITS_AS_CASH_ENABLED.
+  //
+  // FIX-UNIT-MONEY L10: this test (and the ACCOUNT_HELD test below) only
+  // ever asserted the REFUSAL BODY'S SOURCE STRING exists somewhere in the
+  // route -- an inverted condition (crediting when the cap IS exceeded,
+  // refusing when it is NOT) would still pass, which is exactly why M1 was
+  // not caught by any pre-existing test. The REAL refusal behavior --
+  // BALANCE_CAP_EXCEEDED actually returned by the live route when unpaid
+  // pending Checkout sessions push an account over the cap, and
+  // ACCOUNT_HELD actually returned when a webhook-race hold is in place,
+  // driven through a real staged server with no mocking -- is proved in
+  // test/fix-unit-money-webhook.test.js ("[ruling M3] unpaid, unexpired
+  // Checkout sessions count toward the pre-check..." and "[ruling M4] the
+  // admin route clears an account hold..."). These ordering/wiring checks
+  // stay as a fast source-level regression guard for where the checks sit
+  // relative to each other, not as the only proof they work.
   it('checks the balance cap and the daily purchase cap after pack validation, before Stripe usability [AUD-CAC]', () => {
     const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 5200);
     const packIdx = h.indexOf('const { pack } = body');
@@ -407,10 +425,17 @@ describe('T10 dashboard.html: Queries column retired, Credits card wired', () =>
 
 describe('T11 PACKS pin (80/250/1000) + Terms §7.1 doc↔literal cross-check', () => {
   const { PACKS } = require('../lib/stripe.js');
-  it('the three unlock counts are pinned', () => {
-    assert.equal(PACKS.starter.unlocks, 80);
-    assert.equal(PACKS.growth.unlocks, 250);
-    assert.equal(PACKS.pro.unlocks, 1000);
+  // FIX-UNIT-MONEY L8: unlock counts retired -- there is one balance, and a
+  // pack adds exactly its price_usd in dollars, nothing else. The three
+  // NUMBERS this test pinned (80/250/1000) no longer exist anywhere to pin;
+  // what stays pinned is the dollar price and the absence of the field.
+  it('no pack carries an unlocks field; prices are pinned', () => {
+    for (const id of ['starter', 'growth', 'pro']) {
+      assert.equal(Object.prototype.hasOwnProperty.call(PACKS[id], 'unlocks'), false, `PACKS.${id} must not carry unlocks`);
+    }
+    assert.equal(PACKS.starter.price_usd, 10);
+    assert.equal(PACKS.growth.price_usd, 25);
+    assert.equal(PACKS.pro.price_usd, 100);
   });
   it('pack cards + dashboard control never hand-type PACKS numbers (rendered from window.__AUXILO_PACKS__ / renderPackData)', () => {
     assert.ok(SERVER_SRC.includes('function renderPackData(html)'));
@@ -588,7 +613,8 @@ describe('T14 behavioral: real server boot', () => {
       for (const p of badPackBody.valid_packs) {
         assert.ok(!Object.prototype.hasOwnProperty.call(p, 'queries'), `valid_packs[] entry must not carry "queries": ${JSON.stringify(p)}`);
         assert.ok(Object.prototype.hasOwnProperty.call(p, 'id'));
-        assert.ok(Object.prototype.hasOwnProperty.call(p, 'unlocks'));
+        // FIX-UNIT-MONEY L8: unlocks retired -- a pack adds dollars only.
+        assert.ok(!Object.prototype.hasOwnProperty.call(p, 'unlocks'), `valid_packs[] entry must not carry "unlocks": ${JSON.stringify(p)}`);
         assert.ok(Object.prototype.hasOwnProperty.call(p, 'price_usd'));
       }
 
@@ -671,12 +697,15 @@ describe('T15 auxiloBuyCredits: TERMS_NOT_ACCEPTED 403 routes to the terms-gate 
 // (purchased_queries/queries_used) stay in the record shape — see
 // test/credits.test.js for the reader-tolerance coverage of legacy records.
 
-describe('T16 CREDITS-QUERIES-RESIDUAL: packs grant unlocks only', () => {
-  it('lib/stripe.js PACKS: no pack defines a queries field anymore', () => {
+describe('T16 CREDITS-QUERIES-RESIDUAL: packs grant dollars only', () => {
+  // FIX-UNIT-MONEY L8: packs no longer grant unlocks either -- there is one
+  // balance, and a pack adds exactly its price_usd in dollars.
+  it('lib/stripe.js PACKS: no pack defines a queries field, or an unlocks field, anymore', () => {
     const packsBlock = sliceAt(STRIPE_LIB_SRC, 'const PACKS = {', 700);
     assert.ok(!/queries:\s*\d+/.test(packsBlock), 'no PACKS entry may carry a queries count');
-    assert.ok(/unlocks:\s*80/.test(packsBlock) && /unlocks:\s*250/.test(packsBlock) && /unlocks:\s*1000/.test(packsBlock),
-      'unlock counts must be untouched');
+    assert.ok(!/unlocks:\s*\d+/.test(packsBlock), 'no PACKS entry may carry an unlocks count');
+    assert.ok(/price_usd:\s*10/.test(packsBlock) && /price_usd:\s*25/.test(packsBlock) && /price_usd:\s*100/.test(packsBlock),
+      'dollar prices must be untouched');
   });
 
   // RETIRED (credits-as-cash follow-up, SITE-PM 2026-09-27): 'the webhook no
@@ -714,12 +743,16 @@ describe('T16 CREDITS-QUERIES-RESIDUAL: packs grant unlocks only', () => {
   // RETIRED (credits-as-cash follow-up): the old test asserted
   // Purchase.unlocks_added STILL existed in openapi.json; F-7/F-8 remove it
   // — the purchase schema now matches the dollars-only response.
-  it('openapi.json: CreditPack has no "queries" property and Purchase has no queries_added or unlocks_added property', () => {
+  //
+  // FIX-UNIT-MONEY L9: CreditPack.unlocks is ALSO removed now (it used to
+  // "remain" because packs still granted a unit count) -- a pack adds
+  // dollars only.
+  it('openapi.json: CreditPack has no "queries" or "unlocks" property, and Purchase has no queries_added or unlocks_added property', () => {
     const openapi = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'openapi.json'), 'utf-8'));
     const creditPack = openapi.components.schemas.CreditPack.properties;
     const purchase = openapi.components.schemas.Purchase.properties;
     assert.ok(!Object.prototype.hasOwnProperty.call(creditPack, 'queries'), 'CreditPack.queries must be removed');
-    assert.ok(Object.prototype.hasOwnProperty.call(creditPack, 'unlocks'), 'CreditPack.unlocks must remain');
+    assert.ok(!Object.prototype.hasOwnProperty.call(creditPack, 'unlocks'), 'CreditPack.unlocks must be removed');
     assert.ok(!Object.prototype.hasOwnProperty.call(purchase, 'queries_added'), 'Purchase.queries_added must be removed');
     assert.ok(!Object.prototype.hasOwnProperty.call(purchase, 'unlocks_added'), 'Purchase.unlocks_added must be removed');
   });

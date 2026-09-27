@@ -36,8 +36,8 @@ process.env.AUXILO_PURCHASES_FILE = path.join(TMP_DIR, 'purchases.jsonl');
 const { describe, it, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { addDollarLot, recordLotFunding, loadCredits, round6 } = require('../lib/credits.js');
-const { isAccountHeld, getAccountHold } = require('../lib/account-holds.js');
+const { addDollarLot, recordLotFunding, loadCredits, removeDollarLotRemainder, round6 } = require('../lib/credits.js');
+const { isAccountHeld, getAccountHold, holdAccount, clearAccountHold } = require('../lib/account-holds.js');
 const { initEarningsEntry, resolveEarningsEntry, getWithdrawableBalance } = require('../lib/earnings.js');
 const {
   handleDisputeCreated,
@@ -323,12 +323,20 @@ describe('[test 27] the invariant holds after a reversal: a builder is never lef
     assert.equal(builderNetKept, 0, 'the entire share this lot funded was reversed, matching zero surviving revenue');
   });
 
-  it('a partial refund (dispute lost on the UNSPENT remainder only) never claws back revenue-backed shares already earned from what was actually spent', async () => {
-    // The lot had 10, 6 was spent (real revenue, a real share was paid),
-    // 4 remained unspent when the dispute landed and was lost. Only the
-    // unspent 4 is removed; the 6 that already became real spend, and the
-    // share it funded, is not touched by construction (removeDollarLotRemainder
-    // only zeroes remaining_usd, never re-derives the already-spent portion).
+  // FIX-UNIT-MONEY H1: this test used to be titled "never claws back
+  // revenue-backed shares already earned from what was actually spent" but
+  // asserted the FULL 4.2 was clawed back on any charge.refunded event for
+  // this payment_intent, with no read of charge.amount / amount_refunded —
+  // exactly H1's defect (title and assertion said opposite things; Stripe
+  // DOES carry a real amount_refunded on a partial refund, and the handler
+  // never read it). Replaced with a title that says what the code now
+  // actually does: a partial refund removes only up to the amount refunded,
+  // and reverses a builder share ONLY for the amount beyond what remained.
+  it('a genuinely partial refund removes only the unspent remainder it targets, and claws back nothing already spent', async () => {
+    // The lot had 10, 6 was spent (real revenue, a real share was paid), 4
+    // remained unspent. A $2 partial refund (amount_refunded=200 cents)
+    // removes 2 of the 4 unspent dollars; nothing beyond the remainder was
+    // refunded, so the builder's already-earned 4.2 share is untouched.
     const accountId = uid();
     const builder = uid();
     const { paymentIntent, earnings } = await buildFundedLot({
@@ -337,17 +345,99 @@ describe('[test 27] the invariant holds after a reversal: a builder is never lef
     });
     const beforeReversal = earnings[builder].pending_balance;
 
-    await handleChargeRefunded(chargeRefundedEvent(paymentIntent), {
-      earnings, saveEarnings: () => {}, sendOpsAlert: makeOpsAlertSpy(),
+    const result = await handleChargeRefunded(
+      { data: { object: { payment_intent: paymentIntent, amount: 1000, amount_refunded: 200, refunded: false } } },
+      { earnings, saveEarnings: () => {}, sendOpsAlert: makeOpsAlertSpy() },
+    );
+
+    assert.equal(result.matched, true);
+    assert.equal(result.removed_usd, 2, 'only the $2 refunded is removed from the $4 that remained');
+    assert.equal(result.reversed_usd, 0, 'the refund never exceeded the unspent remainder -- nothing to claw back');
+    assert.equal(earnings[builder].pending_balance, beforeReversal, 'the 4.2 already earned from real spend is untouched');
+    const lot = loadCredits()[accountId].dollar_lots.find(l => l.stripe_payment_intent === paymentIntent);
+    assert.equal(lot.remaining_usd, 2, '4 remained, 2 refunded, 2 left');
+  });
+
+  it('a partial refund that exceeds the unspent remainder claws back only the excess, newest Unlock first, the last one in proportion (H1 worked case)', async () => {
+    // $100 pack, one $10 unlock (builder share $7), so $90 remained. A $95
+    // refund removes all $90 that remained, and the $5 beyond that comes
+    // out of the $10 Unlock's history: $5 of $10 is 50%, so 50% of the $7
+    // share (=$3.50) is reversed, and the builder keeps the other $3.50.
+    const accountId = uid();
+    const builder = uid();
+    const { paymentIntent, earnings } = await buildFundedLot({
+      accountId, originalUsd: 100,
+      unlocks: [{ learningId: 'lrn_95', builderAccountId: builder, paidDrawn: 10, contributorEarned: 7, platformEarned: 3 }],
     });
 
-    // The reversal only ever removes what THIS lot's history says it paid —
-    // here that is the full 4.2 (the only funded_unlocks entry), because a
-    // partial Stripe refund of just the unspent portion still targets the
-    // SAME payment_intent / lot as a whole under this build's design (a
-    // finer-grained "partial charge refund of only the unspent slice"
-    // distinction is not represented in Stripe's refund event itself).
-    assert.equal(round6(beforeReversal - earnings[builder].pending_balance), 4.2);
+    const result = await handleChargeRefunded(
+      { data: { object: { payment_intent: paymentIntent, amount: 10000, amount_refunded: 9500, refunded: false } } },
+      { earnings, saveEarnings: () => {}, sendOpsAlert: makeOpsAlertSpy() },
+    );
+
+    assert.equal(result.matched, true);
+    assert.equal(result.removed_usd, 90);
+    assert.equal(result.reversed_usd, 3.5);
+    assert.equal(earnings[builder].pending_balance, 3.5, '7 - 3.5 = 3.5 kept');
+  });
+
+  it('a second, larger partial refund on the same charge handles only the increase (idempotent on the running total)', async () => {
+    const accountId = uid();
+    const builder = uid();
+    const { paymentIntent, earnings } = await buildFundedLot({
+      accountId, originalUsd: 100,
+      unlocks: [{ learningId: 'lrn_seq', builderAccountId: builder, paidDrawn: 10, contributorEarned: 7, platformEarned: 3 }],
+    });
+    const ctx = { earnings, saveEarnings: () => {}, sendOpsAlert: makeOpsAlertSpy() };
+
+    // First delivery: $5 refunded.
+    const r1 = await handleChargeRefunded(
+      { data: { object: { payment_intent: paymentIntent, amount: 10000, amount_refunded: 500, refunded: false } } }, ctx);
+    assert.equal(r1.removed_usd, 5);
+    assert.equal(r1.reversed_usd, 0);
+
+    // Replay of the SAME amount changes nothing.
+    const replay = await handleChargeRefunded(
+      { data: { object: { payment_intent: paymentIntent, amount: 10000, amount_refunded: 500, refunded: false } } }, ctx);
+    assert.equal(replay.removed_usd, 0);
+    assert.equal(replay.reversed_usd, 0);
+
+    // A SECOND, LARGER partial refund on the same charge: cumulative now $95.
+    const r2 = await handleChargeRefunded(
+      { data: { object: { payment_intent: paymentIntent, amount: 10000, amount_refunded: 9500, refunded: false } } }, ctx);
+    assert.equal(r2.removed_usd, 85, 'only the NEW increase is handled: cumulative 95 - already-accounted 5 = 90 newly refunded, of which 85 comes off the $85 that still remained');
+    assert.equal(r2.reversed_usd, 3.5);
+    assert.equal(earnings[builder].pending_balance, 3.5);
+  });
+
+  it('a full refund still behaves as today: removes everything remaining and reverses every funded share in full', async () => {
+    const accountId = uid();
+    const builder = uid();
+    const { paymentIntent, earnings } = await buildFundedLot({
+      accountId, originalUsd: 10,
+      unlocks: [{ learningId: 'lrn_full', builderAccountId: builder, paidDrawn: 6, contributorEarned: 4.2, platformEarned: 1.8 }],
+    });
+    const result = await handleChargeRefunded(
+      { data: { object: { payment_intent: paymentIntent, amount: 1000, amount_refunded: 1000, refunded: true } } },
+      { earnings, saveEarnings: () => {}, sendOpsAlert: makeOpsAlertSpy() },
+    );
+    assert.equal(result.removed_usd, 4);
+    assert.equal(result.reversed_usd, 4.2);
+    assert.equal(earnings[builder].pending_balance, 0);
+  });
+
+  it('a legacy/constructed refund event with no amount fields still behaves as a full refund (backward compatible)', async () => {
+    const accountId = uid();
+    const builder = uid();
+    const { paymentIntent, earnings } = await buildFundedLot({
+      accountId, originalUsd: 10,
+      unlocks: [{ learningId: 'lrn_legacy', builderAccountId: builder, paidDrawn: 6, contributorEarned: 4.2, platformEarned: 1.8 }],
+    });
+    const result = await handleChargeRefunded(chargeRefundedEvent(paymentIntent), {
+      earnings, saveEarnings: () => {}, sendOpsAlert: makeOpsAlertSpy(),
+    });
+    assert.equal(result.removed_usd, 4);
+    assert.equal(result.reversed_usd, 4.2);
   });
 });
 
@@ -388,5 +478,219 @@ describe('idempotency: a replayed dispute.closed/charge.refunded event never dou
 
     assert.equal(round6(before - afterFirst), 2.8, 'the first replay reverses the real amount');
     assert.equal(afterSecond, afterFirst, 'a second delivery of the same event reverses nothing further');
+  });
+});
+
+// ─── Ruling H2: only 'lost' is a loss; 'won' and 'warning_closed' unfreeze,
+// reverse nothing, and clear a dispute_hold; any other status is a no-op ───
+
+describe('[ruling H2] dispute.closed status handling', () => {
+  it("status 'warning_closed' (an inquiry that never became a chargeback) unfreezes, reverses nothing, and clears a dispute_hold", async () => {
+    const accountId = uid();
+    const builder = uid();
+    const { paymentIntent, earnings } = await buildFundedLot({
+      accountId, originalUsd: 10,
+      unlocks: [{ learningId: 'lrn_wc', builderAccountId: builder, paidDrawn: 6, contributorEarned: 4.2, platformEarned: 1.8 }],
+    }); // 4 remaining of 10 -- 60% spent, so a created event holds the account
+    await handleDisputeCreated(disputeCreatedEvent(paymentIntent));
+    assert.equal(isAccountHeld(accountId), true, 'sanity: the more-than-half-spent created event held the account');
+    const before = earnings[builder].pending_balance;
+
+    const result = await handleDisputeClosed(disputeClosedEvent(paymentIntent, 'warning_closed'), {
+      earnings, saveEarnings: () => {}, sendOpsAlert: makeOpsAlertSpy(),
+    });
+
+    assert.equal(result.matched, true);
+    assert.equal(result.status, 'warning_closed');
+    const lot = loadCredits()[accountId].dollar_lots.find(l => l.stripe_payment_intent === paymentIntent);
+    assert.equal(lot.frozen, false);
+    assert.equal(lot.remaining_usd, 4, 'nothing removed');
+    assert.equal(earnings[builder].pending_balance, before, 'nothing reversed');
+    assert.equal(isAccountHeld(accountId), false, 'the dispute_hold this same dispute placed is cleared automatically');
+  });
+
+  it("an unrecognized status is logged and changes nothing -- never treated as a loss by default", async () => {
+    const accountId = uid();
+    const builder = uid();
+    const { paymentIntent, earnings } = await buildFundedLot({
+      accountId, originalUsd: 10,
+      unlocks: [{ learningId: 'lrn_unrec', builderAccountId: builder, paidDrawn: 4, contributorEarned: 2.8, platformEarned: 1.2 }],
+    });
+    await handleDisputeCreated(disputeCreatedEvent(paymentIntent));
+    const before = earnings[builder].pending_balance;
+
+    const result = await handleDisputeClosed(disputeClosedEvent(paymentIntent, 'some_future_status_stripe_might_add'), {
+      earnings, saveEarnings: () => {}, sendOpsAlert: makeOpsAlertSpy(),
+    });
+
+    assert.equal(result.matched, false);
+    assert.equal(result.reason, 'unrecognized_status');
+    const lot = loadCredits()[accountId].dollar_lots.find(l => l.stripe_payment_intent === paymentIntent);
+    assert.equal(lot.frozen, true, 'the lot stays exactly as the created event left it');
+    assert.equal(lot.remaining_usd, 6, 'nothing removed');
+    assert.equal(earnings[builder].pending_balance, before, 'nothing reversed');
+  });
+
+  it("a resolved dispute never clears an UNRELATED hold (cap_overage) -- only its own dispute_hold", async () => {
+    const accountId = uid();
+    const builder = uid();
+    const { paymentIntent, earnings } = await buildFundedLot({
+      accountId, originalUsd: 10,
+      unlocks: [{ learningId: 'lrn_cap', builderAccountId: builder, paidDrawn: 1, contributorEarned: 0.7, platformEarned: 0.3 }],
+    });
+    holdAccount(accountId, 'cap_overage', { balance_usd: 2010 });
+    await handleDisputeCreated(disputeCreatedEvent(paymentIntent));
+
+    await handleDisputeClosed(disputeClosedEvent(paymentIntent, 'won'), {
+      earnings, saveEarnings: () => {}, sendOpsAlert: makeOpsAlertSpy(),
+    });
+
+    assert.equal(isAccountHeld(accountId), true, 'the cap_overage hold is a different matter -- it needs the admin route (M4), not this');
+    assert.equal(getAccountHold(accountId).reason, 'cap_overage');
+  });
+});
+
+// ─── Ruling M5: a late/retried dispute.created for an ALREADY-closed dispute
+// is ignored; a genuinely NEW dispute (a different dispute id) still freezes ─
+
+describe('[ruling M5] late/retried dispute.created after the SAME dispute already closed', () => {
+  it('a retried created event (no dispute id, matching the review\'s own Stripe-event shape) after a won dispute never re-freezes the lot', async () => {
+    const accountId = uid();
+    const builder = uid();
+    const { paymentIntent } = await buildFundedLot({
+      accountId, originalUsd: 10,
+      unlocks: [{ learningId: 'lrn_m5', builderAccountId: builder, paidDrawn: 6, contributorEarned: 4.2, platformEarned: 1.8 }],
+    });
+    await handleDisputeCreated(disputeCreatedEvent(paymentIntent));
+    await handleDisputeClosed(disputeClosedEvent(paymentIntent, 'won'), {
+      earnings: {}, saveEarnings: () => {}, sendOpsAlert: makeOpsAlertSpy(),
+    });
+    const lotAfterWon = loadCredits()[accountId].dollar_lots.find(l => l.stripe_payment_intent === paymentIntent);
+    assert.equal(lotAfterWon.frozen, false);
+
+    const retry = await handleDisputeCreated(disputeCreatedEvent(paymentIntent));
+    assert.equal(retry.matched, false);
+    assert.equal(retry.reason, 'dispute_already_closed');
+    const lotAfterRetry = loadCredits()[accountId].dollar_lots.find(l => l.stripe_payment_intent === paymentIntent);
+    assert.equal(lotAfterRetry.frozen, false, 'the lot must never be re-frozen forever by a stale retry');
+  });
+
+  it('a created event whose OWN status is already terminal is a no-op, never freezes', async () => {
+    const accountId = uid();
+    const { paymentIntent } = await buildFundedLot({
+      accountId, originalUsd: 10,
+      unlocks: [],
+    });
+    const result = await handleDisputeCreated({ data: { object: { payment_intent: paymentIntent, status: 'lost' } } });
+    assert.equal(result.matched, false);
+    assert.equal(result.reason, 'already_terminal');
+    const lot = loadCredits()[accountId].dollar_lots.find(l => l.stripe_payment_intent === paymentIntent);
+    assert.equal(lot.frozen, false);
+  });
+
+  it('a genuinely different dispute (a different dispute id) on the same lot still freezes normally', async () => {
+    const accountId = uid();
+    const { paymentIntent } = await buildFundedLot({
+      accountId, originalUsd: 10,
+      unlocks: [],
+    });
+    await handleDisputeCreated({ data: { object: { payment_intent: paymentIntent, status: 'needs_response', id: 'dp_first' } } });
+    await handleDisputeClosed({ data: { object: { payment_intent: paymentIntent, status: 'won', id: 'dp_first' } } },
+      { earnings: {}, saveEarnings: () => {}, sendOpsAlert: makeOpsAlertSpy() });
+
+    const second = await handleDisputeCreated({ data: { object: { payment_intent: paymentIntent, status: 'needs_response', id: 'dp_second' } } });
+    assert.equal(second.matched, true, 'a NEW dispute (its own id, distinct from the closed one) must still be able to freeze');
+    const lot = loadCredits()[accountId].dollar_lots.find(l => l.stripe_payment_intent === paymentIntent);
+    assert.equal(lot.frozen, true);
+  });
+});
+
+// ─── Ruling L6: a crash between marking pending_reversal and saving earnings
+// loses nothing -- the next delivery of the same event finds and completes it ─
+
+describe('[ruling L6] a crash between marking a reversal and saving earnings loses it -- proven and fixed', () => {
+  it('a crash right after credits.json is durably marked pending_reversal (before ANY earnings write) is completed by a later call, never lost', async () => {
+    const accountId = uid();
+    const builder = uid();
+    const { paymentIntent, earnings } = await buildFundedLot({
+      accountId, originalUsd: 10,
+      unlocks: [{ learningId: 'lrn_crash', builderAccountId: builder, paidDrawn: 6, contributorEarned: 4.2, platformEarned: 1.8 }],
+    });
+
+    // Phase 1 only, simulating a process crash immediately after: mark
+    // pending_reversal and persist credits.json, exactly what
+    // removeDollarLotRemainder does on its own, with NO earnings-side
+    // reversal or finalize ever running.
+    const removal = await removeDollarLotRemainder(accountId, paymentIntent);
+    assert.equal(removal.funded_unlocks.length, 1);
+    assert.equal(removal.funded_unlocks[0].pending_reversal, true);
+    const lotAfterCrash = loadCredits()[accountId].dollar_lots.find(l => l.stripe_payment_intent === paymentIntent);
+    assert.equal(lotAfterCrash.funded_unlocks[0].reversed, false, 'not yet durably finalized -- the crash window this ruling closes');
+    assert.equal(earnings[builder].pending_balance, 4.2, 'the builder still has NOT been reversed -- proves the loss window exists before the fix');
+
+    // "The next run" -- Stripe retries the SAME event (or an operator
+    // replays it). removeDollarLotRemainder's own self-healing scan finds
+    // the durable marker (there is nothing NEW to remove -- the amount was
+    // already fully accounted for on the first call) and this completes it.
+    const retry = await handleChargeRefunded(chargeRefundedEvent(paymentIntent), {
+      earnings, saveEarnings: () => {}, sendOpsAlert: makeOpsAlertSpy(),
+    });
+    assert.equal(retry.matched, true);
+    assert.equal(retry.reversed_usd, 4.2, 'the reversal the crashed run never finished is completed here -- nothing lost');
+    assert.equal(earnings[builder].pending_balance, 0);
+    const lotAfterRetry = loadCredits()[accountId].dollar_lots.find(l => l.stripe_payment_intent === paymentIntent);
+    assert.equal(lotAfterRetry.funded_unlocks[0].reversed, true, 'now durably finalized');
+
+    // A further retry finds nothing left pending -- idempotent.
+    const secondRetry = await handleChargeRefunded(chargeRefundedEvent(paymentIntent), {
+      earnings, saveEarnings: () => {}, sendOpsAlert: makeOpsAlertSpy(),
+    });
+    assert.equal(secondRetry.reversed_usd, 0);
+  });
+});
+
+// ─── Ruling M8: each reversal takes the SAME earnings lock a withdrawal takes ─
+
+describe('[ruling M8] reverseOneFundedUnlock takes the earnings lock around its mutation', () => {
+  it('acquires acquireEarningsLock keyed on the resolved entry BEFORE mutating, and releases it after', async () => {
+    const earningsLockPath = require.resolve('../lib/earnings-lock.js');
+    const reversalPath = require.resolve('../lib/earnings-reversal.js');
+    const originalLockEntry = require.cache[earningsLockPath];
+    delete require.cache[earningsLockPath];
+    delete require.cache[reversalPath];
+
+    const calls = [];
+    require.cache[earningsLockPath] = {
+      id: earningsLockPath,
+      filename: earningsLockPath,
+      loaded: true,
+      exports: {
+        acquireEarningsLock: async (key) => {
+          calls.push({ event: 'acquire', key });
+          return () => { calls.push({ event: 'release', key }); };
+        },
+        getActiveEarningsLockCount: () => 0,
+      },
+    };
+
+    try {
+      const { reverseOneFundedUnlock } = require('../lib/earnings-reversal.js');
+      const earnings = {};
+      earnings.acc_m8_probe = initEarningsEntry('acc_m8_probe', null);
+      earnings.acc_m8_probe.pending_balance = 5;
+      const result = await reverseOneFundedUnlock(earnings, {
+        contributor_account_id: 'acc_m8_probe', contributor_amount: 2, platform_amount: 1, learning_id: 'lrn_m8',
+      });
+      assert.equal(result.reversed, 2);
+      assert.equal(earnings.acc_m8_probe.pending_balance, 3);
+      assert.equal(calls.length, 2, 'exactly one acquire and one release');
+      assert.equal(calls[0].event, 'acquire');
+      assert.equal(calls[0].key, 'acc_m8_probe', 'locked on the SAME resolved key the mutation touches');
+      assert.equal(calls[1].event, 'release');
+    } finally {
+      delete require.cache[reversalPath];
+      if (originalLockEntry) require.cache[earningsLockPath] = originalLockEntry;
+      else delete require.cache[earningsLockPath];
+    }
   });
 });

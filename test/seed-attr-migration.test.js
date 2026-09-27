@@ -543,14 +543,19 @@ test('fixture diff: acc_platform and null-account unlocks mutate earnings.json b
   assert.equal(entry.account_id, null);
   assert.equal(entry.wallet, walletKey);
   assert.equal(entry.total_gross, 0.1);
-  assert.equal(entry.total_contributor, 0.1 * 0.7);
-  assert.equal(entry.total_platform, 0.1 * (1 - 0.7));
+  // FIX-UNIT-MONEY L1: the split is remainder-allocated now
+  // (contributor = round6(basis * share); platform = round6(basis -
+  // contributor)), so the stored figures are the clean 0.07/0.03, not the
+  // raw-multiplication float artifacts (0.1 * 0.7 === 0.06999999999999999
+  // in JS).
+  assert.equal(entry.total_contributor, 0.07);
+  assert.equal(entry.total_platform, 0.03);
   assert.equal(entry.pending_balance, 0);
-  assert.equal(entry.unassented_pending, 0.1 * 0.7);
+  assert.equal(entry.unassented_pending, 0.07);
   assert.deepEqual(entry.by_learning[UNLOCK_FIXTURE_ID], {
     gross: 0.1,
-    contributor: 0.1 * 0.7,
-    platform: 0.1 * (1 - 0.7),
+    contributor: 0.07,
+    platform: 0.03,
     unlocks: 1,
   });
 });

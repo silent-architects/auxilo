@@ -123,7 +123,7 @@ function deleteRecord(accountId) {
 test('New account: starts with a zero dollar balance', () => {
     const id = uid();
     const status = getCreditStatus(id);
-    assert.deepEqual(status.credit_balance, { paid_usd: 0, promo_usd: 0, total_usd: 0 });
+    assert.deepEqual(status.credit_balance, { paid_usd: 0, promo_usd: 0, total_usd: 0, frozen_usd: 0 }); // L3: frozen_usd now reported
     deleteRecord(id);
 });
 
@@ -182,7 +182,7 @@ test('getOrInitCredits: a pre-existing record carrying only legacy query fields 
     writeRecord(id, { purchased_queries: 7, queries_used: 3, purchased_unlocks: 0 });
 
     const status = getCreditStatus(id);
-    assert.deepEqual(status.credit_balance, { paid_usd: 0, promo_usd: 0, total_usd: 0 });
+    assert.deepEqual(status.credit_balance, { paid_usd: 0, promo_usd: 0, total_usd: 0, frozen_usd: 0 }); // L3: frozen_usd now reported
 
     const store = loadCredits();
     assert.equal(store[id].purchased_queries, 7, 'legacy field survives a read cycle unchanged');

@@ -149,7 +149,7 @@ You receive no Builder Share on:
 
 A repeat Unlock of the same Learning by the same Consumer is charged the Listed Price and earns the Builder Share in full, whether it is paid from a Balance or by x402.
 
-If the payment that funded an Unlock is later refunded, or reversed after a dispute, the Builder Share on that Unlock is reversed as provided in Section 7.6.
+If the payment that funded an Unlock is later refunded, or reversed after a dispute, the Builder Share on that Unlock may be reversed, in whole or in part, as provided in Section 7.6.
 
 Changes to either Builder Share percentage or to the platform fee constitute a material change requiring at least **30 days' advance notice** to Builders under Section 17, delivered via email or platform notification.
 
@@ -244,7 +244,7 @@ The quality threshold in effect for a Builder is the one that Builder selected, 
 
 **(b) After the retraction window.** Following the seven-day window, published Learnings are subject to the same removal mechanisms as any other published Learning, including Auxilo's content moderation and enforcement rights under Section 10 and the notice-and-takedown procedure in our [DMCA Copyright Policy](/dmca), which is incorporated into these Terms.
 
-**(c) No clawback; no refund.** Retraction removes a Learning from the catalog on a forward-going basis only. It does **not** reverse, refund, or unwind any unlock transaction completed prior to retraction. Consumers who unlocked the Learning before retraction retain the perpetual license described in Section 5.3 and Section 6.4. Builder earnings already accrued from pre-retraction unlocks remain payable on the normal settlement schedule and are not subject to clawback because of the retraction. A Builder Share on a payment that is later refunded or reversed is reversed as provided in Section 7.6.
+**(c) No clawback; no refund.** Retraction removes a Learning from the catalog on a forward-going basis only. It does **not** reverse, refund, or unwind any unlock transaction completed prior to retraction. Consumers who unlocked the Learning before retraction retain the perpetual license described in Section 5.3 and Section 6.4. Builder earnings already accrued from pre-retraction unlocks remain payable on the normal settlement schedule and are not subject to clawback because of the retraction. A Builder Share on a payment that is later refunded or reversed may be reversed, in whole or in part, as provided in Section 7.6.
 
 **(d) Relationship to transaction finality.** This subsection is consistent with, and does not alter, the transaction-finality rule in Section 7.3.
 
@@ -273,7 +273,7 @@ Accordingly:
 - The Consumer bears **no** risk that you will not receive your Builder Share; once Auxilo receives payment, that risk is between you and Auxilo.
 - Any failure, delay, or shortfall by Auxilo in remitting the Builder Share to you is a matter solely between you and Auxilo and does **not** revive, reinstate, or create any payment obligation of the Consumer to you.
 
-A payment that is later refunded, or reversed after a dispute, is treated as not received for purposes of this Section 5.10, and Section 7.6 governs the Builder Share on it.
+Where a payment is later refunded, or reversed after a dispute, and a Builder Share on it is reversed under Section 7.6, that Builder Share is treated as not received for purposes of this Section 5.10.
 
 #### 5.10.3 No Trust, No Fiduciary Deposit, No Custodial Duty
 
@@ -396,9 +396,9 @@ You are solely responsible for determining and paying any taxes applicable to yo
 
 This Section applies when a payment for a credit pack is refunded, or is disputed with the card issuer or payment provider.
 
-1. **Dispute opened.** While the dispute is open, the Balance that the credit pack added is not available to spend. If at least half of that Balance had already been spent when the dispute was opened, Auxilo may also stop your account from buying further credit packs until the dispute is resolved.
-2. **Dispute decided in Auxilo's favor.** That Balance becomes available to spend again, and nothing is reversed.
-3. **Refund, or dispute decided against Auxilo.** Auxilo removes whatever remains of the Balance that the credit pack added, and reverses the Builder Share on each Unlock that Balance paid for, to the extent that Balance paid for it.
+1. **Dispute opened.** While a dispute about the payment is open, including an inquiry from the card issuer that has not become a chargeback, the Balance that the credit pack added and that remains unspent is not available to spend. If at least half of that Balance had already been spent when the dispute was opened, Auxilo may also stop your account from buying further credit packs. That stop ends when the dispute is decided in Auxilo's favor or the inquiry closes without a chargeback, and Auxilo may end it at any earlier time.
+2. **Dispute decided in Auxilo's favor, or inquiry closed without a chargeback.** That Balance becomes available to spend again, any stop placed under item 1 ends, and nothing is reversed.
+3. **Refund, or dispute decided against Auxilo.** Auxilo removes Balance that the credit pack added, up to the amount refunded or reversed. If the amount refunded or reversed is more than the Balance from that credit pack that remained, the difference is treated as not collected for the Unlocks that Balance paid for, starting with the most recent of those Unlocks. Auxilo reverses the Builder Share on each Unlock whose payment from that Balance falls wholly within the difference, and reverses the same proportion of the Builder Share on the Unlock whose payment falls partly within it. A full refund, or a dispute decided against Auxilo for the full amount, therefore removes all of that Balance that remained and reverses the Builder Share on every Unlock that Balance paid for, to the extent that Balance paid for it.
 4. **Reversed Builder Shares.** A reversed Builder Share is deducted from the Builder's unpaid earnings. If those earnings are not enough, the Builder's unpaid earnings become a negative amount; nothing is paid out to the Builder while that amount is negative, and later Builder Shares reduce it before anything further becomes payable. Each reversal is recorded in the Builder's earnings record. Auxilo does not charge the Builder its platform fee or any dispute fee.
 5. **Access and account.** Auxilo may end your access to Learnings unlocked with a payment that was reversed after a dispute decided against Auxilo or for fraud, and may suspend your account under Section 14.2 while such a matter is unresolved.
 

@@ -319,7 +319,7 @@
               },
               "amount_paid_usd": {
                 "type": "number",
-                "description": "What this caller actually paid (AUD19-2 accrual basis). 0 on a free owner self-unlock.",
+                "description": "The Paid Balance portion actually drawn for this Unlock (AUD19-2 accrual basis) — the basis the Builder Share is calculated on. 0 on a free owner self-unlock, and 0 when the Unlock was funded entirely from Promotional Balance, even though the account's Balance was debited the full Listed Price.",
                 "example": 0.05
               },
               "contributor_earned_usd": {
@@ -337,10 +337,6 @@
               "owner_recall_free": {
                 "type": "boolean",
                 "description": "Present and true only on the DR-8 free owner path: the caller PROVED ownership (API key of the contributing account, or an account whose EIP-712-linked wallet is the contributor wallet) and was served at $0 before any charge."
-              },
-              "accrual_capped": {
-                "type": "boolean",
-                "description": "Present and true on a repeat unlock inside the 30-day per-(buyer, learning) accrual window: content served, no new accrual."
               }
             }
           }
@@ -435,11 +431,7 @@
           },
           "price_usd": {
             "type": "number",
-            "description": "Pack price in USD"
-          },
-          "unlocks": {
-            "type": "integer",
-            "description": "Credits included, if any. The pack adds price_usd to the buyer's balance."
+            "description": "Pack price in USD. The pack adds exactly this amount to the buyer's Balance, in US dollars — one dollar of Balance for each dollar paid."
           }
         }
       },
@@ -2281,6 +2273,76 @@
         }
       }
     },
+    "/account/credits": {
+      "get": {
+        "summary": "View Balance for the authenticated account",
+        "description": "Returns the authenticated account's Balance: paid_usd (Paid Balance, added by credit packs), promo_usd (Promotional Balance, added by a grant), total_usd (the spendable sum of the two — excludes frozen_usd), and frozen_usd (Balance a payment dispute has frozen, reported separately and never included in total_usd or in any refusal message). Requires session authentication.",
+        "operationId": "getAccountCredits",
+        "tags": [
+          "Account",
+          "Payments"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Balance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "credit_balance": {
+                      "type": "object",
+                      "properties": {
+                        "paid_usd": {
+                          "type": "number",
+                          "description": "Paid Balance — added by credit packs paid for with money."
+                        },
+                        "promo_usd": {
+                          "type": "number",
+                          "description": "Promotional Balance — added by a grant, at no charge."
+                        },
+                        "total_usd": {
+                          "type": "number",
+                          "description": "Spendable Balance: paid_usd plus promo_usd. Excludes any frozen_usd."
+                        },
+                        "frozen_usd": {
+                          "type": "number",
+                          "description": "Balance a payment dispute has frozen and is not currently spendable. Reported on its own, never folded into total_usd."
+                        }
+                      }
+                    },
+                    "period": {
+                      "type": "object",
+                      "properties": {
+                        "start": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "end": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    },
+                    "plan": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          }
+        }
+      }
+    },
     "/account/earnings": {
       "get": {
         "summary": "View contributor earnings for the authenticated account",
@@ -2540,7 +2602,7 @@
             }
           },
           "400": {
-            "description": "Invalid or missing pack ID",
+            "description": "Invalid or missing pack ID, or the purchase would cross the $2,000 balance cap or the $2,000 trailing-24h purchase cap (code BALANCE_CAP_EXCEEDED or DAILY_PURCHASE_CAP_EXCEEDED).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2549,11 +2611,28 @@
                     "error": {
                       "type": "string"
                     },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "BALANCE_CAP_EXCEEDED",
+                        "DAILY_PURCHASE_CAP_EXCEEDED"
+                      ],
+                      "description": "Present only on a cap refusal; absent on the plain invalid-pack 400."
+                    },
                     "valid_packs": {
                       "type": "array",
                       "items": {
                         "$ref": "#/components/schemas/CreditPack"
-                      }
+                      },
+                      "description": "Present only on the invalid-pack 400."
+                    },
+                    "current_usd": {
+                      "type": "number",
+                      "description": "Present only on a cap refusal: the account's current figure against that cap."
+                    },
+                    "limit_usd": {
+                      "type": "number",
+                      "description": "Present only on a cap refusal: the cap itself ($2,000)."
                     }
                   }
                 }
@@ -2562,6 +2641,31 @@
           },
           "401": {
             "description": "Not authenticated"
+          },
+          "403": {
+            "description": "The account is held and cannot start a new purchase until a human clears it (code ACCOUNT_HELD).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "ACCOUNT_HELD"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "description": "Why the account is held, e.g. cap_overage or dispute_hold."
+                    }
+                  }
+                }
+              }
+            }
           },
           "503": {
             "description": "Stripe not configured"

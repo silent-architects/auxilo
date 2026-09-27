@@ -162,7 +162,8 @@ describe('F-7: GET /account/credits and GET /account/purchases report dollars on
     const id = uid();
     const status = getCreditStatus(id);
     assert.deepEqual(Object.keys(status).sort(), ['credit_balance', 'period', 'plan'].sort());
-    assert.deepEqual(Object.keys(status.credit_balance).sort(), ['paid_usd', 'promo_usd', 'total_usd'].sort());
+    // L3: frozen_usd is now reported alongside the other three figures.
+    assert.deepEqual(Object.keys(status.credit_balance).sort(), ['paid_usd', 'promo_usd', 'total_usd', 'frozen_usd'].sort());
   });
 
   it('a real balance reports paid, promotional, and total spendable, all real dollar numbers', async () => {
@@ -208,7 +209,7 @@ describe('F-7: GET /account/credits and GET /account/purchases report dollars on
     saveCredits(credits);
 
     const status = getCreditStatus(id);
-    assert.deepEqual(status.credit_balance, { paid_usd: 0, promo_usd: 0, total_usd: 0 },
+    assert.deepEqual(status.credit_balance, { paid_usd: 0, promo_usd: 0, total_usd: 0, frozen_usd: 0 },
       'the leftover unit fields are never read into the reported balance');
   });
 

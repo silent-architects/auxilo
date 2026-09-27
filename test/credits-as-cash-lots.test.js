@@ -44,6 +44,8 @@ const {
   freezeDollarLot,
   unfreezeDollarLot,
   removeDollarLotRemainder,
+  finalizePendingReversals,
+  stampDisputeStatus,
   round6,
 } = credits;
 const {
@@ -217,27 +219,54 @@ describe('insufficient balance: one shape, always a dollar shortfall', () => {
     assert.match(r.message, /Insufficient balance/);
     assert.match(r.message, /x402/);
     assert.deepEqual(Object.keys(r.status).sort(), ['credit_balance', 'period_end'].sort());
-    assert.deepEqual(r.status.credit_balance, { paid_usd: 0, promo_usd: 0, total_usd: 0 });
+    // L3: frozen_usd is now reported alongside the other three figures.
+    assert.deepEqual(r.status.credit_balance, { paid_usd: 0, promo_usd: 0, total_usd: 0, frozen_usd: 0 });
   });
 });
 
 // ─── 5. AUD19-10 refund path: dollar draws restore correctly ────────────────
 
-describe('refundDollarDraw: restores the exact paid/promo split as fresh lots', () => {
-  it('restores both a paid and a promo remainder after a delivery-failure compensation', async () => {
+// FIX-UNIT-MONEY M1: refundDollarDraw no longer pushes fresh lots -- it
+// restores the exact amounts drawn back onto the SAME lots they came from
+// (the `draws` array debitDollarLots returned for the original debit), and
+// skips any draw whose lot a refund has since removed.
+describe('refundDollarDraw: restores drawn amounts onto the SAME lots (ruling M1)', () => {
+  it('restores both a paid and a promo draw back onto their own lots', async () => {
     const id = uid();
-    await refundDollarDraw(id, 0.30, 0.56);
+    const paidLot = await addDollarLot(id, 'dollar_paid', 1);
+    const promoLot = await addDollarLot(id, 'dollar_promo', 1);
+    // The exact shape debitDollarLots' own `draws` return carries -- the
+    // unlock handler stashes this verbatim as creditDollarDraws.
+    const draws = [
+      { lot_id: paidLot.lot_id, kind: 'dollar_paid', amount: 0.30 },
+      { lot_id: promoLot.lot_id, kind: 'dollar_promo', amount: 0.56 },
+    ];
+    await refundDollarDraw(id, draws);
     const balance = summarizeCreditBalance(loadCredits()[id]);
-    assert.equal(balance.paid_usd, 0.30);
-    assert.equal(balance.promo_usd, 0.56);
+    assert.equal(balance.paid_usd, 1.30, 'the paid lot got its own draw back, on top of its own remaining balance');
+    assert.equal(balance.promo_usd, 1.56, 'the promo lot got its own draw back, on top of its own remaining balance');
   });
 
-  it('a zero-amount refund on either side adds nothing', async () => {
+  it('a zero-amount draw entry adds nothing', async () => {
     const id = uid();
-    await refundDollarDraw(id, 1, 0);
+    const lot = await addDollarLot(id, 'dollar_paid', 1);
+    await refundDollarDraw(id, [{ lot_id: lot.lot_id, kind: 'dollar_paid', amount: 0 }]);
     const balance = summarizeCreditBalance(loadCredits()[id]);
     assert.equal(balance.paid_usd, 1);
-    assert.equal(balance.promo_usd, 0);
+  });
+
+  it('skips a draw whose lot a refund has since removed (removed_at set)', async () => {
+    const id = uid();
+    const lot = await addDollarLot(id, 'dollar_paid', 10, { stripe_payment_intent: pi() });
+    // Simulate the lot having been fully refunded already (removeDollarLotRemainder stamps removed_at).
+    const credits = loadCredits();
+    credits[id].dollar_lots[0].removed_at = new Date().toISOString();
+    credits[id].dollar_lots[0].remaining_usd = 0;
+    saveCredits(credits);
+    const result = await refundDollarDraw(id, [{ lot_id: lot.lot_id, kind: 'dollar_paid', amount: 5 }]);
+    assert.equal(result.paid_restored, 0, 'a removed lot must not receive money back');
+    assert.equal(result.skipped_usd, 5);
+    assert.equal(loadCredits()[id].dollar_lots[0].remaining_usd, 0, 'the removed lot stays at 0 -- the money already left Auxilo by the refund');
   });
 });
 
@@ -312,6 +341,28 @@ describe('freeze, unfreeze, and remove-remainder primitives', () => {
     assert.equal(result.half_spent, false);
   });
 
+  // FIX-UNIT-MONEY L5: NO CHANGE ruling -- the Terms say "at least half",
+  // so the boundary (exactly half spent) correctly counts as half_spent.
+  // Pinned per the ruling's own instruction.
+  it('[ruling L5, NO CHANGE] a lot spent EXACTLY half places a hold -- "at least half" per the Terms', async () => {
+    const id = uid();
+    const intent = pi();
+    await addDollarLot(id, 'dollar_paid', 10, { stripe_payment_intent: intent });
+    await deductCredit(id, 'unlock', 5); // exactly half of 10
+    const result = await freezeDollarLot(id, intent, 'dispute');
+    assert.equal(result.half_spent, true, 'exactly half spent must count as "at least half"');
+    assert.equal(result.remaining_usd, 5);
+  });
+
+  it('[ruling L5, NO CHANGE] one cent short of half does NOT place a hold', async () => {
+    const id = uid();
+    const intent = pi();
+    await addDollarLot(id, 'dollar_paid', 10, { stripe_payment_intent: intent });
+    await deductCredit(id, 'unlock', 4.99);
+    const result = await freezeDollarLot(id, intent, 'dispute');
+    assert.equal(result.half_spent, false, 'just under half must not count as "at least half"');
+  });
+
   it('unfreezeDollarLot restores spendability with nothing removed (spec test 24)', async () => {
     const id = uid();
     const intent = pi();
@@ -324,18 +375,31 @@ describe('freeze, unfreeze, and remove-remainder primitives', () => {
     assert.equal(loadCredits()[id].dollar_lots[0].remaining_usd, before, 'unfreezing never touches remaining_usd');
   });
 
-  it('removeDollarLotRemainder zeroes remaining_usd and returns unreversed funded_unlocks exactly once (idempotent)', async () => {
+  it('removeDollarLotRemainder zeroes remaining_usd and returns pending-reversal funded_unlocks exactly once (idempotent) [ruling H1/L6]', async () => {
     const id = uid();
     const intent = pi();
     const lotResult = await addDollarLot(id, 'dollar_paid', 10, { stripe_payment_intent: intent });
     await recordLotFunding(id, [{ lot_id: lotResult.lot_id, kind: 'dollar_paid', amount: 4 }], {
       learning_id: 'lrn_r', contributor_account_id: 'acc_r', contributor_amount: 2.8, platform_amount: 1.2, ts: new Date().toISOString(),
     });
-    const first = await removeDollarLotRemainder(id, intent);
+    // Mirror what a real unlock does: the $4 draw actually debited
+    // remaining_usd (recordLotFunding only records the funding HISTORY,
+    // never the debit itself -- deductCredit/debitDollarLots does that).
+    const creditsBefore = loadCredits();
+    creditsBefore[id].dollar_lots[0].remaining_usd = 6; // 10 - 4 spent
+    saveCredits(creditsBefore);
+
+    const first = await removeDollarLotRemainder(id, intent); // default = full (Infinity, capped at original_usd)
     assert.equal(first.success, true);
-    assert.equal(first.removed_usd, 10);
-    assert.equal(first.funded_unlocks.length, 1);
+    assert.equal(first.removed_usd, 6, 'only the unspent remainder is removed by "remove"');
+    assert.equal(first.funded_unlocks.length, 1, 'the $4 funded entry is fully within the $10 - $6 = $4 excess -- reversed in full');
+    assert.equal(first.funded_unlocks[0].pending_reversal, true);
     assert.equal(loadCredits()[id].dollar_lots[0].remaining_usd, 0);
+
+    // The caller (lib/stripe-refund-handlers.js) would now reverse earnings
+    // and call finalizePendingReversals -- simulate that here so the next
+    // check (a Stripe retry) proves the FULL idempotency chain.
+    await finalizePendingReversals(id, first.lot_id);
 
     // a Stripe retry of the same event must find nothing left to reverse
     const second = await removeDollarLotRemainder(id, intent);
@@ -454,11 +518,19 @@ describe('structural: a balance can never move between accounts [test 17]', () =
     const mutators = [
       'async function deductCredit(accountId, creditType, listedPriceUsd)',
       'async function addDollarLot(accountId, kind, amountUsd, opts = {})',
-      'async function refundDollarDraw(accountId, paidUsd, promoUsd)',
+      // FIX-UNIT-MONEY M1: refundDollarDraw now restores onto the SAME lots
+      // the money was drawn from (a `draws` array), not fresh lots from
+      // plain paid/promo totals.
+      'async function refundDollarDraw(accountId, draws)',
       'async function recordLotFunding(accountId, draws, info)',
       'async function freezeDollarLot(accountId, paymentIntent, reason)',
       'async function unfreezeDollarLot(accountId, paymentIntent)',
-      'async function removeDollarLotRemainder(accountId, paymentIntent)',
+      // FIX-UNIT-MONEY H1: amount-aware (ruling H1) -- a third parameter,
+      // defaulted to Infinity (capped at the lot's own original_usd), so a
+      // 2-argument call still means "full removal", today's behavior.
+      'async function removeDollarLotRemainder(accountId, paymentIntent, amountUsd = Infinity)',
+      'async function finalizePendingReversals(accountId, lotId)',
+      'async function stampDisputeStatus(accountId, paymentIntent, disputeId, status)',
     ];
     for (const sig of mutators) {
       assert.ok(CREDITS_SRC.includes(sig), `expected exact signature not found: ${sig}`);
@@ -470,9 +542,26 @@ describe('structural: a balance can never move between accounts [test 17]', () =
 });
 
 describe('structural: a balance can never spend on anything but an unlock [test 18]', () => {
-  it('the unit-lot debit function (consumeUnlockLot) has exactly one call site in server.js — the unlock path\'s credit deduction', () => {
-    const callSites = (SERVER_SRC.match(/consumeUnlockLot\(/g) || []).length;
-    assert.equal(callSites, 0, 'server.js must never call consumeUnlockLot directly — only lib/credits.js\'s own deductCredit does, inside the account lock');
+  // FIX-UNIT-MONEY L10: the old test here was titled "has exactly one call
+  // site" but asserted 0 call sites of consumeUnlockLot -- a function that
+  // was deleted with the unit-lot model and was never coming back, so the
+  // assertion passed whatever server.js contained (title and assertion
+  // disagreed, and neither meant anything). Replaced with a real,
+  // non-tautological proof: no retired unit-lot vocabulary is called
+  // anywhere in the codebase, checked with a positive control (BUILDER-
+  // RULES: every absence check needs a same-test proof the detector can
+  // actually find a match).
+  it('no retired unit-lot debit function is called anywhere — spending is exclusively through debitDollarLots (positive-control checked)', () => {
+    const RETIRED_UNIT_VOCAB = ['consumeUnlockLot', 'ensureUnlockLots', 'addPurchasedCredits', 'deriveLegacyUnitPrice'];
+    for (const name of RETIRED_UNIT_VOCAB) {
+      assert.equal((SERVER_SRC.match(new RegExp(`${name}\\(`, 'g')) || []).length, 0,
+        `${name} must never be called in server.js — no unit-lot model exists`);
+      assert.equal((CREDITS_SRC.match(new RegExp(`${name}\\(`, 'g')) || []).length, 0,
+        `${name} must never be called in lib/credits.js — no unit-lot model exists`);
+    }
+    // Positive control: the SAME style of check finds a real, still-present name.
+    assert.ok((CREDITS_SRC.match(/debitDollarLots\(/g) || []).length > 0,
+      'positive control: the real dollar-lot debit function must be found by the same detector');
   });
   it('the dollar-lot debit function (debitDollarLots) is called from exactly one place inside lib/credits.js — deductCredit', () => {
     // Every occurrence of "debitDollarLots(" minus the one function

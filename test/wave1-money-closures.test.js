@@ -94,8 +94,11 @@ describe('AUD19-15: discovery-premium cache read uses the POST-auth identity', (
 
   it('share selection and basis composition survive verbatim (60/40 on discovery, on the PAID basis)', () => {
     assert.ok(h.includes("const CONTRIBUTOR_SHARE = (source === 'search') ? CONTRIBUTOR_SHARE_DISCOVERY : CONTRIBUTOR_SHARE_STANDARD;"));
-    assert.ok(h.includes('const contributorEarned = accrualBasis * CONTRIBUTOR_SHARE;'));
-    assert.ok(h.includes('const platformEarned = accrualBasis * (1 - CONTRIBUTOR_SHARE);'));
+    // FIX-UNIT-MONEY L1: remainder-allocated -- the platform share is
+    // round6(accrualBasis - contributorEarned), not its own independent
+    // rounding, so the two always sum to exactly round6(accrualBasis).
+    assert.ok(h.includes('const contributorEarned = round6(accrualBasis * CONTRIBUTOR_SHARE);'));
+    assert.ok(h.includes('const platformEarned = round6(accrualBasis - contributorEarned);'));
   });
 
   it('pre-settlement consumers quote the STANDARD share (router bps + 402 description)', () => {
@@ -131,19 +134,31 @@ describe('AUD19-15: discovery-premium cache read uses the POST-auth identity', (
 // price" — refundCredit and addPurchasedCredits are both deleted (F-3, F-4).
 // A delivery-failure refund now always restores the exact paid/promo split
 // the debit drew, via refundDollarDraw, proved fresh below.
-describe('AUD19-10: refundDollarDraw restores the exact paid/promo split drawn', () => {
-  it('paid balance round-trip: deduct → delivery-failure restore → next deduct sees the same balance', async () => {
+// FIX-UNIT-MONEY M1: refundDollarDraw no longer takes plain (paidUsd,
+// promoUsd) totals and pushes brand-new lots with no payment intent -- it
+// takes the exact `draws` array the original debit returned and restores
+// each amount onto the SAME lot it came from, so the restored balance stays
+// tied to the Stripe purchase behind it (a later refund or lost dispute of
+// that pack can still find and remove it -- see test/credits-as-cash-lots.
+// test.js and test/credits-as-cash-refunds.test.js S2/S2b for the
+// refund-after-restore proofs this signature change exists to support).
+describe('[ruling M1] refundDollarDraw restores the exact draws onto the SAME lots', () => {
+  it('paid balance round-trip: deduct → delivery-failure restore → next deduct sees the same balance, same lot', async () => {
     const acct = 'acc_w1_refund_paid';
-    await credits.addDollarLot(acct, 'dollar_paid', 0.40);
+    const lot = await credits.addDollarLot(acct, 'dollar_paid', 0.40);
     const d1 = await credits.deductCredit(acct, 'unlock', 0.40);
     assert.equal(d1.success, true);
     assert.equal(d1.paid_drawn, 0.40);
     assert.equal(credits.loadCredits()[acct].dollar_lots[0].remaining_usd, 0);
 
-    const r = await credits.refundDollarDraw(acct, d1.paid_drawn, d1.promo_drawn);
+    const r = await credits.refundDollarDraw(acct, d1.draws);
     assert.equal(r.success, true);
+    assert.equal(r.paid_restored, 0.40);
 
-    const balance = credits.summarizeCreditBalance(credits.loadCredits()[acct]);
+    const record = credits.loadCredits()[acct];
+    assert.equal(record.dollar_lots.length, 1, 'restored onto the SAME lot -- no second lot created');
+    assert.equal(record.dollar_lots[0].lot_id, lot.lot_id);
+    const balance = credits.summarizeCreditBalance(record);
     assert.equal(balance.paid_usd, 0.40, 'the restored balance must carry the original paid amount — basis accounting cannot drift');
 
     const d2 = await credits.deductCredit(acct, 'unlock', 0.40);
@@ -151,24 +166,39 @@ describe('AUD19-10: refundDollarDraw restores the exact paid/promo split drawn',
     assert.equal(d2.paid_drawn, 0.40);
   });
 
-  it('a refunded promotional draw comes back as promotional, not paid', async () => {
+  it('a refunded promotional draw comes back as promotional, not paid, onto its own lot', async () => {
     const acct = 'acc_w1_refund_grant';
-    await credits.addDollarLot(acct, 'dollar_promo', 1);
+    const lot = await credits.addDollarLot(acct, 'dollar_promo', 1);
     const d1 = await credits.deductCredit(acct, 'unlock', 1);
     assert.equal(d1.promo_drawn, 1);
     assert.equal(d1.paid_drawn, 0);
-    await credits.refundDollarDraw(acct, d1.paid_drawn, d1.promo_drawn);
-    const balance = credits.summarizeCreditBalance(credits.loadCredits()[acct]);
+    const r = await credits.refundDollarDraw(acct, d1.draws);
+    assert.equal(r.promo_restored, 1);
+    const record = credits.loadCredits()[acct];
+    assert.equal(record.dollar_lots[0].lot_id, lot.lot_id);
+    const balance = credits.summarizeCreditBalance(record);
     assert.equal(balance.promo_usd, 1, 'a promotional draw refunds as promotional');
     assert.equal(balance.paid_usd, 0);
   });
 
-  it('defensive: a refund against an account with no prior record creates one', async () => {
-    const acct = 'acc_w1_refund_fresh';
-    const r = await credits.refundDollarDraw(acct, 0.10, 0);
-    assert.equal(r.success, true);
-    const balance = credits.summarizeCreditBalance(credits.loadCredits()[acct]);
-    assert.equal(balance.paid_usd, 0.10);
+  it('a draw whose lot a refund has since removed is skipped, not fabricated onto a phantom lot', async () => {
+    const acct = 'acc_w1_refund_removed';
+    const lot = await credits.addDollarLot(acct, 'dollar_paid', 10, { stripe_payment_intent: 'pi_w1_removed' });
+    const d1 = await credits.deductCredit(acct, 'unlock', 4);
+    assert.equal(d1.success, true);
+    // Simulate the lot having already been refunded away entirely (what
+    // removeDollarLotRemainder stamps) BEFORE the delivery-failure
+    // compensation runs.
+    const credsBefore = credits.loadCredits();
+    credsBefore[acct].dollar_lots[0].removed_at = new Date().toISOString();
+    credsBefore[acct].dollar_lots[0].remaining_usd = 0;
+    credits.saveCredits(credsBefore);
+
+    const r = await credits.refundDollarDraw(acct, d1.draws);
+    assert.equal(r.paid_restored, 0, 'the removed lot must not receive money back');
+    assert.equal(r.skipped_usd, 4, 'that money already left Auxilo by way of the refund');
+    assert.equal(credits.loadCredits()[acct].dollar_lots[0].remaining_usd, 0);
+    void lot;
   });
 });
 
@@ -224,11 +254,88 @@ describe('AUD19-10: unlock handler compensation wiring (source)', () => {
   // (F-5); there is no repeat-accrual cap left to un-arm.
 
   it('in-memory ledger rollback exists (phantom accruals cannot flush later)', () => {
-    assert.ok(h.includes('_rb.earningsSnapshot'), 'earnings entry snapshot taken');
     const catchBlock = h.slice(h.indexOf('} catch (deliveryErr) {'));
     assert.ok(catchBlock.includes('learning.quality.unlocks = _rb.qualityUnlocks;'));
     assert.ok(catchBlock.includes('delete earnings[_rb.earningsKey];'),
       'a newly-created earnings entry is removed on rollback');
+  });
+
+  // FIX-UNIT-MONEY L7: the old rollback restored a whole-entry SNAPSHOT
+  // taken before this request's mutation, which would silently overwrite
+  // any OTHER concurrent mutation to the same entry (a reversal landing
+  // during the `await recordLotFunding` window, for example). The rollback
+  // now subtracts THIS request's own amounts instead -- there is no
+  // snapshot left to take or restore.
+  it('[ruling L7] rollback undoes by SUBTRACTING this request\'s own amounts, not by restoring a snapshot', () => {
+    assert.ok(!h.includes('_rb.earningsSnapshot'), 'the whole-entry snapshot mechanism must be gone');
+    assert.ok(!h.includes('JSON.parse(JSON.stringify(activeEntry))'), 'no deep-clone snapshot of the live entry is taken');
+    const catchBlock = h.slice(h.indexOf('} catch (deliveryErr) {'));
+    assert.ok(catchBlock.includes('rbEntry.total_gross = round6((rbEntry.total_gross || 0) - accrualBasis);'),
+      'the existing-entry rollback arm subtracts this request\'s own accrualBasis/contributorEarned/platformEarned');
+    assert.ok(catchBlock.includes('rbEntry.pending_balance = round6((rbEntry.pending_balance || 0) - contributorEarned);'));
+  });
+});
+
+// FIX-UNIT-MONEY L10: "the delivery-failure compensation is covered only by
+// source-string checks, which is why M1 was not caught." This describe
+// proves M1's actual FIX with real lib calls in the exact sequence the
+// unlock handler now runs them (debit -> [delivery fails] -> refundDollarDraw
+// with the real draws array -> recordLotFunding never runs because the
+// handler returns before reaching it), matching server.js's own ordering
+// after this build: recordLotFunding only ever runs AFTER commitWal, so a
+// delivery failure (which throws before ever reaching that point) means it
+// never runs at all for that request.
+describe('[ruling M1] delivery-failure compensation restores onto the SAME lot, real lib sequence', () => {
+  it('a failed delivery restores the drawn amount onto the ORIGINAL lot (same payment_intent) -- not a fresh, unlinked lot', async () => {
+    const acct = 'acc_w1_m1_real';
+    const pi = 'pi_w1_m1_real';
+    await credits.addDollarLot(acct, 'dollar_paid', 10, { stripe_payment_intent: pi });
+
+    // The unlock handler's own sequence: debit first...
+    const draw = await credits.deductCredit(acct, 'unlock', 10);
+    assert.equal(draw.success, true);
+    assert.equal(credits.loadCredits()[acct].dollar_lots[0].remaining_usd, 0);
+
+    // ...then delivery fails BEFORE the WAL commits, so recordLotFunding
+    // (moved to run only after commitWal by this build) never executes --
+    // the compensation arm restores the draw with nothing else to undo.
+    const restore = await credits.refundDollarDraw(acct, draw.draws);
+    assert.equal(restore.success, true);
+    assert.equal(restore.paid_restored, 10);
+
+    const record = credits.loadCredits()[acct];
+    assert.equal(record.dollar_lots.length, 1, 'restored onto the SAME lot -- no second lot, no null payment_intent lot');
+    assert.equal(record.dollar_lots[0].stripe_payment_intent, pi, 'the restored balance stays tied to its Stripe purchase');
+    assert.equal(record.dollar_lots[0].remaining_usd, 10);
+
+    // Because it is the SAME lot, a later refund of that purchase still
+    // finds it (the M1 defect this build fixes: the old code pushed a
+    // fresh lot with stripe_payment_intent: null, which a refund could
+    // never find).
+    const { handleChargeRefunded } = require('../lib/stripe-refund-handlers.js');
+    const refundResult = await handleChargeRefunded(
+      { data: { object: { payment_intent: pi } } },
+      { earnings: {}, saveEarnings: () => {}, sendOpsAlert: async () => {} },
+    );
+    assert.equal(refundResult.matched, true, 'the refund must find the restored lot by its Stripe payment_intent');
+    assert.equal(refundResult.removed_usd, 10);
+    assert.equal(credits.loadCredits()[acct].dollar_lots[0].remaining_usd, 0, 'the pack is now fully refunded, no leftover phantom balance');
+  });
+
+  it('recordLotFunding leaves no funding record when it never runs (M1: recorded only after commit)', async () => {
+    const acct = 'acc_w1_m1_norecord';
+    const pi = 'pi_w1_m1_norecord';
+    await credits.addDollarLot(acct, 'dollar_paid', 10, { stripe_payment_intent: pi });
+    const draw = await credits.deductCredit(acct, 'unlock', 10);
+    assert.equal(draw.success, true);
+    // Simulate the delivery failure: recordLotFunding is never called at
+    // all (server.js only reaches it after commitWal, which a delivery
+    // failure never reaches), then the compensation restores the draw.
+    await credits.refundDollarDraw(acct, draw.draws);
+
+    const lot = credits.loadCredits()[acct].dollar_lots[0];
+    assert.equal((lot.funded_unlocks || []).length, 0,
+      'no stale funding record survives -- there was never a chance for one to be written before the restore');
   });
 });
 

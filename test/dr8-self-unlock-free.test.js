@@ -195,11 +195,18 @@ describe('DR-8 leaves the paid path intact', () => {
   // AUD-CAC (credits-as-cash follow-up, SITE-PM 2026-09-27): F-5 removes the
   // 30-day repeat-accrual cap — countersCredited now gates on the M-2 wash
   // guard alone.
+  //
+  // FIX-UNIT-MONEY M9 (2026-09-27): countersCredited also gates on paid
+  // dollars actually drawn and a 30-day per-(buyer, learning) ranking-only
+  // window (test/credits-as-cash-unlock.test.js "[ruling M9]" proves the
+  // behavior against a real server) — it still starts from `!isSelfUnlock`.
   it('M-2 wash guard intact as the post-payment backstop (header claims + anonymous x402 still pay, still accrue nothing)', () => {
     assert.ok(h.includes('const isSelfUnlock ='), 'M-2 predicate present');
     assert.ok(h.includes('if (isSelfUnlock) {'), 'M-2 branch present');
-    assert.ok(h.includes('const countersCredited = !isSelfUnlock;'),
-      'CAT-1 §5 counter gating unchanged');
+    assert.ok(h.includes('const countersCredited = !isSelfUnlock && drewPaidDollars'),
+      'CAT-1 §5 counter gating still starts from the M-2 wash guard');
+    assert.ok(h.includes('shouldCountUnlockForRanking(buyerAccountId, id)'),
+      'ruling M9: gated at most once per (buyer, learning) per 30 days, counters only');
   });
 
   // RETIRED (credits-as-cash follow-up): 'accrual cap (AUD19-2) untouched
