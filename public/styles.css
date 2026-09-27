@@ -2182,10 +2182,16 @@ span.pull-stat-secondary.pull-stat-secondary, .pull-stat-secondary.pull-stat-sec
   letter-spacing: -0.02em;
 }
 
+/* LAYOUT-SHEET 2026-09-26 item 8: uppercase transform dropped -- the
+   markup is already authored in sentence case underneath it, and
+   multi-word labels ("direct share (60% via discovery)") were measurably
+   harder to scan uppercased at phone width. Letter-spacing tuned down to
+   match: 0.08em was set for tracked uppercase and reads unnaturally
+   spaced-out on sentence case at 13px. Do not touch .code-block-lang --
+   that is the ruled eyebrow signature, a different component. */
 span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.pull-stat-caption {
   font-size: 13px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
   color: var(--slate);
   margin-top: 8px;
 }
@@ -2220,10 +2226,13 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   min-height: 26px;
   margin: 20px auto 0;
   align-items: baseline;
-  justify-content: center;
+  /* LAYOUT-SHEET 2026-09-26 item 5: was justify-content: center. The sole
+     live consumer today (how-it-works.html) is now left-aligned by
+     ruling; flex-start holds that. */
+  justify-content: flex-start;
   gap: 10px;
 }
-.hero-ledger.is-live { visibility: visible; } /* justify-content:center below centers it regardless of parent text-align */
+.hero-ledger.is-live { visibility: visible; } /* justify-content below centers it regardless of parent text-align; its sole current consumer (how-it-works.html) is left-aligned by design now (LAYOUT-SHEET 2026-09-26 item 5) -- a future page reaching for .hero-ledger should not assume the old centered default */
 .hero-ledger .hero-ledger-num {
   font-family: var(--mono);
   font-size: 22px;
@@ -2232,10 +2241,12 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   letter-spacing: -0.01em;
   line-height: 1;
 }
+/* LAYOUT-SHEET 2026-09-26 item 8: same two edits as .pull-stat-caption
+   above (same visual role, different component) -- uppercase dropped,
+   letter-spacing tuned down for sentence case. */
 .hero-ledger .hero-ledger-label {
   font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
   color: var(--slate);
 }
 

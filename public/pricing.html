@@ -29,7 +29,7 @@
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono500.0ecb6352.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=ddd971ac" />
+  <link rel="stylesheet" href="/styles.css?v=80b44c53" />
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: Organization + Product + FAQPage -->
@@ -126,8 +126,10 @@
 
   <style>
     /* ── Pricing page-specific overrides ─────────────────────────── */
+    /* LAYOUT-SHEET 2026-09-26 item 5: left-align to match every other page
+       -- was text-align: center. */
     .pricing-page-header {
-      text-align: center;
+      text-align: left;
       padding: 140px 24px 88px;
     }
     .pricing-page-header h1 {
@@ -142,7 +144,10 @@
       font-size: clamp(16px, 2vw, 18px);
       color: var(--slate-text);
       max-width: 540px;
-      margin: 0 auto;
+      /* was margin: 0 auto -- the auto side-margins centered the box
+         independently of text-align and would strand it centered inside
+         the now-left-aligned header. */
+      margin: 0;
       line-height: 1.65;
     }
 
@@ -470,15 +475,12 @@
     @media (max-width: 600px) {
       .economics-grid { grid-template-columns: 1fr; }
     }
-    /* .pricing-hero-stats: hero placement override for the relocated live
-       tile — the hero's ambient text-align:center (.pricing-page-header)
-       would otherwise center the card labels/descs, and the grid needs
-       its own centering since it no longer sits in a full-width section. */
-    .pricing-hero-stats {
-      margin-left: auto;
-      margin-right: auto;
-      text-align: left;
-    }
+    /* .pricing-hero-stats: LAYOUT-SHEET 2026-09-26 item 5 removed the
+       margin-left/right: auto centering this rule used to force on the
+       grid (as a counter to the header's then-ambient text-align:center)
+       -- now that .pricing-page-header is left-aligned, those auto
+       side-margins would strand this grid centered on its own against a
+       left-aligned h1. text-align: left is a no-op now but harmless. */
     @media (max-width: 600px) {
       .pricing-hero-stats { max-width: 320px; }
     }
@@ -564,7 +566,7 @@
 <!-- ━━━ Hero ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <div id="pricing-hero" class="pricing-page-header">
   <div class="container">
-    <h1>Search free. Pay only<br>when you unlock, from $0.05.</h1>
+    <h1>Search free. Pay only <br>when you unlock, from $0.05.</h1>
     <p>A config fix costs almost nothing. An architectural breakthrough costs what it saves you.</p>
     <!-- SITE-RESTRUCTURE-W3 item C: the live-ledger stat strip, moved here
          from the cut "The Numbers" section (was #platform-economics). The
@@ -587,12 +589,12 @@
       </div>
       <div class="econ-card">
         <p class="econ-label">Unlocks</p>
-        <p class="econ-value pull-stat-num" id="lc-unlocks"></p>
+        <p class="econ-value pull-stat-secondary" id="lc-unlocks"></p>
         <p class="econ-desc">unlocks recorded</p>
       </div>
       <div class="econ-card">
         <p class="econ-label">Categories</p>
-        <p class="econ-value pull-stat-num" id="lc-categories"></p>
+        <p class="econ-value pull-stat-secondary" id="lc-categories"></p>
         <p class="econ-desc">knowledge categories covered</p>
       </div>
     </div>
@@ -935,7 +937,7 @@
 <!-- ━━━ Bottom CTA ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section id="pricing-cta" class="pricing-cta-section section-raised" aria-labelledby="pricing-cta-heading">
   <div class="container">
-    <h2 id="pricing-cta-heading" >Your agents are already learning.<br>Your earnings start now.</h2>
+    <h2 id="pricing-cta-heading" >Your agents are already learning. <br>Your earnings start now.</h2>
     <p>Configure once. Earn every time another agent buys what yours discovered.</p>
     <div class="pricing-cta-btns">
       <a href="/for-agents" class="btn-primary">Search the catalog free</a>

@@ -186,8 +186,12 @@ describe('SITE-RESTRUCTURE-W3 item C — /pricing 9 -> 6 sections', () => {
   });
 
   it('no numbers are hard-coded in the moved stat strip — the value spans start empty for server-side fill', () => {
+    // LAYOUT-SHEET 2026-09-26 item 4: only lc-learnings stays the one gold
+    // (pull-stat-num) figure; lc-unlocks/lc-categories moved to
+    // pull-stat-secondary (ivory) so a zero unlocks count doesn't carry the
+    // same gold weight as a real live count — was pull-stat-num on all three.
     assert.match(pricing, /<p class="econ-value pull-stat-num" id="lc-learnings"><\/p>/);
-    assert.match(pricing, /<p class="econ-value pull-stat-num" id="lc-unlocks"><\/p>/);
-    assert.match(pricing, /<p class="econ-value pull-stat-num" id="lc-categories"><\/p>/);
+    assert.match(pricing, /<p class="econ-value pull-stat-secondary" id="lc-unlocks"><\/p>/);
+    assert.match(pricing, /<p class="econ-value pull-stat-secondary" id="lc-categories"><\/p>/);
   });
 });

@@ -29,7 +29,7 @@
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono500.0ecb6352.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=ddd971ac" />
+  <link rel="stylesheet" href="/styles.css?v=80b44c53" />
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: FAQPage -->
@@ -359,32 +359,40 @@
       .builders-hero-content { padding-left: 24px; padding-right: 24px; }
 
       /* AD ruling FB-HERO-STATS-MOBILE, 2026-09-07
-         (~/.auxilo/handoffs/FB-HERO-STATS-MOBILE-CSS-2026-09-07.md),
-         reproduced verbatim -- supersedes an earlier builder pass in this
-         same block (flex-wrap: nowrap, 22/15/9.5px) that the AD's own
-         live measurement ruled against. Grid, not flex: 3 equal columns,
-         14px column-gap, 6px row-gap, 32px margin-bottom -- live-verified
-         stats height 75px, landing .btn-primary bottom at 712 (130 hero
-         pad + 40 content pad + 88 h1 + 28 h1 margin + 132 sub1 + 40 shared
-         sub margin + 75 stats + 32 stats margin + 53 sub2 + 40 shared sub
-         margin + 54 button = 712). The doubled
+         (~/.auxilo/handoffs/FB-HERO-STATS-MOBILE-CSS-2026-09-07.md) set a
+         3-equal-column grid here. LAYOUT-SHEET 2026-09-26 item 3 REVERSES
+         that part of the ruling: even after this block's font-size cuts,
+         each ~105px-wide column still wrapped "direct share (60% via
+         discovery)" onto 3-4 lines at 375px. The lead stat (257, gold)
+         now spans the full row alone; the two secondary stats ("70%",
+         "under 1 minute") share a 2-column row beneath it, each getting
+         ~155px instead of ~105px. Grid stays 2 columns, not flex --
+         14px column-gap, 10px row-gap (up from 6px, so the lead stat's
+         own row reads as visually separate from the paired row beneath
+         it), 32px margin-bottom. This is now a 2-ROW block, so the old
+         712px .btn-primary-bottom pixel math (measured against the prior
+         1-row/3-column layout) no longer holds -- re-measure and record a
+         fresh number rather than trusting 712. The doubled
          #builders-hero span.pull-stat-num.pull-stat-num selector is
-         DELIBERATE specificity per the ruling -- do not tidy it to a
-         single class. !important throughout because this page-scoped
-         block must outrank styles.css's shared #builders-hero
+         DELIBERATE specificity per the original ruling -- do not tidy it
+         to a single class. !important throughout because this
+         page-scoped block must outrank styles.css's shared #builders-hero
          .builders-hero-stats .builders-hero-stat .stat-num rules at equal
          specificity (BREAKPOINT-CONSOLIDATION precedent). DO NOT TOUCH
-         (verbatim from the ruling): #builders-hero padding-top: 130px
-         above; .builders-hero-content padding-top: 40px !important
-         above; .builders-hero-sub margin-bottom: 40px (styles.css,
-         shared); the base .pull-stat-num/.pull-stat-caption rules in
-         styles.css. */
+         (verbatim from the original ruling, still true): #builders-hero
+         padding-top: 130px above; .builders-hero-content padding-top:
+         40px !important above; .builders-hero-sub margin-bottom: 40px
+         (styles.css, shared); the base .pull-stat-num/.pull-stat-caption
+         rules in styles.css. */
       #builders-hero .builders-hero-stats {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         column-gap: 14px;
-        row-gap: 6px;
+        row-gap: 10px;
         margin-bottom: 32px !important;
+      }
+      #builders-hero .builders-hero-stats .builders-hero-stat:first-child {
+        grid-column: 1 / -1;
       }
       #builders-hero .builders-hero-stats .builders-hero-stat .stat-num {
         min-height: 0 !important;
@@ -447,7 +455,7 @@
 <!-- ━━━ Section 1: Hero ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section id="builders-hero" aria-labelledby="builders-hero-heading">
   <div class="builders-hero-content">
-    <h1 id="builders-hero-heading">Build Once.<br>Keep Earning.</h1>
+    <h1 id="builders-hero-heading">Build Once. <br>Keep Earning.</h1>
     <p class="builders-hero-sub">Your agents are already producing operational knowledge. Right now, 100% of it disappears. Connect once and you earn every time another agent unlocks one of those fixes.</p>
 
     <!-- SITE-PM ruling, hero stat row: one live number leads (the hero's
@@ -582,7 +590,7 @@
 
     <div class="builders-grid">
       <div class="builders-left">
-        <h2 id="connect-heading" >Built for builders who'd rather<br>ship than bill.</h2>
+        <h2 id="connect-heading" >Built for builders who'd rather <br>ship than bill.</h2>
         <p class="body-copy">Connect your agent in under a minute with <code style="font-family:var(--mono);font-size:13px;color:var(--aurum);">npx auxilo setup</code>. Your agent extracts and scores learnings in the background. <strong style="color:var(--ivory)">Everything lands in your private review queue, and nothing publishes until you approve it, one learning at a time or in advance in your dashboard</strong>. Your first published learning also passes an Auxilo review before it reaches the public catalog. Published learnings stay retractable for 7 days. Set an initial price or let the pricing engine set it. Earnings accrue now → <a href="/status">withdrawals open soon</a>.</p>
 
         <ul class="feature-list" aria-label="Builder features">
@@ -783,7 +791,7 @@ curl -X POST \
 <section id="footer-cta" aria-labelledby="footer-cta-heading">
   <div class="container">
 
-    <h2 id="footer-cta-heading" >Your agents are already learning.<br>Your earnings start now.</h2>
+    <h2 id="footer-cta-heading" >Your agents are already learning. <br>Your earnings start now.</h2>
     <p class="footer-cta-sub">Set it up once, then leave it running. Every learning you publish now is positioned to catch more unlocks as agents join, and the early catalog gets the head start.</p>
 
     <div class="footer-ctas">
