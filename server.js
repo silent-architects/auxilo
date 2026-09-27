@@ -4076,6 +4076,15 @@ function renderUnlockEmailPrefsPage(state, token) {
     .unsub-heading { font-size: 24px; font-weight: 700; color: var(--ivory); margin-bottom: 8px; letter-spacing: -0.02em; }
     .unsub-sub { font-size: 14px; color: var(--slate); line-height: 1.6; margin-bottom: 28px; }
     .unsub-done { font-size: 14px; color: var(--ivory); line-height: 1.6; }
+    /* FIX-UNIT-2 V8: this page's skip link, inlined here (not only relying
+       on the linked styles.css .skip-to-content rule) since this route's
+       markup is otherwise self-contained. */
+    .skip-to-content {
+      position: absolute; top: -100%; left: 16px; padding: 12px 24px;
+      background: var(--aurum); color: var(--obsidian); font-weight: 600;
+      border-radius: 0 0 6px 6px; z-index: 9999; transition: top 0.2s;
+    }
+    .skip-to-content:focus { top: 0; }
   </style>`;
 
   const logoRow = `<a href="/" class="unsub-logo">
@@ -4108,7 +4117,9 @@ function renderUnlockEmailPrefsPage(state, token) {
 
   // A5a: `<main>` landmark — every other page on the site wraps its content
   // in one; this route was the only one missing it.
-  return `<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Stop Unlock Emails | Auxilo</title><link rel="stylesheet" href="/styles.css?v=5974206b"/>${styleBlock}</head><body><main class="unsub-wrap">${logoRow}${body}</main></body></html>`;
+  // FIX-UNIT-2 V8: skip link, same class and text as every other page's,
+  // first element in <body>, pointing at this <main>'s new id.
+  return `<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Stop Unlock Emails | Auxilo</title><link rel="stylesheet" href="/styles.css?v=2d91b7aa"/>${styleBlock}</head><body><a href="#main" class="skip-to-content">Skip to content</a><main class="unsub-wrap" id="main">${logoRow}${body}</main></body></html>`;
 }
 
 app.get('/account/email-prefs/unsubscribe', (c) => {
@@ -12994,7 +13005,7 @@ function serveLegalPage(c, filename, title, seo) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>${title} | Auxilo</title>
   ${seoTags}
-  <link rel="stylesheet" href="/styles.css?v=5974206b"/>
+  <link rel="stylesheet" href="/styles.css?v=2d91b7aa"/>
   <style>
     .legal-wrap{max-width:720px;margin:0 auto;padding:120px 24px 80px;color:#E5E5E3}
     .legal-wrap h1{color:#FAFAF8;font-size:32px;margin-bottom:24px}

@@ -8,7 +8,7 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=5974206b" />
+  <link rel="stylesheet" href="/styles.css?v=2d91b7aa" />
   <style>
     /* ── Dashboard layout ───────────────────────────────────────────── */
     .dash-wrap {
@@ -157,7 +157,16 @@
 
     /* ── Buttons ────────────────────────────────────────────────────── */
     .btn {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      /* FIX-UNIT-2 V4: this page-scoped .btn shadows the shared site-wide
+         .btn-primary (~48px tall) with no min-height of its own, so "Send
+         magic link" / "Accept and continue" / "Turn on auto-publish" all
+         rendered at 35px -- under the 44px touch-target minimum. inline-flex
+         + centering keeps the label centered rather than top-aligned once
+         the box grows past its padded content height. */
+      min-height: 44px;
       padding: 10px 20px;
       border-radius: 6px;
       font-size: 14px;
@@ -626,6 +635,8 @@
 </head>
 <body>
 
+<a href="#main" class="skip-to-content">Skip to content</a>
+
 <!-- FIX-UNIT A1: shared polite live region for the copy-button "copied!"
      announcement (see copyDashSetupCode() below). -->
 <span id="copy-status" role="status" aria-live="polite" class="visually-hidden"></span>
@@ -658,6 +669,11 @@
   </div>
 </nav>
 
+<!-- FIX-UNIT-2 V8: this page had no <main> landmark at all -- the two
+     top-level content views below (#login-view / #dash-view, only one
+     ever visible at a time) are now wrapped in one, matching the id the
+     new skip link above targets. -->
+<main id="main">
 <!-- ── Login view (shown when no session) ──────────────────────────── -->
 <div id="login-view" style="display:none">
   <div class="login-logo">
@@ -927,6 +943,7 @@
 
   </div>
 </div>
+</main>
 
 <!-- AD sheet 9 / packet 3 rev 2: site footer link row (tagline omitted; the
      wordmark link stays). Sits outside both #login-view and #dash-view, so
@@ -1400,7 +1417,13 @@
     }
 
     var items = [
-      { label: 'Your share (accrued)', value: fmt(data.pending_balance), highlight: true },
+      // FIX-UNIT-2 V2: gold is a "real amount" signal — a brand-new account
+      // with a genuine $0.00 accrued balance was rendering the same gold
+      // highlight as a real nonzero figure. Only highlight when > 0; at
+      // $0.00 this now takes the same plain .earnings-value style as the
+      // other figures on the card (Lifetime gross, revenue share, total
+      // withdrawn).
+      { label: 'Your share (accrued)', value: fmt(data.pending_balance), highlight: (data.pending_balance || 0) > 0 },
       { label: 'Lifetime gross', value: fmt(data.total_gross_usd || data.total_gross || 0) },
       { label: 'Your revenue share, earned to date', value: fmt(data.total_contributor) },
       { label: 'Total withdrawn', value: fmt(data.total_withdrawn) },

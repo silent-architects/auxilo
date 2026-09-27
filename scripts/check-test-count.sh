@@ -286,7 +286,21 @@ cd "${REPO_ROOT}"
 # Part D brand-gate rows D1-D5 (openapi.json/agent-card description parity;
 # "AI"->"agents" on how-it-works/pricing/index; sitewide standalone-"AI"
 # guard): +18 assertions, 0 removed. 3477 -> 3495, verified twice.
-EXPECTED_TEST_COUNT=3495
+#
+# FIX-UNIT-2 + FIX-UNIT-2B (site/launch-wave-0926 final visual QA + one FAQ
+# item, base 3495): +56, 0 removed. All 56 are in the one new file
+# test/launch-wave-fixes-visual.test.js (header-clearance/earnings-highlight/
+# trust-page-secondary-style/button-height/contrast/skip-link/heading-
+# hierarchy/heading-<br>-sweep fixes, the FIX-UNIT-2B heading corrections
+# H1-H5, and the new /for-builders FAQ item Q-01 REV 2). Every other file
+# touched by this pass (test/mobile-header-offset.test.js,
+# test/launch-wave-emails-e2e.test.js, test/faq-consolidation.test.js,
+# test/launch-wave-for-builders.test.js, test/trust-page.test.js) had only
+# existing it() bodies/pinned values edited to the new deliberate state, no
+# it() blocks added or removed. Verified against the actual `npm test`
+# discovered count, run twice, identical both times: 3495 -> 3551, 0 fail,
+# 6 skipped (pre-existing, unrelated).
+EXPECTED_TEST_COUNT=3551
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

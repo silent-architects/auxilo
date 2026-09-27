@@ -107,9 +107,17 @@ const MIN_CLEARANCE = 8;
 // desktop is one of this fix's explicit constraints, so it's pinned here
 // rather than just eyeballed once.
 const EXPECTED_1440_H1_TOP = {
-  'public/about.html': 48,
+  // FIX-UNIT-2 V1/V7 (2026-09-26): about.html/connect.html/works-with.html's
+  // `main`/`.ww-main` padding-top:var(--header-h) rule was gated behind
+  // `@media (max-width: 900px)`, so these three pages' desktop h1 sat under
+  // (about/connect) or 3px into (works-with) the fixed header -- these three
+  // values were the BROKEN pre-fix numbers (48, 48, 96), not a healthy
+  // baseline. The fix makes the rule apply unconditionally; --header-h is a
+  // fixed formula (44+28+26+1+31=130px, not font-metric- or width-dependent),
+  // so all three now measure a clean 130 at every width, re-pinned here.
+  'public/about.html': 130,
   'public/api.html': 140,
-  'public/connect.html': 48,
+  'public/connect.html': 130,
   'public/dashboard.html': 208.8,
   'public/for-agents.html': 140,
   'public/for-builders.html': 250,
@@ -120,10 +128,15 @@ const EXPECTED_1440_H1_TOP = {
   // sheet item 1) -- #hero's flex-centered content is now shorter, so its
   // vertically centered h1 sits lower in the viewport. Deliberate, not drift;
   // re-measured against the rebuilt hero (was 100).
-  'public/index.html': 168.359375,
+  // FIX-UNIT-2B H2: #hero h1's max-width went 820px -> 950px (fixes the
+  // 1280px 3-line orphan; see styles.css). At 1440px this reflows the h1's
+  // own wrapped-line height, which shifts where #hero's flex-centered
+  // content lands vertically -- re-measured against the new width (was
+  // 168.359375).
+  'public/index.html': 175.234375,
   'public/pricing.html': 140,
   'public/status.html': 140,
-  'public/works-with.html': 96,
+  'public/works-with.html': 130,
   'public/writing-agents-message-board.html': 177.4,
   'public/writing/index.html': 48,
 };

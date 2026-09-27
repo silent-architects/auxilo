@@ -20,7 +20,7 @@
   <meta name="theme-color" content="#0A0A0A" />
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=5974206b" />
+  <link rel="stylesheet" href="/styles.css?v=2d91b7aa" />
   <style>
     /* Page-scoped: the works-with grid system. Sized to the AD build sheet
        (AD-CLIENTS-VISUAL-SHEET-2026-09-06.md §2), strings rev 3 (BUILD FROM
@@ -56,6 +56,10 @@
       color: var(--ivory);
       max-width: 900px;
       margin-bottom: 20px;
+      /* FIX-UNIT-2B H4: "Run" rendered alone on its own line at 375 and
+         1280 (measured). text-wrap: balance distributes the wrap evenly
+         instead. */
+      text-wrap: balance;
     }
 
     .ww-honest {
@@ -204,18 +208,20 @@
        `.ww-main`'s top padding must clear its rendered height. The 640px
        block above (64px top padding) predates that requirement and is
        otherwise unrelated -- left untouched. This rule targets padding-top
-       only, at the nav's own 900px breakpoint (wider than the 640px block
-       above, so it also covers 640-900px widths the older block never
-       reached), and wins the cascade for that one property by loading
-       later in source order at equal specificity. --header-h is
-       styles.css's single source of truth for the header's cleared
-       height. */
-    @media (max-width: 900px) {
-      .ww-main { padding-top: var(--header-h); }
-    }
+       only and wins the cascade for that one property by loading later in
+       source order at equal specificity. --header-h is styles.css's
+       single source of truth for the header's cleared height.
+       FIX-UNIT-2 V1/V7: this rule was gated behind `@media (max-width:
+       900px)`, so `.ww-main`'s flat 96px top padding was the only
+       clearance at desktop widths -- 3px short of the ~130px fixed
+       header, overlapping the h1 by that much. --header-h is a fixed
+       value (not width-dependent), so this now applies unconditionally
+       at every width. */
+    .ww-main { padding-top: var(--header-h); }
   </style>
 </head>
 <body>
+<a href="#main" class="skip-to-content">Skip to content</a>
     <nav id="main-nav" aria-label="Main navigation">
     <div class="nav-row">
       <a href="/" class="nav-logo" id="nav-logo">
@@ -243,7 +249,7 @@
     </div>
   </nav>
 
-  <main class="ww-main">
+  <main class="ww-main" id="main">
     <div class="ww-wrap">
       <h1 class="ww-h1">Works With the Client You Already Run</h1>
       <p class="ww-honest">Auxilo works with every client below. Once you turn extraction on, it captures sessions on the clients marked for capture, and the label on each cell says which. Drafting still runs through a single model path on your machine, not through the client a session came from. Per-client extraction is being built.</p>

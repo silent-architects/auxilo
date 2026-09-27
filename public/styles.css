@@ -372,7 +372,14 @@ section h2 {
   line-height: 1.08;
   letter-spacing: -0.02em;
   color: var(--ivory);
-  max-width: 820px;
+  /* FIX-UNIT-2B H2: was 820px, which wrapped this 10-word h1 to 3 lines at
+     1280px with "before." orphaned alone on the last line. 950px is the
+     smallest width (of 820/850/880/900/920/950px, measured live) that
+     reaches 2 lines with no single-word line at 1280, with no font-size
+     change. Narrower viewports never reach this max-width in the first
+     place (the section's own padding/container constrain them well below
+     it), so 375/768 are unaffected -- verified unchanged. */
+  max-width: 950px;
   margin-bottom: 28px;
 }
 

@@ -32,7 +32,7 @@
   <meta name="theme-color" content="#0A0A0A" />
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=5974206b" />
+  <link rel="stylesheet" href="/styles.css?v=2d91b7aa" />
   <style>
     /* N3: this page now links the shared stylesheet like every other page.
        DR-6 ruling still applies to what's left below: near-miss token values
@@ -156,15 +156,17 @@
     /* MOBILE-HEADER-OFFSET: #main-nav is position:fixed at every width, so
        `main`'s top padding must clear its rendered height. The 640px block
        above (32px top padding) predates that requirement and is otherwise
-       unrelated -- left untouched. This rule targets padding-top only, at
-       the nav's own 900px breakpoint (wider than the 640px block above, so
-       it also covers 640-900px widths the older block never reached), and
+       unrelated -- left untouched. This rule targets padding-top only and
        wins the cascade for that one property by loading later in source
        order at equal specificity. --header-h is styles.css's single
-       source of truth for the header's cleared height. */
-    @media (max-width: 900px) {
-      main { padding-top: var(--header-h); }
-    }
+       source of truth for the header's cleared height.
+       FIX-UNIT-2 V1/V7: this rule was gated behind `@media (max-width:
+       900px)`, so `main`'s flat `padding: 3rem 2rem` (48px) was the only
+       top padding at desktop widths -- nowhere near clearing the ~130px
+       fixed header, fully hiding the h1 at 1280px. --header-h is a fixed
+       value (not width-dependent — see its derivation in styles.css), so
+       this now applies unconditionally at every width. */
+    main { padding-top: var(--header-h); }
   </style>
   <style>
     /* Page-scoped additions to the /status register (no new tokens). */
@@ -190,6 +192,7 @@
   </style>
 </head>
 <body>
+<a href="#main" class="skip-to-content">Skip to content</a>
 <nav id="main-nav" aria-label="Main navigation">
   <div class="nav-row">
     <a href="/" class="nav-logo" id="nav-logo">
@@ -217,7 +220,7 @@
   </div>
 </nav>
 
-  <main>
+  <main id="main">
     <h1 class="page-title">About Auxilo</h1>
 
     <!-- Register A row A-17 (advertising-copywriter, 2026-09-26): the

@@ -96,6 +96,9 @@ const EXPECTED = {
     "How does the revenue share work?",
     "What's the minimum to start earning?",
     'Who sets the price for my learnings?',
+    // FIX-UNIT-2B Part A (REGISTER-Q-FINAL.md, Q-01 REV 2): new 4th item,
+    // added directly after "Who sets the price for my learnings?".
+    'Does Auxilo work if I do not use Claude Code?',
     'What happens to sensitive data?',
     'Do I need a crypto wallet?',
     'How do I monetize what my AI agent learns?',
@@ -129,9 +132,12 @@ describe('FAQ consolidation (SITE-RESTRUCTURE-W3 item A): per-page question sets
     });
   }
 
-  it('the total kept-question count across all six pages is 18 (31 -> 18)', () => {
+  // FIX-UNIT-2B Part A (Q-01 REV 2) added one new question to /for-builders
+  // ("Does Auxilo work if I do not use Claude Code?"), independent of this
+  // item's own consolidation arithmetic -- 18 + 1 = 19.
+  it('the total kept-question count across all six pages is 19 (31 -> 18 consolidation, +1 FIX-UNIT-2B Part A)', () => {
     const total = PAGES.reduce((sum, page) => sum + EXPECTED[page].length, 0);
-    assert.equal(total, 18, 'net effect of the consolidation is 31 -> 18 questions');
+    assert.equal(total, 19, 'net effect is 31 -> 18 (consolidation) -> 19 (FIX-UNIT-2B Part A adds one)');
   });
 });
 

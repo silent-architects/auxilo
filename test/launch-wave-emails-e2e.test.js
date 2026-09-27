@@ -552,7 +552,7 @@ describe('LAUNCH-WAVE-EMAILS-E2E: both flags ON', { timeout: 180_000 }, () => {
     assert.equal(res.status, 400);
     assert.deepEqual(readJson(path.join(ctx.dataDir, 'accounts.json')), before);
     // A5a: the 'expired' state wraps its content in <main>.
-    assert.match(res.text, /<main class="unsub-wrap">/);
+    assert.match(res.text, /<main class="unsub-wrap" id="main">/);
   });
 
   it('a valid earning-emails-off token flips the flag exactly once via the POST form, appends an email_link opt-out record, and is single-use (a second POST with the same token fails)', async () => {
@@ -569,13 +569,13 @@ describe('LAUNCH-WAVE-EMAILS-E2E: both flags ON', { timeout: 180_000 }, () => {
     assert.match(getPage.text, /Turn Off Unlock Emails/);
     assert.match(getPage.text, new RegExp(`value="${rawToken}"`), 'token is placed in the hidden form field');
     // A5a: the 'form' state wraps its content in <main>.
-    assert.match(getPage.text, /<main class="unsub-wrap">/);
+    assert.match(getPage.text, /<main class="unsub-wrap" id="main">/);
 
     const post1 = await postForm(`${ctx.baseUrl}/account/email-prefs/unsubscribe`, { token: rawToken });
     assert.equal(post1.status, 200);
     assert.match(post1.text, /Unlock emails are off/);
     // A5a: the 'done' state wraps its content in <main>.
-    assert.match(post1.text, /<main class="unsub-wrap">/);
+    assert.match(post1.text, /<main class="unsub-wrap" id="main">/);
 
     const accountsAfter = readJson(path.join(ctx.dataDir, 'accounts.json'));
     assert.equal(accountsAfter[BUYER_NORMAL].earning_notifications_enabled, false);

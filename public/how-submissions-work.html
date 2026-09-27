@@ -70,7 +70,7 @@
   <meta name="theme-color" content="#0A0A0A" />
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=5974206b" />
+  <link rel="stylesheet" href="/styles.css?v=2d91b7aa" />
   <style>
     /* ── Page-specific: hero (Finding 7 — H1 only in this build; no subhead
        string was supplied, no CTA pair, no eyebrow) ── */
@@ -179,6 +179,13 @@
       font-weight: 500;
       color: var(--aurum, #C9A84C);
     }
+    /* FIX-UNIT-2 V3: gold is the lead-figure treatment (kept for
+       #s7-learnings-count). #s7-unlocks-count additionally carries
+       styles.css's `.pull-stat-secondary` class (higher specificity than
+       this single-class rule, so it wins on color/size), the same neutral
+       ivory secondary treatment its sibling figure already gets on
+       /for-builders and /pricing. Do not rename or move the id — server.js
+       renderTrustPageLiveCounts fills it by id. */
     .ledger-card-label {
       display: block;
       color: var(--slate-text);
@@ -442,7 +449,7 @@
           <span id="s7-learnings-label" class="ledger-card-label">learnings live in the catalog</span>
         </div>
         <div class="ledger-card-stat">
-          <span id="s7-unlocks-count" class="ledger-card-value">…</span>
+          <span id="s7-unlocks-count" class="ledger-card-value pull-stat-secondary">…</span>
           <span id="s7-unlocks-label" class="ledger-card-label">unlocks recorded</span>
         </div>
       </div>

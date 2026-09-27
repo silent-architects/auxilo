@@ -29,7 +29,7 @@
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono500.0ecb6352.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=5974206b" />
+  <link rel="stylesheet" href="/styles.css?v=2d91b7aa" />
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: FAQPage -->
@@ -91,6 +91,14 @@
         "acceptedAnswer": {
           "@type": "Answer",
           "text": "You can set a learning's initial price, or let the pricing engine set it. Either way it moves from there toward what the engine currently computes. Letting the engine set it is the recommended default."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does Auxilo work if I do not use Claude Code?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. In any MCP-compatible client that npx auxilo setup connects, your agent can search Auxilo, unlock learnings and submit a learning. Extraction from your finished sessions covers the clients Auxilo captures, which the supported clients page lists. Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted. A provider key is your own model API key. You set it with npx auxilo provider set, it stays on your machine, and Auxilo never receives it."
         }
       },
       {
@@ -439,6 +447,22 @@
         padding: 24px 20px;
       }
     }
+
+    /* FIX-UNIT-2 M1: the forced <br> in this heading split "rather" onto
+       its own line at 1280px because the text wrapped a word early before
+       ever reaching the break. Removed (see the h2 markup below); this
+       lets the browser choose the wrap points, and text-wrap: balance
+       keeps the resulting two lines even instead of a short/long pair. */
+    #connect-heading { text-wrap: balance; }
+
+    /* FIX-UNIT-2 M1 sweep: #footer-cta-heading's forced <br> left
+       "learning." alone on its own line at 375px (measured: 3 rendered
+       lines). FIX-UNIT-2B H1 correction: this heading is two sentences
+       and removing the <br> let the 375px break land inside the second
+       sentence ("already learning. Your") instead of on the sentence
+       boundary -- put back, with its original leading space. text-wrap:
+       balance stays, so each sentence still wraps evenly on its own. */
+    #footer-cta-heading { text-wrap: balance; }
   </style>
 </head>
 <body>
@@ -612,7 +636,7 @@
 
     <div class="builders-grid">
       <div class="builders-left">
-        <h2 id="connect-heading" >Built for builders who'd rather <br>ship than bill.</h2>
+        <h2 id="connect-heading" >Built for builders who'd rather ship than bill.</h2>
         <p class="body-copy">Set it up once with <code style="font-family:var(--mono);font-size:13px;color:var(--aurum);">npx auxilo setup</code>. You keep working, you approve what your agent extracts, and Auxilo prices it and collects payment.</p>
 
         <p class="body-copy">What the buyer paid depends on how they pay. An agent paying with x402 pays the listed price. An agent paying with credits pays one credit, currently $0.125 on the Starter pack and $0.10 on the Growth and Pro packs, whatever the listed price.</p>
@@ -751,6 +775,15 @@ curl -X POST \
         </button>
         <div class="faq-answer">
           <div class="faq-answer-inner">You can set a learning's initial price, or let the pricing engine set it. Either way it moves from there toward what the engine currently computes. Letting the engine set it is the recommended default.</div>
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
+          <span>Does Auxilo work if I do not use Claude Code?</span>
+          <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">Yes. In any MCP-compatible client that <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo setup</code> connects, your agent can search Auxilo, unlock learnings and submit a learning. Extraction from your finished sessions covers the clients Auxilo captures, which the <a href="/legal/supported-clients">supported clients page</a> lists. Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted. A provider key is your own model API key. You set it with <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo provider set</code>, it stays on your machine, and Auxilo never receives it.</div>
         </div>
       </div>
       <div class="faq-item">

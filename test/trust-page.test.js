@@ -300,9 +300,13 @@ describe('Trust page: route, redirects, head tags, h1, forbidden strings', { tim
     assert.equal(claudeCodeMatches.length, 1, 'exactly one "Claude Code" occurrence, inside the §2b What-runs-where drafting sentence');
   });
 
-  it('D1 T1: the approved drafting boundary appears exactly eight times across public HTML, and the docs-only "Without one" form stays out of public HTML', () => {
+  it('D1 T1: the approved drafting boundary appears exactly ten times across public HTML, and the docs-only "Without one" form stays out of public HTML', () => {
     const publicText = publicHtmlText(path.join(REPO, 'public'));
-    assert.equal(countLiteral(publicText, D1_BOUNDARY), 8, 'approved boundary appears exactly eight times across public HTML');
+    // FIX-UNIT-2B Part A (Q-01 REV 2): the new /for-builders FAQ item "Does
+    // Auxilo work if I do not use Claude Code?" is required to carry this
+    // same boundary sentence verbatim, in both its visible answer and its
+    // JSON-LD mirror -- +2 site-wide (8 -> 10).
+    assert.equal(countLiteral(publicText, D1_BOUNDARY), 10, 'approved boundary appears exactly ten times across public HTML (was 8, +2 from the new /for-builders FAQ item\'s visible answer and JSON-LD mirror)');
     assert.equal(countLiteral(publicText, 'Without one, captured sessions are held and nothing is submitted.'), 0, 'docs-only "Without one" form is absent from public HTML');
     assert.equal(countLiteral(SUPPORTED_CLIENTS_MD, 'Without one, captured sessions are held and nothing is submitted.'), 1, 'docs-only "Without one" form remains exactly once in SUPPORTED-CLIENTS');
   });

@@ -199,13 +199,13 @@ describe('LAUNCH-WAVE /for-builders: new tests (write-first, per BUILDER-RULES)'
     });
   });
 
-  describe('4. The drafting boundary pair (R3: back in the note, exactly once; step 02 carries none)', () => {
-    it('the boundary pair appears exactly once on the page, inside the note under the steps', () => {
-      assert.equal(countOccurrences(STATIC_HTML, DRAFTING_BOUNDARY), 1, 'boundary pair appears exactly once');
-      const idx = STATIC_HTML.indexOf(DRAFTING_BOUNDARY);
+  describe('4. The drafting boundary pair (R3: back in the note, exactly once; step 02 carries none; FIX-UNIT-2B Part A adds a second served location, in both its visible and JSON-LD forms)', () => {
+    it('the boundary pair appears exactly three times in the raw served file: the JSON-LD mirror of the new FAQ answer (head), the note under the steps (body), and the new FAQ answer\'s visible text (body) — FIX-UNIT-2B Part A, Q-01 REV 2 requires it verbatim in both the visible answer and its JSON-LD twin', () => {
+      assert.equal(countOccurrences(STATIC_HTML, DRAFTING_BOUNDARY), 3, 'boundary pair appears exactly three times: new-FAQ JSON-LD + the note + new-FAQ visible answer');
       const noteIdx = STATIC_HTML.indexOf('<p class="drafting-note">');
       assert.ok(noteIdx > -1, 'note located');
-      assert.equal(idx, noteIdx + '<p class="drafting-note">'.length, 'the boundary pair is the first text inside the note');
+      const noteOccurrenceIdx = noteIdx + '<p class="drafting-note">'.length;
+      assert.equal(STATIC_HTML.slice(noteOccurrenceIdx, noteOccurrenceIdx + DRAFTING_BOUNDARY.length), DRAFTING_BOUNDARY, 'the boundary pair is still the first text inside the note');
     });
 
     it('the note under the three steps reads the boundary pair followed by the /works-with link sentence', () => {
@@ -403,41 +403,65 @@ describe('LAUNCH-WAVE /for-builders: new tests (write-first, per BUILDER-RULES)'
       }
     });
 
-    it('outside the note, the visible page text (tags/style/script/comments stripped) carries no draft or write-up word', () => {
+    // FIX-UNIT-2B Part A (Q-01 REV 2): the new FAQ item "Does Auxilo work if
+    // I do not use Claude Code?" is REQUIRED to carry the canonical boundary
+    // sentence verbatim, in both its visible answer and its JSON-LD mirror —
+    // a second approved location, alongside the drafting-note. The three
+    // tests below are updated to exclude that one named question (by name,
+    // same pattern R3-07/R3-08 above already uses for its own exceptions),
+    // not to accept "draft" anywhere unnamed.
+    const NEW_FAQ_QUESTION = 'Does Auxilo work if I do not use Claude Code?';
+
+    it('outside the note and the new FAQ answer, the visible page text (tags/style/script/comments stripped) carries no draft or write-up word', () => {
       const noteMatch = STATIC_HTML.match(/<p class="drafting-note">[\s\S]*?<\/p>/);
       assert.ok(noteMatch, 'note present');
-      const withoutNote = STATIC_HTML.replace(noteMatch[0], '');
+      const newFaqAnswerMatch = STATIC_HTML.match(/<span>Does Auxilo work if I do not use Claude Code\?<\/span>[\s\S]*?<div class="faq-answer-inner">([\s\S]*?)<\/div>/);
+      assert.ok(newFaqAnswerMatch, 'new FAQ answer present');
+      const withoutNote = STATIC_HTML.replace(noteMatch[0], '').replace(newFaqAnswerMatch[1], '');
       const text = visibleText(withoutNote);
-      assert.doesNotMatch(text, DRAFT_WORDS, 'no draft/drafts/drafted/Drafting word survives outside the note');
+      assert.doesNotMatch(text, DRAFT_WORDS, 'no draft/drafts/drafted/Drafting word survives outside the note and the new FAQ answer');
       assert.doesNotMatch(text, WRITE_UP, 'no "write-up" survives outside the note');
     });
 
-    it('outside the note, every FAQPage JSON-LD answer text carries no draft or write-up word (machine-readable surface, separate from visible text)', () => {
+    it('outside the new FAQ question, every FAQPage JSON-LD answer text carries no draft or write-up word (machine-readable surface, separate from visible text)', () => {
       const entries = faqJsonLdEntries(STATIC_HTML);
       assert.ok(entries.length > 0, 'sanity: at least one FAQ entry to check (an empty list would make the loop below vacuous)');
       for (const entry of entries) {
+        if (entry.name === NEW_FAQ_QUESTION) continue;
         assert.doesNotMatch(entry.acceptedAnswer.text, DRAFT_WORDS, `${entry.name}: no draft word in JSON-LD`);
         assert.doesNotMatch(entry.acceptedAnswer.text, WRITE_UP, `${entry.name}: no write-up in JSON-LD`);
       }
     });
 
-    it('every "draft" occurrence in the served (non-comment, non-style) surfaces is inside the note\'s boundary sentence', () => {
+    it('every "draft" occurrence in the served (non-comment, non-style) surfaces is inside the note\'s boundary sentence or the new FAQ answer/its JSON-LD mirror', () => {
       // Stricter cross-check than the visible-text/JSON-LD tests above: scan
       // the raw file for every whole-word "draft" occurrence, exclude the
       // ones inside <style>...</style> and inside HTML/CSS comments (dev
       // documentation, never served as page content), and confirm every
-      // remaining occurrence falls inside the note's own <p> element.
+      // remaining occurrence falls inside one of the two approved spans:
+      // the note's own <p>, or the new FAQ item (its visible answer div and
+      // its JSON-LD entry, both required to carry the boundary sentence).
       const withoutStyle = STATIC_HTML.replace(/<style[\s\S]*?<\/style>/g, ' ');
       const withoutComments = withoutStyle.replace(/<!--[\s\S]*?-->/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ');
       const allMatches = [...withoutComments.matchAll(/\b(drafts?|drafted|drafting)\b/gi)];
       const noteMatch = withoutComments.match(/<p class="drafting-note">[\s\S]*?<\/p>/);
       assert.ok(noteMatch, 'note present after stripping style/comments');
-      const noteStart = withoutComments.indexOf(noteMatch[0]);
-      const noteEnd = noteStart + noteMatch[0].length;
+      const spans = [[withoutComments.indexOf(noteMatch[0]), withoutComments.indexOf(noteMatch[0]) + noteMatch[0].length]];
+
+      const newFaqVisibleMatch = withoutComments.match(/<span>Does Auxilo work if I do not use Claude Code\?<\/span>[\s\S]*?<div class="faq-answer-inner">[\s\S]*?<\/div>/);
+      assert.ok(newFaqVisibleMatch, 'new FAQ visible answer present after stripping style/comments');
+      const visStart = withoutComments.indexOf(newFaqVisibleMatch[0]);
+      spans.push([visStart, visStart + newFaqVisibleMatch[0].length]);
+
+      const newFaqJsonMatch = withoutComments.match(/"name":\s*"Does Auxilo work if I do not use Claude Code\?"[\s\S]*?"text":\s*"[^"]*"/);
+      assert.ok(newFaqJsonMatch, 'new FAQ JSON-LD entry present after stripping style/comments');
+      const jsonStart = withoutComments.indexOf(newFaqJsonMatch[0]);
+      spans.push([jsonStart, jsonStart + newFaqJsonMatch[0].length]);
+
       assert.ok(allMatches.length > 0, 'sanity: at least one match (the note itself)');
       for (const m of allMatches) {
-        const inNote = m.index >= noteStart && m.index < noteEnd;
-        assert.ok(inNote, `unexpected "draft" occurrence outside the note, at index ${m.index}: ${JSON.stringify(withoutComments.slice(Math.max(0, m.index - 40), m.index + 40))}`);
+        const inApprovedSpan = spans.some(([s, e]) => m.index >= s && m.index < e);
+        assert.ok(inApprovedSpan, `unexpected "draft" occurrence outside every approved span, at index ${m.index}: ${JSON.stringify(withoutComments.slice(Math.max(0, m.index - 40), m.index + 40))}`);
       }
     });
   });

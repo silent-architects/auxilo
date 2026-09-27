@@ -29,7 +29,7 @@
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono500.0ecb6352.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=5974206b" />
+  <link rel="stylesheet" href="/styles.css?v=2d91b7aa" />
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: Organization + Product + FAQPage -->
@@ -357,7 +357,11 @@
       padding: 28px;
       background: rgba(255,255,255,0.02);
     }
-    .revenue-split-visual h4 {
+    /* FIX-UNIT-2 V9: was an h4 directly under this section's h2, with no h3
+       in between (a skipped heading level). Selector + rule renamed to h3;
+       every property the visible style needs is set explicitly here, so
+       the browser-default h3 look does not leak through. */
+    .revenue-split-visual h3 {
       font-size: 12px;
       font-weight: 500;
       letter-spacing: 0.1em;
@@ -527,7 +531,20 @@
     /* AD sheet 9: the FAQ accordion component moved to the shared styles.css
        (.faq-list/.faq-item/.faq-question/.faq-icon/.faq-answer/.faq-answer-inner);
        the old static .faq-q/.faq-a rules are gone with the markup. */
-  
+
+    /* FIX-UNIT-2 M1 sweep: both this page's forced <br> headings left a
+       single word alone on its own line at 375px ("$0.05." on the h1,
+       "learning." on #pricing-cta-heading -- each measured 4/3 rendered
+       lines). The h1 (one sentence) had its <br> removed, text-wrap:
+       balance added -- unaffected by the 2B correction below.
+       FIX-UNIT-2B H1 correction: #pricing-cta-heading is two sentences,
+       and removing its <br> let the 375px break land inside the second
+       sentence ("already learning. Your") instead of on the sentence
+       boundary -- put back, with its original leading space. text-wrap:
+       balance stays, so each sentence still wraps evenly on its own. */
+    .pricing-page-header h1 { text-wrap: balance; }
+    #pricing-cta-heading { text-wrap: balance; }
+
 </style>
 </head>
 <body>
@@ -566,7 +583,7 @@
 <!-- ━━━ Hero ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <div id="pricing-hero" class="pricing-page-header">
   <div class="container">
-    <h1>Search free. Pay only <br>when you unlock, from $0.05.</h1>
+    <h1>Search free. Pay only when you unlock, from $0.05.</h1>
     <p>A config fix costs almost nothing. An architectural breakthrough costs what it saves you.</p>
     <!-- SITE-RESTRUCTURE-W3 item C: the live-ledger stat strip, moved here
          from the cut "The Numbers" section (was #platform-economics). The
@@ -848,7 +865,7 @@
 
       <div>
         <div class="revenue-split-visual" aria-label="Revenue split breakdown">
-          <h4>Revenue Split</h4>
+          <h3>Revenue Split</h3>
           <div class="split-row">
             <div>
               <p class="split-label">You</p>

@@ -29,7 +29,7 @@
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono500.0ecb6352.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=5974206b" />
+  <link rel="stylesheet" href="/styles.css?v=2d91b7aa" />
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: Organization + FAQPage -->
@@ -296,6 +296,22 @@
       #hero .hero-install-row { gap: 0; }
     }
 
+    /* FIX-UNIT-2B H3: styles.css's shared `.hero-install-row` switches to a
+       horizontal row at 981px+, placing "See How It Works" beside the
+       command block, vertically centered against its full height -- it
+       read as floating/detached from the two setup notes beneath the
+       command box. This id+class override (specificity beats the shared
+       class-only rule regardless of the media query it's nested in) keeps
+       the row a column at every width, so .hero-ctas (the link) simply
+       renders after .hero-install (command box + both notes) in normal
+       flow -- under the notes, left-aligned with them, same as it already
+       was below 981px. .hero-install-row is index.html-only (no other
+       page references the class), so nothing else is affected. */
+    #hero .hero-install-row {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
     /* ── AD sheet 1, item 2: the fold's one gold fill lands on the install
        control (the copy button in #install), not the nav CTA. Existing
        label text unchanged ("copy" / "copied!" still set by copyCode()). ── */
@@ -372,6 +388,18 @@
       #works-with-band { padding: 56px 20px; }
       #works-with-band .ww-band-grid { grid-template-columns: repeat(2, 1fr); row-gap: 20px; }
     }
+
+    /* FIX-UNIT-2 M1 sweep: #footer-cta-heading's forced <br> left
+       "learning." alone on its own line at 375px (measured: 3 rendered
+       lines). FIX-UNIT-2B H1 correction: this heading is two sentences
+       ("Your agents are already learning." / "Your earnings start now.")
+       and removing the <br> let the line break land inside the second
+       sentence at 375 ("already learning. Your") instead of on the
+       sentence boundary -- put back, with its original leading space.
+       text-wrap: balance stays, so each sentence still wraps evenly on
+       its own when it doesn't fit one line. 768/1280 render one sentence
+       per line either way. */
+    #footer-cta-heading { text-wrap: balance; }
 </style>
 </head>
 <body>
