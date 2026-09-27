@@ -1027,7 +1027,7 @@ Tyler, 2026-09-26: SITE-PM manages the site launch build in parallel with TECH-P
 | SLW-23 | The catalog preview block shows human visitors the untrusted-content advisory written for agents. Keep it for agents and decide how a human should see it. | P3 | TECH-PM + GOV-3 | OPEN |
 | SLW-24 | Unlock notification: bounce and complaint handling, and a suppression list, before the first real send. | P2 | TECH-PM | OPEN, before the email flag is set |
 
-**Gates and reviews run (SITE-PM, 2026-09-26 and 09-27).** Copy: brand steward four rounds, positioning strategist two, disclosure arbiter four, legal memo on the emails, financial brief on the share basis. Build: adversarial code and security review (0 blockers, every high and medium fixed on the branch), accessibility audit (7 findings, all fixed), agent behavioural test before and after, final visual review at three widths (7 findings, 6 fixed, 1 accepted), cold builder read of the finished site. Full battery on the branch is green at 3551 tests and predeploy passes.
+**Gates and reviews run (SITE-PM, 2026-09-26 and 09-27).** Copy: brand steward four rounds, positioning strategist two, disclosure arbiter four, legal memo on the emails, financial brief on the share basis. Build: adversarial code and security review (0 blockers, every high and medium fixed on the branch), accessibility audit (7 findings, all fixed), agent behavioural test before and after, final visual review at three widths (7 findings, 6 fixed, 1 accepted), cold builder read of the finished site. Full battery on the branch is green at 3555 tests and predeploy passes.
 
 ## Counts
 
