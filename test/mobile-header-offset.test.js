@@ -139,7 +139,12 @@ const EXPECTED_1440_H1_TOP = {
   // own wrapped-line height, which shifts where #hero's flex-centered
   // content lands vertically -- re-measured against the new width (was
   // 168.359375).
-  'public/index.html': 175.234375,
+  // HERO-0927 (2026-09-27): the headline text changed (owner-ruled
+  // replacement, BUILD-BRIEF-HERO.md; #hero h1's CSS is untouched). The new,
+  // shorter headline wraps to fewer/different-height lines at 1440px, which
+  // again shifts the flex-centered vertical position -- re-measured against
+  // the new headline (was 175.234375).
+  'public/index.html': 190.90625,
   'public/pricing.html': 140,
   'public/status.html': 140,
   'public/works-with.html': 130,

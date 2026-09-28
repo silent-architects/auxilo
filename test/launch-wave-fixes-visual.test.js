@@ -806,9 +806,21 @@ describe('FIX-UNIT-2B H2/H3: homepage hero h1 width + CTA link placement', { tim
     assert.doesNotMatch(m[1], /font-size:\s*clamp\(4[1-9]px/, 'font-size clamp minimum must not have changed from 40px');
   });
 
+  // HERO-0927 (2026-09-27): the headline text itself changed (owner-ruled
+  // replacement, build brief BUILD-BRIEF-HERO.md; #hero h1's CSS above is
+  // untouched). Re-measured against the new 8-word headline: 3 lines at
+  // 375px (was 4, for the old 10-word headline), 2 at 768 and 1280
+  // (unchanged in count). R2-1 (coordinator, same day): the 768px line first
+  // left a single word ("does.") alone -- a real consequence of the new,
+  // shorter headline wrapping inside the same unchanged 950px max-width, not
+  // a regression. The ruled fix was `#hero-heading { text-wrap: balance; }`
+  // (public/index.html's own style block; nothing else about the heading
+  // changed) rather than a word or max-width change. Re-measured clean at
+  // all three widths after that change — see test/hero-0927.test.js's H-13
+  // (also covers 1440px) and its R2-3 test for the text-wrap assertion.
   it('H2 rendered: homepage h1 has no single-word line at 375, 768 or 1280 (2 lines at 1280, was 3)', async (t) => {
     if (!ok) { t.skip('playwright not resolvable'); return; }
-    const expected = { 375: 4, 768: 2, 1280: 2 };
+    const expected = { 375: 3, 768: 2, 1280: 2 };
     for (const width of [375, 768, 1280]) {
       const height = width === 375 ? 812 : (width === 768 ? 1024 : 800);
       const ctx = await browser.newContext({ viewport: { width, height } });

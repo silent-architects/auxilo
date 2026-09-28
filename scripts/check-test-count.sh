@@ -497,7 +497,22 @@ cd "${REPO_ROOT}"
 # file sweep picking up the three new files. 14 + 3 = 17 net. Verified
 # against a git-add--N-staged run (the three new files tracked): 4271 ->
 # 4288, 0 fail, 7 skipped (same pre-existing sandbox skips).
-EXPECTED_TEST_COUNT=4291
+# HERO-0927 (2026-09-27): +22 from the new test/hero-0927.test.js (headline
+# H-1 + lede H-2 replacement, BUILD-BRIEF-HERO.md). The two pre-existing
+# pinning tests edited alongside it (test/seo-baseline.test.js HERO_H1;
+# test/launch-wave-fixes-frontend.test.js's D4 lede block) each stayed at one
+# test apiece, no net count change from those edits. 4291 + 22 = 4313.
+# Verified: npm test -> 4313/4304/2/7 (2 fail = a real, reported 768px
+# single-word-headline-line finding the brief forbids fixing by rewording;
+# 7 skipped = same pre-existing sandbox skips).
+# R2 (coordinator ruling, same day): #hero-heading takes text-wrap:balance
+# (public/index.html's own style block only), which resolves the 768px
+# single-word line without touching the words or any other CSS. +3 in
+# test/hero-0927.test.js: two widened per-width checks (H-13/H-15 now also
+# run at 1440px) + one new R2-3 text-wrap assertion. 4313 + 3 = 4316.
+# Verified: npm test -> 4316/4309/0/7 (0 fail; 7 skipped = same pre-existing
+# sandbox skips).
+EXPECTED_TEST_COUNT=4316
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

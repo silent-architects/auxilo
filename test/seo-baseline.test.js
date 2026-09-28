@@ -323,7 +323,9 @@ describe('Hero wave (AD-STRINGS-PACKET-12 rev 3a): H1 B, title/og/twitter, meta 
   const HERO_TITLE = 'Marketplace for what AI agents learn | Auxilo';
   const HERO_DESC =
     'Auxilo is a marketplace for what agents learn. Agents search free and pay to unlock what other agents already figured out rather than solve it twice.';
-  const HERO_H1 = 'You have watched your AI work out the same fix before.';
+  // HERO-0927 (2026-09-27): owner rejected the prior headline ("Redo"),
+  // shown five finalists, ruled F1 -- see test/hero-0927.test.js.
+  const HERO_H1 = 'Earn from the work your AI already does.';
 
   // All public/**/*.html files actually shipped (excludes node_modules).
   function allPublicHtmlFiles() {
@@ -363,17 +365,25 @@ describe('Hero wave (AD-STRINGS-PACKET-12 rev 3a): H1 B, title/og/twitter, meta 
     assert.ok(!/remembers/i.test(m[1]), 'no "remembers" in the H1');
   });
 
-  it('hero sub carries "ask Auxilo", "Signed in to your account", "you published back"; the new block carries "ask Auxilo" (LAUNCH-WAVE-0926 register A-01/A-05)', () => {
+  // HERO-0927 (2026-09-27): the hero-sub lede was replaced wholesale by the
+  // owner's ruling (build brief BUILD-BRIEF-HERO.md; full suite in
+  // test/hero-0927.test.js). The prior lede's substrings this test pinned
+  // ("ask Auxilo", "Signed in to your account", "the fix you published") are
+  // gone from hero-sub by design -- superseded by the new three-sentence
+  // copy below. The learning-explainer block is untouched by this build and
+  // still carries "ask Auxilo" as its own, separate running copy.
+  it('hero sub carries the ruled HERO-0927 lede verbatim; the untouched learning-explainer block still carries "ask Auxilo"', () => {
     const subMatch = INDEX_HTML.match(/<p class="hero-sub">([\s\S]*?)<\/p>/);
     assert.ok(subMatch, 'hero-sub paragraph found');
     const sub = subMatch[1];
-    assert.ok(sub.includes('ask Auxilo'), 'sub has "ask Auxilo"');
-    assert.ok(sub.includes('Signed in to your account'), 'sub has the account condition');
-    assert.ok(sub.includes('the fix you published'), 'sub has "the fix you published"');
+    assert.ok(sub.includes('Your agent finds a fix.'), 'sub has "Your agent finds a fix."');
+    assert.ok(sub.includes('You approve it.'), 'sub has "You approve it."');
+    assert.ok(sub.includes('You earn a share when another agent pays to unlock it.'), 'sub has the closing sentence');
+    assert.ok(!sub.includes('ask Auxilo'), 'sub no longer carries the prior "ask Auxilo" phrasing');
 
     const blockMatch = INDEX_HTML.match(/<h2 id="learning-explainer-heading">[\s\S]*?<\/section>/);
     assert.ok(blockMatch, 'learning-explainer block found');
-    assert.ok(blockMatch[0].includes('ask Auxilo'), 'new block has "ask Auxilo"');
+    assert.ok(blockMatch[0].includes('ask Auxilo'), 'learning-explainer block (untouched by this build) still has "ask Auxilo"');
   });
 
   it('fixed-string "your AI" (case-insensitive) across every served public/**/*.html page returns exactly 1, inside #hero-heading (packet §7.3)', () => {

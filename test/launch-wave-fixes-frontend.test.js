@@ -307,27 +307,29 @@ describe('D3: pricing.html structured-data description drops "AI" before "agents
   });
 });
 
-// ─── D4: public/index.html hero lede, third sentence only -- "it" is
-// disambiguated to "that fix" (the first two sentences are untouched) ───────
+// ─── D4 → HERO-0927 (2026-09-27): public/index.html hero lede replaced
+// wholesale with the owner-ruled copy (build brief BUILD-BRIEF-HERO.md; see
+// test/hero-0927.test.js for the full render/sweep suite). This describe
+// block's earlier subject -- a one-sentence "it" -> "that fix" disambiguation
+// -- is superseded: the entire lede is different prose now, not a partial
+// edit of the old one, so the old three-sentence structure is checked for
+// total absence rather than partial retention. ─────────────────────────────
 
-describe('D4: index.html hero lede third sentence disambiguates "it" to "that fix"', () => {
-  const FULL_LEDE = 'Next time, your agent can ask Auxilo instead. Signed in to your account, it gets the fix you published back for free. When another agent unlocks that fix, you earn a share.';
-  const FIRST_TWO_SENTENCES = 'Next time, your agent can ask Auxilo instead. Signed in to your account, it gets the fix you published back for free.';
-  const OLD_THIRD_SENTENCE = 'When another agent unlocks it, you earn a share.';
+describe('D4/HERO-0927: index.html hero lede replaced with the owner-ruled copy', () => {
+  const NEW_LEDE = 'Your agent finds a fix. You approve it. You earn a share when another agent pays to unlock it.';
+  const OLD_LEDE = 'Next time, your agent can ask Auxilo instead. Signed in to your account, it gets the fix you published back for free. When another agent unlocks that fix, you earn a share.';
+  const OLD_THIRD_SENTENCE = 'When another agent unlocks that fix, you earn a share.';
+  const EVEN_OLDER_THIRD_SENTENCE = 'When another agent unlocks it, you earn a share.';
 
-  it('the lede reads the new third sentence, the first two sentences are byte-for-byte unchanged, old third sentence gone', () => {
+  it('the lede reads the new ruled copy exactly once, as one contiguous run; every prior lede (and its sentences) is gone', () => {
     assert.equal(
-      (INDEX_HTML.match(/When another agent unlocks that fix, you earn a share\./g) || []).length,
+      (INDEX_HTML.match(new RegExp(NEW_LEDE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))) || []).length,
       1,
-      'new third sentence must appear exactly once'
+      'the new lede must appear exactly once'
     );
-    assert.ok(!INDEX_HTML.includes(OLD_THIRD_SENTENCE), 'old third sentence ("...unlocks it...") must be gone');
-    assert.ok(INDEX_HTML.includes(FIRST_TWO_SENTENCES), 'the first two lede sentences must be untouched, verbatim');
-    assert.equal(
-      (INDEX_HTML.match(new RegExp(FULL_LEDE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))) || []).length,
-      1,
-      'the full three-sentence lede must appear exactly once, as one contiguous run'
-    );
+    assert.ok(!INDEX_HTML.includes(OLD_LEDE), 'the prior full lede must be gone');
+    assert.ok(!INDEX_HTML.includes(OLD_THIRD_SENTENCE), 'the prior third sentence ("...unlocks that fix...") must be gone');
+    assert.ok(!INDEX_HTML.includes(EVEN_OLDER_THIRD_SENTENCE), 'the even-older third sentence ("...unlocks it...") must be gone');
   });
 });
 
