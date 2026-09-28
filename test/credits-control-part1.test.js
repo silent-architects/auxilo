@@ -669,16 +669,19 @@ describe('T14 behavioral: real server boot', () => {
 // functions with no module export, same constraint noted in the file header) ─
 
 describe('T15 auxiloBuyCredits: TERMS_NOT_ACCEPTED 403 routes to the terms-gate clickwrap', () => {
-  it('dashboard.html: reveals #terms-gate and focuses its checkbox before falling through to the generic alert', () => {
+  it('dashboard.html: reveals #terms-gate and focuses its Read the Terms button before falling through to the generic alert', () => {
     const h = sliceAt(DASHBOARD_HTML, 'window.auxiloBuyCredits = function (packId, btn) {', 1600);
     const codeCheckIdx = h.indexOf("res.data.code === 'TERMS_NOT_ACCEPTED'");
     const showGateIdx = h.indexOf("show('terms-gate')");
-    const focusIdx = h.indexOf("getElementById('terms-agree-check')");
+    // BUILD-BRIEF-TERMS-SCROLL.md (2026-09-27): the checkbox this handler used
+    // to focus is gone (owner ruling) -- it now focuses the Read the Terms
+    // button that opens the scroll-to-accept dialog instead.
+    const focusIdx = h.indexOf("getElementById('terms-read-btn')");
     const returnIdx = h.indexOf('return;', focusIdx);
     const genericAlertIdx = h.indexOf("showAlert('dash-alert', (res.data && res.data.error)");
     assert.notEqual(codeCheckIdx, -1, 'handler must branch on the TERMS_NOT_ACCEPTED code');
     assert.notEqual(showGateIdx, -1, 'handler must reveal #terms-gate');
-    assert.notEqual(focusIdx, -1, 'handler must focus the terms-gate checkbox');
+    assert.notEqual(focusIdx, -1, 'handler must focus the terms-gate Read the Terms button');
     assert.ok(codeCheckIdx < showGateIdx && showGateIdx < focusIdx, 'code check must precede reveal must precede focus');
     assert.notEqual(returnIdx, -1, 'the TERMS_NOT_ACCEPTED branch must return before falling through');
     assert.ok(genericAlertIdx === -1 || returnIdx < genericAlertIdx, 'a TERMS_NOT_ACCEPTED response must never reach the generic dash-alert');
@@ -697,9 +700,9 @@ describe('T15 auxiloBuyCredits: TERMS_NOT_ACCEPTED 403 routes to the terms-gate 
     assert.ok(genericAlertIdx === -1 || returnIdx < genericAlertIdx, 'a TERMS_NOT_ACCEPTED response must never reach window.alert');
   });
 
-  it('the dashboard #terms-gate card (~:673) still exists with the checkbox this handler focuses', () => {
+  it('the dashboard #terms-gate card still exists with the Read the Terms button this handler focuses', () => {
     assert.ok(DASHBOARD_HTML.includes('id="terms-gate"'));
-    assert.ok(DASHBOARD_HTML.includes('id="terms-agree-check"'));
+    assert.ok(DASHBOARD_HTML.includes('id="terms-read-btn"'));
   });
 });
 

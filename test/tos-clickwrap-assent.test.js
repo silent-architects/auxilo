@@ -319,16 +319,24 @@ describe('mcp-server.js: acceptance handshake', () => {
 const DASHBOARD_SRC = fs.readFileSync(path.join(__dirname, '..', 'public', 'dashboard.html'), 'utf-8');
 
 describe('public/dashboard.html: web clickwrap', () => {
-  it('the accept checkbox is unchecked by default and the button disabled until checked', () => {
-    assert.ok(/id="terms-agree-check"[^>]*onchange="onTermsCheckChange\(\)"/.test(DASHBOARD_SRC));
+  // BUILD-BRIEF-TERMS-SCROLL.md (2026-09-27): the owner ruled the checkbox
+  // off -- the builder now reads the full Terms in a dialog and Accept there
+  // stays disabled until the reader has scrolled to the end, not until a
+  // box is checked. Before: id="terms-agree-check" + onTermsCheckChange().
+  // Now: that markup is gone; the Accept button still starts disabled.
+  it('the checkbox and onTermsCheckChange are gone; the Accept button still starts disabled', () => {
+    assert.ok(!DASHBOARD_SRC.includes('terms-agree-check'), 'the checkbox is removed');
+    assert.ok(!DASHBOARD_SRC.includes('onTermsCheckChange'), 'the checkbox handler is removed');
+    // Positive control: other onchange handlers still exist in this file.
+    assert.ok(/onchange="on\w+\(\)"/.test(DASHBOARD_SRC), 'positive control: onchange handlers still exist in the file');
     assert.ok(/id="terms-accept-btn"[^>]*onclick="acceptTerms\(\)"[^>]*disabled/.test(DASHBOARD_SRC),
-      'the Accept button must be disabled until the box is checked');
+      'the Accept button must start disabled until the reader reaches the end of the Terms');
   });
   it('acceptTerms POSTs agree:true alongside the version (L-2)', () => {
     const i = DASHBOARD_SRC.indexOf('window.acceptTerms');
     const h = DASHBOARD_SRC.slice(i, i + 900);
-    assert.ok(/if \(!chk \|\| !chk\.checked\) return/.test(h), 'must require the affirmative checkbox before POSTing');
+    assert.ok(/if \(!_termsReachedEnd\) return/.test(h), 'must require the reader has reached the end of the Terms before POSTing');
     assert.ok(/version: _tosStatus\.current_tos_version, agree: true/.test(h),
-      'the web client must forward the checkbox affirmation to the server');
+      'the web client must forward the reached-the-end affirmation to the server');
   });
 });

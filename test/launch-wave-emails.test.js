@@ -2,9 +2,12 @@
 
 /**
  * test/launch-wave-emails.test.js — Wave 3, Unit B (dashboard-reorder wave):
- * two new transactional emails (welcome, earning-notification) and the
- * setting that turns one of them off. Both ship DARK behind
- * WELCOME_EMAIL_ENABLED / EARNING_NOTIFICATIONS_ENABLED.
+ * two new transactional emails (welcome, earning-notification), each gated
+ * in CODE behind its own flag (WELCOME_EMAIL_ENABLED /
+ * EARNING_NOTIFICATIONS_ENABLED -- on only when exactly "true"). W-1
+ * (owner, 2026-09-27, "welcome on"): fly.toml now arms
+ * WELCOME_EMAIL_ENABLED in production. EARNING_NOTIFICATIONS_ENABLED is
+ * unchanged and stays off.
  *
  * This file covers pure logic (no server boot, no network): lib/email.js's
  * new builders/senders, lib/earning-notifications.js's queue, and

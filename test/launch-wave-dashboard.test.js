@@ -507,6 +507,12 @@ describe('FIX-UNIT A5b: dashboard card titles are headings', () => {
       'h2: API Keys',
       'h2: Balance',
       'h2: Purchase History',
+      // R3-11: the Terms dialog now sits as a body-level sibling of
+      // #dash-view (never inside it), so everything else while the
+      // background is inert stays reachable and correctly excluded --
+      // its own title heading lands here, textually after the view closes,
+      // not among #dash-view's own cards.
+      'h2: Terms of Service',
     ]);
   });
 });

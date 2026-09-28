@@ -1007,11 +1007,11 @@ The money model: a balance is held in dollars, a pack adds what was paid, an unl
 | SLW-1 | Site, launch copy and dashboard: homepage, /for-builders, /for-agents, /how-it-works, /pricing, /about, reference pages, agent card, llms.txt, openapi.json. Accessibility fixes. A guard test fails if a retired phrase returns to a served file. | P1 | SITE-PM | SHIPPED 2026-09-27, verified live |
 | SLW-2 | Money model: dollar balance, caps on balance and daily purchases, refund and dispute handling, builder share reversal. `lib/earnings.js` unchanged. Adversarial review run, every finding ruled and fixed. | P1 | SITE-PM | SHIPPED 2026-09-27, verified live |
 | SLW-3 | Terms of Service and privacy policy, version `2026-09-27-credit-balance-a2`. | P1 | SITE-PM + GOV-2 | SHIPPED 2026-09-27, verified live |
-| SLW-4 | Stripe webhook subscribes to the refund and dispute events, so that handling runs. | P1 | Tyler | OPEN, before the first outside purchase |
+| SLW-4 | Stripe webhook listens to the refund and dispute events, so that handling runs. | P1 | Tyler | DONE 2026-09-27, verified in the Stripe dashboard |
 | SLW-5 | npm release carrying the launch wording in the CLI consent text and the MCP tool descriptions. | P1 | TECH-PM | OPEN |
 | SLW-6 | Review approval record for accounts not yet cleared to publish. (H) | P1 | TECH-PM | OPEN, before any outside account is cleared |
 | SLW-7 | Before withdrawals open. (H) | P1 | TECH-PM + Tyler | OPEN |
-| SLW-8 | Welcome email and unlock notification are built and off (`WELCOME_EMAIL_ENABLED`, `EARNING_NOTIFICATIONS_ENABLED`, each on only when exactly `true`). The privacy policy names both before either is set. | P1 | Tyler + GOV-2 | OPEN |
+| SLW-8 | Welcome email is on (`WELCOME_EMAIL_ENABLED = "true"` in `fly.toml`, the owner's word 2026-09-27). Unlock notification is built and off (`EARNING_NOTIFICATIONS_ENABLED`, on only when exactly `true`). Before it is set the privacy policy names it, the retention table covers its queue, and SLW-14 is done. | P1 | Tyler + GOV-2 | OPEN for the unlock notification |
 | SLW-9 | Live catalog fill should match an element's opening tag only. The pages are guarded by `test/launch-wave-ssr-markers.test.js`. | P2 | TECH-PM | OPEN |
 | SLW-10 | `quality.score` is written on two scales. | P2 | TECH-PM | OPEN |
 | SLW-11 | A signed-in agent short of balance, and the x402 path. (H) | P2 | TECH-PM | OPEN |
@@ -1020,19 +1020,20 @@ The money model: a balance is held in dollars, a pack adds what was paid, an unl
 | SLW-14 | Unlock notification, before its flag is set: bounce and complaint handling, a signed opt-out link, async queue writes. | P2 | TECH-PM | OPEN |
 | SLW-15 | The catalog preview block shows human visitors the advisory written for agents. | P3 | TECH-PM + GOV-3 | OPEN |
 | SLW-16 | openapi.json: internal ticket codes in description strings, with a guard test so they do not return. | P3 | TECH-PM | OPEN |
-| SLW-17 | Dashboard review table is clipped at phone width. | P3 | SITE-PM | OPEN |
+| SLW-17 | Dashboard review table at phone width: rows stack below 600 wide so the title is in view. Row checkboxes are 44 by 44 at phone width as of 2026-09-27. | P3 | SITE-PM | OPEN |
+| SLW-18 | Terms acceptance on the dashboard: read the Terms to the end, then accept (the owner's ruling 2026-09-27). A session that has ended returns to the sign-in screen. Legal pages render inline code. Adversarial review and accessibility audit run, every finding ruled and fixed. | P1 | SITE-PM | BUILT, ships with this release |
 
 ## Counts
 
 | Priority | Open | On Hold | Deferred | Done/Verified | Total |
 |----------|------|---------|----------|---------------|-------|
 | P0 (blocks launch) | **1** | 0 | 0 | **34** | 35 |
-| P1 (blocks real money / production) | **21** | 6 | 2 | 84 | 113 |
+| P1 (blocks real money / production) | **21** | 6 | 2 | 85 | 114 |
 | P2 (blocks scale) | **33** | 1 | 0 | 30 | 64 |
 | P3 (polish) | **7** | 0 | 0 | 5 | 12 |
-| **Total** | **62** | **7** | **2** | **153** | **224** |
+| **Total** | **62** | **7** | **2** | **154** | **225** |
 
-> **Section 37 (SITE-PM, 2026-09-27).** The table includes the 17 rows SLW-1 to SLW-17 (8 P1, 6 P2, 3 P3). SLW-1 to SLW-3 shipped on 2026-09-27 and are counted done. The other 14 are open.
+> **Section 37 (SITE-PM, 2026-09-27).** The table includes the 18 rows SLW-1 to SLW-18 (9 P1, 6 P2, 3 P3). SLW-1 to SLW-4 are counted done. The other 14 are open.
 
 > **Counts caveat (PM, 2026-08-28).** The table above now includes the nine §34 rows and the fifteen §35 rows (AD-1..AD-15: 3 P1, 11 P2, 1 P3). It still does NOT include `R13-CLOSE` and `GTM-HF` (§29) — their statuses have not been re-derived, so the totals remain understated by at least those two rows and want a full recount by whoever owns them.
 

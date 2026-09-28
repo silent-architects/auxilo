@@ -162,9 +162,9 @@
       justify-content: center;
       /* FIX-UNIT-2 V4: this page-scoped .btn shadows the shared site-wide
          .btn-primary (~48px tall) with no min-height of its own, so "Send
-         magic link" / "Accept and continue" / "Turn on auto-publish" all
-         rendered at 35px -- under the 44px touch-target minimum. inline-flex
-         + centering keeps the label centered rather than top-aligned once
+         magic link" / "Accept" / "Turn on auto-publish" all rendered at
+         35px -- under the 44px touch-target minimum. inline-flex +
+         centering keeps the label centered rather than top-aligned once
          the box grows past its padded content height. */
       min-height: 44px;
       padding: 10px 20px;
@@ -331,6 +331,124 @@
       color: #FCD34D;
     }
 
+    /* ── Terms of Service dialog (T-20..T-45) ─────────────────────────
+       The dialog itself never scrolls -- only #terms-scroll-region does,
+       so the Accept/Close row stays in the fixed flex chrome below it and
+       is always in view, including at 375 wide where the dialog fills the
+       screen (media query below). */
+    #terms-dialog-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      z-index: 1000;
+    }
+
+    #terms-dialog {
+      background: #14140F;
+      border: 1px solid rgba(229,229,227,0.14);
+      border-radius: 12px;
+      padding: 28px;
+      width: 100%;
+      max-width: 640px;
+      max-height: 85vh;
+      max-height: 85dvh; /* R3-4: the dynamic viewport height, where supported */
+      display: flex;
+      flex-direction: column;
+    }
+
+    #terms-scroll-region {
+      overflow-y: auto;
+      overflow-x: hidden;
+      border: 1px solid rgba(229,229,227,0.08);
+      border-radius: 8px;
+      padding: 16px 18px;
+      background: rgba(0,0,0,0.25);
+      color: var(--ash);
+      font-size: 14px;
+      line-height: 1.7;
+      flex: 1 1 auto;
+      min-height: 120px;
+      margin-bottom: 12px;
+    }
+
+    #terms-scroll-region h1, #terms-scroll-region h2, #terms-scroll-region h3 {
+      color: var(--ivory);
+      margin: 16px 0 8px;
+    }
+    #terms-scroll-region h1:first-child, #terms-scroll-region h2:first-child { margin-top: 0; }
+    #terms-scroll-region p { margin-bottom: 12px; }
+    #terms-scroll-region a { color: var(--aurum); }
+    #terms-scroll-region ul, #terms-scroll-region ol { margin: 0 0 12px 20px; }
+    #terms-scroll-region code { font-family: var(--mono); font-size: inherit; background: none; padding: 0; color: inherit; }
+    /* R3-8: a fenced block keeps its box treatment by bare tag name, since
+       the sanitizer strips its class="legal-pre" along with every other
+       attribute the fetched page carried. */
+    #terms-scroll-region pre {
+      background: #111;
+      border: 1px solid rgba(229,229,227,0.12);
+      border-radius: 6px;
+      padding: 16px;
+      margin-bottom: 16px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--ash);
+    }
+    #terms-scroll-region table { border-collapse: collapse; width: 100%; margin-bottom: 16px; }
+    #terms-scroll-region th, #terms-scroll-region td { border: 1px solid rgba(229,229,227,0.12); padding: 8px 10px; text-align: left; }
+
+    #terms-scroll-hint {
+      font-size: 13px;
+      color: var(--slate);
+      margin: 0 0 14px;
+    }
+
+    #terms-dialog-actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 540px) {
+      #terms-dialog-overlay { padding: 0; }
+      #terms-dialog {
+        max-width: none;
+        width: 100%;
+        height: 100%;
+        max-height: 100%;
+        border-radius: 0;
+      }
+    }
+
+    /* R3-4: a compact layout for short viewports (280 high and up), keyed
+       on HEIGHT alone -- a viewport can be short while still wide (667x300,
+       740x280), so this is independent of the width query above and both
+       can apply together. Tighter padding throughout, a lower floor on the
+       scrolling region (still >= 80 high), and the action row forced onto
+       one line so it never costs an extra row of height. */
+    @media (max-height: 480px) {
+      #terms-dialog-overlay { padding: 8px; }
+      #terms-dialog {
+        max-height: 100%;
+        max-height: 100dvh;
+        padding: 12px;
+      }
+      #terms-dialog-title { margin-bottom: 8px; }
+      #terms-scroll-region { min-height: 80px; margin-bottom: 8px; padding: 10px 12px; }
+      #terms-scroll-hint { margin-bottom: 8px; }
+      #terms-dialog-actions { flex-wrap: nowrap; gap: 8px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #terms-scroll-region { scroll-behavior: auto; }
+    }
+
     /* ── Pending queue ──────────────────────────────────────────────── */
     .pending-item {
       border: 1px solid rgba(229,229,227,0.1);
@@ -464,6 +582,23 @@
       padding: 8px 10px;
       border-bottom: 1px solid rgba(229,229,227,0.06);
       vertical-align: middle;
+    }
+
+    /* V-1: at phone width the checkbox's own tap target grows to 44x44 --
+       the checkbox itself keeps its normal small, native visual size, only
+       the row grows the few pixels this floor needs. A negative-margin
+       overlay was deliberately avoided, since it would spill the tap
+       target into the neighboring cell or row and risk a misclick there.
+       Scoped to narrow widths (below) so the table at 1280 looks as it
+       does today -- unchanged row height, unchanged first-column width. */
+    .triage-check-label {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    @media (max-width: 600px) {
+      .triage-check-label { width: 44px; height: 44px; }
     }
 
     .triage-title-btn {
@@ -745,21 +880,14 @@
          asserts "payment received" from the URL alone — see showCheckoutBanner(). -->
     <div id="checkout-banner" class="alert" style="display:none"></div>
 
-    <!-- Terms of Service clickwrap gate (R-01 §5.10 payee-agency) -->
+    <!-- Terms of Service clickwrap gate (R-01 §5.10 payee-agency). The
+         builder clicks through to the full Terms in a dialog, and Accept
+         there stays disabled until the reader has scrolled to the end
+         (T-20..T-29 in BUILD-BRIEF-TERMS-SCROLL.md). -->
     <div id="terms-gate" class="dash-card" style="display:none;border:1px solid var(--aurum)">
       <h2 class="dash-card-title">Accept the Terms</h2>
-      <p style="font-size:14px;color:var(--slate);margin-bottom:14px;line-height:1.6">
-        Our <a href="/terms" target="_blank" rel="noopener" style="color:var(--aurum)">Terms of Service</a> include
-        <strong style="color:var(--ivory)">Section 5.10</strong>, under which you appoint Auxilo as your
-        limited agent to receive your Builder Share on your behalf when consumers unlock your learnings. Accept
-        the current Terms before you link a payout wallet or withdraw earnings.
-      </p>
-      <div id="terms-gate-alert" class="alert" role="alert" style="display:none;margin-bottom:12px"></div>
-      <label style="display:flex;align-items:flex-start;gap:10px;font-size:14px;color:var(--ivory);cursor:pointer;margin-bottom:16px">
-        <input type="checkbox" id="terms-agree-check" style="margin-top:3px" onchange="onTermsCheckChange()">
-        <span>I have read and agree to the <a href="/terms" target="_blank" rel="noopener" style="color:var(--aurum)">Terms of Service</a>, including the Section 5.10 payment-collection agency.</span>
-      </label>
-      <button class="btn btn-primary" id="terms-accept-btn" onclick="acceptTerms()" disabled>Accept and continue</button>
+      <p style="font-size:14px;color:var(--slate);margin-bottom:16px;line-height:1.6">Read the Terms of Service to the end, then accept.</p>
+      <button class="btn btn-primary" id="terms-read-btn" onclick="openTermsDialog()">Read the Terms</button>
     </div>
 
     <!-- Welcome card (LW3, new). Same neutral .dash-card box as every other
@@ -815,7 +943,7 @@
         <div class="earnings-grid" id="earnings-grid"></div>
         <p id="earnings-empty-note" style="display:none;font-size:13px;color:var(--slate);margin-top:16px;line-height:1.6">When another agent unlocks one of your published learnings, your share accrues and shows here.</p>
         <!-- LAYOUT-SHEET-ADDENDUM item 5(a): reuses the page's own consent-checkbox
-             pattern (terms-gate, clean-lane-agree). Native, unstyled checkbox --
+             pattern (clean-lane-agree). Native, unstyled checkbox --
              no accent-color, no gold. Ships hidden; revealed only once
              GET /account/settings reports earning_notifications_available === true
              (fail-closed, same posture as #terms-gate). -->
@@ -946,6 +1074,31 @@
 </div>
 </main>
 
+<!-- Terms of Service dialog. One source of truth: the content shown here is
+     fetched from the server's own /terms page each time the dialog opens
+     (loadTermsDialogContent) -- no copy of the Terms text lives in this
+     file. Accept stays disabled until the reader reaches the end of the
+     scrolling region (markTermsReachedEnd). R3-11: sits as a sibling of
+     #main-nav / #login-view / #dash-view, never inside any of them, so
+     marking those inert while the dialog is open never reaches in here. -->
+<div id="terms-dialog-overlay" style="display:none">
+  <div id="terms-dialog" role="dialog" aria-modal="true" aria-labelledby="terms-dialog-title">
+    <h2 id="terms-dialog-title" class="dash-card-title">Terms of Service</h2>
+    <div id="terms-gate-alert" class="alert" role="alert" style="display:none;margin-bottom:12px"></div>
+    <div id="terms-scroll-region" tabindex="0" aria-label="Terms of Service, scrollable"></div>
+    <div id="terms-load-error" style="display:none">
+      <p style="font-size:14px;color:var(--slate);margin:12px 0 10px;line-height:1.6">The Terms did not load. Try again.</p>
+      <button class="btn btn-ghost btn-sm" id="terms-retry-btn" onclick="loadTermsDialogContent()">Try Again</button>
+    </div>
+    <p id="terms-scroll-hint">Scroll to the end to accept.</p>
+    <span id="terms-reached-live" role="status" aria-live="polite" class="visually-hidden"></span>
+    <div id="terms-dialog-actions">
+      <button class="btn btn-primary" id="terms-accept-btn" onclick="acceptTerms()" disabled aria-describedby="terms-scroll-hint">Accept</button>
+      <button class="btn btn-ghost" id="terms-close-btn" onclick="closeTermsDialog()">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- AD sheet 9 / packet 3 rev 2: site footer link row (tagline omitted; the
      wordmark link stays). Sits outside both #login-view and #dash-view, so
      it renders at the page bottom for the signed-out and signed-in states
@@ -989,10 +1142,39 @@
 
   function setToken(t) {
     try { localStorage.setItem(SESSION_KEY, t); } catch (_) {}
+    _sessionEndedHandled = false; // re-arm S-2's once-only gate for the new session
   }
 
   function clearToken() {
     try { localStorage.removeItem(SESSION_KEY); } catch (_) {}
+  }
+
+  // ── A session that has ended (S-1/S-2) ──────────────────────────────
+  // A stored token the server refuses sends the builder to sign-in with one
+  // line, shown once even though several account requests fire at once at
+  // page load -- see apiFetch below. A 403 is never treated as a session
+  // that has ended (S-3); routes that can 403 handle it themselves.
+  var _sessionEndedHandled = false;
+
+  function handleSessionEnded() {
+    if (_sessionEndedHandled) return;
+    _sessionEndedHandled = true;
+    // R3-5: a 401 while the Terms dialog is open must not leave the page
+    // scroll locked and the background inert on the sign-in screen behind
+    // it -- closing the dialog restores both.
+    var termsOverlay = document.getElementById('terms-dialog-overlay');
+    if (termsOverlay && termsOverlay.style.display !== 'none' && window.closeTermsDialog) window.closeTermsDialog();
+    clearToken();
+    showLoginScreen(); // hides dash-view and clears login-alert
+    showAlert('login-alert', 'Your session ended. Sign in again.', 'info');
+    focusSessionEndedEmail(); // R3-12
+  }
+
+  // R3-12: after a session ends (here or at boot), focus lands in the
+  // email field rather than staying on the body.
+  function focusSessionEndedEmail() {
+    var email = document.getElementById('login-email');
+    if (email && email.focus) email.focus();
   }
 
   // ── XSS-safe DOM helpers ────────────────────────────────────────────
@@ -1060,9 +1242,29 @@
   // ── API fetch wrapper (Bearer JWT in header, never in URL) ──────────
   function apiFetch(path, opts) {
     var token = getToken();
+    // R3-6: a request that would go out with no stored token (e.g. signed
+    // out in another tab since this page loaded) is itself a session that
+    // has ended -- same screen, same line, once, without ever sending a
+    // request the server would refuse anyway with the raw "Authorization
+    // required" text.
+    if (!token) {
+      handleSessionEnded();
+      return new Promise(function () {});
+    }
     var headers = Object.assign({ 'Content-Type': 'application/json' }, (opts || {}).headers || {});
-    if (token) headers['Authorization'] = 'Bearer ' + token;
-    return fetch(path, Object.assign({}, opts || {}, { headers: headers }));
+    headers['Authorization'] = 'Bearer ' + token;
+    return fetch(path, Object.assign({}, opts || {}, { headers: headers })).then(function (r) {
+      // S-2: any account request made WITH the session token that comes back
+      // 401 means the stored token no longer works. Handle it once (many
+      // requests run at once at page load) and never hand this response to
+      // the caller -- the returned promise never settles, so no .then/.catch
+      // downstream ever runs and no card prints the server's raw 401 text.
+      if (r.status === 401) {
+        handleSessionEnded();
+        return new Promise(function () {});
+      }
+      return r;
+    });
   }
 
   // ── Magic link login ────────────────────────────────────────────────
@@ -1109,6 +1311,15 @@
 
   // ── Sign out ────────────────────────────────────────────────────────
   window.signOut = function () {
+    // R4-1: a deliberate sign-out marks the session-ended guard as already
+    // handled, so a checkout poll (or any other in-flight account request)
+    // that resolves after this point -- finding no stored token, or a 401
+    // -- can never re-trigger handleSessionEnded() and stomp whatever the
+    // sign-in screen is showing right now (e.g. a fresh magic-link "check
+    // your email" confirmation) with the session-ended line. Also cancels
+    // the poll's own pending timer outright, so it never even fires again.
+    _sessionEndedHandled = true;
+    if (_creditPollTimeoutId !== null) { clearTimeout(_creditPollTimeoutId); _creditPollTimeoutId = null; }
     clearToken();
     showLoginScreen();
   };
@@ -1141,9 +1352,11 @@
   }
 
   // ── Terms of Service clickwrap (R-01 §5.10 payee-agency) ────────────
-  // Assent must be an affirmative act (unchecked box + explicit button), captured
-  // server-side with version + timestamp + IP/UA. The server enforces the gate at
-  // wallet-link/withdrawal; this surfaces it and records the acceptance.
+  // Assent must be an affirmative act, captured server-side with version +
+  // timestamp + IP/UA. The server enforces the gate at wallet-link/
+  // withdrawal/checkout; this surfaces it and records the acceptance. The
+  // owner ruled the card down to one line + a button that opens a dialog:
+  // the full Terms, read to the end, before Accept enables (T-20..T-29).
   var _tosStatus = null;
 
   function loadTerms() {
@@ -1160,40 +1373,393 @@
       .catch(function () {});
   }
 
-  window.onTermsCheckChange = function () {
-    var chk = document.getElementById('terms-agree-check');
-    var btn = document.getElementById('terms-accept-btn');
-    if (btn) btn.disabled = !(chk && chk.checked);
+  // _termsReachedEnd and _termsAnnouncedReached persist for the life of the
+  // page (T-23: "once reached, it stays reached while the page is open") --
+  // neither resets when the dialog closes and reopens. _termsLoadToken
+  // guards against a stale load: a slow first load superseded by "Try
+  // Again", or a fetch still in flight when the reader closes the dialog
+  // (R3-1) -- closing bumps the token so that fetch's own .then can never
+  // touch the region again. _termsContentLoaded is true only once real
+  // content has actually been appended into the region for THIS load; it
+  // resets at the start of every load and at close, and is one of
+  // canMarkTermsReachedEnd's required conditions (R3-1), so a stale scroll
+  // handler or observer callback firing against an emptied or not-yet-
+  // populated region can never mark the end reached.
+  var _termsReachedEnd = false;
+  var _termsAnnouncedReached = false;
+  var _termsLoadToken = 0;
+  var _termsIntersectionObserver = null;
+  var _termsContentLoaded = false;
+
+  window.openTermsDialog = function () {
+    show('terms-dialog-overlay');
+    document.body.style.overflow = 'hidden'; // T-43: page behind the dialog does not scroll
+    setTermsBackgroundInert(true); // R3-11
+    document.addEventListener('keydown', onTermsDialogKeydown, true);
+    loadTermsDialogContent();
+    var region = document.getElementById('terms-scroll-region');
+    if (region && region.focus) region.focus(); // T-40/T-41: focus moves into the dialog, onto the scrollable region
   };
+
+  window.closeTermsDialog = function () {
+    hide('terms-dialog-overlay');
+    document.body.style.overflow = '';
+    setTermsBackgroundInert(false); // R3-11
+    document.removeEventListener('keydown', onTermsDialogKeydown, true);
+    // R3-1: closing cancels any load in flight (the fetch's own token check
+    // then bails before ever touching the region), removes the scroll
+    // handler, and disconnects the observer -- none of them can mark the
+    // end reached against a region this dialog no longer shows.
+    ++_termsLoadToken;
+    var region = document.getElementById('terms-scroll-region');
+    if (region) region.onscroll = null;
+    if (_termsIntersectionObserver) { _termsIntersectionObserver.disconnect(); _termsIntersectionObserver = null; }
+    _termsContentLoaded = false;
+    var btn = document.getElementById('terms-read-btn');
+    if (btn && btn.focus) btn.focus(); // T-40: focus returns to Read the Terms on close
+  };
+
+  // R3-11: while the dialog is open, everything else on the page is inert
+  // to assistive technology and cannot be tabbed or clicked into. Walks
+  // every direct child of <body> except the dialog overlay itself (which
+  // sits as that same kind of sibling -- see its markup comment -- so this
+  // never makes its own container inert) and script tags (inert has no
+  // meaning on them).
+  function setTermsBackgroundInert(inert) {
+    Array.prototype.forEach.call(document.body.children, function (el) {
+      if (el.id === 'terms-dialog-overlay' || el.tagName === 'SCRIPT') return;
+      if (inert) el.setAttribute('inert', ''); else el.removeAttribute('inert');
+    });
+  }
+
+  // T-40: Escape closes the dialog; Tab is trapped inside it while open.
+  function onTermsDialogKeydown(e) {
+    if (e.key === 'Escape' || e.key === 'Esc') {
+      e.preventDefault();
+      window.closeTermsDialog();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    var dialog = document.getElementById('terms-dialog');
+    if (!dialog) return;
+    var focusable = Array.prototype.slice
+      .call(dialog.querySelectorAll('button, [href], [tabindex]:not([tabindex="-1"])'))
+      .filter(function (el) { return !el.disabled && el.offsetParent !== null; });
+    if (!focusable.length) return;
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+
+  // R3-8: hardening -- the fetched Terms are trusted as they arrive from
+  // the server's own renderer today, but this walk treats them as
+  // untrusted regardless. Only these tags survive; anything else is
+  // replaced by its own text, discarding whatever structure or attributes
+  // it carried. Every attribute is stripped except a validated href on
+  // <a>. Every id the fetched page carried is re-applied with the prefix
+  // "tos-" so it can never collide with an id this page already uses.
+  var TERMS_ALLOWED_TAGS = {
+    H2: 1, H3: 1, H4: 1, H5: 1, H6: 1, P: 1, UL: 1, OL: 1, LI: 1, STRONG: 1, EM: 1,
+    A: 1, CODE: 1, PRE: 1, TABLE: 1, THEAD: 1, TBODY: 1, TR: 1, TH: 1, TD: 1,
+    HR: 1, BR: 1, BLOCKQUOTE: 1, DIV: 1, SPAN: 1,
+  };
+
+  function sanitizeTermsNode(node) {
+    if (node.nodeType === 3) return document.createTextNode(node.nodeValue);
+    if (node.nodeType !== 1) return null; // comments etc. -- dropped entirely
+    var tag = node.tagName;
+    if (!TERMS_ALLOWED_TAGS[tag]) {
+      var text = node.textContent;
+      return text ? document.createTextNode(text) : null;
+    }
+    var clean = document.createElement(tag.toLowerCase());
+    if (node.id) clean.id = 'tos-' + node.id;
+    if (tag === 'A') {
+      var href = node.getAttribute('href') || '';
+      // R4-2: a path href is kept only when it starts with ONE "/" that is
+      // not itself followed by "/" or "\" -- "//host/path" and "/\host/path"
+      // are both browser-recognized ways to spell an absolute URL to a
+      // DIFFERENT origin (a protocol-relative URL, and a backslash the
+      // browser's own URL parser normalizes to a second slash), not a
+      // same-site path, even though a bare leading "/" matches either.
+      var isSitePath = href.charAt(0) === '/' && href.charAt(1) !== '/' && href.charAt(1) !== '\\';
+      if (/^(https:|http:|mailto:|#)/.test(href) || isSitePath) {
+        if (href.charAt(0) === '#') {
+          // A #hash link is rewritten to the prefixed id and scrolls
+          // inside the region, never the page.
+          var targetId = 'tos-' + href.slice(1);
+          clean.setAttribute('href', '#' + targetId);
+          clean.addEventListener('click', function (e) {
+            e.preventDefault();
+            scrollTermsRegionToId(targetId);
+          });
+        } else {
+          clean.setAttribute('href', href);
+          clean.target = '_blank'; // T-28: opens in a new tab, never this one
+          clean.rel = 'noopener';
+        }
+      }
+      // An href with any other scheme (javascript:, data:, ...) is omitted
+      // entirely -- the tag survives as a plain, non-navigating element.
+    }
+    Array.prototype.forEach.call(node.childNodes, function (child) {
+      var cleanChild = sanitizeTermsNode(child);
+      if (cleanChild) clean.appendChild(cleanChild);
+    });
+    return clean;
+  }
+
+  // Scrolls the target into view by moving ONLY the region's own scrollTop
+  // (computed from viewport-relative rects, so it works at any nesting
+  // depth) -- the page itself never scrolls.
+  function scrollTermsRegionToId(targetId) {
+    var region = document.getElementById('terms-scroll-region');
+    var target = document.getElementById(targetId);
+    if (!region || !target) return;
+    var regionRect = region.getBoundingClientRect();
+    var targetRect = target.getBoundingClientRect();
+    region.scrollTop += (targetRect.top - regionRect.top);
+  }
+
+  // R3-3: the amendment id the served Terms print beside "Current
+  // Amendment:", read directly off the fetched HTML (the same shape
+  // test/legal-code-spans.test.js pins server-side).
+  function extractTermsAmendmentId(html) {
+    var m = /Current Amendment:\s*<code>([^<]+)<\/code>/.exec(html);
+    return m ? m[1] : null;
+  }
+
+  // T-22: ONE source of truth -- fetches the Terms the server serves at
+  // /terms (fresh, never from the cache -- R3-3, so a reader can never see
+  // Terms from before the current amendment while Accept would record the
+  // new version), and moves only the legal content across (T-28: parse the
+  // fetched document, never build an HTML string from it; R3-8: sanitized,
+  // never trusted as-is). DOMParser-created nodes are inert -- any
+  // <script> in the fetched page never runs.
+  window.loadTermsDialogContent = function () {
+    var myToken = ++_termsLoadToken;
+    var region = document.getElementById('terms-scroll-region');
+    _termsContentLoaded = false;
+    if (_termsIntersectionObserver) { _termsIntersectionObserver.disconnect(); _termsIntersectionObserver = null; }
+    hide('terms-load-error');
+    setAcceptDisabled(true); // T-24: disabled while loading
+    if (region) { region.textContent = ''; region.style.display = ''; }
+
+    // Renders the fetched, already version-confirmed Terms html into the
+    // region -- the tail half of the load, shared by both the immediate-
+    // match path below and the re-checked-and-matched path (R4-3).
+    function importTermsHtml(html) {
+      var doc = new DOMParser().parseFromString(html, 'text/html');
+      var wrap = doc.querySelector('.legal-wrap');
+      if (!wrap || !region) { showTermsLoadError(); return; }
+      region.textContent = '';
+      // T-22: take the legal content only -- skip the "Back to Auxilo" link,
+      // never the site header, navigation, or footer (those live outside
+      // .legal-wrap entirely and are never touched). R2-3: also skip the
+      // page's own <h1> -- the dialog title already says "Terms of
+      // Service"; everything after that h1 is shown, so the dialog never
+      // renders a second, duplicate heading.
+      var skippedH1 = false;
+      Array.prototype.forEach.call(wrap.childNodes, function (node) {
+        if (node.nodeType === 1 && node.classList && node.classList.contains('legal-back')) return;
+        if (!skippedH1 && node.nodeType === 1 && node.tagName === 'H1') { skippedH1 = true; return; }
+        var clean = sanitizeTermsNode(node);
+        if (clean) region.appendChild(clean);
+      });
+      _termsContentLoaded = true; // R3-1: only now, after the real append
+
+      var marker = document.createElement('div');
+      marker.id = 'terms-end-marker';
+      marker.style.height = '1px';
+      region.appendChild(marker);
+
+      attachTermsScrollWatchers(region, marker);
+      if (region.scrollHeight <= region.clientHeight + 1) markTermsReachedEnd(); // T-23: fits without scrolling
+      applyTermsReachedState();
+    }
+
+    fetch('/terms', { cache: 'no-store' })
+      .then(function (r) { return r.text().then(function (html) { return { ok: r.ok, html: html }; }); })
+      .then(function (res) {
+        if (myToken !== _termsLoadToken) return; // superseded by a later Try Again, or the dialog was closed
+        if (!res.ok) { showTermsLoadError(); return; }
+        // R3-3: Accept may only enable when the fetched Terms carry the
+        // SAME amendment id terms-status reports as current. R4-3: a
+        // mismatch is not necessarily stale Terms -- terms-status may
+        // simply have resolved before a just-landed amendment, so it is
+        // re-fetched ONCE and compared again before giving up; only a
+        // mismatch that survives the recheck (or that recheck itself
+        // failing) is treated as a failed load.
+        var fetchedVersion = extractTermsAmendmentId(res.html);
+        if (fetchedVersion && _tosStatus && fetchedVersion === _tosStatus.current_tos_version) {
+          importTermsHtml(res.html);
+          return;
+        }
+        apiFetch('/account/terms-status')
+          .then(function (r2) { return r2.json().then(function (d) { return { ok: r2.ok, data: d }; }); })
+          .then(function (statusRes) {
+            if (myToken !== _termsLoadToken) return;
+            if (statusRes.ok) _tosStatus = statusRes.data;
+            if (!statusRes.ok || !fetchedVersion || !_tosStatus || fetchedVersion !== _tosStatus.current_tos_version) {
+              showTermsLoadError();
+              return;
+            }
+            importTermsHtml(res.html);
+          })
+          .catch(function () {
+            if (myToken !== _termsLoadToken) return;
+            showTermsLoadError();
+          });
+      })
+      .catch(function () {
+        if (myToken !== _termsLoadToken) return;
+        showTermsLoadError();
+      });
+  };
+
+  function showTermsLoadError() {
+    var region = document.getElementById('terms-scroll-region');
+    if (region) region.style.display = 'none';
+    show('terms-load-error');
+    setAcceptDisabled(true); // T-24: a failed load never enables it
+  }
+
+  // R2-1: the single place that flips Accept's disabled state, so the hint
+  // and its aria-describedby association always move in lockstep with it --
+  // the hint is shown and described only while the button is disabled;
+  // hidden (via visibility, so its box stays reserved and nothing below it
+  // jumps) once Accept enables.
+  function setAcceptDisabled(disabled) {
+    var acceptBtn = document.getElementById('terms-accept-btn');
+    var hint = document.getElementById('terms-scroll-hint');
+    if (acceptBtn) {
+      acceptBtn.disabled = disabled;
+      if (disabled) acceptBtn.setAttribute('aria-describedby', 'terms-scroll-hint');
+      else acceptBtn.removeAttribute('aria-describedby');
+    }
+    if (hint) hint.style.visibility = disabled ? '' : 'hidden';
+  }
+
+  // T-23: a marker element observed against the scrolling region (primary
+  // signal) plus a scroll-position check (second signal) -- either one
+  // reaching the end is enough. R3-10: a focusin listener on the region
+  // catches the case neither of those cover -- keyboard/AT focus landing
+  // on the region's last focusable element without a real scroll event.
+  function attachTermsScrollWatchers(region, marker) {
+    if (typeof IntersectionObserver === 'function') {
+      _termsIntersectionObserver = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) markTermsReachedEnd();
+        });
+      }, { root: region, threshold: 0 });
+      _termsIntersectionObserver.observe(marker);
+    }
+    region.onscroll = function () {
+      if (region.scrollTop + region.clientHeight >= region.scrollHeight - 2) markTermsReachedEnd();
+    };
+    // Bound once, ever -- the region element persists across opens, so a
+    // stray remove-then-add here just guarantees exactly one listener.
+    region.removeEventListener('focusin', onTermsRegionFocusIn);
+    region.addEventListener('focusin', onTermsRegionFocusIn);
+  }
+
+  // R3-10: a reader who moves by Tab, by a screen reader's link list, by
+  // switch, or by voice reaches the scrolling region's last focusable
+  // element without necessarily firing a real scroll event -- the
+  // browser's own focus-into-view behavior stops as soon as the element is
+  // merely visible, not at the very bottom. When that happens before the
+  // end is reached, finish the scroll to the region's own end so the
+  // normal detection fires and Accept enables through the same path a
+  // mouse or touch reader uses. A reader who scrolls with a mouse or touch
+  // never triggers this (it only fires on a real focus change).
+  function onTermsRegionFocusIn(e) {
+    if (_termsReachedEnd) return;
+    var region = document.getElementById('terms-scroll-region');
+    if (!region) return;
+    var focusables = region.querySelectorAll('a[href], button, [tabindex]:not([tabindex="-1"])');
+    if (!focusables.length) return;
+    if (e.target === focusables[focusables.length - 1]) {
+      region.scrollTop = region.scrollHeight;
+    }
+  }
+
+  // R3-1: every signal that can mark the end reached requires ALL of
+  // these. closeTermsDialog already cancels the load, clears the scroll
+  // handler, and disconnects the observer, but this is the independent,
+  // second guard: even a stale signal that still manages to fire (the
+  // observer's own callback can be queued a tick before disconnect takes
+  // effect) can never mark the end reached against a region that is not,
+  // right now, genuinely showing loaded content.
+  function canMarkTermsReachedEnd() {
+    var overlay = document.getElementById('terms-dialog-overlay');
+    var region = document.getElementById('terms-scroll-region');
+    if (!overlay || overlay.style.display === 'none') return false;
+    if (!region || region.clientHeight <= 0) return false;
+    if (!_termsContentLoaded) return false;
+    if (!region.querySelector('h2')) return false;
+    return true;
+  }
+
+  function markTermsReachedEnd() {
+    if (!canMarkTermsReachedEnd()) return;
+    _termsReachedEnd = true;
+    applyTermsReachedState();
+  }
+
+  // T-24: nothing else enables Accept -- not a timer, not opening the
+  // dialog, not a failed load (a load in progress or a load error bails out
+  // above before this can flip the button on).
+  function applyTermsReachedState() {
+    var region = document.getElementById('terms-scroll-region');
+    var errBox = document.getElementById('terms-load-error');
+    if (errBox && errBox.style.display !== 'none') return;
+    if (!region || region.style.display === 'none') return;
+    setAcceptDisabled(!_termsReachedEnd);
+    // T-42: announced once, ever, through the polite live region -- the
+    // visible T-5 line beside the button (#terms-scroll-hint) never changes
+    // its wording, it stays the button's aria-describedby target while
+    // disabled (R2-1), and the live region announcement is separate from it.
+    if (_termsReachedEnd && !_termsAnnouncedReached) {
+      _termsAnnouncedReached = true;
+      var live = document.getElementById('terms-reached-live');
+      if (live) live.textContent = 'You can accept now.';
+    }
+  }
 
   window.acceptTerms = function () {
     if (!_tosStatus || !_tosStatus.current_tos_version) return;
-    var chk = document.getElementById('terms-agree-check');
-    if (!chk || !chk.checked) return; // affirmative action required
+    if (!_termsReachedEnd) return; // only reaching the end of the Terms enables this (T-24)
     var btn = document.getElementById('terms-accept-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Recording…'; }
     hideAlert('terms-gate-alert');
     apiFetch('/account/accept-terms', {
       method: 'POST',
-      // agree:true forwards the checkbox affirmation to the server (L-2). The box is
-      // unchecked by default and the button is disabled until it is checked (above), so
-      // this is a genuine, server-recorded manifestation of assent, not a bare version-echo.
+      // agree:true forwards the read-to-the-end affirmation to the server
+      // (L-2): a real, server-recorded manifestation of assent, not a bare
+      // version-echo -- Accept only reaches here once _termsReachedEnd is true.
       body: JSON.stringify({ version: _tosStatus.current_tos_version, agree: true }),
     })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
         if (res.ok) {
           _tosStatus = { needs_acceptance: false, accepted: true, current_tos_version: _tosStatus.current_tos_version };
+          window.closeTermsDialog();
           hide('terms-gate');
           loadEarnings(); // re-render payout with withdrawal unlocked
         } else {
           showAlert('terms-gate-alert', (res.data && res.data.error) || 'Could not record acceptance. Please try again.', 'error');
-          if (btn) { btn.disabled = false; btn.textContent = 'Accept and continue'; }
+          if (btn) { btn.disabled = false; btn.textContent = 'Accept'; }
         }
       })
       .catch(function () {
         showAlert('terms-gate-alert', 'Network error. Please try again.', 'error');
-        if (btn) { btn.disabled = false; btn.textContent = 'Accept and continue'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Accept'; }
       });
   };
 
@@ -1707,11 +2273,11 @@
             alertEl.className = 'alert alert-info';
             alertEl.style.display = '';
           }
-        } else if (res.status === 401 || res.status === 403) {
-          showAlert('dash-alert', 'Session expired. Please sign in again.', 'error');
-          clearToken();
-          setTimeout(showLoginScreen, 1800);
         } else {
+          // S-3: a 401 here is already handled once, upstream, by apiFetch --
+          // this callback never runs for one. This route does not gate on
+          // Terms acceptance, so any 403 (e.g. a suspended account) just
+          // shows the server's message here and leaves the builder signed in.
           var alertEl = document.getElementById('stripe-alert');
           if (alertEl) {
             alertEl.textContent = res.data.error || 'Could not connect Stripe. Please try again.';
@@ -1754,11 +2320,19 @@
           if (a) { a.textContent = 'Withdrawal initiated. Funds will arrive in 1 to 2 business days.'; a.className = 'alert alert-success'; a.style.display = ''; }
           // Refresh earnings after a short delay
           setTimeout(loadEarnings, 1500);
-        } else if (res.status === 401 || res.status === 403) {
-          showAlert('dash-alert', 'Session expired. Please sign in again.', 'error');
-          clearToken();
-          setTimeout(showLoginScreen, 1800);
+        } else if (res.status === 403 && res.data && res.data.code === 'TERMS_NOT_ACCEPTED') {
+          // S-3: a 403 is not a session that has ended. This route gates on
+          // Terms acceptance (R-01 5.10) -- surface the same clickwrap card
+          // the pack-purchase handler does (T-26).
+          show('terms-gate');
+          var gateEl = document.getElementById('terms-gate');
+          if (gateEl && gateEl.scrollIntoView) gateEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          var readBtn = document.getElementById('terms-read-btn');
+          if (readBtn && readBtn.focus) readBtn.focus();
         } else {
+          // Any other error (including any other 403) shows the server's
+          // message here and leaves the builder signed in -- a 401 is
+          // already handled once, upstream, by apiFetch.
           if (a) { a.textContent = res.data.error || 'Withdrawal failed. Please try again.'; a.className = 'alert alert-error'; a.style.display = ''; }
         }
       })
@@ -2425,13 +2999,20 @@
     var tr = document.createElement('tr');
     tr.id = 'triage-row-' + row.id;
 
-    // Checkbox
+    // Checkbox. V-1: wrapped in a <label> sized to a 44x44 tap target --
+    // clicking anywhere in the label toggles the native checkbox it wraps
+    // (standard label-for-input semantics), so the row's action control is
+    // never smaller than a touch target at any width, while the checkbox
+    // itself keeps its normal small, native visual size.
     var tdCheck = document.createElement('td');
+    var checkLabel = document.createElement('label');
+    checkLabel.className = 'triage-check-label';
     var box = document.createElement('input');
     box.type = 'checkbox';
     box.id = 'triage-check-' + row.id;
     box.onchange = function () { setRowChecked(row.id, box.checked); };
-    tdCheck.appendChild(box);
+    checkLabel.appendChild(box);
+    tdCheck.appendChild(checkLabel);
     tr.appendChild(tdCheck);
 
     // Quality
@@ -2911,8 +3492,8 @@
           show('terms-gate');
           var gateEl = document.getElementById('terms-gate');
           if (gateEl && gateEl.scrollIntoView) gateEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          var checkEl = document.getElementById('terms-agree-check');
-          if (checkEl && checkEl.focus) checkEl.focus();
+          var readBtn = document.getElementById('terms-read-btn');
+          if (readBtn && readBtn.focus) readBtn.focus();
           return;
         }
         showAlert('dash-alert', (res.data && res.data.error) || 'Could not start checkout. Please try again.', 'error');
@@ -2928,6 +3509,9 @@
   // asserts "payment received" from the URL — the webhook can land after
   // the browser redirect, so success polls the balance instead.
   var CHECKOUT_POLL_MAX_ATTEMPTS = 4;
+  // R4-1: the handle of the next scheduled poll tick, so signOut() can
+  // cancel it outright rather than let it fire after sign-out.
+  var _creditPollTimeoutId = null;
 
   // CREDITS-E2E-FINDINGS: pure decision function, DOM- and network-free, so
   // the state machine is unit-testable without a browser. Given what the
@@ -2993,7 +3577,10 @@
           showAlert('checkout-banner', 'Your balance has not updated yet. If nothing changes in a few minutes, write to support@auxilo.io.', 'info');
           return;
         }
-        setTimeout(function () { pollForCreditIncrease(attempt + 1, priorBalance); }, 3000);
+        _creditPollTimeoutId = setTimeout(function () {
+          _creditPollTimeoutId = null;
+          pollForCreditIncrease(attempt + 1, priorBalance);
+        }, 3000);
       })
       .catch(function () {
         if (attempt >= CHECKOUT_POLL_MAX_ATTEMPTS) {
@@ -3176,10 +3763,17 @@
 
     // 2. Check for existing session
     var token = getToken();
-    if (token) {
+    if (token && isTokenUsable(token)) {
       var email = decodeJwtEmail(token);
       showDashboard(email);
       if (checkoutState) showCheckoutBanner(checkoutState);
+    } else if (token) {
+      // S-1: a stored token whose exp has passed, or that cannot be read at
+      // all, is a session that has ended before a single request was made.
+      clearToken();
+      showLoginScreen(); // hides dash-view and clears login-alert
+      showAlert('login-alert', 'Your session ended. Sign in again.', 'info');
+      focusSessionEndedEmail(); // R3-12
     } else {
       showLoginScreen();
     }
@@ -3195,6 +3789,20 @@
       return (payload && typeof payload.email === 'string') ? payload.email : '';
     } catch (_) {
       return '';
+    }
+  }
+
+  // S-1: true only for a token that decodes AND carries a still-future exp
+  // (JWT exp is seconds since epoch). Anything else -- truncated, not JSON,
+  // no exp claim, or an exp already in the past -- counts as unreadable.
+  function isTokenUsable(token) {
+    try {
+      var parts = token.split('.');
+      if (parts.length !== 3) return false;
+      var payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+      return !!payload && typeof payload.exp === 'number' && payload.exp * 1000 > Date.now();
+    } catch (_) {
+      return false;
     }
   }
 

@@ -154,7 +154,11 @@ describe('[ruling T2] docs/TERMS-OF-SERVICE.md: section 7.6 content and numberin
   });
 });
 
-// ─── Ruling D1: the Terms card no longer reads as an update ───────────────
+// ─── Ruling D1 (superseded 2026-09-27 by the owner's read-to-the-end ruling,
+// BUILD-BRIEF-TERMS-SCROLL.md): the card no longer carries a paragraph or a
+// checkbox at all -- it is one line and a button that opens a dialog, and
+// Accept lives in that dialog, disabled until the reader scrolls to the end
+// of the Terms. ───────────────────────────────────────────────────────────
 
 describe('[ruling D1] public/dashboard.html: Terms card reads as a plain acceptance ask', () => {
   const DASHBOARD_HTML = read('public', 'dashboard.html');
@@ -165,20 +169,21 @@ describe('[ruling D1] public/dashboard.html: Terms card reads as a plain accepta
     assert.ok(!DASHBOARD_HTML.includes("We've updated our"));
   });
 
-  it('the paragraph reads the exact ruled text, with the link on "Terms of Service" and the bold on "Section 5.10" preserved', () => {
-    assert.ok(DASHBOARD_HTML.includes(
-      'Our <a href="/terms" target="_blank" rel="noopener" style="color:var(--aurum)">Terms of Service</a> include\n' +
-      '        <strong style="color:var(--ivory)">Section 5.10</strong>, under which you appoint Auxilo as your\n' +
-      '        limited agent to receive your Builder Share on your behalf when consumers unlock your learnings. Accept\n' +
-      '        the current Terms before you link a payout wallet or withdraw earnings.'
-    ));
+  it('the Section 5.10 paragraph and its Terms link are gone from the card; one plain line replaces it (before: the payee-agency paragraph; now: absent)', () => {
+    assert.ok(!DASHBOARD_HTML.includes('under which you appoint Auxilo as your'), 'the payee-agency paragraph is removed');
+    assert.ok(!DASHBOARD_HTML.includes('limited agent to receive your Builder Share'), 'the payee-agency paragraph is removed');
+    // Positive control: the card's replacement line is present.
+    assert.ok(DASHBOARD_HTML.includes('Read the Terms of Service to the end, then accept.'));
   });
 
-  it('the checkbox line and the accept button stay word for word', () => {
-    assert.ok(DASHBOARD_HTML.includes(
-      '<span>I have read and agree to the <a href="/terms" target="_blank" rel="noopener" style="color:var(--aurum)">Terms of Service</a>, including the Section 5.10 payment-collection agency.</span>'
-    ));
-    assert.ok(DASHBOARD_HTML.includes('<button class="btn btn-primary" id="terms-accept-btn" onclick="acceptTerms()" disabled>Accept and continue</button>'));
+  it('the checkbox, its label, and onTermsCheckChange are gone; Read the Terms opens the dialog and Accept lives there (before: a checkbox + "Accept and continue"; now: "Read the Terms" + "Accept")', () => {
+    assert.ok(!DASHBOARD_HTML.includes('id="terms-agree-check"'), 'the checkbox is removed');
+    assert.ok(!DASHBOARD_HTML.includes('I have read and agree to the'), 'the checkbox label is removed');
+    assert.ok(!DASHBOARD_HTML.includes('onTermsCheckChange'), 'the checkbox handler is removed');
+    assert.ok(!DASHBOARD_HTML.includes('Accept and continue'), 'the old button text is gone');
+    // Positive control: the new controls are present.
+    assert.ok(DASHBOARD_HTML.includes('<button class="btn btn-primary" id="terms-read-btn" onclick="openTermsDialog()">Read the Terms</button>'));
+    assert.ok(/id="terms-accept-btn"[^>]*onclick="acceptTerms\(\)"[^>]*disabled/.test(DASHBOARD_HTML));
   });
 });
 

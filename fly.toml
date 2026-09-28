@@ -29,6 +29,10 @@ kill_timeout  = "30s"
   # A config value, not a secret. Only 'true' (exact) arms it; anything else
   # keeps the routes 404 and every extraction-channel item held.
   EXTRACTION_AUTOPUBLISH_CONSENT_ENABLED = "true"
+  # W-1 (owner, 2026-09-27: "welcome on"): arms the one-time welcome email a
+  # first sign-in sends when it creates the account. Only the exact value
+  # "true" turns it on; anything else leaves it off.
+  WELCOME_EMAIL_ENABLED = "true"
   # LW-1: RESEND_API_KEY is a SECRET — `flyctl secrets set RESEND_API_KEY=...`,
   # never in this file. EMAIL_FROM defaults to 'Auxilo <login@auxilo.io>'.
   # EMAIL_FROM = "Auxilo <login@auxilo.io>"

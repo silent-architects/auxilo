@@ -13322,6 +13322,39 @@ function serveLegalPage(c, filename, title, seo) {
       codeBlocks.push(`<pre class="legal-pre">${esc}</pre>`);
       return ` CODE${codeBlocks.length - 1} `;
     });
+    // Code spans (`text`, ONE line only) are pulled out into placeholders
+    // HERE -- after fenced blocks (so a span can never reach inside one) but
+    // BEFORE tables and every bold/italic/link transform, both the inlineMd()
+    // pass table cells get and the paragraph pass below -- so an asterisk,
+    // underscore, or bracket inside a span is never transformed, and a span
+    // inside a table cell still renders (the cell's raw text carries only
+    // the placeholder by the time inlineMd() sees it). `[^`\n]+` cannot
+    // cross a line, and a lone backtick with nothing to pair with on its
+    // line never matches, so it survives untouched, same as plain text.
+    // Restored last, after both the code-block and table restorations below,
+    // so a placeholder surfaced by restoring a table's stored HTML is still
+    // swept up in that final pass. Unlike CODE_N/TABLE_N (always alone on
+    // their own line), a span sits inline mid-sentence, so its placeholder
+    // is wrapped in U+0001 (a control character, never legitimate content)
+    // rather than plain spaces -- a real space here would either double up
+    // with whatever natural spacing already surrounds the span in prose, or
+    // vanish along with it once splitTableRow() trims a table cell whose
+    // ENTIRE content is one span, stranding the placeholder unmatched.
+    const codeSpans = [];
+    // R4-4: the RAW (pre-escape) text of each span, kept alongside the
+    // escaped HTML -- a heading's id is slugified from these characters
+    // directly (a literal "<" is a separator to the slugifier; its escaped
+    // spelling "&lt;" would wrongly contribute the letters "lt").
+    const codeSpansRaw = [];
+    const protectedMdSpans = protectedMd.replace(/`([^`\n]+)`/g, (_m, code) => {
+      const esc = code
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      codeSpans.push(`<code>${esc}</code>`);
+      codeSpansRaw.push(code);
+      return `\u0001SPAN${codeSpans.length - 1}\u0001`;
+    });
     // Wave E fix (F7): minimal GitHub-flavoured table support. A table
     // (header row, separator row, contiguous body rows, all "| a | b |")
     // is pulled out into an HTML placeholder BEFORE the line-based
@@ -13330,11 +13363,18 @@ function serveLegalPage(c, filename, title, seo) {
     // regex (which only skips lines already starting with <h, <u, or <l)
     // would wrap every table row in its own stray <p>. Restored at the
     // very end, alongside the code-block restoration.
+    // R3-7: a URL that carries a code-span placeholder (the span opened
+    // mid-URL, e.g. a doc source with a backtick-highlighted path segment)
+    // is left alone -- rendering it as a link would restore the span's
+    // <code> HTML tag text into the middle of an href attribute value
+    // later, a broken attribute. isRealUrl fails that case the same way it
+    // already fails any other non-matching scheme, dropping to plain text.
+    const isRealUrl = (url) => /^(https?:|mailto:|\/|#)/i.test(url) && url.indexOf('\u0001') === -1;
     const inlineMd = (text) => text
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.+?)\*/g, '<em>$1</em>')
       .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, linkText, url) =>
-        /^(https?:|mailto:|\/|#)/i.test(url) ? `<a href="${url.replace(/"/g, '&quot;')}">${linkText}</a>` : linkText);
+        isRealUrl(url) ? `<a href="${url.replace(/"/g, '&quot;')}">${linkText}</a>` : linkText);
     const splitTableRow = (line) => {
       let row = line.trim();
       if (row.startsWith('|')) row = row.slice(1);
@@ -13342,7 +13382,7 @@ function serveLegalPage(c, filename, title, seo) {
       return row.split('|').map((cell) => cell.trim());
     };
     const tables = [];
-    const protectedMd2 = protectedMd.replace(
+    const protectedMd2 = protectedMdSpans.replace(
       /^(\|.*\|)[ \t]*\r?\n(\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)+\|?)[ \t]*\r?\n((?:\|.*\|[ \t]*\r?\n?)*)/gm,
       (_m, headerLine, _sepLine, bodyBlock) => {
         const headHtml = splitTableRow(headerLine).map((cell) => `<th>${inlineMd(cell)}</th>`).join('');
@@ -13366,9 +13406,17 @@ function serveLegalPage(c, filename, title, seo) {
       // shared renderer (/terms, /privacy), not just Payment Terms.
       .replace(/^## (.+)$/gm, (_m, text) => {
         const numMatch = text.match(/^(\d+)\./);
+        // R3-7/R4-4: an unnumbered heading's id is slugified from the
+        // heading's raw text WITH each code span's own RAW characters (never
+        // its \u0001-wrapped placeholder, and never the escaped HTML) --
+        // so a span holding "<", ">" or "&" produces exactly the id the
+        // heading had before inline code was rendered at all, the same as
+        // any other span. The DISPLAYED text keeps its placeholder, restored
+        // to <code> HTML in the normal restoration pass below.
+        const slugSource = numMatch ? text : text.replace(/\u0001SPAN(\d+)\u0001/g, (_sm, si) => codeSpansRaw[Number(si)] || '');
         const id = numMatch
           ? `section-${numMatch[1]}`
-          : text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-+|-+$)/g, '');
+          : slugSource.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-+|-+$)/g, '');
         return `<h2 id="${id}">${text}</h2>`;
       })
       .replace(/^# (.+)$/gm, '<h1>$1</h1>')
@@ -13382,7 +13430,7 @@ function serveLegalPage(c, filename, title, seo) {
       // Inline links [text](url) → <a>. Before list/paragraph wrapping so links
       // inside prose, headings, and list items all become clickable.
       .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, text, url) =>
-        /^(https?:|mailto:|\/|#)/i.test(url) ? `<a href="${url.replace(/"/g, '&quot;')}">${text}</a>` : text)
+        isRealUrl(url) ? `<a href="${url.replace(/"/g, '&quot;')}">${text}</a>` : text)
       .replace(/^- (.+)$/gm, '<li>$1</li>')
       .replace(/(<li>.*<\/li>\n?)+/g, (m) => `<ul>${m}</ul>`)
       .replace(/^(?!<[hul])(.*\S.*)$/gm, '<p>$1</p>')
@@ -13393,6 +13441,16 @@ function serveLegalPage(c, filename, title, seo) {
     // Restore protected tables, unwrapping any <p> the paragraph rule added.
     body = body.replace(/<p> TABLE(\d+) <\/p>| TABLE(\d+) /g,
       (_m, a, b) => tables[a !== undefined ? a : b]);
+    // Restore protected code spans LAST -- a table just restored above may
+    // have carried a "\u0001SPANn\u0001" placeholder inside one of its own
+    // cells, and this pass (over the CURRENT body, after that restoration)
+    // still finds and replaces it. Unwrap any <p> the paragraph rule added
+    // around a span that was an entire line/paragraph by itself. The U+0001
+    // delimiters are never whitespace, so splitTableRow()'s per-cell trim()
+    // cannot strip them away -- the token matches identically whether it
+    // sits mid-sentence in prose or was a table cell's entire content.
+    body = body.replace(/<p>\u0001SPAN(\d+)\u0001<\/p>|\u0001SPAN(\d+)\u0001/g,
+      (_m, a, b) => codeSpans[a !== undefined ? a : b]);
     // SEO-BASELINE-2026-09-06: canonical + og/twitter block, /terms and /privacy only
     // (routes below pass `seo`; other serveLegalPage callers pass nothing and get no tags).
     // AD-STRINGS-PACKET-10-SEO-FINAL-2026-09-06: `seo.full` gives a page the full
@@ -13446,6 +13504,7 @@ function serveLegalPage(c, filename, title, seo) {
     .legal-wrap a{color:#C9A84C}
     .legal-wrap hr{border:none;border-top:1px solid rgba(229,229,227,0.12);margin:24px 0}
     .legal-wrap pre.legal-pre{background:#111;border:1px solid rgba(229,229,227,0.12);border-radius:6px;padding:16px;margin-bottom:16px;overflow-x:auto;white-space:pre-wrap;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;line-height:1.6;color:#E5E5E3}
+    .legal-wrap code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:inherit;background:none;padding:0;color:inherit}
     .legal-back{display:inline-block;margin-bottom:32px;color:#C9A84C;text-decoration:none;font-size:14px}
     .legal-back:hover{text-decoration:underline}
   </style>

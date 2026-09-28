@@ -198,7 +198,16 @@ describe('server.js analytics wiring', () => {
     // that same call, pushing it to ~11721 chars in -- widened again.
     // CREDITS-CONTROL PART 1 (D8) added the ## heading id="section-N" rule
     // ahead of that same call, pushing it to ~12433 chars in -- widened again.
-    const h = sliceAt('function serveLegalPage(', 12600);
+    // BUILD-BRIEF-TERMS-SCROLL R2-4 added the code-span extraction/
+    // restoration (and its doc comments) ahead of that same call, pushing
+    // it to ~15076 chars in -- widened again.
+    // FIX-UNIT-TERMS-3 R3-7 added the isRealUrl() code-span-placeholder
+    // guard and the heading-id plain-text substitution ahead of that same
+    // call, pushing it to ~16288 chars in -- widened again.
+    // Round 4 R4-4 added the codeSpansRaw parallel array (raw, pre-escape
+    // code-span text) and the slugSource change that reads from it, ahead
+    // of that same call, pushing it to ~16574 chars in -- widened again.
+    const h = sliceAt('function serveLegalPage(', 16700);
     assert.ok(h.includes('injectAnalytics(html, ANALYTICS_DOMAIN)'));
   });
 });

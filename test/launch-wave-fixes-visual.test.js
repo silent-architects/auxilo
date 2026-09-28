@@ -231,6 +231,12 @@ describe('FIX-UNIT-2: dashboard + email-prefs (staged server)', { timeout: 180_0
             // #unlock-email-setting row.
             const form = document.getElementById('clean-lane-grant-form');
             if (form) form.style.display = '';
+            // BUILD-BRIEF-TERMS-SCROLL.md: #terms-accept-btn now lives inside
+            // the Terms dialog, shown only once "Read the Terms" opens it --
+            // force the overlay visible for the same reason as the clean-lane
+            // form above, purely to measure the button's CSS-driven height.
+            const termsOverlay = document.getElementById('terms-dialog-overlay');
+            if (termsOverlay) termsOverlay.style.display = '';
             return ['terms-accept-btn', 'clean-lane-grant-btn'].map((id) => {
               const el = document.getElementById(id);
               const r = el.getBoundingClientRect();

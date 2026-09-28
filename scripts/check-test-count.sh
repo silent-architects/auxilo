@@ -438,7 +438,66 @@ cd "${REPO_ROOT}"
 # what it proves) but no new it() count. 20 + 2 = 22 net. Verified against a
 # git-add--N-staged run: 4230 -> 4252, 0 fail, 7 skipped (same pre-existing
 # sandbox skips).
-EXPECTED_TEST_COUNT=4252
+#
+# BUILD-BRIEF-TERMS-SCROLL (2026-09-27): +12 it()s -- two new files,
+# test/terms-scroll-accept.test.js (7: the card is T-1/T-2/T-3 only + no
+# horizontal scroll, the dialog shows the real /terms content with Accept
+# disabled, partial-vs-full scroll, keyboard-only reach-the-end, the real
+# accept-terms POST + terms-status flip, a failed load + Try Again, Escape
+# closes and returns focus) and test/session-ended.test.js (5: S-1 expired
+# stored token, S-2 a server-refused token redirecting once with no card
+# printing the raw text, S-3a/b/c the three 403 dispositions). No existing
+# file's it() count changed -- fix-unit-money.test.js, tos-clickwrap-
+# assent.test.js, and credits-control-part1.test.js's T15 each swapped
+# checkbox-era assertions for the new dialog/button ones in place; launch-
+# wave-dashboard.test.js and launch-wave-fixes-visual.test.js only edited
+# existing it() bodies (a heading-order array entry; forcing the new dialog
+# overlay visible to measure #terms-accept-btn, same pattern already used
+# for #clean-lane-grant-form). Plus +2 from the no-local-paths guard's own
+# per-tracked-file sweep picking up the two new files (same mechanism as PM
+# follow-up 2 above). 12 + 2 = 14 net. Verified against a git-add--N-staged
+# run (the two new files tracked): 4252 -> 4266, 0 fail, 7 skipped (same
+# pre-existing sandbox skips).
+#
+# BUILD-BRIEF-TERMS-SCROLL ROUND 2 (2026-09-27): +4 it()s -- one new file,
+# test/legal-code-spans.test.js (4: no backtick survives in any of the four
+# served legal pages' visible text, the /terms amendment id renders inside
+# a <code> element, an asterisk/bracket/less-than inside a code span render
+# literally and escaped while a lone unpaired backtick is left alone, and
+# the four pages' visible text is unchanged apart from the backtick
+# characters themselves versus the server.js at HEAD). No existing file's
+# it() count changed -- test/terms-scroll-accept.test.js's tests 2 and 3
+# gained new assertions in place (R2-1 hint/aria-describedby, R2-2 full-
+# opacity + background-match waited-for by state not by time, R2-3 no h1
+# inside the dialog), and test/analytics-gating.test.js only widened a
+# fixed-length source slice past the new code-span block, same as every
+# prior addition ahead of that same call. Plus +1 from the no-local-paths
+# guard's own per-tracked-file sweep picking up the one new file. 4 + 1 = 5
+# net. Verified against a git-add--N-staged run (the new file tracked):
+# 4266 -> 4271, 0 fail, 7 skipped (same pre-existing sandbox skips).
+#
+# FIX-UNIT-TERMS-3 ROUND 3 (2026-09-27): +14 it()s across three new files --
+# test/terms-dialog-hardening.test.js (9: R3-1a/b/c the three ways Accept
+# could turn on without reading, R3-3a/b cache:no-store + the version-
+# mismatch load-failure state, R3-8 onclick/javascript:/style/iframe/
+# colliding-id all neutralized, R3-10 Tab-alone reaches Accept, R3-11 the
+# background is inert while open and restored on close, R3-4 Accept/Close/
+# region sizing across six viewports), test/welcome-email-flag.test.js (1:
+# the fly.toml pin), test/review-table-phone-width.test.js (2: readable +
+# 44x44 controls + no horizontal scroll at 375/320, unchanged at 1280).
+# test/session-ended.test.js gained +2 in place (R3-5, R3-6); its S-1/S-2
+# only gained assertions (R3-12), no count change. test/legal-code-spans.
+# test.js stayed at 4 -- R3-2 replaced the git-history comparison test with
+# one comprehensive synthetic-Markdown test (also proving R3-7's link/
+# heading-id fixes) and added a dedicated heading-id-list pin, a wash.
+# test/analytics-gating.test.js and test/launch-wave-dashboard.test.js only
+# widened a fixed-length slice / moved one expected array entry to its new
+# DOM position (the Terms dialog now sits outside #dash-view, R3-11) -- no
+# count change. Plus +3 from the no-local-paths guard's own per-tracked-
+# file sweep picking up the three new files. 14 + 3 = 17 net. Verified
+# against a git-add--N-staged run (the three new files tracked): 4271 ->
+# 4288, 0 fail, 7 skipped (same pre-existing sandbox skips).
+EXPECTED_TEST_COUNT=4291
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
