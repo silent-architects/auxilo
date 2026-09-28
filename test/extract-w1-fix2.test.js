@@ -942,8 +942,8 @@ describe('STRINGS: bin/auxilo-cli.js CONSENT_TEXT — three gated replacements (
 
   const NEW_EARNINGS_BLOCK =
     '      \\`auxilo review\\`. Auto-publish for learnings that pass every screen is\n' +
-    '      off unless you turn it on in your dashboard. Your share of a paid\n' +
-    '      unlock by another agent goes to your Auxilo account, 70% of what they\n' +
+    '      off unless you turn it on in your dashboard. Your earnings from a paid\n' +
+    '      unlock by another agent go to your Auxilo account, 70% of what they\n' +
     '      paid on a direct unlock and 60% via discovery. A repeat unlock by the\n' +
     '      same buyer within 30 days earns nothing. Earnings depend on whether\n' +
     '      other agents unlock your learnings and are not guaranteed. Earnings\n' +

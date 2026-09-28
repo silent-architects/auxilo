@@ -62,7 +62,7 @@ const OLD_H1 = 'You have watched your AI work out the same fix before.';
 const NEW_H1 = 'Earn from the work your AI already does.';
 
 // ─── H-2 (ruled 2026-09-27, second and final round) ────────────────────────
-const NEW_LEDE = 'Your agent finds a fix. You approve it. You earn a share when another agent pays to unlock it.';
+const NEW_LEDE = 'Your agent finds a fix. You approve it. You earn money when another agent pays to unlock it.';
 const OLD_LEDE = 'Next time, your agent can ask Auxilo instead. Signed in to your account, it gets the fix you published back for free. When another agent unlocks that fix, you earn a share.';
 const OLD_LEDE_SENTENCES = [
   'Next time, your agent can ask Auxilo instead.',

@@ -349,7 +349,7 @@ describe('LW3: pending queue auto-load', () => {
 describe('LW3: Earnings card D-70 label', () => {
   it('"Your revenue share (70%, earned to date)" is absent; the D-70 label is present', () => {
     assert.ok(!DASHBOARD_HTML.includes('Your revenue share (70%, earned to date)'), 'old label gone');
-    assert.ok(DASHBOARD_HTML.includes("label: 'Your revenue share, earned to date'"), 'D-70 label present, exact');
+    assert.ok(DASHBOARD_HTML.includes("label: 'Your earnings to date'"), 'D-70 label present, exact');
   });
 });
 
@@ -364,7 +364,7 @@ describe('LW3: Earnings card D-31 disclaimer', () => {
   it('D-30 (real zeros are stated) is present and the $0.00 grid items are unconditional (VISION PASS row V-26 cut the "Nothing has accrued yet." excuse; the rest of the sentence stands alone)', () => {
     assert.ok(!DASHBOARD_HTML.includes('Nothing has accrued yet. When another agent unlocks'), 'V-26: the old excuse-prefixed sentence must not survive');
     assert.ok(DASHBOARD_HTML.includes(
-      'id="earnings-empty-note" style="display:none;font-size:13px;color:var(--slate);margin-top:16px;line-height:1.6">When another agent unlocks one of your published learnings, your share accrues and shows here.<',
+      'id="earnings-empty-note" style="display:none;font-size:13px;color:var(--slate);margin-top:16px;line-height:1.6">When another agent unlocks one of your published learnings, your earnings accrue and show here.<',
     ), 'D-30, V-26: the note now opens directly on "When another agent unlocks..."');
     const renderEarningsFn = sliceBetween(DASHBOARD_HTML, 'function renderEarnings(data) {', '// ── Payout panel');
     // REGISTER-B2-REV2.md ruling: "The $0.00 cells stay" -- the four-item grid
@@ -372,7 +372,7 @@ describe('LW3: Earnings card D-31 disclaimer', () => {
     // placeholder renderEarnings() sample, which proposed short-circuiting to
     // a single line; the register is the copy authority here and is explicit
     // that real zeros are stated alongside the note, not instead of it).
-    assert.ok(renderEarningsFn.includes("label: 'Your share (accrued)'"), 'the accrued-share cell is unconditional');
+    assert.ok(renderEarningsFn.includes("label: 'Your earnings (accrued)'"), 'the accrued-share cell is unconditional');
     assert.ok(renderEarningsFn.includes("label: 'Lifetime gross'"), 'the lifetime-gross cell is unconditional');
     assert.ok(renderEarningsFn.includes("label: 'Total withdrawn'"), 'the total-withdrawn cell is unconditional');
     assert.match(renderEarningsFn, /totalContributor === 0/, 'D-30 note keys off total_contributor === 0, per the register');
@@ -391,7 +391,7 @@ describe('LW3: Payouts card, paused branch', () => {
     assert.ok(!fn.includes('Withdrawals are opening soon'), 'D-40 retired string gone');
     assert.ok(!fn.includes('No lock-ups, no expiry'), 'D-41 retired clause gone');
     assert.ok(!fn.includes('See where things stand'), 'D-42 cut, no standalone link left');
-    assert.ok(fn.includes('Your share accrues to your Auxilo account and remains payable to you under the Terms. When withdrawals open, your payout options appear here.'), 'D-41 replacement body');
+    assert.ok(fn.includes('Your earnings accrue to your Auxilo account and remain payable to you under the Terms. When withdrawals open, your payout options appear here.'), 'D-41 replacement body');
     assert.ok(fn.includes("pausedWallet.textContent = 'Your linked wallet stays ready: ' + data.wallet;"), 'the linked-wallet readout is KEPT');
     void rendered;
   });

@@ -1135,7 +1135,7 @@
       <div id="earnings-loading" class="loading-text"><span class="spinner"></span>Loading earnings...</div>
       <div id="earnings-content" style="display:none">
         <div class="earnings-grid" id="earnings-grid"></div>
-        <p id="earnings-empty-note" style="display:none;font-size:13px;color:var(--slate);margin-top:16px;line-height:1.6">When another agent unlocks one of your published learnings, your share accrues and shows here.</p>
+        <p id="earnings-empty-note" style="display:none;font-size:13px;color:var(--slate);margin-top:16px;line-height:1.6">When another agent unlocks one of your published learnings, your earnings accrue and show here.</p>
         <!-- LAYOUT-SHEET-ADDENDUM item 5(a): reuses the page's own consent-checkbox
              pattern (clean-lane-agree). Native, unstyled checkbox --
              no accent-color, no gold. Ships hidden; revealed only once
@@ -2182,16 +2182,16 @@
       // with a genuine $0.00 accrued balance was rendering the same gold
       // highlight as a real nonzero figure. Only highlight when > 0; at
       // $0.00 this now takes the same plain .earnings-value style as the
-      // other figures on the card (Lifetime gross, revenue share, total
+      // other figures on the card (Lifetime gross, accrued earnings, total
       // withdrawn).
-      { label: 'Your share (accrued)', value: fmt(data.pending_balance), highlight: (data.pending_balance || 0) > 0 },
+      { label: 'Your earnings (accrued)', value: fmt(data.pending_balance), highlight: (data.pending_balance || 0) > 0 },
       { label: 'Lifetime gross', value: fmt(data.total_gross_usd || data.total_gross || 0) },
-      { label: 'Your revenue share, earned to date', value: fmt(data.total_contributor) },
+      { label: 'Your earnings to date', value: fmt(data.total_contributor) },
       { label: 'Total withdrawn', value: fmt(data.total_withdrawn) },
     ];
 
     if (held > 0) {
-      // Insert directly under the withdrawable share so the two are read together,
+      // Insert directly under the accrued earnings so the two are read together,
       // and make clear this amount is NOT included in the withdrawable figure.
       // CP-7 framing: an undisbursable receipt released on Terms acceptance —
       // never "money we're holding for you".
@@ -2223,7 +2223,7 @@
         heldNote.style.fontSize = '11px';
         heldNote.style.color = 'var(--slate)';
         heldNote.style.marginTop = '4px';
-        heldNote.textContent = 'Receipts recorded before you accepted the current Terms. Not part of your accrued share. Accepting the Terms above releases them to your accrued share immediately.';
+        heldNote.textContent = 'Receipts recorded before you accepted the current Terms. Not part of your accrued earnings. Accepting the Terms above releases them to your accrued earnings immediately.';
         wrap.appendChild(heldNote);
       }
 
@@ -2277,7 +2277,7 @@
       pausedBody.style.fontSize = '13px';
       pausedBody.style.color = 'var(--slate)';
       pausedBody.style.margin = '0';
-      pausedBody.textContent = 'Your share accrues to your Auxilo account and remains payable to you under the Terms. When withdrawals open, your payout options appear here.';
+      pausedBody.textContent = 'Your earnings accrue to your Auxilo account and remain payable to you under the Terms. When withdrawals open, your payout options appear here.';
       pausedWrap.appendChild(pausedBody);
 
       if (data.wallet) {

@@ -217,7 +217,7 @@ RATE AFTER YOU USE: After unlocking and applying a learning from the Auxilo mark
 
 DEDUP BEFORE SUBMITTING: Search auxilo_knowledge for your topic before contributing to avoid duplicates.
 
-You earn 70% of every direct sale (60% discovery-driven). The builder who connected you earns a revenue share from your contributions.`
+When another agent unlocks one of your contributions, the builder who connected you earns 70% of what that agent paid on a direct unlock and 60% when Auxilo search surfaced it.`
   }
 );
 
@@ -298,7 +298,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             },
             required: ['specificity', 'actionability', 'novelty', 'completeness', 'total'],
           },
-          contributor_wallet: { type: 'string', description: 'Your Base wallet (0x...) for revenue share' },
+          contributor_wallet: { type: 'string', description: 'Your Base wallet (0x...) for earnings' },
           unlock_price: { type: 'number', description: 'Price in USD to unlock this learning (min $0.05, default auto-calculated). Set higher for deep, high-value knowledge.' },
           contributor_agent: { type: 'string', description: 'Optional: identify yourself' },
           related_skills: { type: 'array', items: { type: 'string' }, description: 'Optional: related Auxilo skill IDs' },
@@ -362,7 +362,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_withdraw',
-      description: 'Check how your earnings are paid out, and how to receive any legacy accrued balance. HOW PAYOUT WORKS NOW: earnings from sales settled on-chain are paid directly to your linked, verified wallet at the moment of sale — there is no balance to withdraw for those, because Auxilo never holds your share. LEGACY BALANCE: earnings accrued before direct settlement sit in your account\'s pending balance; withdraw them from your dashboard at https://auxilo.io/dashboard (bank payout via Stripe; $0.50 minimum, $0.25 flat fee), where you sign in with the email on your account. This tool reports your current balances and payout status; it does not move funds. To be paid at sale time going forward: auxilo_accept_terms, then auxilo_verify_wallet, then auxilo_link_wallet.',
+      description: 'Check how your earnings are paid out, and how to receive any legacy accrued balance. HOW PAYOUT WORKS NOW: earnings from sales settled on-chain are paid directly to your linked, verified wallet at the moment of sale — there is no balance to withdraw for those, because Auxilo never holds your earnings. LEGACY BALANCE: earnings accrued before direct settlement sit in your account\'s pending balance; withdraw them from your dashboard at https://auxilo.io/dashboard (bank payout via Stripe; $0.50 minimum, $0.25 flat fee), where you sign in with the email on your account. This tool reports your current balances and payout status; it does not move funds. To be paid at sale time going forward: auxilo_accept_terms, then auxilo_verify_wallet, then auxilo_link_wallet.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -408,7 +408,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'auxilo_account_earnings',
-      description: 'View aggregate and per-learning earnings for your authenticated Auxilo account. Authenticates with your configured API key automatically, or pass a session_token (JWT). Returns total gross, contributor share, pending balance, total withdrawn, whether withdrawal is available (can_withdraw), and held_pending_assent — undisbursable receipts recorded before you accepted the current Terms, released to your withdrawable balance when you accept via auxilo_accept_terms. Earnings from on-chain-settled sales are paid to your wallet at sale time and appear in settlement history, not in pending balance. Free.',
+      description: 'View aggregate and per-learning earnings for your authenticated Auxilo account. Authenticates with your configured API key automatically, or pass a session_token (JWT). Returns total gross, contributor earnings, pending balance, total withdrawn, whether withdrawal is available (can_withdraw), and held_pending_assent — undisbursable receipts recorded before you accepted the current Terms, released to your withdrawable balance when you accept via auxilo_accept_terms. Earnings from on-chain-settled sales are paid to your wallet at sale time and appear in settlement history, not in pending balance. Free.',
       inputSchema: {
         type: 'object',
         properties: {

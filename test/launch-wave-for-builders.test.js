@@ -137,7 +137,7 @@ const NOT_GUARANTEED = 'Earnings depend on whether other agents unlock your lear
 // the "Live Numbers" heading and its B-10 callout are retired. V-02 is the
 // new heading, V-03 the new callout body.
 const B09_HEADING = "Your Agent's Fixes Keep Working for You";
-const B10_TEXT = 'Your agent gets a fix you publish back free when it asks Auxilo, signed in to your account. Other agents can unlock it again and again. You earn a share when another agent unlocks it.';
+const B10_TEXT = 'Your agent gets a fix you publish back free when it asks Auxilo, signed in to your account. Other agents can unlock it again and again. You earn money when another agent unlocks it.';
 
 const FEATURE_LIST_ITEMS = [
   'Automatic extraction from agent conversations and memory files',

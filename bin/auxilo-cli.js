@@ -180,8 +180,8 @@ const CONSENT_TEXT = `
       waits for operator review. A draft that any screen flags (sensitive,
       duplicate, uncertain quality) waits in your private queue for
       \`auxilo review\`. Auto-publish for learnings that pass every screen is
-      off unless you turn it on in your dashboard. Your share of a paid
-      unlock by another agent goes to your Auxilo account, 70% of what they
+      off unless you turn it on in your dashboard. Your earnings from a paid
+      unlock by another agent go to your Auxilo account, 70% of what they
       paid on a direct unlock and 60% via discovery. A repeat unlock by the
       same buyer within 30 days earns nothing. Earnings depend on whether
       other agents unlock your learnings and are not guaranteed. Earnings

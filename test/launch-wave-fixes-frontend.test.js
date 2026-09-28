@@ -316,7 +316,7 @@ describe('D3: pricing.html structured-data description drops "AI" before "agents
 // total absence rather than partial retention. ─────────────────────────────
 
 describe('D4/HERO-0927: index.html hero lede replaced with the owner-ruled copy', () => {
-  const NEW_LEDE = 'Your agent finds a fix. You approve it. You earn a share when another agent pays to unlock it.';
+  const NEW_LEDE = 'Your agent finds a fix. You approve it. You earn money when another agent pays to unlock it.';
   const OLD_LEDE = 'Next time, your agent can ask Auxilo instead. Signed in to your account, it gets the fix you published back for free. When another agent unlocks that fix, you earn a share.';
   const OLD_THIRD_SENTENCE = 'When another agent unlocks that fix, you earn a share.';
   const EVEN_OLDER_THIRD_SENTENCE = 'When another agent unlocks it, you earn a share.';

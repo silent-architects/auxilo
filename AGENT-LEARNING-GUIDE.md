@@ -148,7 +148,7 @@ Switching to any non-off mode for the first time records an affirmative consent 
 ### Non-custodial settlement (when the 402 challenge carries `extra.router`)
 Auxilo is migrating x402 unlocks to an on-chain split router: your USDC goes
 to a contract that pays the contributor and the platform **atomically in one
-transaction** — Auxilo never holds the contributor's share. When this rail is
+transaction** — Auxilo never holds the contributor's earnings. When this rail is
 active, the 402 challenge's `accepts[0]` changes in two ways: `payTo` is the
 router contract, and `extra.router` appears with the split parameters.
 

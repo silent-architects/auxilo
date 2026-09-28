@@ -168,11 +168,11 @@ describe('FIX-UNIT-2: dashboard + email-prefs (staged server)', { timeout: 180_0
     try {
       const info = await page.evaluate(() => {
         const items = Array.from(document.querySelectorAll('#earnings-grid .earnings-item'));
-        const row = items.find((el) => el.querySelector('.earnings-label').textContent.trim() === 'Your share (accrued)');
+        const row = items.find((el) => el.querySelector('.earnings-label').textContent.trim() === 'Your earnings (accrued)');
         const val = row ? row.querySelector('.earnings-value') : null;
         return val ? { text: val.textContent.trim(), hasAurum: val.classList.contains('aurum'), color: getComputedStyle(val).color } : null;
       });
-      assert.ok(info, 'earnings row "Your share (accrued)" found');
+      assert.ok(info, 'earnings row "Your earnings (accrued)" found');
       assert.equal(info.text, '$0.00');
       assert.equal(info.hasAurum, false, 'zero balance must NOT carry .aurum');
       assert.notEqual(info.color, 'rgb(201, 168, 76)', 'computed color must not be the gold token');
@@ -188,11 +188,11 @@ describe('FIX-UNIT-2: dashboard + email-prefs (staged server)', { timeout: 180_0
     try {
       const info = await page.evaluate(() => {
         const items = Array.from(document.querySelectorAll('#earnings-grid .earnings-item'));
-        const row = items.find((el) => el.querySelector('.earnings-label').textContent.trim() === 'Your share (accrued)');
+        const row = items.find((el) => el.querySelector('.earnings-label').textContent.trim() === 'Your earnings (accrued)');
         const val = row ? row.querySelector('.earnings-value') : null;
         return val ? { text: val.textContent.trim(), hasAurum: val.classList.contains('aurum'), color: getComputedStyle(val).color } : null;
       });
-      assert.ok(info, 'earnings row "Your share (accrued)" found');
+      assert.ok(info, 'earnings row "Your earnings (accrued)" found');
       assert.equal(info.text, '$12.34');
       assert.equal(info.hasAurum, true, 'nonzero balance must still carry .aurum');
       assert.equal(info.color, 'rgb(201, 168, 76)', 'computed color must be the gold token');

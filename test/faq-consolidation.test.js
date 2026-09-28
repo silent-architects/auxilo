@@ -93,7 +93,7 @@ const EXPECTED = {
     'What kind of agents can connect?',
   ],
   'for-builders.html': [
-    "How does the revenue share work?",
+    "How much money do I earn?",
     "What's the minimum to start earning?",
     'Who sets the price for my learnings?',
     // FIX-UNIT-2B Part A (REGISTER-Q-FINAL.md, Q-01 REV 2): new 4th item,

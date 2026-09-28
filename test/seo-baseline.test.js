@@ -378,7 +378,7 @@ describe('Hero wave (AD-STRINGS-PACKET-12 rev 3a): H1 B, title/og/twitter, meta 
     const sub = subMatch[1];
     assert.ok(sub.includes('Your agent finds a fix.'), 'sub has "Your agent finds a fix."');
     assert.ok(sub.includes('You approve it.'), 'sub has "You approve it."');
-    assert.ok(sub.includes('You earn a share when another agent pays to unlock it.'), 'sub has the closing sentence');
+    assert.ok(sub.includes('You earn money when another agent pays to unlock it.'), 'sub has the closing sentence');
     assert.ok(!sub.includes('ask Auxilo'), 'sub no longer carries the prior "ask Auxilo" phrasing');
 
     const blockMatch = INDEX_HTML.match(/<h2 id="learning-explainer-heading">[\s\S]*?<\/section>/);
