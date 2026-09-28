@@ -500,8 +500,8 @@ cd "${REPO_ROOT}"
 # The homepage headline and lede: test/hero-0927.test.js adds 25 tests, and
 # the local path guard adds one for that file once it is tracked. 4291 + 26 = 4317.
 # The dashboard review table at phone width: test/review-table-phone-width.test.js
-# grew from 2 tests to 13. 4317 + 11 = 4328.
-EXPECTED_TEST_COUNT=4328
+# grew from 2 tests to 14. 4317 + 12 = 4329.
+EXPECTED_TEST_COUNT=4329
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
