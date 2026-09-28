@@ -337,40 +337,121 @@ describe('P-1..P-9, R2, R3: pending review table at phone width', { timeout: 240
     }
   });
 
-  it('R3-1: at 1280 every column matches production\'s left edge and width exactly (no column floor)', async (t) => {
+  it('R4-1: at 1280, every column matches a same-run measurement of the table with the stacked-block and title-wrap rules turned off (no pinned pixel literals -- a font rasterizes differently on every machine)', async (t) => {
     if (bootSkipReason) { t.skip(bootSkipReason); return; }
     const { chromium } = playwright;
     const browser = await chromium.launch();
     try {
       const page = await openDashboard(browser, { width: 1280, height: 900 });
-      const cols = await page.evaluate(() => Array.from(document.querySelectorAll('.triage-table thead th')).map((th) => {
-        const r = th.getBoundingClientRect();
-        return { label: th.textContent, left: r.left, width: r.width };
-      }));
 
-      // Pinned literals -- measured at build time, NOT by this file, from
-      // git HEAD:public/dashboard.html (true production, before any round
-      // of this fix) staged in a full tree copy OUTSIDE the repo, booted,
-      // and rendered at 1280 with this exact seed. This test only reads
-      // the live DOM; it never touches git history itself.
-      const PRODUCTION_COLUMNS_1280 = [
-        { label: '', left: 265, width: 33 },
-        { label: 'Quality', left: 298, width: 72.234375 },
-        { label: 'Category', left: 370.234375, width: 120.234375 },
-        { label: 'Lane / signals', left: 490.46875, width: 115.0625 },
-        { label: 'Title', left: 605.53125, width: 1146.59375 },
-        { label: 'Submitted', left: 1752.125, width: 90.421875 },
-      ];
+      function readColumns() {
+        return Array.from(document.querySelectorAll('.triage-table thead th')).map((th) => {
+          const r = th.getBoundingClientRect();
+          return { label: th.textContent, left: r.left, width: r.width };
+        });
+      }
 
-      assert.equal(cols.length, PRODUCTION_COLUMNS_1280.length, 'same column count as production');
-      for (let i = 0; i < cols.length; i++) {
-        assert.equal(cols[i].label, PRODUCTION_COLUMNS_1280[i].label, `column ${i} label matches production`);
-        assert.ok(Math.abs(cols[i].left - PRODUCTION_COLUMNS_1280[i].left) <= 0.5,
-          `column ${i} (${cols[i].label}) left edge matches production (got ${cols[i].left}, production ${PRODUCTION_COLUMNS_1280[i].left})`);
-        assert.ok(Math.abs(cols[i].width - PRODUCTION_COLUMNS_1280[i].width) <= 0.5,
-          `column ${i} (${cols[i].label}) width matches production (got ${cols[i].width}, production ${PRODUCTION_COLUMNS_1280[i].width})`);
+      // Render 1: as built.
+      const builtCols = await page.evaluate(readColumns);
+
+      // Render 2: the SAME page, SAME seed, SAME machine -- with exactly
+      // the rules this build added for the stacked blocks and the title
+      // wrap turned off via the CSSOM, identified by media text and
+      // selector (never by rewriting the stylesheet text or reloading).
+      // What's left is the table as it was before this fix. A stacked-
+      // block media rule is disabled by setting its own media text to
+      // "not all" (a standard, reversible way to turn off everything
+      // inside it without deleting it); the title-wrap declarations are
+      // removed from the one rule that carries them via
+      // CSSStyleDeclaration.removeProperty. Every stylesheet on the page
+      // is searched; a cross-origin sheet would throw reading .cssRules,
+      // so that's caught and skipped (none is expected here -- this page
+      // loads no cross-origin CSS).
+      const revertResult = await page.evaluate(() => {
+        const disabledMediaRules = [];
+        const removedDeclarations = [];
+        let titleRuleFound = false;
+        for (const sheet of Array.from(document.styleSheets)) {
+          let rules;
+          try { rules = sheet.cssRules; } catch (e) { continue; }
+          if (!rules) continue;
+          for (const rule of Array.from(rules)) {
+            if (typeof CSSMediaRule !== 'undefined' && rule instanceof CSSMediaRule
+              && rule.media.mediaText.replace(/\s+/g, '').includes('max-width:899px')) {
+              disabledMediaRules.push(rule.media.mediaText);
+              rule.media.mediaText = 'not all';
+            } else if (typeof CSSStyleRule !== 'undefined' && rule instanceof CSSStyleRule
+              && rule.selectorText === '.triage-title-btn') {
+              titleRuleFound = true;
+              if (rule.style.getPropertyValue('overflow-wrap')) {
+                removedDeclarations.push('overflow-wrap');
+                rule.style.removeProperty('overflow-wrap');
+              }
+              if (rule.style.getPropertyValue('max-width')) {
+                removedDeclarations.push('max-width');
+                rule.style.removeProperty('max-width');
+              }
+            }
+          }
+        }
+        // Force a fresh layout under the mutated CSSOM before the caller
+        // reads geometry.
+        void document.body.offsetHeight;
+        return { disabledMediaRules, removedDeclarations, titleRuleFound };
+      });
+
+      assert.ok(revertResult.titleRuleFound, 'the .triage-title-btn rule was found in the page\'s CSSOM');
+      assert.ok(revertResult.removedDeclarations.includes('overflow-wrap'), 'overflow-wrap was removed from the title rule');
+      assert.ok(revertResult.disabledMediaRules.length >= 1, 'at least one "(max-width: 899px)" rule was found and disabled');
+
+      const revertedCols = await page.evaluate(readColumns);
+
+      assert.equal(builtCols.length, revertedCols.length, 'same column count built vs. the table as it was');
+      for (let i = 0; i < builtCols.length; i++) {
+        assert.equal(builtCols[i].label, revertedCols[i].label, `column ${i} label matches between built and reverted`);
+        assert.ok(Math.abs(builtCols[i].left - revertedCols[i].left) <= 0.5,
+          `column ${i} (${builtCols[i].label}) left edge: built ${builtCols[i].left} vs. the table as it was ${revertedCols[i].left}`);
+        assert.ok(Math.abs(builtCols[i].width - revertedCols[i].width) <= 0.5,
+          `column ${i} (${builtCols[i].label}) width: built ${builtCols[i].width} vs. the table as it was ${revertedCols[i].width}`);
       }
       await page.close();
+    } finally {
+      await browser.close();
+    }
+  });
+
+  it('R4-2: the structural facts that keep the desktop table from drifting again -- no column min-width floor, auto table layout, real table-row/table-cell display, the mobile row hidden -- at 1280 and 900', async (t) => {
+    if (bootSkipReason) { t.skip(bootSkipReason); return; }
+    const { chromium } = playwright;
+    const browser = await chromium.launch();
+    try {
+      for (const width of [1280, 900]) {
+        const page = await openDashboard(browser, { width, height: 900 });
+        const facts = await page.evaluate(() => {
+          const table = document.querySelector('.triage-table');
+          const headerMinWidths = Array.from(document.querySelectorAll('.triage-table thead th')).map((th) => getComputedStyle(th).minWidth);
+          const dataRow = document.querySelector('.triage-data-row');
+          const dataCell = dataRow.querySelector('td');
+          const metaMobile = document.querySelector('.triage-cell-meta-mobile');
+          return {
+            tableLayout: getComputedStyle(table).tableLayout,
+            headerMinWidths,
+            rowDisplay: getComputedStyle(dataRow).display,
+            cellDisplay: getComputedStyle(dataCell).display,
+            metaMobileDisplay: metaMobile ? getComputedStyle(metaMobile).display : null,
+          };
+        });
+        assert.equal(facts.tableLayout, 'auto', `the table's computed table-layout is auto at ${width}`);
+        assert.ok(facts.headerMinWidths.length > 0, `header cells found at ${width}`);
+        for (let i = 0; i < facts.headerMinWidths.length; i++) {
+          assert.ok(facts.headerMinWidths[i] === '0px' || facts.headerMinWidths[i] === 'auto',
+            `header cell ${i}'s computed min-width is 0px or auto at ${width} (got ${facts.headerMinWidths[i]})`);
+        }
+        assert.equal(facts.rowDisplay, 'table-row', `a data row's computed display is table-row at ${width}`);
+        assert.equal(facts.cellDisplay, 'table-cell', `a data cell's computed display is table-cell at ${width}`);
+        assert.equal(facts.metaMobileDisplay, 'none', `.triage-cell-meta-mobile's computed display is none at ${width}`);
+        await page.close();
+      }
     } finally {
       await browser.close();
     }
