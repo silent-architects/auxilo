@@ -512,7 +512,9 @@ cd "${REPO_ROOT}"
 # run at 1440px) + one new R2-3 text-wrap assertion. 4313 + 3 = 4316.
 # Verified: npm test -> 4316/4309/0/7 (0 fail; 7 skipped = same pre-existing
 # sandbox skips).
-EXPECTED_TEST_COUNT=4316
+# The local path guard counts one test per tracked file, so the count is
+# 4317 once test/hero-0927.test.js is tracked.
+EXPECTED_TEST_COUNT=4317
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
