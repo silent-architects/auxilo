@@ -578,6 +578,7 @@
       white-space: nowrap;
     }
 
+
     .triage-table td {
       padding: 8px 10px;
       border-bottom: 1px solid rgba(229,229,227,0.06);
@@ -597,7 +598,13 @@
       justify-content: center;
       cursor: pointer;
     }
-    @media (max-width: 600px) {
+    /* R3-2: breakpoint measured, not guessed at 600 -- see the main phone
+       block below for the measurement and the existing-breakpoint choice
+       (900, matching styles.css's own @media (max-width: 900px)). This
+       tap-target floor must cover the SAME range as the stacked layout it
+       belongs to, or the 601-899px band would render the stacked block
+       (needing 44x44) with the table's un-enlarged checkbox. */
+    @media (max-width: 899px) {
       .triage-check-label { width: 44px; height: 44px; }
     }
 
@@ -612,6 +619,24 @@
       text-align: left;
       text-decoration: underline;
       text-decoration-color: rgba(229,229,227,0.25);
+      /* P-2 (phone-width review-table fix): a title with no whitespace must
+         break inside its own control instead of stretching the column --
+         and so the table -- wider than the viewport. Applies at every
+         width, 1280 included; this is the one exception P-7 allows above
+         the breakpoint (900, R3-2).
+         R3-1: overflow-wrap:break-word, NOT :anywhere and NOT word-break:
+         break-word (a legacy alias that computes to the same thing as
+         :anywhere). :anywhere counts toward the MIN-CONTENT intrinsic size
+         table auto-layout uses to size every column -- shrinking Title's
+         min-content let auto-layout give Title far LESS than production's
+         width at 1280 and hand the freed space to Category/Lane-signals,
+         changing every column's width and left edge, which P-7 forbids.
+         :break-word does not affect intrinsic sizing at all (per spec) --
+         column widths come out identical to production -- it only kicks
+         in at actual paint time, as a last resort, if the title still
+         doesn't fit the column production would have given it anyway. */
+      overflow-wrap: break-word;
+      max-width: 100%;
     }
 
     .triage-title-btn:hover { text-decoration-color: var(--aurum); }
@@ -622,6 +647,21 @@
       font-size: 11px;
       line-height: 1.45;
     }
+
+    /* Hidden by default; shown only below the breakpoint (media block
+       further down),
+       where it is a SEPARATE cell from the nested .triage-why--desktop
+       copy under the title -- exactly one of the two is ever visible at a
+       given width. See that block's comment for why two copies exist. */
+    .triage-cell-why-mobile { display: none; }
+
+    /* R2 (round 2): a duplicate cell, hidden by default (600+), holding the
+       score/category/lane/submitted-date badges as a natural-width
+       flex-wrap row below the breakpoint -- see the media block below for why
+       this replaces trying to lay .triage-cell-quality/category/lane/
+       submitted out with CSS Grid columns. */
+    .triage-cell-meta-mobile { display: none; }
+    .triage-meta-badge { white-space: nowrap; }
 
     .triage-group-row td {
       padding-top: 14px;
@@ -642,6 +682,160 @@
     }
 
     .triage-row-done td { opacity: 0.45; }
+
+    /* P-1..P-6 (phone-width review-table fix); revised R2 after the first
+       pass broke ordinary badges mid-word ("CODE-EXECUTION" -> "CODE-
+       EXECUTI"/"ON"); revised again R3 (breakpoint moved from the literal
+       number 600 to a measured value, and the exact spacing rulings
+       below). Below the breakpoint each learning becomes a stacked block
+       instead of a table row. The markup keeps its table tags and gains
+       explicit ARIA table roles (role=table/rowgroup/row/columnheader/
+       cell, set in the script below) so the table stays a semantic table
+       for assistive technology at every width (P-3) -- only the CSS box
+       type changes here. The header row is hidden below the breakpoint.
+
+       R3-2 (why 900, not 600): measured against a REALISTIC seed (an
+       ordinary title, the longest real category enum value
+       "payment-financial", the longest real no-space signal "injection"
+       -- not the pathological 120-char-title/70-char-tag torture seed
+       that exists to stress the STACKED layout elsewhere, since that seed
+       never fits any width under this card's own 860px max-width cap
+       (.dash-wrap) and so can't be what "production's own table fits"
+       means). Swept the production table (no column floor) downward from
+       900: every real no-space badge <=20 chars stayed one line and the
+       wrap never scrolled sideways down to viewport 860; at 855 and below
+       "payment-financial" wrapped to two lines. 900 is the narrowest
+       EXISTING breakpoint (styles.css already has "@media (max-width:
+       900px)") at or above that measured 860px threshold.
+
+       Row 1 is the checkbox (44px) plus the title (spans the rest of the
+       grid). Row 2 (R2-1/R2-4) is NOT three CSS Grid columns any more --
+       a fixed-width column forces its content to fit that column's share
+       of the row regardless of the content's own natural width, which is
+       exactly what broke "CODE-EXECUTION": it was squeezed into 1/3 of a
+       291px row and had nowhere to go but break internally. Grid also
+       cannot merge three separate sibling <td>s (quality/category/lane)
+       into one shared wrapping flex line -- items given the same
+       grid-area overlap instead of flowing side by side. So row 2 is
+       instead a SEPARATE, single cell (.triage-cell-meta-mobile, built in
+       the script below) holding independent copies of the score, the
+       category tag, the lane/signal tags AND the submitted date as
+       natural-width flex items in one flex-wrap row: each keeps its own
+       content width, equal 8px gaps apply across and down (R2-1/R3-3),
+       and an item that doesn't fit moves to a new line as a whole unit --
+       including the date (R2-4), which is just the last item in that
+       same row. The four originals (.triage-cell-quality/category/lane/
+       submitted) stay in the DOM at the breakpoint and above (R2-3/R3-1:
+       unchanged there) and are hidden here.
+       Row 3 is the reason line a needs-your-eyes row carries (P-1's "any
+       reason line the row carries today"), via the same desktop-cell-
+       hidden/mobile-cell-shown duplication as the meta line.
+
+       R3-3 (spacing): row-gap 8px separates title -> meta line -> reason
+       line (one uniform grid row-gap, so both hops are 8px). Blocks
+       (including a group heading before its first block) are separated
+       by one uniform value, 16px -- see tbody below, which owns ALL
+       inter-row spacing now; a block no longer carries its own top/bottom
+       padding (that would add a second, different gap on top of the
+       tbody gap), and the group heading's own top padding is zeroed
+       below for the same reason. */
+    @media (max-width: 899px) {
+      .triage-table-wrap { overflow-x: visible; }
+      .triage-table thead { display: none; }
+      .triage-table { display: block; width: 100%; }
+      /* R3-3: the ONE value that separates every pair of blocks, group
+         headings included -- flex-column + gap puts it in exactly one
+         place, so "blocks" and "a group heading before its first block"
+         can't drift apart the way two independently-tuned paddings did. */
+      .triage-table tbody {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        width: 100%;
+      }
+      .triage-table tr { display: block; }
+      .triage-table tr.triage-group-row td { display: block; padding-top: 0; }
+
+      .triage-table tr.triage-data-row {
+        display: grid;
+        grid-template-columns: 44px 1fr;
+        grid-template-areas:
+          "check title"
+          ".     meta"
+          ".     why";
+        column-gap: 10px;
+        row-gap: 8px;
+        border-bottom: 1px solid rgba(229,229,227,0.06);
+      }
+      .triage-table tr.triage-data-row td {
+        display: block;
+        border-bottom: none;
+        padding: 0;
+        min-width: 0;
+      }
+
+      .triage-cell-check { grid-area: check; }
+      .triage-cell-title { grid-area: title; }
+      /* Specificity must match (or beat) ".triage-table tr.triage-data-row
+         td" above (0,2,2) -- a bare ".triage-cell-quality { display:none }"
+         (0,1,0) LOSES that cascade regardless of source order, so the
+         four originals stayed visible alongside their mobile duplicates. */
+      .triage-table tr.triage-data-row td.triage-cell-quality,
+      .triage-table tr.triage-data-row td.triage-cell-category,
+      .triage-table tr.triage-data-row td.triage-cell-lane,
+      .triage-table tr.triage-data-row td.triage-cell-submitted { display: none; }
+      /* Specificity must match (or beat) ".triage-table tr.triage-data-row
+         td" above (0,2,2) -- a bare ".triage-cell-meta-mobile { display:
+         flex }" (0,1,0) LOSES that cascade, leaving this cell's computed
+         display "block": gap has no effect there (no flex line to space),
+         so the badges sat with a zero gap despite the property being set
+         (measured: adjacent items' rects touched exactly, 0px apart). */
+      .triage-table tr.triage-data-row td.triage-cell-meta-mobile {
+        grid-area: meta;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        /* R2-1: one `gap` value gives equal gaps between badges both
+           across (column-gap) and down (row-gap). */
+        gap: 8px;
+      }
+      .triage-cell-why-mobile { grid-area: why; display: block; }
+
+      /* R2-2: a badge may break at a hyphen or a space (the browser's
+         normal line-breaking already does this with NO extra CSS --
+         U+002D HYPHEN-MINUS is a standard break-after point); it breaks
+         inside a word only as a last resort, when one unbroken run is
+         itself wider than the ROW it's in (overflow-wrap: break-word, NOT
+         :anywhere, which also breaks a run that would have fit). Here
+         "the row" is this flex-wrap line, much narrower than the 140px
+         desktop column floor (R2-3, above) -- so an ordinary short badge
+         never needs this at all; only the long-tag seed does. */
+      .triage-cell-meta-mobile .tag,
+      .triage-cell-meta-mobile .triage-meta-badge {
+        overflow-wrap: break-word;
+        flex: 0 0 auto;
+        max-width: 100%;
+      }
+
+      /* The desktop copies (nested under the title; the four cells above)
+         are hidden below the breakpoint -- the separate mobile cells take over so
+         the reason line lands after the meta line, and the date joins
+         the meta line instead of dangling alone below it. */
+      .triage-why--desktop { display: none; }
+
+      .triage-cell-title .triage-title-btn {
+        /* NOT display:flex -- a flex container's anonymous text item does
+           not reliably wrap against the container's own cross size in
+           this engine (measured: a 237px-wide flex box let a 520px-wide
+           unbroken/lightly-spaced string overflow instead of wrapping).
+           table-cell + vertical-align does not have that failure mode and
+           still centers a short title in the 44px-tall box. */
+        display: table-cell;
+        vertical-align: middle;
+        width: 100%;
+        min-height: 44px;
+      }
+    }
 
     /* ── API key input area ─────────────────────────────────────────── */
     .apikey-row {
@@ -2903,11 +3097,20 @@
     wrap.setAttribute('aria-label', 'Review queue table, scrolls horizontally');
     var table = document.createElement('table');
     table.className = 'triage-table';
+    // P-3: explicit ARIA table roles, present at every width. Below 600 the
+    // CSS reflows each row to a stacked block (its display overridden away
+    // from table-row/table-cell), which some assistive tech takes as a cue
+    // to drop a table's IMPLICIT row/cell semantics -- explicit roles keep
+    // this a semantic table regardless of which CSS box type is in effect.
+    table.setAttribute('role', 'table');
 
     var thead = document.createElement('thead');
+    thead.setAttribute('role', 'rowgroup');
     var headRow = document.createElement('tr');
+    headRow.setAttribute('role', 'row');
     ['', 'Quality', 'Category', 'Lane / signals', 'Title', 'Submitted'].forEach(function (label) {
       var th = document.createElement('th');
+      th.setAttribute('role', 'columnheader');
       th.textContent = label;
       headRow.appendChild(th);
     });
@@ -2915,10 +3118,13 @@
     table.appendChild(thead);
 
     var tbody = document.createElement('tbody');
+    tbody.setAttribute('role', 'rowgroup');
     function addGroupRow(label) {
       var tr = document.createElement('tr');
       tr.className = 'triage-group-row';
+      tr.setAttribute('role', 'row');
       var td = document.createElement('td');
+      td.setAttribute('role', 'cell');
       td.colSpan = 6;
       td.textContent = label;
       tr.appendChild(td);
@@ -2949,6 +3155,28 @@
     el.appendChild(resultEl);
 
     updateBulkBar();
+  }
+
+  // P-3: a plain-text mirror of verdictTags()'s labels, for the
+  // Lane/signals cell's aria-label (so a screen reader gets a name for the
+  // cell once its column header is hidden below the breakpoint). Kept as its own
+  // function -- rather than reading verdictTags()'s rendered textContent --
+  // so the two never disagree about spacing/punctuation between labels.
+  function laneSignalsAriaText(row) {
+    var parts = [];
+    if (AuxiloReviewLanes.isPrivateRow(row)) parts.push('priv');
+    var lane = AuxiloReviewLanes.laneForRow(row).lane;
+    if (lane === AuxiloReviewLanes.READY) { parts.push('ready'); return parts.join(', '); }
+    if (lane === AuxiloReviewLanes.NEEDS_SCORE) { parts.push('needs score'); return parts.join(', '); }
+    var flagParts = (row.flags || []).map(function (f) {
+      return f === 'content_sensitivity' ? 'sensitive'
+        : f === 'near_duplicate' ? 'duplicate'
+        : f === 'process_advice' ? 'process advice'
+        : f === 'account_vocab' ? 'account vocabulary'
+        : f;
+    });
+    parts = parts.concat(flagParts.length ? flagParts : ['needs eyes']);
+    return parts.join(', ');
   }
 
   function verdictTags(row) {
@@ -2998,13 +3226,21 @@
   function buildTriageRow(row) {
     var tr = document.createElement('tr');
     tr.id = 'triage-row-' + row.id;
+    // P-1: below the breakpoint this row becomes a stacked block via CSS
+    // (.triage-data-row); role=row keeps it a semantic table row at every
+    // width regardless of the CSS box type in effect (P-3).
+    tr.className = 'triage-data-row';
+    tr.setAttribute('role', 'row');
 
     // Checkbox. V-1: wrapped in a <label> sized to a 44x44 tap target --
     // clicking anywhere in the label toggles the native checkbox it wraps
     // (standard label-for-input semantics), so the row's action control is
     // never smaller than a touch target at any width, while the checkbox
-    // itself keeps its normal small, native visual size.
+    // itself keeps its normal small, native visual size. P-1: this cell is
+    // line 1 of the phone-width block, level with the title.
     var tdCheck = document.createElement('td');
+    tdCheck.className = 'triage-cell-check';
+    tdCheck.setAttribute('role', 'cell');
     var checkLabel = document.createElement('label');
     checkLabel.className = 'triage-check-label';
     var box = document.createElement('input');
@@ -3015,13 +3251,23 @@
     tdCheck.appendChild(checkLabel);
     tr.appendChild(tdCheck);
 
-    // Quality
+    // Quality. P-3: the column header ("Quality") is hidden below the
+    // breakpoint, so the cell carries its own accessible name (e.g.
+    // "Quality 19/20") instead of leaving the bare number with no header
+    // context.
     var tdQ = document.createElement('td');
-    tdQ.textContent = row.quality == null ? '--' : (row.quality + '/20');
+    tdQ.className = 'triage-cell-quality';
+    tdQ.setAttribute('role', 'cell');
+    var qualityText = row.quality == null ? '--' : (row.quality + '/20');
+    tdQ.textContent = qualityText; // textContent -- safe
+    tdQ.setAttribute('aria-label', 'Quality ' + qualityText);
     tr.appendChild(tdQ);
 
     // Category
     var tdCat = document.createElement('td');
+    tdCat.className = 'triage-cell-category';
+    tdCat.setAttribute('role', 'cell');
+    tdCat.setAttribute('aria-label', 'Category ' + (row.category || 'not set'));
     if (row.category) {
       var catTag = document.createElement('span');
       catTag.className = 'tag tag-category';
@@ -3032,19 +3278,31 @@
 
     // Lane / signals
     var tdV = document.createElement('td');
+    tdV.className = 'triage-cell-lane';
+    tdV.setAttribute('role', 'cell');
+    tdV.setAttribute('aria-label', 'Lane and signals: ' + laneSignalsAriaText(row));
     tdV.appendChild(verdictTags(row));
     tr.appendChild(tdV);
 
-    // Title (click to expand full body + single-item actions)
+    // Title (click to expand full body + single-item actions). P-1/P-2:
+    // line 1 of the phone-width block, beside the checkbox. Its reason
+    // line (below) stays nested here for 600+, where it renders exactly as
+    // it does today; below the breakpoint that copy is hidden and a duplicate in its
+    // own cell (triage-cell-why-mobile, below) renders after line 2
+    // instead, since P-1 orders the reason line after the quality/
+    // category/lane line.
     var tdTitle = document.createElement('td');
+    tdTitle.className = 'triage-cell-title';
+    tdTitle.setAttribute('role', 'cell');
     var titleBtn = document.createElement('button');
     titleBtn.className = 'triage-title-btn';
     titleBtn.textContent = row.title || '(no title)'; // textContent -- safe
     titleBtn.onclick = function () { toggleTriageDetail(row, tr); };
     tdTitle.appendChild(titleBtn);
-    if (AuxiloReviewLanes.laneForRow(row).lane === AuxiloReviewLanes.NEEDS_EYES && row.why) {
+    var isNeedsEyesWithWhy = AuxiloReviewLanes.laneForRow(row).lane === AuxiloReviewLanes.NEEDS_EYES && row.why;
+    if (isNeedsEyesWithWhy) {
       var why = document.createElement('div');
-      why.className = 'triage-why';
+      why.className = 'triage-why triage-why--desktop';
       why.textContent = row.why; // textContent -- safe
       tdTitle.appendChild(why);
     }
@@ -3052,14 +3310,98 @@
 
     // Submitted
     var tdDate = document.createElement('td');
+    tdDate.className = 'triage-cell-submitted';
+    tdDate.setAttribute('role', 'cell');
     if (row.created_at) {
       var d = new Date(row.created_at);
-      tdDate.textContent = isNaN(d.getTime()) ? row.created_at : d.toLocaleDateString(); // textContent -- safe
+      var dateText = isNaN(d.getTime()) ? row.created_at : d.toLocaleDateString();
+      tdDate.textContent = dateText; // textContent -- safe
+      tdDate.setAttribute('aria-label', 'Submitted ' + dateText);
       tdDate.style.whiteSpace = 'nowrap';
       tdDate.style.color = 'var(--slate)';
       tdDate.style.fontSize = '12px';
     }
     tr.appendChild(tdDate);
+
+    // R2 (round 2): a duplicate cell, hidden at 600+ (CSS), shown below
+    // 600 INSTEAD of the four cells above, holding independent copies of
+    // the score, the category tag, EACH lane/signal tag, and the
+    // submitted date as separate flex items in one wrapping row. This is
+    // not just a repositioning of the same nodes: R2-1 requires each
+    // badge to keep its own natural width and wrap as a whole unit when
+    // the row runs out of room, and R2-4 requires the date to join that
+    // same wrapping row rather than sit alone on its own line -- neither
+    // is possible by only repositioning three separate sibling <td>s with
+    // CSS Grid (a shared grid-area overlaps them instead of flowing them
+    // side by side; separate grid-areas fix each a share of the row
+    // regardless of its own content width, which is what broke ordinary
+    // badges like "CODE-EXECUTION" in the first pass of this fix).
+    var tdMetaMobile = document.createElement('td');
+    tdMetaMobile.className = 'triage-cell-meta-mobile';
+    tdMetaMobile.setAttribute('role', 'cell');
+    var metaLabelParts = [
+      'Quality ' + qualityText,
+      'Category ' + (row.category || 'not set'),
+      'Lane and signals: ' + laneSignalsAriaText(row),
+    ];
+    if (dateText) metaLabelParts.push('Submitted ' + dateText);
+    tdMetaMobile.setAttribute('aria-label', metaLabelParts.join(', '));
+
+    var qualityBadge = document.createElement('span');
+    qualityBadge.className = 'triage-meta-badge';
+    qualityBadge.textContent = qualityText; // textContent -- safe
+    tdMetaMobile.appendChild(qualityBadge);
+
+    if (row.category) {
+      var catBadgeMobile = document.createElement('span');
+      catBadgeMobile.className = 'tag tag-category';
+      catBadgeMobile.textContent = row.category; // textContent -- safe
+      tdMetaMobile.appendChild(catBadgeMobile);
+    }
+
+    // Unwrap verdictTags()'s holder so each lane/signal tag is its OWN
+    // flex item (R2-1: "each badge... moves to a new line as a whole
+    // badge" -- a cluster of tags kept inside one shared wrapper would
+    // have to move together instead of each wrapping independently).
+    // R3-3: verdictTags() sets an inline marginRight:4px on the private
+    // tag and on each flag tag -- spacing meant for its ORIGINAL plain
+    // inline-block desktop context, which has no flex `gap` of its own.
+    // Left in place here it stacks with this row's 8px gap (measured:
+    // 12px between the injection tag and its neighbor, not 8), so it is
+    // cleared on this mobile-only copy; the separate call building the
+    // DESKTOP cell's tags (tdV, above) is untouched.
+    var laneHolderMobile = verdictTags(row);
+    while (laneHolderMobile.firstChild) {
+      var laneChildMobile = laneHolderMobile.firstChild;
+      if (laneChildMobile.style) laneChildMobile.style.marginRight = '';
+      tdMetaMobile.appendChild(laneChildMobile);
+    }
+
+    if (dateText) {
+      var dateBadge = document.createElement('span');
+      dateBadge.className = 'triage-meta-badge';
+      dateBadge.style.color = 'var(--slate)';
+      dateBadge.style.fontSize = '12px';
+      dateBadge.textContent = dateText; // textContent -- safe
+      tdMetaMobile.appendChild(dateBadge);
+    }
+    tr.appendChild(tdMetaMobile);
+
+    // P-1: below the breakpoint, the reason line renders AFTER the quality/
+    // category/lane line -- a separate cell from the one nested in the
+    // title (above), which 600+ uses instead. CSS shows exactly one of the
+    // two at a given width (see .triage-why--desktop / .triage-cell-why-
+    // mobile), so the same words (row.why) are never read twice.
+    if (isNeedsEyesWithWhy) {
+      var tdWhyMobile = document.createElement('td');
+      tdWhyMobile.className = 'triage-cell-why-mobile';
+      tdWhyMobile.setAttribute('role', 'cell');
+      var whyMobile = document.createElement('div');
+      whyMobile.className = 'triage-why';
+      whyMobile.textContent = row.why; // textContent -- safe
+      tdWhyMobile.appendChild(whyMobile);
+      tr.appendChild(tdWhyMobile);
+    }
 
     return tr;
   }
