@@ -1008,7 +1008,7 @@ The money model: a balance is held in dollars, a pack adds what was paid, an unl
 | SLW-2 | Money model: dollar balance, caps on balance and daily purchases, refund and dispute handling, builder share reversal. `lib/earnings.js` unchanged. Adversarial review run, every finding ruled and fixed. | P1 | SITE-PM | SHIPPED 2026-09-27, verified live |
 | SLW-3 | Terms of Service and privacy policy, version `2026-09-27-credit-balance-a2`. | P1 | SITE-PM + GOV-2 | SHIPPED 2026-09-27, verified live |
 | SLW-4 | Stripe webhook listens to the refund and dispute events, so that handling runs. | P1 | Tyler | DONE 2026-09-27, verified in the Stripe dashboard |
-| SLW-5 | npm release carrying the launch wording in the CLI consent text and the MCP tool descriptions. | P1 | TECH-PM | OPEN |
+| SLW-5 | npm release carrying the launch wording in the CLI consent text and the MCP tool descriptions. Before it, correct two sentences in `mcp-server.js` against the code: what the withdraw tool says about when earnings reach a wallet, and who the unlock tool says sets the price. | P1 | TECH-PM | OPEN |
 | SLW-6 | Review approval record for accounts not yet cleared to publish. (H) | P1 | TECH-PM | OPEN, before any outside account is cleared |
 | SLW-7 | Before withdrawals open. (H) | P1 | TECH-PM + Tyler | OPEN |
 | SLW-8 | Welcome email is on (`WELCOME_EMAIL_ENABLED = "true"` in `fly.toml`, the owner's word 2026-09-27). Unlock notification is built and off (`EARNING_NOTIFICATIONS_ENABLED`, on only when exactly `true`). Before it is set the privacy policy names it, the retention table covers its queue, and SLW-14 is done. | P1 | Tyler + GOV-2 | OPEN for the unlock notification |
@@ -1023,19 +1023,21 @@ The money model: a balance is held in dollars, a pack adds what was paid, an unl
 | SLW-17 | Dashboard review table below 900 wide: each learning is a stacked block with its title in view, and a badge never breaks inside a word. From 900 wide the table is unchanged. | P3 | SITE-PM | SHIPPED 2026-09-28, verified live |
 | SLW-18 | Terms acceptance on the dashboard: read the Terms to the end, then accept (the owner's ruling 2026-09-27). A session that has ended returns to the sign-in screen. Legal pages render inline code. Adversarial review and accessibility audit run, every finding ruled and fixed. | P1 | SITE-PM | SHIPPED 2026-09-27, verified live |
 | SLW-19 | Homepage headline `Earn from the work your AI already does.` and its lede (the owner's pick, 2026-09-27). | P1 | SITE-PM | SHIPPED 2026-09-28, verified live |
-| SLW-20 | Uniform spacing across the site, to the Art Director's measured sheet: one gutter, one section rhythm, one scale (the owner's instruction, 2026-09-27). | P1 | SITE-PM | BUILT, in Art Director review |
+| SLW-20 | Uniform spacing across the site, to the Art Director's measured sheet: one gutter, one section rhythm, one scale (the owner's instruction, 2026-09-27). | P1 | SITE-PM | IN BUILD, ships when the Art Director's own measurement passes every rule |
+| SLW-21 | The site says `earn money` and `earnings`, never `a share`, on every served surface (the owner's ruling, 2026-09-28). `test/earn-money-guard.test.js` keeps it so. | P1 | SITE-PM | SHIPPED 2026-09-28, verified live |
+| SLW-22 | `/for-builders`: the hero's main button sits below the first screen at desktop and phone sizes. Needs a layout ruling from the Art Director. | P2 | SITE-PM | OPEN |
 
 ## Counts
 
 | Priority | Open | On Hold | Deferred | Done/Verified | Total |
 |----------|------|---------|----------|---------------|-------|
 | P0 (blocks launch) | **1** | 0 | 0 | **34** | 35 |
-| P1 (blocks real money / production) | **21** | 6 | 2 | 87 | 116 |
-| P2 (blocks scale) | **33** | 1 | 0 | 30 | 64 |
+| P1 (blocks real money / production) | **21** | 6 | 2 | 88 | 117 |
+| P2 (blocks scale) | **34** | 1 | 0 | 30 | 65 |
 | P3 (polish) | **6** | 0 | 0 | 6 | 12 |
-| **Total** | **61** | **7** | **2** | **157** | **227** |
+| **Total** | **62** | **7** | **2** | **158** | **229** |
 
-> **Section 37 (SITE-PM, 2026-09-27).** The table includes the 20 rows SLW-1 to SLW-20 (11 P1, 6 P2, 3 P3). SLW-1 to SLW-4 and SLW-17 to SLW-19 are counted done. The other 13 are open.
+> **Section 37 (SITE-PM, 2026-09-27).** The table includes the 22 rows SLW-1 to SLW-22 (12 P1, 7 P2, 3 P3). SLW-1 to SLW-4, SLW-17 to SLW-19 and SLW-21 are counted done. The other 14 are open.
 
 > **Counts caveat (PM, 2026-08-28).** The table above now includes the nine §34 rows and the fifteen §35 rows (AD-1..AD-15: 3 P1, 11 P2, 1 P3). It still does NOT include `R13-CLOSE` and `GTM-HF` (§29) — their statuses have not been re-derived, so the totals remain understated by at least those two rows and want a full recount by whoever owns them.
 
