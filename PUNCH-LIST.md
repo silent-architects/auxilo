@@ -1020,20 +1020,22 @@ The money model: a balance is held in dollars, a pack adds what was paid, an unl
 | SLW-14 | Unlock notification, before its flag is set: bounce and complaint handling, a signed opt-out link, async queue writes. | P2 | TECH-PM | OPEN |
 | SLW-15 | The catalog preview block shows human visitors the advisory written for agents. | P3 | TECH-PM + GOV-3 | OPEN |
 | SLW-16 | openapi.json: internal ticket codes in description strings, with a guard test so they do not return. | P3 | TECH-PM | OPEN |
-| SLW-17 | Dashboard review table at phone width: rows stack below 600 wide so the title is in view. Row checkboxes are 44 by 44 at phone width as of 2026-09-27. | P3 | SITE-PM | OPEN |
+| SLW-17 | Dashboard review table below 900 wide: each learning is a stacked block with its title in view, and a badge never breaks inside a word. From 900 wide the table is unchanged. | P3 | SITE-PM | SHIPPED 2026-09-28, verified live |
 | SLW-18 | Terms acceptance on the dashboard: read the Terms to the end, then accept (the owner's ruling 2026-09-27). A session that has ended returns to the sign-in screen. Legal pages render inline code. Adversarial review and accessibility audit run, every finding ruled and fixed. | P1 | SITE-PM | SHIPPED 2026-09-27, verified live |
+| SLW-19 | Homepage headline `Earn from the work your AI already does.` and its lede (the owner's pick, 2026-09-27). | P1 | SITE-PM | SHIPPED 2026-09-28, verified live |
+| SLW-20 | Uniform spacing across the site, to the Art Director's measured sheet: one gutter, one section rhythm, one scale (the owner's instruction, 2026-09-27). | P1 | SITE-PM | BUILT, in Art Director review |
 
 ## Counts
 
 | Priority | Open | On Hold | Deferred | Done/Verified | Total |
 |----------|------|---------|----------|---------------|-------|
 | P0 (blocks launch) | **1** | 0 | 0 | **34** | 35 |
-| P1 (blocks real money / production) | **20** | 6 | 2 | 86 | 114 |
+| P1 (blocks real money / production) | **21** | 6 | 2 | 87 | 116 |
 | P2 (blocks scale) | **33** | 1 | 0 | 30 | 64 |
-| P3 (polish) | **7** | 0 | 0 | 5 | 12 |
-| **Total** | **61** | **7** | **2** | **155** | **225** |
+| P3 (polish) | **6** | 0 | 0 | 6 | 12 |
+| **Total** | **61** | **7** | **2** | **157** | **227** |
 
-> **Section 37 (SITE-PM, 2026-09-27).** The table includes the 18 rows SLW-1 to SLW-18 (9 P1, 6 P2, 3 P3). SLW-1 to SLW-4 and SLW-18 are counted done. The other 13 are open.
+> **Section 37 (SITE-PM, 2026-09-27).** The table includes the 20 rows SLW-1 to SLW-20 (11 P1, 6 P2, 3 P3). SLW-1 to SLW-4 and SLW-17 to SLW-19 are counted done. The other 13 are open.
 
 > **Counts caveat (PM, 2026-08-28).** The table above now includes the nine §34 rows and the fifteen §35 rows (AD-1..AD-15: 3 P1, 11 P2, 1 P3). It still does NOT include `R13-CLOSE` and `GTM-HF` (§29) — their statuses have not been re-derived, so the totals remain understated by at least those two rows and want a full recount by whoever owns them.
 
