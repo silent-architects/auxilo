@@ -506,7 +506,9 @@ cd "${REPO_ROOT}"
 # Uniform spacing: the spacing suite measures every page at three widths
 # against the spacing tokens, and compares type against a committed baseline.
 # The pin is the total npm test prints on the integrated tree.
-EXPECTED_TEST_COUNT=4403
+# FIX-UNIT-LEGAL-CLEARANCE (2026-09-28): the missing nav-clearance test, new
+# test/nav-clearance.test.js (93). Verified `npm test` discovered count: 4497.
+EXPECTED_TEST_COUNT=4497
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

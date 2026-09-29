@@ -13493,7 +13493,7 @@ function serveLegalPage(c, filename, title, seo) {
   ${seoTags}
   <link rel="stylesheet" href="/styles.css?v=eba132a8"/>
   <style>
-    .legal-wrap{max-width:720px;margin:0 auto;padding:120px 24px 80px;color:#E5E5E3}
+    .legal-wrap{max-width:720px;margin-left:auto;margin-right:auto;padding:120px 24px 80px;color:#E5E5E3}
     .legal-wrap h1{color:#FAFAF8;font-size:32px;margin-bottom:var(--space-body)}
     .legal-wrap h2{color:#FAFAF8;font-size:22px;margin:32px 0 var(--space-body)}
     .legal-wrap h3{color:#FAFAF8;font-size:18px;margin:24px 0 var(--space-body)}
@@ -13506,7 +13506,7 @@ function serveLegalPage(c, filename, title, seo) {
     .legal-wrap hr{border:none;border-top:1px solid rgba(229,229,227,0.12);margin:24px 0}
     .legal-wrap pre.legal-pre{background:#111;border:1px solid rgba(229,229,227,0.12);border-radius:6px;padding:16px;margin-bottom:16px;overflow-x:auto;white-space:pre-wrap;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;line-height:1.6;color:#E5E5E3}
     .legal-wrap code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:inherit;background:none;padding:0;color:inherit}
-    .legal-back{display:inline-block;margin-bottom:32px;color:#C9A84C;text-decoration:none;font-size:14px}
+    .legal-back{display:inline-block;vertical-align:top;margin-bottom:32px;color:#C9A84C;text-decoration:none;font-size:14px}
     .legal-back:hover{text-decoration:underline}
   </style>
 </head>
