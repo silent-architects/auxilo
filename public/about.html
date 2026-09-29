@@ -32,7 +32,7 @@
   <meta name="theme-color" content="#0A0A0A" />
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=2d91b7aa" />
+  <link rel="stylesheet" href="/styles.css?v=eba132a8" />
   <style>
     /* N3: this page now links the shared stylesheet like every other page.
        DR-6 ruling still applies to what's left below: near-miss token values
@@ -84,10 +84,19 @@
 
     .logo span { color: var(--ivory); }
 
+    /* SPACING-0927 (BUILD-BRIEF-SPACING.md A1b): the reading column is
+       720px (was a bespoke 760px), centred, with the same rhythm padding
+       and the same shared token every body section already uses --
+       var(--section-pad) reproduces the ruled 304/44/16 gutter through
+       plain centering math (max-width 720 inside the viewport), not a
+       bespoke value. Nav clearance (`margin-top`) is a separate, sitewide
+       `main` rule in styles.css; this page's own margin only needs to add
+       the auto left/right centering on top of it. */
     main {
-      max-width: 760px;
-      margin: 0 auto;
-      padding: 3rem 2rem;
+      max-width: 720px;
+      margin-left: auto;
+      margin-right: auto;
+      padding: var(--section-pad);
       flex: 1;
       width: 100%;
     }
@@ -102,7 +111,8 @@
       font-weight: 700;
       line-height: 1.1;
       letter-spacing: -0.02em;
-      margin-bottom: 0.5rem;
+      /* SPACING-0927 rule 5: heading-to-next-element is 16px sitewide (was 8). */
+      margin-bottom: 1rem;
     }
 
     /* ── Component Table ───────────────────────────────────────── */
@@ -114,10 +124,14 @@
       margin-bottom: 2.5rem;
     }
 
+    /* SPACING-0927 R2-2a: gap between list items is 16px, named by the
+       sheet -- each row's own top/bottom padding supplies half the gap to
+       the row above/below (was 0.9rem=14.4px each, giving ~28.8 between
+       rows; 0.5rem=8px each gives 16). */
     .component-row {
       display: flex;
       align-items: center;
-      padding: 0.9rem 1.25rem;
+      padding: 0.5rem 1.25rem;
       border-bottom: 1px solid var(--border);
       gap: 1rem;
     }
@@ -142,39 +156,33 @@
 
     /* ── Mobile ─────────────────────────────────────────────────── */
     @media (max-width: 640px) {
-      main { padding: 2rem 1.25rem; }
+      /* SPACING-0927: main's own padding is var(--section-pad) at every
+         width (base rule above, scales at the shared 600px breakpoint, not
+         this component's own 640px grid breakpoint); no override needed. */
 
       /* Component rows stack so name + desc + badge don't push wide. */
+      /* SPACING-0927 R2-2b: column-gap 0.75rem=12px ties 8/16 -- tie goes to the larger value. */
       .component-row {
         flex-wrap: wrap;
-        gap: 0.5rem 0.75rem;
+        gap: 0.5rem 1rem;
       }
       .component-name { flex: 1 1 auto; min-width: 0; }
       .component-desc { flex: 1 1 100%; }
     }
 
-    /* MOBILE-HEADER-OFFSET: #main-nav is position:fixed at every width, so
-       `main`'s top padding must clear its rendered height. The 640px block
-       above (32px top padding) predates that requirement and is otherwise
-       unrelated -- left untouched. This rule targets padding-top only and
-       wins the cascade for that one property by loading later in source
-       order at equal specificity. --header-h is styles.css's single
-       source of truth for the header's cleared height.
-       FIX-UNIT-2 V1/V7: this rule was gated behind `@media (max-width:
-       900px)`, so `main`'s flat `padding: 3rem 2rem` (48px) was the only
-       top padding at desktop widths -- nowhere near clearing the ~130px
-       fixed header, fully hiding the h1 at 1280px. --header-h is a fixed
-       value (not width-dependent — see its derivation in styles.css), so
-       this now applies unconditionally at every width. */
-    main { padding-top: var(--header-h); }
+    /* MOBILE-HEADER-OFFSET (SUPERSEDED by SPACING-0927): nav clearance is
+       now `main`'s own margin-top (styles.css, sitewide) -- this page's
+       <main> already carries it; its own padding-top is the clean rhythm
+       value (var(--section-pad), above), not the nav's height. */
   </style>
   <style>
     /* Page-scoped additions to the /status register (no new tokens). */
+    /* SPACING-0927 R2-2a: paragraph to paragraph is 24px, named by the sheet (was 2.5rem=40). */
     .page-intro {
       font-size: 0.95rem;
       line-height: 1.7;
       color: var(--ivory-dim);
-      margin-bottom: 2.5rem;
+      margin-bottom: var(--space-copy);
     }
     .page-intro a { color: var(--aurum); text-decoration: none; }
     .page-intro a:hover { text-decoration: underline; }

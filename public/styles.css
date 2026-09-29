@@ -47,7 +47,37 @@
   --ash-border: rgba(229, 229, 227, 0.35);
   --code-bg: #111111;
   --section-pad: 120px 24px;
+  /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-7): "A band is a section
+     with no heading that holds a single row. A band's top and bottom
+     padding is the band rhythm: 64 at 1280, 48 at 768, 32 at 375." Half
+     the section rhythm at each width, same horizontal gutter as
+     --section-pad. */
+  --band-pad: 64px 24px;
   --max-w: 1100px;
+  /* SPACING-0927 (BUILD-BRIEF-SPACING.md, Art Director's SPACING-SHEET.md):
+     the ruled uniform-spacing system. --gutter-base mirrors --section-pad's
+     own horizontal component at the same two breakpoints below (24/20/16)
+     -- it exists as its own token because the nav and footer need just the
+     horizontal number, not the vertical+horizontal shorthand.
+     --nav-clear is the fixed header's exact rendered height in this
+     project's own Playwright test harness (nav-row's 72px content + the
+     nav-strip's 26px + the 1px border = 99px, live-measured identical at
+     1280/768/375 -- confirmed via getBoundingClientRect, not the declared-
+     box estimate). Unlike --header-h (deliberately padded for cross-browser
+     safety margin, per its own comment below), this one is used only where
+     a test demands the exact rendered clearance, so it carries no buffer.
+     The content scale (A2): every non-zero spacing value below the layout
+     tier is one of these seven multiples of 4. */
+  --gutter-base: 24px;
+  --nav-clear: 99px;
+  --space-micro: 4px;
+  --space-tight: 8px;
+  --space-body: 16px;
+  --space-copy: 24px;
+  --space-card: 32px;
+  --space-block: 48px;
+  --space-wide: 64px;
+  --space-hairline: 2px;
   /* Wave E2 item 11: the size-adjust'd fallback faces (defined near the
      end of this sheet, next to the @font-face rules they support) sit
      right after the primary font, ahead of the original raw fallback
@@ -88,7 +118,11 @@
      and headroom for other engines/OSes, so --header-h clears the header on
      any browser, not just the one that produced the 99px estimate. */
   --header-h: calc(44px + 28px + 26px + 1px + 31px);
-  --hero-pad-mobile: var(--header-h) 16px 60px;
+  /* --hero-pad-mobile (was: var(--header-h) 16px 60px) is retired by
+     SPACING-0927: every hero now takes plain var(--section-pad) at every
+     width, and nav clearance moved to `main`'s own margin-top (see the
+     Layout Primitives section below) -- no hero needs a bespoke mobile
+     padding shorthand any more. */
 
   /* Wave C.3b: one label-size token for the three inline drawings' SVG text
      (index hero exchange, how-it-works approval fork, for-agents demand
@@ -129,7 +163,25 @@ a { color: var(--aurum); text-decoration: underline; }
 .container {
   max-width: var(--max-w);
   margin: 0 auto;
-  padding: 0 24px;
+  padding: 0 var(--gutter-base);
+}
+
+/* SPACING-0927 B0-a: a section already supplies the page gutter via its own
+   --section-pad horizontal component. A bare .container nested directly in
+   a section stacked ITS OWN padding on top of that below 1200px (44px/40px
+   instead of the ruled 20px/16px). Fix the cause at every width: a
+   .container that is a section's direct child never carries its own
+   horizontal padding -- the section's padding plus centering math supplies
+   the ruled 90/20/16 gutter alone, the same way the existing >=1200px rule
+   below already does above that width. This scopes narrowly to
+   `section > .container` so the OTHER, non-doubled uses of .container
+   (status.html's .status-hero/.status-body, api.html's #api-hero -- plain
+   divs, not sections, whose own horizontal padding is zero by design and
+   which rely on .container's padding as their ONLY gutter) are untouched
+   and still get the responsive --gutter-base value above. */
+section > .container {
+  padding-left: 0;
+  padding-right: 0;
 }
 
 /* AD sheet 9: a section already carries --section-pad's own 24px horizontal
@@ -157,6 +209,72 @@ a { color: var(--aurum); text-decoration: underline; }
 
 section { padding: var(--section-pad); }
 
+/* SPACING-0927 R2-1 (round 2, coordinator ruling): a section's space above
+   and below its content comes from the section's own padding and nothing
+   else. Below a section (or the legal template's .legal-wrap, or a
+   reading-column <main>), the leading edge of content is whichever element
+   is first in the unbroken chain of first-children from that root, at
+   whatever depth; the trailing edge is the same chain of last-children. A
+   component's own margin-top/bottom on that specific instance is the
+   overage rule 4 (the seam = twice the rhythm) was failing on. `:first-
+   child`/`:last-child` inside a descendant selector matches every element
+   in BOTH chains at once, at any depth -- not just the section's own direct
+   child -- which is what "at every depth" requires; a single pair of rules
+   covers every page without walking each component by hand. !important
+   because this is a sitewide invariant that must win over every existing
+   component rule that (correctly, for a non-edge instance) sets its own
+   margin-top/bottom -- never mind specificity per component.
+   Scope: section, .legal-wrap and reading-column main are the three content
+   roots the sheet's page-gutter system already recognizes (A1/A1b).
+   dashboard.html has no <section> and its own <main> is excluded (via
+   :not(:has(#dash-view)), matched only on that one page) because its
+   signed-in cards, the Terms dialog and the review table are out of scope
+   (R2-3). */
+:is(section, .legal-wrap, main:not(:has(#dash-view))) :first-child {
+  margin-top: 0 !important;
+}
+:is(section, .legal-wrap, main:not(:has(#dash-view))) :last-child {
+  margin-bottom: 0 !important;
+}
+
+/* SPACING-0927 (A1 hero clearance / A1b reading pages): #main-nav is fixed
+   at every width, so whatever sits first in the document renders under it
+   unless something clears it. One rule, applied once, sitewide: every
+   page's <main> (and the legal template's .legal-wrap, which has no <main>
+   of its own -- see below) is pushed down by exactly the fixed nav's
+   rendered height. This is a MARGIN, deliberately separate from any
+   section's own padding-top, so a hero (or the reading column) still
+   carries a clean, literal padding-top of 120/80/64 (rule 3) while the
+   ACTUAL measured clearance from the nav's bottom edge is that same
+   120/80/64 too: margin-top (99) + the first section's own padding-top
+   (120/80/64) - the nav's real rendered bottom (99) = 120/80/64 exactly. */
+main {
+  margin-top: var(--nav-clear);
+}
+
+/* A1b: the four legal routes (server.js's serveLegalPage) render
+   .legal-wrap directly under <nav>, with no <main> wrapper -- server.js
+   itself is out of this build's scope, so the fix lives entirely here.
+   .legal-wrap's own margin carries no rule from server.js's inline style
+   (only padding is set there), so no specificity fight is needed for this
+   part. */
+.legal-wrap {
+  margin-top: var(--nav-clear);
+}
+
+/* server.js's inline <style> sets `.legal-wrap { padding: 120px 24px 80px }`
+   (flat, never scales, top != bottom) and loads AFTER this sheet, so an
+   equal-specificity `.legal-wrap` rule here would lose the cascade. `body
+   .legal-wrap` is more specific (0,2,0 vs 0,1,0) and wins on its own,
+   without !important. var(--section-pad) gives 120/120, 80/80, 64/64 and,
+   combined with .legal-wrap's own max-width:720px + margin:0 auto (already
+   correct, untouched), reproduces the ruled 304/44/16 reading-column gutter
+   through the exact same centering math every body section already uses
+   (A1b) -- not a bespoke value. */
+body .legal-wrap {
+  padding: var(--section-pad);
+}
+
 /* AD sheet 9: one section-h2 size site-wide. This is a low-specificity
    fallback — any section heading without its own per-page rule (e.g.
    index #own-learnings-free, .explore-section, for-agents #agent-catalog,
@@ -168,6 +286,42 @@ section h2 {
   font-weight: 500;
   letter-spacing: -0.02em;
   color: var(--ivory);
+}
+
+/* SPACING-0927 R2-2a: heading to the element beneath it is 16px, named by
+   the sheet, as a low-specificity DEFAULT for every heading inside a
+   section that does not already carry a more specific rule of its own
+   (many section headings -- e.g. #setup-detail-heading, #explore-heading,
+   #operator-callout-heading and its siblings on how-submissions-work --
+   had NO margin-bottom declared anywhere and rendered flush against the
+   next element, 0px, not just "off scale"). R2-1's :last-child rule still
+   wins (!important) for a heading that happens to be a section's own last
+   visible child, per rule 4. */
+section :is(h1, h2, h3, h4, h5, h6) {
+  margin-bottom: var(--space-body);
+}
+
+/* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-3, root cause): a
+   heading's own margin-bottom (16px, the rule above, or a more specific
+   per-component rule already at 16) only sets the gap to what follows it
+   when nothing collapses against it. Adjacent-sibling margins collapse to
+   whichever is LARGER, not their sum -- so an element that still carries
+   its OWN margin-top (a paragraph at 20/24/32px, a subsection h3/h4 at
+   24px, a numbered-step header, an FAQ h2, etc.) silently overrides the
+   heading's ruled 16px with its own larger value. This is the recurring
+   cause the Art Director's independent measurement found on 8+ pages
+   (numbered-step headings, "Common Questions", legal-page subsection
+   headings all read 20-49px instead of 16) -- fixed once, at the cause,
+   instead of hunting down and patching every individual element's
+   margin-top. Excludes the dashboard's own sign-in screen (#login-view)
+   and post-login cards (.dash-card), both explicitly out of this build's
+   scope. */
+:is(h1, h2, h3, h4, h5, h6) + * {
+  margin-top: 0 !important;
+}
+.dash-card :is(h1, h2, h3, h4, h5, h6) + *,
+#login-view :is(h1, h2, h3, h4, h5, h6) + * {
+  margin-top: initial !important;
 }
 
 /* AD sheet 9: one closing-CTA h2 size site-wide, replacing 60/56/52/44px
@@ -237,7 +391,16 @@ section h2 {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding: 0 24px;
+  /* SPACING-0927 B0-b: the nav has no centered max-width wrapper of its own
+     (it is the fixed full-width bar), so it cannot reuse the section+
+     container centering trick directly. This formula reproduces the exact
+     same resolved number: below the point where a 1100px column would
+     center inside the viewport, max() falls back to the flat gutter-base
+     (24/20/16, responsive at the same breakpoints --section-pad uses);
+     above it, the calc() term (identical to a centered --max-w column's own
+     margin) takes over and matches the section gutter exactly (verified
+     90px at 1280). */
+  padding: 0 max(var(--gutter-base), calc((100vw - var(--max-w)) / 2));
   font-family: var(--mono);
   font-size: 12px;
   font-weight: 400;
@@ -262,7 +425,7 @@ section h2 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 24px;
+  padding: 14px max(var(--gutter-base), calc((100vw - var(--max-w)) / 2));
 }
 
 /* Wave E2 item 12: 44px tap target (was 28.8px, AD-STEP4-FINAL P3.19). */
@@ -348,13 +511,20 @@ section h2 {
 }
 
 /* ── Hero ──────────────────────────────────────────────────────────────────── */
+/* SPACING-0927 B-4/A1: the hero loses its full-height centering trick
+   (min-height:100vh + flex align-items:center made its measured nav-to-
+   headline clearance swing wildly by viewport HEIGHT -- 76/202/42px at
+   1280/768/375 -- instead of a stable number). It now takes plain padding
+   like any other section: var(--section-pad) gives it the same rhythm
+   (120/80/64) top and bottom as every section, hero included, no
+   exception (SPACING-SHEET.md A3-3). The fixed nav's own clearance is
+   handled once, sitewide, by `main`'s own margin-top below -- not by the
+   hero's padding -- so the hero's OWN padding-top reads exactly 120/80/64,
+   not 120/80/64-plus-header-height. */
 #hero {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  padding: 0 24px;
   position: relative;
   overflow: hidden;
+  padding: var(--section-pad);
 }
 
 .hero-content {
@@ -363,7 +533,6 @@ section h2 {
   max-width: var(--max-w);
   margin: 0 auto;
   width: 100%;
-  padding-top: 100px;
 }
 
 #hero h1 {
@@ -380,7 +549,9 @@ section h2 {
      place (the section's own padding/container constrain them well below
      it), so 375/768 are unaffected -- verified unchanged. */
   max-width: 950px;
-  margin-bottom: 28px;
+  /* SPACING-0927 R2-2a: heading to the element beneath it is 16px,
+     sitewide, named by the sheet (was 28). */
+  margin-bottom: var(--space-body);
 }
 
 .hero-sub {
@@ -389,7 +560,9 @@ section h2 {
   color: var(--slate-text);
   max-width: 600px;
   line-height: 1.65;
-  margin-bottom: 48px;
+  /* SPACING-0927 rule 5: text-to-its-action is 24px sitewide (was 48) --
+     the lede leads directly into the command block, the hero's action. */
+  margin-bottom: var(--space-copy);
 }
 
 .hero-ctas {
@@ -409,7 +582,8 @@ section h2 {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 20px;
+  /* SPACING-0927 rule 7/A3-8: on the content scale now (was 20). */
+  gap: var(--space-body);
 }
 
 @media (min-width: 981px) {
@@ -527,7 +701,8 @@ section h2 {
 .footer-cta-note {
   font-size: 13px;
   color: var(--slate);
-  margin-top: 12px;
+  /* SPACING-0927 R2-2b: 12 ties 8/16 -- tie goes to the larger value. */
+  margin-top: var(--space-body);
 }
 .footer-email-capture {
   margin: 0 auto;
@@ -569,8 +744,9 @@ section h2 {
 #how-it-works { background: var(--obsidian); }
 
 #how-it-works h2 {
-  /* font-size/weight/letter-spacing/color now come from the shared section h2 rule */
-  margin-bottom: 20px;
+  /* font-size/weight/letter-spacing/color now come from the shared section h2 rule.
+     SPACING-0927 rule 5: heading-to-next-element is 16px sitewide (was 20). */
+  margin-bottom: var(--space-body);
 }
 
 .steps {
@@ -580,12 +756,14 @@ section h2 {
   background: rgba(229,229,227,0.06);
   border-radius: 0;
   overflow: hidden;
-  margin-bottom: 72px;
+  /* SPACING-0927 R2-2b: 72 rounds down to 64. */
+  margin-bottom: var(--space-wide);
 }
 
 .step {
   background: var(--obsidian);
-  padding: 40px 32px;
+  /* SPACING-0927 rule 6: card padding is 32px on all four sides (was 40/32). */
+  padding: var(--space-card);
   position: relative;
 }
 
@@ -598,7 +776,9 @@ section h2 {
 }
 
 .step-header {
-  margin-bottom: 20px;
+  /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-6): 20 ties 16/24 -- tie
+     goes to the larger value. */
+  margin-bottom: var(--space-copy);
 }
 
 .step-header .step-number {
@@ -609,7 +789,8 @@ section h2 {
   font-size: 18px;
   font-weight: 700;
   color: var(--ivory);
-  margin-bottom: 14px;
+  /* SPACING-0927 rule 5: heading-to-next-element is 16px sitewide (was 14). */
+  margin-bottom: var(--space-body);
   line-height: 1.3;
   letter-spacing: -0.01em;
 }
@@ -762,7 +943,8 @@ section h2 {
   font-size: 18px;
   font-weight: 600;
   color: var(--ivory);
-  margin-bottom: 10px;
+  /* SPACING-0927 rule 5: heading-to-next-element is 16px sitewide (was 10). */
+  margin-bottom: var(--space-body);
   letter-spacing: -0.01em;
 }
 
@@ -814,14 +996,18 @@ section h2 {
   color: var(--slate-text);
   font-size: 16px;
   line-height: 1.75;
-  margin-bottom: 20px;
+  /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-6): paragraph to
+     paragraph is 24, named by the sheet (was 20). */
+  margin-bottom: var(--space-copy);
 }
 
+/* SPACING-0927 R2-2b: gap 12 ties 8/16 (tie->larger); margin-top 28 rounds
+   up to 32. */
 .pricing-pills {
   display: flex;
-  gap: 12px;
+  gap: var(--space-body);
   flex-wrap: wrap;
-  margin: 28px 0 32px;
+  margin: var(--space-card) 0 32px;
 }
 
 .pricing-pill {
@@ -843,13 +1029,22 @@ section h2 {
   font-size: 12px;
   color: var(--slate);
   letter-spacing: 0.05em;
+  /* R4-3 (RULING-SEAMS-2026-09-28.md): a price and its label is the
+     named label-to-value pairing (8px). Was an inline <span> (the
+     default), measuring 7px purely from its own inline line-box leading
+     against .pill-price's line-height, not an authored margin (both were
+     0). display:block removes the inline-leading artifact; the explicit
+     margin-top makes the named 8px value real rather than accidental. */
+  display: block;
+  margin-top: var(--space-tight);
 }
 
 .catalog-stats {
   border: 1px solid rgba(229,229,227,0.08);
   border-radius: 0;
-  padding: 28px;
-  margin: 28px 0;
+  /* SPACING-0927 rule 6: card padding is 32px on all four sides (was 28). */
+  padding: var(--space-card);
+  margin: var(--space-card) 0;
 }
 
 .catalog-stats .stat-row {
@@ -1026,14 +1221,17 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
 .pricing-packs {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-  margin-bottom: 40px;
+  /* SPACING-0927 rule 6: gap between cards in a row/grid is 48px (was 20). */
+  gap: var(--space-block);
+  /* SPACING-0927 R2-2b: 40 rounds up to 48. */
+  margin-bottom: var(--space-block);
 }
 
 .pack-card {
   border: 1px solid rgba(229,229,227,0.1);
   border-radius: 0;
-  padding: 28px 24px;
+  /* SPACING-0927 rule 6: card padding is 32px on all four sides (was 28/24). */
+  padding: var(--space-card);
   transition: border-color 0.2s, background 0.2s;
 }
 
@@ -1048,7 +1246,8 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--slate);
-  margin-bottom: 12px;
+  /* SPACING-0927 R2-2a: label to its value is 8px, named by the sheet (was 12). */
+  margin-bottom: var(--space-tight);
 }
 
 .pack-price {
@@ -1073,7 +1272,8 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
 .free-tier {
   border: 1px solid rgba(201,168,76,0.25);
   border-radius: 0;
-  padding: 20px 24px;
+  /* SPACING-0927 rule 6: card padding is 32px on all four sides (was 20/24). */
+  padding: var(--space-card);
   display: flex;
   align-items: center;
   gap: 16px;
@@ -1104,7 +1304,8 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
   font-size: 18px;
   font-weight: 600;
   color: var(--ivory);
-  margin-bottom: 20px;
+  /* SPACING-0927 rule 5: heading-to-next-element is 16px sitewide (was 20). */
+  margin-bottom: var(--space-body);
   letter-spacing: -0.01em;
 }
 
@@ -1114,18 +1315,22 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--slate);
-  margin: 28px 0 14px;
+  /* SPACING-0927 rule 7/A3-8: both values now on the content scale
+     (was 28px 0 14px). */
+  margin: var(--space-card) 0 var(--space-body);
 }
 
+/* SPACING-0927 R2-2b: 28 rounds up to 32. */
 .endpoint-list {
   list-style: none;
-  margin-bottom: 28px;
+  margin-bottom: var(--space-card);
 }
 
 .endpoint-list li {
   display: flex;
   align-items: baseline;
-  gap: 12px;
+  /* SPACING-0927 R2-2b: gap 12 ties 8/16 -- tie goes to the larger value. */
+  gap: var(--space-body);
   padding: 8px 0;
   border-bottom: 1px solid rgba(229,229,227,0.05);
   font-size: 14px;
@@ -1158,14 +1363,16 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
 .auth-options {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  /* SPACING-0927 rule 6: gap between cards in a row/grid is 48px (was 14). */
+  gap: var(--space-block);
   margin-bottom: 28px;
 }
 
 .auth-card {
   border: 1px solid rgba(229,229,227,0.08);
   border-radius: 0;
-  padding: 18px 16px;
+  /* SPACING-0927 rule 6: card padding is 32px on all four sides (was 18/16). */
+  padding: var(--space-card);
 }
 
 .auth-card .auth-title {
@@ -1213,7 +1420,8 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
   letter-spacing: -0.02em;
   color: var(--ivory);
   max-width: 760px;
-  margin: 0 auto 20px;
+  /* SPACING-0927 R2-2a: heading to the element beneath it is 16px, named by the sheet (was 20). */
+  margin: 0 auto var(--space-body);
   line-height: 1.1;
 }
 
@@ -1258,7 +1466,14 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
 
 footer {
   border-top: 1px solid rgba(229,229,227,0.06);
-  padding: 32px 24px;
+  /* SPACING-0927 B-3: nav and footer both take the page gutter, so the
+     logo's left edge and the content's left edge are the same number at
+     every width. Vertical 32px is unchanged (not part of the section
+     rhythm scale -- footer is not a "section" for rule 3). .footer-inner
+     (below) already has zero own padding + max-width/auto-margin
+     centering, so this footer padding + that centering reproduces
+     90/20/16 exactly, the same math a section+.container pair uses. */
+  padding: 32px var(--gutter-base);
   text-align: center;
 }
 
@@ -1492,28 +1707,31 @@ footer {
 
 /* ── Responsive: general layout ──────────────────────────────────────────── */
 @media (max-width: 900px) {
-  :root { --section-pad: 80px 20px; }
+  :root { --section-pad: 80px 20px; --gutter-base: 20px; --band-pad: 48px 20px; }
 
   .steps { grid-template-columns: 1fr; }
-  .builders-grid { grid-template-columns: 1fr; gap: 40px; }
-  .agents-grid { grid-template-columns: 1fr; gap: 40px; }
+  /* SPACING-0927 R2-2b: 40 is equidistant from 32 and 48 -- tie goes to
+     the larger value. */
+  .builders-grid { grid-template-columns: 1fr; gap: var(--space-block); }
+  .agents-grid { grid-template-columns: 1fr; gap: var(--space-block); }
   .api-grid { grid-template-columns: 1fr; gap: 48px; }
   .pricing-packs { grid-template-columns: repeat(2, 1fr); }
   .auth-options { grid-template-columns: 1fr; }
 
-  .footer-inner { flex-direction: column; align-items: center; text-align: center; }
-
-  /* MOBILE-HEADER-OFFSET: index.html's hero is the one page whose top
-     offset lives in this shared sheet unconditionally (`.hero-content`
-     above, `padding-top: 100px`, no per-page inline override -- confirmed
-     by grepping every tracked page's own <style> block for a hero padding
-     override; index.html has none). #hero centers its content vertically
-     within 100vh, which is enough slack to keep the header clear on tall
-     desktop viewports at the old 100px, but not on an 812px-tall phone
-     (the v102 defect this fix closes). --header-h clears it at any height
-     this breakpoint covers, using the same source-of-truth token every
-     other consumer below uses. */
-  .hero-content { padding-top: var(--header-h); }
+  /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-5): align-items:center
+     shrinks each stacked child (.footer-logo, .footer-meta) to its own
+     content width and centres that box within the column -- so the
+     box's OWN left edge (what the gutter is measured from) no longer
+     touches the page gutter, and how far off depends on how much text the
+     footer holds. /pricing's footer, with its tagline, happens to render
+     wide enough that the centred box still reads close to the gutter;
+     /dashboard's shorter link-only footer does not (measured 162.97px at
+     768px, ruled 20px). flex-start makes every page's footer content hug
+     the real left edge deterministically, not by content-length
+     coincidence. text-align:center is dropped with it -- once each child
+     is its own natural width (not centred as a shrunk box), it no longer
+     does anything (the text already fills its own box). */
+  .footer-inner { flex-direction: column; align-items: flex-start; }
 
   /* Anchor jumps (in-page # links) must land below the fixed header too --
      same token, same breakpoint the header itself uses for the
@@ -1522,7 +1740,7 @@ footer {
 }
 
 @media (max-width: 600px) {
-  :root { --section-pad: 64px 16px; }
+  :root { --section-pad: 64px 16px; --gutter-base: 16px; --band-pad: 32px 16px; }
 
   /* ── DR-3: mobile type ramp — the one-large-headline law holds at 375px ──────
      Every phone width (<=430px) sits inside this query. Display heads (page/hero
@@ -1699,7 +1917,8 @@ abbr[title] {
 /* ── Value Callout ─────────────────────────────────────────────────────────── */
 .value-callout {
   max-width: 720px;
-  padding: 28px 32px;
+  /* SPACING-0927 rule 6: card padding is 32px on all four sides (was 28/32). */
+  padding: var(--space-card);
   background: var(--aurum-dim);
   border: 1px solid var(--aurum-border);
   border-radius: 0;
@@ -1768,7 +1987,8 @@ abbr[title] {
 .tier-cards-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
+  /* SPACING-0927 rule 6: gap between cards in a row/grid is 48px (was 20). */
+  gap: var(--space-block);
   max-width: 960px;
   margin: 0 auto 56px;
 }
@@ -1777,7 +1997,8 @@ abbr[title] {
   background: rgba(255,255,255,0.025);
   border: 1px solid rgba(229,229,227,0.08);
   border-radius: 0;
-  padding: 28px 24px;
+  /* SPACING-0927 rule 6: card padding is 32px on all four sides (was 28/24). */
+  padding: var(--space-card);
   display: flex;
   flex-direction: column;
 }
@@ -2002,7 +2223,8 @@ abbr[title] {
 /* ── Earnings Scenario (For Builders) ──────────────────────────────────────── */
 .earnings-scenario {
   margin-top: 32px;
-  padding: 24px 28px;
+  /* SPACING-0927 R2-2b: 28 rounds up to 32. */
+  padding: 24px var(--space-card);
   background: rgba(255,255,255,0.02);
   border: 1px solid rgba(229,229,227,0.08);
   border-radius: 0;
@@ -2012,7 +2234,8 @@ abbr[title] {
   font-size: 14px;
   font-weight: 600;
   color: var(--ivory);
-  margin-bottom: 12px;
+  /* SPACING-0927 rule 5: heading-to-next-element is 16px sitewide (was 12). */
+  margin-bottom: var(--space-body);
   letter-spacing: -0.01em;
 }
 
@@ -2115,12 +2338,14 @@ abbr[title] {
 
 .hero-install .hero-setup-block pre {
   font-size: 18px;
-  padding: 20px 22px;
+  /* SPACING-0927: vertical on the content scale now (was 20). */
+  padding: var(--space-body) 22px;
   color: var(--aurum);
 }
 
 .hero-setup-note {
-  margin: 10px 0 0;
+  /* SPACING-0927 rule 7/A3-8: on the content scale now (was 10). */
+  margin: var(--space-tight) 0 0;
   font-size: 14px;
   line-height: 1.5;
   color: var(--slate-text);
@@ -2188,17 +2413,19 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
    painting nothing until live. Still satisfies DR-7f ("never renders a
    fabricated or placeholder figure"): visibility:hidden paints nothing and
    is excluded from the accessibility tree, same as display:none was. */
+/* SPACING-0927 R2-2b: margin-top 20 ties 16/24 (tie->larger); gap 10
+   rounds down to 8. */
 .hero-ledger {
   display: flex;
   visibility: hidden;
   min-height: 26px;
-  margin: 20px auto 0;
+  margin: var(--space-copy) auto 0;
   align-items: baseline;
   /* LAYOUT-SHEET 2026-09-26 item 5: was justify-content: center. The sole
      live consumer today (how-it-works.html) is now left-aligned by
      ruling; flex-start holds that. */
   justify-content: flex-start;
-  gap: 10px;
+  gap: var(--space-tight);
 }
 .hero-ledger.is-live { visibility: visible; } /* FIX-UNIT L10: comment corrected -- justify-content above is flex-start (not center) as of LAYOUT-SHEET 2026-09-26 item 5, so this positions the ledger left, regardless of parent text-align; its sole current consumer (how-it-works.html) is left-aligned by design. A future page reaching for .hero-ledger should not assume the old centered default. */
 .hero-ledger .hero-ledger-num {
@@ -2229,7 +2456,11 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   grid-template-columns: 150px 1fr auto auto;
   align-items: baseline;
   gap: 16px;
-  padding: 14px 4px;
+  /* SPACING-0927 R2-2a: this is a list item; gap between list items is
+     16px, named by the sheet. Each row's own padding-top and padding-
+     bottom supply half the gap to the row above/below (was 14, giving 28
+     between rows; 8+8=16). */
+  padding: var(--space-tight) 4px;
   border-bottom: 1px solid rgba(229,229,227,0.06);
 }
 
@@ -2274,7 +2505,8 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
 .discovery-band-note {
   font-size: 13px;
   color: var(--slate);
-  margin-top: 14px;
+  /* SPACING-0927 R2-2b: 14 rounds up to 16 (was 14). */
+  margin-top: var(--space-body);
   line-height: 1.6;
 }
 
@@ -2312,10 +2544,11 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
     display: block;
     width: 100%;
   }
+  /* SPACING-0927 R2-2b: 12 ties 8/16 -- tie goes to the larger value. */
   .value-tiers-table tr {
     border: 1px solid rgba(229,229,227,0.1);
     border-radius: 0;
-    margin-bottom: 12px;
+    margin-bottom: var(--space-body);
     padding: 16px 16px 8px;
     background: rgba(255,255,255,0.02);
   }
@@ -2525,46 +2758,27 @@ span.pull-stat-range.pull-stat-range, .pull-stat-range.pull-stat-range.pull-stat
   }
 }
 
-/* ── Item 13: pricing measure widened from 295 to the site value ─────────
-   pricing.html wraps its hero h1 in a `.container` (base rule above:
-   `padding: 0 24px`) INSIDE `.pricing-page-header` (mobile padding
-   `var(--hero-pad-mobile)`, 16px horizontal) — the two stack to a 40px
-   inset at 375 (16+24), where for-agents/how-it-works reach the same hero
-   at a plain 16px inset with no .container wrapper. 375 - 2*40 = 295,
-   375 - 2*16 = 343: exactly AD-STEP4-FINAL's measured 295 and 343 figures
-   (§2 hero-wraps table). Removing just the doubled .container padding
-   inside this one hero converges pricing to the same 343px "site value"
-   for-agents/how-it-works already use — AD's own prediction is that this
-   alone drops "$0.05." from 5 lines to 4. */
-@media (max-width: 600px) {
-  .pricing-page-header .container {
-    padding-left: 0;
-    padding-right: 0;
-  }
-}
+/* ── Item 13 (SUPERSEDED by SPACING-0927): pricing measure widening ──────
+   The old fix zeroed .pricing-page-header .container's own padding below
+   600px to cancel a stacked --hero-pad-mobile + .container double inset.
+   SPACING-0927 removes --hero-pad-mobile from every hero (B-4/A1: a hero
+   takes plain padding like any section, nav clearance moves to `main`'s
+   own margin) and gives #pricing-hero zero horizontal padding of its own
+   at every width, delegating the gutter entirely to .container's now-
+   responsive padding (var(--gutter-base)) -- see the Hero section above
+   and #pricing-hero's own rule in pricing.html. Re-zeroing .container here
+   would collapse that gutter back to 0, so this rule is removed rather
+   than kept as a no-op. */
 
-/* ── Item 13: for-builders hero top padding cut ───────────────────────────
-   for-builders.html's own <style> block sets `.builders-hero-content {
-   padding-top: 110px; }` unconditionally (no media query), stacking on
-   top of `#builders-hero`'s own mobile padding (var(--hero-pad-mobile) =
-   100px top at <=600px) for a combined 210px — exactly where this builder
-   live-measured the h1's top at 375 (getBoundingClientRect, matches AD's
-   210 in AD-STEP4-FINAL §1.5). Overriding just the mobile padding-top on
-   this page-local class (not shared with any other page) to 40px brings
-   the combined total to 100+40=140, landing first ink at the "near 140"
-   target. !important: the local rule is unconditional (equal specificity,
-   loads after this sheet). Getting the CTA pair fully into a real ~700-
-   750px mobile fold (AD-STEP4-FINAL §0: browser chrome shortens the
-   measured 812px fold by 60-110px) also depends on the sub-paragraph and
-   stat-row heights below the h1, which this item doesn't touch — this
-   padding cut alone measured the CTA top moving from 898.8px to roughly
-   828.8px, still outside a realistic mobile fold; flagging rather than
-   overclaiming the "CTA pair in the fold" half of this item. */
-@media (max-width: 600px) {
-  .builders-hero-content {
-    padding-top: 40px !important;
-  }
-}
+/* ── Item 13 (SUPERSEDED by SPACING-0927): for-builders hero top padding cut
+   The old fix pinned .builders-hero-content's mobile padding-top to 40px
+   to land a combined (hero + content) offset near a "140px" target. Hero
+   nav-clearance is no longer part of any hero's own padding (it is `main`'s
+   margin-top, sitewide, see above), and .builders-hero-content itself now
+   carries no padding of its own at any width (matching every sibling
+   *-content wrapper) -- this !important override would reintroduce an
+   unwanted 40px on top of #builders-hero's own clean rhythm padding, so it
+   is removed rather than kept as a no-op. */
 
 /* ── Item 13: for-agents strip caption widened at 375 ─────────────────────
    for-agents.html's own <style> block switches `.stats-strip` to a 2-col

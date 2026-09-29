@@ -207,7 +207,11 @@ describe('server.js analytics wiring', () => {
     // Round 4 R4-4 added the codeSpansRaw parallel array (raw, pre-escape
     // code-span text) and the slugSource change that reads from it, ahead
     // of that same call, pushing it to ~16574 chars in -- widened again.
-    const h = sliceAt('function serveLegalPage(', 16700);
+    // SPACING-0927 R2-2a added the .legal-wrap h4 rule (a new heading-to-
+    // element margin-bottom for the legal pages' subsection headers, which
+    // had no rule at all before) ahead of that same call, pushing it to
+    // ~16693 chars in -- widened again.
+    const h = sliceAt('function serveLegalPage(', 17000);
     assert.ok(h.includes('injectAnalytics(html, ANALYTICS_DOMAIN)'));
   });
 });

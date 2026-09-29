@@ -95,10 +95,21 @@ function startStaticServer(root) {
 // var(--section-pad) rhythm) -- verified unchanged at 0px/0px before and after
 // this fix, not part of the --section-pad rhythm the other 7 sections share.
 const HOMEPAGE_SECTIONS = [
-  { id: 'hero', label: 'hero (Hero heading)', expectPad: false },
+  // SPACING-0927 (BUILD-BRIEF-SPACING.md B-4/A1): the hero used to carry
+  // `padding: 0 24px` (0 vertical) under its own full-viewport flex-
+  // centering. That mechanism is gone -- the hero now takes plain padding
+  // like any section, var(--section-pad), so its padding-top/bottom is
+  // 120px here too, hero included, no exception (rule 3).
+  { id: 'hero', label: 'hero (Hero heading)', expectPad: true },
   { id: 'setup-detail', label: 'You Control What Publishes', expectPad: true },
   { id: 'learning-explainer', label: 'What a Learning Is, and Why Another Agent Would Use It', expectPad: true },
-  { id: 'works-with-band', label: '(unheaded) works-with logo band', expectPad: true },
+  // SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-7): "A band is a section
+  // with no heading that holds a single row. A band's top and bottom
+  // padding is the band rhythm: 64 at 1280..." -- not the full section
+  // rhythm every headed section uses. Pin moved (was 120px, the same
+  // var(--section-pad) every other section carries) to 64px, the new
+  // var(--band-pad) token this section-with-no-heading now uses.
+  { id: 'works-with-band', label: '(unheaded) works-with logo band', expectPadValue: '64px' },
   { id: 'own-learnings-free', label: 'Never watch your agent solve the same problem twice.', expectPad: true },
   { id: 'how-it-works', label: 'Your Agents Learn. You Earn.', expectPad: true },
   { id: 'explore-section', label: 'explore-section (class-selected, no id)', expectPad: true },
@@ -142,20 +153,24 @@ describe('SITE-PERFECT-W1 item 3: /works-with h1 matches /pricing h1 at 1440px',
     }
   }
 
-  it('/works-with .ww-h1 computes font-size: 56px, margin-bottom: 20px', async (t) => {
+  // SPACING-0927 R2-2a: heading to the element beneath it is 16px, named
+  // by the sheet (was 20). Pin moved, not weakened -- font-size untouched.
+  it('/works-with .ww-h1 computes font-size: 56px, margin-bottom: 16px', async (t) => {
     if (!ok) { t.skip('playwright not resolvable'); return; }
     const m = await measureH1('works-with.html', '.ww-h1');
     assert.ok(m, '.ww-h1 not found on /works-with');
     assert.equal(m.fontSize, '56px', `.ww-h1 font-size: got ${m.fontSize}`);
-    assert.equal(m.marginBottom, '20px', `.ww-h1 margin-bottom: got ${m.marginBottom}`);
+    assert.equal(m.marginBottom, '16px', `.ww-h1 margin-bottom: got ${m.marginBottom}`);
   });
 
-  it('/pricing .pricing-page-header h1 computes font-size: 56px, margin-bottom: 20px', async (t) => {
+  // SPACING-0927 R2-2a: heading to the element beneath it is 16px, named
+  // by the sheet (was 20). Pin moved, not weakened -- font-size untouched.
+  it('/pricing .pricing-page-header h1 computes font-size: 56px, margin-bottom: 16px', async (t) => {
     if (!ok) { t.skip('playwright not resolvable'); return; }
     const m = await measureH1('pricing.html', '.pricing-page-header h1');
     assert.ok(m, '.pricing-page-header h1 not found on /pricing');
     assert.equal(m.fontSize, '56px', `pricing h1 font-size: got ${m.fontSize}`);
-    assert.equal(m.marginBottom, '20px', `pricing h1 margin-bottom: got ${m.marginBottom}`);
+    assert.equal(m.marginBottom, '16px', `pricing h1 margin-bottom: got ${m.marginBottom}`);
   });
 
   it('/works-with and /pricing h1 computed values are equal (the required proof)', async (t) => {
@@ -202,9 +217,9 @@ describe('SITE-PERFECT-W1 item 4: every top-level homepage section computes padd
     assert.deepEqual(found, expected, `top-level section list drifted: found ${JSON.stringify(found)}, expected ${JSON.stringify(expected)}`);
   });
 
-  for (const { id, label, expectPad } of HOMEPAGE_SECTIONS) {
+  for (const { id, label, expectPad, expectPadValue } of HOMEPAGE_SECTIONS) {
     const selector = id === 'explore-section' ? '.explore-section' : `#${id}`;
-    const want = expectPad ? '120px' : '0px';
+    const want = expectPadValue || (expectPad ? '120px' : '0px');
     it(`section "${label}" (${selector}) computes padding-top: ${want}, padding-bottom: ${want}`, async (t) => {
       if (!ok) { t.skip('playwright not resolvable'); return; }
       const pad = await page.evaluate((sel) => {

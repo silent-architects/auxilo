@@ -70,12 +70,16 @@
   <meta name="theme-color" content="#0A0A0A" />
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=2d91b7aa" />
+  <link rel="stylesheet" href="/styles.css?v=eba132a8" />
   <style>
     /* ── Page-specific: hero (Finding 7 — H1 only in this build; no subhead
-       string was supplied, no CTA pair, no eyebrow) ── */
+       string was supplied, no CTA pair, no eyebrow) ──
+       SPACING-0927 (BUILD-BRIEF-SPACING.md B-4/A1): a hero takes plain
+       padding like any section -- var(--section-pad) gives the ruled
+       120/80/64 rhythm. Nav clearance is `main`'s own margin-top
+       (styles.css), sitewide, not part of this element's padding. */
     .page-hero {
-      padding: 140px 24px 72px;
+      padding: var(--section-pad);
     }
     .page-hero-content {
       max-width: 820px;
@@ -134,7 +138,9 @@
       max-width: 720px;
       color: var(--ash);
       line-height: 1.7;
-      margin-bottom: 20px;
+      /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-6): paragraph to
+         paragraph is 24, named by the sheet (was 20). */
+      margin-bottom: var(--space-copy);
     }
     .trust-prose p:last-child { margin-bottom: 0; }
     /* Empty content slots (this build pass) collapse rather than leaving a
@@ -142,29 +148,41 @@
     .trust-prose p:empty { margin-bottom: 0; }
 
     /* ── §6 — bordered callout, same treatment as §0 (finding 9) ── */
+    /* SPACING-0927 B-5/B8: this box sat off-centre (max-width:720 with no
+       auto-margin, inside a 1100px container) -- centred, no other
+       property changed. */
+    /* SPACING-0927 R2-2a: card padding is 32px on all four sides, named by the sheet (was 28/32). */
     .callout-bordered {
       max-width: 720px;
+      margin: 0 auto;
       border: 1px solid rgba(201,168,76,0.2);
       background: rgba(201,168,76,0.04);
       border-radius: 8px;
-      padding: 28px 32px;
+      padding: var(--space-card);
     }
     .callout-bordered h2 { margin-top: 0; }
     .callout-bordered .trust-prose p:empty { display: none; }
 
-    /* ── §7 — bounded card (finding 2) ── */
+    /* ── §7 — bounded card (finding 2) ──
+       SPACING-0927 B-5/B8: this box sat off-centre (max-width:720 with no
+       auto-margin, inside a 1100px container) -- centred, no other
+       property changed. */
+    /* SPACING-0927 R2-2a: card padding is 32px on all four sides, named by the sheet (was 28/32). */
     .ledger-card {
       max-width: 720px;
+      margin: 0 auto;
       border: 1px solid rgba(229,229,227,0.13);
       border-radius: 8px;
-      padding: 28px 32px;
+      padding: var(--space-card);
     }
     .ledger-card h2 { margin-top: 0; }
     .ledger-card-stats {
       display: flex;
       flex-wrap: wrap;
       gap: 32px;
-      margin-top: 20px;
+      /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-6): 20 ties 16/24 --
+         tie goes to the larger value. */
+      margin-top: var(--space-copy);
     }
     .ledger-card-stat { min-width: 160px; }
     .ledger-card-value {

@@ -20,7 +20,7 @@
   <meta name="theme-color" content="#0A0A0A" />
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=2d91b7aa" />
+  <link rel="stylesheet" href="/styles.css?v=eba132a8" />
   <style>
     /* Page-scoped: the works-with grid system. Sized to the AD build sheet
        (AD-CLIENTS-VISUAL-SHEET-2026-09-06.md §2), strings rev 3 (BUILD FROM
@@ -44,8 +44,20 @@
        mobile, vs. the 32px / 24px row gap within a tier) is restored with a
        margin-top bump on the first item of each new tier (nth-child(5),
        nth-child(11) -- 4 large then 6 medium then 9 small). */
-    .ww-main { padding: 96px 0 120px; }
-    .ww-wrap { max-width: 1057px; margin: 0 auto; padding: 0 40px; }
+    /* SPACING-0927 (BUILD-BRIEF-SPACING.md B-6): no distinct hero wrapper on
+       this page -- .ww-main plays a section's role (var(--section-pad)
+       gives the ruled 120/80/64 rhythm, top and bottom, and nav clearance
+       is `main`'s own margin-top in styles.css, sitewide -- .ww-main IS
+       that <main>). Its own horizontal padding stays the section-pad value
+       (24/20/16) -- the same section+container centering math every other
+       page uses: at >=1148px .ww-wrap's own auto-margin dominates (90px
+       total); below it, .ww-main's own padding alone is the gutter (20/16).
+       .ww-wrap's max-width was a bespoke 1057 (151.5px gutter at 1280
+       against the ruled 90); var(--max-w) (1100, the same token every body
+       section uses) reproduces 90/20/16, with .ww-wrap itself carrying no
+       padding of its own (like any section's .container). */
+    .ww-main { padding: var(--section-pad); }
+    .ww-wrap { max-width: var(--max-w); margin: 0 auto; }
 
     .ww-h1 {
       font-family: var(--sans);
@@ -55,13 +67,16 @@
       line-height: 1.08;
       color: var(--ivory);
       max-width: 900px;
-      margin-bottom: 20px;
+      /* SPACING-0927 R2-2a: heading to the element beneath it is 16px,
+         named by the sheet (was 20). */
+      margin-bottom: var(--space-body);
       /* FIX-UNIT-2B H4: "Run" rendered alone on its own line at 375 and
          1280 (measured). text-wrap: balance distributes the wrap evenly
          instead. */
       text-wrap: balance;
     }
 
+    /* SPACING-0927 R2-2b: 72 rounds down to 64. */
     .ww-honest {
       font-family: var(--sans);
       font-weight: 400;
@@ -69,7 +84,7 @@
       line-height: 1.6;
       color: var(--slate);
       max-width: 62ch;
-      margin: 32px 0 72px;
+      margin: 32px 0 var(--space-wide);
     }
 
     .ww-list {
@@ -153,7 +168,8 @@
     .ww-key dt { font-weight: 600; color: var(--ivory); display: inline; }
     .ww-key dd { display: inline; margin: 0; }
     .ww-key .ww-key-lead { display: block; margin-bottom: 12px; color: var(--ivory); }
-    .ww-key .ww-key-row { display: block; margin: 0 0 6px; }
+    /* SPACING-0927 R2-2a: gap between list items is 16px, named by the sheet (was 6). */
+    .ww-key .ww-key-row { display: block; margin: 0 0 var(--space-body); }
 
     .ww-basis {
       font-family: var(--mono);
@@ -178,46 +194,43 @@
       line-height: 1.6;
       color: var(--slate);
       max-width: 70ch;
-      margin-top: 56px;
+      /* SPACING-0927 R2-2b: 56 ties 48/64 -- tie goes to the larger value. */
+      margin-top: var(--space-wide);
       padding-top: 24px;
       border-top: 1px solid var(--border, rgba(229,229,227,0.08));
     }
     .ww-trademark a { color: var(--slate); }
 
     @media (max-width: 640px) {
-      .ww-main { padding: 64px 0 80px; }
-      .ww-wrap { padding: 0 20px; }
+      /* SPACING-0927: .ww-main's own padding is var(--section-pad) at every
+         width (base rule above, scales at the shared 600px breakpoint, not
+         this component's own 640px grid breakpoint); .ww-wrap carries no
+         padding of its own at any width (matching every section+container
+         pair) -- neither needs an override here. */
       .ww-h1 { font-size: 40px; }
-      .ww-honest { font-size: 17px; margin: 24px 0 48px; }
+      .ww-honest { font-size: 17px; margin: 24px 0 48px; } /* already on-scale */
 
       /* Single shared column-gap (12px) rather than the sheet's per-tier
          16px/12px split -- a single flex container has one gap, and 12px
          is the value both the 2-column (159px) and 3-column (103px) runs
          need to keep their sheet-specified per-row counts at 335px content
          width. Row gap 24px matches the sheet for every tier. */
-      .ww-list { gap: 24px 12px; margin-bottom: 36px; }
+      /* SPACING-0927 R2-2b: column-gap 12 ties 8/16 (tie->larger); margin-bottom 36 rounds down to 32. */
+      .ww-list { gap: 24px var(--space-body); margin-bottom: var(--space-card); }
+      /* SPACING-0927 R2-2b: 12 ties 8/16 -- tie goes to the larger value. */
       .ww-list li:nth-child(5),
-      .ww-list li:nth-child(11) { margin-top: 12px; }
+      .ww-list li:nth-child(11) { margin-top: var(--space-body); }
 
       .ww-size-large  { flex-basis: 159px; min-height: 104px; }
       .ww-size-medium { flex-basis: 159px; min-height: 88px; }
       .ww-size-small  { flex-basis: 103px; min-height: 68px; }
     }
 
-    /* MOBILE-HEADER-OFFSET: #main-nav is position:fixed at every width, so
-       `.ww-main`'s top padding must clear its rendered height. The 640px
-       block above (64px top padding) predates that requirement and is
-       otherwise unrelated -- left untouched. This rule targets padding-top
-       only and wins the cascade for that one property by loading later in
-       source order at equal specificity. --header-h is styles.css's
-       single source of truth for the header's cleared height.
-       FIX-UNIT-2 V1/V7: this rule was gated behind `@media (max-width:
-       900px)`, so `.ww-main`'s flat 96px top padding was the only
-       clearance at desktop widths -- 3px short of the ~130px fixed
-       header, overlapping the h1 by that much. --header-h is a fixed
-       value (not width-dependent), so this now applies unconditionally
-       at every width. */
-    .ww-main { padding-top: var(--header-h); }
+    /* MOBILE-HEADER-OFFSET (SUPERSEDED by SPACING-0927): nav clearance is
+       now `main`'s own margin-top (styles.css, sitewide) -- .ww-main is
+       this page's main landmark, so it already carries that margin. Its
+       own padding-top is the clean rhythm value (var(--section-pad),
+       above), not the nav's height. */
   </style>
 </head>
 <body>

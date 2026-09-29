@@ -56,7 +56,7 @@
   <meta name="theme-color" content="#0A0A0A" />
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=2d91b7aa" />
+  <link rel="stylesheet" href="/styles.css?v=eba132a8" />
   <style>
     /* AD sheet 9: /status now links the shared stylesheet (styles.css) like
        every other page. This block keeps ONLY the rules that are unique to
@@ -91,12 +91,18 @@
     }
     main#main { flex: 1; }
 
-    /* ── Page hero (compact, no decorative art — a status page) ──────── */
+    /* ── Page hero (compact, no decorative art — a status page) ────────
+       SPACING-0927 (BUILD-BRIEF-SPACING.md B-4/A1): a hero takes plain
+       padding like any section -- var(--section-pad) gives the ruled
+       120/80/64 rhythm at every width, so no per-breakpoint override is
+       needed any more. Nav clearance is `main`'s own margin-top
+       (styles.css), sitewide, not part of this element's padding.
+       Horizontal stays 0: .status-hero's own .container (inside) already
+       supplies the gutter (S1). */
     .status-hero {
-      padding: 140px 0 24px;
-    }
-    @media (max-width: 600px) {
-      .status-hero { padding: var(--hero-pad-mobile); padding-left: 0; padding-right: 0; }
+      padding: var(--section-pad);
+      padding-left: 0;
+      padding-right: 0;
     }
 
     .page-title {
@@ -107,7 +113,9 @@
       font-weight: 700;
       letter-spacing: -0.03em;
       line-height: 1.1;
-      margin-bottom: 0.5rem;
+      /* SPACING-0927 R2-2a: heading to the element beneath it is 16px,
+         named by the sheet (was 0.5rem/8px). */
+      margin-bottom: var(--space-body);
     }
 
     .page-subtitle {
@@ -118,19 +126,26 @@
 
     /* S1: no horizontal padding here — .container (inside) carries the
        same inset the hero uses, so hero h1 and this section's first block
-       share one left edge at every width. */
-    .status-body { padding: 0 0 96px; }
+       share one left edge at every width.
+       SPACING-0927 (rule 3): padding-top now equals padding-bottom, the
+       same rhythm every section uses, hero included, no exception --
+       was 0/96 (top=0, since the hero directly above already ended with
+       its own bottom padding). */
+    .status-body { padding: var(--section-pad); padding-left: 0; padding-right: 0; }
 
     /* ── Overall Status Banner ─────────────────────────────────── */
+    /* SPACING-0927 R2-2a: card padding is 32px on all four sides, named by
+       the sheet (was 1.25rem/1.5rem=20/24). R2-2b: margin-bottom 2.5rem=40
+       rounds up to 48. */
     .overall-status {
       background: var(--green-bg);
       border: 1px solid rgba(34,197,94,0.2);
       border-radius: 12px;
-      padding: 1.25rem 1.5rem;
+      padding: 2rem;
       display: flex;
       align-items: center;
       gap: 1rem;
-      margin-bottom: 2.5rem;
+      margin-bottom: 3rem;
     }
 
     .status-dot {
@@ -171,28 +186,36 @@
        words, same look as the site's .section-label (styles.css: 11px /
        0.16em / uppercase / 400), rendered with this page's own dim-ivory
        token in place of --slate. */
+    /* SPACING-0927 R2-2a: heading to the element beneath it is 16px, named
+       by the sheet (was 0.75rem=12) -- .component-label plays a section-
+       heading role here (AD sheet 7 comment above). */
     .component-label {
       font-size: 11px;
       font-weight: 400;
       text-transform: uppercase;
       letter-spacing: 0.16em;
       color: var(--ivory-dim);
-      margin-bottom: 0.75rem;
+      margin-bottom: 1rem;
     }
 
     /* ── Component Table ───────────────────────────────────────── */
+    /* SPACING-0927 R2-2b: margin-bottom 2.5rem=40 rounds up to 3rem=48. */
     .components {
       background: var(--obsidian-2);
       border: 1px solid var(--border);
       border-radius: 12px;
       overflow: hidden;
-      margin-bottom: 2.5rem;
+      margin-bottom: 3rem;
     }
 
+    /* SPACING-0927 R2-2a: gap between list items is 16px, named by the
+       sheet -- each row's own top/bottom padding supplies half the gap to
+       the row above/below (was 0.9rem=14.4px each, giving ~28.8 between
+       rows; 0.5rem=8px each gives 16). */
     .component-row {
       display: flex;
       align-items: center;
-      padding: 0.9rem 1.25rem;
+      padding: 0.5rem 1.25rem;
       border-bottom: 1px solid var(--border);
       gap: 1rem;
     }
@@ -238,18 +261,21 @@
     }
 
     /* ── Quick Links ────────────────────────────────────────────── */
+    /* SPACING-0927 R2-2a: gap between cards is 48px, named by the sheet
+       (was 0.75rem=12). R2-2b: margin-bottom 2.5rem=40 rounds up to 48. */
     .links-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 0.75rem;
-      margin-bottom: 2.5rem;
+      gap: 3rem;
+      margin-bottom: 3rem;
     }
 
+    /* SPACING-0927 R2-2a: card padding is 32px on all four sides, named by the sheet (was 1rem/1.25rem=16/20). */
     .link-card {
       background: var(--obsidian-2);
       border: 1px solid var(--border);
       border-radius: 10px;
-      padding: 1rem 1.25rem;
+      padding: 2rem;
       text-decoration: none;
       color: var(--ivory);
       transition: border-color 0.2s, background 0.2s;
@@ -275,34 +301,41 @@
     }
 
     /* ── Health Monitor ─────────────────────────────────────────── */
+    /* SPACING-0927 R2-2a: card padding is 32px on all four sides, named by
+       the sheet (was 1.25rem=20). R2-2b: margin-bottom 2.5rem=40 rounds up
+       to 48. */
     .health-block {
       background: var(--obsidian-2);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 1.25rem;
-      margin-bottom: 2.5rem;
+      padding: 2rem;
+      margin-bottom: 3rem;
     }
 
+    /* SPACING-0927 R2-2a: heading to the element beneath it is 16px, named
+       by the sheet (was 0.75rem=12). */
     .health-endpoint {
       font-family: var(--mono);
       font-size: 0.82rem;
       color: var(--aurum);
-      margin-bottom: 0.75rem;
+      margin-bottom: 1rem;
     }
 
+    /* SPACING-0927 R2-2b: 0.75rem=12 ties 8/16 (tie->larger); 1rem=16 already on scale. */
     .health-response {
       font-family: var(--mono);
       font-size: 0.78rem;
       color: var(--ivory-dim);
       background: var(--obsidian-3);
       border-radius: 8px;
-      padding: 0.75rem 1rem;
+      padding: 1rem;
       line-height: 1.6;
       overflow-x: auto;
     }
 
+    /* SPACING-0927 R2-2b: 0.75rem=12 ties 8/16 -- tie goes to the larger value. */
     #live-health {
-      margin-top: 0.75rem;
+      margin-top: 1rem;
       font-size: 0.78rem;
       color: var(--ivory-dim);
     }
@@ -311,11 +344,12 @@
     #live-health.err { color: var(--red); }
 
     /* ── Contact ────────────────────────────────────────────────── */
+    /* SPACING-0927 R2-2a: card padding is 32px on all four sides, named by the sheet (was 1.25rem=20). */
     .contact-block {
       background: var(--obsidian-2);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 1.25rem;
+      padding: 2rem;
     }
 
     .contact-block p {
@@ -332,12 +366,15 @@
 
     /* ── Mobile ─────────────────────────────────────────────────── */
     @media (max-width: 640px) {
-      .status-body { padding: 0 0 64px; }
+      /* SPACING-0927: .status-body's own padding is var(--section-pad) at
+         every width (base rule above, scales at the shared 600px
+         breakpoint); no ad hoc 640px override needed. */
 
       /* Component rows stack so name + desc + badge don't push wide. */
+      /* SPACING-0927 R2-2b: column-gap 0.75rem=12 ties 8/16 -- tie goes to the larger value. */
       .component-row {
         flex-wrap: wrap;
-        gap: 0.5rem 0.75rem;
+        gap: 0.5rem 1rem;
       }
       .component-name { flex: 1 1 auto; min-width: 0; }
       .component-desc { flex: 1 1 100%; }

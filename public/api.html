@@ -29,7 +29,7 @@
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono500.0ecb6352.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=2d91b7aa" />
+  <link rel="stylesheet" href="/styles.css?v=eba132a8" />
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: Organization + FAQPage -->
@@ -93,9 +93,23 @@
 
   <style>
     /* ── API page-specific styles ───────────────────────────────────── */
+    /* SPACING-0927: the rhythm padding now lives on #api-hero itself (the
+       outer wrapper, below) so it reads as this hero's own top-level
+       padding, matching every sibling hero -- not on this inner element,
+       two levels further in. */
     .api-page-header {
       text-align: left;
-      padding: 140px 0 88px;
+    }
+    /* SPACING-0927 (BUILD-BRIEF-SPACING.md B-4/A1): a hero takes plain
+       padding like any section -- var(--section-pad) gives the ruled
+       120/80/64 rhythm. Nav clearance is `main`'s own margin-top
+       (styles.css), sitewide, not part of this element's padding.
+       Horizontal stays 0: #api-hero > .container already supplies the
+       gutter. */
+    #api-hero {
+      padding: var(--section-pad);
+      padding-left: 0;
+      padding-right: 0;
     }
     .api-page-header h1 {
       font-size: clamp(38px, 5vw, 56px);
@@ -103,7 +117,9 @@
       color: var(--ivory);
       letter-spacing: -0.02em;
       line-height: 1.1;
-      margin-bottom: 20px;
+      /* SPACING-0927 R2-2a: heading to the element beneath it is 16px,
+         named by the sheet (was 20). */
+      margin-bottom: var(--space-body);
       max-width: 720px;
     }
     .api-page-header p {
@@ -125,18 +141,22 @@
 
     .api-section h2 {
       /* AD sheet 9: font-size/weight/letter-spacing/color now come from the
-         shared section h2 rule in styles.css. */
-      margin-bottom: 8px;
+         shared section h2 rule in styles.css.
+         SPACING-0927 R2-2a: heading to the element beneath it is 16px,
+         named by the sheet (was 8). */
+      margin-bottom: var(--space-body);
     }
+    /* SPACING-0927 R2-2b: 40 rounds up to 48. */
     .api-section-intro {
       font-size: 16px;
       color: var(--slate-text);
-      margin-bottom: 40px;
+      margin-bottom: var(--space-wide);
       max-width: 640px;
       line-height: 1.7;
     }
 
     /* Quick-start steps */
+    /* SPACING-0927 R2-2b: 40 rounds up to 48. */
     .quickstart-steps {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -144,25 +164,28 @@
       background: rgba(229,229,227,0.06);
       border-radius: 6px;
       overflow: hidden;
-      margin-bottom: 40px;
+      margin-bottom: var(--space-wide);
     }
+    /* SPACING-0927 R2-2a: card padding is 32px on all four sides, named by the sheet (was 36/28). */
     .qs-step {
       background: var(--obsidian);
-      padding: 36px 28px;
+      padding: var(--space-card);
     }
+    /* SPACING-0927 R2-2b: 14 rounds up to 16. */
     .qs-num {
       font-family: var(--mono);
       font-size: 11px;
       color: var(--aurum);
       letter-spacing: 0.1em;
       display: block;
-      margin-bottom: 14px;
+      margin-bottom: var(--space-body);
     }
     .qs-step h3 {
       font-size: 17px;
       font-weight: 600;
       color: var(--ivory);
-      margin-bottom: 10px;
+      /* SPACING-0927 R2-2a: heading to the element beneath it is 16px, named by the sheet (was 10). */
+      margin-bottom: var(--space-body);
       letter-spacing: -0.01em;
     }
     .qs-step p {
@@ -174,7 +197,8 @@
       font-family: var(--mono);
       font-size: 12px;
       background: rgba(255,255,255,0.05);
-      padding: 2px 6px;
+      /* SPACING-0927 R2-2b: 6 ties 4/8 -- tie goes to the larger value (was 2px 6px; 2 is already the reserved hairline). */
+      padding: var(--space-hairline) var(--space-tight);
       border-radius: 3px;
       color: var(--aurum);
     }
@@ -221,22 +245,29 @@
     }
 
     /* Auth section side-by-side */
+    /* SPACING-0927 R2-2a: gap between cards is 48px, named by the sheet
+       (was 32 -- already on the scale numerically, but not the named
+       card-gap value). R2-2b: margin-bottom 40 rounds up to 48. */
     .auth-split {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 32px;
-      margin-bottom: 40px;
+      gap: var(--space-wide);
+      margin-bottom: var(--space-wide);
     }
+    /* SPACING-0927 R2-2a: card padding is 32px on all four sides, named by the sheet (was 28/24). */
     .auth-block {
       border: 1px solid rgba(229,229,227,0.08);
       border-radius: 6px;
-      padding: 28px 24px;
+      padding: var(--space-card);
     }
     .auth-block h3 {
       font-size: 16px;
       font-weight: 600;
       color: var(--ivory);
-      margin-bottom: 8px;
+      /* SPACING-0927 R2-2a: heading to the element beneath it is 16px,
+         named by the sheet (was 8 -- already on the scale numerically, but
+         not the named heading value). */
+      margin-bottom: var(--space-body);
       letter-spacing: -0.01em;
     }
     .auth-block .auth-badge {
@@ -251,20 +282,24 @@
       display: inline-block;
       margin-bottom: 14px;
     }
+    /* SPACING-0927 R2-2b: 14 rounds up to 16. */
     .auth-block p {
       font-size: 14px;
       color: var(--slate-text);
       line-height: 1.65;
-      margin-bottom: 14px;
+      margin-bottom: var(--space-body);
     }
     .auth-block ul {
       list-style: none;
       padding: 0;
     }
+    /* SPACING-0927 R2-2a: gap between list items is 16px, named by the
+       sheet -- each item's own top/bottom padding supplies half the gap
+       to the item above/below (was 5+5=10 between items; 8+8=16). */
     .auth-block ul li {
       font-size: 13px;
       color: var(--slate);
-      padding: 5px 0;
+      padding: var(--space-tight) 0;
       padding-left: 16px;
       position: relative;
       line-height: 1.5;
@@ -278,37 +313,48 @@
     }
 
     /* MCP tools expanded list */
+    /* SPACING-0927 R2-2a: gap between cards is 48px, named by the sheet (was 12). */
     .mcp-tools-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-      gap: 12px;
+      gap: var(--space-wide);
       margin-bottom: 32px;
     }
+    /* SPACING-0927 R2-2a: card padding is 32px on all four sides, named by the sheet (was 16/18). */
     .mcp-tool-card {
       border: 1px solid rgba(229,229,227,0.08);
       border-radius: 5px;
-      padding: 16px 18px;
+      padding: var(--space-card);
       transition: border-color 0.2s;
     }
     .mcp-tool-card:hover { border-color: var(--aurum-border); }
+    /* SPACING-0927 R2-2a: label to its value is 8px, named by the sheet (was 6). */
     .mcp-tool-name {
       font-family: var(--mono);
       font-size: 13px;
       color: var(--aurum);
       display: block;
-      margin-bottom: 6px;
+      margin-bottom: var(--space-tight);
     }
     .mcp-tool-desc {
       font-size: 13px;
       color: var(--slate);
       line-height: 1.5;
+      /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-6): this <span> had no
+         declared display (inline, the default), so it measured inside its
+         surrounding inline-formatting context's own taller line-box instead
+         of its own -- the gap from .mcp-tool-name read 15px though its own
+         margin-bottom is already the ruled 8px. display:block removes the
+         inline leading artifact; no spacing value changes. */
+      display: block;
     }
 
     /* A2A agent card block */
+    /* SPACING-0927 R2-2a: card padding is 32px on all four sides, named by the sheet (was 28/28). */
     .a2a-block {
       border: 1px solid rgba(229,229,227,0.08);
       border-radius: 6px;
-      padding: 28px 28px;
+      padding: var(--space-card);
       display: flex;
       gap: 24px;
       align-items: flex-start;
@@ -329,13 +375,17 @@
       font-size: 16px;
       font-weight: 600;
       color: var(--ivory);
-      margin-bottom: 8px;
+      /* SPACING-0927 R2-2a: heading to the element beneath it is 16px,
+         named by the sheet (was 8 -- already on the scale numerically, but
+         not the named heading value). */
+      margin-bottom: var(--space-body);
     }
+    /* SPACING-0927 R2-2b: 12 ties 8/16 -- tie goes to the larger value. */
     .a2a-body p {
       font-size: 14px;
       color: var(--slate-text);
       line-height: 1.65;
-      margin-bottom: 12px;
+      margin-bottom: var(--space-body);
     }
     .a2a-body a {
       font-family: var(--mono);
@@ -344,12 +394,27 @@
       text-decoration: none;
       border-bottom: 1px solid var(--aurum-border);
       transition: border-color 0.2s;
+      /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-6): this <a> sits on
+         its own line below the paragraph, but had no declared display
+         (inline, the default), so it measured inside its surrounding
+         inline-formatting context's own taller line-box -- the gap from
+         .a2a-body p read 21px though its own margin-bottom is already the
+         ruled 16px. display:block removes the inline leading artifact; no
+         spacing value changes. */
+      display: block;
     }
     .a2a-body a:hover { border-color: var(--aurum); }
 
-    /* CTA section */
+    /* SPACING-0927 (SPACING-SHEET.md B0-c/B10): 96px was internally
+       symmetric but not on the ruled scale (not the rhythm, not a content
+       step) and its own horizontal 0 relied on the pre-fix .container
+       still carrying its own 24px padding below 1200px -- now that a
+       section's .container never carries its own horizontal padding
+       (styles.css, `section > .container`), var(--section-pad) restores
+       both the ruled 120/80/64 rhythm and the 90/20/16 gutter (via the
+       same section+container centering math every other section uses). */
     .api-cta-section {
-      padding: 96px 0;
+      padding: var(--section-pad);
       text-align: center;
     }
     .api-cta-section h2 {
@@ -360,11 +425,13 @@
       margin-bottom: 16px;
       line-height: 1.1;
     }
+    /* SPACING-0927 R2-2a: text to its action is 24px, named by the sheet
+       (was 40) -- this leads directly into .api-cta-btns. */
     .api-cta-section p {
       font-size: 17px;
       color: var(--slate-text);
       max-width: 460px;
-      margin: 0 auto 40px;
+      margin: 0 auto var(--space-copy);
       line-height: 1.65;
     }
     .api-cta-btns {
@@ -391,15 +458,25 @@
       list-style: none;
       margin-top: 4px;
     }
+    /* SPACING-0927 R2-2a: gap between list items is 16px, named by the
+       sheet -- each item's own top/bottom padding supplies half the gap
+       to the item above/below (was 18+18=36 between items; 8+8=16). */
     .annotation-list li {
       display: grid;
       grid-template-columns: 120px 1fr;
       gap: 16px;
-      padding: 18px 0;
+      padding: var(--space-tight) 0;
       border-bottom: 1px solid rgba(229,229,227,0.06);
       align-items: start;
     }
-    .annotation-list li:last-child { border-bottom: none; }
+    /* R4-1 (RULING-SEAMS-2026-09-28.md): the last item's own border is
+       already removed (no trailing divider under the list), but it kept
+       the same 8px bottom padding every other item carries to pair with
+       ITS OWN border. With no border left to draw, that trailing 8px is
+       unpaired, unexplained space between the list and the section's own
+       edge -- not list-item spacing (rule 7 governs the 16px gap BETWEEN
+       items), not a border, not a caption. Removed at the cause. */
+    .annotation-list li:last-child { border-bottom: none; padding-bottom: 0; }
     .ann-key {
       font-family: var(--mono);
       font-size: 12px;
@@ -419,10 +496,9 @@
       .response-annotated { grid-template-columns: 1fr; }
     }
     @media (max-width: 600px) {
-      /* AD sheet 9: --hero-pad-mobile replaces the hardcoded pair. Horizontal
-         stays 0 here (unlike the other heroes) because .api-page-header sits
-         inside .container, which already supplies the horizontal gutter. */
-      .api-page-header { padding: var(--hero-pad-mobile); padding-left: 0; padding-right: 0; }
+      /* SPACING-0927: .api-page-header's own padding is var(--section-pad)
+         (zeroed horizontally) at every width; no per-breakpoint override
+         needed. */
       .mcp-tools-grid { grid-template-columns: 1fr; }
       .a2a-block { flex-direction: column; }
       /* Let the endpoint table scroll within its own box instead of
@@ -434,8 +510,10 @@
     /* ── FAQ (visible mirror of the FAQPage JSON-LD) ── */
     #faq h2 {
       /* AD sheet 9: font-size/weight/letter-spacing/color now come from the
-         shared section h2 rule in styles.css. */
-      margin-bottom: 48px;
+         shared section h2 rule in styles.css.
+         SPACING-0927 R2-2a: heading to the element beneath it is 16px,
+         named by the sheet (was 48). */
+      margin-bottom: var(--space-body);
     }
     /* AD sheet 9: the FAQ accordion component moved to the shared styles.css
        (.faq-list/.faq-item/.faq-question/.faq-icon/.faq-answer/.faq-answer-inner);
@@ -616,7 +694,7 @@ curl -X POST \
         <!-- AD strings packet 7 (SITE-PM, 2026-09-06): the paused-rail disclosure
              that lived as a code comment above (cut at char 39, 375px) moved
              here as prose, ratified pair verbatim. -->
-        <p style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:10px;">Earnings accrue now. <a href="/status">Withdrawals open soon</a>.</p>
+        <p style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:var(--space-tight);">Earnings accrue now. <a href="/status">Withdrawals open soon</a>.</p>
       </div>
     </div>
   </div>
@@ -748,7 +826,7 @@ curl -X POST \
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
     </div>
-    <p style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Natural language search, always free (no key needed). Response (live capture): snippets only, no unlock required.</p>
+    <p style="font-size:13px;color:var(--slate);margin-top:var(--space-body);line-height:1.6;">Natural language search, always free (no key needed). Response (live capture): snippets only, no unlock required.</p>
 
     <div class="response-annotated">
       <div style="min-width:0;">
@@ -827,12 +905,13 @@ curl -X GET \
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
       </div>
-      <p style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Response shape from live captures. Counter and earnings values vary per unlock. settlement {tx_hash, path, router} appears in _revenue only on x402-router settles; legacy-rail x402 settles return none.</p>
+      <p style="font-size:13px;color:var(--slate);margin-top:var(--space-body);line-height:1.6;">Response shape from live captures. Counter and earnings values vary per unlock. settlement {tx_hash, path, router} appears in _revenue only on x402-router settles; legacy-rail x402 settles return none.</p>
       </div>
 
       <!-- Field annotations -->
       <div>
-        <p style="font-size:14px;color:var(--slate);margin-bottom:20px;letter-spacing:0.05em;text-transform:uppercase;">Field-by-field</p>
+        <!-- SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-6): 20 ties 16/24 -- tie goes to the larger value (was 20px). -->
+        <p style="font-size:14px;color:var(--slate);margin-bottom:var(--space-copy);letter-spacing:0.05em;text-transform:uppercase;">Field-by-field</p>
         <ul class="annotation-list">
           <li>
             <span class="ann-key">quality_score</span>
@@ -986,7 +1065,7 @@ curl -X GET https://auxilo.io/knowledge/abc123 \
           </div>
           <pre id="npm-code">npx auxilo setup</pre>
         </div>
-        <p style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">The installer finds your MCP clients, registers the server, and signs you in with a device code.</p>
+        <p style="font-size:13px;color:var(--slate);margin-top:var(--space-body);line-height:1.6;">The installer finds your MCP clients, registers the server, and signs you in with a device code.</p>
 
         <div class="code-block" id="claude-config-snippet" style="margin-top:16px;">
           <div class="code-block-header">
@@ -1030,8 +1109,9 @@ AUXILO_API_KEY=axl_… auxilo-mcp</pre>
     </div>
 
     <!-- MCP tools grid -->
-    <h3 style="font-size:16px;font-weight:600;color:var(--ivory);margin:40px 0 8px;letter-spacing:-0.01em;">Available Tools <span style="font-size:13px;font-weight:400;color:var(--slate);margin-left:8px;">17 tools total</span></h3>
-    <p style="font-size:13px;color:var(--slate);margin:0 0 20px;">All 17 tools are Auxilo's own; none call an external service.</p>
+    <h3 style="font-size:16px;font-weight:600;color:var(--ivory);margin:var(--space-block) 0 var(--space-body);letter-spacing:-0.01em;">Available Tools <span style="font-size:13px;font-weight:400;color:var(--slate);margin-left:8px;">17 tools total</span></h3>
+    <!-- SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-6): 20 ties 16/24 -- tie goes to the larger value (was 20px). -->
+    <p style="font-size:13px;color:var(--slate);margin:0 0 var(--space-copy);">All 17 tools are Auxilo's own; none call an external service.</p>
     <div class="mcp-tools-grid">
       <div class="mcp-tool-card">
         <span class="mcp-tool-name">auxilo_discover</span>
@@ -1183,7 +1263,7 @@ curl https://auxilo.io/.well-known/agent.json
       <a href="/dashboard" class="btn-primary">Start Building</a>
       <a href="https://auxilo.io/openapi.json" class="btn-secondary" target="_blank" rel="noopener">View OpenAPI Spec</a>
     </div>
-    <p style="font-size:13px;color:var(--slate);margin-top:12px;line-height:1.6;">Sign in with your email. Generate your key from the CLI (npx auxilo setup) or a POST to /account/api-keys.</p>
+    <p style="font-size:13px;color:var(--slate);margin-top:var(--space-body);line-height:1.6;">Sign in with your email. Generate your key from the CLI (npx auxilo setup) or a POST to /account/api-keys.</p>
   </div>
 </section>
 

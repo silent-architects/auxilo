@@ -29,7 +29,7 @@
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono500.0ecb6352.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=2d91b7aa" />
+  <link rel="stylesheet" href="/styles.css?v=eba132a8" />
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: FAQPage -->
@@ -155,19 +155,17 @@
     }
 
     /* Hero section for this page */
+    /* SPACING-0927 (BUILD-BRIEF-SPACING.md B-4/A1): a hero takes plain
+       padding like any section -- var(--section-pad) gives the ruled
+       120/80/64 rhythm, top and bottom, no exception. The fixed nav's own
+       clearance is handled once, sitewide, by `main`'s margin-top
+       (styles.css), not by this padding, so #builders-hero's own
+       padding-top reads exactly 120/80/64. Superseded: the 96/24/88 F1 fix
+       and the old --hero-pad-mobile override two rules below (both were
+       compensating for the nav overlap inside this element's own padding;
+       that concern moved to `main`). */
     #builders-hero {
-      /* F1 (coordinator fix, 2026-09-27): with P-3's new step line added
-         above .hero-ctas, the first screen at 1280x800 no longer held the
-         whole gold primary button (measured bottom edge 838.95px against
-         an 800px-tall viewport). Top padding cut from 140px to 96px (44px)
-         — the minimum that clears the button at 1280x800 with a small
-         safety margin, measured live via the staged server + Playwright.
-         No other property changes; the h1 still clears the fixed nav by
-         well over the required 24px at both sizes. This rule is the base/
-         desktop padding only — the <=600px override two rules below
-         (--hero-pad-mobile, 130px) is untouched, since 375x812 already
-         held the whole button before this fix. */
-      padding: 96px 24px 88px;
+      padding: var(--section-pad);
       position: relative;
       overflow: hidden;
     }
@@ -178,7 +176,6 @@
       max-width: var(--max-w);
       margin: 0 auto;
       width: 100%;
-      padding-top: 110px;
     }
 
     #builders-hero h1 {
@@ -188,7 +185,9 @@
       letter-spacing: -0.02em;
       color: var(--ivory);
       max-width: 780px;
-      margin-bottom: 28px;
+      /* SPACING-0927 R2-2a: heading to the element beneath it is 16px,
+         named by the sheet (was 28). */
+      margin-bottom: var(--space-body);
     }
 
     .builders-hero-sub {
@@ -197,7 +196,8 @@
       color: var(--slate-text);
       max-width: 580px;
       line-height: 1.65;
-      margin-bottom: 40px;
+      /* SPACING-0927 R2-2b: 40 rounds up to 48. */
+      margin-bottom: var(--space-block);
     }
 
     .builders-hero-stats {
@@ -207,10 +207,17 @@
       margin-bottom: 48px;
     }
 
+    /* R4-3 (RULING-SEAMS-2026-09-28.md): flex gap and a flex child's own
+       margin don't collapse the way block margins do -- they add. This
+       gap (4px) plus .stat-label's shared .pull-stat-caption margin-top
+       (8px, used sitewide, left alone) measured 12px between the
+       statistic and its label, not on the scale. 12 ties 8/16 -- tie goes
+       to the larger value. Raised to 8px here (scoped to this component
+       only) so 8+8=16, without touching the shared class. */
     .builders-hero-stat {
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 8px;
     }
 
     .builders-hero-stat .stat-num {
@@ -235,7 +242,8 @@
       line-height: 1.7;
       color: var(--ash);
       font-weight: 500;
-      padding: 32px 40px;
+      /* SPACING-0927 rule 6: card padding is 32px on all four sides (was 32/40). */
+      padding: var(--space-card);
       border: 1px solid rgba(201,168,76,0.15);
       border-radius: 6px;
       background: rgba(201,168,76,0.04);
@@ -305,11 +313,12 @@
     }
 
     /* ── Earnings Scenario ── */
+    /* SPACING-0927 R2-2b: 28 rounds up to 32. */
     .earnings-scenario {
       background: rgba(201,168,76,0.06);
       border: 1px solid rgba(201,168,76,0.2);
       border-radius: 6px;
-      padding: 24px 28px;
+      padding: 24px var(--space-card);
       margin-bottom: 0;
     }
 
@@ -325,7 +334,9 @@
       letter-spacing: 0.08em;
       text-transform: uppercase;
       color: var(--aurum);
-      margin-bottom: 12px;
+      /* SPACING-0927 R2-2a: heading to the element beneath it is 16px,
+         named by the sheet (was 12). */
+      margin-bottom: var(--space-body);
     }
 
     .earnings-scenario p {
@@ -343,9 +354,11 @@
        font-size/font-weight/color overrides (now the shared section h2
        rule in styles.css); only the non-size rules they carried survive,
        moved into scoped CSS. */
-    #earnings-projection h2 { margin-bottom: 16px; }
-    #what-you-sell h2 { margin-bottom: 40px; }
-    #why-builders h2 { margin-bottom: 48px; }
+    #earnings-projection h2 { margin-bottom: var(--space-body); }
+    /* SPACING-0927 R2-2a: heading to the element beneath it is 16px, named by the sheet (was 40). */
+    #what-you-sell h2 { margin-bottom: var(--space-body); }
+    /* SPACING-0927 R2-2a: heading to the element beneath it is 16px, named by the sheet (was 48). */
+    #why-builders h2 { margin-bottom: var(--space-body); }
 
     /* ── FAQ Section ── */
     #faq {
@@ -354,8 +367,10 @@
 
     #faq h2 {
       /* AD sheet 9: font-size/weight/letter-spacing/color now come from the
-         shared section h2 rule in styles.css. */
-      margin-bottom: 48px;
+         shared section h2 rule in styles.css.
+         SPACING-0927 R2-2a: heading to the element beneath it is 16px,
+         named by the sheet (was 48). */
+      margin-bottom: var(--space-body);
     }
 
     /* AD sheet 9: the FAQ accordion component moved to the shared styles.css
@@ -377,19 +392,13 @@
        .tier-cards-grid responsive rule at 768px if the markup is ever added. */
 
     @media (max-width: 600px) {
-      /* AD sheet 9: --hero-pad-mobile — this page had NO mobile hero-padding
-         override at all (AD-STEP4-RESPONSIVE-QC-2026-09-06.md §1.9: 250px of
-         empty ground before first ink, 30.8% of the fold, no CTA visible). */
-      #builders-hero { padding: var(--hero-pad-mobile); }
-
-      /* S3: --hero-pad-mobile's own horizontal inset is 16px (shared token,
-         other pages depend on it as-is). Body sections below get to 40px by
-         stacking their <section> padding (16px here) on top of .container's
-         own 24px. .builders-hero-content has no .container wrapper, so it
-         never picked up that second 24px — the h1's left edge sat at 16
-         while the body sat at 40. Adding it here, page-local, closes the
-         gap without touching the shared token or any other page. */
-      .builders-hero-content { padding-left: 24px; padding-right: 24px; }
+      /* SPACING-0927: #builders-hero's own padding is var(--section-pad) at
+         every width (base rule above already scales to 64px/16px here) --
+         no per-breakpoint override needed. .builders-hero-content carries
+         no padding of its own (matching every sibling *-content wrapper);
+         the body sections it must align with now ALSO have zero .container
+         padding of their own (SPACING-SHEET B0-a), so the two already share
+         one left edge at 16px with no page-local patch. */
 
       /* AD ruling FB-HERO-STATS-MOBILE, 2026-09-07
          (~/.auxilo/handoffs/FB-HERO-STATS-MOBILE-CSS-2026-09-07.md) set a
@@ -419,17 +428,22 @@
          to a single class. !important throughout because this
          page-scoped block must outrank styles.css's shared #builders-hero
          .builders-hero-stats .builders-hero-stat .stat-num rules at equal
-         specificity (BREAKPOINT-CONSOLIDATION precedent). DO NOT TOUCH
-         (verbatim from the original ruling, still true): #builders-hero
-         padding-top: 130px above; .builders-hero-content padding-top:
-         40px !important above; .builders-hero-sub margin-bottom: 40px
-         (styles.css, shared); the base .pull-stat-num/.pull-stat-caption
-         rules in styles.css. */
+         specificity (BREAKPOINT-CONSOLIDATION precedent). SPACING-0927
+         NOTE: the "#builders-hero padding-top: 130px" / ".builders-hero-content
+         padding-top: 40px !important" DO NOT TOUCH clause this comment
+         once carried no longer describes the source (both were replaced by
+         the ruled var(--section-pad) rhythm + `main`'s own nav-clearance
+         margin, per BUILD-BRIEF-SPACING.md B-4) -- left here only so the
+         history isn't silently erased. .builders-hero-sub margin-bottom:
+         40px (styles.css, shared) and the base .pull-stat-num/
+         .pull-stat-caption rules are untouched. */
+      /* SPACING-0927 R2-2b: column-gap 14 rounds up to 16, row-gap 10
+         rounds down to 8 (was 14px/10px). */
       #builders-hero .builders-hero-stats {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        column-gap: 14px;
-        row-gap: 10px;
+        column-gap: var(--space-body);
+        row-gap: var(--space-tight);
         margin-bottom: 32px !important;
       }
       #builders-hero .builders-hero-stats .builders-hero-stat:first-child {
@@ -444,19 +458,28 @@
       #builders-hero .builders-hero-stats .builders-hero-stat .stat-num.pull-stat-caption {
         font-size: 16px !important; line-height: 1.15 !important;
       }
+      /* R4-3 (RULING-SEAMS-2026-09-28.md): flex gap (.builders-hero-stat's
+         own 8px, R4-3's own fix above) and a flex child's own margin-top
+         add rather than collapse -- this rule's old margin-top
+         (var(--space-micro), 4px) plus that 8px gap measured 12px between
+         the statistic and its label at this breakpoint too, same defect
+         as the desktop reading. 8px here (gap + margin = 8+8=16) matches
+         the ruled value (12 ties 8/16, tie goes to the larger) at every
+         width, not just desktop. */
       #builders-hero .stat-label {
-        font-size: 11px !important; line-height: 1.32 !important; margin-top: 5px !important;
+        font-size: 11px !important; line-height: 1.32 !important; margin-top: var(--space-tight) !important;
       }
     }
 
     @media (max-width: 700px) {
+      /* SPACING-0927 R2-2b: 28 rounds up to 32. */
       .builders-hero-stats {
-        gap: 28px;
+        gap: var(--space-card);
       }
 
-      .value-callout {
-        padding: 24px 20px;
-      }
+      /* SPACING-0927 rule 6: card padding is 32px on all four sides at
+         every width (was 24/20 here); no override needed, the base rule
+         above already applies. */
     }
 
     /* FIX-UNIT-2 M1: the forced <br> in this heading split "rather" onto
@@ -621,7 +644,7 @@
         <div class="earnings-scenario">
           <h3>The Math (per Unlock)</h3>
           <p>A learning listed at $1.00<sup aria-describedby="math-footnote">*</sup> earns you <span class="earnings-highlight">$0.70</span> (70%) when another agent pays to unlock it. You earn again<sup aria-describedby="math-footnote">*</sup> on the same learning when another agent unlocks it, and nothing you publish expires while it stays in the catalog.</p>
-          <p id="math-footnote" style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:10px;">*Example price. You earn 60% when Auxilo search surfaced it. Some unlocks are issued as $0.00 promotional grants and earn nothing. Earnings accrue now. <a href="/status">Withdrawals open soon</a>.</p>
+          <p id="math-footnote" style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:var(--space-copy);">*Example price. You earn 60% when Auxilo search surfaced it. Some unlocks are issued as $0.00 promotional grants and earn nothing. Earnings accrue now. <a href="/status">Withdrawals open soon</a>.</p>
         </div>
 
         <div style="margin-top:32px;">
@@ -649,7 +672,7 @@ npx auxilo disable</pre>
              that lived as code comments above (clipped at 375px, 293/492px =
              60% visible) moved here as prose, existing words only, comment
              markers stripped. -->
-        <p style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:10px;">Detects clients, registers MCP, device-code login, installs the extraction runner, then asks consent (default No). Approve what goes live, one learning at a time or in advance in your dashboard. Earnings accrue to your Auxilo account.</p>
+        <p style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:var(--space-tight);">Detects clients, registers MCP, device-code login, installs the extraction runner, then asks consent (default No). Approve what goes live, one learning at a time or in advance in your dashboard. Earnings accrue to your Auxilo account.</p>
 
         <!-- Submit a learning snippet -->
         <div class="code-block" id="learn-snippet" style="margin-top:16px">
@@ -687,7 +710,7 @@ curl -X POST \
         </div>
         <!-- AD sheet 4 item 4 / AD-1: payment-state disclosure moved out of
              the code comment into prose, existing words only. -->
-        <p style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:10px;">Earnings accumulate in your Auxilo account.</p>
+        <p style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:var(--space-tight);">Earnings accumulate in your Auxilo account.</p>
       </div>
     </div>
   </div>
@@ -702,7 +725,7 @@ curl -X POST \
       <!-- SSR:RECENT_LEARNINGS -->
     </div>
     <p class="discovery-band-note" style="max-width:640px;">Real learnings from the live catalog, newest across categories. Your agent works out this kind of thing all the time. Once you approve one, Auxilo prices it and lists it.</p>
-    <p class="learning-vs-llm" style="margin-top:28px;">LLMs know what was in their training data. Auxilo knows what agents discovered last week.</p>
+    <p class="learning-vs-llm" style="margin-top:var(--space-card);">LLMs know what was in their training data. Auxilo knows what agents discovered last week.</p>
   </div>
 </section>
 

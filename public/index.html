@@ -29,7 +29,7 @@
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono500.0ecb6352.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=2d91b7aa" />
+  <link rel="stylesheet" href="/styles.css?v=eba132a8" />
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: Organization + FAQPage -->
@@ -110,8 +110,10 @@
       padding: var(--section-pad);
     }
 
+    /* SPACING-0927 R2-2a: this sits directly under h2#explore-heading --
+       heading to the element beneath it is 16px, named by the sheet (was 40). */
     .dive-index {
-      margin-top: 40px;
+      margin-top: var(--space-body);
       border-bottom: 1px solid rgba(229,229,227,0.08);
     }
 
@@ -163,7 +165,10 @@
       .dive-row {
         grid-template-columns: 40px 1fr 24px;
         grid-template-areas: "num title arrow" ". desc .";
-        row-gap: 4px;
+        /* SPACING-0927 (SPACING-SHEET.md D-7): was a 4x drop from the
+           desktop 16px gap; 8px (the next step down the content scale) is
+           a deliberate single mobile step, not an ad hoc residue. */
+        row-gap: var(--space-tight);
       }
       .dive-num { grid-area: num; }
       .dive-title { grid-area: title; }
@@ -174,8 +179,9 @@
     /* ── FAQ (visible mirror of the FAQPage JSON-LD) ── */
     #faq h2 {
       /* AD sheet 9: font-size/weight/letter-spacing/color now come from the
-         shared section h2 rule in styles.css. */
-      margin-bottom: 48px;
+         shared section h2 rule in styles.css.
+         SPACING-0927 rule 5: heading-to-next-element is 16px sitewide (was 48). */
+      margin-bottom: var(--space-body);
     }
     /* AD sheet 9: the FAQ accordion component moved to the shared styles.css
        (.faq-list/.faq-item/.faq-question/.faq-icon/.faq-answer/.faq-answer-inner);
@@ -185,8 +191,9 @@
        hero (it moved into #setup-detail, alongside the ratified control
        copy). These rules describe its look only; its grid placement is
        .setup-detail-grid's job, below. ── */
+    /* SPACING-0927 R2-2b: 28 rounds up to 32 (nearest scale step). */
     .hero-figure {
-      margin: 28px 0 8px;
+      margin: var(--space-card) 0 var(--space-tight);
     }
 
     .hero-exchange {
@@ -254,7 +261,8 @@
     }
 
     .setup-detail-copy p + p {
-      margin-top: 16px;
+      /* SPACING-0927 rule 5: paragraph-to-paragraph is 24px sitewide (was 16). */
+      margin-top: var(--space-copy);
     }
 
     .setup-detail-copy code {
@@ -262,7 +270,8 @@
       font-size: 12.5px;
       color: var(--ash);
       background: rgba(255,255,255,0.05);
-      padding: 1px 5px;
+      /* SPACING-0927 R2-2b: 1->0, 5->4 (was 1px 5px). */
+      padding: 0 var(--space-tight);
       border-radius: 4px;
     }
 
@@ -271,7 +280,12 @@
         display: grid;
         grid-template-columns: minmax(0,1fr) minmax(320px,420px);
         column-gap: 64px;
-        align-items: center;
+        /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-1): the text
+           column aligns to the top of its row, not the vertical centre of
+           the taller diagram beside it -- centring left 126px between the
+           heading's bottom and the paragraph's first line (ruled: 16px).
+           Was align-items: center. */
+        align-items: start;
       }
     }
 
@@ -287,7 +301,8 @@
        past the fold -- the mobile override below also zeroes margin-bottom
        on #install only, so the row's own gap is the sole spacing there. */
     #install.hero-install { max-width: 680px; }
-    #install .hero-setup-block pre { font-size: 20px; padding: 22px 24px; }
+    /* SPACING-0927: vertical on the content scale now (was 22). */
+    #install .hero-setup-block pre { font-size: 20px; padding: var(--space-body) 24px; }
 
     @media (max-width: 600px) {
       #install.hero-install { max-width: 100%; margin-bottom: 0; }
@@ -351,8 +366,23 @@
        one row of six at desktop, three rows of two at mobile, the link cell
        spanning its own full-width row at both breakpoints (see
        .ww-band-link below). */
-    #works-with-band { padding: 120px 24px; }
-    #works-with-band .ww-band-wrap { max-width: 1057px; margin: 0 auto; }
+    /* SPACING-0927 B1/A3-10: a band is a section for the rhythm rule. Was a
+       flat 120px 24px (desktop) / 56px 20px (an ad hoc 640px breakpoint,
+       not one of the two the shared system already uses), frozen at every
+       width above 640 and inconsistent with it below. var(--section-pad)
+       scales at the SAME 900/600 breakpoints every other section uses --
+       no new breakpoint added -- giving 120/120, 80/80, 64/64. max-width
+       1100 (var(--max-w), was a bespoke 1057) + zero own padding on
+       .ww-band-wrap reproduces the ruled 90/20/16 gutter via the same
+       centering math a section+.container pair uses. */
+    /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-7): a band is a
+       section with no heading that holds a single row -- this one holds
+       exactly one row of six client names. Its own rhythm is half the
+       section rhythm (var(--band-pad): 64/48/32), not the full
+       var(--section-pad) rhythm every headed section uses; top equals
+       bottom either way. */
+    #works-with-band { padding: var(--band-pad); }
+    #works-with-band .ww-band-wrap { max-width: var(--max-w); margin: 0 auto; }
     #works-with-band .ww-band-eyebrow {
       font-family: var(--mono);
       font-size: 13px;
@@ -390,7 +420,6 @@
     #works-with-band .ww-band-link:hover { color: var(--ash); }
 
     @media (max-width: 640px) {
-      #works-with-band { padding: 56px 20px; }
       #works-with-band .ww-band-grid { grid-template-columns: repeat(2, 1fr); row-gap: 20px; }
     }
 

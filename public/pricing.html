@@ -29,7 +29,7 @@
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono500.0ecb6352.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=2d91b7aa" />
+  <link rel="stylesheet" href="/styles.css?v=eba132a8" />
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: Organization + Product + FAQPage -->
@@ -128,9 +128,20 @@
     /* ── Pricing page-specific overrides ─────────────────────────── */
     /* LAYOUT-SHEET 2026-09-26 item 5: left-align to match every other page
        -- was text-align: center. */
+    /* SPACING-0927 (BUILD-BRIEF-SPACING.md B-4/A1): a hero takes plain
+       padding like any section -- var(--section-pad) gives the ruled
+       120/80/64 rhythm. Nav clearance is `main`'s own margin-top
+       (styles.css), sitewide, not part of this element's padding.
+       #pricing-hero is a <div>, not a <section>, wrapping its own
+       .container (styles.css's `section > .container` zero-out doesn't
+       reach it) -- so its own horizontal padding is zeroed here and the
+       gutter comes from .container's own (now-responsive) padding alone,
+       the same mechanism status.html and api.html's hero already use. */
     .pricing-page-header {
       text-align: left;
-      padding: 140px 24px 88px;
+      padding: var(--section-pad);
+      padding-left: 0;
+      padding-right: 0;
     }
     .pricing-page-header h1 {
       font-size: clamp(38px, 5vw, 56px);
@@ -138,7 +149,9 @@
       letter-spacing: -0.02em;
       color: var(--ivory);
       line-height: 1.1;
-      margin-bottom: 20px;
+      /* SPACING-0927 R2-2a: heading to the element beneath it is 16px,
+         named by the sheet (was 20). */
+      margin-bottom: var(--space-body);
     }
     .pricing-page-header p {
       font-size: clamp(16px, 2vw, 18px);
@@ -155,22 +168,27 @@
        Hidden by default (dark-safe invariant); shown by JS only once
        GET /health reports payments_enabled && stripe_configured. */
     .pack-buy-btn { margin-top: 20px; width: 100%; justify-content: center; }
+    /* SPACING-0927 R2-2b: margin-top 28 rounds up to 32; padding 20 ties
+       16/24 (tie->larger). */
     .purchase-disclosures {
       max-width: 640px;
-      margin: 28px auto 0;
-      padding: 20px 24px;
+      margin: var(--space-card) auto 0;
+      padding: var(--space-copy) 24px;
       border: 1px solid rgba(229,229,227,0.14);
       border-radius: 10px;
       font-size: 13px;
       color: var(--slate-text);
       line-height: 1.65;
     }
-    .purchase-disclosures p { margin: 0 0 10px; }
+    /* SPACING-0927 R2-2a: paragraph to paragraph is 24px, named by the sheet (was 10). */
+    .purchase-disclosures p { margin: 0 0 var(--space-copy); }
     .purchase-disclosures p:last-of-type { margin-bottom: 0; }
     .purchase-disclosures a { color: var(--aurum); }
+    /* SPACING-0927 R2-2b: margin-bottom 10 rounds down to 8; padding 12
+       ties 8/16 (tie->larger), 14 rounds up to 16. */
     .purchase-legal {
-      margin: 0 0 10px;
-      padding: 12px 14px;
+      margin: 0 0 var(--space-tight);
+      padding: var(--space-body) var(--space-body);
       border-left: 2px solid rgba(229,229,227,0.25);
       color: var(--slate-text);
       font-style: normal;
@@ -206,7 +224,8 @@
     .algo-factor {
       border: 1px solid rgba(229,229,227,0.08);
       border-radius: 6px;
-      padding: 24px 20px;
+      /* SPACING-0927 R2-2b: 20 ties 16/24 -- tie goes to the larger value. */
+      padding: var(--space-copy);
       background: rgba(255,255,255,0.02);
       transition: border-color 0.2s;
     }
@@ -219,7 +238,8 @@
       letter-spacing: 0.1em;
       text-transform: uppercase;
       color: var(--aurum);
-      margin-bottom: 10px;
+      /* SPACING-0927 R2-2a: label to its value is 8px, named by the sheet (was 10). */
+      margin-bottom: var(--space-tight);
     }
     .algo-factor p {
       font-size: 14px;
@@ -229,7 +249,8 @@
     .pricing-range-callout {
       border: 1px solid rgba(201,168,76,0.25);
       border-radius: 6px;
-      padding: 20px 24px;
+      /* SPACING-0927 R2-2b: 20 ties 16/24 -- tie goes to the larger value. */
+      padding: var(--space-copy);
       background: var(--aurum-dim);
       display: flex;
       align-items: center;
@@ -250,9 +271,9 @@
     }
     @media (max-width: 600px) {
       .algo-factors { grid-template-columns: 1fr; }
-      /* AD sheet 9: --hero-pad-mobile — this page had NO mobile hero-padding
-         override at all. */
-      .pricing-page-header { padding: var(--hero-pad-mobile); }
+      /* SPACING-0927: .pricing-page-header's own padding is
+         var(--section-pad) (zeroed horizontally) at every width; no
+         per-breakpoint override needed. */
     }
 
     /* ── For Agents Pricing ──────────────────────────────────────── */
@@ -264,12 +285,13 @@
          the shared section h2 rule in styles.css. */
       margin-bottom: 16px;
     }
+    /* SPACING-0927 R2-2b: 40 rounds up to 48. */
     .pricing-agents-section .section-intro {
       font-size: 16px;
       color: var(--slate-text);
       max-width: 600px;
       line-height: 1.7;
-      margin-bottom: 40px;
+      margin-bottom: var(--space-block);
     }
     .agents-pricing-grid {
       display: grid;
@@ -281,8 +303,11 @@
       list-style: none;
       margin: 0 0 32px;
     }
+    /* SPACING-0927 R2-2a: gap between list items is 16px, named by the
+       sheet -- each item's own top/bottom padding supplies half the gap
+       to the item above/below (was 12+12=24 between items; 8+8=16). */
     .agent-feature-list li {
-      padding: 12px 0 12px 16px;
+      padding: var(--space-tight) 0 var(--space-tight) 16px;
       font-size: 15px;
       color: var(--ivory);
       border-bottom: 1px solid rgba(229,229,227,0.06);
@@ -290,22 +315,26 @@
       line-height: 1.5;
     }
     .agent-feature-list li:last-child { border-bottom: none; }
+    /* SPACING-0927 R2-2b: 3 rounds up to 4. */
     .agent-feature-list .feat-sub {
       display: block;
       font-size: 13px;
       color: var(--slate);
-      margin-top: 3px;
+      margin-top: var(--space-micro);
     }
+    /* SPACING-0927 R2-2b: gap 14 rounds up to 16. */
     .payment-methods {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 14px;
+      gap: var(--space-body);
       margin-bottom: 32px;
     }
+    /* SPACING-0927 R2-2a: card padding is 32px on all four sides, named by
+       the sheet (was 20/18). */
     .payment-method-card {
       border: 1px solid rgba(229,229,227,0.08);
       border-radius: 5px;
-      padding: 20px 18px;
+      padding: var(--space-card);
       transition: border-color 0.2s;
     }
     .payment-method-card:hover {
@@ -315,7 +344,8 @@
       font-family: var(--mono);
       font-size: 12px;
       color: var(--aurum);
-      margin-bottom: 10px;
+      /* SPACING-0927 R2-2a: label to its value is 8px, named by the sheet (was 10). */
+      margin-bottom: var(--space-tight);
       display: block;
       letter-spacing: 0.04em;
     }
@@ -325,7 +355,8 @@
       line-height: 1.65;
     }
     @media (max-width: 900px) {
-      .agents-pricing-grid { grid-template-columns: 1fr; gap: 40px; }
+      /* SPACING-0927 R2-2b: 40 ties 32/48 -- tie goes to the larger value. */
+      .agents-pricing-grid { grid-template-columns: 1fr; gap: var(--space-block); }
       .payment-methods { grid-template-columns: 1fr; }
     }
 
@@ -338,12 +369,13 @@
          the shared section h2 rule in styles.css. */
       margin-bottom: 16px;
     }
+    /* SPACING-0927 R2-2b: 40 rounds up to 48. */
     .pricing-builders-section .section-intro {
       font-size: 16px;
       color: var(--slate-text);
       max-width: 600px;
       line-height: 1.7;
-      margin-bottom: 40px;
+      margin-bottom: var(--space-block);
     }
     .builders-pricing-grid {
       display: grid;
@@ -351,10 +383,11 @@
       gap: 48px;
       align-items: start;
     }
+    /* SPACING-0927 R2-2a: card padding is 32px on all four sides, named by the sheet (was 28). */
     .revenue-split-visual {
       border: 1px solid rgba(229,229,227,0.08);
       border-radius: 6px;
-      padding: 28px;
+      padding: var(--space-card);
       background: rgba(255,255,255,0.02);
     }
     /* FIX-UNIT-2 V9: was an h4 directly under this section's h2, with no h3
@@ -367,13 +400,15 @@
       letter-spacing: 0.1em;
       text-transform: uppercase;
       color: var(--slate);
-      margin-bottom: 20px;
+      /* SPACING-0927 R2-2a: heading to the element beneath it is 16px, named by the sheet (was 20). */
+      margin-bottom: var(--space-body);
     }
+    /* SPACING-0927 R2-2b: 12 ties 8/16 -- tie goes to the larger value. */
     .split-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 12px 0;
+      padding: var(--space-body) 0;
       border-bottom: 1px solid rgba(229,229,227,0.06);
     }
     .split-row:last-child { border-bottom: none; }
@@ -397,8 +432,9 @@
       margin-top: 4px;
     }
     .payout-callout {
-      margin-top: 20px;
-      padding: 16px 20px;
+      /* SPACING-0927 R2-2b: 20 ties 16/24 -- tie goes to the larger value. */
+      margin-top: var(--space-copy);
+      padding: var(--space-body) var(--space-copy);
       background: var(--aurum-dim);
       border: 1px solid var(--aurum-border);
       border-radius: 5px;
@@ -411,8 +447,11 @@
       list-style: none;
       margin: 0 0 32px;
     }
+    /* SPACING-0927 R2-2a: gap between list items is 16px, named by the
+       sheet -- each item's own top/bottom padding supplies half the gap
+       to the item above/below (was 12+12=24 between items; 8+8=16). */
     .builder-feature-list li {
-      padding: 12px 0 12px 16px;
+      padding: var(--space-tight) 0 var(--space-tight) 16px;
       font-size: 15px;
       color: var(--ivory);
       border-bottom: 1px solid rgba(229,229,227,0.06);
@@ -420,14 +459,16 @@
       line-height: 1.5;
     }
     .builder-feature-list li:last-child { border-bottom: none; }
+    /* SPACING-0927 R2-2b: 3 rounds up to 4. */
     .builder-feature-list .feat-sub {
       display: block;
       font-size: 13px;
       color: var(--slate);
-      margin-top: 3px;
+      margin-top: var(--space-micro);
     }
     @media (max-width: 900px) {
-      .builders-pricing-grid { grid-template-columns: 1fr; gap: 40px; }
+      /* SPACING-0927 R2-2b: 40 ties 32/48 -- tie goes to the larger value. */
+      .builders-pricing-grid { grid-template-columns: 1fr; gap: var(--space-block); }
     }
 
     /* ── Live Ledger Stat Cards ──────────────────────────────────────
@@ -500,7 +541,9 @@
       letter-spacing: -0.025em;
       color: var(--ivory);
       max-width: 700px;
-      margin: 0 auto 20px;
+      /* SPACING-0927 R2-2a: heading to the element beneath it is 16px,
+         named by the sheet (was 20). */
+      margin: 0 auto var(--space-body);
       line-height: 1.1;
     }
     .pricing-cta-section p {
@@ -525,8 +568,10 @@
     /* ── FAQ (visible mirror of the FAQPage JSON-LD) ── */
     #faq h2 {
       /* AD sheet 9: font-size/weight/letter-spacing/color now come from the
-         shared section h2 rule in styles.css. */
-      margin-bottom: 48px;
+         shared section h2 rule in styles.css.
+         SPACING-0927 R2-2a: heading to the element beneath it is 16px,
+         named by the sheet (was 48). */
+      margin-bottom: var(--space-body);
     }
     /* AD sheet 9: the FAQ accordion component moved to the shared styles.css
        (.faq-list/.faq-item/.faq-question/.faq-icon/.faq-answer/.faq-answer-inner);
@@ -589,7 +634,7 @@
          with no gap, reading as one broken paragraph. 14px inline margin-top
          only (matches the sub's own line-spacing rhythm, the 12-16px band
          asked for); no other property, no word, changes. -->
-    <p style="margin-top:14px;">Skip the work another agent already did, and earn when other agents unlock what yours figured out.</p>
+    <p style="margin-top:var(--space-copy);">Skip the work another agent already did, and earn when other agents unlock what yours figured out.</p>
   </div>
 </div>
 

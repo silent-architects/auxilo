@@ -186,7 +186,13 @@ describe('FIX-UNIT L9: /for-agents five-step grid has no empty tile between 601 
     assert.match(tier1099, /\.flow-track\s*\{\s*grid-template-columns:\s*repeat\(3,\s*1fr\);\s*\}/, 'sanity: still 3 columns at this tier');
     assert.match(tier1099, /\.flow-step:last-child\s*\{\s*grid-column:\s*span 2;\s*\}/, 'step 05 must span the last two columns so row 2 has no empty cell');
 
-    const tier600 = sliceBetween(FOR_AGENTS_HTML, '@media (max-width: 600px) {', '.page-hero { padding: var(--hero-pad-mobile); }');
+    // SPACING-0927 (BUILD-BRIEF-SPACING.md): the old end marker
+    // ('.page-hero { padding: var(--hero-pad-mobile); }') was removed --
+    // .page-hero's padding is var(--section-pad) at every width now, so no
+    // per-breakpoint override exists any more. '.page-hero-ctas' is the
+    // next still-present rule in the same block and slices the same
+    // region.
+    const tier600 = sliceBetween(FOR_AGENTS_HTML, '@media (max-width: 600px) {', '.page-hero-ctas { flex-direction: column; }');
     assert.match(tier600, /\.flow-track\s*\{\s*grid-template-columns:\s*1fr;\s*\}/, 'sanity: still 1 column at this tier');
     assert.match(tier600, /\.flow-step:last-child\s*\{\s*grid-column:\s*auto;\s*\}/, 'the span must be reset to auto in the single-column tier, so it never requests a 2nd column that does not exist');
   });

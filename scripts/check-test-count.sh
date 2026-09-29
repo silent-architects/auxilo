@@ -503,7 +503,10 @@ cd "${REPO_ROOT}"
 # grew from 2 tests to 14. 4317 + 12 = 4329.
 # MONEY-0928 ("earn a share" -> "earn money"): test/earn-money-guard.test.js adds
 # 29 tests, plus 1 from the local path guard once it is tracked. 4329 + 30 = 4359.
-EXPECTED_TEST_COUNT=4359
+# Uniform spacing: the spacing suite measures every page at three widths
+# against the spacing tokens, and compares type against a committed baseline.
+# The pin is the total npm test prints on the integrated tree.
+EXPECTED_TEST_COUNT=4403
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

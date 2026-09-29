@@ -51,6 +51,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
+const { PAGE_GUTTER } = require('./helpers/ad-rules-check');
 
 const REPO_ROOT = path.join(__dirname, '..');
 const PUBLIC_DIR = path.join(REPO_ROOT, 'public');
@@ -136,17 +137,21 @@ describe('B1 (static, SUPERSEDED by the wave D1 AD design-tells sweep): .moat-ca
 });
 
 describe('S1 (static): /status drops .status-body\'s own horizontal padding', () => {
-  it('both .status-body padding declarations (desktop + <=640px) carry zero horizontal inset', () => {
+  // SPACING-0927 (BUILD-BRIEF-SPACING.md): .status-body's vertical padding
+  // is now the ruled section rhythm (var(--section-pad), responsive at the
+  // shared 900/600px breakpoints) instead of a flat, ad hoc pair with its
+  // own 640px-only override -- one rule now covers every width, so there is
+  // only one declaration to check, not two. The horizontal inset is still
+  // explicitly zeroed (via the longhand padding-left/right, not the
+  // shorthand's 2nd value), so .container alone still drives the inset —
+  // S1's actual point, unchanged.
+  it('.status-body carries a zero horizontal inset (padding-left/right: 0) at every width', () => {
     const html = readPublic('status.html');
-    const decls = [...html.matchAll(/\.status-body\s*\{\s*padding:\s*([^;]+);/g)].map((m) => m[1].trim());
-    assert.ok(decls.length >= 2, `expected at least 2 .status-body padding declarations, found ${decls.length}`);
-    for (const decl of decls) {
-      // "<top> <right> <bottom>" (3-value shorthand) or "<top> 0 <bottom>" —
-      // either way the horizontal (2nd) value must be 0.
-      const parts = decl.split(/\s+/);
-      assert.equal(parts.length, 3, `.status-body padding "${decl}" should be a 3-value shorthand`);
-      assert.equal(parts[1], '0', `.status-body padding "${decl}" must carry 0 horizontal inset`);
-    }
+    const rule = ruleBody(html, '\\.status-body\\s*\\{');
+    assert.ok(rule, '.status-body rule exists in status.html');
+    assert.match(rule, /padding:\s*var\(--section-pad\)/, '.status-body uses the shared section-rhythm token');
+    assert.match(rule, /padding-left:\s*0/, '.status-body zeroes its own left padding');
+    assert.match(rule, /padding-right:\s*0/, '.status-body zeroes its own right padding');
   });
 });
 
@@ -166,13 +171,21 @@ describe('N5 (static): /status body pins the footer to the bottom on short conte
   });
 });
 
-describe('S3 (static): /for-builders mobile hero content picks up .container\'s 24px', () => {
-  it('.builders-hero-content gets 24px horizontal padding inside the <=600px media query', () => {
+describe('S3 (static): /for-builders hero content shares the body section\'s own left edge', () => {
+  // SPACING-0927 (BUILD-BRIEF-SPACING.md B0-a): the 24px patch this test
+  // used to require existed to compensate for a body section's OWN
+  // .container carrying a second, stacked 24px padding below 1200px. That
+  // stacking is gone everywhere now (`section > .container` is zeroed at
+  // every width, styles.css) -- a body section's inset is its own
+  // var(--section-pad) alone. #builders-hero (a <section>) and
+  // .builders-hero-content both carry zero padding of their own (matching
+  // every sibling hero's *-content wrapper), so the hero's inset is ALSO
+  // just #builders-hero's own var(--section-pad) -- the two already match
+  // with no page-local patch, at every width, not just <=600px.
+  it('.builders-hero-content carries no padding of its own at any width', () => {
     const html = readPublic('for-builders.html');
     const styleBlock = [...html.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
-    const mediaBlock = ruleBody(styleBlock, '@media \\(max-width: 600px\\)\\s*\\{');
-    assert.ok(mediaBlock, 'the <=600px media query exists in for-builders.html');
-    assert.match(mediaBlock, /\.builders-hero-content\s*\{\s*padding-left:\s*24px;\s*padding-right:\s*24px;\s*\}/);
+    assert.doesNotMatch(styleBlock, /\.builders-hero-content\s*\{[^}]*padding/, '.builders-hero-content must not declare its own padding');
   });
 });
 
@@ -378,7 +391,7 @@ describe('Tier 2 (dynamic, playwright)', () => {
     });
   }
 
-  it('S3: /for-builders mobile (375px) hero h1 left edge equals the body section\'s left edge (40px)', async (t) => {
+  it('S3: /for-builders mobile (375px) hero h1 left edge equals the body section\'s left edge (16px, SPACING-0927 ruled gutter -- was 40px)', async (t) => {
     if (!tier2ok) { t.skip('playwright not resolvable'); return; }
     const ctx = await browser.newContext({ viewport: { width: 375, height: 900 } });
     const p = await ctx.newPage();
@@ -395,7 +408,13 @@ describe('Tier 2 (dynamic, playwright)', () => {
         Math.abs(lefts.heroH1 - lefts.bodyLabel) <= 0.5,
         `hero h1 left (${lefts.heroH1}) should equal body section left (${lefts.bodyLabel})`
       );
-      assert.ok(Math.abs(lefts.heroH1 - 40) <= 1, `hero h1 left should be ~40px at 375px, got ${lefts.heroH1}`);
+      // SPACING-0927 (BUILD-BRIEF-SPACING.md, SPACING-SHEET.md A1): the
+      // ruled page gutter at 375px is 16px, sitewide (was 40px, the
+      // now-removed .container double-pad compensation, B0-a). Compared
+      // against the named token (M-5), not a bare number -- this is a
+      // horizontal start position, not a rendered text metric, but the
+      // token reference is the more honest source of truth either way.
+      assert.ok(Math.abs(lefts.heroH1 - PAGE_GUTTER['375']) <= 1, `hero h1 left should be ~${PAGE_GUTTER['375']}px at 375px, got ${lefts.heroH1}`);
     } finally {
       await ctx.close();
     }
@@ -467,7 +486,21 @@ describe('Tier 2 (dynamic, playwright)', () => {
     }
   });
 
-  it('N4: .container computed horizontal padding holds 24px through 1199px and drops only at 1200px', async (t) => {
+  // SPACING-0927 (BUILD-BRIEF-SPACING.md B0-a): the >=1200px zero-out this
+  // block originally proved is still intact verbatim (N4 static, above) --
+  // that was never the whole story, though. Below 1200px, a .container
+  // nested directly in a <section> stacked ITS OWN 24px on top of the
+  // section's own gutter (44px/40px at 768/375 instead of the ruled
+  // 20px/16px). The fix removes that stacking at every width via a new,
+  // more specific `section > .container` rule (styles.css) -- so
+  // #own-learnings-free's .container (a direct child of a <section>) now
+  // reads 0px at 1149/1150/1199 too, not just at 1200px. The two
+  // mechanisms coexist (the original bare `.container` rule fires only at
+  // >=1200px; the new `section > .container` rule fires at every width and
+  // wins on specificity below 1200 where the bare rule doesn't apply
+  // anyway) -- there is no longer a width where THIS element's padding is
+  // 24px.
+  it('N4: .container computed horizontal padding is 0px at every width once nested in a section (was 24px below 1200px)', async (t) => {
     if (!tier2ok) { t.skip('playwright not resolvable'); return; }
     const results = {};
     for (const width of [1149, 1150, 1199, 1200]) {
@@ -483,9 +516,9 @@ describe('Tier 2 (dynamic, playwright)', () => {
         await ctx.close();
       }
     }
-    assert.equal(results[1149], '24px', `.container padding-left at 1149px should be 24px, got ${results[1149]}`);
-    assert.equal(results[1150], '24px', `.container padding-left at 1150px should be 24px, got ${results[1150]}`);
-    assert.equal(results[1199], '24px', `.container padding-left at 1199px should be 24px, got ${results[1199]}`);
+    assert.equal(results[1149], '0px', `.container padding-left at 1149px should be 0px, got ${results[1149]}`);
+    assert.equal(results[1150], '0px', `.container padding-left at 1150px should be 0px, got ${results[1150]}`);
+    assert.equal(results[1199], '0px', `.container padding-left at 1199px should be 0px, got ${results[1199]}`);
     assert.equal(results[1200], '0px', `.container padding-left at 1200px should be 0px, got ${results[1200]}`);
   });
 

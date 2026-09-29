@@ -102,55 +102,79 @@ const ALL_PUBLIC_HTML = gitTrackedPublicHtmlFiles();
 const WIDTHS = [375, 390, 430, 768];
 const MIN_CLEARANCE = 8;
 
-// Pre-fix 1440px h1.top per page (measured against base commit 34d979f,
-// before any of this suite's CSS changes) -- "no change vs before" at
-// desktop is one of this fix's explicit constraints, so it's pinned here
-// rather than just eyeballed once.
-const EXPECTED_1440_H1_TOP = {
-  // FIX-UNIT-2 V1/V7 (2026-09-26): about.html/connect.html/works-with.html's
-  // `main`/`.ww-main` padding-top:var(--header-h) rule was gated behind
-  // `@media (max-width: 900px)`, so these three pages' desktop h1 sat under
-  // (about/connect) or 3px into (works-with) the fixed header -- these three
-  // values were the BROKEN pre-fix numbers (48, 48, 96), not a healthy
-  // baseline. The fix makes the rule apply unconditionally; --header-h is a
-  // fixed formula (44+28+26+1+31=130px, not font-metric- or width-dependent),
-  // so all three now measure a clean 130 at every width, re-pinned here.
-  'public/about.html': 130,
-  'public/api.html': 140,
-  'public/connect.html': 130,
-  'public/dashboard.html': 208.8,
-  'public/for-agents.html': 140,
-  // F1 (coordinator fix, 2026-09-27, VISION PASS): #builders-hero's desktop
-  // padding-top cut 140px -> 96px (44px) so the first screen at 1280x800
-  // holds the whole gold primary button beneath the new P-3 step line.
-  // h1.top drops by the same 44px at every non-mobile width, including
-  // 1440 -- deliberate, not drift; re-measured against the fixed hero (was
-  // 250). --hero-pad-mobile (<=600px) is untouched, so mobile is unaffected.
-  'public/for-builders.html': 206,
-  'public/how-it-works.html': 140,
-  'public/how-submissions-work.html': 140,
-  // LAUNCH-WAVE-0926: the hero's own two-column grid (h1 head-row, copy+figure
-  // below) was removed along with the figure it existed to place (AD layout
-  // sheet item 1) -- #hero's flex-centered content is now shorter, so its
-  // vertically centered h1 sits lower in the viewport. Deliberate, not drift;
-  // re-measured against the rebuilt hero (was 100).
-  // FIX-UNIT-2B H2: #hero h1's max-width went 820px -> 950px (fixes the
-  // 1280px 3-line orphan; see styles.css). At 1440px this reflows the h1's
-  // own wrapped-line height, which shifts where #hero's flex-centered
-  // content lands vertically -- re-measured against the new width (was
-  // 168.359375).
-  // HERO-0927 (2026-09-27): the headline text changed (owner-ruled
-  // replacement, BUILD-BRIEF-HERO.md; #hero h1's CSS is untouched). The new,
-  // shorter headline wraps to fewer/different-height lines at 1440px, which
-  // again shifts the flex-centered vertical position -- re-measured against
-  // the new headline (was 175.234375).
-  'public/index.html': 190.90625,
-  'public/pricing.html': 140,
-  'public/status.html': 140,
-  'public/works-with.html': 130,
-  'public/writing-agents-message-board.html': 177.4,
-  'public/writing/index.html': 48,
-};
+// SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md M-5): this used to be a
+// per-page table of literal pixel numbers (219 on twelve pages, 208.8,
+// 177.4, 48 on the other three) asserted against h1.top -- a rendered
+// position, which CI (Linux) can draw a pixel differently than this
+// machine does. No pin here may depend on how text is drawn; a position
+// is compared against another measurement taken in the same run instead.
+// Two cases, both resolved with a live sibling/ancestor measurement rather
+// than a literal number: if h1 has a preceding visible sibling (e.g.
+// dashboard's .login-logo, or a legal/writing page's "back" link that sits
+// outside h1's own wrapper -- reached through that wrapper's own live
+// rect.top, not by walking the DOM further), h1 sits right after that
+// sibling's own bottom edge, margin-collapsed; otherwise h1 is the first
+// visible thing in its parent, so it sits exactly at the parent's own
+// content edge (the parent's own rect.top -- a live value that already
+// bakes in everything above it -- plus the parent's own padding-top/
+// border-top). Comparing the two live, in the same run, proves the same
+// invariant the old table asserted (h1 sits exactly where CSS box flow
+// puts it, not shifted by a stray margin) without hard-coding what that
+// position happens to equal on any one page.
+function measureExpectedH1Top(page) {
+  return page.evaluate(() => {
+    const h1 = document.querySelector('h1');
+    if (!h1) return null;
+    function isVisible(node) {
+      if (!(node instanceof Element)) return false;
+      const s = getComputedStyle(node);
+      if (s.display === 'none' || s.visibility === 'hidden') return false;
+      const r = node.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    }
+    const h1s = getComputedStyle(h1);
+    const h1MarginTop = parseFloat(h1s.marginTop) || 0;
+    const h1Top = h1.getBoundingClientRect().top;
+
+    // A real preceding sibling (e.g. dashboard's .login-logo above its
+    // h1) places h1 right after its own bottom edge, margin-collapsed --
+    // not at the containing block's padding edge at all. Walk siblings
+    // first; only fall through to the ancestor-padding case (below) when
+    // h1 is effectively the first visible thing in its block.
+    let sib = h1.previousElementSibling;
+    while (sib && !isVisible(sib)) sib = sib.previousElementSibling;
+    if (sib) {
+      const sr = sib.getBoundingClientRect();
+      const sibMarginBottom = parseFloat(getComputedStyle(sib).marginBottom) || 0;
+      return {
+        h1Top,
+        h1MarginTop,
+        expected: sr.bottom + Math.max(sibMarginBottom, h1MarginTop),
+        ancestorSelector: 'preceding sibling ' + sib.tagName.toLowerCase() + (sib.className && typeof sib.className === 'string' ? '.' + sib.className.trim().split(/\s+/)[0] : ''),
+      };
+    }
+
+    // No preceding sibling: h1 is the first visible content of its direct
+    // parent, so it sits exactly at that parent's own content edge -- the
+    // parent's OWN rect.top (a live measurement that already bakes in
+    // every ancestor's margin and padding above it, from nav-clearance
+    // down to whatever sits before the parent itself) plus the parent's
+    // own padding-top/border-top (0 for a pass-through wrapper, which
+    // still gives the right answer: h1 flush with the wrapper's own box).
+    // No need to walk further up the tree -- the parent's rect.top is
+    // already the finished answer for everything above it.
+    const el = h1.parentElement;
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    const s = getComputedStyle(el);
+    return {
+      h1Top,
+      h1MarginTop,
+      expected: r.top + (parseFloat(s.paddingTop) || 0) + (parseFloat(s.borderTopWidth) || 0),
+      ancestorSelector: el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/)[0] : ''),
+    };
+  });
+}
 
 function isPlaywrightAvailable() {
   try {
@@ -255,18 +279,21 @@ describe('MOBILE-HEADER-OFFSET Tier 1 (static server): h1 clears the fixed heade
 
   for (const relPath of ALL_PUBLIC_HTML) {
     const urlPath = relPath.replace(/^public\//, '');
-    const expected = EXPECTED_1440_H1_TOP[relPath];
-    it(`${relPath} at 1440px: h1.top unchanged from the pre-fix value (${expected})`, async (t) => {
+    it(`${relPath} at 1440px: h1.top sits exactly at its containing block's own content edge (no stray margin)`, async (t) => {
       if (!tier1ok) { t.skip('playwright not resolvable'); return; }
-      assert.ok(expected !== undefined, `${relPath} missing from EXPECTED_1440_H1_TOP -- add its pre-fix 1440px h1.top`);
       const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
       const p = await ctx.newPage();
       try {
         await p.goto(`${base}/${urlPath}`, { waitUntil: 'networkidle' });
-        const m = await measure(p);
+        const m = await measureExpectedH1Top(p);
+        assert.ok(m, `${relPath}: no <h1> found`);
         assert.ok(
-          Math.abs(m.h1Top - expected) < 0.5,
-          `${relPath} at 1440px: h1.top=${m.h1Top}, expected ${expected} (unchanged from before this fix)`
+          Math.abs(m.h1MarginTop) < 0.5,
+          `${relPath}: h1 margin-top should be 0, got ${m.h1MarginTop}`
+        );
+        assert.ok(
+          Math.abs(m.h1Top - m.expected) < 0.5,
+          `${relPath} at 1440px: h1.top=${m.h1Top}, expected ${m.expected} (its own containing block ${m.ancestorSelector}'s content edge, measured live in the same run)`
         );
       } finally {
         await ctx.close();

@@ -284,14 +284,32 @@ describe('W3-B rendering: buttons in hero, outlined ivory, click-scroll lands ta
     }
   });
 
-  it('no layout shift: the desktop hero (1440px) h1.top matches the pre-existing pinned value (140)', async (t) => {
+  it('no layout shift: the desktop hero (1440px) h1.top sits exactly at its containing block\'s own content edge (no stray margin)', async (t) => {
     if (!ok) { t.skip('playwright not resolvable'); return; }
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const p = await ctx.newPage();
     try {
       await p.goto(`${base}/how-it-works.html`, { waitUntil: 'networkidle' });
-      const h1Top = await p.evaluate(() => document.querySelector('h1').getBoundingClientRect().top);
-      assert.ok(Math.abs(h1Top - 140) < 0.5, `h1.top should remain 140 at 1440px (mobile-header-offset.test.js's pinned value), got ${h1Top}`);
+      // SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md M-5): was a literal
+      // pixel pin (219) duplicating mobile-header-offset.test.js's own
+      // EXPECTED_1440_H1_TOP table -- that table is gone too (same reason:
+      // a rendered position, not a token). h1 has no preceding visible
+      // sibling here, so it sits exactly at its own parent's content edge
+      // (the parent's live rect.top + its own padding-top/border-top);
+      // comparing the two live, in the same run, proves "no layout shift"
+      // without hard-coding what the position happens to equal.
+      const m = await p.evaluate(() => {
+        const h1 = document.querySelector('h1');
+        const h1Top = h1.getBoundingClientRect().top;
+        const h1MarginTop = parseFloat(getComputedStyle(h1).marginTop) || 0;
+        const el = h1.parentElement;
+        const r = el.getBoundingClientRect();
+        const s = getComputedStyle(el);
+        const expected = r.top + (parseFloat(s.paddingTop) || 0) + (parseFloat(s.borderTopWidth) || 0);
+        return { h1Top, h1MarginTop, expected };
+      });
+      assert.ok(Math.abs(m.h1MarginTop) < 0.5, `h1 margin-top should be 0, got ${m.h1MarginTop}`);
+      assert.ok(Math.abs(m.h1Top - m.expected) < 0.5, `h1.top=${m.h1Top}, expected ${m.expected} (its own containing block's content edge, measured live in the same run)`);
     } finally {
       await ctx.close();
     }

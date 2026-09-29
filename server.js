@@ -4260,7 +4260,7 @@ function renderUnlockEmailPrefsPage(state, token) {
   // in one; this route was the only one missing it.
   // FIX-UNIT-2 V8: skip link, same class and text as every other page's,
   // first element in <body>, pointing at this <main>'s new id.
-  return `<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Stop Unlock Emails | Auxilo</title><link rel="stylesheet" href="/styles.css?v=2d91b7aa"/>${styleBlock}</head><body><a href="#main" class="skip-to-content">Skip to content</a><main class="unsub-wrap" id="main">${logoRow}${body}</main></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Stop Unlock Emails | Auxilo</title><link rel="stylesheet" href="/styles.css?v=eba132a8"/>${styleBlock}</head><body><a href="#main" class="skip-to-content">Skip to content</a><main class="unsub-wrap" id="main">${logoRow}${body}</main></body></html>`;
 }
 
 app.get('/account/email-prefs/unsubscribe', (c) => {
@@ -13491,15 +13491,16 @@ function serveLegalPage(c, filename, title, seo) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>${title} | Auxilo</title>
   ${seoTags}
-  <link rel="stylesheet" href="/styles.css?v=2d91b7aa"/>
+  <link rel="stylesheet" href="/styles.css?v=eba132a8"/>
   <style>
     .legal-wrap{max-width:720px;margin:0 auto;padding:120px 24px 80px;color:#E5E5E3}
-    .legal-wrap h1{color:#FAFAF8;font-size:32px;margin-bottom:24px}
-    .legal-wrap h2{color:#FAFAF8;font-size:22px;margin:32px 0 12px}
-    .legal-wrap h3{color:#FAFAF8;font-size:18px;margin:24px 0 8px}
-    .legal-wrap p{line-height:1.7;margin-bottom:16px}
+    .legal-wrap h1{color:#FAFAF8;font-size:32px;margin-bottom:var(--space-body)}
+    .legal-wrap h2{color:#FAFAF8;font-size:22px;margin:32px 0 var(--space-body)}
+    .legal-wrap h3{color:#FAFAF8;font-size:18px;margin:24px 0 var(--space-body)}
+    .legal-wrap h4{margin-bottom:var(--space-body)}
+    .legal-wrap p{line-height:1.7;margin-bottom:var(--space-copy)}
     .legal-wrap ul{margin:0 0 16px 20px}
-    .legal-wrap li{margin-bottom:6px;line-height:1.6}
+    .legal-wrap li{margin-bottom:var(--space-body);line-height:1.6}
     .legal-wrap strong{color:#FAFAF8}
     .legal-wrap a{color:#C9A84C}
     .legal-wrap hr{border:none;border-top:1px solid rgba(229,229,227,0.12);margin:24px 0}

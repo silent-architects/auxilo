@@ -8,8 +8,19 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=2d91b7aa" />
+  <link rel="stylesheet" href="/styles.css?v=eba132a8" />
   <style>
+    /* SPACING-0927 (BUILD-BRIEF-SPACING.md B-9): this build's only
+       authorized effect on this page is what the shared navigation and
+       footer rules bring. styles.css now gives every <main> a sitewide
+       margin-top for nav clearance (B-4/A1) -- opted out here, at equal
+       specificity, loading after that sheet, so it wins by source order
+       with no !important needed. #login-view's and .dash-wrap's own top
+       padding (140px / 100px, both untouched, both already well past the
+       fixed nav) remain this page's sign-in-screen and dashboard-card
+       layout, neither of which this build touches. */
+    main { margin-top: 0; }
+
     /* ── Dashboard layout ───────────────────────────────────────────── */
     .dash-wrap {
       max-width: 860px;
@@ -236,21 +247,28 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      margin-bottom: 40px;
+      /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-6): 40 ties 32/48 --
+         tie goes to the larger value. */
+      margin-bottom: 48px;
     }
 
     .login-heading {
       font-size: 24px;
       font-weight: 700;
       color: var(--ivory);
-      margin-bottom: 8px;
+      /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-3): heading to the
+         first visible thing that follows it is 16px, named by the sheet
+         (was 8). */
+      margin-bottom: 16px;
       letter-spacing: -0.02em;
     }
 
     .login-sub {
       font-size: 14px;
       color: var(--slate);
-      margin-bottom: 28px;
+      /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-6): 28 ties 24/32 --
+         tie goes to the larger value. */
+      margin-bottom: 32px;
       line-height: 1.6;
     }
 
@@ -263,7 +281,9 @@
       font-size: 13px;
       font-weight: 500;
       color: var(--ash);
-      margin-bottom: 6px;
+      /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-6): a label above its
+         input is in scope and takes 8 (was 6). */
+      margin-bottom: 8px;
     }
 
     .form-input {
