@@ -162,12 +162,11 @@ describe('WAVE-D1 type pairing: tokens + @font-face', () => {
     assert.match(newsFallback, /descent-override:\s*\d+(\.\d+)?%/);
   });
 
-  it('the three self-hosted font files exist on disk (content-hashed names) within the byte ceilings', () => {
+  it('the three self-hosted font files exist on disk (content-hashed names) within the byte ceilings, and the retired Plex Mono 500 file is gone', () => {
     const prefixes = [
       ['ArchivoVariable', 70 * 1024],
       ['PlexMono400', 28 * 1024],
-      ['PlexMono500', 28 * 1024],
-      ['NewsreaderDisplay300', 28 * 1024],
+      ['NewsreaderDisplay300', 30 * 1024],
     ];
     const fontsDir = path.join(PUBLIC_DIR, 'fonts');
     const onDisk = fs.readdirSync(fontsDir);
@@ -179,6 +178,8 @@ describe('WAVE-D1 type pairing: tokens + @font-face', () => {
       assert.ok(size <= ceiling, `${match} is ${size} bytes, over its ${ceiling}-byte ceiling`);
       assert.ok(size > 1000, `${match} is suspiciously small (${size} bytes) — likely not a real font`);
     }
+    // The Plex Mono 500 face is retired, and its file with it.
+    assert.equal(onDisk.filter((f) => /^PlexMono500\./.test(f)).length, 0, 'no PlexMono500 file remains in the fonts folder');
   });
 
   for (const page of [...PAIRING_SHEET_PAGES, ...GAP_FILL_FONT_PAGES]) {
@@ -298,13 +299,18 @@ describe('WAVE-D1 design-tells sweep: removed markup + CSS carry no residue', ()
     }
   });
 
-  it('tell 8 — .section-ground carries no decorative background-image (background-color only)', () => {
-    // Design system pass: .section-ground is the paper ground now; #how-it-works and #footer-cta no
-    // longer paint a ground of their own (a section declares one with .on-dark / .on-tint).
-    const body = STYLES.match(/^\.section-ground\s*\{([^}]*)\}/m);
-    assert.ok(body, '.section-ground shared rule exists');
-    assert.doesNotMatch(body[1], /background-image/, '.section-ground should carry no background-image');
-    assert.match(body[1], /background-color:\s*var\(--paper\)/, '.section-ground should keep background-color');
+  it('tell 8 — the ground scopes carry no decorative background-image (background colour only), and .section-ground is retired', () => {
+    // Design system pass: a section declares its ground with .on-dark / .on-tint, or sits on paper.
+    // .section-ground (the old paper ground) is retired: no page carries it.
+    assert.doesNotMatch(STYLES, /\.section-ground\b/, '.section-ground is retired from styles.css');
+    const dark = STYLES.match(/^\.on-dark\s*\{([^}]*)\}/m);
+    assert.ok(dark, '.on-dark ground rule exists');
+    assert.match(dark[1], /background:\s*var\(--bg\)/, '.on-dark keeps its background colour');
+    assert.doesNotMatch(dark[1], /background-image/, '.on-dark should carry no background-image');
+    const tint = STYLES.match(/^\.on-tint\s*\{([^}]*)\}/m);
+    assert.ok(tint, '.on-tint ground rule exists');
+    assert.match(tint[1], /background:\s*var\(--bg\)/, '.on-tint keeps its background colour');
+    assert.doesNotMatch(tint[1], /background-image/, '.on-tint should carry no background-image');
   });
 
   // Tell 4: hairline section-divider ornament.
@@ -382,33 +388,31 @@ describe('WAVE-D1 design-tells sweep: removed markup + CSS carry no residue', ()
   });
 
   // Tell 5: card wall + border-radius normalization.
-  it('tell 5 — .moat-card is flattened (border-top ruled row, no background/border-radius/hover)', () => {
-    const body = STYLES.match(/\.moat-card\s*\{([^}]*)\}/);
-    assert.ok(body, '.moat-card rule exists');
-    assert.match(body[1], /border-top:/);
-    assert.doesNotMatch(body[1], /background:/);
-    assert.doesNotMatch(body[1], /border-radius:/);
-    assert.doesNotMatch(STYLES, /^\.moat-card:hover\s*\{/m, '.moat-card:hover should be gone');
+  it('tell 5 — the card wall stays flat: .moat-card is retired (no page uses it), and the ruled-row component that remains has no radius or hover lift', () => {
+    assert.doesNotMatch(STYLES, /\.moat-(?:card|grid)\b/, '.moat-card and .moat-grid are retired from styles.css');
+    // Positive control: a ruled row (border-top, no background, no radius) is what the shared sheet draws now.
+    const row = STYLES.match(/^\.dive-row\s*\{([^}]*)\}/m);
+    assert.ok(row, '.dive-row rule exists');
+    assert.match(row[1], /border-top:/);
+    assert.doesNotMatch(row[1], /background:/);
+    assert.doesNotMatch(row[1], /border-radius:/);
+    assert.doesNotMatch(STYLES, /^\.dive-row:hover\s*\{/m, '.dive-row:hover should lift nothing');
   });
 
   it('tell 5 (P3a) — border-radius sitewide in styles.css follows the shape scale: controls 6px, panels 10px, stages and cards 14px (tokens), plus 4px chips, 0, and the named exceptions', () => {
     // Design system pass: this used to collapse every radius to 4px controls / 0 surfaces.
     const radii = [...STYLES.matchAll(/border-radius:\s*([^;]+);/g)].map((m) => m[1].trim());
     const allowed = new Set(['var(--r-control)', 'var(--r-panel)', 'var(--r-stage)', '4px', '0']);
-    // Named, counted exceptions never swept: the email-capture split-corner
-    // pair (desktop L/R-only rounding + its mobile all-corner variant),
-    // the skip-to-content a11y control's bottom-only rounding, and
-    // .legend-swatch's 2px micro-decoration. (The 50% avatar-circle idiom
+    // Named, counted exceptions never swept: the skip-to-content a11y control's
+    // bottom-only rounding, the drawing kit's 5px button and the ledger drawing's
+    // 50% dot. (The email-capture split-corner pair, .legend-swatch's 2px and the
+    // 999px queue count pill left with their components.) The 50% avatar-circle idiom
     // lives in each page's own <style> block, not styles.css — untouched,
-    // out of this sitewide-sheet's scope, not checked here.)
+    // out of this sitewide-sheet's scope, not checked here.
     const exceptions = {
-      'var(--r-control) 0 0 var(--r-control)': 1, // .email-input, desktop
-      '0 var(--r-control) var(--r-control) 0': 1, // .footer-email-capture .btn-primary, desktop
       '0 0 var(--r-control) var(--r-control)': 1, // .skip-to-content
-      '2px': 1,         // .legend-swatch
       '5px': 1,         // .dw-btn, the drawing kit's button
       '50%': 1,         // .dw-tick, the ledger drawing's dot
-      '999px': 1,       // .dw-badge, the queue count pill
     };
     const seen = Object.fromEntries(Object.keys(exceptions).map((k) => [k, 0]));
     for (const r of radii) {
@@ -539,5 +543,49 @@ describe('WAVE-D1 fix pass: font cache immutability, CSP tightened, for-agents r
     assert.ok(sharedRevealRule, 'styles.css should still define the shared .reveal transition rule');
     assert.doesNotMatch(sharedRevealRule[1], /opacity\s*:\s*0/,
       'the shared .reveal rule should not set opacity: 0');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// Integration pass: the drawing kit's own face, and the helpers every page shares
+// ═══════════════════════════════════════════════════════════════════════
+
+describe('integration: .dw-title sets its own face, and the shared drawing helpers live once in the sheet', () => {
+  // A learning title inside a dark terminal stage inherits the mono face from .dw-term. A title is
+  // Archivo 500 wherever it sits, so the rule names its own family instead of inheriting one.
+  it('.dw-title is Archivo 500 by its own rule (it holds inside a mono .dw-term)', () => {
+    const rule = STYLES.match(/^\.dw-title\s*\{([^}]*)\}/m);
+    assert.ok(rule, '.dw-title rule exists');
+    assert.match(rule[1], /font-family:\s*var\(--sans\)/, '.dw-title names the sans face itself');
+    assert.match(rule[1], /font-weight:\s*500\b/, '.dw-title is weight 500');
+    // Positive control: the container it must beat really does set the mono face.
+    const term = STYLES.match(/^\.dw-term\s*\{([^}]*)\}/m);
+    assert.ok(term, '.dw-term rule exists');
+    assert.match(term[1], /font-family:\s*var\(--mono\)/, '.dw-term sets the mono face that .dw-title must not inherit');
+  });
+
+  // The homepage and /for-builders each carried a copy of the device's clipping wrapper and the
+  // review-queue drawing's kill-switch helpers. They live in the shared sheet now, once.
+  it('.dw-device-clip, .dw-hang and .dw-kill are defined once in styles.css and in no page', () => {
+    for (const selector of ['.dw-device-clip', '.dw-hang', '.dw-kill']) {
+      const defs = [...STYLES.matchAll(new RegExp(`^${selector.replace('.', '\\.')}\\s*\\{`, 'gm'))];
+      assert.equal(defs.length, 1, `${selector} is defined exactly once in styles.css, found ${defs.length}`);
+    }
+    for (const page of ['index.html', 'for-builders.html']) {
+      const html = readPage(page);
+      const style = html.match(/<style>([\s\S]*?)<\/style>/)[1];
+      for (const selector of ['.dw-device-clip', '.dw-hang', '.dw-kill']) {
+        assert.ok(!style.includes(`${selector} {`) && !style.includes(`${selector}{`), `${page} carries no copy of ${selector}`);
+      }
+      // Positive control: the markup still uses the shared helpers.
+      assert.match(html, /class="dw-device-clip"/, `${page} still draws the device through the shared wrapper`);
+      assert.match(html, /dw-kill/, `${page} still uses the shared kill-switch panel`);
+    }
+  });
+
+  it('the homepage style block carries no second .hero-grid (the shared sheet has it)', () => {
+    const style = readPage('index.html').match(/<style>([\s\S]*?)<\/style>/)[1];
+    assert.ok(!/^\s*\.hero-grid\s*\{/m.test(style), 'index.html defines no .hero-grid of its own');
+    assert.match(STYLES, /^\.hero-grid\s*\{/m, 'positive control: styles.css defines .hero-grid');
   });
 });

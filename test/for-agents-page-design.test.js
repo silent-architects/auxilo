@@ -102,12 +102,13 @@ describe('for-agents.html design pass: the five discovery cards', () => {
     assert.deepEqual(steps.map((s) => (s.match(/<h3>([^<]+)<\/h3>/) || [])[1]), ['Search', 'Preview', 'Unlock', 'Use', 'Share']);
   });
 
-  it('each card ends in its tag, and the step numbers stay in the text but are taken out of the picture', () => {
+  it('each card ends in its tag, and the ornamental step numbers are gone from the markup and from the page block', () => {
     assert.deepEqual(steps.map((s) => (s.match(/<span class="flow-step-tag (free|paid)">([^<]+)<\/span>\s*$/) || [])[2]), ['free', 'free', 'paid', 'immediate', 'free']);
-    const hide = STYLE.match(/\.flow-step-num\s*\{([^}]*)\}/);
-    assert.ok(hide, 'the step number rule is in the page block');
-    assert.match(hide[1], /position:\s*absolute/);
-    assert.match(hide[1], /clip:\s*rect\(0,\s*0,\s*0,\s*0\)/);
+    // positive control: each card opens on its h3 and the tag rule is still in the page block
+    assert.equal(steps.filter((s) => /^\s*<h3>/.test(s)).length, 5, 'every card opens on its h3');
+    assert.match(STYLE, /\.flow-step-tag\s*\{/, 'positive control: the tag rule is still in the page block');
+    assert.doesNotMatch(HTML, /flow-step-num/, 'no step number element or rule remains');
+    assert.doesNotMatch(track, />\s*0[1-5]\s*</, 'no 01 to 05 numeral remains in the cards');
   });
 
   it('inline code inside a card is plain code (no inline colour), styled as a chip by the page block', () => {

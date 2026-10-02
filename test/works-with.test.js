@@ -387,6 +387,61 @@ describe('WORKS-WITH: design rebuild, static markup and head', () => {
     assert.ok(/mask-position:\s*left center/.test(logoRule[1]), 'the mark sits on the left edge');
     assert.doesNotMatch(styleBlock, /var\(--(ivory|slate|ash|obsidian)\)/, 'no ground-blind colour token in the page block');
   });
+
+  it('every client card has either a real mark or the one placeholder glyph, never neither and never both, and the glyph carries no text', () => {
+    const listStart = WORKS_WITH_HTML.indexOf('<ul class="ww-list">');
+    const listBlock = WORKS_WITH_HTML.slice(listStart, WORKS_WITH_HTML.indexOf('</ul>', listStart));
+    const cards = [...listBlock.matchAll(/<li class="ww-cell[^"]*">([\s\S]*?)<\/li>/g)].map((m) => m[1]);
+    assert.equal(cards.length, 19, 'positive control: 19 cards');
+
+    const MARK = /<span class="ww-logo" role="img"/g;
+    const GLYPH = /<svg class="ww-glyph"/g;
+    let marks = 0;
+    let glyphs = 0;
+    for (const card of cards) {
+      const name = (card.match(/<div class="ww-client-name">([^<]+)<\/div>/) || [, '?'])[1];
+      const m = (card.match(MARK) || []).length;
+      const g = (card.match(GLYPH) || []).length;
+      assert.equal(m + g, 1, `${name}: exactly one of a real mark or the placeholder, got ${m} mark and ${g} glyph`);
+      assert.ok(/<div class="ww-logo-box">(?:<span class="ww-logo"|<svg class="ww-glyph")/.test(card), `${name}: the mark or glyph sits first in the mark box`);
+      marks += m;
+      glyphs += g;
+    }
+    assert.equal(marks, 9, 'positive control: nine real marks, untouched');
+    assert.equal(glyphs, 10, 'ten markless clients carry the placeholder');
+
+    const markless = ['Codex', 'Continue.dev', 'Roo Code', 'Antigravity', 'Amp', 'Factory droid', 'Kiro', 'OpenHands', 'OpenClaw', 'Other MCP clients'];
+    for (const name of markless) {
+      const card = cards.find((c) => c.includes(`<div class="ww-client-name">${name}</div>`));
+      assert.ok(card, `${name}: card present`);
+      assert.match(card, /<svg class="ww-glyph"/, `${name}: carries the placeholder`);
+    }
+
+    // The placeholder: decorative, drawn only from a rounded square, a chevron and a tick, no text of any kind.
+    const glyphMarkup = [...listBlock.matchAll(/<svg class="ww-glyph"[\s\S]*?<\/svg>/g)].map((x) => x[0]);
+    assert.equal(glyphMarkup.length, 10, 'positive control: ten placeholder drawings found');
+    for (const svg of glyphMarkup) {
+      assert.match(svg, /aria-hidden="true"/, 'the placeholder is hidden from assistive technology');
+      assert.match(svg, /viewBox="0 0 24 24"/, 'a 24 viewBox');
+      assert.match(svg, /stroke="currentColor"/, 'the stroke is currentColor');
+      assert.match(svg, /stroke-width="1\.25"/, 'a 1.25 stroke');
+      assert.match(svg, /<rect [^>]*rx="4"/, 'a rounded square with a 4 corner radius');
+      assert.equal((svg.match(/<path /g) || []).length, 2, 'two paths: the chevron and the tick');
+      assert.doesNotMatch(svg, /<(text|tspan|title|desc|image|use|foreignObject)\b/i, 'no text, title or embedded element');
+      assert.equal(svg.replace(/<[^>]*>/g, '').trim(), '', 'no character of text inside the drawing');
+    }
+    assert.ok(glyphMarkup.every((svg) => svg === glyphMarkup[0]), 'the same glyph on every markless card');
+  });
+
+  it('the placeholder fills the mark box like a real mark and takes its colour from the note token', () => {
+    const styleBlock = WORKS_WITH_HTML.slice(WORKS_WITH_HTML.indexOf('<style>'), WORKS_WITH_HTML.indexOf('</style>'));
+    const rule = styleBlock.match(/\.ww-logo-box \.ww-glyph\s*\{([^}]*)\}/);
+    assert.ok(rule, 'the page has a .ww-logo-box .ww-glyph rule');
+    assert.match(rule[1], /width:\s*100%/, 'full width of the box');
+    assert.match(rule[1], /height:\s*100%/, 'full height of the box');
+    assert.match(rule[1], /color:\s*var\(--fg-3\)/, 'note ink');
+    assert.match(WORKS_WITH_HTML, /<svg class="ww-glyph"[^>]*preserveAspectRatio="xMinYMid meet"/, 'drawn square at the left edge, centred vertically, as a mask is');
+  });
 });
 
 describe('WORKS-WITH: design rebuild, the card grid as rendered', { timeout: 120_000 }, () => {
@@ -481,6 +536,46 @@ describe('WORKS-WITH: design rebuild, the card grid as rendered', { timeout: 120
     }
     for (const c of m.cells.filter((x) => x.hasMark)) {
       assert.equal(c.markInk, 'rgb(10, 10, 10)', 'a mark is painted in the ink of the light ground');
+    }
+  });
+
+  it('in every tier the placeholder glyph takes the box a real mark takes in that tier, and is drawn in the note colour', async (t) => {
+    if (!ok) { t.skip('playwright not resolvable'); return; }
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const page = await ctx.newPage();
+    let cells;
+    try {
+      await page.goto(`${base}/works-with.html`, { waitUntil: 'networkidle' });
+      cells = await page.evaluate(() => [...document.querySelectorAll('.ww-list > li')].map((li) => {
+        const r = li.getBoundingClientRect();
+        const art = li.querySelector('.ww-logo, .ww-glyph');
+        const a = art.getBoundingClientRect();
+        const note = li.querySelector('.ww-client-note');
+        return {
+          size: ['large', 'medium', 'small'].find((s) => li.classList.contains('ww-size-' + s)),
+          kind: art.classList.contains('ww-glyph') ? 'glyph' : 'mark',
+          box: [a.left - r.left, a.top - r.top, a.width, a.height].map((n) => Math.round(n * 100) / 100).join(','),
+          ink: getComputedStyle(art).color,
+          noteInk: getComputedStyle(note).color,
+          text: art.textContent.trim(),
+        };
+      }));
+    } finally {
+      await ctx.close();
+    }
+    assert.equal(cells.length, 19, 'positive control: 19 cards');
+    for (const size of ['medium', 'small']) {
+      const inTier = cells.filter((c) => c.size === size);
+      const marks = inTier.filter((c) => c.kind === 'mark');
+      const glyphs = inTier.filter((c) => c.kind === 'glyph');
+      assert.ok(marks.length > 0 && glyphs.length > 0, `${size}: positive control, both kinds present`);
+      for (const g of glyphs) {
+        assert.equal(g.box, marks[0].box, `${size}: the glyph takes the box (left, top, width, height inside its card) a real mark takes`);
+      }
+    }
+    for (const g of cells.filter((c) => c.kind === 'glyph')) {
+      assert.equal(g.ink, g.noteInk, 'the glyph is drawn in the colour of the note text');
+      assert.equal(g.text, '', 'the glyph holds no text');
     }
   });
 

@@ -29,7 +29,6 @@
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/NewsreaderDisplay300.a07d3c5c.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="preload" href="/fonts/PlexMono500.0ecb6352.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/styles.css?v=eba132a8" />
   <meta name="theme-color" content="#0A0A0A" />
 
@@ -105,24 +104,12 @@
        questions and the closing ask live in the shared sheet. */
 
     /* ── Hero: the ask beside the exchange drawing ── */
-    /* The device (a shared drawing) runs past the hero's edges, so it sits in its own clipping
-       wrapper. The wrapper only clips: it draws nothing and is not a layout box of its own
-       (hidden, with the drawing inside it shown again), so the hero's one real box stays the
-       container. The hero itself stays a plain box (overflow visible): a clipping hero would
-       hide everything inside it from layout measurement. */
-    #hero { position: relative; overflow: visible; }
-    .dw-device-clip { position: absolute; inset: 0; overflow: hidden; pointer-events: none; visibility: hidden; }
-    .dw-device-clip .dw-device { visibility: visible; }
-
-    .hero-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
-      gap: var(--space-wide);
-      align-items: center;
-    }
+    /* The hero is the positioning box for the device (the shared drawing and its clipping
+       wrapper). It stays a plain box, overflow visible, so layout measurement sees everything
+       inside it. */
+    #hero { position: relative; }
 
     .hero-sub {
-      margin-top: var(--space-copy);
       font-size: 19px;
       line-height: 1.55;
       color: var(--fg-2);
@@ -130,6 +117,7 @@
     }
 
     .hero-install { margin-top: var(--space-card); }
+    #hero-setup-snippet { max-width: 560px; }
 
     .hero-setup-note {
       margin-top: var(--space-body);
@@ -181,29 +169,24 @@
       stroke-linecap: round;
     }
 
-    /* ── Review queue drawing: the kill switch hangs off the stage ──
-       It overhangs the stage by one gap step. The stage's wrapper reserves that step, which
-       keeps the section's space below its last visible thing the same as every other
-       section's. */
-    .dw-hang { padding-bottom: var(--space-body); }
-    .dw-kill {
-      position: absolute;
-      right: calc(var(--space-tight) * -1);
-      bottom: calc(var(--space-body) * -1);
-      padding: var(--space-tight) var(--space-body);
-    }
-    .dw-kill pre { font-family: var(--mono); font-size: 14px; color: var(--fg-1); }
-    .dw-kill pre::before { content: '$ '; color: var(--fg-3); }
-
     /* ── The client band, directly under the first screen ── */
     #works-with-band { padding: var(--band-pad); border-top: 1px solid var(--line); }
     .ww-band-wrap {
       display: grid;
       grid-template-columns: 220px 1fr;
-      gap: var(--space-block);
+      gap: var(--space-body) var(--space-block);
       align-items: center;
     }
-    .ww-band-eyebrow { font-size: 15px; line-height: 1.4; color: var(--fg-2); }
+    /* The label spans both rows of the band so the names row is as tall as the names alone and
+       the link sits one body gap under it. Its first line is set level with the names. */
+    .ww-band-eyebrow {
+      grid-row: 1 / span 2;
+      align-self: start;
+      padding-top: var(--space-micro);
+      font-size: 15px;
+      line-height: 1.4;
+      color: var(--fg-2);
+    }
     .ww-band-grid {
       display: flex;
       flex-wrap: wrap;
@@ -249,10 +232,10 @@
       }
     }
 
-    /* ── 1024 and down: one column, the exchange keeps its drawn size ── */
+    /* ── 1024 and down: the client band stacks and the exchange keeps its drawn size ── */
     @media (max-width: 1024px) {
-      .hero-grid { grid-template-columns: 1fr; gap: var(--space-block); }
-      .ww-band-wrap { grid-template-columns: 1fr; gap: var(--space-copy); }
+      .ww-band-wrap { grid-template-columns: 1fr; gap: var(--space-body); }
+      .ww-band-eyebrow { grid-row: auto; padding-top: 0; margin-bottom: var(--space-tight); }
       .ww-band-link { grid-column: 1; }
       .ww-band-grid { justify-content: flex-start; }
       .hx { max-width: 520px; }
@@ -262,11 +245,12 @@
     @media (max-width: 480px) {
       .hero-sub { font-size: 17px; }
       .hero-install { margin-top: var(--space-copy); }
+      .hero-setup-note { margin-top: var(--space-tight); }
+      .hero-setup-note + .hero-setup-note { margin-top: var(--space-micro); }
       .hx { height: auto; display: grid; gap: var(--space-body); }
       .hx .dw-panel { position: static; width: auto; }
       .hx-thread { display: none; }
       .ww-band-grid { display: grid; grid-template-columns: 1fr 1fr; }
-      .dw-kill { right: var(--space-tight); }
     }
 </style>
 </head>
@@ -308,7 +292,7 @@
 
 <!-- Hero: the ask beside the exchange drawing -->
 <section id="hero" class="on-dark" aria-labelledby="hero-heading">
-  <div class="dw-device-clip" aria-hidden="true"><svg class="dw-device" viewBox="0 0 900 860" aria-hidden="true"><polygon class="tri" points="450,40 860,800 40,800"/><line class="bar" x1="450" y1="478" x2="900" y2="478"/></svg></div>
+  <div class="dw-device-clip" aria-hidden="true"><svg class="dw-device" viewBox="0 160 900 700" aria-hidden="true"><polygon class="tri" points="450,40 860,800 40,800"/><line class="bar" x1="450" y1="478" x2="900" y2="478"/></svg></div>
   <div class="container hero-grid">
     <div>
       <h1 id="hero-heading">Earn from the work your AI already does.</h1>

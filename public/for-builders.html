@@ -144,14 +144,10 @@
        the questions and the closing ask live in the shared sheet. */
 
     /* ── Hero: the copy beside the three numbers ── */
-    /* The device (a shared drawing) runs past the hero's edges, so it sits in its own clipping
-       wrapper. The wrapper only clips: it draws nothing and is not a layout box of its own
-       (hidden, with the drawing inside it shown again), so the hero's one real box stays the
-       container. The hero itself stays a plain box (overflow visible) so layout measurement
-       still sees everything inside it. The grid sits above the device. */
+    /* The hero is the positioning box for the device (the shared drawing and its clipping
+       wrapper). It stays a plain box, overflow visible, so layout measurement sees everything
+       inside it. The grid sits above the device. */
     #builders-hero { position: relative; overflow: visible; }
-    .dw-device-clip { position: absolute; inset: 0; overflow: hidden; pointer-events: none; visibility: hidden; }
-    .dw-device-clip .dw-device { visibility: visible; }
     #builders-hero .hero-grid { position: relative; z-index: 1; }
 
     .builders-hero-sub {
@@ -330,19 +326,8 @@
       font-synthesis-weight: none;
     }
 
-    /* ── Why builders: the review queue drawing, as on the homepage ──
-       The kill switch overhangs the stage by one gap step. The wrapper reserves that step, which
-       keeps the section's space below its last visible thing the same as every other section's. */
+    /* ── Why builders: the review queue drawing, as on the homepage ── */
     .rq-panel { padding: var(--space-copy); }
-    .dw-hang { padding-bottom: var(--space-body); }
-    .dw-kill {
-      position: absolute;
-      right: calc(var(--space-tight) * -1);
-      bottom: calc(var(--space-body) * -1);
-      padding: var(--space-tight) var(--space-body);
-    }
-    .dw-kill pre { font-family: var(--mono); font-size: 14px; color: var(--fg-1); }
-    .dw-kill pre::before { content: '$ '; color: var(--fg-3); }
 
     /* ── Questions: a command or a bold phrase inside an answer ── */
     .faq-answer-inner code { color: var(--fg-1); }
@@ -367,9 +352,8 @@
       .discovery-band .discovery-row { padding: var(--space-body) var(--space-copy); }
     }
 
-    /* ── 480 and down: the kill switch tucks in, each stat row stacks its label under the numeral ── */
+    /* ── 480 and down: each stat row stacks its label under the numeral ── */
     @media (max-width: 480px) {
-      .dw-kill { right: var(--space-tight); }
       #builders-hero .builders-hero-stat { flex-direction: column; align-items: flex-start; gap: var(--space-micro); }
       #builders-hero .builders-hero-stats .builders-hero-stat .stat-label { text-align: left; }
     }
@@ -413,7 +397,7 @@
 
 <!-- ━━━ Section 1: Hero ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section id="builders-hero" class="on-dark" aria-labelledby="builders-hero-heading">
-  <div class="dw-device-clip" aria-hidden="true"><svg class="dw-device" viewBox="0 0 900 860" aria-hidden="true"><polygon class="tri" points="450,40 860,800 40,800"/><line class="bar" x1="450" y1="478" x2="900" y2="478"/></svg></div>
+  <div class="dw-device-clip" aria-hidden="true"><svg class="dw-device" viewBox="0 160 900 700" aria-hidden="true"><polygon class="tri" points="450,40 860,800 40,800"/><line class="bar" x1="450" y1="478" x2="900" y2="478"/></svg></div>
   <div class="container hero-grid">
     <div class="builders-hero-content">
       <h1 id="builders-hero-heading">Build Once. <br>Keep Earning.</h1>

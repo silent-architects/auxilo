@@ -183,10 +183,13 @@ describe('Wave E2 item 12: remaining 44px targets and coarse-pointer dive-arrow'
     assert.match(m[1], /min-height:\s*44px/);
   });
 
-  it('.dive-arrow is shown at any coarse pointer', () => {
-    const m = STYLES.match(/@media \(pointer: coarse\) \{([\s\S]*?)\n\}/);
-    assert.ok(m, '@media (pointer: coarse) block found');
-    assert.match(m[1], /\.dive-arrow\s*\{[^}]*opacity:\s*1\s*!important/);
+  it('.dive-arrow is retired: the index rows carry no arrow, so no rule shows one at a coarse pointer', () => {
+    // Design rebuild: "no arrows on buttons or links". The page index is .dive-row rows with a
+    // title and a description, and the coarse-pointer override that kept an arrow visible went with it.
+    assert.doesNotMatch(STYLES, /\.dive-arrow\b/, 'styles.css carries no .dive-arrow rule');
+    assert.doesNotMatch(fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8'), /dive-arrow/, 'index.html carries no .dive-arrow element');
+    // Positive control: the rows that replaced it are drawn by the shared sheet.
+    assert.match(STYLES, /^\.dive-row\s*\{/m, '.dive-row rule exists');
   });
 });
 
@@ -216,7 +219,7 @@ describe('Wave E2 item 13: cross-file CSS-only overrides', () => {
     assert.match(m[1], /font-size:\s*12px/);
   });
 
-  it('.legal-wrap h1/h2 and .writing-wrap h1 carry 1.1 leading + site tracking', () => {
+  it('.legal-wrap h1/h2 carry the display leading + site tracking, and .writing-wrap is retired', () => {
     // Design system pass: h1 and h2 now carry their own leading and tracking (h1 1.04 / -0.022em, h2 1.1 / -0.016em).
     const legalH1 = STYLES.match(/^\.legal-wrap h1\s*\{([^}]*)\}/m);
     assert.ok(legalH1, '.legal-wrap h1 rule found');
@@ -227,13 +230,9 @@ describe('Wave E2 item 13: cross-file CSS-only overrides', () => {
     assert.match(legalH2[1], /line-height:\s*1\.1\b/);
     assert.match(legalH2[1], /letter-spacing:\s*-0\.016em/);
 
-    // Anchor to line start so this matches the actual rule, not the
-    // preceding comment's own inline-quoted `.writing-wrap h1 { ... }`
-    // example (documenting the OLD 1.25 value it's replacing).
-    const writingM = STYLES.match(/^\.writing-wrap h1\s*\{([^}]*)\}/m);
-    assert.ok(writingM, '.writing-wrap h1 override found');
-    assert.match(writingM[1], /line-height:\s*1\.04\s*!important/); // Design system pass: h1 leading is 1.04
-    assert.match(writingM[1], /letter-spacing:\s*-0\.022em/);
+    // The essay's wrapper class is on no page, so its override is gone from the shared sheet
+    // (positive control: the legal rules above are still there).
+    assert.doesNotMatch(STYLES, /\.writing-wrap\b/, 'styles.css carries no .writing-wrap rule');
   });
 });
 

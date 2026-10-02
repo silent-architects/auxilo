@@ -89,36 +89,19 @@ function ruleBody(css, selectorPattern) {
 // Tier 1: static CSS + HTML assertions
 // ═══════════════════════════════════════════════════════════════════════
 
-describe('B1 (static, SUPERSEDED by the wave D1 AD design-tells sweep): .moat-card is a ruled list, .moat-icon is gone', () => {
-  // The original B1 protected the 2-col bordered-card + 32x32 icon design
-  // against an accidental dead-CSS deletion (Gate-A regression, sheet 9).
-  // Wave D1's AD design-tells sweep (tell 5 card-wall, tell 6 icon-marker)
-  // deliberately supersedes that design: .moat-icon is removed sitewide and
-  // .moat-card flattens to a hairline-ruled list, no grid/box/hover chrome.
-  // This block now protects the NEW state instead.
-  it('.moat-card is flattened (no background/border/border-radius/hover), .moat-icon rule is gone', () => {
-    const moatGrid = ruleBody(STYLES, '^\\.moat-grid\\s*\\{');
-    assert.ok(moatGrid, '.moat-grid rule exists');
-    assert.doesNotMatch(moatGrid, /display:\s*grid/, '.moat-grid is no longer a grid (flattened to a block ruled list)');
-
-    const moatCard = ruleBody(STYLES, '^\\.moat-card\\s*\\{');
-    assert.ok(moatCard, '.moat-card rule exists');
-    // Design system pass: the hairline is the ground-aware --line token (was rgba(229,229,227,0.13)).
-    assert.match(moatCard, /border-top:\s*1px solid var\(--line\)/);
-    assert.doesNotMatch(moatCard, /background:/, '.moat-card carries no fill');
-    assert.doesNotMatch(moatCard, /border-radius:/, '.moat-card carries no radius');
-
-    assert.equal(ruleBody(STYLES, '^\\.moat-card:hover\\s*\\{'), null, '.moat-card:hover rule is gone (no hover chrome on a ruled list)');
-    assert.equal(ruleBody(STYLES, '^\\.moat-icon\\s*\\{'), null, '.moat-icon rule is gone (icon-as-marker tell removed)');
-
-    const moatCardH3 = ruleBody(STYLES, '^\\.moat-card h3\\s*\\{');
-    assert.ok(moatCardH3, '.moat-card h3 rule exists');
-    assert.match(moatCardH3, /font-size:\s*19px/); // Design system pass: the h3 scale is 19px (was 18px)
-    assert.match(moatCardH3, /font-weight:\s*500/);
-
-    const moatCardP = ruleBody(STYLES, '^\\.moat-card p\\s*\\{');
-    assert.ok(moatCardP, '.moat-card p rule exists');
-    assert.match(moatCardP, /font-size:\s*15px/);
+describe('B1 (static, SUPERSEDED by the design rebuild): .moat-grid, .moat-card and .moat-icon are retired', () => {
+  // The original B1 protected the 2-col bordered-card + 32x32 icon design against an accidental
+  // dead-CSS deletion (Gate-A regression, sheet 9). Wave D1's AD design-tells sweep flattened it to a
+  // hairline-ruled list, and the design rebuild then removed the last page that used it (the
+  // paragraph on /for-builders is a claim beside a drawing now). With no user left the whole family
+  // is gone from the shared sheet. This block protects THAT state instead.
+  it('.moat-grid, .moat-card (and its h3, p, :hover) and .moat-icon have no rule in the shared sheet', () => {
+    for (const selector of ['\\.moat-grid', '\\.moat-card', '\\.moat-card:first-child', '\\.moat-card:hover', '\\.moat-card h3', '\\.moat-card p', '\\.moat-icon']) {
+      assert.equal(ruleBody(STYLES, `^${selector}\\s*\\{`), null, `${selector.replace(/\\\\/g, '')} rule is retired`);
+    }
+    assert.doesNotMatch(STYLES, /\.moat-/, 'styles.css carries no .moat-* selector at all');
+    // Positive control: ruleBody still finds a rule that exists.
+    assert.ok(ruleBody(STYLES, '^\\.dive-row\\s*\\{'), 'positive control: ruleBody finds the live .dive-row rule');
   });
 
   it('the <=900px media query no longer collapses .moat-grid to one column (nothing to collapse — it is already a single-column ruled list)', () => {
@@ -129,15 +112,15 @@ describe('B1 (static, SUPERSEDED by the wave D1 AD design-tells sweep): .moat-ca
 
   // Design rebuild: the "You Control What Publishes" block on /for-builders is a claim beside the
   // review-queue drawing (a .pair), so its paragraph no longer sits in a .moat-grid/.moat-card
-  // wrapper. The shared rules above are untouched (the positive control is the .moat-card rule
-  // still existing in the shared sheet), and the paragraph itself is still served.
+  // wrapper. The shared rules went with it (the positive control is the paragraph itself, still
+  // served inside the .pair).
   it('/for-builders no longer wraps its "You Control What Publishes" paragraph in .moat-grid/.moat-card, and never renders .moat-icon', () => {
     const html = readPublic('for-builders.html');
     assert.doesNotMatch(html, /class="moat-grid"/);
     assert.doesNotMatch(html, /class="moat-card"/);
     assert.doesNotMatch(html, /class="moat-icon"/, '.moat-icon markup is gone from /for-builders');
     assert.match(html, /<section id="why-builders"[^>]*>\s*<div class="container pair art-left">\s*<div>\s*<h2 id="why-builders-heading" >You Control What Publishes<\/h2>\s*<p>Raw transcripts never leave your machine\./, 'the paragraph is the claim beside the drawing');
-    assert.ok(ruleBody(STYLES, '^\\.moat-card\\s*\\{'), 'positive control: the shared .moat-card rule still exists');
+    assert.equal(ruleBody(STYLES, '^\\.moat-card\\s*\\{'), null, 'the shared .moat-card rule went with its last user');
   });
 });
 

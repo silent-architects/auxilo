@@ -51,8 +51,8 @@
     }
     .ww-size-small { padding: var(--space-copy); }
 
-    /* The mark box is reserved on every card, so a card without a mark puts its name
-       on the same line as a card with one. A CSS mask needs a box with a real height. */
+    /* The mark box is on every card, so a card without a mark puts its name on the same
+       line as a card with one. A CSS mask needs a box with a real height. */
     .ww-logo-box {
       display: flex;
       align-items: flex-end;
@@ -66,6 +66,16 @@
     .ww-logo-box .ww-logo {
       -webkit-mask-position: left center;
       mask-position: left center;
+    }
+    /* A client with no mark file gets one generic placeholder glyph, a tiny terminal prompt, in the
+       same box. It fills the box exactly as a real mark does (full width and height, drawn square at
+       the left edge and centred vertically), so a card without a mark keeps its name on the same line.
+       It is quieter than a mark on purpose: note ink, not heading ink. */
+    .ww-logo-box .ww-glyph {
+      display: block;
+      width: 100%;
+      height: 100%;
+      color: var(--fg-3);
     }
 
     .ww-client-name {
@@ -221,7 +231,7 @@
             <div class="ww-client-note">Capture wired; not yet confirmed on a live session.</div>
           </li>
           <li class="ww-cell ww-size-medium">
-            <div class="ww-logo-box"></div>
+            <div class="ww-logo-box"><svg class="ww-glyph" viewBox="0 0 24 24" preserveAspectRatio="xMinYMid meet" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M7.5 8.5L11.5 12L7.5 15.5"/><path d="M13.5 15.5H17.5"/></svg></div>
             <div class="ww-client-name">Codex</div>
             <div class="ww-client-label">supported, hook capture (CLI) &middot; best-effort, sweep capture (Desktop)</div>
             <div class="ww-client-note">Desktop app currently does not execute hooks (upstream openai/codex#21639); sweep covers it.</div>
@@ -245,31 +255,31 @@
             <div class="ww-client-note">NOT locally verified; strict format probe fails silent on storage-shape drift</div>
           </li>
           <li class="ww-cell ww-size-medium">
-            <div class="ww-logo-box"></div>
+            <div class="ww-logo-box"><svg class="ww-glyph" viewBox="0 0 24 24" preserveAspectRatio="xMinYMid meet" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M7.5 8.5L11.5 12L7.5 15.5"/><path d="M13.5 15.5H17.5"/></svg></div>
             <div class="ww-client-name">Continue.dev</div>
             <div class="ww-client-label">best-effort, sweep capture</div>
             <div class="ww-client-note">NOT locally verified; strict format probe fails silent on storage-shape drift</div>
           </li>
           <li class="ww-cell ww-size-medium">
-            <div class="ww-logo-box"></div>
+            <div class="ww-logo-box"><svg class="ww-glyph" viewBox="0 0 24 24" preserveAspectRatio="xMinYMid meet" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M7.5 8.5L11.5 12L7.5 15.5"/><path d="M13.5 15.5H17.5"/></svg></div>
             <div class="ww-client-name">Roo Code</div>
             <div class="ww-client-label">best-effort, sweep capture</div>
             <div class="ww-client-note">NOT locally verified; strict format probe fails silent on storage-shape drift</div>
           </li>
           <li class="ww-cell ww-size-small">
-            <div class="ww-logo-box"></div>
+            <div class="ww-logo-box"><svg class="ww-glyph" viewBox="0 0 24 24" preserveAspectRatio="xMinYMid meet" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M7.5 8.5L11.5 12L7.5 15.5"/><path d="M13.5 15.5H17.5"/></svg></div>
             <div class="ww-client-name">Antigravity</div>
             <div class="ww-client-label">supported early, hook capture</div>
             <div class="ww-client-note">hook schema young; verified against live install</div>
           </li>
           <li class="ww-cell ww-size-small">
-            <div class="ww-logo-box"></div>
+            <div class="ww-logo-box"><svg class="ww-glyph" viewBox="0 0 24 24" preserveAspectRatio="xMinYMid meet" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M7.5 8.5L11.5 12L7.5 15.5"/><path d="M13.5 15.5H17.5"/></svg></div>
             <div class="ww-client-name">Amp</div>
             <div class="ww-client-label">probabilistic, no capture, MCP only</div>
             <div class="ww-client-note">threads are server-side</div>
           </li>
           <li class="ww-cell ww-size-small">
-            <div class="ww-logo-box"></div>
+            <div class="ww-logo-box"><svg class="ww-glyph" viewBox="0 0 24 24" preserveAspectRatio="xMinYMid meet" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M7.5 8.5L11.5 12L7.5 15.5"/><path d="M13.5 15.5H17.5"/></svg></div>
             <div class="ww-client-name">Factory droid</div>
             <div class="ww-client-label">unverified</div>
             <div class="ww-client-note">Capture wired; not yet confirmed on a live session.</div>
@@ -281,13 +291,13 @@
             <div class="ww-client-note"></div>
           </li>
           <li class="ww-cell ww-size-small">
-            <div class="ww-logo-box"></div>
+            <div class="ww-logo-box"><svg class="ww-glyph" viewBox="0 0 24 24" preserveAspectRatio="xMinYMid meet" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M7.5 8.5L11.5 12L7.5 15.5"/><path d="M13.5 15.5H17.5"/></svg></div>
             <div class="ww-client-name">Kiro</div>
             <div class="ww-client-label">probabilistic, no capture, MCP only</div>
             <div class="ww-client-note"></div>
           </li>
           <li class="ww-cell ww-size-small">
-            <div class="ww-logo-box"></div>
+            <div class="ww-logo-box"><svg class="ww-glyph" viewBox="0 0 24 24" preserveAspectRatio="xMinYMid meet" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M7.5 8.5L11.5 12L7.5 15.5"/><path d="M13.5 15.5H17.5"/></svg></div>
             <div class="ww-client-name">OpenHands</div>
             <div class="ww-client-label">probabilistic, no capture, MCP only</div>
             <div class="ww-client-note">(best-effort adapter planned)</div>
@@ -299,13 +309,13 @@
             <div class="ww-client-note">(plugin planned)</div>
           </li>
           <li class="ww-cell ww-size-small">
-            <div class="ww-logo-box"></div>
+            <div class="ww-logo-box"><svg class="ww-glyph" viewBox="0 0 24 24" preserveAspectRatio="xMinYMid meet" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M7.5 8.5L11.5 12L7.5 15.5"/><path d="M13.5 15.5H17.5"/></svg></div>
             <div class="ww-client-name">OpenClaw</div>
             <div class="ww-client-label">best-effort, sweep paused</div>
             <div class="ww-client-note">NOT locally verified; reads the legacy sessions/*.jsonl layout. Current OpenClaw builds keep transcripts in a per-agent SQLite store, so capture is paused until the adapter is re-pointed; dedicated plugin + clawhub listing planned</div>
           </li>
           <li class="ww-cell ww-size-small">
-            <div class="ww-logo-box"></div>
+            <div class="ww-logo-box"><svg class="ww-glyph" viewBox="0 0 24 24" preserveAspectRatio="xMinYMid meet" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M7.5 8.5L11.5 12L7.5 15.5"/><path d="M13.5 15.5H17.5"/></svg></div>
             <div class="ww-client-name">Other MCP clients</div>
             <div class="ww-client-label">probabilistic, no capture, MCP only</div>
             <div class="ww-client-note"></div>

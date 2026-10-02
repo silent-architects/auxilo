@@ -46,8 +46,10 @@ const ALLOWED_SPACING_VALUES = new Set([
   HAIRLINE,
 ]);
 
+// The reading-column pages: the four legal routes. /about and /connect are
+// sectioned pages with the standard gutter now.
 const READING_PAGES = new Set([
-  '/about', '/connect', '/terms', '/privacy',
+  '/terms', '/privacy',
   '/legal/subprocessors', '/legal/supported-clients',
 ]);
 

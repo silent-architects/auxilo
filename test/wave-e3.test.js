@@ -16,9 +16,9 @@
  *      legal shell (serveLegalPage in server.js).
  *   4. /terms and /privacy: the legal shell now emits <hr> for a markdown
  *      line that is exactly "---", instead of a literal "<p>---</p>".
- *   6. PlexMono500 preload added to /, /how-it-works, /pricing, /api (the
- *      four pages Lighthouse named as missing it; /for-agents and
- *      /for-builders already had it).
+ *   6. Font preloads. PlexMono500 was preloaded on /, /how-it-works, /pricing,
+ *      /api, /for-agents and /for-builders; the design pass retired the face and
+ *      every page now preloads the display serif in its place.
  *   7. The DR-4 reveal failsafe (head <script> + setInterval watchdog),
  *      the scroll-reveal IntersectionObserver initializers, and every
  *      `class="reveal"` / reveal-in-a-class-list attribute removed from
@@ -62,28 +62,26 @@ function readPublic(rel) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Item 6: PlexMono500 preload
+// Item 6: font preloads
 // ═══════════════════════════════════════════════════════════════════════
 
-describe('WAVE-E3 item 6: PlexMono500 preload on the four Lighthouse-named pages', () => {
-  const PAGES = ['index.html'];
-  const LINK = '<link rel="preload" href="/fonts/PlexMono500.0ecb6352.woff2" as="font" type="font/woff2" crossorigin />';
+// Design pass: index.html carries the display serif preload in place of the retired
+// PlexMono500 face (the weight 500 face and its file are gone), and keeps the other two.
+// The original item 6 loop (PlexMono500 preloaded on /, /how-it-works, /pricing, /api) has
+// no page left in it: every page that carried the link has dropped it.
+describe('WAVE-E3 item 6 (design pass): index.html preloads the display serif, not PlexMono500', () => {
+  const INDEX = readPublic('index.html');
+  const NEWSREADER = '<link rel="preload" href="/fonts/NewsreaderDisplay300.a07d3c5c.woff2" as="font" type="font/woff2" crossorigin />';
 
-  for (const page of PAGES) {
-    it(`${page} preloads PlexMono500 exactly once`, () => {
-      const html = readPublic(page);
-      const count = html.split(LINK).length - 1;
-      assert.equal(count, 1, `expected exactly one PlexMono500 preload link in ${page}, found ${count}`);
-    });
+  it('index.html preloads NewsreaderDisplay300 exactly once', () => {
+    assert.equal(INDEX.split(NEWSREADER).length - 1, 1);
+  });
 
-    it(`${page} still preloads ArchivoVariable and PlexMono400 (unchanged)`, () => {
-      const html = readPublic(page);
-      assert.match(html, /PlexMono500\.0ecb6352\.woff2/);
-      assert.match(html, /ArchivoVariable\.1b4d984f\.woff2/);
-      assert.match(html, /PlexMono400\.0698749e\.woff2/);
-    });
-  }
-
+  it('index.html no longer preloads PlexMono500 (positive control: it still preloads ArchivoVariable and PlexMono400)', () => {
+    assert.doesNotMatch(INDEX, /PlexMono500/);
+    assert.match(INDEX, /ArchivoVariable\.1b4d984f\.woff2/);
+    assert.match(INDEX, /PlexMono400\.0698749e\.woff2/);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════

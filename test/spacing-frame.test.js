@@ -169,7 +169,7 @@ describe('SPACING-0927 Part A (the frame), measured the Art Director\'s way', { 
     return `${RULE_NAMES[rule]}: ${evalResult.passCounts[rule]}/${evalResult.totalChecks[rule]} passing\n${shown}${more}`;
   }
 
-  for (const rule of [1, 2, 3, 4, 5, 6, 8, 9, 10]) {
+  for (const rule of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
     it(`${RULE_NAMES[rule]}: every check passes`, (t) => {
       if (bootSkipReason) { t.skip(bootSkipReason); return; }
       if (!playwrightOk) { t.skip('playwright not resolvable'); return; }
@@ -222,6 +222,35 @@ describe('SPACING-0927 Part A (the frame), measured the Art Director\'s way', { 
         for (const b of bottoms) {
           assert.ok(b.bottom <= h, `${w}x${h}: "${b.id}" bottom edge ${b.bottom} exceeds the fold (${h})`);
         }
+      } finally {
+        await ctx.close();
+      }
+    });
+  }
+
+  // ── The homepage client band: its link sits 16 under the row of names ──
+  // Measured box to box in the same run and compared with the page's own
+  // --space-body token, not a pixel literal.
+  for (const width of WIDTHS) {
+    it(`homepage @ ${width}: the client band's link sits one body gap (--space-body, 16) under the row of client names`, async (t) => {
+      if (bootSkipReason) { t.skip(bootSkipReason); return; }
+      if (!playwrightOk) { t.skip('playwright not resolvable'); return; }
+      const ctx = await browser.newContext({ viewport: { width, height: HEIGHTS[width] } });
+      const page = await ctx.newPage();
+      try {
+        await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
+        const m = await page.evaluate(() => {
+          const names = document.querySelector('#works-with-band .ww-band-grid');
+          const link = document.querySelector('#works-with-band .ww-band-link');
+          const token = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--space-body'));
+          return {
+            token,
+            gap: link && names ? link.getBoundingClientRect().top - names.getBoundingClientRect().bottom : null,
+            fullGridGap: names ? parseFloat(getComputedStyle(names.parentElement).rowGap) : null,
+          };
+        });
+        assert.ok(typeof m.gap === 'number', 'the names row and the link were both found');
+        assert.ok(Math.abs(m.gap - m.token) <= 0.5, `${width}: names row -> link gap ${m.gap}, token --space-body ${m.token}`);
       } finally {
         await ctx.close();
       }

@@ -200,9 +200,12 @@ describe('CSS-MECHANICAL (static): the four no-judgment-required token dispositi
     assert.doesNotMatch(html, /\.tier-card--power\s*\{/);
     assert.doesNotMatch(html, /@media \(max-width: 900px\)\s*\{\s*\.tier-cards-grid/, 'the dead 900px .tier-cards-grid override is also gone');
 
-    // The shared rule this page now falls through to is untouched.
-    const sharedTierCard = ruleBody(STYLES, '\\.tier-card\\s*\\{');
-    assert.ok(sharedTierCard, 'shared styles.css .tier-card rule still exists, unchanged');
+    // Design rebuild: the page falls through to nothing now. The shared .tier-* card family was
+    // unused by every page and is retired from styles.css (.tier-name stays: the pricing table's
+    // tier column uses it, which is the positive control that ruleBody still finds a live rule).
+    assert.equal(ruleBody(STYLES, '\\.tier-card\\s*\\{'), null, 'shared styles.css .tier-card rule is retired');
+    assert.equal(ruleBody(STYLES, '\\.tier-cards-grid\\s*\\{'), null, 'shared styles.css .tier-cards-grid rule is retired');
+    assert.ok(ruleBody(STYLES, '\\.tier-name\\s*\\{'), 'positive control: the live shared .tier-name rule is found');
   });
 });
 

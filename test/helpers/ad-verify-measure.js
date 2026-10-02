@@ -38,6 +38,13 @@
  *   is what inflated a heading-to-card-row gap by the card's own internal
  *   padding, e.g. 16 + 32 = 48).
  *
+ *   Sheet v2 (design rebuild): `headingGaps` now returns the first visible
+ *   thing wherever it sits (it used to skip anything that started above the
+ *   heading's bottom edge) with the heading's and the following unit's edges,
+ *   so rule 5 can tell under from beside; out-of-flow elements and the inner
+ *   shapes of a drawing are never "the thing under a heading", and an inline
+ *   <svg> root is a box. `cards` and `joinedRows` feed rules 7 and 9.
+ *
  *   M-4: "A scrollable code block is measured by its visible box, not by
  *   the full height of what it holds." The Art Director's own unionBox()
  *   (used for section content-box / gutter measurement) did not exclude a
@@ -481,6 +488,30 @@ function extractPageMetrics() {
     if (!behind) return true; // painted on the page background, own colour is a real fill
     return !(own.r === behind.r && own.g === behind.g && own.b === behind.b && Math.abs(own.a - behind.a) < 0.02);
   }
+  // Sheet v2 (heading gap): the first visible thing is found in reading
+  // order, through any wrapper, and is returned wherever it sits. The old
+  // version skipped everything that started above the heading's bottom edge
+  // and carried on looking, which measured a heading-left layout against
+  // some unrelated row further down. Now the caller sees the real first
+  // thing and its edges, and rule 5 decides whether it is under the heading
+  // or beside it. Two kinds of element are never "the thing under a
+  // heading": one that is out of the flow (absolutely positioned or fixed,
+  // or inside such a box that does not also hold the heading, e.g. the
+  // faint device behind a hero), and a drawing's inner shapes (an inline
+  // <svg> is one drawing, a box; its text is not a line of text on the
+  // page). An inline <svg> root counts as a box here, which the old
+  // upper-case tag check never matched.
+  function isOutOfFlow(el, startEl) {
+    for (let p = el; p && p !== mainRoot; p = p.parentElement) {
+      if (p.contains(startEl)) break;
+      const pos = cs(p).position;
+      if (pos === 'absolute' || pos === 'fixed') return true;
+    }
+    return false;
+  }
+  function isSvgRoot(el) {
+    return el.namespaceURI === 'http://www.w3.org/2000/svg' && el.localName === 'svg' && !el.ownerSVGElement;
+  }
   function firstVisibleThingAfter(startEl) {
     const all = Array.from(mainRoot.querySelectorAll('*'));
     const idx = all.indexOf(startEl);
@@ -489,8 +520,14 @@ function extractPageMetrics() {
       const el = all[i];
       if (!isVisible(el)) continue;
       if (el.contains(startEl) || startEl.contains(el)) continue;
+      if (el.ownerSVGElement) continue; // a shape inside a drawing; the drawing itself is found at its root
+      if (isOutOfFlow(el, startEl)) continue;
       const r = rect(el);
-      if (r.top < rect(startEl).bottom - 2) continue; // still overlapping/above, skip
+
+      // A drawing is a box.
+      if (isSvgRoot(el)) {
+        return { el, rect: r, kind: 'box' };
+      }
 
       // M-3 box-edge check FIRST: a bordered/backgrounded box is itself
       // "the first visible thing" -- stop here, do not descend into it.
@@ -537,16 +574,228 @@ function extractPageMetrics() {
     if (!isVisible(h)) continue;
     const hRect = rect(h);
     const found = firstVisibleThingAfter(h);
+    // The unit that follows the heading: the child of the closest common
+    // ancestor that holds the found thing (a table's first cell sits at the
+    // table's own left edge, but it is the table that follows the heading).
+    // Beside-or-under is judged on that unit.
+    let branch = null;
+    if (found) {
+      branch = found.el;
+      while (branch.parentElement && !branch.parentElement.contains(h)) branch = branch.parentElement;
+    }
+    const bRect = branch ? rect(branch) : null;
     out.headingGaps.push({
       heading: shortSelector(h),
+      headingTag: h.tagName.toLowerCase(),
       headingText: h.textContent.trim().slice(0, 60),
       headingBottom: round(hRect.bottom),
+      // Sheet v2: the heading's edges, the found thing's and the following
+      // unit's, so rule 5 can tell a thing UNDER the heading from one BESIDE it.
+      headingLeft: round(hRect.left),
+      headingRight: round(hRect.right),
+      firstThingLeft: found ? round(found.rect.left) : null,
+      firstThingRight: found ? round(found.rect.right) : null,
+      followingUnitLeft: bRect ? round(bRect.left) : null,
+      followingUnitRight: bRect ? round(bRect.right) : null,
+      followingUnitTop: bRect ? round(bRect.top) : null,
       firstThingSelector: found ? shortSelector(found.el) : null,
       firstThingKind: found ? found.kind : null,
       firstThingText: found ? found.el.textContent.trim().slice(0, 60) : null,
       firstThingTop: found ? round(found.rect.top) : null,
       gap: found ? round(found.rect.top - hRect.bottom) : null,
     });
+  }
+
+  // ── Cards in a grid, and rows joined by a hairline (sheet v2) ─────────
+  // A drawing is not a card and its panels are not cards: anything inside
+  // one of these is left to the drawing rules.
+  const DRAWING_SCOPE = '.stage, .panel, .step-art, .code-block, .dw-stage, .dw-stage-dark, .dw-dark, .dw-light, [aria-hidden="true"], svg, nav, footer';
+  function px(v) { return parseFloat(v) || 0; }
+  function lineBox(el) {
+    // Visible border widths, per side (a transparent border is not a line).
+    const s = cs(el);
+    const vis = (w, c) => (px(w) > 0 && (parseColor(c) || { a: 0 }).a > 0 ? px(w) : 0);
+    return {
+      top: vis(s.borderTopWidth, s.borderTopColor),
+      right: vis(s.borderRightWidth, s.borderRightColor),
+      bottom: vis(s.borderBottomWidth, s.borderBottomColor),
+      left: vis(s.borderLeftWidth, s.borderLeftColor),
+    };
+  }
+  // The token values a card must take on the ground it sits on: read the
+  // computed colour of a throwaway child painted with var(--surface) and
+  // var(--line), so the check follows the ground (paper, tint, dark).
+  function groundTokens(el) {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;visibility:hidden;width:0;height:0;background-color:var(--surface);border:1px solid var(--line)';
+    el.appendChild(probe);
+    const ps = cs(probe);
+    const out2 = { surface: ps.backgroundColor, line: ps.borderTopColor };
+    el.removeChild(probe);
+    return out2;
+  }
+  // Cards: a repeated element (two or more under one parent) that draws a
+  // box of its own, big enough to be a card rather than a pill, tag or
+  // button, sitting in a grid or flex parent, outside any drawing.
+  out.cards = [];
+  for (const [key, g] of groups) {
+    if (g.els.length < 2) continue;
+    const first = g.els[0];
+    if (first.closest(DRAWING_SCOPE)) continue;
+    const parent = first.parentElement;
+    const pd = cs(parent).display;
+    if (!['grid', 'inline-grid', 'flex', 'inline-flex'].includes(pd)) continue;
+    const ls = lineBox(first);
+    const four = ls.top > 0 && ls.right > 0 && ls.bottom > 0 && ls.left > 0;
+    const r0 = rect(first);
+    if (!four || r0.width < 140 || r0.height < 96) continue;
+    const gt = groundTokens(first);
+    const fs0 = cs(first);
+    const rads = [fs0.borderTopLeftRadius, fs0.borderTopRightRadius, fs0.borderBottomRightRadius, fs0.borderBottomLeftRadius].map(px);
+    // Gaps to the nearest card to the right (same row) and below (same
+    // column), measured edge to edge, for every card in the group.
+    const rr = g.els.map(rect);
+    const gaps = [];
+    for (let i = 0; i < rr.length; i++) {
+      let right = null, below = null;
+      for (let j = 0; j < rr.length; j++) {
+        if (i === j) continue;
+        const a = rr[i], b = rr[j];
+        const overlapV = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 4;
+        const overlapH = Math.min(a.right, b.right) - Math.max(a.left, b.left) > 4;
+        if (overlapV && b.left >= a.right - 1) { const d = b.left - a.right; if (right === null || d < right) right = d; }
+        if (overlapH && b.top >= a.bottom - 1) { const d = b.top - a.bottom; if (below === null || d < below) below = d; }
+      }
+      if (right !== null) gaps.push({ dir: 'across', gap: round(right) });
+      if (below !== null) gaps.push({ dir: 'down', gap: round(below) });
+    }
+    out.cards.push({
+      key,
+      className: g.className,
+      parentSelector: g.parentSelector,
+      parentDisplay: pd,
+      count: g.els.length,
+      inGrid: pd === 'grid' || pd === 'inline-grid',
+      bg: fs0.backgroundColor,
+      surface: gt.surface,
+      borderColor: fs0.borderTopColor,
+      line: gt.line,
+      borderWidths: [ls.top, ls.right, ls.bottom, ls.left],
+      radii: rads,
+      gaps,
+    });
+  }
+
+  // Rows joined by a 1px line: a run of two or more adjacent siblings of
+  // one kind, at least one of which draws a 1px hairline above or below it
+  // and no line at either side. A table row is its cells: a table whose
+  // cells carry the hairline is one such list, each cell measured by its
+  // own padding (a cell's text can sit short of a taller neighbour's, so
+  // its inset is not its padding). For every row the probe records whether
+  // a line sits above it and below it (its own, or the neighbour's), and
+  // its padding on each side. A row's padding is its own plus the padding of
+  // the chain of first (or last) in-flow children down to the text, so a
+  // row that hands its padding to an inner button still reads right (a
+  // question row's button carries the 24).
+  out.joinedRows = [];
+  const rowSeen = new Set();
+  const runsSeen = new Map();
+  function hairlineRow(el) {
+    const ls = lineBox(el);
+    return ls.left === 0 && ls.right === 0 && (ls.top === 1 || ls.bottom === 1);
+  }
+  function rowKey(el) { return el.tagName + '|' + (typeof el.className === 'string' ? el.className.trim() : ''); }
+  function isBlockLevel(el) {
+    const d = cs(el).display;
+    return !(d === 'inline' || d === 'inline-block' || d === 'inline-flex' || d === 'inline-grid' || d === 'contents');
+  }
+  function hasOwnText(el) {
+    for (const node of el.childNodes) {
+      if (node.nodeType === 3 && node.textContent.trim().length > 0) return true;
+    }
+    return false;
+  }
+  // Padding a row gives its content on one side: its own, plus that of each
+  // wrapper in the chain of first (or last) in-flow children, down to the
+  // first element that holds text of its own. That element is the content,
+  // so a chip or a label with padding of its own does not count as the row's.
+  function chainPadding(row, side) {
+    const Side = side === 'top' ? 'Top' : 'Bottom';
+    let total = px(cs(row)['padding' + Side]);
+    let cur = row;
+    for (let depth = 0; depth < 6; depth++) {
+      const kids = Array.from(cur.children).filter((k) => isVisible(k) && cs(k).position !== 'absolute' && cs(k).position !== 'fixed' && isBlockLevel(k) && rect(k).height > 0);
+      if (!kids.length) break;
+      const kid = side === 'top' ? kids[0] : kids[kids.length - 1];
+      const ks = cs(kid);
+      total += px(ks['margin' + Side]);
+      if (hasOwnText(kid)) break;
+      total += px(ks['padding' + Side]) + px(ks['border' + Side + 'Width']);
+      cur = kid;
+    }
+    return round(total);
+  }
+  for (const el of mainRoot.querySelectorAll('*')) {
+    if (!isVisible(el) || el.parentElement === mainRoot) continue;
+    if (el.closest(DRAWING_SCOPE)) continue;
+    const tag = el.tagName;
+    if (tag === 'TD' || tag === 'TH') {
+      if (cs(el).display !== 'table-cell' || !hairlineRow(el)) continue;
+      const table = el.closest('table');
+      if (!table || rowSeen.has(table)) continue;
+      rowSeen.add(table);
+      const trs = Array.from(table.rows).filter(isVisible);
+      if (trs.length < 2) continue;
+      trs.forEach((tr, ri) => {
+        const prev = ri > 0 ? trs[ri - 1] : null;
+        Array.from(tr.cells).filter(isVisible).forEach((c, ci) => {
+          const ls = lineBox(c);
+          const pc = prev && prev.cells[ci] ? lineBox(prev.cells[ci]) : null;
+          const pd2 = paddingOf(c);
+          out.joinedRows.push({
+            kind: 'cell',
+            selector: shortSelector(c),
+            lineAbove: ls.top > 0 || !!(pc && pc.bottom > 0),
+            lineBelow: ls.bottom > 0,
+            padTop: pd2.top,
+            padBottom: pd2.bottom,
+            text: c.textContent.trim().slice(0, 30),
+          });
+        });
+      });
+      continue;
+    }
+    if (['TR', 'THEAD', 'TBODY', 'TFOOT', 'TABLE'].includes(tag)) continue;
+    if (!hairlineRow(el)) continue;
+    const parent = el.parentElement;
+    const kids = Array.from(parent.children).filter(isVisible);
+    const k = rowKey(el);
+    const idx = kids.indexOf(el);
+    // the run of adjacent same-kind siblings this element belongs to
+    let a = idx, b = idx;
+    while (a > 0 && rowKey(kids[a - 1]) === k) a--;
+    while (b < kids.length - 1 && rowKey(kids[b + 1]) === k) b++;
+    if (b - a + 1 < 2) continue;
+    const marker = k + '@' + a;
+    if (!runsSeen.has(parent)) runsSeen.set(parent, new Set());
+    if (runsSeen.get(parent).has(marker)) continue;
+    runsSeen.get(parent).add(marker);
+    for (let i = a; i <= b; i++) {
+      const row = kids[i];
+      const bd = lineBox(row);
+      const prevRow = i > a ? kids[i - 1] : null;
+      const nextRow = i < b ? kids[i + 1] : null;
+      out.joinedRows.push({
+        kind: 'row',
+        selector: shortSelector(row),
+        parent: shortSelector(parent),
+        lineAbove: bd.top > 0 || !!(prevRow && lineBox(prevRow).bottom > 0),
+        lineBelow: bd.bottom > 0 || !!(nextRow && lineBox(nextRow).top > 0),
+        padTop: chainPadding(row, 'top'),
+        padBottom: chainPadding(row, 'bottom'),
+        text: row.textContent.trim().slice(0, 30),
+      });
+    }
   }
 
   return out;
