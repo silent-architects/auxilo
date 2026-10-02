@@ -85,9 +85,10 @@ function startStaticServer(root) {
 // This file's section list and count were updated to match (9 -> 8).
 //
 // LAUNCH-WAVE-0926 (advertising-copywriter/AD layout sheet, 2026-09-26):
-// #setup-detail is new, inserted directly after #hero and before
-// #learning-explainer (the hero's trust bullets + exchange figure moved
-// there). Count updated to match (8 -> 9).
+// #setup-detail is new, inserted before #learning-explainer (the hero's trust
+// bullets + exchange figure moved there). Count updated to match (8 -> 9).
+// Design rebuild: the order is now hero, works-with band, setup-detail, ... (the
+// band moved up under the hero; the count of nine is unchanged).
 //
 // #hero is deliberately excluded from the "everything computes 120px" invariant:
 // public/styles.css's `#hero { padding: 0 24px; ... min-height: 100vh; }` is a
@@ -101,15 +102,15 @@ const HOMEPAGE_SECTIONS = [
   // like any section, var(--section-pad), so its padding-top/bottom is
   // 120px here too, hero included, no exception (rule 3).
   { id: 'hero', label: 'hero (Hero heading)', expectPad: true },
+  // Design rebuild: the client band moved up to sit directly under the dark first
+  // screen (hero then band, the one pair of neighbours that share a ground). It keeps
+  // the band rhythm. SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-7): "A band is a
+  // section with no heading that holds a single row. A band's top and bottom
+  // padding is the band rhythm: 64 at 1280..." -- not the full section rhythm every
+  // headed section uses (var(--band-pad), 64px here).
+  { id: 'works-with-band', label: '(unheaded) works-with logo band', expectPadValue: '64px' },
   { id: 'setup-detail', label: 'You Control What Publishes', expectPad: true },
   { id: 'learning-explainer', label: 'What a Learning Is, and Why Another Agent Would Use It', expectPad: true },
-  // SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-7): "A band is a section
-  // with no heading that holds a single row. A band's top and bottom
-  // padding is the band rhythm: 64 at 1280..." -- not the full section
-  // rhythm every headed section uses. Pin moved (was 120px, the same
-  // var(--section-pad) every other section carries) to 64px, the new
-  // var(--band-pad) token this section-with-no-heading now uses.
-  { id: 'works-with-band', label: '(unheaded) works-with logo band', expectPadValue: '64px' },
   { id: 'own-learnings-free', label: 'Never watch your agent solve the same problem twice.', expectPad: true },
   { id: 'how-it-works', label: 'Your Agents Learn. You Earn.', expectPad: true },
   { id: 'explore-section', label: 'explore-section (class-selected, no id)', expectPad: true },

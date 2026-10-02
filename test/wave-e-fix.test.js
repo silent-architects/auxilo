@@ -200,7 +200,8 @@ describe('Wave E fix F4: #nav-<page>-page !important overrides removed; class="a
 
   it('the shared .nav-links a.active rule still exists in styles.css (E2\'s rule this fix relies on)', () => {
     const styles = fs.readFileSync(path.join(PUBLIC_DIR, 'styles.css'), 'utf8');
-    assert.match(styles, /\.nav-links a\.active\s*\{\s*color:\s*var\(--ash\);\s*\}/);
+    // Design system pass: the active link is --fg-1 (ivory in the dark nav scope), was var(--ash).
+    assert.match(styles, /\.nav-links a\.active\s*\{\s*color:\s*var\(--fg-1\);\s*\}/);
   });
 });
 

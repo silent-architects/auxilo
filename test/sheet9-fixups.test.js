@@ -103,7 +103,8 @@ describe('B1 (static, SUPERSEDED by the wave D1 AD design-tells sweep): .moat-ca
 
     const moatCard = ruleBody(STYLES, '^\\.moat-card\\s*\\{');
     assert.ok(moatCard, '.moat-card rule exists');
-    assert.match(moatCard, /border-top:\s*1px solid rgba\(229,229,227,0\.13\)/);
+    // Design system pass: the hairline is the ground-aware --line token (was rgba(229,229,227,0.13)).
+    assert.match(moatCard, /border-top:\s*1px solid var\(--line\)/);
     assert.doesNotMatch(moatCard, /background:/, '.moat-card carries no fill');
     assert.doesNotMatch(moatCard, /border-radius:/, '.moat-card carries no radius');
 
@@ -112,7 +113,8 @@ describe('B1 (static, SUPERSEDED by the wave D1 AD design-tells sweep): .moat-ca
 
     const moatCardH3 = ruleBody(STYLES, '^\\.moat-card h3\\s*\\{');
     assert.ok(moatCardH3, '.moat-card h3 rule exists');
-    assert.match(moatCardH3, /font-size:\s*18px/);
+    assert.match(moatCardH3, /font-size:\s*19px/); // Design system pass: the h3 scale is 19px (was 18px)
+    assert.match(moatCardH3, /font-weight:\s*500/);
 
     const moatCardP = ruleBody(STYLES, '^\\.moat-card p\\s*\\{');
     assert.ok(moatCardP, '.moat-card p rule exists');

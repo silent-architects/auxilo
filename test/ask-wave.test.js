@@ -218,6 +218,10 @@ describe('ASK-WAVE treatment tests', { timeout: 120_000 }, () => {
       for (const el of all) {
         const cs = getComputedStyle(el);
         if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+        // Design rebuild: a gold mark inside a drawing (the exchange's earnings bar and tick)
+        // is illustration, not an ask. Drawings are role="img" or aria-hidden; only real
+        // controls and content count as gold events.
+        if (el.closest('[role="img"], [aria-hidden="true"]')) continue;
         const bg = cs.backgroundColor;
         if (bg !== aurum && bg !== aurumHi) continue;
         const r = el.getBoundingClientRect();
@@ -336,6 +340,29 @@ describe('ASK-WAVE treatment tests', { timeout: 120_000 }, () => {
     }
   }
 
+  // ── (ii-c) positive control for the drawing exclusion in goldElements() above: on /, the
+  // exchange drawing really does carry solid-gold marks, the collector really does skip them,
+  // and the one real ask (the copy button) is still counted. Without this the exclusion could
+  // hide a gold control that was wrongly marked aria-hidden. ──
+  for (const viewport of VIEWPORTS) {
+    it(`(ii-c) the exchange drawing on / carries solid-gold marks that the collector skips, while the copy button still counts, at ${viewport.name}`, async (t) => {
+      if (!ok) { t.skip('playwright not resolvable'); return; }
+      await withPage(viewport, async (p) => {
+        await goto(p, 'index.html');
+        const aurum = await resolveToken(p, '--aurum');
+        const aurumHi = await resolveToken(p, '--aurum-hi');
+        const inDrawing = await p.evaluate(({ a, b }) => [...document.querySelectorAll('.hx *')].filter((el) => {
+          const bg = getComputedStyle(el).backgroundColor;
+          return bg === a || bg === b;
+        }).length, { a: aurum, b: aurumHi });
+        assert.ok(inDrawing >= 1, `expected solid-gold marks inside the .hx drawing at ${viewport.name}, found ${inDrawing}`);
+        const els = await goldElements(p, aurum, aurumHi, false);
+        assert.ok(els.some((e) => e.id === 'copy-hero-setup'), 'the hero copy button is counted as a gold event');
+        assert.ok(!els.some((e) => e.rect && e.className && /dw-(tick|amt)/.test(e.className)), 'no drawing mark is counted');
+      });
+    });
+  }
+
   // ── (ii-b) each page carries >= 1 gold ask somewhere in the document (scroll allowed) ──
   for (const viewport of VIEWPORTS) {
     for (const page of PAGES) {
@@ -371,6 +398,9 @@ describe('ASK-WAVE treatment tests', { timeout: 120_000 }, () => {
         await goto(p, 'for-builders.html');
         const aurum = await resolveToken(p, '--aurum');
         const aurumHi = await resolveToken(p, '--aurum-hi');
+        // Design system pass: on a light ground the same gold is drawn as --gold-ink (--accent-text);
+        // solid --aurum is for fills and for text on a dark ground.
+        const goldInk = await resolveToken(p, '--gold-ink');
         const numEl = await p.evaluate(() => {
           const el = document.querySelector('.pull-stat-num');
           if (!el) return null;
@@ -381,8 +411,8 @@ describe('ASK-WAVE treatment tests', { timeout: 120_000 }, () => {
         // The number's own text colour IS the solid gold token (that's the
         // ledger-tier hierarchy row FB-HERO-STATS-MOBILE preserved)...
         assert.ok(
-          numEl.color === aurum || numEl.color === aurumHi,
-          `.pull-stat-num text colour at ${viewport.name}: got ${numEl.color}, expected the solid --aurum/--aurum-hi token`,
+          numEl.color === aurum || numEl.color === aurumHi || numEl.color === goldInk,
+          `.pull-stat-num text colour at ${viewport.name}: got ${numEl.color}, expected the gold token (--aurum/--aurum-hi, or --gold-ink on a light ground)`,
         );
         // ...but its background is NOT gold, so the collector (which keys
         // on background-color only) must not surface it as a gold-fill

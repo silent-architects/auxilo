@@ -596,12 +596,19 @@ describe('FIX-UNIT-2 M1: heading <br> sweep (static markup)', () => {
   const TWO_SENTENCE_BR_RESTORED = [
     ['public/for-builders.html', 'id="footer-cta-heading"', '#footer-cta-heading'],
     ['public/pricing.html', 'id="pricing-cta-heading"', '#pricing-cta-heading'],
-    ['public/index.html', 'id="footer-cta-heading"', '#footer-cta-heading'],
+    // Design rebuild: the homepage's page-level balance rules are gone; every h1 and h2 gets
+    // text-wrap: balance from one shared rule (null selector below), so the pin moved there.
+    ['public/index.html', 'id="footer-cta-heading"', null],
   ];
   for (const [file, idAttr, balanceSelector] of TWO_SENTENCE_BR_RESTORED) {
     it(`${file} ${idAttr}: <br> restored between the two sentences, text-wrap: balance kept`, () => {
       const html = read(file);
       assert.match(html, new RegExp(`<h2 ${idAttr.replace(/"/g, '\\"')} >Your agents are already learning\\. <br>Your earnings start now\\.<\\/h2>`));
+      if (balanceSelector === null) {
+        assert.doesNotMatch(html, /#footer-cta-heading\s*\{/, 'positive control for the shared rule: the page itself carries no per-heading rule');
+        assert.match(read('public/styles.css'), /(?:^|\n)h1,\s*h2\s*\{[^}]*text-wrap:\s*balance/, 'the shared h1, h2 rule carries text-wrap: balance');
+        return;
+      }
       const escaped = balanceSelector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       assert.match(html, new RegExp(`${escaped}\\s*\\{\\s*text-wrap:\\s*balance;\\s*\\}`));
     });
@@ -820,7 +827,10 @@ describe('FIX-UNIT-2B H2/H3: homepage hero h1 width + CTA link placement', { tim
   // (also covers 1440px) and its R2-3 test for the text-wrap assertion.
   it('H2 rendered: homepage h1 has no single-word line at 375, 768 or 1280 (2 lines at 1280, was 3)', async (t) => {
     if (!ok) { t.skip('playwright not resolvable'); return; }
-    const expected = { 375: 3, 768: 2, 1280: 2 };
+    // Design rebuild: the display face is a lighter, narrower serif and the hero grid's copy
+    // column is wider, so the headline now sets on ONE line at 768 (was 2). 375 and 1280 are
+    // unchanged. A single line is never a single-word line, so the orphan check below holds.
+    const expected = { 375: 3, 768: 1, 1280: 2 };
     for (const width of [375, 768, 1280]) {
       const height = width === 375 ? 812 : (width === 768 ? 1024 : 800);
       const ctx = await browser.newContext({ viewport: { width, height } });
@@ -857,9 +867,14 @@ describe('FIX-UNIT-2B H2/H3: homepage hero h1 width + CTA link placement', { tim
     }
   });
 
-  it('H3: .hero-install-row stays a column at every width (id override beats the shared 981px row switch)', () => {
+  // Design rebuild: the link's row wrapper is retired with the old hero layout. The link is a
+  // plain child of the copy column, after the install block, so it can never sit beside the
+  // command block at any width (the rendered H3 test below measures the placement).
+  it('H3: the link sits in the copy column after the install block, never in a row beside it at any width (no .hero-install-row wrapper)', () => {
     const html = read('public/index.html');
-    assert.match(html, /#hero \.hero-install-row\s*\{\s*flex-direction:\s*column;\s*align-items:\s*flex-start;\s*\}/);
+    assert.ok(html.includes('id="hero-cta-secondary"'), 'positive control: the link is on the page');
+    assert.ok(!html.includes('hero-install-row'), 'the row wrapper and its rules are gone');
+    assert.match(html, /<\/div>\s*<a href="\/how-it-works" id="hero-cta-secondary" class="hero-cta-link">/, 'the link follows the closed #install block directly');
   });
 
   it('H3 rendered: "See How It Works" sits under the two setup notes, left-aligned with them, and its bottom edge is inside the first screen at 1280x800 and 375x812', async (t) => {

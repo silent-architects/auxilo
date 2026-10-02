@@ -113,7 +113,8 @@ describe('ASK-WAVE A: old strings retired', () => {
     const rule = stylesCss.slice(ruleStart, ruleEnd) + stylesCss.slice(hoverStart, hoverEnd);
     assert.equal(/var\(--aurum\)|var\(--aurum-hi\)/.test(rule), false, 'a gold token still fills .nav-cta');
     assert.match(rule, /background:\s*transparent/);
-    assert.match(rule, /var\(--ivory\)/);
+    // Design system pass: the text is --fg-1, which the dark nav scope sets to ivory.
+    assert.match(rule, /var\(--fg-1\)/);
   });
 });
 
@@ -206,8 +207,14 @@ describe('ASK-WAVE A: homepage gold-event + hero-secondary invariants', () => {
     assert.match(indexHtml, /<a href="\/how-it-works" id="hero-cta-secondary" class="hero-cta-link">See How It Works<\/a>/);
   });
 
-  it('#install .copy-btn still carries its gold fill, unchanged, in index.html', () => {
-    assert.match(indexHtml, /#install \.copy-btn\s*\{[^}]*background:\s*var\(--aurum\)/);
+  // Design rebuild: the ask's gold fill is one shared rule (the hero block and the closing block
+  // only), no longer a page-scoped `#install .copy-btn` override in index.html. The hero button
+  // still sits inside .hero-setup-block, so it still takes the gold fill.
+  it('the hero copy button still carries its gold fill: index.html keeps it inside .hero-setup-block and the shared sheet fills that button with --aurum', () => {
+    assert.match(indexHtml, /<div class="code-block hero-setup-block" id="hero-setup-snippet">[\s\S]*?<button class="copy-btn" id="copy-hero-setup"/, 'the hero copy button sits inside .hero-setup-block');
+    assert.doesNotMatch(indexHtml, /#install \.copy-btn/, 'the page-scoped override is gone from index.html');
+    const stylesCss = fs.readFileSync(path.join(PUBLIC_DIR, 'styles.css'), 'utf8');
+    assert.match(stylesCss, /\.hero-setup-block \.copy-btn[^{]*\{[^}]*background:\s*var\(--aurum\)/, 'the shared sheet fills .hero-setup-block .copy-btn with --aurum');
   });
 
   it("connect.html's own #install .copy-btn gold fill is untouched", () => {

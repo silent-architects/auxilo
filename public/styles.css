@@ -1,6 +1,7 @@
 /* ─── Auxilo Landing Page ──────────────────────────────────────────────────── */
 /* Brand: Obsidian #0A0A0A | Ivory #FAFAF8 | Aurum #C9A84C | Slate #8B929A | Ash #E5E5E3 */
-/* Typography: Archivo (body/headings) | IBM Plex Mono (code) */
+/* Typography: Newsreader (h1, h2) | Archivo (body, h3) | IBM Plex Mono (code, weight 400 only) */
+/* Grounds: paper by default, dark where a scope class says so (see Ground scopes under the tokens). */
 
 /* AD type pairing 2026-09-06: Archivo (sans) + IBM Plex Mono (mono),
    self-hosted, subset latin + latin-ext. Both SIL OFL 1.1. */
@@ -12,9 +13,12 @@
   font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap;
   src: url('/fonts/PlexMono400.0698749e.woff2') format('woff2');
 }
+/* Design system pass: Newsreader display cut, weight 300, used for h1 and h2 only
+   (SIL OFL 1.1, same-origin, one file). The weight 500 face of IBM Plex Mono is
+   retired: every mono use is weight 400. */
 @font-face {
-  font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: swap;
-  src: url('/fonts/PlexMono500.0ecb6352.woff2') format('woff2');
+  font-family: 'Newsreader'; font-style: normal; font-weight: 300; font-display: swap;
+  src: url('/fonts/NewsreaderDisplay300.a07d3c5c.woff2') format('woff2');
 }
 
 /* ── Reset & Base ──────────────────────────────────────────────────────────── */
@@ -85,12 +89,15 @@
      falls through local()'s failure to the original chain. */
   --mono: 'IBM Plex Mono', 'IBM Plex Mono Fallback', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --sans: 'Archivo', 'Archivo Fallback', 'Helvetica Neue', Arial, system-ui, sans-serif;
+  --serif: 'Newsreader', 'Newsreader Fallback', Georgia, serif;
 
   /* ── AD sheet 9: site-wide tokens ─────────────────────────────────────
      One section-h2 size, one closing-CTA h2 size, and one hero mobile
      padding pair, replacing the per-page values audited in
      AD-STEP4-RESPONSIVE-QC-2026-09-06.md §1.3 and §1.9. */
-  --h2-section: clamp(28px, 3.5vw, 42px);
+  /* Design system pass: the h2 scale is clamp(30px, 3.6vw, 46px) for sections and
+     closing asks alike; the h1 scale (--h1, below) is one size on every page. */
+  --h2-section: clamp(30px, 3.6vw, 46px);
   /* Wave E2 item 9: one large headline per page — the closing-CTA h2 drops
      to the section size (42) so the h1 (56, 72 on /) is the single
      dominant type event; amends the earlier 60-closing/42-section pair.
@@ -100,7 +107,7 @@
      reference "the closing-CTA size" by name. /earnings' #earnings-cta h2
      has its own hardcoded clamp(30px,4vw,52px) in earnings.html, a file
      outside this builder's ownership — not reachable from here. */
-  --h2-cta: clamp(28px, 3.5vw, 42px);
+  --h2-cta: clamp(30px, 3.6vw, 46px);
   /* MOBILE-HEADER-OFFSET (PUNCH-LIST, SITE-PM v102 find): #main-nav is
      `position: fixed` at every width (see the Navigation section below), so
      the first section on every page must reserve at least the header's
@@ -136,6 +143,91 @@
      demand exchange <g> — because its widest label (345.8 of 364 viewBox
      units at 14) would overflow its rect at 15 (370.7 of 364). */
   --svg-label: 15px;
+
+  /* ── Design system tokens: grounds, ink, shape ───────────────────────────
+     Paper by default. A dark scope (below) redefines the ground-aware tokens
+     so every rule that reads --bg / --surface / --fg-* / --line / --accent-text
+     is correct on either ground without a second rule. */
+  --paper: #FAFAF8;
+  --tint: #F1EFE9;
+  --tint-deep: #E6E3DA;
+  --card: #FFFFFF;
+  --raise-dark: #151514;
+  --gold-ink: #7A5D10;
+  --r-control: 6px;
+  --r-panel: 10px;
+  --r-stage: 14px;
+  --shadow-panel: 0 1px 2px rgba(10, 10, 10, 0.06), 0 12px 32px -8px rgba(10, 10, 10, 0.16);
+  --shadow-panel-dark: 0 1px 0 rgba(250, 250, 248, 0.04) inset, 0 24px 48px -16px rgba(0, 0, 0, 0.7);
+  --h1: clamp(40px, 5vw, 64px);
+
+  /* ground-aware tokens: light values here, dark values in the dark scope below */
+  --bg: var(--paper);
+  --surface: var(--card);
+  --fg-1: #0A0A0A;
+  --fg-2: #45453F;
+  --fg-3: #5E5E57;
+  --line: #E2E0DA;
+  --accent-text: var(--gold-ink);
+  --focus-ring: #0A0A0A;
+  /* the four below follow the same rule: link underline, outline-control border,
+     and the primary button's fill and ink (ink on light, gold on dark) */
+  --link-line: var(--gold-ink);
+  --ctrl-line: #0A0A0A;
+  --btn-fill: #0A0A0A;
+  --btn-ink: #FAFAF8;
+}
+
+/* ── Ground scopes ──────────────────────────────────────────────────────────
+   A section declares its ground with a class: .on-dark, .on-tint, or none
+   (paper). Everything inside reads the tokens, so a card, a table, a link or a
+   focus ring is right on whichever ground it sits. Navigation, footer, code
+   blocks and the dark halves of a drawing are always dark. */
+.on-dark,
+#main-nav,
+body > footer,
+.code-block,
+.dw-dark,
+.step-art,
+.dw-stage-dark {
+  --bg: #0A0A0A;
+  --surface: var(--raise-dark);
+  --fg-1: #FAFAF8;
+  --fg-2: #A7ACB2;
+  --fg-3: #8B929A;
+  --line: rgba(250, 250, 248, 0.12);
+  --accent-text: var(--aurum);
+  --focus-ring: var(--aurum);
+  --link-line: rgba(250, 250, 248, 0.4);
+  --ctrl-line: rgba(250, 250, 248, 0.5);
+  --btn-fill: var(--aurum);
+  --btn-ink: var(--obsidian);
+  color: var(--fg-2);
+}
+.on-dark { background: var(--bg); }
+
+.on-tint,
+.section-raised {
+  --bg: var(--tint);
+  background: var(--bg);
+}
+
+/* a light panel inside a dark section: the light values again */
+.dw-light,
+.on-dark .dw-light {
+  --bg: var(--paper);
+  --surface: var(--card);
+  --fg-1: #0A0A0A;
+  --fg-2: #45453F;
+  --fg-3: #5E5E57;
+  --line: #E2E0DA;
+  --accent-text: var(--gold-ink);
+  --focus-ring: #0A0A0A;
+  --link-line: var(--gold-ink);
+  --ctrl-line: #0A0A0A;
+  --btn-fill: #0A0A0A;
+  --btn-ink: #FAFAF8;
+  color: var(--fg-2);
 }
 
 html { scroll-behavior: smooth; }
@@ -146,18 +238,30 @@ html { scroll-behavior: smooth; }
 html, body { overflow-x: clip; }
 
 body {
-  background: var(--obsidian);
-  color: var(--ivory);
+  background: var(--paper);
+  color: var(--fg-2);
   font-family: var(--sans);
   font-size: 16px;
-  line-height: 1.6;
+  line-height: 1.65;
   -webkit-font-smoothing: antialiased;
 }
 
 /* Base link — bare <a> in prose. Low specificity so styled nav/button/footer
    links (which carry their own classes) win and render unchanged. Browser-default
    blue fails WCAG on the dark bg (~2.1:1); aurum on obsidian is 8.66:1. */
-a { color: var(--aurum); text-decoration: underline; }
+/* Design system pass: gold text never sits on a light ground. A bare link is ink
+   with a gold-ink underline on light, and an ivory-ish underline in a dark scope
+   (--link-line). The fuller treatment for links in running copy is below. */
+a { color: var(--fg-1); text-decoration: underline; text-decoration-color: var(--link-line); }
+
+main p a,
+main li a {
+  color: var(--fg-1);
+  text-decoration: underline;
+  text-decoration-color: var(--link-line);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
 
 /* ── Layout Primitives ─────────────────────────────────────────────────────── */
 .container {
@@ -283,9 +387,43 @@ body .legal-wrap {
    class) still win the cascade and are unified to the same value below. */
 section h2 {
   font-size: var(--h2-section);
+  font-weight: 300;
+  letter-spacing: -0.016em;
+  color: var(--fg-1);
+  font-family: var(--serif);
+  line-height: 1.1;
+  text-wrap: balance;
+  font-synthesis-weight: none;
+}
+
+/* Design system pass: the display type. h1 and h2 are Newsreader 300, never bold
+   (font-synthesis-weight keeps a stray bold request from faking one); h3 is
+   Archivo 500. Page-local rules that still ask for a heavier weight stay light. */
+h1,
+h2 {
+  font-family: var(--serif);
+  font-weight: 300;
+  color: var(--fg-1);
+  text-wrap: balance;
+  font-synthesis-weight: none;
+}
+h1 {
+  font-size: var(--h1);
+  line-height: 1.04;
+  letter-spacing: -0.022em;
+}
+h2 {
+  font-size: var(--h2-section);
+  line-height: 1.1;
+  letter-spacing: -0.016em;
+}
+h3 {
+  font-family: var(--sans);
   font-weight: 500;
-  letter-spacing: -0.02em;
-  color: var(--ivory);
+  font-size: 19px;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--fg-1);
 }
 
 /* SPACING-0927 R2-2a: heading to the element beneath it is 16px, named by
@@ -332,7 +470,7 @@ section :is(h1, h2, h3, h4, h5, h6) {
 .pricing-cta-section h2,
 .api-cta-section h2 {
   font-size: var(--h2-cta);
-  font-weight: 700;
+  font-weight: 300;
 }
 
 /* ── Navigation ────────────────────────────────────────────────────────────── */
@@ -354,7 +492,8 @@ section :is(h1, h2, h3, h4, h5, h6) {
   z-index: 100;
   display: flex;
   flex-direction: column;
-  border-bottom: 1px solid rgba(229, 229, 227, 0.08);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
 }
 
 /* DR-1 fix: the glass background lives on a pseudo-element, not on #main-nav
@@ -363,16 +502,9 @@ section :is(h1, h2, h3, h4, h5, h6) {
    -- collapsing its "fixed to viewport" box down to #main-nav's own ~84px bar.
    A pseudo-element has no descendants, so it carries the same visual blur
    without ever becoming a containing-block trap for .nav-links. */
-#main-nav::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: rgba(10, 10, 10, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  pointer-events: none;
-}
+/* Design system pass: the glass ground is gone. #main-nav is a solid #0A0A0A with
+   no backdrop-filter anywhere, so the containing-block trap described above cannot
+   come back and the ::before layer that worked around it is removed. */
 
 /* AD nav re-rule sheet §1: the sign-in utility strip. Height 26px, right
    aligned on the nav's own 24px gutter (same horizontal padding as
@@ -408,13 +540,13 @@ section :is(h1, h2, h3, h4, h5, h6) {
 }
 
 .nav-strip a {
-  color: var(--slate);
+  color: var(--fg-3);
   text-decoration: none;
   transition: color 0.2s;
 }
 
 .nav-strip a:hover {
-  color: var(--ash);
+  color: var(--fg-1);
 }
 
 /* AD nav re-rule sheet §1: height is paid for out of the nav row, not the
@@ -434,7 +566,7 @@ section :is(h1, h2, h3, h4, h5, h6) {
   align-items: center;
   gap: 10px;
   text-decoration: none;
-  color: var(--ivory);
+  color: var(--fg-1);
   min-height: 44px;
 }
 
@@ -447,7 +579,7 @@ section :is(h1, h2, h3, h4, h5, h6) {
   font-size: 18px;
   font-weight: 500;
   letter-spacing: -0.01em;
-  color: var(--ivory);
+  color: var(--fg-1);
 }
 
 .nav-links {
@@ -458,17 +590,17 @@ section :is(h1, h2, h3, h4, h5, h6) {
 }
 
 .nav-links a {
-  color: var(--slate);
+  color: var(--fg-2);
   text-decoration: none;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 400;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
   transition: color 0.2s;
 }
 
-.nav-links a:hover { color: var(--ivory); }
+.nav-links a:hover { color: var(--fg-1); }
 /* Wave E2 item 10: active-link gold -> ash. */
-.nav-links a.active { color: var(--ash); }
+.nav-links a.active { color: var(--fg-1); }
 
 /* AD sheet 9: nav CTA >= 36px tall (measured 35px live).
    Wave E2 item 12: raised to 44px (measured 40.4px live, AD-STEP4-FINAL
@@ -484,13 +616,13 @@ section :is(h1, h2, h3, h4, h5, h6) {
    ivory. --aurum-hi is no longer referenced by this rule (left defined,
    unused). */
 .nav-cta {
-  font-size: 14px !important;
+  font-size: 15px !important;
   font-weight: 500 !important;
-  color: var(--ivory) !important;
+  color: var(--fg-1) !important;
   background: transparent;
-  border: 1px solid rgba(229,229,227,0.35);
+  border: 1px solid rgba(250, 250, 248, 0.5);
   padding: 8px 18px;
-  border-radius: 4px;
+  border-radius: var(--r-control);
   min-height: 44px;
   display: inline-flex;
   align-items: center;
@@ -499,14 +631,14 @@ section :is(h1, h2, h3, h4, h5, h6) {
 }
 
 .nav-cta:hover {
-  background: rgba(255,255,255,0.04) !important;
-  color: var(--ivory) !important;
+  background: rgba(250, 250, 248, 0.08) !important;
+  color: var(--fg-1) !important;
 }
 
 /* AD sheet §2: "Focus ring 2px var(--ivory) at 2px offset, because a gold
    ring dies on a gold ground." */
 .nav-cta:focus-visible {
-  outline: 2px solid var(--ivory);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -536,11 +668,11 @@ section :is(h1, h2, h3, h4, h5, h6) {
 }
 
 #hero h1 {
-  font-size: clamp(40px, 6vw, 72px);
-  font-weight: 700;
-  line-height: 1.08;
-  letter-spacing: -0.02em;
-  color: var(--ivory);
+  font-size: var(--h1);
+  font-weight: 300;
+  line-height: 1.04;
+  letter-spacing: -0.022em;
+  color: var(--fg-1);
   /* FIX-UNIT-2B H2: was 820px, which wrapped this 10-word h1 to 3 lines at
      1280px with "before." orphaned alone on the last line. 950px is the
      smallest width (of 820/850/880/900/920/950px, measured live) that
@@ -552,14 +684,16 @@ section :is(h1, h2, h3, h4, h5, h6) {
   /* SPACING-0927 R2-2a: heading to the element beneath it is 16px,
      sitewide, named by the sheet (was 28). */
   margin-bottom: var(--space-body);
+  font-family: var(--serif);
+  text-wrap: balance;
 }
 
 .hero-sub {
-  font-size: clamp(16px, 2vw, 19px);
+  font-size: 19px;
   font-weight: 400;
-  color: var(--slate-text);
+  color: var(--fg-2);
   max-width: 600px;
-  line-height: 1.65;
+  line-height: 1.55;
   /* SPACING-0927 rule 5: text-to-its-action is 24px sitewide (was 48) --
      the lede leads directly into the command block, the hero's action. */
   margin-bottom: var(--space-copy);
@@ -600,16 +734,19 @@ section :is(h1, h2, h3, h4, h5, h6) {
   /* FIX-UNIT A6+L8: 44px touch target. Already inline-flex/align-items:center,
      so the text stays centered in place and simply gets more box around it. */
   min-height: 44px;
-  color: var(--ivory);
+  color: var(--fg-1);
   font-family: var(--sans);
   font-size: 15px;
   font-weight: 500;
   letter-spacing: -0.01em;
-  text-decoration: none;
+  text-decoration: underline;
+  text-decoration-color: var(--link-line);
+  text-underline-offset: 4px;
 }
 
 .hero-cta-link:hover {
   text-decoration: underline;
+  text-decoration-color: var(--fg-1);
 }
 
 /* Wave E2 item 12: pinned to 54px (was 52px — .btn-secondary's 1px border
@@ -621,44 +758,43 @@ section :is(h1, h2, h3, h4, h5, h6) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: var(--aurum);
-  color: var(--obsidian);
+  background: var(--btn-fill);
+  color: var(--btn-ink);
   font-family: var(--sans);
   font-size: 15px;
   font-weight: 600;
   padding: 14px 28px;
-  border-radius: 4px;
+  border-radius: var(--r-control);
   text-decoration: none;
   border: 1px solid transparent;
   cursor: pointer;
-  transition: opacity 0.2s, transform 0.15s;
+  transition: opacity 0.2s;
   letter-spacing: -0.01em;
 }
 
-.btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+.btn-primary:hover { opacity: 0.9; }
 
 .btn-secondary {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   background: transparent;
-  color: var(--ivory);
+  color: var(--fg-1);
   font-family: var(--sans);
   font-size: 15px;
   font-weight: 500;
   padding: 14px 28px;
-  border-radius: 4px;
+  border-radius: var(--r-control);
   text-decoration: none;
-  border: 1px solid rgba(229,229,227,0.2);
+  border: 1px solid var(--ctrl-line);
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s, transform 0.15s;
+  transition: border-color 0.2s, background 0.2s;
   letter-spacing: -0.01em;
 }
 
 .btn-secondary:hover {
-  border-color: rgba(229,229,227,0.45);
-  background: rgba(255,255,255,0.04);
-  transform: translateY(-1px);
+  border-color: var(--fg-1);
+  background: var(--line);
 }
 
 /* ── Email Capture ───────────────────────────────────────────────── */
@@ -673,20 +809,20 @@ section :is(h1, h2, h3, h4, h5, h6) {
   padding: 14px 18px;
   font-family: var(--sans);
   font-size: 15px;
-  color: var(--ivory);
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
+  color: var(--fg-1);
+  background: var(--surface);
+  border: 1px solid var(--ctrl-line);
   border-right: none;
-  border-radius: 6px 0 0 6px;
+  border-radius: var(--r-control) 0 0 var(--r-control);
   outline: none;
   transition: border-color 0.2s, background 0.2s;
 }
 .email-input::placeholder {
-  color: var(--slate);
+  color: var(--fg-3);
 }
 .email-input:focus {
-  border-color: var(--aurum);
-  background: rgba(255,255,255,0.08);
+  border-color: var(--accent-text);
+  background: var(--surface);
 }
 .email-input.input-error {
   border-color: #e74c3c;
@@ -694,13 +830,13 @@ section :is(h1, h2, h3, h4, h5, h6) {
 }
 .hero-email-capture .btn-primary,
 .footer-email-capture .btn-primary {
-  border-radius: 0 6px 6px 0;
+  border-radius: 0 var(--r-control) var(--r-control) 0;
   white-space: nowrap;
   padding: 14px 24px;
 }
 .footer-cta-note {
-  font-size: 13px;
-  color: var(--slate);
+  font-size: 14px;
+  color: var(--fg-3);
   /* SPACING-0927 R2-2b: 12 ties 8/16 -- tie goes to the larger value. */
   margin-top: var(--space-body);
 }
@@ -716,12 +852,12 @@ section :is(h1, h2, h3, h4, h5, h6) {
     gap: 8px;
   }
   .email-input {
-    border-right: 1px solid rgba(255,255,255,0.12);
-    border-radius: 6px;
+    border-right: 1px solid var(--ctrl-line);
+    border-radius: var(--r-control);
   }
   .hero-email-capture .btn-primary,
   .footer-email-capture .btn-primary {
-    border-radius: 6px;
+    border-radius: var(--r-control);
     width: 100%;
   }
   .email-input { font-size: 16px; }
@@ -737,11 +873,12 @@ section :is(h1, h2, h3, h4, h5, h6) {
   margin: 0 auto;
   font-size: 15px;
   font-weight: 500;
-  color: var(--ivory);
+  color: var(--fg-1);
 }
 
 /* ── How It Works ──────────────────────────────────────────────────────────── */
-#how-it-works { background: var(--obsidian); }
+/* Design system pass: #how-it-works no longer paints its own ground. A section
+   declares its ground with .on-dark / .on-tint, or sits on paper. */
 
 #how-it-works h2 {
   /* font-size/weight/letter-spacing/color now come from the shared section h2 rule.
@@ -751,26 +888,29 @@ section :is(h1, h2, h3, h4, h5, h6) {
 
 .steps {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 2px;
-  background: rgba(229,229,227,0.06);
-  border-radius: 0;
-  overflow: hidden;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-copy);
   /* SPACING-0927 R2-2b: 72 rounds down to 64. */
   margin-bottom: var(--space-wide);
 }
 
 .step {
-  background: var(--obsidian);
-  /* SPACING-0927 rule 6: card padding is 32px on all four sides (was 40/32). */
-  padding: var(--space-card);
-  position: relative;
+  background: var(--surface);
+  /* SPACING-0927 rule 6 set card padding to 32px on all four sides (was 40/32).
+     Design system pass: a step card is now a dark drawing (.step-art) over a body
+     (.step-body), each carrying its own padding (see the drawing kit below);
+     markup without .step-body keeps the 32px through `.step:not(:has(> .step-body))`. */
+  border: 1px solid var(--line);
+  border-radius: var(--r-stage);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .step-number {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--aurum);
+  color: var(--accent-text);
   letter-spacing: 0.1em;
   display: block;
 }
@@ -786,9 +926,9 @@ section :is(h1, h2, h3, h4, h5, h6) {
 }
 
 .step h3 {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--ivory);
+  font-size: 19px;
+  font-weight: 500;
+  color: var(--fg-1);
   /* SPACING-0927 rule 5: heading-to-next-element is 16px sitewide (was 14). */
   margin-bottom: var(--space-body);
   line-height: 1.3;
@@ -797,8 +937,8 @@ section :is(h1, h2, h3, h4, h5, h6) {
 
 .step p {
   font-size: 15px;
-  color: var(--slate-text);
-  line-height: 1.7;
+  color: var(--fg-2);
+  line-height: 1.6;
 }
 
 /* Earnings Table */
@@ -806,8 +946,9 @@ section :is(h1, h2, h3, h4, h5, h6) {
   max-width: 900px;
   margin: 0 auto 56px;
   overflow-x: auto;
-  border: 1px solid rgba(229,229,227,0.08);
-  border-radius: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-stage);
+  background: var(--surface);
 }
 
 .earnings-table {
@@ -818,8 +959,7 @@ section :is(h1, h2, h3, h4, h5, h6) {
 .earnings-table thead th {
   text-align: center;
   padding: 20px 16px 16px;
-  background: rgba(255,255,255,0.025);
-  border-bottom: 1px solid rgba(229,229,227,0.08);
+  border-bottom: 1px solid var(--line);
   vertical-align: top;
 }
 
@@ -831,8 +971,8 @@ section :is(h1, h2, h3, h4, h5, h6) {
 .tier-label {
   display: block;
   font-size: 14px;
-  font-weight: 600;
-  color: var(--ivory);
+  font-weight: 500;
+  color: var(--fg-1);
   letter-spacing: -0.01em;
   margin-bottom: 6px;
 }
@@ -841,7 +981,7 @@ section :is(h1, h2, h3, h4, h5, h6) {
   display: block;
   font-size: 11px;
   font-weight: 400;
-  color: var(--slate);
+  color: var(--fg-3);
   letter-spacing: 0;
   text-transform: none;
   line-height: 1.4;
@@ -852,9 +992,9 @@ section :is(h1, h2, h3, h4, h5, h6) {
   text-align: center;
   font-family: var(--mono);
   font-size: 16px;
-  font-weight: 600;
-  color: var(--ivory);
-  border-bottom: 1px solid rgba(229,229,227,0.05);
+  font-weight: 400;
+  color: var(--fg-1);
+  border-bottom: 1px solid var(--line);
 }
 
 .earnings-table tbody tr:last-child td {
@@ -862,7 +1002,7 @@ section :is(h1, h2, h3, h4, h5, h6) {
 }
 
 .earnings-table tbody tr:hover {
-  background: rgba(255,255,255,0.018);
+  background: var(--bg);
 }
 
 .year-label {
@@ -870,27 +1010,27 @@ section :is(h1, h2, h3, h4, h5, h6) {
   font-family: var(--mono) !important;
   font-size: 12px !important;
   font-weight: 400 !important;
-  color: var(--slate) !important;
+  color: var(--fg-3) !important;
   letter-spacing: 0.04em;
 }
 
 .per-unit {
   font-size: 11px;
   font-weight: 400;
-  color: var(--slate);
+  color: var(--fg-3);
 }
 
 .tier-highlight {
-  background: rgba(201,168,76,0.04);
+  background: rgba(201, 168, 76, 0.12);
 }
 
 .row-highlight td {
-  color: var(--aurum) !important;
+  color: var(--accent-text) !important;
   font-size: 18px;
 }
 
 .row-highlight .year-label {
-  color: var(--aurum) !important;
+  color: var(--accent-text) !important;
 }
 
 /* AD design-tells sweep: the CSS Bar Chart component (.bar-chart,
@@ -903,7 +1043,7 @@ section :is(h1, h2, h3, h4, h5, h6) {
   margin-bottom: 16px;
   font-size: 17px;
   line-height: 1.7;
-  color: var(--ash);
+  color: var(--fg-2);
   font-weight: 500;
 }
 
@@ -911,7 +1051,7 @@ section :is(h1, h2, h3, h4, h5, h6) {
   max-width: 640px;
   margin-bottom: 32px;
   font-size: 12px;
-  color: var(--slate);
+  color: var(--fg-3);
   font-style: italic;
   line-height: 1.6;
 }
@@ -928,7 +1068,7 @@ section :is(h1, h2, h3, h4, h5, h6) {
 /* AD design-tells sweep tell 5: flattened from a bordered/rounded card wall
    to a ruled list — border-top + top padding per row, no fill/border/radius. */
 .moat-card {
-  border-top: 1px solid rgba(229,229,227,0.13);
+  border-top: 1px solid var(--line);
   padding-top: 32px;
   margin-top: 32px;
 }
@@ -940,9 +1080,9 @@ section :is(h1, h2, h3, h4, h5, h6) {
 }
 
 .moat-card h3 {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--ivory);
+  font-size: 19px;
+  font-weight: 500;
+  color: var(--fg-1);
   /* SPACING-0927 rule 5: heading-to-next-element is 16px sitewide (was 10). */
   margin-bottom: var(--space-body);
   letter-spacing: -0.01em;
@@ -951,14 +1091,12 @@ section :is(h1, h2, h3, h4, h5, h6) {
 .moat-card p {
   font-size: 15px;
   line-height: 1.65;
-  color: var(--slate-text);
+  color: var(--fg-2);
 }
 
 /* ── For Builders ──────────────────────────────────────────────────────────── */
 #for-builders {
-  background: rgba(255,255,255,0.018);
-  border-top: 1px solid rgba(229,229,227,0.06);
-  border-bottom: 1px solid rgba(229,229,227,0.06);
+  background: var(--tint);
 }
 
 /* AD sheet 9: #for-builders (no such id on for-builders.html) is dead; its h2
@@ -972,7 +1110,7 @@ section :is(h1, h2, h3, h4, h5, h6) {
 }
 
 .builders-left .body-copy {
-  color: var(--slate-text);
+  color: var(--fg-2);
   font-size: 16px;
   line-height: 1.75;
   margin-bottom: 20px;
@@ -980,7 +1118,6 @@ section :is(h1, h2, h3, h4, h5, h6) {
 }
 
 /* ── For Agents ────────────────────────────────────────────────────────────── */
-#for-agents { background: var(--obsidian); }
 
 /* AD sheet 9: #for-agents h2 (no such id on for-agents.html) is dead; removed
    with the h2 consolidation. */
@@ -993,7 +1130,7 @@ section :is(h1, h2, h3, h4, h5, h6) {
 }
 
 .agents-copy p {
-  color: var(--slate-text);
+  color: var(--fg-2);
   font-size: 16px;
   line-height: 1.75;
   /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-6): paragraph to
@@ -1011,23 +1148,23 @@ section :is(h1, h2, h3, h4, h5, h6) {
 }
 
 .pricing-pill {
-  background: var(--aurum-dim);
-  border: 1px solid var(--aurum-border);
-  border-radius: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
   padding: 10px 16px;
 }
 
 .pricing-pill .pill-price {
   font-family: var(--mono);
   font-size: 18px;
-  font-weight: 500;
-  color: var(--aurum);
+  font-weight: 400;
+  color: var(--fg-1);
   display: block;
 }
 
 .pricing-pill .pill-label {
   font-size: 12px;
-  color: var(--slate);
+  color: var(--fg-3);
   letter-spacing: 0.05em;
   /* R4-3 (RULING-SEAMS-2026-09-28.md): a price and its label is the
      named label-to-value pairing (8px). Was an inline <span> (the
@@ -1040,11 +1177,12 @@ section :is(h1, h2, h3, h4, h5, h6) {
 }
 
 .catalog-stats {
-  border: 1px solid rgba(229,229,227,0.08);
-  border-radius: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-stage);
   /* SPACING-0927 rule 6: card padding is 32px on all four sides (was 28). */
   padding: var(--space-card);
   margin: var(--space-card) 0;
+  background: var(--surface);
 }
 
 .catalog-stats .stat-row {
@@ -1052,7 +1190,7 @@ section :is(h1, h2, h3, h4, h5, h6) {
   gap: 12px;
   align-items: baseline;
   padding: 8px 0;
-  border-bottom: 1px solid rgba(229,229,227,0.06);
+  border-bottom: 1px solid var(--line);
 }
 
 .catalog-stats .stat-row:last-child { border-bottom: none; }
@@ -1060,21 +1198,21 @@ section :is(h1, h2, h3, h4, h5, h6) {
 .catalog-stats .stat-num {
   font-family: var(--mono);
   font-size: 20px;
-  font-weight: 500;
-  color: var(--aurum);
+  font-weight: 400;
+  color: var(--fg-1);
   min-width: 48px;
 }
 
 .catalog-stats .stat-label {
   font-size: 14px;
-  color: var(--slate);
+  color: var(--fg-3);
 }
 
 /* ── Code Blocks ───────────────────────────────────────────────────────────── */
 .code-block {
-  background: var(--code-bg);
-  border: 1px solid rgba(229,229,227,0.08);
-  border-radius: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
   overflow: hidden;
   position: relative;
   max-width: 100%;
@@ -1096,14 +1234,13 @@ section :is(h1, h2, h3, h4, h5, h6) {
   align-items: center;
   justify-content: space-between;
   padding: 10px 16px;
-  background: rgba(255,255,255,0.03);
-  border-bottom: 1px solid rgba(229,229,227,0.08);
+  border-bottom: 1px solid var(--line);
 }
 
 .code-block-lang {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--slate);
+  color: var(--fg-3);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -1114,12 +1251,12 @@ section :is(h1, h2, h3, h4, h5, h6) {
 .copy-btn {
   font-family: var(--mono);
   font-size: 13px;
-  color: var(--slate);
+  color: var(--fg-1);
   background: none;
-  border: none;
+  border: 1px solid var(--line);
   cursor: pointer;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--r-control);
   transition: color 0.2s, background 0.2s;
   letter-spacing: 0.05em;
   min-height: 44px;
@@ -1129,15 +1266,15 @@ section :is(h1, h2, h3, h4, h5, h6) {
   justify-content: center;
 }
 
-.copy-btn:hover { color: var(--aurum); background: var(--aurum-dim); }
-.copy-btn.copied { color: var(--aurum); }
+.copy-btn:hover { color: var(--fg-1); background: var(--line); }
+.copy-btn.copied { color: var(--accent-text); }
 
 .code-block pre {
   padding: 20px 20px;
   font-family: var(--mono);
   font-size: 13px;
   line-height: 1.7;
-  color: var(--ivory);
+  color: var(--fg-1);
   overflow-x: auto;
   tab-size: 2;
 }
@@ -1147,15 +1284,13 @@ section :is(h1, h2, h3, h4, h5, h6) {
    green stays reserved for the /status "operational" semantic only. */
 .code-block pre .c { color: #7C8A9A; } /* comment — #7C8A9A on #111 = 5.36:1 (WCAG AA) */
 .code-block pre .k { color: #C9A84C; } /* keyword / key — the one gold token */
-.code-block pre .s { color: var(--ivory); } /* string */
-.code-block pre .n { color: var(--ivory); } /* number */
-.code-block pre .p { color: var(--slate); } /* punctuation */
+.code-block pre .s { color: var(--fg-1); } /* string */
+.code-block pre .n { color: var(--fg-1); } /* number */
+.code-block pre .p { color: var(--fg-3); } /* punctuation */
 
 /* ── Pricing ───────────────────────────────────────────────────────────────── */
 #pricing {
-  background: rgba(255,255,255,0.018);
-  border-top: 1px solid rgba(229,229,227,0.06);
-  border-bottom: 1px solid rgba(229,229,227,0.06);
+  background: var(--tint);
 }
 
 /* AD sheet 9: #pricing h2 (no such id on pricing.html) is dead; removed with
@@ -1163,15 +1298,16 @@ section :is(h1, h2, h3, h4, h5, h6) {
 
 .pricing-sub {
   font-size: 16px;
-  color: var(--slate-text);
+  color: var(--fg-2);
   margin-bottom: 56px;
 }
 
 .pricing-table-wrap {
   overflow-x: auto;
-  border: 1px solid rgba(229,229,227,0.08);
-  border-radius: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-stage);
   margin-bottom: 56px;
+  background: var(--surface);
 }
 
 table {
@@ -1187,36 +1323,35 @@ thead th {
   font-weight: 400;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--slate);
-  background: rgba(255,255,255,0.025);
-  border-bottom: 1px solid rgba(229,229,227,0.08);
+  color: var(--fg-3);
+  border-bottom: 1px solid var(--line);
 }
 
 tbody td {
   padding: 14px 20px;
-  color: var(--ivory);
-  border-bottom: 1px solid rgba(229,229,227,0.05);
+  color: var(--fg-1);
+  border-bottom: 1px solid var(--line);
   vertical-align: top;
 }
 
 tbody tr:last-child td { border-bottom: none; }
 
-tbody tr:hover { background: rgba(255,255,255,0.018); }
+tbody tr:hover { background: var(--bg); }
 
 .td-action {
   font-family: var(--mono);
   font-size: 13px;
-  color: var(--aurum);
+  color: var(--fg-1);
 }
 
 .td-cost {
   font-family: var(--mono);
   font-size: 13px;
-  color: var(--ivory);
+  color: var(--fg-1);
   white-space: nowrap;
 }
 
-.td-notes { color: var(--slate); font-size: 13px; }
+.td-notes { color: var(--fg-3); font-size: 13px; }
 
 .pricing-packs {
   display: grid;
@@ -1228,16 +1363,16 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
 }
 
 .pack-card {
-  border: 1px solid rgba(229,229,227,0.1);
-  border-radius: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-stage);
   /* SPACING-0927 rule 6: card padding is 32px on all four sides (was 28/24). */
   padding: var(--space-card);
-  transition: border-color 0.2s, background 0.2s;
+  transition: border-color 0.2s;
+  background: var(--surface);
 }
 
 .pack-card:hover {
-  border-color: var(--aurum-border);
-  background: var(--aurum-dim);
+  border-color: var(--accent-text);
 }
 
 .pack-name {
@@ -1245,50 +1380,49 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
   font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--slate);
+  color: var(--fg-3);
   /* SPACING-0927 R2-2a: label to its value is 8px, named by the sheet (was 12). */
   margin-bottom: var(--space-tight);
 }
 
 .pack-price {
   font-size: 36px;
-  font-weight: 700;
-  color: var(--ivory);
+  font-weight: 500;
+  color: var(--fg-1);
   letter-spacing: -0.02em;
   margin-bottom: 16px;
   line-height: 1;
 }
 
-.pack-price span { font-size: 18px; font-weight: 400; color: var(--slate); }
+.pack-price span { font-size: 18px; font-weight: 400; color: var(--fg-3); }
 
 .pack-detail {
   font-size: 13px;
-  color: var(--slate);
+  color: var(--fg-3);
   line-height: 1.8;
 }
 
-.pack-detail strong { color: var(--ivory); }
+.pack-detail strong { color: var(--fg-1); }
 
 .free-tier {
-  border: 1px solid rgba(201,168,76,0.25);
-  border-radius: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-stage);
   /* SPACING-0927 rule 6: card padding is 32px on all four sides (was 20/24). */
   padding: var(--space-card);
   display: flex;
   align-items: center;
   gap: 16px;
-  background: var(--aurum-dim);
+  background: var(--surface);
 }
 
 .free-tier .ft-text {
   font-size: 15px;
-  color: var(--ivory);
+  color: var(--fg-1);
 }
 
-.free-tier .ft-text span { color: var(--slate); font-size: 14px; }
+.free-tier .ft-text span { color: var(--fg-3); font-size: 14px; }
 
 /* ── API & Integration ──────────────────────────────────────────────────────── */
-#api-integration { background: var(--obsidian); }
 
 /* AD sheet 9: #api-integration h2 (no such id on api.html) is dead; removed
    with the h2 consolidation. */
@@ -1301,9 +1435,9 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
 }
 
 .api-col h3 {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--ivory);
+  font-size: 19px;
+  font-weight: 500;
+  color: var(--fg-1);
   /* SPACING-0927 rule 5: heading-to-next-element is 16px sitewide (was 20). */
   margin-bottom: var(--space-body);
   letter-spacing: -0.01em;
@@ -1314,7 +1448,7 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
   font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--slate);
+  color: var(--fg-3);
   /* SPACING-0927 rule 7/A3-8: both values now on the content scale
      (was 28px 0 14px). */
   margin: var(--space-card) 0 var(--space-body);
@@ -1332,7 +1466,7 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
   /* SPACING-0927 R2-2b: gap 12 ties 8/16 -- tie goes to the larger value. */
   gap: var(--space-body);
   padding: 8px 0;
-  border-bottom: 1px solid rgba(229,229,227,0.05);
+  border-bottom: 1px solid var(--line);
   font-size: 14px;
 }
 
@@ -1341,24 +1475,24 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
 .ep-method {
   font-family: var(--mono);
   font-size: 10px;
-  font-weight: 500;
+  font-weight: 400;
   padding: 2px 7px;
   border-radius: 4px;
   flex-shrink: 0;
   letter-spacing: 0.05em;
 }
 
-.ep-method.post { background: rgba(201,168,76,0.18); color: var(--aurum); }
-.ep-method.get  { background: rgba(229,229,227,0.12); color: var(--ash); }
+.ep-method.post { background: rgba(201,168,76,0.18); color: var(--accent-text); }
+.ep-method.get  { background: var(--line); color: var(--fg-1); }
 
 .ep-path {
   font-family: var(--mono);
   font-size: 13px;
-  color: var(--ivory);
+  color: var(--fg-1);
   flex: 1;
 }
 
-.ep-desc { font-size: 12px; color: var(--slate); }
+.ep-desc { font-size: 12px; color: var(--fg-3); }
 
 .auth-options {
   display: grid;
@@ -1369,23 +1503,24 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
 }
 
 .auth-card {
-  border: 1px solid rgba(229,229,227,0.08);
-  border-radius: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-stage);
   /* SPACING-0927 rule 6: card padding is 32px on all four sides (was 18/16). */
   padding: var(--space-card);
+  background: var(--surface);
 }
 
 .auth-card .auth-title {
   font-family: var(--mono);
   font-size: 12px;
-  color: var(--aurum);
+  color: var(--fg-1);
   margin-bottom: 8px;
   display: block;
 }
 
 .auth-card p {
   font-size: 13px;
-  color: var(--slate);
+  color: var(--fg-2);
   line-height: 1.6;
 }
 
@@ -1400,9 +1535,9 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
 .tool-tag {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--ivory);
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(229,229,227,0.1);
+  color: var(--fg-1);
+  background: var(--surface);
+  border: 1px solid var(--line);
   padding: 4px 10px;
   border-radius: 4px;
   letter-spacing: 0.03em;
@@ -1410,15 +1545,14 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
 
 /* ── Footer CTA ────────────────────────────────────────────────────────────── */
 #footer-cta {
-  background: var(--obsidian);
-  border-top: 1px solid rgba(229,229,227,0.06);
+  border-top: 1px solid var(--line);
   text-align: center;
 }
 
 #footer-cta h2 {
   /* font-size/font-weight now come from the shared closing-CTA rule above */
-  letter-spacing: -0.02em;
-  color: var(--ivory);
+  letter-spacing: -0.016em;
+  color: var(--fg-1);
   max-width: 760px;
   /* SPACING-0927 R2-2a: heading to the element beneath it is 16px, named by the sheet (was 20). */
   margin: 0 auto var(--space-body);
@@ -1427,7 +1561,7 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
 
 .footer-cta-sub {
   font-size: 17px;
-  color: var(--slate-text);
+  color: var(--fg-2);
   max-width: 480px;
   margin: 0 auto 48px;
   line-height: 1.65;
@@ -1445,15 +1579,16 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
 
 .footer-links {
   display: flex;
-  gap: 28px;
+  gap: var(--space-tight) var(--space-card);
   justify-content: center;
   flex-wrap: wrap;
+  margin-top: var(--space-wide);
   margin-bottom: 48px;
 }
 
 .footer-links a {
   font-size: 14px;
-  color: var(--slate);
+  color: var(--fg-2);
   text-decoration: none;
   transition: color 0.2s;
   padding: 8px 4px;
@@ -1462,10 +1597,10 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
   align-items: center;
 }
 
-.footer-links a:hover { color: var(--aurum); }
+.footer-links a:hover { color: var(--fg-1); }
 
 footer {
-  border-top: 1px solid rgba(229,229,227,0.06);
+  border-top: 1px solid var(--line);
   /* SPACING-0927 B-3: nav and footer both take the page gutter, so the
      logo's left edge and the content's left edge are the same number at
      every width. Vertical 32px is unchanged (not part of the section
@@ -1475,6 +1610,8 @@ footer {
      90/20/16 exactly, the same math a section+.container pair uses. */
   padding: 32px var(--gutter-base);
   text-align: center;
+  background: var(--bg);
+  color: var(--fg-3);
 }
 
 .footer-inner {
@@ -1496,20 +1633,20 @@ footer {
   min-height: 44px;
 }
 
-.footer-logo .wordmark { font-size: 15px; font-weight: 500; color: var(--slate); }
+.footer-logo .wordmark { font-size: 15px; font-weight: 500; color: var(--fg-3); }
 
 .footer-meta {
   font-size: 13px;
-  color: var(--slate);
+  color: var(--fg-3);
 }
 
 .footer-meta a {
-  color: var(--slate);
+  color: var(--fg-3);
   text-decoration: none;
   transition: color 0.2s;
 }
 
-.footer-meta a:hover { color: var(--aurum); }
+.footer-meta a:hover { color: var(--fg-1); }
 
 /* ── AD sheet 9: one FAQ accordion component, site-wide ──────────────────────
    Matches how-it-works' pattern (the only page with a working accordion
@@ -1523,8 +1660,8 @@ footer {
    open max-height is set generously above how-it-works' own 400px so longer
    answers on other pages are never clipped. */
 .faq-list { max-width: 700px; margin: 0 auto; }
-.faq-item { border-bottom: 1px solid rgba(229,229,227,0.08); }
-.faq-item:first-child { border-top: 1px solid rgba(229,229,227,0.08); }
+.faq-item { border-bottom: 1px solid var(--line); }
+.faq-item:first-child { border-top: 1px solid var(--line); }
 .faq-question {
   width: 100%;
   display: flex;
@@ -1537,21 +1674,22 @@ footer {
   padding: 24px 0;
   text-align: left;
   font-family: var(--sans);
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--ivory);
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--fg-1);
   line-height: 1.4;
   transition: color 0.2s;
+  min-height: 44px;
 }
-.faq-question:hover { color: var(--aurum); }
+.faq-question:hover { color: var(--accent-text); }
 .faq-icon {
   width: 20px;
   height: 20px;
   flex-shrink: 0;
-  color: var(--slate);
+  color: var(--fg-3);
   transition: transform 0.3s, color 0.3s;
 }
-.faq-item.open .faq-icon { transform: rotate(45deg); color: var(--aurum); }
+.faq-item.open .faq-icon { transform: rotate(45deg); color: var(--accent-text); }
 /* N1: visibility:hidden on the closed state pulls any link inside the
    (still-in-DOM) answer text out of tab order; visibility flips back the
    instant the item opens (0s delay) but only flips to hidden after the
@@ -1568,8 +1706,8 @@ footer {
   visibility: visible;
   transition: max-height 0.35s ease, visibility 0s linear 0s;
 }
-.faq-answer-inner { padding: 0 0 24px; font-size: 15px; line-height: 1.7; color: var(--ash); }
-.faq-answer-inner a { color: var(--aurum); text-decoration: underline; }
+.faq-answer-inner { padding: 0 0 24px; font-size: 15px; line-height: 1.7; color: var(--fg-2); }
+.faq-answer-inner a { color: var(--fg-1); text-decoration: underline; text-decoration-color: var(--link-line); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
 
 /* ── How It Works Page ───────────────────────────────────────────── */
 .hiw-page-header {
@@ -1577,18 +1715,21 @@ footer {
   padding: 120px 0 60px;
 }
 .hiw-page-header h1 {
-  font-size: 42px;
-  font-weight: 700;
-  color: var(--ivory);
-  letter-spacing: -0.025em;
+  font-size: var(--h1);
+  font-weight: 300;
+  color: var(--fg-1);
+  letter-spacing: -0.022em;
   margin-bottom: 16px;
+  font-family: var(--serif);
+  line-height: 1.04;
+  text-wrap: balance;
 }
 .hiw-page-header p {
-  font-size: 18px;
-  color: var(--ash);
+  font-size: 19px;
+  color: var(--fg-2);
   max-width: 560px;
   margin: 0 auto;
-  line-height: 1.6;
+  line-height: 1.55;
 }
 .hiw-section {
   padding: 60px 0;
@@ -1598,7 +1739,7 @@ footer {
    how-it-works.html) is dead; removed with the h2 consolidation. */
 .hiw-section-intro {
   font-size: 16px;
-  color: var(--ash);
+  color: var(--fg-2);
   margin-bottom: 40px;
   max-width: 560px;
   line-height: 1.7;
@@ -1614,11 +1755,11 @@ footer {
 .hiw-options li {
   padding: 8px 0;
   font-size: 14px;
-  color: var(--ash);
+  color: var(--fg-2);
   line-height: 1.6;
 }
 .hiw-options li strong {
-  color: var(--ivory);
+  color: var(--fg-1);
 }
 /* ── Hamburger Menu ──────────────────────────────────────────────── */
 .hamburger {
@@ -1637,7 +1778,7 @@ footer {
   display: block;
   width: 22px;
   height: 2px;
-  background: var(--ivory);
+  background: var(--fg-1);
   transition: transform 0.3s, opacity 0.3s;
 }
 .hamburger[aria-expanded="true"] span:nth-child(1) {
@@ -1749,6 +1890,9 @@ footer {
      APPROVED and untouched — nothing here leaks above 600px. !important is
      required to defeat the per-page inline hero/section-head sizes (none of which
      carry a mobile override of their own). */
+  /* Design system pass: the phone sizes are now the tokens themselves (--h1 clamps
+     to 40px, --h2-section to 30px at this width), so the !important override that
+     defeats per-page sizes points at the tokens instead of fixed numbers. */
   #hero h1,
   .earnings-hero-inner h1,
   .pricing-page-header h1,
@@ -1756,11 +1900,11 @@ footer {
   .page-hero h1,
   #builders-hero h1,
   .api-page-header h1 {
-    font-size: 40px !important;
-    line-height: 1.1 !important;
+    font-size: var(--h1) !important;
+    line-height: 1.04 !important;
   }
   section h2 {
-    font-size: 25px !important;
+    font-size: var(--h2-section) !important;
   }
 
   .hero-ctas { flex-direction: column; }
@@ -1787,8 +1931,8 @@ footer {
 }
 
 /* ── Utilities ─────────────────────────────────────────────────────────────── */
-.text-aurum { color: var(--aurum); }
-.text-slate { color: var(--slate); }
+.text-aurum { color: var(--accent-text); }
+.text-slate { color: var(--fg-3); }
 
 /* AD design-tells sweep P2a: every .reveal block now paints on load (the
    html.js-reveal opt-in line is gone from every page head, so nothing ever
@@ -1820,7 +1964,7 @@ footer {
   background: var(--aurum);
   color: var(--obsidian);
   font-weight: 600;
-  border-radius: 0 0 6px 6px;
+  border-radius: 0 0 var(--r-control) var(--r-control);
   z-index: 9999;
   transition: top 0.2s;
 }
@@ -1841,8 +1985,10 @@ footer {
    `:focus-visible` (not bare `:focus`) is what already scopes this to
    keyboard/programmatic focus and skips mouse-click focus -- no separate
    `:focus:not(:focus-visible)` suppression rule existed or is needed. */
+/* Design system pass: the ring is ground-aware. --focus-ring is ink on a light
+   ground and gold in a dark scope, so one rule is visible everywhere. */
 *:focus-visible {
-  outline: 1.5px solid var(--ivory);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -1855,7 +2001,7 @@ footer {
 
 abbr[title] {
   text-decoration: none;
-  border-bottom: 1px dotted var(--slate);
+  border-bottom: 1px dotted var(--fg-3);
   cursor: help;
 }
 
@@ -1863,21 +2009,16 @@ abbr[title] {
    "Raised" sections carry a legible tint + hairlines; "ground" sections stay
    plain obsidian (the decorative triangle texture was removed sitewide by
    the AD design-tells sweep, tell 8). Strict A/B/A/B per page. */
-.section-raised,
-.explore-section,
-#for-builders,
-#pricing {
-  /* DR-7b: modest tint + hairline bump so the raised/ground alternation reads;
-     the hairlines (not the tone) still carry the rhythm. */
-  background: rgba(255,255,255,0.065);
-  border-top: 1px solid rgba(229,229,227,0.13);
-  border-bottom: 1px solid rgba(229,229,227,0.13);
+/* Design system pass: .section-raised is the same thing as .on-tint (the two share
+   one rule in the Ground scopes block). .explore-section sits on paper like any
+   section that names no ground; #for-builders and #pricing (ids no page carries
+   today) keep a plain tint. */
+.explore-section {
+  background: var(--paper);
 }
 
-.section-ground,
-#how-it-works,
-#footer-cta {
-  background-color: var(--obsidian);
+.section-ground {
+  background-color: var(--paper);
 }
 
 /* ── Line Chart (Earnings Projection) ──────────────────────────────────────── */
@@ -1904,7 +2045,7 @@ abbr[title] {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: var(--slate);
+  color: var(--fg-3);
 }
 
 .legend-swatch {
@@ -1919,12 +2060,12 @@ abbr[title] {
   max-width: 720px;
   /* SPACING-0927 rule 6: card padding is 32px on all four sides (was 28/32). */
   padding: var(--space-card);
-  background: var(--aurum-dim);
-  border: 1px solid var(--aurum-border);
-  border-radius: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-stage);
   font-size: 16px;
   line-height: 1.7;
-  color: var(--ash);
+  color: var(--fg-2);
 }
 
 /* ── Snapshot Table ────────────────────────────────────────────────────────── */
@@ -1932,8 +2073,9 @@ abbr[title] {
   max-width: 720px;
   margin: 0 auto 48px;
   overflow-x: auto;
-  border: 1px solid rgba(229,229,227,0.08);
-  border-radius: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-stage);
+  background: var(--surface);
 }
 
 .snapshot-table {
@@ -1948,9 +2090,8 @@ abbr[title] {
   font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--slate);
-  background: rgba(255,255,255,0.025);
-  border-bottom: 1px solid rgba(229,229,227,0.08);
+  color: var(--fg-3);
+  border-bottom: 1px solid var(--line);
 }
 
 .snapshot-table thead th:first-child {
@@ -1962,9 +2103,9 @@ abbr[title] {
   text-align: center;
   font-family: var(--mono);
   font-size: 15px;
-  font-weight: 500;
-  color: var(--ivory);
-  border-bottom: 1px solid rgba(229,229,227,0.05);
+  font-weight: 400;
+  color: var(--fg-1);
+  border-bottom: 1px solid var(--line);
 }
 
 .snapshot-table tbody td:first-child {
@@ -1972,7 +2113,7 @@ abbr[title] {
   font-family: var(--sans);
   font-size: 14px;
   font-weight: 400;
-  color: var(--ash);
+  color: var(--fg-1);
 }
 
 .snapshot-table tbody tr:last-child td {
@@ -1980,7 +2121,7 @@ abbr[title] {
 }
 
 .snapshot-table tbody tr:hover {
-  background: rgba(255,255,255,0.018);
+  background: var(--bg);
 }
 
 /* ── Tier Cards (Compounding Earnings) ─────────────────────────────────────── */
@@ -1994,9 +2135,9 @@ abbr[title] {
 }
 
 .tier-card {
-  background: rgba(255,255,255,0.025);
-  border: 1px solid rgba(229,229,227,0.08);
-  border-radius: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-stage);
   /* SPACING-0927 rule 6: card padding is 32px on all four sides (was 28/24). */
   padding: var(--space-card);
   display: flex;
@@ -2004,12 +2145,11 @@ abbr[title] {
 }
 
 .tier-card--active {
-  border-color: rgba(201,168,76,0.25);
+  border-color: var(--accent-text);
 }
 
 .tier-card--power {
-  border-color: var(--aurum);
-  box-shadow: 0 0 24px rgba(201,168,76,0.08);
+  border-color: var(--accent-text);
 }
 
 .tier-card-header {
@@ -2026,15 +2166,15 @@ abbr[title] {
 
 .tier-name {
   font-size: 17px;
-  font-weight: 600;
-  color: var(--ivory);
+  font-weight: 500;
+  color: var(--fg-1);
   letter-spacing: -0.01em;
 }
 
 .tier-desc {
   font-size: 13px;
   line-height: 1.5;
-  color: var(--slate);
+  color: var(--fg-3);
   margin-bottom: 20px;
 }
 
@@ -2050,7 +2190,7 @@ abbr[title] {
   justify-content: space-between;
   align-items: center;
   padding: 6px 0;
-  border-bottom: 1px solid rgba(229,229,227,0.04);
+  border-bottom: 1px solid var(--line);
 }
 
 .tier-row:last-child {
@@ -2064,32 +2204,32 @@ abbr[title] {
 
 .tier-row-highlight .tier-amount {
   font-size: 18px;
-  font-weight: 600;
-  color: var(--ivory);
+  font-weight: 400;
+  color: var(--fg-1);
 }
 
 .tier-year {
   font-family: var(--mono);
   font-size: 12px;
-  color: var(--slate);
+  color: var(--fg-3);
   letter-spacing: 0.04em;
 }
 
 .tier-amount {
   font-family: var(--mono);
   font-size: 15px;
-  font-weight: 500;
-  color: var(--ash);
+  font-weight: 400;
+  color: var(--fg-1);
 }
 
 .tier-card--power .tier-row-highlight .tier-amount {
-  color: var(--aurum);
+  color: var(--accent-text);
 }
 
 .tier-annual {
   margin-top: auto;
   padding-top: 16px;
-  border-top: 1px solid rgba(229,229,227,0.08);
+  border-top: 1px solid var(--line);
   display: flex;
   justify-content: space-between;
   align-items: baseline;
@@ -2099,18 +2239,18 @@ abbr[title] {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--slate);
+  color: var(--fg-3);
 }
 
 .tier-annual-amount {
   font-family: var(--mono);
   font-size: 20px;
-  font-weight: 600;
-  color: var(--ivory);
+  font-weight: 400;
+  color: var(--fg-1);
 }
 
 .tier-card--power .tier-annual-amount {
-  color: var(--aurum);
+  color: var(--accent-text);
 }
 
 /* ── Compound Factors (Why It Compounds) ──────────────────────────────────── */
@@ -2129,14 +2269,14 @@ abbr[title] {
 .compound-factor strong {
   display: block;
   font-size: 14px;
-  font-weight: 600;
-  color: var(--ivory);
+  font-weight: 500;
+  color: var(--fg-1);
   margin-bottom: 4px;
 }
 
 .compound-factor p {
   font-size: 13px;
-  color: var(--slate);
+  color: var(--fg-2);
   line-height: 1.4;
   margin: 0;
 }
@@ -2165,9 +2305,10 @@ abbr[title] {
 /* ── Pricing Value Tiers Table ─────────────────────────────────────────────── */
 .value-tiers-table-wrap {
   overflow-x: auto;
-  border: 1px solid rgba(229,229,227,0.08);
-  border-radius: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-stage);
   margin-bottom: 32px;
+  background: var(--surface);
 }
 
 .value-tiers-table {
@@ -2182,15 +2323,14 @@ abbr[title] {
   font-weight: 400;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--slate);
-  background: rgba(255,255,255,0.025);
-  border-bottom: 1px solid rgba(229,229,227,0.08);
+  color: var(--fg-3);
+  border-bottom: 1px solid var(--line);
 }
 
 .value-tiers-table tbody td {
   padding: 14px 20px;
-  color: var(--ivory);
-  border-bottom: 1px solid rgba(229,229,227,0.05);
+  color: var(--fg-1);
+  border-bottom: 1px solid var(--line);
   vertical-align: top;
   font-size: 14px;
 }
@@ -2200,12 +2340,12 @@ abbr[title] {
 }
 
 .value-tiers-table tbody tr:hover {
-  background: rgba(255,255,255,0.018);
+  background: var(--bg);
 }
 
 .value-tiers-table .tier-name {
-  font-weight: 600;
-  color: var(--aurum);
+  font-weight: 500;
+  color: var(--fg-1);
   white-space: nowrap;
 }
 
@@ -2225,15 +2365,16 @@ abbr[title] {
   margin-top: 32px;
   /* SPACING-0927 R2-2b: 28 rounds up to 32. */
   padding: 24px var(--space-card);
-  background: rgba(255,255,255,0.02);
-  border: 1px solid rgba(229,229,227,0.08);
-  border-radius: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-stage);
 }
 
 .earnings-scenario h3 {
+  /* a label heading inside a data box: stays 14px, weight 500 (the h3 scale is for card and section heads) */
   font-size: 14px;
-  font-weight: 600;
-  color: var(--ivory);
+  font-weight: 500;
+  color: var(--fg-1);
   /* SPACING-0927 rule 5: heading-to-next-element is 16px sitewide (was 12). */
   margin-bottom: var(--space-body);
   letter-spacing: -0.01em;
@@ -2243,12 +2384,12 @@ abbr[title] {
   font-family: var(--mono);
   font-size: 13px;
   line-height: 1.8;
-  color: var(--ash);
+  color: var(--fg-2);
 }
 
 .earnings-scenario .earnings-highlight {
-  font-weight: 600;
-  color: var(--aurum);
+  font-weight: 400;
+  color: var(--accent-text);
 }
 
 @media (max-width: 600px) {
@@ -2288,8 +2429,8 @@ abbr[title] {
     top: 0;
     right: 0;
     bottom: 0;
-    width: 24px;
-    background: linear-gradient(to left, var(--obsidian), transparent);
+    width: 4px;
+    background: var(--line);
     pointer-events: none;
     border-radius: 0;
   }
@@ -2332,15 +2473,14 @@ abbr[title] {
 
 .hero-install .hero-setup-block {
   text-align: left;
-  border-color: var(--aurum-border);
-  box-shadow: 0 24px 48px -28px rgba(0,0,0,0.65);
+  border-color: rgba(201, 168, 76, 0.45);
 }
 
 .hero-install .hero-setup-block pre {
-  font-size: 18px;
+  font-size: 19px;
   /* SPACING-0927: vertical on the content scale now (was 20). */
   padding: var(--space-body) 22px;
-  color: var(--aurum);
+  color: var(--accent-text);
 }
 
 .hero-setup-note {
@@ -2348,7 +2488,7 @@ abbr[title] {
   margin: var(--space-tight) 0 0;
   font-size: 14px;
   line-height: 1.5;
-  color: var(--slate-text);
+  color: var(--fg-3);
 }
 
 @media (max-width: 600px) {
@@ -2359,18 +2499,18 @@ abbr[title] {
 /* ── Pull-stats: ledger tier — exactly one gold figure per strip (Move 1) ── */
 span.pull-stat-num.pull-stat-num, .pull-stat-num.pull-stat-num.pull-stat-num {
   font-size: clamp(48px, 7vw, 88px);
-  font-weight: 500;
+  font-weight: 400;
   font-family: var(--mono);
-  color: var(--aurum);
+  color: var(--accent-text);
   line-height: 1;
   letter-spacing: -0.02em;
 }
 
 span.pull-stat-secondary.pull-stat-secondary, .pull-stat-secondary.pull-stat-secondary.pull-stat-secondary {
   font-size: clamp(28px, 4vw, 40px);
-  font-weight: 500;
+  font-weight: 400;
   font-family: var(--mono);
-  color: var(--ivory);
+  color: var(--fg-1);
   line-height: 1.1;
   letter-spacing: -0.02em;
 }
@@ -2385,14 +2525,14 @@ span.pull-stat-secondary.pull-stat-secondary, .pull-stat-secondary.pull-stat-sec
 span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.pull-stat-caption {
   font-size: 13px;
   letter-spacing: 0.02em;
-  color: var(--slate);
+  color: var(--fg-3);
   margin-top: 8px;
 }
 
 .ledger-strip.ledger-strip {
   padding: 64px 0;
-  border-top: 1px solid var(--aurum-border);
-  border-bottom: 1px solid rgba(229,229,227,0.08);
+  border-top: 1px solid var(--accent-text);
+  border-bottom: 1px solid var(--line);
 }
 
 /* ── DR-7d LEDGER CONTAINER FORM RULE ───────────────────────────────────────
@@ -2431,8 +2571,8 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
 .hero-ledger .hero-ledger-num {
   font-family: var(--mono);
   font-size: 22px;
-  font-weight: 600;
-  color: var(--aurum);
+  font-weight: 400;
+  color: var(--accent-text);
   letter-spacing: -0.01em;
   line-height: 1;
 }
@@ -2442,13 +2582,13 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
 .hero-ledger .hero-ledger-label {
   font-size: 12px;
   letter-spacing: 0.02em;
-  color: var(--slate);
+  color: var(--fg-3);
 }
 
 /* ── Recent discoveries band (E3: real learnings, server-rendered) ────────── */
 .discovery-band {
-  border-top: 1px solid rgba(229,229,227,0.08);
-  border-bottom: 1px solid rgba(229,229,227,0.08);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
 }
 
 .discovery-row {
@@ -2461,7 +2601,7 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
      bottom supply half the gap to the row above/below (was 14, giving 28
      between rows; 8+8=16). */
   padding: var(--space-tight) 4px;
-  border-bottom: 1px solid rgba(229,229,227,0.06);
+  border-bottom: 1px solid var(--line);
 }
 
 .discovery-row:last-child { border-bottom: none; }
@@ -2471,7 +2611,7 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
 .discovery-cat {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--slate);
+  color: var(--fg-3);
   letter-spacing: 0.04em;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2481,7 +2621,7 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
 .discovery-title {
   font-size: 15px;
   font-weight: 500;
-  color: var(--ivory);
+  color: var(--fg-1);
   line-height: 1.45;
   min-width: 0;
 }
@@ -2489,22 +2629,22 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
 .discovery-score {
   font-family: var(--mono);
   font-size: 12px;
-  color: var(--slate);
+  color: var(--fg-3);
   white-space: nowrap;
 }
 
 .discovery-price {
   font-family: var(--mono);
   font-size: 13px;
-  font-weight: 600;
-  color: var(--aurum);
+  font-weight: 400;
+  color: var(--accent-text);
   white-space: nowrap;
   justify-self: end;
 }
 
 .discovery-band-note {
   font-size: 13px;
-  color: var(--slate);
+  color: var(--fg-3);
   /* SPACING-0927 R2-2b: 14 rounds up to 16 (was 14). */
   margin-top: var(--space-body);
   line-height: 1.6;
@@ -2518,6 +2658,8 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
       "title title"
       "score price";
     row-gap: 4px;
+    /* top-aligned (not baseline) so the 12px score and 13px price do not push each other down a pixel */
+    align-items: start;
   }
   .discovery-cat { grid-area: cat; }
   .discovery-title { grid-area: title; }
@@ -2532,7 +2674,7 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   .value-tiers-table-wrap {
     overflow-x: visible;
     border: none;
-    border-radius: 0;
+    border-radius: var(--r-stage);
   }
   .value-tiers-table-wrap::after { display: none; }
   .value-tiers-table { min-width: 0; }
@@ -2546,11 +2688,11 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   }
   /* SPACING-0927 R2-2b: 12 ties 8/16 -- tie goes to the larger value. */
   .value-tiers-table tr {
-    border: 1px solid rgba(229,229,227,0.1);
-    border-radius: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--r-stage);
     margin-bottom: var(--space-body);
     padding: 16px 16px 8px;
-    background: rgba(255,255,255,0.02);
+    background: var(--surface);
   }
   .value-tiers-table td {
     border-bottom: none;
@@ -2559,7 +2701,7 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   .value-tiers-table td.tier-name {
     font-size: 15px;
     padding-bottom: 10px;
-    border-bottom: 1px solid rgba(229,229,227,0.08);
+    border-bottom: 1px solid var(--line);
     margin-bottom: 6px;
   }
   .value-tiers-table td:not(.tier-name)::before {
@@ -2567,7 +2709,7 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
     font-size: 10px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: var(--slate);
+    color: var(--fg-3);
     margin-bottom: 2px;
   }
   .value-tiers-table td:nth-child(2)::before { content: 'What it covers'; }
@@ -2612,9 +2754,9 @@ span.pull-stat-range.pull-stat-range, .pull-stat-range.pull-stat-range.pull-stat
    which doesn't depend on a class either wave might remove next. */
 #builders-hero .builders-hero-stats .builders-hero-stat .stat-num.pull-stat-caption {
   font-size: clamp(28px, 4vw, 40px);
-  font-weight: 500;
+  font-weight: 400;
   font-family: var(--mono);
-  color: var(--ivory);
+  color: var(--fg-1);
   letter-spacing: -0.02em;
   text-transform: none;
   margin-top: 0;
@@ -2651,18 +2793,33 @@ span.pull-stat-range.pull-stat-range, .pull-stat-range.pull-stat-range.pull-stat
    !important, same later-source-wins reason). Outage/red is untouched:
    not part of what's live on screen today, and the brand has no red
    either — a genuine design call left for whoever owns status.html. */
+/* Design system pass: the same repointing, ground-aware. :root carries the light
+   values; every dark scope redeclares them, so a status badge inside a dark panel
+   (.dw-dark, .on-dark and the rest) reads on that panel and not on paper. */
 :root {
-  --green: var(--ash) !important;
-  --green-bg: rgba(229, 229, 227, 0.08) !important;
-  --yellow: var(--aurum) !important;
-  --yellow-bg: var(--aurum-dim) !important;
+  --green: var(--fg-1) !important;
+  --green-bg: rgba(10, 10, 10, 0.06) !important;
+  --yellow: var(--accent-text) !important;
+  --yellow-bg: rgba(201, 168, 76, 0.18) !important;
+}
+.on-dark,
+#main-nav,
+body > footer,
+.code-block,
+.dw-dark,
+.step-art,
+.dw-stage-dark {
+  --green: var(--fg-1) !important;
+  --green-bg: rgba(250, 250, 248, 0.08) !important;
+  --yellow: var(--accent-text) !important;
+  --yellow-bg: rgba(201, 168, 76, 0.18) !important;
 }
 .overall-status,
 .badge.degraded {
-  border-color: var(--aurum-border) !important;
+  border-color: var(--accent-text) !important;
 }
 .badge.operational {
-  border-color: rgba(229, 229, 227, 0.25) !important;
+  border-color: var(--line) !important;
 }
 
 /* ── Item 11: .hero-ledger reserved min-height ────────────────────────────
@@ -2714,6 +2871,20 @@ span.pull-stat-range.pull-stat-range, .pull-stat-range.pull-stat-range.pull-stat
   font-family: 'IBM Plex Mono Fallback';
   src: local('Menlo'), local('Consolas');
   size-adjust: 99.68%;
+}
+/* Design system pass: Newsreader's fallback. Measured live (Range widths of ten
+   real headings at 64px, Newsreader vs local Georgia): Newsreader sets 96.9% as
+   wide as Georgia, so size-adjust is 96.9%. Newsreader's own ascent 735 and
+   descent 265 per 1000 em, divided by that ratio, give the overrides below, so a
+   heading set in the fallback occupies the same box (64px tall at 64px) and the
+   swap does not move the lines. */
+@font-face {
+  font-family: 'Newsreader Fallback';
+  src: local('Georgia');
+  size-adjust: 96.9%;
+  ascent-override: 75.8%;
+  descent-override: 27.3%;
+  line-gap-override: 0%;
 }
 
 /* ── Item 12 (remainder): 44px targets not reachable via a shared class ── */
@@ -2846,6 +3017,30 @@ span.pull-stat-range.pull-stat-range, .pull-stat-range.pull-stat-range.pull-stat
   font-size: 12px;
 }
 
+/* Design system pass: the legal routes (server.js serveLegalPage) carry an inline
+   <style> that still paints dark-era ink (#FAFAF8 headings, #E5E5E3 copy, gold
+   links) and loads after this sheet. `body .legal-wrap` and `body .legal-back`
+   out-rank those single-class rules, so the pages read on paper until their own
+   pass retires the inline colours and this block with them. The dark pre panel
+   inside them is already a dark panel and is left alone. */
+body .legal-wrap {
+  color: var(--fg-2);
+}
+body .legal-wrap h1,
+body .legal-wrap h2,
+body .legal-wrap h3,
+body .legal-wrap strong {
+  color: var(--fg-1);
+}
+body .legal-wrap a,
+body .legal-back {
+  color: var(--fg-1);
+  text-decoration-color: var(--link-line);
+}
+body .legal-wrap hr {
+  border-top-color: var(--line);
+}
+
 /* ── Item 13: terms/privacy onto the display type scale ──────────────────
    /terms and /privacy are server-rendered by serveLegalPage() in
    server.js (out of this builder's ownership — no static terms.html or
@@ -2856,10 +3051,13 @@ span.pull-stat-range.pull-stat-range, .pull-stat-range.pull-stat-range.pull-stat
    51.2px leading (32*1.6, the plain body inheritance) and h2 22px at
    35.2px (22*1.6), both "normal" tracking, against every main h1's
    -1.12 to -1.68px. */
-.legal-wrap h1,
+.legal-wrap h1 {
+  line-height: 1.04;
+  letter-spacing: -0.022em;
+}
 .legal-wrap h2 {
   line-height: 1.1;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.016em;
 }
 
 /* ── Item 13: the essay onto the display type scale ───────────────────────
@@ -2869,8 +3067,8 @@ span.pull-stat-range.pull-stat-range, .pull-stat-range.pull-stat-range.pull-stat
    needed: same property, same selector, declared later. No letter-spacing
    was set at all there, so that half needs no !important. */
 .writing-wrap h1 {
-  line-height: 1.1 !important;
-  letter-spacing: -0.02em;
+  line-height: 1.04 !important;
+  letter-spacing: -0.022em;
 }
 
 /* ── LOGOS-INVISIBLE: Works With client marks rendered via CSS mask ───────
@@ -2893,7 +3091,491 @@ span.pull-stat-range.pull-stat-range, .pull-stat-range.pull-stat-range.pull-stat
   display: block;
   width: 100%;
   height: 100%;
-  background-color: var(--ivory);
+  background-color: var(--fg-1);
   -webkit-mask: var(--logo) center / contain no-repeat;
   mask: var(--logo) center / contain no-repeat;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Drawing kit and layout primitives (design system pass)
+   The shared pieces every page builds from: claim-beside-picture, the stage a
+   drawing sits in, the product panels, the skeleton bars, the step cards, the
+   heading-left list, the index rows. Every colour is a ground-aware token, so
+   the same rule is right on paper, on tint and on dark. A drawing shows the
+   real product and nothing else: skeleton bars stand in wherever text would be.
+   The page-only pieces (the hero grid, the exchange drawing and its thread, the
+   kill-switch chip, the client band layout, the keyframes) live in the page.
+   Every gap, margin and panel padding below is a value of the spacing scale
+   (4, 8, 16, 24, 32, 48, 64): the comp's 9, 10, 12, 14 and 18 are rounded onto it
+   (a tie goes to the larger), because the spacing test measures sibling gaps in a
+   drawing like any others. Control padding (a button, a chip, a badge) is exempt.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.lede {
+  font-size: 19px;
+  line-height: 1.55;
+}
+
+/* a command, a tool name or any data in running copy is mono at weight 400 */
+code,
+.mono {
+  font-family: var(--mono);
+  font-size: 0.875em;
+}
+pre code {
+  font-size: 1em;
+}
+
+.cmd-chip {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 13px;
+  background: var(--obsidian);
+  color: var(--ivory);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+/* ── Claim beside picture ──
+   The comp also spaces a heading to its paragraph at 24px here; the sitewide
+   heading rule (16px, !important above) governs that gap, so it is not restated. */
+.pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-wide);
+  align-items: center;
+}
+.pair p {
+  max-width: 60ch;
+}
+.pair p + p {
+  margin-top: var(--space-body);
+}
+@media (min-width: 1025px) {
+  .pair.art-left > .pair-art {
+    order: -1;
+  }
+}
+
+/* ── Heading left, list right (page index, questions, any list of definitions) ── */
+.aside-list {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+  gap: var(--space-wide);
+  align-items: start;
+}
+
+/* a questions list in the right-hand column fills it (the page-wide list centres at 700) */
+.aside-list .faq-list {
+  max-width: none;
+  margin: 0;
+}
+
+/* ── The stage a drawing sits in ── */
+.dw-stage,
+.dw-stage-dark {
+  border-radius: var(--r-stage);
+  padding: var(--space-card);
+  position: relative;
+}
+.dw-stage {
+  background: var(--tint);
+}
+.on-tint .dw-stage,
+.section-raised .dw-stage {
+  background: var(--tint-deep);
+}
+.dw-stage-dark,
+.on-tint .dw-stage.dw-stage-dark,
+.section-raised .dw-stage.dw-stage-dark {
+  background: var(--bg);
+}
+
+/* ── Product panels ── */
+.dw-panel {
+  border-radius: var(--r-panel);
+  padding: var(--space-body);
+}
+.dw-dark {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-panel-dark);
+  color: var(--fg-2);
+}
+.dw-light {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-panel);
+  color: var(--fg-2);
+}
+.on-dark .dw-light {
+  border-color: transparent;
+}
+.dw-cap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-tight);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--fg-1);
+}
+.dw-node {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  overflow: visible;
+}
+.dw-node path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+}
+
+/* skeleton bars stand in for any text the drawing may not carry */
+.dw-sk {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: currentColor;
+  opacity: 0.22;
+}
+.dw-light .dw-sk {
+  opacity: 0.16;
+}
+.dw-sk + .dw-sk {
+  margin-top: var(--space-tight);
+}
+.dw-sk.w30 { width: 30%; }
+.dw-sk.w40 { width: 40%; }
+.dw-sk.w55 { width: 55%; }
+.dw-sk.w70 { width: 70%; }
+.dw-sk.w85 { width: 85%; }
+.dw-sk.w100 { width: 100%; }
+.dw-sk.lit {
+  opacity: 0.7;
+}
+
+.dw-term {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.dw-term .dw-tool {
+  color: var(--fg-1);
+}
+.dw-term .dw-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-tight);
+}
+.dw-term .dw-row .dw-sk {
+  flex: 1;
+  margin: 0;
+}
+
+.dw-title {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--fg-1);
+  margin-top: var(--space-tight);
+}
+.dw-chip {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1;
+  padding: 5px 8px;
+  border-radius: 4px;
+  background: var(--tint);
+  color: var(--fg-2);
+}
+.dw-btns {
+  display: flex;
+  gap: var(--space-tight);
+  margin-top: var(--space-body);
+}
+.dw-btn {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 9px 14px;
+  border-radius: 5px;
+  border: 1px solid var(--fg-1);
+}
+.dw-btn.primary {
+  background: var(--fg-1);
+  color: var(--bg);
+}
+.dw-btn.ghost {
+  border-color: var(--line);
+  color: var(--fg-2);
+}
+
+/* the earnings ledger drawing: a gold tick, a skeleton bar, a gold amount bar */
+.dw-ledger {
+  margin-top: var(--space-body);
+  display: grid;
+  gap: var(--space-tight);
+}
+.dw-ledger .dw-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-tight);
+}
+.dw-ledger .dw-tick {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--aurum);
+}
+.dw-ledger .dw-sk {
+  flex: 1;
+  margin: 0;
+  opacity: 0.3;
+}
+.dw-ledger .dw-amt {
+  width: 44px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--aurum);
+  opacity: 0.85;
+}
+
+/* the review queue drawing */
+.dw-queue-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg-1);
+  display: flex;
+  align-items: center;
+  gap: var(--space-tight);
+}
+.dw-badge {
+  font-family: var(--mono);
+  font-size: 11px;
+  background: var(--fg-1);
+  color: var(--bg);
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+.dw-queue-row {
+  padding: var(--space-body) 0;
+  border-top: 1px solid var(--line);
+}
+.dw-queue-row:first-of-type {
+  margin-top: var(--space-body);
+}
+.dw-queue-row .dw-sk {
+  margin-top: var(--space-tight);
+}
+
+/* the recall drawing: the long way beside the short way */
+.dw-twoup {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-body);
+  align-items: end;
+}
+.dw-twoup .dw-panel {
+  padding: 16px;
+}
+.dw-long .dw-sk {
+  opacity: 0.14;
+}
+
+/* the device: our own mark, very large and very faint, behind a hero only */
+.dw-device {
+  position: absolute;
+  right: -140px;
+  top: -40px;
+  width: 900px;
+  height: 860px;
+  pointer-events: none;
+}
+.dw-device .tri {
+  fill: none;
+  stroke: rgba(250, 250, 248, 0.07);
+  stroke-width: 1;
+}
+.dw-device .bar {
+  stroke: rgba(201, 168, 76, 0.38);
+  stroke-width: 1;
+}
+
+/* ── Step cards: a dark drawing on top, h3 and text below. No numerals. ──
+   .step itself is the white card (rules above). Markup that still carries the
+   older .step-header / .step-number inside .step, with no .step-body, takes the
+   card padding itself until its page is rebuilt. */
+.step-art {
+  background: var(--bg);
+  padding: var(--space-copy);
+  height: 168px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.step-body {
+  padding: var(--space-copy);
+}
+.step-body p {
+  font-size: 15px;
+  line-height: 1.6;
+}
+.step:not(:has(> .step-body)) {
+  padding: var(--space-card);
+}
+
+/* ── Index of pages: heading left (.aside-list), rows right. No numerals, no arrows. ── */
+.dive-row {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: var(--space-copy);
+  align-items: baseline;
+  padding: 20px 0;
+  border-top: 1px solid var(--line);
+  text-decoration: none;
+}
+.dive-row:last-child {
+  border-bottom: 1px solid var(--line);
+}
+.dive-title {
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--fg-1);
+}
+.dive-desc {
+  font-size: 15px;
+  color: var(--fg-3);
+}
+.dive-row:hover .dive-title {
+  text-decoration: underline;
+  text-decoration-color: var(--accent-text);
+  text-underline-offset: 4px;
+}
+
+/* ── The ask: the framed command (the hero block and the closing block only) ──
+   Gold line, a gold button with ink text, the command in gold mono with a dim
+   "$ " drawn by CSS so the copied text stays the bare command. Every other code
+   block on the site stays the plain dark panel with an outline copy button. */
+.hero-setup-block,
+#footer-setup-snippet {
+  border-color: rgba(201, 168, 76, 0.45);
+}
+.hero-setup-block .copy-btn,
+#footer-setup-snippet .copy-btn {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0;
+  color: var(--obsidian);
+  background: var(--aurum);
+  border: 0;
+  padding: 0 18px;
+}
+.hero-setup-block .copy-btn:hover,
+#footer-setup-snippet .copy-btn:hover,
+.hero-setup-block .copy-btn.copied,
+#footer-setup-snippet .copy-btn.copied {
+  color: var(--obsidian);
+}
+.hero-setup-block .copy-btn:hover,
+#footer-setup-snippet .copy-btn:hover {
+  background: var(--aurum-hi);
+}
+.hero-setup-block pre,
+#footer-setup-snippet pre {
+  font-size: 19px;
+  color: var(--accent-text);
+}
+.hero-setup-block pre::before,
+#footer-setup-snippet pre::before {
+  content: '$ ';
+  color: var(--fg-3);
+}
+
+/* the closing ask: a 480px frame, centred in its section, the command left-aligned inside it */
+#footer-cta .code-block {
+  margin: var(--space-card) auto 0;
+  text-align: left;
+  max-width: 480px;
+}
+
+/* ── Responsive: 1024 and down ── */
+@media (max-width: 1024px) {
+  .pair,
+  .aside-list {
+    grid-template-columns: 1fr;
+    gap: var(--space-block);
+  }
+  /* stacked, the heading sits 16px above its list (the heading rule), not 16 plus the grid gap */
+  .aside-list {
+    row-gap: 0;
+  }
+  .steps {
+    grid-template-columns: 1fr;
+  }
+  .dw-device {
+    display: none;
+  }
+}
+
+/* ── Responsive: 480 and down ── */
+@media (max-width: 480px) {
+  .lede,
+  .hero-sub {
+    font-size: 17px;
+  }
+  .hero-setup-block .code-block-header,
+  #footer-setup-snippet .code-block-header {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px;
+  }
+  .hero-setup-block .copy-btn,
+  #footer-setup-snippet .copy-btn {
+    width: 100%;
+  }
+  .hero-setup-block pre,
+  #footer-setup-snippet pre {
+    font-size: 17px;
+    padding: 16px;
+  }
+  .dive-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .dw-twoup {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Hero layouts, shared by every page ──
+   hero-grid: the copy beside a drawing. hero-one: the copy alone, in a reading
+   width. Both sit inside a dark first section. One column below 1024. */
+.hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: var(--space-wide);
+  align-items: center;
+}
+.hero-one > * {
+  max-width: 720px;
+}
+.hero-one.hero-centred {
+  text-align: center;
+}
+.hero-one.hero-centred > * {
+  margin-left: auto;
+  margin-right: auto;
+}
+@media (max-width: 1024px) {
+  .hero-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-block);
+  }
 }

@@ -165,11 +165,13 @@ describe('WORKS-WITH: structural — public/works-with.html, public/index.html b
     }
   });
 
-  it('LOGOS-INVISIBLE: the shared .ww-logo mask rule exists in public/styles.css with mask + -webkit-mask + the ivory background', () => {
+  it('LOGOS-INVISIBLE: the shared .ww-logo mask rule exists in public/styles.css with mask + -webkit-mask + the ground-aware ink background (ivory on dark, ink on light)', () => {
     const ruleMatch = STYLES_CSS.match(/\.ww-logo\s*\{[^}]*\}/);
     assert.ok(ruleMatch, 'shared .ww-logo rule present in public/styles.css');
     const rule = ruleMatch[0];
-    assert.match(rule, /background-color:\s*var\(--ivory\)/, 'rule sets background-color to var(--ivory)');
+    // Design system pass: was var(--ivory), which vanishes on paper. --fg-1 is ivory in a dark scope
+    // (the homepage client band) and ink on a light ground (this page).
+    assert.match(rule, /background-color:\s*var\(--fg-1\)/, 'rule sets background-color to var(--fg-1)');
     assert.match(rule, /-webkit-mask:\s*var\(--logo\)\s*center\s*\/\s*contain\s*no-repeat/, 'rule sets -webkit-mask from the --logo custom property, centered/contain/no-repeat');
     assert.match(rule, /(?<!-webkit-)mask:\s*var\(--logo\)\s*center\s*\/\s*contain\s*no-repeat/, 'rule sets the standard mask property too');
     assert.match(STYLES_CSS, /--ivory:\s*#FAFAF8/i, 'the --ivory token is confirmed as #FAFAF8 (rgb(250,250,248)) in public/styles.css');
@@ -226,7 +228,9 @@ describe('WORKS-WITH: structural — public/works-with.html, public/index.html b
   });
 
   it('public/index.html step 01 no longer claims background extraction support (LAUNCH-WAVE-0926 register A-08, GOV-4 Q2), and carries the new connect-step text verbatim', () => {
-    const STEP01_A08 = 'Run <code style="font-family:var(--mono);font-size:13px;color:var(--aurum);">npx auxilo setup</code>. It finds the supported clients on your machine, registers Auxilo, and signs you in. Decline extraction and every Auxilo tool still works.';
+    // Design rebuild: the inline style on the step-one <code> is gone (the shared sheet styles
+    // `code`); the words are unchanged.
+    const STEP01_A08 = 'Run <code>npx auxilo setup</code>. It finds the supported clients on your machine, registers Auxilo, and signs you in. Decline extraction and every Auxilo tool still works.';
     assert.ok(INDEX_HTML.includes(STEP01_A08), 'step 01 carries the A-08 register text verbatim');
     assert.ok(!INDEX_HTML.includes(STEP01_OLD), 'step 01 no longer names exactly two clients');
     assert.ok(!INDEX_HTML.includes('extract learnings in the background'), 'step 01 no longer makes the background-extraction output claim (A-08 supersedes it)');

@@ -41,8 +41,8 @@
  *      nav link on the page is hit-testable via elementFromPoint. Also
  *      confirms at 1280x800 that the hamburger stays hidden, .nav-links
  *      keeps its normal desktop layout (display:flex, position:static),
- *      and the nav still resolves a real backdrop-filter (via #main-nav or
- *      its ::before).
+ *      and the nav paints a solid opaque ground with no backdrop-filter
+ *      (design system pass: the glass is retired, so the trap cannot return).
  *
  *      CI installs playwright + Chromium and sets CI_REQUIRE_TIER2=1 so a
  *      broken install fails the build loudly instead of silently falling
@@ -249,12 +249,15 @@ function runStaticTests() {
         }
     });
 
-    runTest('T-DR1-STATIC-003: the glass blur still exists, scoped to #main-nav::before', () => {
-        const rules = parseCssRules(css).filter((r) => r.selector.split(',').map((s) => s.trim()).includes('#main-nav::before'));
-        assert.ok(rules.length > 0, '#main-nav::before rule should exist and carry the glass background');
-        const body = rules.map((r) => r.body).join('\n');
-        assert.ok(/backdrop-filter\s*:\s*blur\(/i.test(body), '#main-nav::before should apply backdrop-filter: blur(...)');
-        assert.ok(/background\s*:/i.test(body), '#main-nav::before should carry the glass background color');
+    runTest('T-DR1-STATIC-003: the nav ground is solid, with no glass: a #main-nav background, no #main-nav::before layer, no blur anywhere on the nav', () => {
+        // Design system pass: the glass (a ::before layer carrying backdrop-filter: blur) is retired.
+        // Positive control: #main-nav itself paints a background. Negative: no ::before rule, no blur.
+        const navRules = parseCssRules(css).filter((r) => r.selector.split(',').map((s) => s.trim()).includes('#main-nav'));
+        assert.ok(navRules.some((r) => /(^|[\s;])background\s*:/i.test(r.body)), '#main-nav should paint its own solid background');
+        const before = parseCssRules(css).filter((r) => r.selector.split(',').map((s) => s.trim()).includes('#main-nav::before'));
+        assert.strictEqual(before.length, 0, '#main-nav::before (the old glass layer) should be gone');
+        const blurAnywhere = parseCssRules(css).filter((r) => /#main-nav/.test(r.selector) && /backdrop-filter\s*:\s*blur\(/i.test(r.body));
+        assert.strictEqual(blurAnywhere.length, 0, 'no rule that targets #main-nav may apply a backdrop blur');
     });
 
     runTest('T-DR1-STATIC-004: .nav-links mobile overlay still spans the full viewport', () => {
@@ -363,7 +366,7 @@ async function runDynamicTests() {
         }
 
         for (const page of DYNAMIC_PAGES) {
-            await runAsyncTest(`T-DR1-DYNAMIC-DESKTOP-${page}: nav layout + backdrop-filter unchanged at 1280x800`, async () => {
+            await runAsyncTest(`T-DR1-DYNAMIC-DESKTOP-${page}: nav layout + solid ground (no backdrop-filter) at 1280x800`, async () => {
                 const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
                 const p = await ctx.newPage();
                 try {
@@ -373,17 +376,19 @@ async function runDynamicTests() {
                         const links = document.querySelector('.nav-links');
                         const hamburger = document.getElementById('hamburger');
                         const navBefore = getComputedStyle(nav, '::before');
+                        const navStyle = getComputedStyle(nav);
                         return {
-                            beforeBackdrop: navBefore.backdropFilter || navBefore.webkitBackdropFilter,
+                            navBackground: navStyle.backgroundColor,
+                            navBackdrop: navStyle.backdropFilter || navStyle.webkitBackdropFilter || 'none',
+                            beforeBackdrop: navBefore.backdropFilter || navBefore.webkitBackdropFilter || 'none',
                             linksDisplay: getComputedStyle(links).display,
                             linksPosition: getComputedStyle(links).position,
                             hamburgerDisplay: getComputedStyle(hamburger).display,
                         };
                     });
-                    assert.ok(
-                        computed.beforeBackdrop && computed.beforeBackdrop !== 'none',
-                        'nav should still resolve a real backdrop-filter via ::before at desktop width'
-                    );
+                    assert.strictEqual(computed.navBackground, 'rgb(10, 10, 10)', 'nav paints a solid opaque #0A0A0A ground at desktop width');
+                    assert.strictEqual(computed.navBackdrop, 'none', 'nav has no backdrop-filter');
+                    assert.strictEqual(computed.beforeBackdrop, 'none', 'nav ::before has no backdrop-filter either'); 
                     assert.strictEqual(computed.linksDisplay, 'flex', '.nav-links should keep its normal desktop flex layout');
                     assert.strictEqual(computed.linksPosition, 'static', '.nav-links should not be position:fixed at desktop width');
                     assert.strictEqual(computed.hamburgerDisplay, 'none', 'hamburger should stay hidden at desktop width');

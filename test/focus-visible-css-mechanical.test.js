@@ -97,18 +97,26 @@ function ruleBody(css, selectorPattern) {
 // Tier 1: static CSS + HTML assertions
 // ═══════════════════════════════════════════════════════════════════════
 
-describe('FOCUS-VISIBLE (static): one universal ivory 1.5px focus-visible rule, no aurum/duplicate leftovers', () => {
+describe('FOCUS-VISIBLE (static): one universal ground-aware 2px focus-visible rule, no aurum/duplicate leftovers', () => {
   it('--ivory resolves to rgb(250,250,248) (#FAFAF8), the exact colour the sheet\'s V3 row specifies', () => {
     const root = ruleBody(STYLES, ':root\\s*\\{');
     assert.ok(root, ':root rule exists');
     assert.match(root, /--ivory:\s*#FAFAF8/i);
   });
 
-  it('the universal *:focus-visible rule is outline: 1.5px solid var(--ivory); outline-offset: 2px', () => {
+  it('the universal *:focus-visible rule is outline: 2px solid var(--focus-ring); outline-offset: 2px (ink on light, gold in a dark scope)', () => {
+    // Design system pass: was `1.5px solid var(--ivory)`. --focus-ring is ground-aware, so the
+    // one rule is visible on both grounds.
     const rule = ruleBody(STYLES, '\\*:focus-visible\\s*\\{');
     assert.ok(rule, '*:focus-visible rule exists');
-    assert.match(rule, /outline:\s*1\.5px solid var\(--ivory\)/);
+    assert.match(rule, /outline:\s*2px solid var\(--focus-ring\)/);
     assert.match(rule, /outline-offset:\s*2px/);
+
+    const root = ruleBody(STYLES, ':root\\s*\\{');
+    assert.match(root, /--focus-ring:\s*#0A0A0A/i, 'on a light ground the ring is ink');
+    const darkScope = ruleBody(STYLES, '\\.on-dark,\\s*\\n#main-nav,');
+    assert.ok(darkScope, 'the dark scope rule exists');
+    assert.match(darkScope, /--focus-ring:\s*var\(--aurum\)/, 'in a dark scope the ring is gold');
   });
 
   it('the old duplicate button:focus-visible,a:focus-visible,input:focus-visible aurum block is gone (consolidated into *:focus-visible)', () => {
@@ -141,8 +149,10 @@ describe('CSS-MECHANICAL (static): the four no-judgment-required token dispositi
     assert.doesNotMatch(rule, /font-size:\s*clamp\(/, 'the literal clamp() value should be gone, replaced by the token');
 
     const token = ruleBody(STYLES, ':root\\s*\\{');
-    assert.match(token, /--h2-section:\s*clamp\(28px,\s*3\.5vw,\s*42px\)/,
-      '--h2-section is still clamp(28px,3.5vw,42px), the exact value .hiw-section-heading used to hardcode');
+    // Design system pass: the h2 scale moved from clamp(28px,3.5vw,42px) to clamp(30px,3.6vw,46px);
+    // the heading still reads the token, which is what this row protects.
+    assert.match(token, /--h2-section:\s*clamp\(30px,\s*3\.6vw,\s*46px\)/,
+      '--h2-section is clamp(30px,3.6vw,46px), the design system h2 scale');
   });
 
   it('.page-hero-content (for-agents) and .hiw-hero h1 (how-it-works) max-width is var(--max-w), matching the token\'s own 1100px value', () => {
@@ -250,7 +260,7 @@ describe('Tier 2 (dynamic, playwright)', () => {
     if (server) server.close();
   });
 
-  it('FOCUS-VISIBLE: keyboard-Tab to the first nav link renders a solid ivory outline, not outline-style: none', async (t) => {
+  it('FOCUS-VISIBLE: keyboard-Tab to the first nav link renders a solid gold outline (the nav is a dark scope), not outline-style: none', async (t) => {
     if (!tier2ok) { t.skip('playwright not resolvable'); return; }
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const p = await ctx.newPage();
@@ -274,16 +284,10 @@ describe('Tier 2 (dynamic, playwright)', () => {
       assert.equal(info.tag, 'A', `expected the third Tab stop to land on an <a>, got ${info.tag}`);
       assert.notEqual(info.outlineStyle, 'none', 'outline-style should not be none on a keyboard-focused link');
       assert.equal(info.outlineStyle, 'solid');
-      // Chromium's used-value for outline-width rounds a declared 1.5px down
-      // to the nearest whole device pixel (1px at devicePixelRatio 1) --
-      // verified directly (a probe with the same declared width renders
-      // identically) and confirmed against the pre-existing 2px .nav-cta
-      // ivory ring, which is unaffected because 2 is already a whole
-      // pixel. The authored declaration (1.5px, in source) is asserted
-      // separately in the static Tier 1 block above; this only asserts the
-      // real rendered/used value.
-      assert.equal(info.outlineWidth, '1px');
-      assert.equal(info.outlineColor, 'rgb(250, 250, 248)', 'outline colour should be the ivory token, not aurum');
+      // Design system pass: the ring is 2px (a whole pixel, so used value equals declared) and
+      // ground-aware: the nav is a dark scope, so --focus-ring resolves to --aurum there.
+      assert.equal(info.outlineWidth, '2px');
+      assert.equal(info.outlineColor, 'rgb(201, 168, 76)', 'outline colour should be the gold ring of a dark scope');
     } finally {
       await ctx.close();
     }
@@ -296,7 +300,9 @@ describe('Tier 2 (dynamic, playwright)', () => {
     try {
       await p.goto(`${base}/index.html`, { waitUntil: 'networkidle' });
       const footerInfo = await p.evaluate(() => {
-        const el = document.querySelector('.footer-links a, .footer-meta a');
+        // Design system pass: the page footer is always a dark scope (body > footer); the closing
+        // ask's own link row takes its ground from the section, so the footer's own link is the stable target.
+        const el = document.querySelector('footer .footer-meta a, footer a');
         if (!el) return null;
         el.focus();
         const cs = getComputedStyle(el);
@@ -305,7 +311,8 @@ describe('Tier 2 (dynamic, playwright)', () => {
       assert.ok(footerInfo, 'a footer link exists on the homepage');
       assert.ok(footerInfo.matchesFocusVisible, 'programmatic .focus() on a footer link matches :focus-visible');
       assert.notEqual(footerInfo.outlineStyle, 'none');
-      assert.equal(footerInfo.outlineColor, 'rgb(250, 250, 248)');
+      // Design system pass: the footer is a dark scope, so its ring is gold.
+      assert.equal(footerInfo.outlineColor, 'rgb(201, 168, 76)');
 
       await p.goto(`${base}/dashboard.html`, { waitUntil: 'networkidle' });
       const formInfo = await p.evaluate(() => {
@@ -325,7 +332,8 @@ describe('Tier 2 (dynamic, playwright)', () => {
       // this asserts it stays gone.
       assert.notEqual(formInfo.outlineStyle, 'none',
         '.form-input should render a visible focus outline (its old unconditional `outline: none` must not have returned)');
-      assert.equal(formInfo.outlineColor, 'rgb(250, 250, 248)');
+      // Design system pass: the sign-in field sits on the paper ground, so its ring is ink.
+      assert.equal(formInfo.outlineColor, 'rgb(10, 10, 10)');
     } finally {
       await ctx.close();
     }
@@ -355,7 +363,8 @@ describe('Tier 2 (dynamic, playwright)', () => {
         `expected to Tab onto .hamburger within 20 presses at 375px, last stop was ${info && info.tag}.${info && info.cls}`);
       assert.equal(info.tag, 'BUTTON');
       assert.notEqual(info.outlineStyle, 'none');
-      assert.equal(info.outlineColor, 'rgb(250, 250, 248)');
+      // Design system pass: the hamburger lives in the dark nav, so its ring is gold.
+      assert.equal(info.outlineColor, 'rgb(201, 168, 76)');
     } finally {
       await ctx.close();
     }

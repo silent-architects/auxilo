@@ -66,16 +66,18 @@ describe('Wave E2 item 9: --h2-cta equals --h2-section (one large headline per p
     const ctaM = STYLES.match(/--h2-cta:\s*([^;]+);/);
     assert.ok(sectionM, '--h2-section token found');
     assert.ok(ctaM, '--h2-cta token found');
-    assert.equal(ctaM[1].trim(), sectionM[1].trim(), '--h2-cta now matches --h2-section (both clamp(28px, 3.5vw, 42px))');
-    assert.equal(ctaM[1].trim(), 'clamp(28px, 3.5vw, 42px)');
+    assert.equal(ctaM[1].trim(), sectionM[1].trim(), '--h2-cta now matches --h2-section (both clamp(30px, 3.6vw, 46px))');
+    // Design system pass: the h2 scale moved from clamp(28px, 3.5vw, 42px) to clamp(30px, 3.6vw, 46px).
+    assert.equal(ctaM[1].trim(), 'clamp(30px, 3.6vw, 46px)');
   });
 });
 
 describe('Wave E2 item 10 (partially reverted by the AD nav re-rule sheet, 2026-09-06 §2/§4/§6): the CTA is the band\'s one gold element', () => {
-  it('.nav-links a.active is still ash, not aurum (unchanged by the NAV-WAVE amendment)', () => {
+  it('.nav-links a.active is the ground-aware ink token (ivory in the dark nav), not aurum', () => {
     const m = STYLES.match(/\.nav-links a\.active\s*\{([^}]*)\}/);
     assert.ok(m, '.nav-links a.active rule found');
-    assert.match(m[1], /color:\s*var\(--ash\)/, '.nav-links a.active color is var(--ash)');
+    // Design system pass: was var(--ash); --fg-1 is ivory inside the dark nav scope.
+    assert.match(m[1], /color:\s*var\(--fg-1\)/, '.nav-links a.active color is var(--fg-1)');
     assert.doesNotMatch(m[1], /var\(--aurum\)/, '.nav-links a.active no longer references --aurum');
   });
 
@@ -83,8 +85,10 @@ describe('Wave E2 item 10 (partially reverted by the AD nav re-rule sheet, 2026-
     const m = STYLES.match(/^\.nav-cta\s*\{([^}]*)\}/m);
     assert.ok(m, '.nav-cta rule found');
     assert.match(m[1], /background:\s*transparent/, '.nav-cta background is transparent — ASK-WAVE (2026-09-07, THE-ASK-PACKET §3) demotes the nav pill sitewide since the hero command block is now the property\'s single gold event, superseding the AD sheet\'s filled-gold call');
-    assert.match(m[1], /color:\s*var\(--ivory\)\s*!important/, '.nav-cta text color is ivory');
-    assert.match(m[1], /border:\s*1px solid rgba\(229,\s*229,\s*227,\s*0\.35\)/, '.nav-cta border is the ash-alpha outline (mirrors --ash-border/--aurum-border\'s 0.35 pattern), same box math as before');
+    // Design system pass: text is --fg-1 (ivory in the dark nav scope), border is an ivory outline at .5, radius 6px.
+    assert.match(m[1], /color:\s*var\(--fg-1\)\s*!important/, '.nav-cta text color is the ink token (ivory in the nav)');
+    assert.match(m[1], /border:\s*1px solid rgba\(250,\s*250,\s*248,\s*0\.5\)/, '.nav-cta border is the ivory .5 outline, same box math as before');
+    assert.match(m[1], /border-radius:\s*var\(--r-control\)/, '.nav-cta takes the 6px control radius');
     assert.match(m[1], /min-height:\s*44px/, '.nav-cta is still 44px tall (same position, item 12 unchanged)');
     assert.doesNotMatch(m[1], /var\(--aurum\b/, '.nav-cta base rule no longer references any --aurum token');
   });
@@ -92,8 +96,9 @@ describe('Wave E2 item 10 (partially reverted by the AD nav re-rule sheet, 2026-
   it('.nav-cta:hover tints to a faint white/ivory ground, text stays ivory', () => {
     const m = STYLES.match(/\.nav-cta:hover\s*\{([^}]*)\}/);
     assert.ok(m, '.nav-cta:hover rule found');
-    assert.match(m[1], /background:\s*rgba\(255,\s*255,\s*255,\s*0\.04\)/, '.nav-cta:hover tints to a faint ivory ground — --aurum-hi is no longer referenced by this rule (left defined, unused)');
-    assert.match(m[1], /color:\s*var\(--ivory\)/, '.nav-cta:hover text stays ivory');
+    // Design system pass: the hover tint is ivory at .08 (was white at .04); text stays the ink token.
+    assert.match(m[1], /background:\s*rgba\(250,\s*250,\s*248,\s*0\.08\)/, '.nav-cta:hover tints to a faint ivory ground — --aurum-hi is no longer referenced by this rule (left defined, unused)');
+    assert.match(m[1], /color:\s*var\(--fg-1\)/, '.nav-cta:hover text stays the ink token (ivory in the nav)');
     assert.doesNotMatch(m[1], /var\(--aurum-hi\b/, '.nav-cta:hover no longer references --aurum-hi');
   });
 
@@ -212,17 +217,23 @@ describe('Wave E2 item 13: cross-file CSS-only overrides', () => {
   });
 
   it('.legal-wrap h1/h2 and .writing-wrap h1 carry 1.1 leading + site tracking', () => {
-    const legalM = STYLES.match(/\.legal-wrap h1,\s*\n\.legal-wrap h2\s*\{([^}]*)\}/);
-    assert.ok(legalM, '.legal-wrap h1, h2 rule found');
-    assert.match(legalM[1], /line-height:\s*1\.1/);
-    assert.match(legalM[1], /letter-spacing:\s*-0\.02em/);
+    // Design system pass: h1 and h2 now carry their own leading and tracking (h1 1.04 / -0.022em, h2 1.1 / -0.016em).
+    const legalH1 = STYLES.match(/^\.legal-wrap h1\s*\{([^}]*)\}/m);
+    assert.ok(legalH1, '.legal-wrap h1 rule found');
+    assert.match(legalH1[1], /line-height:\s*1\.04/);
+    assert.match(legalH1[1], /letter-spacing:\s*-0\.022em/);
+    const legalH2 = STYLES.match(/^\.legal-wrap h2\s*\{([^}]*)\}/m);
+    assert.ok(legalH2, '.legal-wrap h2 rule found');
+    assert.match(legalH2[1], /line-height:\s*1\.1\b/);
+    assert.match(legalH2[1], /letter-spacing:\s*-0\.016em/);
 
     // Anchor to line start so this matches the actual rule, not the
     // preceding comment's own inline-quoted `.writing-wrap h1 { ... }`
     // example (documenting the OLD 1.25 value it's replacing).
     const writingM = STYLES.match(/^\.writing-wrap h1\s*\{([^}]*)\}/m);
     assert.ok(writingM, '.writing-wrap h1 override found');
-    assert.match(writingM[1], /line-height:\s*1\.1\s*!important/);
+    assert.match(writingM[1], /line-height:\s*1\.04\s*!important/); // Design system pass: h1 leading is 1.04
+    assert.match(writingM[1], /letter-spacing:\s*-0\.022em/);
   });
 });
 

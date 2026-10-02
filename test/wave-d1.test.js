@@ -123,13 +123,15 @@ describe('WAVE-D1 type pairing: tokens + @font-face', () => {
   // (the font bytes changing) doesn't require touching this test.
   const HASH = '[0-9a-f]{8}';
 
-  it('three real-font @font-face rules exist (Archivo variable 100-900, IBM Plex Mono 400 and 500 statics), each on a content-hashed woff2 URL, plus two size-adjust fallback faces (Wave E2 item 11)', () => {
+  it('three real-font @font-face rules exist (Archivo variable 100-900, IBM Plex Mono 400, Newsreader 300), each on a content-hashed woff2 URL, plus three size-adjust fallback faces; the Plex Mono 500 face is retired', () => {
     const faceBlocks = [...STYLES.matchAll(/@font-face\s*\{([^}]*)\}/g)].map((m) => m[1]);
     // Wave E2 item 11: two synthetic local()-only fallback faces
     // ('Archivo Fallback', 'IBM Plex Mono Fallback') were added alongside
     // the original three, each carrying a size-adjust metric override —
     // 5 total, not 3. The three real-font assertions below are unchanged.
-    assert.equal(faceBlocks.length, 5, `expected 5 @font-face rules (3 real fonts + 2 size-adjust fallbacks), found ${faceBlocks.length}`);
+    // Design system pass: Newsreader (display, weight 300) and its fallback join; the Plex Mono 500
+    // face leaves. 3 real fonts + 3 size-adjust fallbacks (Archivo, Plex Mono, Newsreader) = 6.
+    assert.equal(faceBlocks.length, 6, `expected 6 @font-face rules (3 real fonts + 3 size-adjust fallbacks), found ${faceBlocks.length}`);
 
     const archivo = faceBlocks.find((b) => /font-family:\s*'Archivo'/.test(b));
     assert.ok(archivo, 'an Archivo @font-face rule exists');
@@ -140,9 +142,24 @@ describe('WAVE-D1 type pairing: tokens + @font-face', () => {
     assert.ok(plex400, 'an IBM Plex Mono 400 @font-face rule exists');
     assert.match(plex400, new RegExp(`url\\('\\/fonts\\/PlexMono400\\.${HASH}\\.woff2'\\)\\s*format\\('woff2'\\)`));
 
+    // Design system pass: weight 500 is retired (every mono use is 400). The 400 face asserted
+    // above is the positive control that the mono family still ships.
     const plex500 = faceBlocks.find((b) => /font-family:\s*'IBM Plex Mono'/.test(b) && /font-weight:\s*500\b/.test(b));
-    assert.ok(plex500, 'an IBM Plex Mono 500 @font-face rule exists');
-    assert.match(plex500, new RegExp(`url\\('\\/fonts\\/PlexMono500\\.${HASH}\\.woff2'\\)\\s*format\\('woff2'\\)`));
+    assert.equal(plex500, undefined, 'the IBM Plex Mono 500 @font-face rule is retired');
+    assert.doesNotMatch(STYLES, /url\('\/fonts\/PlexMono500/, 'styles.css no longer references the PlexMono500 file');
+
+    const newsreader = faceBlocks.find((b) => /font-family:\s*'Newsreader'/.test(b));
+    assert.ok(newsreader, 'a Newsreader @font-face rule exists');
+    assert.match(newsreader, /font-weight:\s*300/);
+    assert.match(newsreader, /font-display:\s*swap/);
+    assert.match(newsreader, new RegExp(`url\\('\\/fonts\\/NewsreaderDisplay300\\.${HASH}\\.woff2'\\)\\s*format\\('woff2'\\)`));
+
+    const newsFallback = faceBlocks.find((b) => /font-family:\s*'Newsreader Fallback'/.test(b));
+    assert.ok(newsFallback, 'a Newsreader Fallback @font-face rule exists');
+    assert.match(newsFallback, /src:\s*local\('Georgia'\)/);
+    assert.match(newsFallback, /size-adjust:\s*\d+(\.\d+)?%/);
+    assert.match(newsFallback, /ascent-override:\s*\d+(\.\d+)?%/);
+    assert.match(newsFallback, /descent-override:\s*\d+(\.\d+)?%/);
   });
 
   it('the three self-hosted font files exist on disk (content-hashed names) within the byte ceilings', () => {
@@ -150,6 +167,7 @@ describe('WAVE-D1 type pairing: tokens + @font-face', () => {
       ['ArchivoVariable', 70 * 1024],
       ['PlexMono400', 28 * 1024],
       ['PlexMono500', 28 * 1024],
+      ['NewsreaderDisplay300', 28 * 1024],
     ];
     const fontsDir = path.join(PUBLIC_DIR, 'fonts');
     const onDisk = fs.readdirSync(fontsDir);
@@ -244,10 +262,12 @@ describe('WAVE-D1 design-tells sweep: removed markup + CSS carry no residue', ()
   });
 
   it('tell 8 — .section-ground carries no decorative background-image (background-color only)', () => {
-    const body = STYLES.match(/\.section-ground,\s*\n#how-it-works,\s*\n#footer-cta\s*\{([^}]*)\}/);
+    // Design system pass: .section-ground is the paper ground now; #how-it-works and #footer-cta no
+    // longer paint a ground of their own (a section declares one with .on-dark / .on-tint).
+    const body = STYLES.match(/^\.section-ground\s*\{([^}]*)\}/m);
     assert.ok(body, '.section-ground shared rule exists');
     assert.doesNotMatch(body[1], /background-image/, '.section-ground should carry no background-image');
-    assert.match(body[1], /background-color:\s*var\(--obsidian\)/, '.section-ground should keep background-color');
+    assert.match(body[1], /background-color:\s*var\(--paper\)/, '.section-ground should keep background-color');
   });
 
   // Tell 4: hairline section-divider ornament.
@@ -308,10 +328,20 @@ describe('WAVE-D1 design-tells sweep: removed markup + CSS carry no residue', ()
     }
   });
 
-  it('the five .dive-arrow row-affordance spans on index.html survive untouched (explicit keep; was 6 before the Earnings dive-row was removed when /earnings folded into /pricing, packet 15 rev 3a, v97 assembly)', () => {
+  // Design rebuild: the index of pages on the homepage drops its numerals (01 to 05) and its
+  // row arrows (owner ruling: no arrows, no numerals as decoration). The five rows stay, with
+  // their titles and descriptions; only the two decorative spans go.
+  it('the five homepage dive rows carry no .dive-arrow span and no .dive-num numeral (the rows themselves, with title and description, stay)', () => {
     const html = readPage('index.html');
-    const matches = [...html.matchAll(/<span class="dive-arrow">→<\/span>/g)];
-    assert.equal(matches.length, 5, `expected 5 .dive-arrow spans on index.html, found ${matches.length}`);
+    const rows = [...html.matchAll(/<a href="[^"]+" class="dive-row">([\s\S]*?)<\/a>/g)];
+    assert.equal(rows.length, 5, `positive control: expected 5 .dive-row anchors on index.html, found ${rows.length}`);
+    for (const [, inner] of rows) {
+      assert.match(inner, /<span class="dive-title">[^<]+<\/span>/, 'each row keeps its title span');
+      assert.match(inner, /<span class="dive-desc">[^<]+<\/span>/, 'each row keeps its description span');
+    }
+    assert.equal([...html.matchAll(/class="dive-arrow"/g)].length, 0, 'no .dive-arrow span on index.html');
+    assert.equal([...html.matchAll(/class="dive-num"/g)].length, 0, 'no .dive-num span on index.html');
+    assert.ok(!/<span class="dive-[a-z]+">(?:→|0[1-9])<\/span>/.test(html), 'no arrow glyph or 01..09 numeral inside a dive span');
   });
 
   // Tell 5: card wall + border-radius normalization.
@@ -324,9 +354,10 @@ describe('WAVE-D1 design-tells sweep: removed markup + CSS carry no residue', ()
     assert.doesNotMatch(STYLES, /^\.moat-card:hover\s*\{/m, '.moat-card:hover should be gone');
   });
 
-  it('tell 5 (P3a) — border-radius sitewide in styles.css collapses to 4px controls / 0 surfaces (plus the named exceptions)', () => {
+  it('tell 5 (P3a) — border-radius sitewide in styles.css follows the shape scale: controls 6px, panels 10px, stages and cards 14px (tokens), plus 4px chips, 0, and the named exceptions', () => {
+    // Design system pass: this used to collapse every radius to 4px controls / 0 surfaces.
     const radii = [...STYLES.matchAll(/border-radius:\s*([^;]+);/g)].map((m) => m[1].trim());
-    const allowed = new Set(['4px', '0']);
+    const allowed = new Set(['var(--r-control)', 'var(--r-panel)', 'var(--r-stage)', '4px', '0']);
     // Named, counted exceptions never swept: the email-capture split-corner
     // pair (desktop L/R-only rounding + its mobile all-corner variant),
     // the skip-to-content a11y control's bottom-only rounding, and
@@ -334,11 +365,13 @@ describe('WAVE-D1 design-tells sweep: removed markup + CSS carry no residue', ()
     // lives in each page's own <style> block, not styles.css — untouched,
     // out of this sitewide-sheet's scope, not checked here.)
     const exceptions = {
-      '6px 0 0 6px': 1, // .email-input, desktop
-      '0 6px 6px 0': 1, // .footer-email-capture .btn-primary, desktop
-      '0 0 6px 6px': 1, // .skip-to-content
-      '6px': 2,         // .email-input + .btn-primary, mobile (<=600px), all corners
+      'var(--r-control) 0 0 var(--r-control)': 1, // .email-input, desktop
+      '0 var(--r-control) var(--r-control) 0': 1, // .footer-email-capture .btn-primary, desktop
+      '0 0 var(--r-control) var(--r-control)': 1, // .skip-to-content
       '2px': 1,         // .legend-swatch
+      '5px': 1,         // .dw-btn, the drawing kit's button
+      '50%': 1,         // .dw-tick, the ledger drawing's dot
+      '999px': 1,       // .dw-badge, the queue count pill
     };
     const seen = Object.fromEntries(Object.keys(exceptions).map((k) => [k, 0]));
     for (const r of radii) {
@@ -350,6 +383,13 @@ describe('WAVE-D1 design-tells sweep: removed markup + CSS carry no residue', ()
     for (const [value, count] of Object.entries(exceptions)) {
       assert.equal(seen[value], count,
         `expected exactly ${count} border-radius: ${value} declaration(s), found ${seen[value]}`);
+    }
+    // Positive control: the three scale tokens are defined at 6 / 10 / 14 and each one is used.
+    assert.match(STYLES, /--r-control:\s*6px/);
+    assert.match(STYLES, /--r-panel:\s*10px/);
+    assert.match(STYLES, /--r-stage:\s*14px/);
+    for (const token of ['var(--r-control)', 'var(--r-panel)', 'var(--r-stage)']) {
+      assert.ok(radii.includes(token), `${token} is used by at least one rule`);
     }
   });
 
