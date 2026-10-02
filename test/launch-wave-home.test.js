@@ -129,13 +129,13 @@ describe('LAUNCH-WAVE-0926: homepage hero + #setup-detail section', () => {
     assert.match(setupDetail, /<div class="dw-panel dw-light dw-window" aria-hidden="true">/, 'the review-queue window is present and hidden from assistive tech (it repeats the copy above it)');
     assert.match(setupDetail, /Pending Review Queue/, 'the window carries the real dashboard label');
     // The window holds the six real categories as a chip row, then three queue rows with the three real titles,
-    // the first row carrying Approve and Reject, and the kill-switch chip in its bottom corner.
+    // the first row carrying Approve and Reject. It carries no kill-switch chip: the sentence above it names the command.
     const win = setupDetail.slice(setupDetail.indexOf('dw-window"'));
     const cats = win.match(/<div class="dw-window-cats">([\s\S]*?)<\/div>/);
     assert.ok(cats, 'the category chip row is found');
     assert.deepEqual([...cats[1].matchAll(/<span class="dw-chip">([^<]+)<\/span>/g)].map((m) => m[1]),
       ['data-processing', 'web-interaction', 'code-execution', 'storage-state', 'payment-financial', 'monitoring'], 'the six real categories, in order');
-    const rows = [...win.matchAll(/<div class="dw-window-row">([\s\S]*?)<\/div>\s*(?=<div class="dw-window-row">|<div class="dw-window-foot">)/g)].map((m) => m[1]);
+    const rows = [...win.matchAll(/<div class="dw-window-row">([\s\S]*?)<\/div>\s*(?=<div class="dw-window-row">|<\/div>\s*<\/div>\s*<\/section>)/g)].map((m) => m[1]);
     assert.equal(rows.length, 3, 'three queue rows');
     assert.deepEqual(rows.map((r) => (r.match(/<span class="dw-title">([^<]+)<\/span>/) || [])[1]), [
       "MCP tool inputSchema must use 'object' type at the top level or tools won't appear",
@@ -146,7 +146,11 @@ describe('LAUNCH-WAVE-0926: homepage hero + #setup-detail section', () => {
     assert.ok(win.includes('<span class="dw-btn primary">Approve</span><span class="dw-btn ghost">Reject</span>'), 'Approve and Reject are drawn');
     assert.equal((win.match(/<span class="dw-btn /g) || []).length, 2, 'Approve and Reject once, on the first row only');
     assert.ok(win.indexOf('dw-btn primary') < win.indexOf('dw-window-row">', win.indexOf('dw-window-row">') + 1), 'the buttons sit in the first row');
-    assert.match(win, /<div class="dw-window-foot"><div class="dw-panel dw-dark dw-kill"><pre>npx auxilo disable<\/pre><\/div><\/div>\s*<\/div>/, 'the kill-switch chip closes the window');
+    // Round 4: the kill-switch chip is out of every drawing that sits beside the kill-switch sentence. The command
+    // stands once in the section, in that sentence (positive control: the cmd-chip is still there).
+    assert.ok(!/dw-kill|dw-window-foot|<pre>npx auxilo disable/.test(win), 'the window carries no kill-switch chip');
+    assert.equal((setupDetail.match(/npx auxilo disable/g) || []).length, 1, 'the command stands once in the section');
+    assert.ok(/<code class="cmd-chip">npx auxilo disable<\/code> is the kill switch\./.test(setupDetail), 'positive control: the sentence that carries it is still there');
     // Removed: the old exchange figure and its wrapper (positive control above proves the section was read).
     assert.ok(!/class="hero-figure"/.test(setupDetail), 'the hero-figure wrapper is gone from #setup-detail');
     assert.ok(!/class="hero-exchange"/.test(setupDetail), 'the old exchange SVG is gone from #setup-detail');

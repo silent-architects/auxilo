@@ -98,6 +98,7 @@
   --ctrl-line: #0A0A0A;
   --btn-fill: #0A0A0A;
   --btn-ink: #FAFAF8;
+  --chip-bg: var(--tint);
 }
 
 @media (max-width: 1024px) {
@@ -125,6 +126,7 @@ body > footer,
   --ctrl-line: rgba(250, 250, 248, 0.5);
   --btn-fill: var(--aurum);
   --btn-ink: var(--obsidian);
+  --chip-bg: rgba(250, 250, 248, 0.1);
   color: var(--fg-2);
 }
 .on-dark { background: var(--bg); }
@@ -155,6 +157,7 @@ body .unsub-wrap h1.unsub-heading { font-weight: 300; }
   --ctrl-line: #0A0A0A;
   --btn-fill: #0A0A0A;
   --btn-ink: #FAFAF8;
+  --chip-bg: var(--tint);
   color: var(--fg-2);
 }
 
@@ -695,6 +698,7 @@ body .legal-wrap h3 {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-body);
   padding: 10px 16px;
   border-bottom: 1px solid var(--line);
 }
@@ -705,6 +709,8 @@ body .legal-wrap h3 {
   color: var(--fg-3);
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  line-height: 1.3;
+  min-width: 0;
 }
 
 .copy-btn {
@@ -723,6 +729,8 @@ body .legal-wrap h3 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: none;
+  white-space: nowrap;
 }
 
 .copy-btn:hover { color: var(--fg-1); background: var(--line); }
@@ -1859,8 +1867,9 @@ pre code {
   line-height: 1;
   padding: 5px 8px;
   border-radius: 4px;
-  background: var(--tint);
+  background: var(--chip-bg);
   color: var(--fg-2);
+  white-space: nowrap;
 }
 .dw-btns {
   display: flex;
@@ -1914,6 +1923,20 @@ pre code {
   background: var(--aurum);
   opacity: 0.85;
 }
+/* a row label inside a drawing: a real dashboard label, set like a caption */
+.dw-rowlabel {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--fg-1);
+}
+/* a card that stands for a result already given: a 1px outline, never a dimmed fill */
+.dw-outline {
+  background: transparent;
+  border: 1px solid rgba(250, 250, 248, 0.32);
+  box-shadow: none;
+}
 
 /* the review queue drawing */
 .dw-queue-title {
@@ -1935,25 +1958,6 @@ pre code {
   margin-top: var(--space-tight);
 }
 
-.dw-hang {
-  padding-bottom: var(--space-body);
-}
-.dw-kill {
-  position: absolute;
-  right: calc(var(--space-tight) * -1);
-  bottom: calc(var(--space-body) * -1);
-  padding: var(--space-tight) var(--space-body);
-}
-.dw-kill pre {
-  font-family: var(--mono);
-  font-size: 14px;
-  color: var(--fg-1);
-}
-.dw-kill pre::before {
-  content: '$ ';
-  color: var(--fg-3);
-}
-
 /* the recall drawing: the long way beside the short way */
 .dw-twoup {
   display: grid;
@@ -1971,9 +1975,6 @@ pre code {
 .dw-twoup .dw-found {
   margin-top: var(--space-copy);
 }
-.dw-twoup .dw-long .dw-found {
-  opacity: 0.6;
-}
 .dw-twoup .dw-panel:not(.dw-long) .dw-found {
   padding: var(--space-copy);
 }
@@ -1982,43 +1983,22 @@ pre code {
 }
 
 :root {
-  --device: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1300' height='1300' viewBox='0 0 1300 1300' fill='none' stroke='%23FAFAF8' stroke-opacity='.12' stroke-width='1.5' stroke-linejoin='round'%3E%3Cpath d='M-84 1400L650 40L1384 1400'/%3E%3Cline x1='650' y1='478' x2='1300' y2='478'/%3E%3C/svg%3E");
-  --device-band: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='72' viewBox='0 0 200 72' fill='none' stroke='%23FAFAF8' stroke-opacity='.12' stroke-width='1.5' stroke-linejoin='round'%3E%3Cpath d='M101.7 72L140 1L178.3 72'/%3E%3Cline x1='140' y1='42' x2='200' y2='42'/%3E%3C/svg%3E");
-  --device-band-phone: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='56' viewBox='0 0 140 56' fill='none' stroke='%23FAFAF8' stroke-opacity='.12' stroke-width='1.5' stroke-linejoin='round'%3E%3Cpath d='M66.3 56L96 1L125.7 56'/%3E%3Cline x1='96' y1='34' x2='140' y2='34'/%3E%3C/svg%3E");
+  --device: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1250' height='1150' viewBox='0 0 1250 1150' fill='none' stroke='%23FAFAF8' stroke-opacity='.12' stroke-width='1.5' stroke-linejoin='round'%3E%3Cpath d='M-98 1150L520 2L1138 1150'/%3E%3Cline x1='520' y1='202' x2='1250' y2='202'/%3E%3C/svg%3E");
 }
-main > .on-dark:first-child,
-body .legal-wrap > h1::before {
-  --device-a: 230px;
-  background-image: var(--device);
-  background-repeat: no-repeat;
-  background-size: 1300px 1300px;
-  background-position: right calc(var(--device-a) - 650px) top -40px;
-}
-
-:is(#about-hero, #connect-hero, #writing-hero, #essay-hero),
-body .legal-wrap > h1::before {
-  --device-a: 30px;
+/* The device, 1025 and up only: its apex hangs 48px outside the hero container's right edge, level with
+   the container's top, so the crossbar runs in the margin and clears every card in the hero. */
+@media (min-width: 1025px) {
+  main > .on-dark:first-child,
+  body .legal-wrap > h1::before {
+    background-image: var(--device);
+    background-repeat: no-repeat;
+    background-size: 1250px 1150px;
+    background-position: min(calc(50% + 703px), calc(100% + 754px)) 120px;
+  }
 }
 /* The dashboard's sign-in screen is an application surface: no device. */
 main > #login-view {
   background-image: none;
-}
-@media (max-width: 1024px) {
-  main > .on-dark:first-child,
-  body .legal-wrap > h1::before,
-  :is(#about-hero, #connect-hero, #writing-hero, #essay-hero) {
-    background-image: var(--device-band);
-    background-size: 200px 72px;
-    background-position: right top;
-  }
-}
-@media (max-width: 600px) {
-  main > .on-dark:first-child,
-  body .legal-wrap > h1::before,
-  :is(#about-hero, #connect-hero, #writing-hero, #essay-hero) {
-    background-image: var(--device-band-phone);
-    background-size: 140px 56px;
-  }
 }
 
 .step-art {
@@ -2135,14 +2115,13 @@ main > #login-view {
   .hero-sub {
     font-size: 17px;
   }
-  .hero-setup-block .code-block-header,
-  #footer-setup-snippet .code-block-header {
+  .code-block-header {
     flex-direction: column;
     align-items: stretch;
-    padding: 12px;
+    gap: var(--space-tight);
+    padding: var(--space-body);
   }
-  .hero-setup-block .copy-btn,
-  #footer-setup-snippet .copy-btn {
+  .code-block-header .copy-btn {
     width: 100%;
   }
   .hero-setup-block pre,
@@ -2157,9 +2136,6 @@ main > #login-view {
   .dw-twoup {
     grid-template-columns: 1fr;
   }
-  .dw-kill {
-    right: var(--space-tight);
-  }
   /* the footer's meta line breaks only between its items, never inside one */
   .footer-meta {
     line-height: 1.8;
@@ -2173,9 +2149,15 @@ main > #login-view {
 
 .hero-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
-  gap: var(--space-wide);
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-block);
   align-items: center;
+}
+@media (min-width: 901px) {
+  .hero-grid {
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+    gap: var(--space-wide);
+  }
 }
 .hero-one > * {
   max-width: 720px;
@@ -2186,12 +2168,6 @@ main > #login-view {
 .hero-one.hero-centred > * {
   margin-left: auto;
   margin-right: auto;
-}
-@media (max-width: 1024px) {
-  .hero-grid {
-    grid-template-columns: 1fr;
-    gap: var(--space-block);
-  }
 }
 
 :is(#about-hero, #connect-hero, #writing-hero, #essay-hero) .hero-one > *,

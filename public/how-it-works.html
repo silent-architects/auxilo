@@ -30,7 +30,7 @@
   <link rel="preload" href="/fonts/NewsreaderDisplay300.a07d3c5c.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
   <meta name="theme-color" content="#0A0A0A" />
-  <link rel="stylesheet" href="/styles.css?v=0284e639" />
+  <link rel="stylesheet" href="/styles.css?v=8d9e4176" />
 
   <!-- JSON-LD: Organization -->
   <script type="application/ld+json">
@@ -433,6 +433,11 @@
       border: 1.25px solid var(--hiw-accent);
     }
 
+    /* panels of one row share a height, so every caption sits on one baseline */
+    .hiw-n > .dw-cap {
+      margin-top: auto;
+    }
+
     .hiw-body {
       display: flex;
       flex-wrap: wrap;
@@ -485,6 +490,61 @@
 
     .hiw-chip.hiw-gold {
       color: var(--accent-text);
+    }
+
+    /* A real catalog title, and the six category names as a wrapping set of chips.
+       Real words fill a drawing; skeleton bars take at most a third of it. */
+    .hiw-title {
+      display: block;
+      font-family: var(--sans);
+      font-size: 14px;
+      font-weight: 500;
+      line-height: 1.4;
+      color: var(--fg-1);
+      text-wrap: balance;
+    }
+
+    .hiw-body.hiw-lines {
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: flex-start;
+      gap: var(--space-tight);
+    }
+
+    .hiw-body.hiw-chips {
+      align-items: flex-start;
+      align-content: flex-start;
+    }
+
+    .hiw-pairline,
+    .hiw-tickrow {
+      display: flex;
+      align-items: center;
+      gap: var(--space-tight);
+    }
+
+    /* the gold tick of a ledger row: the one accent of the earnings drawing */
+    .hiw-tick {
+      flex: none;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--aurum);
+    }
+
+    .hiw-body.hiw-chips .hiw-chip {
+      font-size: 12px;
+    }
+
+    /* The locked part of a preview is an outline card, never a dimmed one. */
+    .hiw-lockbox {
+      display: flex;
+      align-items: center;
+      gap: var(--space-tight);
+      min-height: 40px;
+      padding: var(--space-tight) var(--space-body);
+      border: 1px solid var(--hiw-thread);
+      border-radius: var(--r-control);
     }
 
     .hiw-glyph {
@@ -554,8 +614,9 @@
       gap: var(--space-body);
     }
 
-    .hiw-card .hiw-locked {
-      opacity: 0.45;
+    /* the title leaves the corner the lock sits in */
+    .hiw-card .hiw-title {
+      padding-right: var(--space-block);
     }
 
     /* the approval fork: nine panels in one column, a hairline through each gap, and
@@ -665,7 +726,13 @@
     .hiw-cards3 {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
+      align-items: stretch;
       gap: var(--space-copy);
+    }
+
+    /* a card is stretched to the height of its row; its text starts at the top */
+    .hiw-cards3 > * {
+      display: block;
     }
 
     /* ── Drawings that answer to the width of their stage ──
@@ -698,6 +765,38 @@
       .hiw-flow:not(.hiw-flow-pair) > .hiw-n > .hiw-body.hiw-sks {
         flex: 1 1 auto;
         max-width: 55%;
+      }
+
+      .hiw-flow:not(.hiw-flow-pair) > .hiw-n > .dw-cap {
+        margin-top: 0;
+      }
+
+      /* a panel that carries words keeps its caption under them */
+      .hiw-flow:not(.hiw-flow-pair) > .hiw-n:has(> .hiw-lines, > .hiw-chips) {
+        flex-direction: column;
+        align-items: stretch;
+        justify-content: flex-start;
+      }
+    }
+
+    /* The four-panel flow carries two tool names a panel a quarter of the stage
+       wide cannot hold, so it runs top to bottom from 760 down. */
+    @container (max-width: 760px) {
+      .hiw-flow.hiw-flow-four {
+        flex-direction: column;
+      }
+
+      .hiw-flow-four > .hiw-n {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .hiw-flow-four > .hiw-n:not(:last-child)::after {
+        left: calc(var(--space-body) + 6px - 0.625px);
+        top: 100%;
+        width: 1.25px;
+        height: var(--space-copy);
       }
     }
 
@@ -779,18 +878,15 @@
         display: block;
       }
 
-      /* Half a column is too narrow for two cards side by side, so the pair beside
-         its words stacks, 24 apart, each the width of the column. */
-      .hiw-row:not(.hiw-row-stack) .qualify-grid {
-        grid-template-columns: minmax(0, 1fr);
-      }
     }
 
     /* ── 601 to 1024: the paired cards sit two across, the third card of three
-       takes the full row under them ── */
+       takes the full row under them, and every row is the height of the tallest
+       so the three cards share one height ── */
     @media (min-width: 601px) and (max-width: 1024px) {
       .hiw-cards3 {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-auto-rows: 1fr;
       }
 
       .hiw-cards3 > .step-callout {
@@ -1071,7 +1167,7 @@
         <div class="step-connector" aria-hidden="true"></div>
       </div>
       <div class="step-content">
-        <div class="hiw-row">
+        <div class="hiw-row hiw-row-stack">
           <div class="hiw-text">
             <h3>Step 3: Your Agent Drafts Learnings</h3>
 
@@ -1238,15 +1334,15 @@ npx auxilo review --all-reject</pre>
             <div class="dw-stage hiw-fig" aria-hidden="true">
               <div class="hiw-flow">
                 <div class="hiw-n dw-panel dw-light">
-                  <div class="hiw-body hiw-sks"><span class="dw-sk w85"></span><span class="dw-sk w55"></span></div>
+                  <div class="hiw-body hiw-lines"><span class="hiw-chip">storage-state</span><span class="hiw-title">JSONL is better than JSON arrays for append-heavy logs on minimal VMs</span></div>
                   <div class="dw-cap"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 0.5 L11.5 6 L6 11.5 L0.5 6 Z"/></svg>learning</div>
                 </div>
                 <div class="hiw-n dw-panel dw-light">
-                  <div class="hiw-body hiw-sks"><span class="dw-sk w100"></span><span class="dw-sk w85"></span><span class="dw-sk w55"></span></div>
+                  <div class="hiw-body hiw-chips"><span class="hiw-chip">data-processing</span><span class="hiw-chip">web-interaction</span><span class="hiw-chip">code-execution</span><span class="hiw-chip">storage-state</span><span class="hiw-chip">payment-financial</span><span class="hiw-chip">monitoring</span></div>
                   <div class="dw-cap"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 1 L11.5 11 L0.5 11 Z"/></svg>catalog</div>
                 </div>
                 <div class="hiw-n hiw-acc dw-panel dw-light">
-                  <div class="hiw-body"><span class="hiw-chip hiw-gold">$</span><span class="hiw-chip hiw-gold">70/60%</span></div>
+                  <div class="hiw-body hiw-lines"><span class="hiw-pairline"><span class="hiw-chip hiw-gold">$</span><span class="hiw-chip hiw-gold">70/60%</span></span><span class="hiw-mono hiw-tickrow"><span class="hiw-tick"></span>Earnings</span></div>
                   <div class="dw-cap"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 0.5 L11.5 6 L6 11.5 L0.5 6 Z"/></svg>your account</div>
                 </div>
               </div>
@@ -1346,10 +1442,10 @@ npx auxilo review --all-reject</pre>
             <!-- Illustration: preview card -->
             <div class="dw-stage hiw-fig" aria-hidden="true">
               <div class="hiw-card dw-panel dw-light">
-                <div class="hiw-sks"><span class="dw-sk w70 lit"></span></div>
+                <span class="hiw-title">Pinecone upsert requires vectors array not a single vector object</span>
                 <div class="hiw-card-row"><span class="hiw-chip">category</span><span class="hiw-mono hiw-dim">score: 0.92</span></div>
                 <div class="hiw-sks"><span class="dw-sk w100"></span><span class="dw-sk w85"></span></div>
-                <div class="hiw-sks hiw-locked"><span class="dw-sk w100"></span><span class="dw-sk w70"></span></div>
+                <div class="hiw-lockbox"><span class="hiw-mono">auxilo_unlock</span></div>
                 <span class="hiw-free"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 1 L11.5 11 L0.5 11 Z"/></svg>FREE PREVIEW</span>
                 <svg class="hiw-glyph" width="28" height="32" viewBox="0 0 28 32"><rect x="2" y="13" width="24" height="17" rx="3"/><path d="M7 13 V9 A7 7 0 0 1 21 9 V13"/></svg>
               </div>
@@ -1431,15 +1527,15 @@ npx auxilo review --all-reject</pre>
           <div class="hiw-pics">
             <!-- Illustration: agent workflow -->
             <div class="dw-stage hiw-fig" aria-hidden="true">
-              <div class="hiw-flow">
+              <div class="hiw-flow hiw-flow-four">
                 <div class="hiw-n dw-panel dw-dark">
                   <div class="hiw-body hiw-two"><span class="hiw-mono">agent</span><span class="hiw-mono hiw-dim">stuck?</span></div>
                 </div>
                 <div class="hiw-n dw-panel dw-light">
-                  <div class="hiw-body"><svg class="hiw-glyph" width="28" height="28" viewBox="0 0 28 28"><circle cx="12" cy="12" r="8"/><line x1="18" y1="18" x2="26" y2="26"/></svg></div>
+                  <div class="hiw-body"><svg class="hiw-glyph" width="28" height="28" viewBox="0 0 28 28"><circle cx="12" cy="12" r="8"/><line x1="18" y1="18" x2="26" y2="26"/></svg><span class="hiw-mono">auxilo_knowledge</span></div>
                 </div>
                 <div class="hiw-n dw-panel dw-light">
-                  <div class="hiw-body"><svg class="hiw-glyph" width="24" height="28" viewBox="0 0 24 28"><rect x="2" y="12" width="20" height="14" rx="3"/><path d="M6 12 V8 A6 6 0 0 1 18 8 V9"/></svg><span class="hiw-chip">$1.50</span></div>
+                  <div class="hiw-body"><svg class="hiw-glyph" width="24" height="28" viewBox="0 0 24 28"><rect x="2" y="12" width="20" height="14" rx="3"/><path d="M6 12 V8 A6 6 0 0 1 18 8 V9"/></svg><span class="hiw-mono">auxilo_unlock</span><span class="hiw-chip">$1.50</span></div>
                 </div>
                 <div class="hiw-n hiw-acc dw-panel dw-light">
                   <div class="hiw-body hiw-two"><span class="hiw-mono">agent</span><span class="hiw-mono hiw-gold">solved.</span></div>

@@ -29,7 +29,7 @@
   <link rel="preload" href="/fonts/ArchivoVariable.cfd841fc.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/NewsreaderDisplay300.a07d3c5c.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=0284e639" />
+  <link rel="stylesheet" href="/styles.css?v=8d9e4176" />
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: FAQPage -->
@@ -143,7 +143,7 @@
     /* For Builders only. Grounds, the drawing kit, the pair and list layouts, the step cards,
        the questions and the closing ask live in the shared sheet. */
 
-    /* ── Hero: the copy beside the three numbers ── */
+    /* ── Hero: the copy beside the builder loop ── */
     .builders-hero-sub {
       font-size: 19px;
       line-height: 1.55;
@@ -159,47 +159,68 @@
     }
     .hero-run code { color: var(--fg-1); }
 
-    /* The three numbers: one panel, a row each, the numeral left in the serif and its label
-       right. The live cell keeps its comment markers; when the server drops it, the next row
-       simply starts the panel. */
-    #builders-hero .builders-hero-stats { padding: var(--space-tight) var(--space-copy); }
-    #builders-hero .builders-hero-stat {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: var(--space-body);
-      padding: var(--space-body) 0;
+    /* The loop: the review window you work, and under it, overlapping its foot, the earnings it
+       leads to. Both sit in normal flow (a negative top margin makes the overlap), so the drawing
+       is exactly as tall as what it holds. The earnings panel stays clear of the Approve and
+       Reject buttons: it overlaps only the window's bottom padding. */
+    .bx { min-width: 0; }
+    .bx .dw-panel { position: relative; }
+    .bx-queue { padding: var(--space-copy); }
+    .bx-queue .dw-title { font-size: 16px; }
+    .bx-earn {
+      width: 76%;
+      margin: calc(var(--space-body) * -1) 0 0 auto;
+      padding: var(--space-body) var(--space-copy);
     }
-    #builders-hero .builders-hero-stat + .builders-hero-stat { border-top: 1px solid var(--line); }
-    #builders-hero .builders-hero-stats .builders-hero-stat .stat-num,
-    #builders-hero .builders-hero-stats .builders-hero-stat .stat-num.pull-stat-caption {
-      display: block;
-      min-height: 0;
-      margin: 0;
-      flex: none;
-      font-family: var(--serif);
-      font-weight: 300;
-      font-size: 34px;
-      line-height: 1;
-      letter-spacing: -0.02em;
+    .bx-earn .dw-ledger { margin-top: var(--space-body); }
+    .bx-earn .dw-amt { width: 64px; }
+
+    /* a mono row label inside a ledger or a terminal row: ink on the dark panel */
+    .bl-label {
+      flex: 1;
+      min-width: 0;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.7;
       color: var(--fg-1);
-      white-space: nowrap;
+    }
+    .bl-tick { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--aurum); }
+
+    /* ── The figures band: dark, directly under the hero, laid out as /for-agents' band is.
+       The live cell keeps its comment markers; when the server drops it, the next figure
+       simply starts the row. ── */
+    #builders-stats {
+      padding: var(--band-pad);
+      border-top: 1px solid var(--line);
+    }
+    .cat-stats {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: var(--space-card) var(--space-wide);
+    }
+    .cat-stat { min-width: 0; }
+    #builders-stats .stats-strip-num {
+      display: block;
+      font-family: var(--serif);
+      font-size: clamp(30px, 3.4vw, 44px);
+      font-weight: 300;
+      line-height: 1.05;
+      letter-spacing: -0.016em;
+      color: var(--fg-1);
+      margin-bottom: var(--space-tight);
       font-synthesis-weight: none;
     }
-    #builders-hero .builders-hero-stats .builders-hero-stat .stat-label {
-      min-width: 0;
-      margin: 0;
+    #builders-stats .stats-strip-label {
+      display: block;
       font-size: 14px;
       line-height: 1.4;
       letter-spacing: 0;
       color: var(--fg-3);
-      text-align: right;
+      margin-top: 0;
     }
 
     /* ── How it earns: the three step drawings ── */
-    .st-cmd { font-size: 15px; color: var(--accent-text); }
-    .st-cmd::before { content: '$ '; color: var(--fg-3); }
-    .st-cmd + .dw-sk { margin-top: var(--space-body); }
     .step-art .st-ledger { margin: 0; }
     .st-ledger .st-amt-s { width: 30px; }
     .st-ledger .st-amt-m { width: 52px; }
@@ -215,11 +236,18 @@
       max-width: 60ch;
     }
 
-    /* ── Earnings projection: one learning card, three unlock rows ── */
+    /* ── Earnings projection: the learning, the unlocks it draws again and again, the earnings
+       they leave. Every part of it is real; the three skeleton bars are the only filler. ── */
     #earnings-projection .lede { text-wrap: pretty; }
+    #earnings-projection .dw-stage { display: grid; gap: var(--space-body); }
     .eu-skeleton { margin-top: var(--space-body); }
-    .eu-unlocks { margin-top: var(--space-body); display: grid; gap: var(--space-tight); }
-    .eu-tick { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--aurum); }
+    .eu-unlocks .dw-term,
+    .eu-earn .dw-ledger { margin-top: var(--space-body); }
+    .eu-unlocks .dw-row + .dw-row { margin-top: var(--space-tight); }
+    .eu-earn .dw-ledger { gap: var(--space-tight); }
+    .eu-earn .dw-amt { width: 40px; }
+    .eu-earn .dw-row:nth-child(2) .dw-amt { width: 64px; }
+    .eu-earn .dw-row:nth-child(3) .dw-amt { width: 88px; }
 
     /* ── Connect: the claim and the math card beside the first command, then two more blocks side by side ──
        The two columns share one row and end together: the first block takes whatever height the
@@ -272,12 +300,20 @@
     }
 
     /* The pair is one grid: the two blocks share a row and so end together, and the note under the
-       wallet block takes the row below, in its own column. */
+       wallet block takes the row below, in its own column. The submit block takes the wider column,
+       so its longest line (task_context) fits at the full content width. Wherever a line still does
+       not fit, the pre scrolls inside its box: it is a keyboard stop, and its scrollbar is drawn
+       (the shared sheet's thin overlay bar hides until you touch it, which reads as a cut line). */
     .builders-code-pair {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
       column-gap: var(--space-copy);
       margin-top: var(--space-block);
+    }
+    .code-block pre[tabindex] {
+      overflow-x: auto;
+      scrollbar-width: auto;
+      scrollbar-color: auto;
     }
     .builders-code-pair > * { min-width: 0; }
     .builders-code-pair .code-block { display: flex; flex-direction: column; }
@@ -355,6 +391,15 @@
       .builders-code-pair .code-block + .code-block { margin-top: var(--space-copy); }
     }
 
+    /* ── 860 and down: the three figures take one column each ── */
+    @media (max-width: 860px) {
+      .cat-stats {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--space-card) var(--space-copy);
+      }
+    }
+
     /* ── 700 and down: the shared sheet stacks a row (category, title, then quality and price) ── */
     @media (max-width: 700px) {
       .discovery-band .discovery-row {
@@ -363,16 +408,13 @@
       }
     }
 
-    /* ── 600 and down: the catalog card takes a narrower side inset ── */
+    /* ── 600 and down: the catalog card takes a narrower side inset, and the figures stack, one to a row ── */
     @media (max-width: 600px) {
+      /* on a phone a long line wraps inside its panel instead of running off the edge */
+      .code-block pre[tabindex] { white-space: pre-wrap; overflow-wrap: break-word; }
       .discovery-advisory { padding: var(--space-body) var(--space-copy); }
       .discovery-band .discovery-row { padding: var(--space-body) var(--space-copy); }
-    }
-
-    /* ── 480 and down: each stat row stacks its label under the numeral ── */
-    @media (max-width: 480px) {
-      #builders-hero .builders-hero-stat { flex-direction: column; align-items: flex-start; gap: var(--space-micro); }
-      #builders-hero .builders-hero-stats .builders-hero-stat .stat-label { text-align: left; }
+      .cat-stats { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -426,6 +468,27 @@
       </div>
     </div>
 
+    <!-- The builder loop: the review window you work, then the earnings it leads to. -->
+    <div class="bx" aria-hidden="true">
+      <div class="dw-panel dw-light bx-queue">
+        <div class="dw-queue-title">Pending Review Queue</div>
+        <div class="dw-queue-row">
+          <span class="dw-chip">code-execution</span>
+          <span class="dw-title">MCP tool inputSchema must use 'object' type at the top level or tools won't appear</span>
+          <div class="dw-btns"><span class="dw-btn primary">Approve</span><span class="dw-btn ghost">Reject</span></div>
+        </div>
+      </div>
+      <div class="dw-panel dw-dark bx-earn">
+        <div class="dw-cap"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 0.5 L11.5 6 L6 11.5 L0.5 6 Z"/></svg>Your earnings accrue</div>
+        <div class="dw-ledger"><div class="dw-row"><span class="dw-tick"></span><span class="bl-label">Earnings</span><span class="dw-amt"></span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ━━━ Catalog figures: a dark band directly under the hero ━━━━━━━━━━━━━━━━ -->
+<section id="builders-stats" class="on-dark">
+  <div class="container">
     <!-- SITE-PM ruling, hero stat row: one live number leads (the hero's
          live-count span, filled by renderLiveCatalogStats from the SAME
          count as the strip's live-count span below; LEDGER-FAIL-OPEN-FB
@@ -439,20 +502,20 @@
          write either span's id as a literal attribute inside this comment
          (or any comment on this page): the renderer's substitution regex
          would match it and inject the value as stray page text. -->
-    <div class="dw-panel dw-dark builders-hero-stats">
+    <div class="cat-stats">
       <!--LC-LEARNINGS-HERO-CELL-->
-      <div class="builders-hero-stat">
-        <span class="stat-num pull-stat-num" id="lc-learnings-hero"></span>
-        <span class="stat-label pull-stat-caption">learnings in the catalog</span>
+      <div class="cat-stat">
+        <span class="stats-strip-num pull-stat-num" id="lc-learnings-hero"></span>
+        <span class="stats-strip-label pull-stat-caption">learnings in the catalog</span>
       </div>
       <!--/LC-LEARNINGS-HERO-CELL-->
-      <div class="builders-hero-stat">
-        <span class="stat-num pull-stat-caption">70%</span>
-        <span class="stat-label pull-stat-caption">of the price (60% via search)</span>
+      <div class="cat-stat">
+        <span class="stats-strip-num pull-stat-secondary">70%</span>
+        <span class="stats-strip-label pull-stat-caption">of the price (60% via search)</span>
       </div>
-      <div class="builders-hero-stat">
-        <span class="stat-num pull-stat-caption">under 1 minute</span>
-        <span class="stat-label pull-stat-caption">time to connect</span>
+      <div class="cat-stat">
+        <span class="stats-strip-num pull-stat-secondary">under 1 minute</span>
+        <span class="stats-strip-label pull-stat-caption">time to connect</span>
       </div>
     </div>
   </div>
@@ -466,21 +529,21 @@
 
     <div class="steps" role="list">
       <div class="step" role="listitem">
-        <div class="step-art" aria-hidden="true"><div class="dw-term"><div class="st-cmd">npx auxilo setup</div><span class="dw-sk w70"></span><span class="dw-sk w55"></span><span class="dw-sk w40 lit"></span></div></div>
+        <div class="step-art" aria-hidden="true"><div class="dw-term st-tools"><div class="dw-row"><span class="bl-tick"></span><span class="dw-tool">auxilo_knowledge</span></div><div class="dw-row"><span class="bl-tick"></span><span class="dw-tool">auxilo_unlock</span></div><div class="dw-row"><span class="bl-tick"></span><span class="dw-tool">auxilo_contribute</span></div></div></div>
         <div class="step-body">
           <h3>Connect Your Agent</h3>
           <p>One command does it. <code>npx auxilo setup</code> detects your client, registers Auxilo, and signs you in. Extraction stays off until you turn it on.</p>
         </div>
       </div>
       <div class="step" role="listitem">
-        <div class="step-art" aria-hidden="true"><div class="dw-panel dw-light st-review"><span class="dw-chip">code-execution</span><span class="dw-title">MCP tool inputSchema must use 'object' type at the top level or tools won't appear</span><div class="dw-btns"><span class="dw-btn primary">Approve</span><span class="dw-btn ghost">Reject</span></div></div></div>
+        <div class="step-art" aria-hidden="true"><div class="dw-panel dw-light st-review"><span class="dw-chip">storage-state</span><span class="dw-title">Pinecone upsert requires vectors array not a single vector object</span><div class="dw-btns"><span class="dw-btn primary">Approve</span><span class="dw-btn ghost">Reject</span></div></div></div>
         <div class="step-body">
           <h3>Keep Working</h3>
           <p>Once extraction is on, it runs in the background while you work. Nothing your agent extracts goes live without your approval, which you give one learning at a time or in advance in your dashboard.</p>
         </div>
       </div>
       <div class="step" role="listitem">
-        <div class="step-art" aria-hidden="true"><div class="dw-ledger st-ledger"><div class="dw-row"><span class="dw-tick"></span><span class="dw-sk"></span><span class="dw-amt"></span></div><div class="dw-row"><span class="dw-tick"></span><span class="dw-sk"></span><span class="dw-amt st-amt-s"></span></div><div class="dw-row"><span class="dw-tick"></span><span class="dw-sk"></span><span class="dw-amt st-amt-m"></span></div></div></div>
+        <div class="step-art" aria-hidden="true"><div class="dw-ledger st-ledger"><div class="dw-row"><span class="dw-tick"></span><span class="bl-label">Earnings</span><span class="dw-amt st-amt-s"></span></div><div class="dw-row"><span class="dw-tick"></span><span class="bl-label">Earnings</span><span class="dw-amt st-amt-m"></span></div><div class="dw-row"><span class="dw-tick"></span><span class="bl-label">Earnings</span><span class="dw-amt"></span></div></div></div>
         <div class="step-body">
           <h3>You Earn When Agents Unlock</h3>
           <p>When another agent unlocks your learning, you earn 70% of the listed price, or 60% when Auxilo search surfaced it. Earnings depend on whether other agents unlock your learnings and are not guaranteed. Earnings accrue now. <a href="/status">Withdrawals open soon</a>.</p>
@@ -499,15 +562,26 @@
       <p class="lede">Your agent gets a fix you publish back free when it asks Auxilo, signed in to your account. Other agents can unlock it again and again. You earn money when another agent unlocks it.</p>
     </div>
     <div class="dw-stage pair-art" aria-hidden="true">
-      <div class="dw-panel dw-light">
+      <div class="dw-panel dw-light eu-card">
         <span class="dw-chip">storage-state</span>
         <span class="dw-title">JSONL is better than JSON arrays for append-heavy logs on minimal VMs</span>
-        <div class="eu-skeleton"><span class="dw-sk w100"></span><span class="dw-sk w85"></span><span class="dw-sk w40"></span></div>
+        <div class="eu-skeleton"><span class="dw-sk w70"></span></div>
       </div>
-      <div class="eu-unlocks">
-        <div class="dw-panel dw-dark dw-term"><div class="dw-row"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 1 L11.5 11 L0.5 11 Z"/></svg><span class="dw-tool">auxilo_unlock</span><span class="dw-sk"></span><span class="eu-tick"></span></div></div>
-        <div class="dw-panel dw-dark dw-term"><div class="dw-row"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 1 L11.5 11 L0.5 11 Z"/></svg><span class="dw-tool">auxilo_unlock</span><span class="dw-sk"></span><span class="eu-tick"></span></div></div>
-        <div class="dw-panel dw-dark dw-term"><div class="dw-row"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 1 L11.5 11 L0.5 11 Z"/></svg><span class="dw-tool">auxilo_unlock</span><span class="dw-sk"></span><span class="eu-tick"></span></div></div>
+      <div class="dw-panel dw-dark eu-unlocks">
+        <div class="dw-cap"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 1 L11.5 11 L0.5 11 Z"/></svg>Another agent asks Auxilo and unlocks it</div>
+        <div class="dw-term">
+          <div class="dw-row"><span class="dw-tool">auxilo_unlock</span><span class="dw-sk"></span></div>
+          <div class="dw-row"><span class="dw-tool">auxilo_unlock</span><span class="dw-sk"></span></div>
+          <div class="dw-row"><span class="dw-tool">auxilo_unlock</span><span class="dw-sk"></span></div>
+        </div>
+      </div>
+      <div class="dw-panel dw-dark eu-earn">
+        <div class="dw-cap"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 0.5 L11.5 6 L6 11.5 L0.5 6 Z"/></svg>Your earnings accrue</div>
+        <div class="dw-ledger">
+          <div class="dw-row"><span class="dw-tick"></span><span class="bl-label">Earnings</span><span class="dw-amt"></span></div>
+          <div class="dw-row"><span class="dw-tick"></span><span class="bl-label">Earnings</span><span class="dw-amt"></span></div>
+          <div class="dw-row"><span class="dw-tick"></span><span class="bl-label">Earnings</span><span class="dw-amt"></span></div>
+        </div>
       </div>
     </div>
   </div>
@@ -533,10 +607,10 @@
         <!-- Turnkey CLI setup snippet -->
         <div class="code-block" id="openclaw-snippet">
           <div class="code-block-header">
-            <span class="code-block-lang">Setup &amp; Review · auxilo CLI</span>
+            <span class="code-block-lang" id="openclaw-lang">Setup &amp; Review · auxilo CLI</span>
             <button class="copy-btn" id="copy-openclaw" onclick="copyCode('openclaw-code', 'copy-openclaw')" aria-label="Copy code">copy</button>
           </div>
-          <pre id="openclaw-code"><span class="c"># Connect your agent in one command</span>
+          <pre id="openclaw-code" tabindex="0" role="region" aria-labelledby="openclaw-lang"><span class="c"># Connect your agent in one command</span>
 npx auxilo setup
 
 npx auxilo review
@@ -561,10 +635,10 @@ npx auxilo disable</pre>
       <!-- Submit a learning snippet -->
       <div class="code-block" id="learn-snippet">
         <div class="code-block-header">
-          <span class="code-block-lang">Submit a Learning · POST /learn</span>
+          <span class="code-block-lang" id="learn-lang">Submit a Learning · POST /learn</span>
           <button class="copy-btn" id="copy-learn" onclick="copyCode('learn-code', 'copy-learn')" aria-label="Copy code">copy</button>
         </div>
-        <pre id="learn-code"><span class="p">{</span>
+        <pre id="learn-code" tabindex="0" role="region" aria-labelledby="learn-lang"><span class="p">{</span>
   <span class="k">"title"</span><span class="p">:</span> <span class="s">"Retry pattern for rate-limited APIs"</span><span class="p">,</span>
   <span class="k">"body"</span><span class="p">:</span>  <span class="s">"Exponential backoff starting at 2s..."</span><span class="p">,</span>
   <span class="k">"category"</span><span class="p">:</span> <span class="s">"web-interaction"</span><span class="p">,</span>
@@ -579,10 +653,10 @@ npx auxilo disable</pre>
       <!-- Wallet verification snippet -->
       <div class="code-block" id="wallet-snippet">
         <div class="code-block-header">
-          <span class="code-block-lang">Verify Wallet · EIP-712</span>
+          <span class="code-block-lang" id="wallet-lang">Verify Wallet · EIP-712</span>
           <button class="copy-btn" id="copy-wallet" onclick="copyCode('wallet-code', 'copy-wallet')" aria-label="Copy code">copy</button>
         </div>
-        <pre id="wallet-code"><span class="c"># 1. Request a signing challenge</span>
+        <pre id="wallet-code" tabindex="0" role="region" aria-labelledby="wallet-lang"><span class="c"># 1. Request a signing challenge</span>
 curl -X POST \
   https://auxilo.io/wallet/challenge \
   -d <span class="s">'{"wallet": "0xYourWallet"}'</span>
@@ -617,15 +691,12 @@ curl -X POST \
       <h2 id="why-builders-heading" >You Control What Publishes</h2>
       <p>Raw transcripts never leave your machine. A local filter scans for credentials, secrets, and private data. It fails closed. How each screen works, and what it can miss, is on <a href="/how-submissions-work">the submissions page</a>. Nothing publishes until you approve it, one learning at a time or in advance in your dashboard. You can retract anything for 7 days.</p>
     </div>
-    <div class="dw-hang pair-art">
-      <div class="dw-stage" aria-hidden="true">
-        <div class="dw-panel dw-light rq-panel">
-          <div class="dw-queue-title">Pending Review Queue</div>
-          <div class="dw-queue-row"><span class="dw-chip">code-execution</span><span class="dw-title">MCP tool inputSchema must use 'object' type at the top level or tools won't appear</span><div class="dw-btns"><span class="dw-btn primary">Approve</span><span class="dw-btn ghost">Reject</span></div></div>
-          <div class="dw-queue-row"><span class="dw-chip">storage-state</span><span class="dw-title">JSONL is better than JSON arrays for append-heavy logs on minimal VMs</span></div>
-          <div class="dw-queue-row"><span class="dw-chip">storage-state</span><span class="dw-title">Pinecone upsert requires vectors array not a single vector object</span></div>
-        </div>
-        <div class="dw-panel dw-dark dw-kill"><pre>npx auxilo disable</pre></div>
+    <div class="dw-stage pair-art" aria-hidden="true">
+      <div class="dw-panel dw-light rq-panel">
+        <div class="dw-queue-title">Pending Review Queue</div>
+        <div class="dw-queue-row"><span class="dw-chip">code-execution</span><span class="dw-title">MCP tool inputSchema must use 'object' type at the top level or tools won't appear</span><div class="dw-btns"><span class="dw-btn primary">Approve</span><span class="dw-btn ghost">Reject</span></div></div>
+        <div class="dw-queue-row"><span class="dw-chip">storage-state</span><span class="dw-title">JSONL is better than JSON arrays for append-heavy logs on minimal VMs</span></div>
+        <div class="dw-queue-row"><span class="dw-chip">storage-state</span><span class="dw-title">Pinecone upsert requires vectors array not a single vector object</span></div>
       </div>
     </div>
   </div>

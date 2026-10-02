@@ -486,6 +486,18 @@ describe('Trust page: route, redirects, head tags, h1, forbidden strings', { tim
     assert.ok(!TRUST_HTML.includes("Of the catalog's"), 'the State B magnitude sentence template never appears in the static file (it is server-injected only)');
     assert.ok(!TRUST_HTML.includes('adversarial submissions are expected'), 'the cut adversarial sentence (§9 item 3) stays cut');
   });
+
+  it('the page is a reading document: every section sits in the shared reading frame (.trust-read), none is heading-left, and the table is rows in the same frame', () => {
+    const body = TRUST_HTML.slice(TRUST_HTML.indexOf('<main id="main">'), TRUST_HTML.indexOf('</main>'));
+    assert.equal((body.match(/<div class="container trust-read">/g) || []).length, 11, 'eleven sections after the hero are in the frame');
+    assert.ok(!/aside-list/.test(body), 'no section is laid heading-left');
+    // positive control: the hero still carries the shared one-column hero and the frame rule reaches it
+    assert.ok(body.includes('<div class="container hero-one">'));
+    assert.match(TRUST_HTML, /section\[aria-labelledby="page-hero-heading"\] \.hero-one > \*,\s*\.trust-read > \*\s*\{[^}]*--read-w:\s*calc\(720px - 2 \* var\(--gutter-base\)\)/, 'the page applies the shared reading-frame formula to its hero and its sections');
+    // the table of what leaves the machine keeps its eleven rows and is not drawn as a card
+    assert.equal((body.match(/<tr>\s*<td>/g) || []).length, 11, 'eleven rows');
+    assert.doesNotMatch(TRUST_HTML, /\.trust-table-wrap\s*\{[^}]*(background|border-radius|padding)/, 'the table wrapper is not a card');
+  });
 });
 
 // ─── TRUST-PAGE-SSR fixtures (module scope — CH-7 guard: no assert-bearing

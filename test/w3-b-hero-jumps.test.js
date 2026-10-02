@@ -315,3 +315,107 @@ describe('W3-B rendering: buttons in hero, outlined ivory, click-scroll lands ta
     }
   });
 });
+
+// ─── Round 4 (how-it-works layout and drawings, needs playwright) ───────
+// The qualifies pair sits two across under the step text; the unlock cards share one height with
+// their text at the top; no drawing is more than a third skeleton bars. Every measure compares two
+// numbers taken in the same run.
+
+describe('how-it-works round 4: the pair, the unlock cards and the drawings', { timeout: 120_000 }, () => {
+  let ok = false;
+  let server;
+  let base;
+  let browser;
+
+  before(async () => {
+    if (!isPlaywrightAvailable()) return;
+    server = await startStaticServer(PUBLIC_DIR);
+    base = `http://127.0.0.1:${server.address().port}`;
+    const { chromium } = require('playwright');
+    browser = await chromium.launch();
+    ok = true;
+  });
+
+  after(async () => {
+    if (browser) await browser.close();
+    if (server) server.close();
+  });
+
+  async function measure(width, fn) {
+    const ctx = await browser.newContext({ viewport: { width, height: 900 } });
+    const p = await ctx.newPage();
+    try {
+      await p.goto(`${base}/how-it-works.html`, { waitUntil: 'networkidle' });
+      await p.evaluate(() => document.fonts.ready);
+      return await p.evaluate(fn);
+    } finally {
+      await ctx.close();
+    }
+  }
+
+  for (const width of [1280, 1100, 768]) {
+    it(`at ${width}: the qualifies and does-not-qualify cards sit two across, equal, under the step text`, async (t) => {
+      if (!ok) { t.skip('playwright not resolvable'); return; }
+      const m = await measure(width, () => {
+        const grid = document.querySelector('.qualify-grid');
+        const boxes = [...grid.querySelectorAll('.qualify-box')].map((b) => b.getBoundingClientRect());
+        const text = grid.closest('.hiw-row').querySelector('.hiw-text').getBoundingClientRect();
+        const g = grid.getBoundingClientRect();
+        return { boxes: boxes.map((r) => ({ l: r.left, r: r.right, t: r.top, h: r.height })), textBottom: text.bottom, textRight: text.right, gridLeft: g.left, gridRight: g.right, gridTop: g.top };
+      });
+      assert.equal(m.boxes.length, 2, 'positive control: both cards are there');
+      assert.ok(Math.abs(m.boxes[0].t - m.boxes[1].t) < 1, 'one row');
+      assert.ok(m.boxes[1].l > m.boxes[0].r, 'side by side');
+      assert.ok(Math.abs(m.boxes[0].h - m.boxes[1].h) < 1, 'equal height');
+      assert.ok(Math.abs((m.boxes[1].l - m.boxes[0].r) - 24) < 1, 'one 24 gap between them');
+      assert.ok(m.gridTop >= m.textBottom - 1, 'under the step text, not beside it');
+      assert.ok(Math.abs(m.boxes[0].l - m.gridLeft) < 1 && Math.abs(m.boxes[1].r - m.gridRight) < 1, 'the pair fills its row');
+    });
+  }
+
+  for (const width of [1280, 768]) {
+    it(`at ${width}: the three unlock cards share one height and their text starts at the top`, async (t) => {
+      if (!ok) { t.skip('playwright not resolvable'); return; }
+      const m = await measure(width, () => [...document.querySelectorAll('.hiw-cards3 > *')].map((c) => {
+        const r = c.getBoundingClientRect();
+        const first = c.firstElementChild.getBoundingClientRect();
+        const cs = getComputedStyle(c);
+        return { h: r.height, topGap: first.top - r.top, edge: parseFloat(cs.paddingTop) + parseFloat(cs.borderTopWidth) };
+      }));
+      assert.equal(m.length, 3, 'positive control: three cards');
+      assert.ok(m.every((c) => Math.abs(c.h - m[0].h) < 1), `one height (${m.map((c) => c.h).join(', ')})`);
+      assert.ok(m.every((c) => Math.abs(c.topGap - c.edge) < 1), 'the text starts at the card border and padding, never centred');
+    });
+  }
+
+  for (const width of [1280, 375]) {
+    it(`at ${width}: skeleton bars fill at most a third of any drawing, and the drawings carry real words`, async (t) => {
+      if (!ok) { t.skip('playwright not resolvable'); return; }
+      const m = await measure(width, () => [...document.querySelectorAll('.hiw-fig, .hero-ledger')].map((st) => {
+        const sr = st.getBoundingClientRect();
+        const groups = new Set([...st.querySelectorAll('.dw-sk')].map((e) => e.parentElement));
+        const region = [...groups].reduce((a, g) => { const r = g.getBoundingClientRect(); return a + r.width * r.height; }, 0);
+        return { share: region / (sr.width * sr.height), words: st.textContent.replace(/\s+/g, ' ').trim().length, bars: st.querySelectorAll('.dw-sk').length };
+      }));
+      assert.ok(m.length >= 6, 'positive control: every drawing was measured');
+      assert.ok(m.some((d) => d.bars > 0), 'positive control: the detector sees a drawing that still has bars');
+      for (const d of m) assert.ok(d.share <= 1 / 3, `a drawing is ${(d.share * 100).toFixed(0)}% bars`);
+    });
+  }
+
+  it('the earn drawing names the six categories and one real catalog title, and the page uses each catalog title at most once', () => {
+    const body = HTML.slice(HTML.indexOf('<body>')).replace(/<script[\s\S]*?<\/script>/g, '');
+    const earn = body.slice(body.indexOf('hiw-chips'), body.indexOf('hiw-chips') + 900);
+    for (const c of ['data-processing', 'web-interaction', 'code-execution', 'storage-state', 'payment-financial', 'monitoring']) {
+      assert.ok(earn.includes(`>${c}<`), `the catalog panel carries the ${c} chip`);
+    }
+    for (const title of [
+      "MCP tool inputSchema must use 'object' type at the top level or tools won't appear",
+      'JSONL is better than JSON arrays for append-heavy logs on minimal VMs',
+      'Pinecone upsert requires vectors array not a single vector object',
+    ]) {
+      assert.ok(body.split(title).length - 1 <= 1, `"${title.slice(0, 24)}..." appears at most once`);
+    }
+    assert.ok(body.includes('JSONL is better than JSON arrays'), 'positive control: a title is used');
+  });
+});

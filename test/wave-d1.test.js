@@ -609,10 +609,15 @@ describe('integration: .dw-title sets its own face, and the shared drawing helpe
   // The device itself is no longer markup: the shared sheet paints it as a background image on the first
   // dark section, so no page carries a device svg or the old clipping wrapper, and the sheet has no rule
   // left for that wrapper.
-  it('.dw-hang and .dw-kill are defined once in styles.css and in no page; no page or sheet carries the old .dw-device-clip', () => {
-    for (const selector of ['.dw-hang', '.dw-kill']) {
-      const defs = [...STYLES.matchAll(new RegExp(`^${selector.replace('.', '\\.')}\\s*\\{`, 'gm'))];
-      assert.equal(defs.length, 1, `${selector} is defined exactly once in styles.css, found ${defs.length}`);
+  // Round 4: the kill-switch chip is retired. A drawing never repeats a command the copy beside it already
+  // shows, so the sheet has no .dw-kill rule and no page carries the chip.
+  it('.dw-hang and .dw-kill are retired from the sheet and from every page; no page or sheet carries the old .dw-device-clip', () => {
+    // Round 4 integration: the hang wrapper only existed to hold the chip; both are gone.
+    assert.ok(!/dw-kill/.test(STYLES), 'styles.css carries no rule for the retired kill-switch chip');
+    assert.ok(!/^\.dw-hang\s*\{/m.test(STYLES), 'styles.css carries no rule for the retired hang wrapper');
+    assert.match(STYLES, /^\.dw-twoup\s*\{/m, 'positive control: the recall drawing rule is still in the sheet');
+    for (const page of ALL_PAGES) {
+      assert.ok(!/dw-kill/.test(readPage(page)), `${page} carries no kill-switch chip`);
     }
     for (const page of ['index.html', 'for-builders.html']) {
       const html = readPage(page);
@@ -620,8 +625,13 @@ describe('integration: .dw-title sets its own face, and the shared drawing helpe
       for (const selector of ['.dw-device-clip', '.dw-hang', '.dw-kill']) {
         assert.ok(!style.includes(`${selector} {`) && !style.includes(`${selector}{`), `${page} carries no copy of ${selector}`);
       }
-      // Positive control: the markup still uses the shared kill-switch panel.
-      assert.match(html, /dw-kill/, `${page} still uses the shared kill-switch panel`);
+      // Positive control: each page still draws the review window the chip hung from. Round 4: /for-builders'
+      // stage holds the review window alone (the chip hung off its corner and is gone), so the page no longer
+      // carries the chip or the hang wrapper; the homepage's window carries no chip either.
+      if (page === 'for-builders.html') {
+        assert.doesNotMatch(html, /dw-kill|dw-hang/, `${page} carries no kill-switch chip and no hang wrapper`);
+      }
+      assert.match(html, /<div class="dw-queue-title">Pending Review Queue<\/div>/, `${page} still draws the review window`);
     }
     // No page carries the device as markup, and the sheet has no rule for the old wrapper.
     for (const page of ALL_PAGES) {

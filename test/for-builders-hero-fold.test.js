@@ -8,8 +8,9 @@
  * viewport's bottom edge, both sides inside the viewport.
  *
  * Every assertion compares two live measurements taken in the same run (the button's box against
- * the window's own size, the navigation's box, the headline's box, the stat panel's box). No fixed
- * pixel number is pinned, so nothing here depends on how text is drawn on a given machine.
+ * the window's own size, the navigation's box, the headline's box, the drawing's box, the figures
+ * band's box). No fixed pixel number is pinned, so nothing here depends on how text is drawn on a
+ * given machine.
  *
  * Boots a tiny static server over public/ (no network, no real HOME) and drives it with
  * Playwright. Skips cleanly when Playwright is not installed.
@@ -102,8 +103,13 @@ describe('/for-builders hero: the main button sits inside the first screen', { t
           mainIsPrimary: buttons[0] ? buttons[0].classList.contains('btn-primary') : false,
           main: box(buttons[0]),
           second: box(buttons[1]),
-          panel: box(document.querySelector('#builders-hero .builders-hero-stats')),
+          // Round 4: the hero's drawing is the builder loop (the review window over its earnings panel),
+          // and the three figures are the dark band that starts where the hero ends.
+          panel: box(document.querySelector('#builders-hero .bx')),
           copy: box(document.querySelector('#builders-hero .builders-hero-content')),
+          hero: box(document.getElementById('builders-hero')),
+          band: box(document.getElementById('builders-stats')),
+          bandFigures: box(document.querySelector('#builders-stats .cat-stats')),
         };
       });
     } finally {
@@ -132,14 +138,26 @@ describe('/for-builders hero: the main button sits inside the first screen', { t
     });
   }
 
-  it('at 1280x720 the stat panel sits beside the copy, and at 375x667 it follows the buttons', async (t) => {
+  it('at 1280x720 the drawing sits beside the copy, and at 375x667 it follows the buttons', async (t) => {
     if (!ok) { t.skip('playwright not resolvable'); return; }
     const wide = await measure(SCREENS[0]);
-    assert.ok(wide.panel && wide.copy, 'the stat panel and the copy column exist');
-    assert.ok(wide.panel.left >= wide.copy.right, `wide: the panel (${wide.panel.left}) starts at or after the copy column's right edge (${wide.copy.right})`);
+    assert.ok(wide.panel && wide.copy, 'the drawing and the copy column exist');
+    assert.ok(wide.panel.left >= wide.copy.right, `wide: the drawing (${wide.panel.left}) starts at or after the copy column's right edge (${wide.copy.right})`);
 
     const phone = await measure(SCREENS[1]);
     const lowest = Math.max(phone.main.bottom, phone.second.bottom);
-    assert.ok(phone.panel.top >= lowest, `phone: the panel top (${phone.panel.top}) is at or below the buttons' bottom (${lowest})`);
+    assert.ok(phone.panel.top >= lowest, `phone: the drawing top (${phone.panel.top}) is at or below the buttons' bottom (${lowest})`);
   });
+
+  for (const screen of SCREENS) {
+    it(`at ${screen.name} the figures band starts exactly where the hero ends, and its figures sit inside it`, async (t) => {
+      if (!ok) { t.skip('playwright not resolvable'); return; }
+      const m = await measure(screen);
+      assert.ok(m.hero && m.band && m.bandFigures, 'the hero, the band and its figures row exist');
+      assert.ok(Math.abs(m.band.top - m.hero.bottom) <= 0.5, `the band top (${m.band.top}) is the hero bottom (${m.hero.bottom})`);
+      assert.ok(m.bandFigures.top >= m.band.top && m.bandFigures.bottom <= m.band.bottom, 'the figures row sits inside the band');
+      // positive control: the drawing is part of the hero, above the band
+      assert.ok(m.panel.bottom <= m.hero.bottom && m.panel.bottom <= m.band.top, 'the drawing ends inside the hero, above the band');
+    });
+  }
 });

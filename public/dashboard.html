@@ -9,7 +9,7 @@
   <link rel="preload" href="/fonts/ArchivoVariable.cfd841fc.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/NewsreaderDisplay300.a07d3c5c.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=0284e639" />
+  <link rel="stylesheet" href="/styles.css?v=8d9e4176" />
   <style>
     /* Sign-in and the account dashboard. Look only: every id, hook, string and
        script is unchanged. Grounds, tokens, type and the ask come from the shared
@@ -259,26 +259,28 @@
     }
 
     /* ── Earnings grid ──────────────────────────────────────────────── */
-    /* An even grid at every count: four figures sit four across, five (an
-       account whose earlier receipts wait on the Terms) sit three over two with
-       the second row's cells wider, so no figure ever stands alone on a row.
-       Two across below 900, one across on a phone. */
+    /* One column grid at every count: four figures sit four across (two across
+       below 900), five (an account whose earlier receipts wait on the Terms) sit
+       three over two from 768 up, the second row on the same column lines as the
+       first. Between 641 and 767 the fifth takes the row under two pairs, and a
+       phone has one across. */
     .earnings-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: var(--space-card) var(--space-copy);
     }
-    @media (max-width: 899px) {
+    @media (max-width: 767px) {
       .earnings-grid > .earnings-item:last-child:nth-child(odd) { grid-column: 1 / -1; }
+    }
+    @media (min-width: 768px) {
+      .earnings-grid:has(> .earnings-item:nth-child(5)) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
     @media (max-width: 640px) {
       .earnings-grid { grid-template-columns: minmax(0, 1fr); }
     }
     @media (min-width: 900px) {
       .earnings-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-      .earnings-grid:has(> .earnings-item:nth-child(5)) { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-      .earnings-grid:has(> .earnings-item:nth-child(5)) > .earnings-item { grid-column: span 2; }
-      .earnings-grid:has(> .earnings-item:nth-child(5)) > .earnings-item:nth-child(n+4) { grid-column: span 3; }
+      .earnings-grid:has(> .earnings-item:nth-child(5)) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
 
     .earnings-item {
@@ -662,7 +664,6 @@
     #dash-setup-block pre { font-size: 19px; color: var(--accent-text); }
     #dash-setup-block pre::before { content: '$ '; color: var(--fg-3); }
     @media (max-width: 480px) {
-      #dash-setup-block .code-block-header { flex-direction: column; align-items: stretch; padding: var(--space-body); gap: var(--space-tight); }
       #dash-setup-block .copy-btn { width: 100%; }
       #dash-setup-block pre { font-size: 17px; padding: var(--space-body); }
     }
@@ -715,6 +716,23 @@
       display: flex;
       flex-wrap: wrap;
       gap: var(--space-tight);
+    }
+    /* Where the three actions no longer fit one row (a phone) they form an even
+       grid, three equal cells, each button the full width of its cell and each
+       row the height of its tallest label, so Reject never wraps alone. */
+    @media (max-width: 480px) {
+      .pending-actions {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        align-items: stretch;
+      }
+      .pending-actions > .btn.btn-sm {
+        width: 100%;
+        min-width: 0;
+        padding-left: var(--space-tight);
+        padding-right: var(--space-tight);
+        text-align: center;
+      }
     }
 
     /* One chip style for the category, the lane and every signal: a tint fill

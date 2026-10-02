@@ -420,35 +420,45 @@ describe('dashboard signed in (rendered)', { timeout: 240_000 }, () => {
     return { grid: m, rows };
   }
 
-  /** Every row spans the grid edge to edge with one gap between cells, and its figures share a top. */
+  /**
+   * One column grid: the first row spans the grid edge to edge with one gap between cells, every
+   * later row sits on the first row's column lines (each cell has the left and right of the cell
+   * above it), and a row's figures share a top.
+   */
   function rowsAreEven({ grid, rows }) {
+    const first = rows[0].slice().sort((a, b) => a.left - b.left);
+    if (Math.abs(first[0].left - grid.left) > 1) return false;
+    if (Math.abs(first[first.length - 1].right - grid.right) > 1) return false;
+    const gaps = first.slice(1).map((c, i) => c.left - first[i].right);
+    if (gaps.some((x) => Math.abs(x - gaps[0]) > 1)) return false;
     for (const row of rows) {
       const cells = row.slice().sort((a, b) => a.left - b.left);
-      if (Math.abs(cells[0].left - grid.left) > 1) return false;
-      if (Math.abs(cells[cells.length - 1].right - grid.right) > 1) return false;
-      const gaps = cells.slice(1).map((c, i) => c.left - cells[i].right);
-      if (gaps.some((x) => Math.abs(x - gaps[0]) > 1)) return false;
+      if (cells.length > first.length) return false;
+      if (cells.some((c, i) => Math.abs(c.left - first[i].left) > 1 || Math.abs(c.right - first[i].right) > 1)) return false;
       if (row.some((c) => Math.abs(c.valueTop - row[0].valueTop) > 0.5)) return false;
     }
     return true;
   }
 
-  it('the checker that judges the earnings grid rejects a ragged grid and a figure off its row\'s baseline', () => {
-    const grid = { left: 0, right: 100 };
+  it('the checker that judges the earnings grid rejects a ragged grid, a second row off the first row\'s column lines, and a figure off its row\'s baseline', () => {
+    const grid = { left: 0, right: 90 };
     const cell = (left, right, valueTop) => ({ left, right, top: 0, valueTop });
-    assert.equal(rowsAreEven({ grid, rows: [[cell(0, 50, 10), cell(50, 100, 10)]] }), true);
-    assert.equal(rowsAreEven({ grid, rows: [[cell(0, 50, 10)]] }), false, 'one cell short of the edge');
-    assert.equal(rowsAreEven({ grid, rows: [[cell(0, 50, 10), cell(50, 100, 14)]] }), false, 'figures off one baseline');
+    const three = [cell(0, 30, 10), cell(30, 60, 10), cell(60, 90, 10)];
+    assert.equal(rowsAreEven({ grid, rows: [three] }), true);
+    assert.equal(rowsAreEven({ grid, rows: [three, [cell(0, 30, 50), cell(30, 60, 50)]] }), true, 'three then two, on the same column lines');
+    assert.equal(rowsAreEven({ grid, rows: [[cell(0, 30, 10), cell(30, 60, 10)]] }), false, 'one cell short of the edge');
+    assert.equal(rowsAreEven({ grid, rows: [[cell(0, 30, 10), cell(30, 60, 14), cell(60, 90, 10)]] }), false, 'figures off one baseline');
+    assert.equal(rowsAreEven({ grid, rows: [three, [cell(0, 45, 50), cell(45, 90, 50)]] }), false, 'a second row on its own, wider columns');
   });
 
   const LAYOUTS = [
     { width: 1280, four: [4], five: [3, 2] },
     { width: 1024, four: [4], five: [3, 2] },
-    { width: 768, four: [2, 2], five: [2, 2, 1] },
+    { width: 768, four: [2, 2], five: [3, 2] },
     { width: 375, four: [1, 1, 1, 1], five: [1, 1, 1, 1, 1] },
   ];
 
-  it('the earnings figures lay out as an even grid at four and at five, with one baseline per row and no figure alone beside empty space', async (t) => {
+  it('the earnings figures lay out on one column grid at four and at five (three then two on the same column lines), with one baseline per row', async (t) => {
     if (skip) { t.skip(skip); return; }
     for (const { width, four, five } of LAYOUTS) {
       for (const [count, expected, earnings] of [[4, four, {}], [5, five, { held_pending_assent: 3.2 }]]) {
@@ -457,7 +467,7 @@ describe('dashboard signed in (rendered)', { timeout: 240_000 }, () => {
           const measured = await earningsRows(page);
           assert.equal(measured.grid.items.length, count, `${width}: ${count} figures rendered`);
           assert.deepEqual(measured.rows.map((r) => r.length), expected, `${width} at ${count}: figures per row`);
-          assert.equal(rowsAreEven(measured), true, `${width} at ${count}: every row fills the grid and its figures share one baseline`);
+          assert.equal(rowsAreEven(measured), true, `${width} at ${count}: the first row fills the grid, later rows sit on its column lines, and each row's figures share one baseline`);
         } finally { await ctx.close(); }
       }
     }
@@ -668,6 +678,38 @@ describe('dashboard signed in (rendered)', { timeout: 240_000 }, () => {
       }
       assert.ok(m.btns.every((b) => b.h >= 44), `${width}: every button is at least 44 high`);
     }
+  });
+
+  it('the three actions on an open row sit on one line at 1280 and form one even row of equal cells at 375, so Reject never wraps alone', async (t) => {
+    if (skip) { t.skip(skip); return; }
+    const measure = async (width) => {
+      const { ctx, page } = await open(width);
+      try {
+        await page.locator('#triage-title-l1').click();
+        await page.waitForSelector('#triage-detail-l1 .pending-actions', { state: 'attached' });
+        return await page.evaluate(() => {
+          const box = document.querySelector('#triage-detail-l1 .pending-actions').getBoundingClientRect();
+          return {
+            left: box.left,
+            right: box.right,
+            btns: [...document.querySelectorAll('#triage-detail-l1 .pending-actions > button')].map((b) => {
+              const r = b.getBoundingClientRect();
+              return { text: b.textContent, left: r.left, right: r.right, top: r.top, w: r.width, h: r.height };
+            }),
+          };
+        });
+      } finally { await ctx.close(); }
+    };
+    const wide = await measure(1280);
+    assert.deepEqual(wide.btns.map((b) => b.text), ['Approve', 'Keep private', 'Reject']);
+    assert.ok(wide.btns.every((b) => Math.abs(b.top - wide.btns[0].top) < 1), '1280: one line');
+    const narrow = await measure(375);
+    assert.deepEqual(narrow.btns.map((b) => b.text), ['Approve', 'Keep private', 'Reject'], 'positive control: the same three actions');
+    assert.ok(narrow.btns.every((b) => Math.abs(b.top - narrow.btns[0].top) < 1), '375: all three on one row, none wrapped under the others');
+    assert.ok(Math.abs(narrow.btns[0].left - narrow.left) < 1 && Math.abs(narrow.btns[2].right - narrow.right) < 1, '375: the row spans its box');
+    assert.ok(narrow.btns.every((b) => Math.abs(b.w - narrow.btns[0].w) < 1), '375: the cells are equal width');
+    assert.ok(narrow.btns.every((b) => Math.abs(b.h - narrow.btns[0].h) < 1), '375: the cells are equal height');
+    assert.ok(narrow.btns.every((b) => b.h >= 44), '375: every button is at least 44 high');
   });
 
   // ── Measure ─────────────────────────────────────────────────────────────

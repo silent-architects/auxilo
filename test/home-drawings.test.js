@@ -11,11 +11,15 @@
  *     arrowheads; stacked (480 and down) it is a vertical hairline through the node column
  *   - its motion: only inside no-preference and 481 and up, finished inside 2.4 seconds, a
  *     leg draws as its panel starts to rise and never before the panel it leaves exists
- *   - the device is one shared background image on the first dark section of every page, 12% ivory, no gold;
- *     at 1024 and down it is a small cropped corner confined to the section's top padding band, so it never
- *     sits behind text; the dashboard carries none
+ *   - the device is one shared background image on the first dark section of every page, 12% ivory, no gold, at
+ *     1025 and up only; its apex hangs 48px outside the hero container's right edge, level with the container's
+ *     top, so its crossbar runs in the margin, clear of every panel and button by 48 or more, and it never sits
+ *     behind hero text; below 1025 there is none; the dashboard carries none
  *   - the two hero notes take the body colour and 15px from 481 up, 14px below
- *   - the recall drawing shows the same learning in both panels, the short way's card dominant and the long way's dimmed
+ *   - the hero drawing: panel 1 is a mono session ending in a category chip and a lit bar, panel 4 is an ordinary
+ *     dark panel (gold only in its marker, its ledger row and the thread's last leg) with an Earnings row label
+ *   - the recall drawing: the long way ends in a 1px outline card, the short way returns the full Pinecone card
+ *   - no catalog title stands twice outside the review queue, and no drawing is more than a third skeleton bars
  *   - code blocks that scroll sideways keep a thin scrollbar on the dark ground
  *   - the footer meta line is 14px, left under the logo, and its links never break inside
  *
@@ -47,7 +51,6 @@ function isPlaywrightAvailable() {
 }
 
 const IVORY_THREAD = 'rgba(250, 250, 248, 0.28)';
-const IVORY_DEVICE = 'rgba(250, 250, 248, 0.07)';
 const AURUM_RGB = 'rgb(201, 168, 76)';
 const TITLE = 'JSONL is better than JSON arrays for append-heavy logs on minimal VMs';
 
@@ -114,40 +117,38 @@ describe('home drawings: the source', () => {
     assert.ok(!/animation\s*:|animation-delay|stroke-dasharray|stroke-dashoffset/.test(outside), 'no animation, dash or delay outside it');
   });
 
-  // Round 3: the device is no longer markup. One shared rule paints the mark's own geometry (the two
-  // sides of the triangle and its crossbar) as a background image on the first dark section of every page.
-  // Three inline svg data URIs carry it: the desktop drawing, and two small corners for a tablet and a phone
-  // (each exactly as tall as the padding band it sits in, drawn at 1:1 so the line is 1.5px).
+  // The device is no longer markup. One shared rule paints the mark's own geometry (the two sides of the triangle
+  // and its crossbar) as a background image on the first dark section of every page, at 1025 and up. One inline svg
+  // data URI carries it, drawn 1:1 so the line is 1.5px. Below 1025 no rule paints anything.
   const deviceSvg = (name) => {
     const m = css.match(new RegExp(`${name}:\\s*url\\("data:image/svg\\+xml,([^"]*)"\\)`));
     if (!m) throw new Error(`${name} is not defined as an svg data URI`);
     return decodeURIComponent(m[1]);
   };
 
-  it('the device is one faint ivory line for both strokes, 1.5px at the size it is drawn, with no gold', () => {
-    for (const [name, w, h] of [['--device', 1300, 1300], ['--device-band', 200, 72], ['--device-band-phone', 140, 56]]) {
-      const svg = deviceSvg(name);
-      assert.ok(/<path /.test(svg) && /<line /.test(svg), `${name} draws the triangle's sides and its crossbar`);
-      assert.match(svg, /stroke='#FAFAF8'/, `${name} is ivory`);
-      assert.match(svg, /stroke-opacity='\.12'/, `${name} is 12% ivory`);
-      assert.ok(!/201,\s*168,\s*76|aurum|c9a84c/i.test(svg), `${name} carries no gold`);
-      assert.equal(Number(svg.match(/\swidth='(\d+)'/)[1]), w, `${name} is drawn ${w}px wide`);
-      assert.equal(Number(svg.match(/\sheight='(\d+)'/)[1]), h, `${name} is drawn ${h}px tall`);
-      // drawn 1:1 (the viewBox is the drawn size), so the rendered line is the stroke width
-      const vb = svg.match(/viewBox='0 0 (\d+) (\d+)'/);
-      assert.ok(vb, `${name} has a viewBox`);
-      const scale = w / Number(vb[1]);
-      const strokeWidth = Number(svg.match(/stroke-width='([\d.]+)'/)[1]);
-      assert.ok(Math.abs(strokeWidth * scale - 1.5) <= 0.02, `${name} renders a 1.5px line (${strokeWidth * scale})`);
-    }
-    // the two corners are drawn 1:1
-    for (const name of ['--device-band', '--device-band-phone']) {
-      const svg = deviceSvg(name);
-      assert.equal(`0 0 ${svg.match(/\swidth='(\d+)'/)[1]} ${svg.match(/\sheight='(\d+)'/)[1]}`, svg.match(/viewBox='([^']*)'/)[1], `${name} is drawn 1:1`);
-    }
-    // positive control: the rule that paints it is on the first dark section, and it is not on a dark ground rule
-    assert.match(css, /main > \.on-dark:first-child,[\s\S]*?background-image:\s*var\(--device\)/, 'the shared rule paints --device on main > .on-dark:first-child');
-    assert.ok(/body \.legal-wrap > h1::before/.test(css), 'the legal template\'s hero band takes it too');
+  it('the device is one faint ivory line for both strokes, 1.5px at the size it is drawn, with no gold, and only one image of it exists', () => {
+    const svg = deviceSvg('--device');
+    assert.ok(/<path /.test(svg) && /<line /.test(svg), '--device draws the triangle\'s sides and its crossbar');
+    assert.match(svg, /stroke='#FAFAF8'/, '--device is ivory');
+    assert.match(svg, /stroke-opacity='\.12'/, '--device is 12% ivory');
+    assert.ok(!/201,\s*168,\s*76|aurum|c9a84c/i.test(svg), '--device carries no gold');
+    const w = Number(svg.match(/\swidth='(\d+)'/)[1]);
+    const h = Number(svg.match(/\sheight='(\d+)'/)[1]);
+    assert.deepEqual([w, h], [1250, 1150], '--device is drawn 1250 by 1150');
+    // drawn 1:1 (the viewBox is the drawn size), so the rendered line is the stroke width
+    assert.equal(svg.match(/viewBox='([^']*)'/)[1], `0 0 ${w} ${h}`, '--device is drawn 1:1');
+    assert.equal(Number(svg.match(/stroke-width='([\d.]+)'/)[1]), 1.5, '--device renders a 1.5px line');
+    // the corner glyphs of the earlier rounds are gone, and so is the old --device-a anchor
+    assert.ok(!/--device-band|--device-a\b/.test(css), 'the 70px corner glyph and the old anchor variable are gone from the sheet');
+    // the rule that paints it is in a 1025-and-up media block, on the first dark section and on the legal band
+    const block = mediaBlock(css, '@media (min-width: 1025px) {\n  main > .on-dark:first-child,');
+    assert.ok(block, 'the device rule sits in a min-width 1025 media block');
+    assert.match(block, /main > \.on-dark:first-child,\s*body \.legal-wrap > h1::before\s*\{[^}]*background-image:\s*var\(--device\)/, 'it paints --device on main > .on-dark:first-child and on the legal template band');
+    assert.match(block, /background-size:\s*1250px 1150px/);
+    // anchored to the hero container's right edge: 48px outside it, level with the container's top (120)
+    assert.match(block, /background-position:\s*min\(calc\(50% \+ 703px\), calc\(100% \+ 754px\)\) 120px/, 'apex at the container\'s right edge plus 48, at the container\'s top');
+    // outside that block nothing paints --device (so there is none at 1024 and down)
+    assert.ok(!css.replace(block, '').includes('background-image: var(--device)'), 'no rule outside the 1025 block paints the device');
     // the dashboard is an application surface: the header band takes no device and the sign-in screen is cleared
     assert.ok(!/\.dash-wrap > \.dash-band:first-child/.test(css), 'the dashboard header band takes no device');
     assert.match(css, /main > #login-view\s*\{[^}]*background-image:\s*none/, 'the dashboard sign-in screen carries no device');
@@ -164,22 +165,66 @@ describe('home drawings: the source', () => {
     assert.ok(ratio([0xA7, 0xAC, 0xB2], under) > ratio([0x8B, 0x92, 0x9A], under), 'positive control: the body colour keeps more than the note colour');
   });
 
-  it('the recall drawing holds the same card twice: the same chip and the same title, in both panels', () => {
+  const MCP_TITLE = "MCP tool inputSchema must use 'object' type at the top level or tools won't appear";
+  const PINECONE_TITLE = 'Pinecone upsert requires vectors array not a single vector object';
+
+  it('the recall drawing: the long way ends in a 1px outline card, the short way returns the full Pinecone card', () => {
     const sec = html.match(/<section id="own-learnings-free"[\s\S]*?<\/section>/)[0];
     assert.match(sec, /<div class="dw-stage pair-art" aria-hidden="true">/, 'the drawing stays hidden from assistive tech');
-    const cards = [...sec.matchAll(/<div class="dw-panel dw-light dw-found">([\s\S]*?)<\/div>/g)].map((m) => m[1]);
-    assert.equal(cards.length, 2, 'two cards');
-    assert.equal(cards[0], cards[1], 'the same markup in both');
-    assert.ok(cards[0].includes('<span class="dw-chip">storage-state</span>'), 'the chip');
-    assert.ok(cards[0].includes(`<span class="dw-title">${TITLE}</span>`), 'the title');
     const panels = sec.split('<div class="dw-panel dw-dark').slice(1);
     assert.equal(panels.length, 2, 'two dark panels');
     assert.ok(panels[0].startsWith(' dw-long dw-term"'), 'the first is the tall panel');
-    assert.ok(/<span class="dw-sk w40 lit"><\/span>\s*<div class="dw-panel dw-light dw-found">/.test(panels[0]), 'its card sits at its foot, after the dim lines');
-    assert.ok(/<span class="dw-tool">auxilo_knowledge<\/span><\/div>\s*<div class="dw-panel dw-light dw-found">/.test(panels[1]), 'the short panel is one tool row with the card directly under it');
+    // the long way's found card is an outline card (no light fill, no dimming), with its chip and skeleton lines
+    assert.ok(/<span class="dw-sk w40 lit"><\/span>\s*<div class="dw-panel dw-outline dw-found"><span class="dw-chip">storage-state<\/span>/.test(panels[0]), 'its outline card sits at its foot, after the dim lines, with the chip');
+    assert.ok(!/dw-light/.test(panels[0]), 'the long way carries no light card');
+    // the short way is one tool row with the full returned card directly under it, the Pinecone title
+    assert.ok(/<span class="dw-tool">auxilo_knowledge<\/span><\/div>\s*<div class="dw-panel dw-light dw-found"><span class="dw-chip">storage-state<\/span><span class="dw-title">/.test(panels[1]), 'the short panel is one tool row with the full card directly under it');
+    assert.ok(panels[1].includes(`<span class="dw-title">${PINECONE_TITLE}</span>`), 'the returned card is the Pinecone title');
     assert.equal((panels[1].match(/auxilo_knowledge/g) || []).length, 1, 'one tool row');
-    // positive control for the counts above: the same title still stands in the queue and the explainer
-    assert.equal(html.split(TITLE).length - 1, 4, 'the title stands in the queue, the explainer and the two recall cards');
+    assert.ok(!sec.includes(TITLE), 'the explainer\'s JSONL title does not stand in the recall drawing');
+  });
+
+  it('no catalog title stands twice outside the review queue window, and the queue window lists all three', () => {
+    const win = html.slice(html.indexOf('<div class="dw-panel dw-light dw-window"'), html.indexOf('<!-- What a learning is'));
+    assert.ok(win.length > 500, 'positive control: the queue window was cut out');
+    const outside = html.replace(win, '');
+    const body = outside.slice(outside.indexOf('<main'), outside.indexOf('</main>'));
+    for (const title of [MCP_TITLE, PINECONE_TITLE, TITLE]) {
+      assert.equal(win.split(title).length - 1, 1, `the queue window lists "${title.slice(0, 24)}" once`);
+      assert.ok(body.split(title).length - 1 <= 1, `"${title.slice(0, 24)}" stands at most once outside the window (${body.split(title).length - 1})`);
+    }
+    // positive control: each of the three still stands somewhere outside it, in the drawing that shows it
+    assert.ok(body.includes(MCP_TITLE) && body.includes(TITLE) && body.includes(PINECONE_TITLE), 'each title stands once in its own drawing');
+  });
+
+  it('hero panel 1 is a mono session ending in a category chip and a lit bar; panel 4 is an ordinary dark panel with an Earnings row label', () => {
+    const hero = html.match(/<section id="hero"[\s\S]*?<\/section>/)[0];
+    const p1 = hero.slice(hero.indexOf('<div class="dw-panel dw-dark hx-1">'), hero.indexOf('<div class="dw-panel dw-light hx-2">'));
+    assert.ok(p1.length > 100, 'positive control: panel 1 was cut out');
+    assert.ok(/<div class="dw-term"[^>]*><span class="dw-sk w85"><\/span><span class="dw-sk w55"><\/span><div class="dw-row hx-1-row"><span class="dw-chip">code-execution<\/span><span class="dw-sk lit"><\/span><\/div><\/div>/.test(p1), 'two short skeleton bars, then a row with the code-execution chip and a lit bar');
+    assert.equal((p1.match(/<span class="dw-sk /g) || []).length, 3, 'three bars in all (two, and the lit one in the row)');
+    assert.ok(/<div class="dw-ledger"><div class="dw-row"><span class="dw-tick"><\/span><span class="dw-rowlabel">Earnings<\/span><span class="dw-sk"><\/span><span class="dw-amt"><\/span><\/div><\/div>/.test(hero.slice(hero.indexOf('hx-4"'))), 'Earnings is the row label of panel 4\'s gold-tick ledger row');
+    // the page style gives panel 4 no border or text colour of its own: it is an ordinary dark panel
+    const rule = ruleBody(pageStyle, '.hx-4');
+    assert.ok(rule, 'the panel 4 rule is found');
+    assert.ok(!/border|color|aurum/.test(rule), 'panel 4 takes no border and no colour of its own');
+    assert.ok(!/\.hx-4 \.dw-cap/.test(pageStyle), 'its caption takes no colour of its own');
+    assert.match(ruleBody(pageStyle, '.hx-4 .dw-node') || '', /color:\s*var\(--aurum\)/, 'its node marker stays gold');
+  });
+
+  it('the explainer drawing keeps the JSONL card and ends its session on a real tool row; the step cards show a review card and Earnings rows', () => {
+    const sec = html.match(/<section id="learning-explainer"[\s\S]*?<\/section>/)[0];
+    assert.ok(sec.includes(`<span class="dw-title" style="font-size:16px">${TITLE}</span>`), 'the explainer keeps the JSONL card');
+    assert.ok(/<span class="dw-tool">auxilo_contribute<\/span><span class="dw-sk lit"/.test(sec), 'its session ends on the real auxilo_contribute tool row');
+    const steps = [...html.matchAll(/<div class="step-art" aria-hidden="true">([\s\S]*?)<\/div><\/div>\s*<div class="step-body">/g)].map((m) => m[1]);
+    assert.equal(steps.length, 3, 'three step drawings');
+    // card 2: a light review card, a category chip, Approve and Reject, and the title as skeleton bars (the MCP title already stands in the hero and the queue)
+    assert.ok(/dw-panel dw-light step-review/.test(steps[1]), 'card 2 is a light review card');
+    assert.ok(steps[1].includes('<span class="dw-chip">code-execution</span>') && steps[1].includes('<span class="dw-btn primary">Approve</span><span class="dw-btn ghost">Reject</span>'), 'with its chip, Approve and Reject');
+    assert.ok(!/dw-title/.test(steps[1]), 'and no catalog title, so none stands twice outside the queue');
+    // card 3: every ledger row carries the Earnings label
+    assert.equal((steps[2].match(/<span class="dw-rowlabel">Earnings<\/span>/g) || []).length, 3, 'card 3 has three ledger rows, each labelled Earnings');
+    assert.equal((steps[2].match(/<span class="dw-tick">/g) || []).length, 3, 'positive control: three ledger rows');
   });
 
   it('code blocks keep a thin scrollbar on the dark ground (standard and webkit)', () => {
@@ -388,154 +433,158 @@ describe('home drawings: the render', { timeout: 180_000 }, () => {
   });
 
   // ── the device ──
-  // The first dark section of every page carries the shared background image, at the size and anchor the
-  // viewport gets, and never gold. No page carries device markup of its own.
+  // The first dark section of every page carries the shared background image at 1025 and up, and nothing below.
+  // Its painted pixels are found by diffing two screenshots of the same hero in one run (the hero's children
+  // hidden, with and without the image), then compared with the boxes of the hero's panels and buttons and
+  // with its text. No pixel literals: the numbers compared are the container's edge, the ruled 48, and boxes
+  // measured in the same page.
   const FIRST_DARK = 'main > .on-dark:first-child';
-  for (const route of ['/', '/for-builders', '/pricing', '/about', '/status']) {
-    it(`the device on ${route} at 1280: the shared image on the first dark section, anchored right, 1300px, no gold`, async (t) => {
-      const d = await at(t, 1280, route, (page) => page.evaluate((sel) => {
-        const el = document.querySelector(sel);
-        const cs = el ? getComputedStyle(el) : null;
-        return cs && { image: cs.backgroundImage, size: cs.backgroundSize, pos: cs.backgroundPosition, repeat: cs.backgroundRepeat, hasClip: !!document.querySelector('.dw-device-clip') };
-      }, FIRST_DARK));
-      if (!d) return;
-      assert.match(d.image, /^url\("data:image\/svg\+xml,/, 'the first dark section paints the device svg');
-      assert.ok(!/201,\s*168,\s*76|c9a84c|aurum/i.test(decodeURIComponent(d.image)), 'no gold in it');
-      assert.equal(d.size, '1300px 1300px');
-      assert.equal(d.repeat, 'no-repeat');
-      assert.match(d.pos, /^calc\(100% [+-] \d+px\) /, 'anchored to the right edge (a calc on 100%)');
-      assert.equal(d.hasClip, false, 'no page carries an inline device wrapper');
-    });
+  const GAP = 48;
+  const DEVICE_ROUTES = ['/', '/for-builders', '/for-agents', '/how-it-works', '/pricing', '/connect', '/status'];
+  const DRAWING_ROUTES = ['/', '/for-builders', '/for-agents', '/how-it-works', '/pricing'];
+
+  // Run in the page: the hero section's box, its content right edge (the container), its panels and buttons,
+  // and the line boxes of its text that are not inside a panel.
+  const heroProbe = () => {
+    const sec = document.querySelector('main > .on-dark:first-child');
+    const r = sec.getBoundingClientRect();
+    const cs = getComputedStyle(sec);
+    const maxW = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--max-w'));
+    const contentL = r.left + parseFloat(cs.paddingLeft);
+    const contentR = r.right - parseFloat(cs.paddingRight);
+    const containerR = Math.min(contentR, (contentL + contentR) / 2 + maxW / 2);
+    const rect = (el) => { const b = el.getBoundingClientRect(); return { l: b.left, t: b.top + scrollY, r: b.right, b: b.bottom + scrollY, tag: el.tagName.toLowerCase() }; };
+    const obstacles = [...sec.querySelectorAll('.dw-panel, .code-block, .copy-btn, .btn-primary, .btn-secondary, .hero-cta-link, .dw-btn')].filter((e) => e.getBoundingClientRect().width > 0).map(rect);
+    const texts = [];
+    const walker = document.createTreeWalker(sec, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const n = walker.currentNode;
+      if (!n.textContent.trim() || !n.parentElement || getComputedStyle(n.parentElement).display === 'none') continue;
+      const rg = document.createRange(); rg.selectNodeContents(n);
+      for (const b of rg.getClientRects()) if (b.width > 0 && b.height > 0) texts.push({ l: b.left, t: b.top + scrollY, r: b.right, b: b.bottom + scrollY, tag: n.parentElement.tagName.toLowerCase() });
+    }
+    const inside = (t, o) => t.l >= o.l - 1 && t.r <= o.r + 1 && t.t >= o.t - 1 && t.b <= o.b + 1;
+    return {
+      sec: { l: r.left, t: r.top + scrollY, r: r.right, b: r.bottom + scrollY, padTop: parseFloat(cs.paddingTop) },
+      containerR, vw: window.innerWidth, scrollW: document.documentElement.scrollWidth,
+      obstacles,
+      texts: texts.filter((t) => !obstacles.some((o) => inside(t, o))),
+      image: cs.backgroundImage,
+    };
+  };
+
+  // The painted device pixels of the hero, in page coordinates.
+  async function deviceMask(page, info) {
+    const clip = { x: 0, y: Math.round(info.sec.t), width: info.vw, height: Math.round(info.sec.b - info.sec.t) };
+    await page.addStyleTag({ content: 'main > .on-dark:first-child > * { visibility: hidden !important; }' });
+    const on = await page.screenshot({ clip, fullPage: true });
+    await page.addStyleTag({ content: 'main > .on-dark:first-child { background-image: none !important; }' });
+    const off = await page.screenshot({ clip, fullPage: true });
+    const diffPage = await page.context().newPage();
+    try {
+      const flat = await diffPage.evaluate(async ([A, B]) => {
+        const load = (b64) => new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.src = `data:image/png;base64,${b64}`; });
+        const [ia, ib] = await Promise.all([load(A), load(B)]);
+        const c = document.createElement('canvas'); c.width = ia.width; c.height = ia.height;
+        const g = c.getContext('2d');
+        g.drawImage(ia, 0, 0); const da = g.getImageData(0, 0, c.width, c.height).data;
+        g.clearRect(0, 0, c.width, c.height); g.drawImage(ib, 0, 0); const db = g.getImageData(0, 0, c.width, c.height).data;
+        const out = [];
+        for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) { const i = (y * c.width + x) * 4; if (Math.abs(da[i] - db[i]) > 3) out.push(x, y); }
+        return out;
+      }, [on.toString('base64'), off.toString('base64')]);
+      const mask = [];
+      for (let i = 0; i < flat.length; i += 2) mask.push([flat[i], flat[i + 1] + clip.y]);
+      return mask;
+    } finally {
+      await diffPage.close();
+    }
   }
 
-  it('the device on the legal template band: the same image, on the h1\'s ::before', async (t) => {
-    const d = await at(t, 1280, '/terms', (page) => page.evaluate(() => {
-      const h1 = document.querySelector('.legal-wrap > h1');
-      const cs = getComputedStyle(h1, '::before');
-      return { image: cs.backgroundImage, size: cs.backgroundSize, width: parseFloat(cs.width), vw: window.innerWidth };
-    }));
-    if (!d) return;
-    assert.match(d.image, /^url\("data:image\/svg\+xml,/);
-    assert.equal(d.size, '1300px 1300px');
-    assert.equal(d.width, d.vw, 'positive control: the band is the full width of the window');
-  });
-
-  // Below 1025 the device is a small cropped corner at the right edge, as tall as less than the section's
-  // top padding, so it never sits behind a heading, a line of copy, a button or a drawing. The painted box is
-  // computed from the section's box and its background-size and background-position, and compared with the
-  // box of every text element in the hero, all in one run (no pixel literals).
-  const BAND = { 768: ['200px 72px', 72], 375: ['140px 56px', 56] };
-  const HERO_ROUTES = ['/', '/for-builders', '/for-agents', '/how-it-works', '/pricing', '/works-with', '/about', '/connect', '/how-submissions-work', '/status', '/api', '/writing', '/writing/agents-message-board', '/terms', '/privacy'];
-
-  // Run in the page. Returns the painted device box, the section's box and padding, the text boxes in the hero
-  // and, for the reading pages at 1280, the device's left-hand side as a line.
-  const deviceProbe = () => {
-    const legal = document.querySelector('.legal-wrap > h1');
-    let section; let cs; let box;
-    if (legal) {
-      cs = getComputedStyle(legal, '::before');
-      const h = legal.getBoundingClientRect();
-      box = { left: h.left + parseFloat(cs.left), top: h.top + parseFloat(cs.top), width: parseFloat(cs.width), height: parseFloat(cs.height) };
-      section = legal.parentElement;
-    } else {
-      section = document.querySelector('main > .on-dark:first-child');
-      cs = getComputedStyle(section);
-      const r = section.getBoundingClientRect();
-      box = { left: r.left, top: r.top, width: r.width, height: r.height };
-    }
-    const pad = parseFloat(getComputedStyle(section).paddingTop);
-    const [sw, sh] = cs.backgroundSize.split(' ').map(parseFloat);
-    const [, px, py] = cs.backgroundPosition.match(/^(calc\([^)]*\)|\S+)\s+(calc\([^)]*\)|\S+)$/);
-    // a position is a percentage or a calc on 100% plus or minus px
-    const at = (pos, free) => {
-      let m = pos.match(/^calc\(([\d.]+)% ([+-]) ([\d.]+)px\)$/);
-      if (m) return (Number(m[1]) / 100) * free + (m[2] === '+' ? 1 : -1) * Number(m[3]);
-      m = pos.match(/^(-?[\d.]+)%$/);
-      if (m) return (Number(m[1]) / 100) * free;
-      m = pos.match(/^(-?[\d.]+)px$/);
-      if (m) return Number(m[1]);
-      return NaN;
-    };
-    const painted = { left: box.left + at(px, box.width - sw), top: box.top + at(py, box.height - sh), width: sw, height: sh };
-    // the hero: the whole first dark section, or, on the legal template, the back link and the h1 (never the body below)
-    const heroParts = legal ? [legal.parentElement.querySelector('.legal-back'), legal] : [section];
-    const inHero = (el) => heroParts.some((part) => part && part.contains(el));
-    // text boxes: every line box of every text node in the hero, plus the element box of each element that has text of its own
-    const texts = [];
-    for (const part of heroParts) {
-      const walker = document.createTreeWalker(part, NodeFilter.SHOW_TEXT);
-      while (walker.nextNode()) {
-        const n = walker.currentNode;
-        if (!n.textContent.trim() || !n.parentElement || getComputedStyle(n.parentElement).display === 'none') continue;
-        const rg = document.createRange(); rg.selectNodeContents(n);
-        for (const r of rg.getClientRects()) if (r.width > 0 && r.height > 0) texts.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom, tag: n.parentElement.tagName.toLowerCase() });
+  // The longest horizontal run of device pixels (the crossbar), and the topmost pixel (the apex).
+  function crossbarAndApex(mask) {
+    const rows = new Map();
+    for (const [x, y] of mask) { if (!rows.has(y)) rows.set(y, []); rows.get(y).push(x); }
+    let bar = null;
+    for (const [y, xs] of rows) {
+      xs.sort((a, b) => a - b);
+      let start = xs[0]; let prev = xs[0];
+      for (let i = 1; i <= xs.length; i++) {
+        if (i === xs.length || xs[i] !== prev + 1) { if (!bar || prev - start > bar.x1 - bar.x0) bar = { y, x0: start, x1: prev }; start = xs[i]; }
+        prev = xs[i];
       }
     }
-    const els = heroParts.flatMap((part) => (part ? [part, ...part.querySelectorAll('h1, h2, h3, p, a, button, li, code, pre, span')] : [])).filter((el) => inHero(el) && getComputedStyle(el).display !== 'none' && [...el.childNodes].some((c) => c.nodeType === 3 && c.textContent.trim()))
-      .map((el) => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, tag: el.tagName.toLowerCase() }; });
-    return { painted, box, pad, vw: window.innerWidth, texts, els, image: cs.backgroundImage, size: cs.backgroundSize, scrollW: document.documentElement.scrollWidth };
-  };
-  const intersects = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-  const paintedRect = (p) => ({ left: p.left, top: p.top, right: p.left + p.width, bottom: p.top + p.height });
+    const top = Math.min(...mask.map((p) => p[1]));
+    const topXs = mask.filter((p) => p[1] === top).map((p) => p[0]);
+    return { bar, apex: { x: topXs.reduce((a, b) => a + b, 0) / topXs.length, y: top } };
+  }
 
-  it('control: the intersection check flags a box that overlaps and passes one that does not', () => {
-    const a = { left: 0, top: 0, right: 10, bottom: 10 };
-    assert.equal(intersects(a, { left: 5, top: 5, right: 15, bottom: 15 }), true);
-    assert.equal(intersects(a, { left: 10, top: 0, right: 20, bottom: 10 }), false, 'touching edges do not overlap');
-    assert.equal(intersects(a, { left: 0, top: 11, right: 10, bottom: 20 }), false);
+  it('control: the crossbar and apex finder reads a drawn crossbar and apex', () => {
+    const mask = [];
+    for (let x = 100; x < 160; x++) mask.push([x, 50]);
+    mask.push([100, 10], [101, 10], [99, 11], [102, 11]);
+    const { bar, apex } = crossbarAndApex(mask);
+    assert.deepEqual(bar, { y: 50, x0: 100, x1: 159 });
+    assert.deepEqual([apex.x, apex.y], [100.5, 10]);
   });
 
-  for (const width of [768, 375]) {
-    for (const route of HERO_ROUTES) {
-      it(`the device at ${width} on ${route}: a small corner in the top padding band, clear of every text element in the hero`, async (t) => {
-        const d = await at(t, width, route, (page) => page.evaluate(deviceProbe), { height: width === 375 ? 812 : 1024 });
+  for (const width of [1280, 1440]) {
+    for (const route of DEVICE_ROUTES) {
+      it(`the device on ${route} at ${width}: apex ${GAP}px outside the container's right edge and level with its top, the crossbar clear of every panel and button by ${GAP} or more, and nothing behind hero text`, async (t) => {
+        const d = await at(t, width, route, async (page) => {
+          const info = await page.evaluate(heroProbe);
+          const mask = await deviceMask(page, info);
+          return { info, mask };
+        }, { height: 900 });
         if (!d) return;
-        assert.match(d.image, /^url\("data:image\/svg\+xml,/, 'the first dark section paints the device svg');
-        assert.equal(d.size, BAND[width][0], 'the corner is the small image, not the desktop drawing');
-        assert.ok(d.scrollW <= width, 'the device adds no sideways scroll');
-        assert.ok(d.texts.length > 0 && d.els.length > 0, `positive control: the hero's text was found (${d.texts.length} line boxes, ${d.els.length} elements)`);
-        const dev = paintedRect(d.painted);
-        // it is at the right edge and at the top of the section
-        assert.ok(Math.abs(dev.right - (d.box.left + d.box.width)) <= 0.5, `anchored to the right edge: ${dev.right} vs ${d.box.left + d.box.width}`);
-        assert.ok(Math.abs(dev.top - d.box.top) <= 0.5, `at the top of the section: ${dev.top} vs ${d.box.top}`);
-        // and no taller than the section's top padding
-        assert.ok(d.painted.height <= d.pad, `its ${d.painted.height}px height is no more than the ${d.pad}px top padding`);
-        assert.equal(d.painted.height, BAND[width][1]);
-        for (const box of [...d.texts, ...d.els]) {
-          assert.equal(intersects(dev, box), false, `the device ${JSON.stringify(dev)} crosses a ${box.tag} at ${JSON.stringify(box)}`);
+        const { info, mask } = d;
+        assert.match(info.image, /^url\("data:image\/svg\+xml,/, 'the first dark section paints the device svg');
+        assert.ok(!/201,\s*168,\s*76|c9a84c|aurum/i.test(decodeURIComponent(info.image)), 'no gold in it');
+        assert.ok(info.scrollW <= width, 'the device adds no sideways scroll');
+        assert.ok(mask.length > 200, `positive control: the device was painted (${mask.length} pixels)`);
+        const { bar, apex } = crossbarAndApex(mask);
+        assert.ok(Math.abs(apex.x - (info.containerR + GAP)) <= 3, `the apex (${apex.x}) hangs ${GAP}px outside the container's right edge (${info.containerR})`);
+        assert.ok(Math.abs(apex.y - (info.sec.t + info.sec.padTop)) <= 4, `the apex (${apex.y}) is level with the container's top (${info.sec.t + info.sec.padTop})`);
+        assert.ok(bar && bar.x1 - bar.x0 >= 30, 'the crossbar leaves the frame to the right');
+        assert.ok(bar.x0 >= apex.x - 3, `the crossbar starts at the apex's centre line (${bar.x0} against ${apex.x})`);
+        if (DRAWING_ROUTES.includes(route)) assert.ok(info.obstacles.length > 0, `positive control: the hero has panels or buttons (${info.obstacles.length})`);
+        for (const o of info.obstacles) {
+          const dx = Math.max(o.l - bar.x1, 0, bar.x0 - o.r);
+          const dy = Math.max(o.t - bar.y, 0, bar.y - o.b);
+          assert.ok(Math.hypot(dx, dy) >= GAP - 0.5, `the crossbar (y ${bar.y}, x ${bar.x0}-${bar.x1}) is ${Math.hypot(dx, dy).toFixed(1)}px from a ${o.tag} at ${JSON.stringify(o)}`);
+        }
+        assert.ok(info.texts.length > 0, 'positive control: the hero has text outside its panels');
+        for (const tx of info.texts) {
+          assert.ok(!mask.some(([x, y]) => x >= tx.l && x <= tx.r && y >= tx.t && y <= tx.b), `a device line crosses a ${tx.tag} line at ${JSON.stringify(tx)}`);
         }
       });
     }
   }
 
-  it('control: at 768 the old tablet drawing (806px, the full triangle) WOULD have crossed the hero text, so the check can see an overlap', async (t) => {
-    const d = await at(t, 768, '/', (page) => page.evaluate(deviceProbe), { height: 1024 });
-    if (!d) return;
-    // the old geometry: an 806px square, its right edge 283px beyond the section's right edge, 20px above the top
-    const old = { left: d.box.left + d.box.width - 806 + 283, top: d.box.top - 20, width: 806, height: 806 };
-    assert.ok([...d.texts, ...d.els].some((b) => intersects(paintedRect(old), b)), 'the old drawing overlapped some hero text at 768');
-  });
-
-  // At 1280 on a reading page the copy is a centred 720 column, and the device sits to the right of it: the
-  // left-hand side of the triangle, at every height of the hero, is to the right of the column and of every
-  // line of text in the hero (the heading included).
-  for (const route of ['/about', '/connect', '/writing', '/writing/agents-message-board', '/terms']) {
-    it(`the device at 1280 on ${route}: right of the 720 column, and it does not cross the heading or any hero text`, async (t) => {
-      const d = await at(t, 1280, route, (page) => page.evaluate(deviceProbe), { height: 900 });
-      if (!d) return;
-      assert.equal(d.size, '1300px 1300px');
-      assert.ok(d.texts.length > 0, 'positive control: hero text was found');
-      // the triangle's left side in page coordinates: image x 650 at y 40, falling to x -84 at y 1400
-      const slope = 734 / 1360;
-      const sideX = (y) => d.painted.left + 650 - slope * Math.max(0, y - d.painted.top - 40);
-      const heroBottom = d.box.top + d.box.height;
-      const columnRight = (d.vw + 720) / 2;
-      assert.ok(sideX(heroBottom) >= columnRight, `at the foot of the hero the side (${Math.round(sideX(heroBottom))}) is right of the column edge (${columnRight})`);
-      for (const b of d.texts) {
-        assert.ok(b.right < sideX(b.bottom), `a ${b.tag} line ends at ${Math.round(b.right)}, left of the side at ${Math.round(sideX(b.bottom))}`);
+  // Below 1025 there is no device: the first dark section paints no image, on every route, at the widths a
+  // tablet and a phone have, and the legal template's band paints none either.
+  for (const width of [1024, 768, 375]) {
+    it(`the device at ${width}: none on the first dark section of any page, and none on the legal band`, async (t) => {
+      const routes = [...DEVICE_ROUTES, '/works-with', '/about', '/how-submissions-work', '/api', '/writing', '/writing/agents-message-board'];
+      const seen = [];
+      for (const route of routes) {
+        const d = await at(t, width, route, (page) => page.evaluate((sel) => {
+          const el = document.querySelector(sel);
+          return { has: !!el, image: el ? getComputedStyle(el).backgroundImage : null, scrollW: document.documentElement.scrollWidth };
+        }, FIRST_DARK), { height: width === 375 ? 812 : 1024 });
+        if (!d) return;
+        assert.ok(d.has, `positive control: ${route} has a first dark section`);
+        assert.equal(d.image, 'none', `${route} at ${width} paints no device`);
+        assert.ok(d.scrollW <= width, `${route} has no sideways scroll`);
+        seen.push(route);
       }
-      // positive control for the line: a text box pushed to the side's x at its own height would be crossed
-      assert.ok(sideX(heroBottom) < d.vw, 'positive control: the side is on screen at the foot of the hero');
+      assert.equal(seen.length, routes.length);
+      const legal = await at(t, width, '/terms', (page) => page.evaluate(() => getComputedStyle(document.querySelector('.legal-wrap > h1'), '::before').backgroundImage));
+      if (legal === undefined) return;
+      assert.equal(legal, 'none', `the legal band paints no device at ${width}`);
+      // positive control: the same band paints it at 1280
+      const wide = await at(t, 1280, '/terms', (page) => page.evaluate(() => getComputedStyle(document.querySelector('.legal-wrap > h1'), '::before').backgroundImage));
+      assert.match(wide, /^url\("data:image\/svg\+xml,/, 'positive control: the legal band paints the device at 1280');
     });
   }
 
@@ -545,7 +594,7 @@ describe('home drawings: the render', { timeout: 180_000 }, () => {
       const d = await at(t, width, '/dashboard', (page) => page.evaluate(() => {
         const login = document.querySelector('#login-view');
         const band = document.querySelector('.dash-wrap > .dash-band');
-        // a positive control, from the same page: the shared rule would paint the first dark section of main
+        // a positive control, from the same page: the shared rule would paint the first dark section of main at 1025 and up
         const probe = document.createElement('section');
         probe.className = 'on-dark';
         document.querySelector('main').prepend(probe);
@@ -556,7 +605,8 @@ describe('home drawings: the render', { timeout: 180_000 }, () => {
       if (!d) return;
       assert.equal(d.login, 'none', 'the sign-in screen paints no device');
       assert.equal(d.band, 'none', 'the signed-in header band paints no device');
-      assert.match(d.control, /^url\("data:image\/svg\+xml,/, 'positive control: the shared rule does paint a first dark section in main');
+      if (width > 1024) assert.match(d.control, /^url\("data:image\/svg\+xml,/, 'positive control: the shared rule does paint a first dark section in main');
+      else assert.equal(d.control, 'none', 'below 1025 the shared rule paints nothing');
     });
   }
 
@@ -588,7 +638,7 @@ describe('home drawings: the render', { timeout: 180_000 }, () => {
   }
 
   // ── the recall drawing ──
-  it('the recall drawing at 1280: bottoms aligned, the long way taller, the short way\'s card the dominant one and the long way\'s dimmed', async (t) => {
+  it('the recall drawing at 1280: bottoms aligned, the long way taller, the short way\'s card the full one and the long way\'s a 1px outline card, never dimmed', async (t) => {
     const m = await at(t, 1280, '/', (page) => page.evaluate(() => {
       const panels = [...document.querySelectorAll('#own-learnings-free .dw-twoup > .dw-dark')].map((p) => p.getBoundingClientRect());
       const found = [...document.querySelectorAll('#own-learnings-free .dw-found')];
@@ -597,7 +647,10 @@ describe('home drawings: the render', { timeout: 180_000 }, () => {
         panels: panels.map((r) => ({ t: r.top, b: r.bottom, w: r.width })),
         cards: cards.map((r) => ({ t: r.top, b: r.bottom, h: r.height, w: r.width })),
         opacity: found.map((c) => parseFloat(getComputedStyle(c).opacity)),
-        title: found.map((c) => parseFloat(getComputedStyle(c.querySelector('.dw-title')).fontSize)),
+        bg: found.map((c) => getComputedStyle(c).backgroundColor),
+        border: found.map((c) => ({ w: getComputedStyle(c).borderTopWidth, style: getComputedStyle(c).borderTopStyle, color: getComputedStyle(c).borderTopColor })),
+        shadow: found.map((c) => getComputedStyle(c).boxShadow),
+        titles: found.map((c) => c.querySelector('.dw-title') ? parseFloat(getComputedStyle(c.querySelector('.dw-title')).fontSize) : null),
       };
     }));
     if (!m) return;
@@ -608,10 +661,15 @@ describe('home drawings: the render', { timeout: 180_000 }, () => {
     assert.ok(m.cards[1].h > m.cards[0].h + 8, 'the short way\'s returned card is the larger card, so the two never read as a duplicate');
     assert.ok(Math.abs(m.cards[0].b - m.cards[1].b) <= 0.5, 'the cards sit level');
     assert.ok(Math.abs((m.panels[0].b - m.cards[0].b) - (m.panels[1].b - m.cards[1].b)) <= 0.5, 'the same space under each card');
-    assert.equal(m.opacity[0], 0.6, 'the long way keeps its small card at the foot, dimmed to 60%');
-    assert.equal(m.opacity[1], 1, 'the short way\'s card is at full contrast');
-    assert.equal(m.title[1], 16, 'its title is 16px');
-    assert.ok(m.title[0] < m.title[1], 'positive control: the dimmed card\'s title is smaller');
+    // a dimmed card never stands for a greyed-out control: the long way's card is a 1px outline, full opacity
+    assert.deepEqual(m.opacity, [1, 1], 'neither card is dimmed');
+    assert.equal(m.border[0].w, '1px', 'the long way\'s card is a 1px outline card');
+    assert.equal(m.border[0].style, 'solid');
+    assert.equal(m.bg[0], 'rgba(0, 0, 0, 0)', 'with no fill of its own');
+    assert.equal(m.shadow[0], 'none', 'and no shadow');
+    assert.notEqual(m.bg[1], 'rgba(0, 0, 0, 0)', 'positive control: the short way\'s card has a fill');
+    assert.equal(m.titles[1], 16, 'the returned card\'s title is 16px');
+    assert.equal(m.titles[0], null, 'the outline card carries no title, so each catalog title stands once outside the queue');
   });
 
   for (const width of [480, 375]) {
@@ -621,6 +679,139 @@ describe('home drawings: the render', { timeout: 180_000 }, () => {
       assert.equal(m.length, 2);
       assert.ok(m[1].t >= m[0].b, 'the second panel starts under the first');
       assert.ok(Math.abs(m[0].l - m[1].l) <= 0.5 && Math.abs(m[0].r - m[1].r) <= 0.5, 'the same column');
+    });
+  }
+
+  // ── the hero's grid, the earnings panel, the code block headers, the skeleton share ──
+  for (const [width, cols] of [[1100, 2], [1024, 2], [901, 2], [900, 1], [768, 1], [375, 1]]) {
+    it(`the hero grid at ${width}: ${cols} column${cols > 1 ? 's' : ''}${width === 768 ? ', and the exchange takes the full content width' : ''}`, async (t) => {
+      const m = await at(t, width, '/', (page) => page.evaluate(() => {
+        const grid = document.querySelector('#hero .hero-grid');
+        const gcs = getComputedStyle(grid);
+        const hx = document.querySelector('.hx').getBoundingClientRect();
+        const pad = parseFloat(gcs.paddingLeft) + parseFloat(gcs.paddingRight);
+        const g = grid.getBoundingClientRect();
+        return { cols: gcs.gridTemplateColumns.split(' ').length, hx: hx.width, content: g.width - pad, gridLeft: g.left + parseFloat(gcs.paddingLeft), hxLeft: hx.left, sw: document.documentElement.scrollWidth };
+      }), { height: 1000 });
+      if (!m) return;
+      assert.equal(m.cols, cols);
+      assert.ok(m.sw <= width, 'no sideways scroll');
+      if (cols === 1) {
+        assert.ok(Math.abs(m.hx - m.content) <= 0.5 && Math.abs(m.hxLeft - m.gridLeft) <= 0.5, `stacked, the exchange takes the whole content width (${m.hx} of ${m.content})`);
+      } else {
+        assert.ok(m.hx < m.content * 0.6, `positive control: side by side, the exchange is the narrower column (${m.hx} of ${m.content})`);
+      }
+    });
+  }
+
+  it('the earnings panel at 1280 is an ordinary dark panel: its border, caption and text match panel 1\'s; only its marker, ledger row and the last leg are gold', async (t) => {
+    const m = await at(t, 1280, '/', (page) => page.evaluate(() => {
+      const card = (n) => document.querySelector(`.hx-${n}`);
+      const cs = (el) => getComputedStyle(el);
+      return {
+        border: [1, 4].map((n) => cs(card(n)).borderTopColor),
+        bg: [1, 4].map((n) => cs(card(n)).backgroundColor),
+        caption: [1, 4].map((n) => cs(card(n).querySelector('.dw-cap')).color),
+        label: cs(card(4).querySelector('.dw-rowlabel')).color,
+        node: cs(card(4).querySelector('.dw-node')).color,
+        nodePath: cs(card(4).querySelector('.dw-node path')).stroke,
+        tick: cs(card(4).querySelector('.dw-tick')).backgroundColor,
+        amt: cs(card(4).querySelector('.dw-amt')).backgroundColor,
+        node1: cs(card(1).querySelector('.dw-node path')).stroke,
+      };
+    }));
+    if (!m) return;
+    assert.equal(m.border[1], m.border[0], 'the same border as panel 1');
+    assert.equal(m.bg[1], m.bg[0], 'the same fill as panel 1');
+    assert.equal(m.caption[1], m.caption[0], 'the same caption colour as panel 1');
+    assert.notEqual(m.caption[1], AURUM_RGB, 'the caption is not gold');
+    assert.equal(m.label, m.caption[0], 'the Earnings label is ivory too');
+    assert.equal(m.node, AURUM_RGB, 'the node marker is gold');
+    assert.equal(m.nodePath, AURUM_RGB);
+    assert.equal(m.tick, AURUM_RGB, 'the ledger tick is gold');
+    assert.notEqual(m.node1, AURUM_RGB, 'positive control: panel 1\'s marker is not gold');
+  });
+
+  for (const width of [480, 375]) {
+    for (const route of ['/', '/connect', '/for-agents', '/for-builders', '/how-it-works', '/api']) {
+      it(`every code block header at ${width} on ${route}: stacked, 16 all round, 8 between the label and a full-width button, never overlapping`, async (t) => {
+        const hs = await at(t, width, route, (page) => page.evaluate(() => [...document.querySelectorAll('.code-block-header')].filter((h) => h.getBoundingClientRect().width > 0).map((h) => {
+          const cs = getComputedStyle(h);
+          const l = h.querySelector('.code-block-lang').getBoundingClientRect();
+          const b = h.querySelector('.copy-btn').getBoundingClientRect();
+          const r = h.getBoundingClientRect();
+          return { dir: cs.flexDirection, pad: [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft], gap: b.top - l.bottom, labelTop: l.top - r.top, btnW: b.width, inner: r.width - 32, overlap: l.left < b.right && l.right > b.left && l.top < b.bottom && l.bottom > b.top };
+        })), { height: 812 });
+        if (!hs) return;
+        assert.ok(hs.length > 0, `positive control: ${route} has a code block header`);
+        for (const h of hs) {
+          assert.equal(h.dir, 'column', 'stacked, label above the button');
+          assert.deepEqual(h.pad, ['16px', '16px', '16px', '16px'], '16 all round');
+          assert.ok(Math.abs(h.gap - 8) <= 0.5, `8 between the label and the button (${h.gap})`);
+          assert.ok(Math.abs(h.btnW - h.inner) <= 0.5, `the button is full width (${h.btnW} of ${h.inner})`);
+          assert.ok(Math.abs(h.labelTop - 16) <= 0.5, `the label sits 16 below the header's top (${h.labelTop})`);
+          assert.equal(h.overlap, false, 'the label and the button never overlap');
+        }
+      });
+    }
+  }
+
+  for (const width of [600, 481]) {
+    it(`code block headers at ${width}: a row, and the label and the button never overlap`, async (t) => {
+      for (const route of ['/', '/for-agents', '/how-it-works', '/api']) {
+        const hs = await at(t, width, route, (page) => page.evaluate(() => [...document.querySelectorAll('.code-block-header')].filter((h) => h.getBoundingClientRect().width > 0).map((h) => {
+          const l = h.querySelector('.code-block-lang').getBoundingClientRect();
+          const b = h.querySelector('.copy-btn').getBoundingClientRect();
+          return { dir: getComputedStyle(h).flexDirection, overlap: l.left < b.right && l.right > b.left && l.top < b.bottom && l.bottom > b.top };
+        })), { height: 900 });
+        if (!hs) return;
+        assert.ok(hs.length > 0, `positive control: ${route} has a header`);
+        for (const h of hs) { assert.equal(h.dir, 'row'); assert.equal(h.overlap, false, `${route}: the label and the button never overlap`); }
+      }
+    });
+  }
+
+  // No drawing is more than a third skeleton bars: the boxes of each run of bars (the union of the bars that share
+  // a parent) over the drawing's own box, in the same page.
+  for (const width of [1280, 768, 375]) {
+    it(`the homepage drawings at ${width}: skeleton bars fill at most a third of each`, async (t) => {
+      const r = await at(t, width, '/', (page) => page.evaluate(() => {
+        const drawings = [['exchange', '.hx'], ['window', '.dw-window'], ['explainer', '#learning-explainer .dw-stage'], ['recall', '#own-learnings-free .dw-stage'], ['step 1', '.step:nth-child(1) .step-art'], ['step 2', '.step:nth-child(2) .step-art'], ['step 3', '.step:nth-child(3) .step-art']];
+        return drawings.map(([name, sel]) => {
+          const d = document.querySelector(sel);
+          const db = d.getBoundingClientRect();
+          const groups = new Map();
+          for (const sk of d.querySelectorAll('.dw-sk')) {
+            const b = sk.getBoundingClientRect();
+            const g = groups.get(sk.parentElement) || { l: 1e9, t: 1e9, r: -1e9, b: -1e9 };
+            g.l = Math.min(g.l, b.left); g.t = Math.min(g.t, b.top); g.r = Math.max(g.r, b.right); g.b = Math.max(g.b, b.bottom);
+            groups.set(sk.parentElement, g);
+          }
+          let area = 0;
+          for (const g of groups.values()) area += (g.r - g.l) * (g.b - g.t);
+          return { name, share: area / (db.width * db.height), bars: d.querySelectorAll('.dw-sk').length };
+        });
+      }));
+      if (!r) return;
+      assert.equal(r.length, 7, 'all seven drawings were measured');
+      assert.ok(r.every((d) => d.bars > 0), 'positive control: every drawing has skeleton bars to measure');
+      for (const d of r) assert.ok(d.share <= 1 / 3, `${d.name} is ${(d.share * 100).toFixed(0)}% skeleton bars`);
+    });
+  }
+
+  for (const width of [1280, 375]) {
+    it(`the review card in step 2 at ${width}: the chip holds one line and clears the buttons`, async (t) => {
+      const m = await at(t, width, '/', (page) => page.evaluate(() => {
+        const head = document.querySelector('.step-review-head');
+        const chip = head.querySelector('.dw-chip').getBoundingClientRect();
+        const btns = head.querySelector('.dw-btns').getBoundingClientRect();
+        const card = document.querySelector('.step-review').getBoundingClientRect();
+        return { chipH: chip.height, chipR: chip.right, btnsL: btns.left, btnsR: btns.right, cardR: card.right, cardL: card.left, chipL: chip.left };
+      }));
+      if (!m) return;
+      assert.ok(m.chipH < 26, `the chip is one line (${m.chipH}px)`);
+      assert.ok(m.chipR <= m.btnsL, 'the chip clears the buttons');
+      assert.ok(m.chipL >= m.cardL && m.btnsR <= m.cardR, 'both sit inside the card');
     });
   }
 

@@ -151,8 +151,9 @@ describe('SPACING-0927 Part A (the frame), measured the Art Director\'s way', { 
       // that used to be named here are gone: the page has no box left.)
       narrowColumnWrapperSelectors: new Set(['div.page-hero-content']),
       // Design rebuild: a band is a section with no heading that holds one row of figures. The homepage's
-      // client band and /for-agents' catalog figures (#catalog-stats) both take the band rhythm.
-      bandSelectors: ['works-with-band', 'catalog-stats'],
+      // client band, /for-agents' catalog figures (#catalog-stats) and /for-builders' figures (#builders-stats)
+      // all take the band rhythm.
+      bandSelectors: ['works-with-band', 'catalog-stats', 'builders-stats'],
     });
   });
 
@@ -177,12 +178,12 @@ describe('SPACING-0927 Part A (the frame), measured the Art Director\'s way', { 
     });
   }
 
-  // ── /how-submissions-work: no boxed section, one rhythm ──
-  // Round 3: the page had three boxed sections (the operator callout, Limits, the live count) among eight
-  // heading-left sections. All three are now set like the others: no card, the heading on the left, the
-  // text on the right. Measured against a section that was never boxed, in the same run.
+  // ── /how-submissions-work: a reading document in the shared 720 frame ──
+  // The hero copy and every section (heading, prose, the table of rows, the live count) sit on one left
+  // edge and in one column, the heading above its text at every width, and no box remains. Every pin is one
+  // measurement compared with another taken in the same run.
   for (const width of WIDTHS) {
-    it(`/how-submissions-work @ ${width}: the three sections that were cards sit on the same heading and text edges as every other section, and no box remains`, async (t) => {
+    it(`/how-submissions-work @ ${width}: the hero copy and every section share one left edge and one column, each heading sits above its text, and no box remains`, async (t) => {
       if (bootSkipReason) { t.skip(bootSkipReason); return; }
       if (!playwrightOk) { t.skip('playwright not resolvable'); return; }
       const ctx = await browser.newContext({ viewport: { width, height: HEIGHTS[width] } });
@@ -190,30 +191,87 @@ describe('SPACING-0927 Part A (the frame), measured the Art Director\'s way', { 
       try {
         await page.goto(`${baseUrl}/how-submissions-work`, { waitUntil: 'networkidle' });
         const m = await page.evaluate(() => {
+          const box = (el) => { const r = el.getBoundingClientRect(); return { left: r.left, width: r.width, top: r.top, bottom: r.bottom }; };
           const section = (headingId) => {
             const h = document.getElementById(headingId);
             const sec = h && h.closest('section');
-            const body = sec && sec.querySelector('.trust-prose, .ledger-card-body');
-            return h && body ? { h: h.getBoundingClientRect().left, body: body.getBoundingClientRect().left, hTop: h.getBoundingClientRect().top, bodyTop: body.getBoundingClientRect().top } : null;
+            const body = sec && sec.querySelector('.trust-prose, .ledger-card-body, .trust-table-wrap');
+            return h && body ? { h: box(h), body: box(body) } : null;
           };
+          const headingIds = [...document.querySelectorAll('main section h2')].map((h) => h.id);
           return {
             boxes: document.querySelectorAll('.callout-bordered, .ledger-card').length,
-            reference: section('what-auxilo-is-heading'),
-            former: ['operator-callout-heading', 'limits-heading', 'live-count-heading'].map((id) => [id, section(id)]),
+            hero: { h1: box(document.querySelector('#page-hero-heading')), lede: box(document.querySelector('.page-hero-sub')) },
+            sections: headingIds.map((id) => [id, section(id)]),
+            table: box(document.querySelector('.trust-table-wrap')),
+            tableRows: document.querySelectorAll('.trust-table tbody tr').length,
+            stat: box(document.querySelector('#s7-learnings-count')),
+            counts: ['s7-learnings-count', 's7-unlocks-count'].map((id) => !!document.getElementById(id)),
+            sheetAside: document.querySelectorAll('main .aside-list').length,
           };
         });
         assert.equal(m.boxes, 0, 'no callout or ledger card box remains');
-        assert.ok(m.reference, 'positive control: a section that was never boxed was measured');
-        assert.equal(m.former.length, 3);
-        for (const [id, sec] of m.former) {
-          assert.ok(sec, `${id}: found, with its text beside or under it`);
-          assert.ok(Math.abs(sec.h - m.reference.h) <= 0.5, `${id}: the heading starts at the same left edge as the other sections' (${sec.h} vs ${m.reference.h})`);
-          assert.ok(Math.abs(sec.body - m.reference.body) <= 0.5, `${id}: the text starts at the same left edge as the other sections' (${sec.body} vs ${m.reference.body})`);
+        assert.equal(m.sheetAside, 0, 'no heading-left section is left on the page');
+        assert.equal(m.sections.length, 11, 'positive control: all eleven sections were measured');
+        assert.equal(m.tableRows, 11, 'positive control: the table is still eleven rows');
+        assert.deepEqual(m.counts, [true, true], 'positive control: both live-count figures are still on the page');
+        const edge = m.sections[0][1].h.left;
+        const col = m.sections[0][1].h.width;
+        assert.ok(Math.abs(m.hero.h1.left - edge) <= 0.5, `the hero heading starts at the sections' left edge (${m.hero.h1.left} vs ${edge})`);
+        assert.ok(Math.abs(m.hero.lede.left - edge) <= 0.5, `the hero lede starts at the sections' left edge (${m.hero.lede.left} vs ${edge})`);
+        for (const [id, sec] of m.sections) {
+          assert.ok(sec, `${id}: found, with its text under it`);
+          assert.ok(Math.abs(sec.h.left - edge) <= 0.5, `${id}: the heading starts at the shared left edge (${sec.h.left} vs ${edge})`);
+          assert.ok(Math.abs(sec.body.left - edge) <= 0.5, `${id}: the text starts at the shared left edge (${sec.body.left} vs ${edge})`);
+          assert.ok(Math.abs(sec.h.width - col) <= 0.5 && Math.abs(sec.body.width - col) <= 0.5, `${id}: the heading and the text share one column (${sec.h.width}, ${sec.body.width} vs ${col})`);
+          assert.ok(sec.body.top > sec.h.bottom - 0.5, `${id}: the text sits under the heading at ${width}, never beside it`);
         }
-        for (const [id, sec] of [['reference', m.reference], ...m.former]) {
-          if (width > 1024) assert.ok(sec.body > sec.h && Math.abs(sec.bodyTop - sec.hTop) < 24, `${id}: side by side, the text starts to the right of the heading and level with it`);
-          else assert.ok(sec.bodyTop > sec.hTop, `${id}: stacked, the text sits under the heading`);
+        // the table is at the reading width, not a wider card
+        assert.ok(Math.abs(m.table.left - edge) <= 0.5 && Math.abs(m.table.width - col) <= 0.5, `the table of rows sits in the same column (${m.table.left}, ${m.table.width} vs ${edge}, ${col})`);
+        // the live-count figures start on the same edge
+        assert.ok(Math.abs(m.stat.left - edge) <= 0.5, `the first live figure starts at the shared left edge (${m.stat.left} vs ${edge})`);
+      } finally {
+        await ctx.close();
+      }
+    });
+  }
+
+  // ── /api: each documentation section's heading and intro sit in a 720 column above the material ──
+  // The tables and code panels run the whole content width. The questions keep the heading-left layout.
+  for (const width of WIDTHS) {
+    it(`/api @ ${width}: the heading and intro of each documentation section are a 720 column above the material, and the tables and code panels are as wide as the section's content`, async (t) => {
+      if (bootSkipReason) { t.skip(bootSkipReason); return; }
+      if (!playwrightOk) { t.skip('playwright not resolvable'); return; }
+      const ctx = await browser.newContext({ viewport: { width, height: HEIGHTS[width] } });
+      const page = await ctx.newPage();
+      try {
+        await page.goto(`${baseUrl}/api`, { waitUntil: 'networkidle' });
+        const m = await page.evaluate(() => {
+          const box = (el) => { const r = el.getBoundingClientRect(); return { left: r.left, width: r.width, top: r.top, bottom: r.bottom }; };
+          return {
+            sections: [...document.querySelectorAll('main .doc-stack')].map((stack) => ({
+              id: stack.closest('section').getAttribute('aria-labelledby'),
+              stack: box(stack),
+              head: box(stack.querySelector('.doc-head')),
+              body: box(stack.querySelector('.doc-body')),
+              wide: [...stack.querySelectorAll('.doc-body > .code-block, .doc-body > .doc-card')].map((el) => ({ cls: el.className.split(' ')[0], ...box(el) })),
+            })),
+            faq: (() => { const f = document.querySelector('#faq .aside-list'); return f ? { cols: getComputedStyle(f).gridTemplateColumns.split(' ').length } : null; })(),
+          };
+        });
+        assert.equal(m.sections.length, 5, 'positive control: the five documentation sections were measured');
+        assert.ok(m.sections.every((s) => s.wide.length >= 1), 'positive control: every section has a table or a code panel');
+        for (const sec of m.sections) {
+          assert.ok(sec.head.width <= 720 + 0.5, `${sec.id}: the heading and intro column is at most 720 (${sec.head.width})`);
+          assert.ok(Math.abs(sec.head.left - sec.body.left) <= 0.5, `${sec.id}: the heading, the intro and the material share one left edge`);
+          assert.ok(sec.body.top >= sec.head.bottom, `${sec.id}: the material sits under the heading, never beside it`);
+          assert.ok(Math.abs(sec.body.width - sec.stack.width) <= 0.5, `${sec.id}: the material runs the section's whole content width`);
+          for (const w of sec.wide) assert.ok(Math.abs(w.width - sec.stack.width) <= 0.5, `${sec.id}: a ${w.cls} runs the whole content width (${w.width} vs ${sec.stack.width})`);
+          if (width > 800) assert.ok(sec.head.width < sec.body.width, `${sec.id}: at ${width} the head column is narrower than the material`);
         }
+        // positive control: the questions are the one heading-left section, two columns from 1025 up
+        assert.ok(m.faq, 'the questions section is still heading-left');
+        assert.equal(m.faq.cols, width > 1024 ? 2 : 1);
       } finally {
         await ctx.close();
       }
@@ -327,7 +385,10 @@ describe('SPACING-0927 Part A (the frame), measured the Art Director\'s way', { 
   // Rule 5's beside exemption is pinned per width. A heading is exempt only where the unit after it sits beside
   // it (the heading-left layout, from 1025 up), so every exemption is at 1280 and none at 768 or 375. A new
   // heading-left section changes the number and fails here, on purpose: raise it knowingly, with the report.
-  const BESIDE_EXEMPT_PINNED = { 1280: 17, 768: 0, 375: 0 };
+  // Round 4: /how-submissions-work is a reading document, so its eleven heading-left sections are gone (17 to 6 at 1280).
+  // /api's documentation sections stack their heading over the material and were never counted as beside (their intro
+  // sat under the heading); its questions stay heading-left.
+  const BESIDE_EXEMPT_PINNED = { 1280: 6, 768: 0, 375: 0 };
   it('rule 5: the beside exemption is reported and pinned per width, so a new silent exemption fails', (t) => {
     if (bootSkipReason) { t.skip(bootSkipReason); return; }
     if (!playwrightOk) { t.skip('playwright not resolvable'); return; }

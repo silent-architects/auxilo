@@ -146,9 +146,13 @@ describe('VISION PASS (V-04/V-05): the honest-zero strip is gone from /for-build
     assert.equal((STATIC_HTML.match(/<!--LC-LEARNINGS-CELL-->/g) || []).length, 0, 'the LC-LEARNINGS-CELL marker pair is gone with the cell it wrapped');
   });
 
-  it('positive control: the hero cell (id="lc-learnings-hero", V2 — the catalog count stays the page\'s lead figure) is still present, gold tier, marker-wrapped', () => {
+  it('positive control: the live-count cell (id="lc-learnings-hero", V2 — the catalog count stays the page\'s lead figure) is still present, in the figures band under the hero, marker-wrapped', () => {
     assert.equal((STATIC_HTML.match(/id="lc-learnings-hero"/g) || []).length, 1, 'lc-learnings-hero id appears exactly once');
-    assert.match(STATIC_HTML, /<span class="stat-num pull-stat-num" id="lc-learnings-hero"><\/span>/, 'hero cell still ships EMPTY for server fill, gold tier');
+    // Round 4: the three figures moved out of the hero into a dark band directly under it, laid out as /for-agents' band is.
+    assert.match(STATIC_HTML, /<span class="stats-strip-num pull-stat-num" id="lc-learnings-hero"><\/span>/, 'the cell still ships EMPTY for server fill');
+    const bandStart = STATIC_HTML.indexOf('<section id="builders-stats" class="on-dark">');
+    assert.ok(bandStart > STATIC_HTML.indexOf('<section id="builders-hero"'), 'the band comes after the hero');
+    assert.ok(STATIC_HTML.indexOf('id="lc-learnings-hero"') > bandStart && STATIC_HTML.indexOf('id="lc-learnings-hero"') < STATIC_HTML.indexOf('</section>', bandStart), 'the live-count span sits inside the band');
     assert.match(STATIC_HTML, /<!--LC-LEARNINGS-HERO-CELL-->[\s\S]*?id="lc-learnings-hero">[\s\S]*?<!--\/LC-LEARNINGS-HERO-CELL-->/, 'hero cell still wrapped in its own markers');
   });
 
@@ -219,32 +223,36 @@ describe('VISION PASS (V-29/P-3): the surviving hero row — new caption text, n
     assert.doesNotMatch(STATIC_HTML, /direct share \(60% via discovery\)/, 'the old caption must be gone');
     assert.match(
       STATIC_HTML,
-      /<span class="stat-num pull-stat-caption">70%<\/span>\s*<span class="stat-label pull-stat-caption">of the price \(60% via search\)<\/span>/,
+      /<span class="stats-strip-num pull-stat-secondary">70%<\/span>\s*<span class="stats-strip-label pull-stat-caption">of the price \(60% via search\)<\/span>/,
       'C-05: the 70% cell\'s caption is the new text, verbatim'
     );
     assert.match(
       STATIC_HTML,
-      /<span class="stat-num pull-stat-caption">under 1 minute<\/span>\s*<span class="stat-label pull-stat-caption">time to connect<\/span>/,
+      /<span class="stats-strip-num pull-stat-secondary">under 1 minute<\/span>\s*<span class="stats-strip-label pull-stat-caption">time to connect<\/span>/,
       'the "under 1 minute" cell is untouched by this pass'
     );
+    // Round 4: the three cells are the figures band's, not the hero's.
     const heroStart = STATIC_HTML.indexOf('<section id="builders-hero"');
     const heroEnd = STATIC_HTML.indexOf('</section>', heroStart);
     const heroSection = STATIC_HTML.slice(heroStart, heroEnd);
-    assert.equal((heroSection.match(/class="builders-hero-stat"/g) || []).length, 3, 'still exactly three stat cells in the hero row');
-    assert.doesNotMatch(heroSection, /\$0\.05/, 'the $0.05 hero figure is still gone (untouched by this pass)');
+    const bandStart = STATIC_HTML.indexOf('<section id="builders-stats" class="on-dark">');
+    const bandSection = STATIC_HTML.slice(bandStart, STATIC_HTML.indexOf('</section>', bandStart));
+    assert.equal((bandSection.match(/class="cat-stat"/g) || []).length, 3, 'exactly three figure cells in the band');
+    assert.equal((heroSection.match(/class="cat-stat"/g) || []).length, 0, 'positive control: the hero itself carries none of them any more');
+    assert.doesNotMatch(heroSection + bandSection, /\$0\.05/, 'the $0.05 figure is still gone (untouched by this pass)');
   });
 
   it('P-3: "Run npx auxilo setup in any terminal. Setup is free." sits directly above .hero-ctas, with the command rendered as code', () => {
     const heroStart = STATIC_HTML.indexOf('<section id="builders-hero"');
     const heroEnd = STATIC_HTML.indexOf('</section>', heroStart);
     const heroSection = STATIC_HTML.slice(heroStart, heroEnd);
-    // Design rebuild: the three numbers are one dark panel beside the copy (after it in the document,
-    // so on a phone it follows the buttons). The setup line now sits directly under the lede and
-    // directly above the buttons, in the copy column.
+    // Round 4: the builder loop drawing sits beside the copy (after it in the document, so on a phone it
+    // follows the buttons), and the three figures are a band under the hero. The setup line sits directly
+    // under the lede and directly above the buttons, in the copy column.
     const subIdx = heroSection.indexOf('<p class="builders-hero-sub">');
-    const statsIdx = heroSection.search(/class="[^"]*\bbuilders-hero-stats\b[^"]*"/);
+    const drawingIdx = heroSection.search(/class="bx"/);
     const ctasIdx = heroSection.indexOf('<div class="hero-ctas">');
-    assert.ok(subIdx > 0 && ctasIdx > subIdx && statsIdx > ctasIdx, 'lede, CTA row and stat panel located, in that order');
+    assert.ok(subIdx > 0 && ctasIdx > subIdx && drawingIdx > ctasIdx, 'lede, CTA row and drawing located, in that order');
     const between = heroSection.slice(heroSection.indexOf('</p>', subIdx) + '</p>'.length, ctasIdx);
     assert.match(between, /^\s*<p class="hero-run">Run\s*<code>npx auxilo setup<\/code>\s*in any terminal\. Setup is free\.<\/p>\s*$/, 'P-3 text sits alone between the lede and the CTA row, command as code');
   });

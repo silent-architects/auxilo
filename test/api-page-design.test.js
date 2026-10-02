@@ -5,7 +5,9 @@
  *
  * Guards the design pass on public/api.html (the /api documentation page):
  *   - a dark hero, then light sections that alternate paper and tint, then a dark close;
- *   - every documentation section is laid heading-left (.aside-list) with the material right;
+ *   - every documentation section puts its heading and intro in a 720 column above the material,
+ *     and the tables and code panels run the full content width (.doc-stack); only the questions
+ *     keep the heading-left layout (.aside-list);
  *   - no inline colour or layout styles in the body, no raw brand-constant colours in the
  *     page's own style block, no weight above 500 on a heading;
  *   - the documentation content survives the re-layout (17 tool rows, 10 code panels, the
@@ -52,10 +54,30 @@ describe('api.html design pass: grounds', () => {
     assert.match(hero, /<p class="lede">/);
   });
 
-  it('the five documentation sections and the FAQ are laid heading-left (.aside-list)', () => {
-    const asides = MAIN.match(/<div class="container aside-list( doc-split)?">/g) || [];
-    assert.equal(asides.length, 6);
-    assert.equal(asides.filter((a) => /doc-split/.test(a)).length, 5, 'five sections carry heading plus intro; the FAQ is heading only');
+  it('the five documentation sections stack their heading and intro over the material (.doc-stack); only the FAQ keeps the heading-left layout (.aside-list)', () => {
+    const stacks = MAIN.match(/<div class="container doc-stack">/g) || [];
+    assert.equal(stacks.length, 5, 'five documentation sections carry heading plus intro over the material');
+    const asides = MAIN.match(/<div class="container aside-list[^"]*">/g) || [];
+    assert.equal(asides.length, 1, 'the questions are the only heading-left section');
+    // positive control: the one heading-left section is the FAQ
+    assert.match(MAIN, /<section id="faq"[^>]*>\s*<div class="container aside-list">/);
+    assert.doesNotMatch(MAIN, /doc-split/, 'the old heading-left documentation layout is gone');
+  });
+
+  it('the heading and intro sit in a 720 column and the material under them is not capped (the tables and code panels run the whole content width)', () => {
+    const head = STYLE.match(/\.doc-head\s*\{([^}]*)\}/);
+    assert.ok(head, 'positive control: the .doc-head rule exists');
+    assert.match(head[1], /max-width:\s*720px/);
+    const stack = STYLE.match(/\.doc-stack\s*\{([^}]*)\}/);
+    assert.ok(stack, 'positive control: the .doc-stack rule exists');
+    assert.match(stack[1], /row-gap:\s*var\(--space-block\)/, 'the head sits 48 above the material');
+    // nothing caps the code panels or the table cards below the full width
+    assert.doesNotMatch(STYLE, /\.doc-body\s*\{[^}]*max-width/);
+    assert.doesNotMatch(STYLE, /\.doc-card\s*\{[^}]*max-width/);
+    assert.doesNotMatch(STYLE, /\.code-block\s*\{[^}]*max-width/);
+    // every doc section opens with its head, then its body, in that order
+    const sections = [...MAIN.matchAll(/<div class="container doc-stack">\s*<div class="doc-head">[\s\S]*?<div class="doc-body">/g)];
+    assert.equal(sections.length, 5);
   });
 });
 

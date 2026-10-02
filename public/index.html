@@ -29,7 +29,7 @@
   <link rel="preload" href="/fonts/ArchivoVariable.cfd841fc.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/NewsreaderDisplay300.a07d3c5c.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=0284e639" />
+  <link rel="stylesheet" href="/styles.css?v=8d9e4176" />
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: Organization + FAQPage -->
@@ -149,14 +149,11 @@
     .hx-1 { left: 0; top: 0; width: 66%; }
     .hx-2 { right: 0; top: 116px; width: 72%; }
     .hx-3 { left: 0; top: 312px; width: 76%; }
-    .hx-4 {
-      right: 0;
-      top: 428px;
-      width: 56%;
-      border-color: rgba(201, 168, 76, 0.55);
-      color: var(--aurum);
-    }
-    .hx-4 .dw-cap { color: var(--aurum); }
+    .hx-4 { right: 0; top: 428px; width: 56%; }
+    /* the earnings panel is an ordinary dark panel: only its marker, its ledger and the last leg are gold */
+    .hx-4 .dw-node { color: var(--aurum); }
+    .hx-4 .dw-ledger { margin-top: var(--space-tight); }
+    .hx-1-row { margin-top: var(--space-tight); }
     .hx-thread {
       position: absolute;
       inset: 0;
@@ -221,8 +218,7 @@
     /* ── You Control What Publishes: the page's one wide section, so the scroll runs split,
        wide, split. The copy sits in a 60ch column; 48 below it, one product window runs the
        full content width. At 900 and down it stays one panel, the chips wrap and the rows
-       stack. The kill-switch chip sits in the window's bottom right corner, inside its
-       padding, so it is inside the content edge at every width. ── */
+       stack. The kill switch is the sentence above the window, so the window carries no chip. ── */
     #setup-detail > .container { display: grid; gap: var(--space-block); }
     .setup-copy { max-width: 60ch; }
     .setup-copy p + p { margin-top: var(--space-body); }
@@ -248,13 +244,20 @@
     .dw-window .dw-title { font-size: 16px; }
     .dw-window-lines { max-width: 560px; margin-top: var(--space-body); }
     .dw-window-row .dw-btns { flex: none; margin-top: 0; }
-    .dw-window-foot {
+
+    /* ── The step cards' drawings: card 2 is one small review card ── */
+    .step-review-head {
       display: flex;
-      justify-content: flex-end;
-      padding: 0 var(--space-copy) var(--space-copy);
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-tight);
     }
-    /* in flow inside the window, and without the dark panel's shadow, which would smear on the white */
-    .dw-window-foot > .dw-panel { position: static; box-shadow: none; }
+    .step-review-head .dw-btns { flex: none; margin-top: 0; }
+    .step-review .dw-btn { padding: 8px 10px; font-size: 12px; }
+    .step-review-lines { margin-top: var(--space-body); }
+
+    /* the recall drawing's outline card: its lines sit one body gap under the chip */
+    .dw-found-lines { margin-top: var(--space-body); }
 
     /* ── Motion: inside the exchange only, once, on load, and over by 1.9 seconds. Each leg of
        the thread draws just before the panel it leads to rises: a panel starts to rise about
@@ -283,18 +286,23 @@
       }
     }
 
+    /* ── 901 to 1100: the two hero columns share the width evenly, so the exchange keeps the
+       width its panels were drawn for ── */
+    @media (min-width: 901px) and (max-width: 1100px) {
+      #hero .hero-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-card); }
+    }
+
     /* ── 900 and down: the window's rows stack, the buttons under the text ── */
     @media (max-width: 900px) {
       .dw-window-row { flex-direction: column; gap: var(--space-body); }
     }
 
-    /* ── 1024 and down: the client band stacks and the exchange keeps its drawn size ── */
+    /* ── 1024 and down: the client band stacks ── */
     @media (max-width: 1024px) {
       .ww-band-wrap { grid-template-columns: 1fr; gap: var(--space-body); }
       .ww-band-eyebrow { grid-row: auto; padding-top: 0; margin-bottom: var(--space-tight); }
       .ww-band-link { grid-column: 1; }
       .ww-band-grid { justify-content: flex-start; }
-      .hx { max-width: 520px; }
     }
 
     /* ── 480 and down: a tighter first screen, the exchange stacks, the client names take two columns ── */
@@ -302,10 +310,10 @@
       .dw-window-head,
       .dw-window-cats,
       .dw-window-row { padding: var(--space-body); }
-      .dw-window-foot { padding: 0 var(--space-body) var(--space-body); }
       .hero-sub { font-size: 17px; }
-      .hero-install { margin-top: var(--space-copy); }
-      .hero-setup-note { margin-top: var(--space-tight); font-size: 14px; }
+      .hero-install { margin-top: var(--space-body); }
+      #hero-setup-snippet pre { line-height: 1.5; }
+      .hero-setup-note { margin-top: var(--space-tight); font-size: 14px; line-height: 1.5; }
       .hero-setup-note + .hero-setup-note { margin-top: var(--space-micro); }
       .hx { height: auto; display: grid; gap: var(--space-copy); }
       .hx .dw-panel { position: relative; top: auto; right: auto; left: auto; width: auto; }
@@ -326,6 +334,12 @@
       }
       .hx-3::after { background: var(--aurum); }
       .ww-band-grid { display: grid; grid-template-columns: 1fr 1fr; }
+    }
+
+    /* ── 360 and down: the review card in step 2 stacks its chip over its buttons and drops its lines ── */
+    @media (max-width: 360px) {
+      .step-review-head { flex-direction: column; align-items: flex-start; }
+      .step-review-lines { display: none; }
     }
 </style>
 </head>
@@ -390,7 +404,7 @@
       <svg class="hx-thread" viewBox="0 0 100 508" preserveAspectRatio="none" aria-hidden="true"><path class="hx-leg-1" vector-effect="non-scaling-stroke" d="M5.1 118 L5.1 136 C5.1 140 5.9 142.1 7.2 142.1 L28.2 142.1"/><path class="hx-leg-2" vector-effect="non-scaling-stroke" d="M89 300 L89 333 C89 336.5 88.2 338.1 86.8 338.1 L75.8 338.1"/><path class="hx-leg-3" vector-effect="non-scaling-stroke" d="M5.1 418 L5.1 449 C5.1 452.5 5.9 454.1 7.2 454.1 L44.2 454.1"/></svg>
       <div class="dw-panel dw-dark hx-1">
         <div class="dw-cap"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 0.5 L11.5 6 L6 11.5 L0.5 6 Z"/></svg>Your agent solves a problem</div>
-        <div class="dw-term" style="margin-top:var(--space-body)"><span class="dw-sk w85"></span><span class="dw-sk w55"></span><span class="dw-sk w70"></span><span class="dw-sk w40 lit"></span></div>
+        <div class="dw-term" style="margin-top:var(--space-body)"><span class="dw-sk w85"></span><span class="dw-sk w55"></span><div class="dw-row hx-1-row"><span class="dw-chip">code-execution</span><span class="dw-sk lit"></span></div></div>
       </div>
       <div class="dw-panel dw-light hx-2">
         <div class="dw-cap"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 0.5 L11.5 6 L6 11.5 L0.5 6 Z"/></svg>You publish the learning</div>
@@ -407,7 +421,7 @@
       </div>
       <div class="dw-panel dw-dark hx-4">
         <div class="dw-cap"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 0.5 L11.5 6 L6 11.5 L0.5 6 Z"/></svg>Your earnings accrue</div>
-        <div class="dw-ledger"><div class="dw-row"><span class="dw-tick"></span><span class="dw-sk"></span><span class="dw-amt"></span></div></div>
+        <div class="dw-ledger"><div class="dw-row"><span class="dw-tick"></span><span class="dw-rowlabel">Earnings</span><span class="dw-sk"></span><span class="dw-amt"></span></div></div>
       </div>
     </div>
   </div>
@@ -450,7 +464,6 @@
       <div class="dw-window-row">
         <div class="dw-window-text"><span class="dw-chip">storage-state</span><span class="dw-title">Pinecone upsert requires vectors array not a single vector object</span><div class="dw-window-lines"><span class="dw-sk w85"></span><span class="dw-sk w30"></span></div></div>
       </div>
-      <div class="dw-window-foot"><div class="dw-panel dw-dark dw-kill"><pre>npx auxilo disable</pre></div></div>
     </div>
   </div>
 </section>
@@ -464,7 +477,8 @@
     </div>
     <div class="dw-stage dw-stage-dark pair-art" aria-hidden="true">
       <div class="dw-term">
-        <span class="dw-sk w85"></span><span class="dw-sk w55"></span><span class="dw-sk w70"></span><span class="dw-sk w40"></span><span class="dw-sk w85"></span><span class="dw-sk w30"></span>
+        <span class="dw-sk w85"></span><span class="dw-sk w55"></span><span class="dw-sk w70"></span>
+        <div class="dw-row" style="margin-top:var(--space-tight)"><span class="dw-tool">auxilo_contribute</span><span class="dw-sk lit" style="max-width:38%"></span></div>
         <div class="dw-panel dw-light" style="margin-top:var(--space-copy)">
           <span class="dw-chip">storage-state</span>
           <span class="dw-title" style="font-size:16px">JSONL is better than JSON arrays for append-heavy logs on minimal VMs</span>
@@ -485,10 +499,10 @@
     <div class="dw-stage pair-art" aria-hidden="true">
       <div class="dw-twoup">
         <div class="dw-panel dw-dark dw-long dw-term"><span class="dw-sk w85"></span><span class="dw-sk w55"></span><span class="dw-sk w100"></span><span class="dw-sk w70"></span><span class="dw-sk w40"></span><span class="dw-sk w85"></span><span class="dw-sk w55"></span><span class="dw-sk w70"></span><span class="dw-sk w100"></span><span class="dw-sk w30"></span><span class="dw-sk w85"></span><span class="dw-sk w40 lit"></span>
-          <div class="dw-panel dw-light dw-found"><span class="dw-chip">storage-state</span><span class="dw-title">JSONL is better than JSON arrays for append-heavy logs on minimal VMs</span></div>
+          <div class="dw-panel dw-outline dw-found"><span class="dw-chip">storage-state</span><div class="dw-found-lines"><span class="dw-sk w100"></span><span class="dw-sk w55"></span></div></div>
         </div>
         <div class="dw-panel dw-dark dw-term"><div class="dw-row"><span class="dw-tool">auxilo_knowledge</span></div>
-          <div class="dw-panel dw-light dw-found"><span class="dw-chip">storage-state</span><span class="dw-title">JSONL is better than JSON arrays for append-heavy logs on minimal VMs</span></div>
+          <div class="dw-panel dw-light dw-found"><span class="dw-chip">storage-state</span><span class="dw-title">Pinecone upsert requires vectors array not a single vector object</span></div>
         </div>
       </div>
     </div>
@@ -509,14 +523,14 @@
         </div>
       </div>
       <div class="step" role="listitem">
-        <div class="step-art" aria-hidden="true"><div class="dw-term"><div class="dw-row"><span class="dw-tool">auxilo_knowledge</span></div><span class="dw-sk w85 lit" style="margin-top:var(--space-body)"></span><span class="dw-sk w55 lit"></span></div></div>
+        <div class="step-art" aria-hidden="true"><div class="dw-panel dw-light step-review"><div class="step-review-head"><span class="dw-chip">code-execution</span><div class="dw-btns"><span class="dw-btn primary">Approve</span><span class="dw-btn ghost">Reject</span></div></div><div class="step-review-lines"><span class="dw-sk w100"></span><span class="dw-sk w70"></span></div></div></div>
         <div class="step-body">
           <h3>Your Agent Stops Re-Solving It</h3>
           <p>Any agent signed in to your Auxilo account can ask for what you published and get it free, in any later session.</p>
         </div>
       </div>
       <div class="step" role="listitem">
-        <div class="step-art" aria-hidden="true"><div class="dw-ledger" style="margin:0"><div class="dw-row"><span class="dw-tick"></span><span class="dw-sk"></span><span class="dw-amt"></span></div><div class="dw-row"><span class="dw-tick"></span><span class="dw-sk"></span><span class="dw-amt" style="width:30px"></span></div><div class="dw-row"><span class="dw-tick"></span><span class="dw-sk"></span><span class="dw-amt" style="width:52px"></span></div></div></div>
+        <div class="step-art" aria-hidden="true"><div class="dw-ledger" style="margin:0"><div class="dw-row"><span class="dw-tick"></span><span class="dw-rowlabel">Earnings</span><span class="dw-sk"></span><span class="dw-amt"></span></div><div class="dw-row"><span class="dw-tick"></span><span class="dw-rowlabel">Earnings</span><span class="dw-sk"></span><span class="dw-amt" style="width:30px"></span></div><div class="dw-row"><span class="dw-tick"></span><span class="dw-rowlabel">Earnings</span><span class="dw-sk"></span><span class="dw-amt" style="width:52px"></span></div></div></div>
         <div class="step-body">
           <h3>You Earn When Agents Unlock</h3>
           <p>When another agent unlocks your learning, you earn 70% of the listed price, or 60% when Auxilo search surfaced it. Your earnings remain payable to you under the Terms, and <a href="/status">withdrawals open soon</a>. Earnings depend on whether other agents unlock your learnings and are not guaranteed. You never send an invoice.</p>

@@ -9,8 +9,8 @@
  *     smooth scrolling off under reduced motion, a focused code scroller's ring drawn inside its box
  *   - reading pages share one frame: the hero copy and the body start on the same left edge, the legal pages' edge
  *   - a block label that acts as a section heading is the serif at 30px
- *   - the homepage's wide section: copy in a 60ch column, 48 under it one window the full content width, the kill
- *     switch chip inside its bottom right corner at every width, the rows stacked at 900 and down
+ *   - the homepage's wide section: copy in a 60ch column, 48 under it one window the full content width, no kill
+ *     switch chip in the window (the sentence above it names the command), the rows stacked at 900 and down
  *   - the homepage band label, closing note and footer links: no lone word, 44px and 24px targets on a phone
  *
  * Runner: node --test test/shared-sheet-r3.test.js
@@ -307,7 +307,7 @@ describe('shared sheet, round 3: the render', { timeout: 240_000 }, () => {
 
   // ── the homepage's wide section ──
   for (const width of [1280, 768, 375]) {
-    it(`homepage @ ${width}: copy in a 60ch column, 48 under it one window the full content width, the kill-switch chip inside its bottom right corner`, async (t) => {
+    it(`homepage @ ${width}: copy in a 60ch column, 48 under it one window the full content width, and no kill-switch chip in the window`, async (t) => {
       const m = await at(t, width, '/', (page) => page.evaluate(() => {
         const box = (el) => { const r = el.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width, h: r.height }; };
         const sec = document.querySelector('#setup-detail');
@@ -315,7 +315,7 @@ describe('shared sheet, round 3: the render', { timeout: 240_000 }, () => {
         const cc = getComputedStyle(container);
         const copy = box(sec.querySelector('.setup-copy'));
         const win = sec.querySelector('.dw-window');
-        const chip = box(win.querySelector('.dw-kill'));
+        const chipCount = win.querySelectorAll('.dw-kill, .dw-window-foot, pre').length;
         const probe = document.createElement('i');
         probe.style.display = 'block'; probe.style.width = '60ch'; probe.style.fontSize = getComputedStyle(sec.querySelector('.setup-copy p')).fontSize; probe.style.fontFamily = getComputedStyle(sec.querySelector('.setup-copy p')).fontFamily;
         sec.appendChild(probe);
@@ -328,7 +328,7 @@ describe('shared sheet, round 3: the render', { timeout: 240_000 }, () => {
         return {
           container: box(container),
           padL: parseFloat(cc.paddingLeft), padR: parseFloat(cc.paddingRight),
-          copy, ch60, win: box(win), chip,
+          copy, ch60, win: box(win), chipCount, pagePres: document.querySelectorAll('pre').length,
           gap: win.getBoundingClientRect().top - copy.b,
           token: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--space-block')),
           catLines: new Set(cats).size,
@@ -344,9 +344,8 @@ describe('shared sheet, round 3: the render', { timeout: 240_000 }, () => {
       assert.ok(Math.abs(m.win.l - contentL) <= 0.5 && Math.abs(m.win.r - contentR) <= 0.5, `the window runs the full content width (${m.win.l}-${m.win.r} against ${contentL}-${contentR})`);
       assert.ok(m.copy.w <= m.ch60 + 0.5, `the copy column (${m.copy.w}) is at most 60ch (${m.ch60})`);
       assert.ok(Math.abs(m.gap - m.token) <= 0.5, `the window sits one --space-block (${m.token}) under the copy, found ${m.gap}`);
-      assert.ok(m.chip.r <= m.win.r - 16 + 0.5 && m.chip.b <= m.win.b - 16 + 0.5, 'the chip is inside the window\'s corner, 16 or more in from both edges');
-      assert.ok(m.chip.r <= contentR + 0.5, 'and inside the content edge');
-      assert.ok(m.chip.l >= m.win.l, 'positive control: the chip is wholly inside the window on the left too');
+      assert.ok(m.pagePres > 0, 'positive control: the page has command blocks, so the selector can find one');
+      assert.equal(m.chipCount, 0, 'the window carries no kill-switch chip and no command block (the sentence above it names the command)');
       assert.equal(m.rows, 3, 'three queue rows');
       assert.ok(m.sw <= width, 'no sideways scroll');
       assert.ok(m.maxTitle <= m.win.r, 'no title runs out of the window');

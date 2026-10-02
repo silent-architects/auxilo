@@ -405,11 +405,13 @@ describe('ASK-WAVE treatment tests', { timeout: 120_000 }, () => {
             const cs = getComputedStyle(el);
             return { color: cs.color, backgroundColor: cs.backgroundColor, size: parseFloat(cs.fontSize) };
           };
-          const hero = document.querySelector('#builders-hero');
+          // Round 4: the three figures are the dark band directly under the hero.
+          const band = document.querySelector('#builders-stats');
           return {
-            first: one(hero.querySelector('.pull-stat-num')),
-            // the second figure, 70%, is the first row that carries no live id
-            second: one(hero.querySelector('.stat-num.pull-stat-caption')),
+            first: one(band.querySelector('.pull-stat-num')),
+            // the second figure, 70%, is the first one that carries no live id
+            second: one(band.querySelector('.pull-stat-secondary')),
+            vw: window.innerWidth,
           };
         });
         assert.ok(figs.first, '.pull-stat-num not found on /for-builders');
@@ -420,7 +422,9 @@ describe('ASK-WAVE treatment tests', { timeout: 120_000 }, () => {
           assert.notEqual(figs.first.color, gold, `.pull-stat-num text colour at ${viewport.name} is the gold token ${gold}, but a gold button is on screen`);
         }
         assert.equal(figs.first.color, figs.second.color, `.pull-stat-num shares its neighbour figure's colour at ${viewport.name}`);
-        assert.equal(figs.first.size, 34, `the hero figures are 34px so the h1 leads, at ${viewport.name}`);
+        // The band's figures scale with the window exactly as /for-agents' band does: 3.4vw, held between 30 and 44.
+        assert.equal(figs.first.size, Math.min(44, Math.max(30, figs.vw * 0.034)), `the band figures scale from 30 to 44 so the h1 leads, at ${viewport.name}`);
+        assert.equal(figs.first.size, figs.second.size, `the live figure and its neighbour are one size at ${viewport.name}`);
         assert.notEqual(figs.first.backgroundColor, aurum, `.pull-stat-num background at ${viewport.name} unexpectedly equals solid --aurum`);
         assert.notEqual(figs.first.backgroundColor, aurumHi, `.pull-stat-num background at ${viewport.name} unexpectedly equals solid --aurum-hi`);
 

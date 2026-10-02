@@ -29,7 +29,7 @@
   <link rel="preload" href="/fonts/ArchivoVariable.cfd841fc.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/NewsreaderDisplay300.a07d3c5c.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=0284e639" />
+  <link rel="stylesheet" href="/styles.css?v=8d9e4176" />
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: Organization + FAQPage -->
@@ -93,7 +93,7 @@
 
   <style>
     /* API page only. Grounds, type, the dark code panels, buttons, the questions list and
-       the heading-left layout (.aside-list) come from the shared sheet. This block holds
+       the heading-left layout (.aside-list, kept here for the questions only) come from the shared sheet. This block holds
        what a documentation page adds: the ruled step rows, the table card, the field and
        tool rows, the a2a card and the response envelope. Colours come only from the
        ground-aware tokens and every gap is a step of the spacing scale. */
@@ -111,8 +111,18 @@
       overflow-wrap: anywhere;
     }
 
-    /* ── Documentation block: heading and intro in the left third, the material in the right ── */
-    .doc-head { min-width: 0; }
+    /* ── Documentation block: the heading and its intro in a 720 column, the material under
+       them at the full content width (tables and code panels run the whole 1100). A heading
+       sits 24 above its intro, and the head sits 48 above the material. ── */
+    .doc-stack {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      row-gap: var(--space-block);
+    }
+    .doc-head {
+      min-width: 0;
+      max-width: 720px;
+    }
     .doc-intro {
       font-size: 16px;
       line-height: 1.65;
@@ -129,7 +139,10 @@
     .doc-body > .doc-label { margin-top: var(--space-block); }
     .doc-body > .doc-label + * { margin-top: var(--space-body); }
 
+    /* Running text keeps a reading measure at the full width: rules, tables and code run the
+       1100, the sentences beside and under them stop at 720. */
     .doc-note {
+      max-width: 720px;
       font-size: 14px;
       line-height: 1.55;
       color: var(--fg-3);
@@ -161,6 +174,7 @@
     }
     .qs-body { min-width: 0; }
     .qs-body p {
+      max-width: 720px;
       font-size: 16px;
       line-height: 1.65;
       color: var(--fg-2);
@@ -247,6 +261,7 @@
       overflow-wrap: anywhere;
     }
     .ann-val {
+      max-width: 720px;
       font-size: 14px;
       line-height: 1.55;
       color: var(--fg-2);
@@ -305,6 +320,7 @@
     .a2a-icon line { stroke: var(--accent-text); }
     .a2a-body { min-width: 0; }
     .a2a-body p {
+      max-width: 720px;
       font-size: 16px;
       line-height: 1.65;
       color: var(--fg-2);
@@ -384,11 +400,6 @@
     .code-block-expand:hover { color: var(--fg-1); background: var(--line); }
     .code-block-expand:focus-visible { outline-offset: -2px; }
     .code-block--envelope.is-expanded .code-block-expand svg { transform: rotate(180deg); }
-
-    /* ── 1024 and down: the heading and its intro sit above the material ── */
-    @media (max-width: 1024px) {
-      .doc-split.aside-list { row-gap: var(--space-card); }
-    }
 
     /* ── 768 and down: the two tables stack into rows, no table scrolls sideways ──
        Each body row becomes a block under the card's padding. The endpoint table keeps the
@@ -511,7 +522,7 @@
 
 <!-- ━━━ Quick Start ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section aria-labelledby="quickstart-heading">
-  <div class="container aside-list doc-split">
+  <div class="container doc-stack">
     <div class="doc-head">
       <h2 id="quickstart-heading" >Quick Start</h2>
       <p class="doc-intro">Start with a free search. Add an API key to unlock from a balance, or pay per request with x402.</p>
@@ -601,7 +612,7 @@ curl -X POST \
 
 <!-- ━━━ REST API ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section class="on-tint" aria-labelledby="rest-api-heading">
-  <div class="container aside-list doc-split">
+  <div class="container doc-stack">
     <div class="doc-head">
       <h2 id="rest-api-heading" >REST API</h2>
       <p class="doc-intro">Comprehensive REST API. Base URL: <code>https://auxilo.io</code>. Full OpenAPI 3.0 specification at <a href="https://auxilo.io/openapi.json" target="_blank" rel="noopener"><code>/openapi.json</code></a>.</p>
@@ -843,7 +854,7 @@ curl -X GET \
 
 <!-- ━━━ Authentication ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section aria-labelledby="auth-heading">
-  <div class="container aside-list doc-split">
+  <div class="container doc-stack">
     <div class="doc-head">
       <h2 id="auth-heading" >Authentication</h2>
       <p class="doc-intro">There are two integration paths, and which one fits depends on how your agent is built. Both run at the same time, so use whichever suits your setup.</p>
@@ -949,7 +960,7 @@ curl -X GET https://auxilo.io/knowledge/abc123 \
 
 <!-- ━━━ MCP Server ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section class="on-tint" aria-labelledby="mcp-heading">
-  <div class="container aside-list doc-split">
+  <div class="container doc-stack">
     <div class="doc-head">
       <h2 id="mcp-heading" >MCP Server</h2>
       <p class="doc-intro">17 tools for Claude, Cursor, and any <abbr title="Model Context Protocol, how agents connect to tools">MCP</abbr>-compatible client. Install once, and they are available in every agent session.</p>
@@ -1087,7 +1098,7 @@ AUXILO_API_KEY=axl_… auxilo-mcp</pre>
 
 <!-- ━━━ Agent Card (A2A) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section aria-labelledby="a2a-heading">
-  <div class="container aside-list doc-split">
+  <div class="container doc-stack">
     <div class="doc-head">
       <h2 id="a2a-heading" >Agent Card <abbr title="Agent-to-Agent protocol by Google">(A2A)</abbr></h2>
       <p class="doc-intro">Auxilo exposes a machine-readable agent card at the standard <code>/.well-known/agent.json</code> path. A2A-compatible orchestrators can autodiscover Auxilo's capabilities without manual configuration.</p>

@@ -121,15 +121,18 @@ describe('Wave E fix F2: for-builders hero stat rule scoped to #builders-hero, n
     );
   });
 
-  it('for-builders.html: the top hero strip lives inside #builders-hero; the second (ledger) strip with lc-unlocks is gone entirely (VISION PASS V-04, superseding this row\'s original premise)', () => {
+  it('for-builders.html: the figures strip is the dark band directly under #builders-hero; the second (ledger) strip with lc-unlocks is gone entirely (VISION PASS V-04, superseding this row\'s original premise)', () => {
     const html = readPublic('for-builders.html');
     const heroSection = html.match(/<section id="builders-hero"[\s\S]*?<\/section>/);
     assert.ok(heroSection, '#builders-hero section found');
-    // Design rebuild: the strip is one dark panel (class list "dw-panel dw-dark builders-hero-stats").
-    assert.match(heroSection[0], /class="[^"]*\bbuilders-hero-stats\b[^"]*"/, 'the top strip is inside #builders-hero');
+    // Round 4: the strip is a band of its own, laid out as /for-agents' figures band is, directly after the hero.
+    const band = html.match(/<\/section>\s*(?:<!--[^>]*-->\s*)?(<section id="builders-stats" class="on-dark">[\s\S]*?<\/section>)/);
+    assert.ok(band, 'the figures band is the section right after the hero');
+    assert.ok(html.indexOf(band[1]) > html.indexOf(heroSection[0]) && html.indexOf(band[1]) < html.indexOf(heroSection[0]) + heroSection[0].length + 800, 'the band follows the hero immediately');
     assert.ok(!html.includes('id="lc-unlocks"'), 'the second (ledger) strip no longer exists anywhere on the page — VISION PASS row V-04 cut it, not just moved it');
-    // Positive control: the top strip's own stat cells are still there.
-    assert.equal((heroSection[0].match(/class="builders-hero-stat"/g) || []).length, 3, 'positive control: the top strip\'s three stat cells are still present');
+    // Positive control: the strip's own three figure cells are there, and the hero no longer holds them.
+    assert.equal((band[1].match(/class="cat-stat"/g) || []).length, 3, 'positive control: the strip\'s three figure cells are still present');
+    assert.equal((heroSection[0].match(/class="cat-stat"/g) || []).length, 0, 'the hero holds none of them');
   });
 });
 
