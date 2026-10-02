@@ -5,7 +5,9 @@ each project's own license file, are reproduced below, followed by the OFL
 bodies, differing only in their copyright line).
 
 -----------------------------------------------------------
-Archivo (ArchivoVariable.*.woff2)
+Archivo (ArchivoVariable.*.woff2: the shipped file is instanced to weights
+400 to 600 and subset to Latin and Latin Extended-A from the upstream
+variable font)
 Source: https://github.com/Omnibus-Type/Archivo
 -----------------------------------------------------------
 

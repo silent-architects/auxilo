@@ -4260,7 +4260,7 @@ function renderUnlockEmailPrefsPage(state, token) {
   // in one; this route was the only one missing it.
   // FIX-UNIT-2 V8: skip link, same class and text as every other page's,
   // first element in <body>, pointing at this <main>'s new id.
-  return `<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Stop Unlock Emails | Auxilo</title><link rel="stylesheet" href="/styles.css?v=eba132a8"/>${styleBlock}</head><body><a href="#main" class="skip-to-content">Skip to content</a><main class="unsub-wrap" id="main">${logoRow}${body}</main></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Stop Unlock Emails | Auxilo</title><link rel="stylesheet" href="/styles.css?v=30220da2"/>${styleBlock}</head><body><a href="#main" class="skip-to-content">Skip to content</a><main class="unsub-wrap" id="main">${logoRow}${body}</main></body></html>`;
 }
 
 app.get('/account/email-prefs/unsubscribe', (c) => {
@@ -13491,7 +13491,7 @@ function serveLegalPage(c, filename, title, seo) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>${title} | Auxilo</title>
   ${seoTags}
-  <link rel="stylesheet" href="/styles.css?v=eba132a8"/>
+  <link rel="stylesheet" href="/styles.css?v=30220da2"/>
   <style>
     .legal-wrap{--lw-rhythm:120px;--lw-wide:min(var(--max-w),calc(100vw - 2 * var(--gutter-base)));position:relative;z-index:0;max-width:720px;margin-left:auto;margin-right:auto;font-size:17px;line-height:1.7;overflow-wrap:break-word}
     @media (max-width:900px){.legal-wrap{--lw-rhythm:80px}}

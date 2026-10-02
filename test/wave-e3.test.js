@@ -79,7 +79,7 @@ describe('WAVE-E3 item 6 (design pass): index.html preloads the display serif, n
 
   it('index.html no longer preloads PlexMono500 (positive control: it still preloads ArchivoVariable and PlexMono400)', () => {
     assert.doesNotMatch(INDEX, /PlexMono500/);
-    assert.match(INDEX, /ArchivoVariable\.1b4d984f\.woff2/);
+    assert.match(INDEX, /ArchivoVariable\.[0-9a-f]{8}\.woff2/);
     assert.match(INDEX, /PlexMono400\.0698749e\.woff2/);
   });
 });
@@ -133,7 +133,7 @@ describe('WAVE-E3 item 6 (design pass): how-it-works.html preloads the display s
 
   it('how-it-works.html no longer preloads PlexMono500 (positive control: it still preloads ArchivoVariable and PlexMono400)', () => {
     assert.doesNotMatch(HIW, /PlexMono500/);
-    assert.match(HIW, /ArchivoVariable\.1b4d984f\.woff2/);
+    assert.match(HIW, /ArchivoVariable\.[0-9a-f]{8}\.woff2/);
     assert.match(HIW, /PlexMono400\.0698749e\.woff2/);
   });
 });
@@ -150,7 +150,7 @@ describe('WAVE-E3 item 6 (design pass): for-builders.html preloads the display s
 
   it('for-builders.html no longer preloads PlexMono500 (positive control: it still preloads ArchivoVariable and PlexMono400)', () => {
     assert.doesNotMatch(FB, /PlexMono500/);
-    assert.match(FB, /ArchivoVariable\.1b4d984f\.woff2/);
+    assert.match(FB, /ArchivoVariable\.[0-9a-f]{8}\.woff2/);
     assert.match(FB, /PlexMono400\.0698749e\.woff2/);
   });
 });
@@ -167,7 +167,7 @@ describe('WAVE-E3 item 6 (design pass): for-agents.html preloads the display ser
 
   it('for-agents.html no longer preloads PlexMono500 (positive control: it still preloads ArchivoVariable and PlexMono400)', () => {
     assert.doesNotMatch(FA, /PlexMono500/);
-    assert.match(FA, /ArchivoVariable\.1b4d984f\.woff2/);
+    assert.match(FA, /ArchivoVariable\.[0-9a-f]{8}\.woff2/);
     assert.match(FA, /PlexMono400\.0698749e\.woff2/);
   });
 });
@@ -188,7 +188,7 @@ describe('WAVE-E3 item 6 (design pass): api.html preloads the display serif, not
 
   it('api.html no longer preloads PlexMono500 (positive control: it still preloads ArchivoVariable and PlexMono400)', () => {
     assert.doesNotMatch(API, /PlexMono500/);
-    assert.match(API, /ArchivoVariable\.1b4d984f\.woff2/);
+    assert.match(API, /ArchivoVariable\.[0-9a-f]{8}\.woff2/);
     assert.match(API, /PlexMono400\.0698749e\.woff2/);
   });
 });
@@ -205,7 +205,7 @@ describe('WAVE-E3 item 6 (design pass): pricing.html preloads the display serif,
 
   it('pricing.html no longer preloads PlexMono500 (positive control: it still preloads ArchivoVariable and PlexMono400)', () => {
     assert.doesNotMatch(PRICING, /PlexMono500/);
-    assert.match(PRICING, /ArchivoVariable\.1b4d984f\.woff2/);
+    assert.match(PRICING, /ArchivoVariable\.[0-9a-f]{8}\.woff2/);
     assert.match(PRICING, /PlexMono400\.0698749e\.woff2/);
   });
 });

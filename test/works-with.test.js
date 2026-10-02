@@ -596,7 +596,7 @@ describe('WORKS-WITH: design rebuild, the card grid as rendered', { timeout: 120
       await page.goto(`${base}/works-with.html`, { waitUntil: 'networkidle' });
       return await page.evaluate(() => {
         const root = getComputedStyle(document.documentElement);
-        const tokens = { tight: parseFloat(root.getPropertyValue('--space-tight')), body: parseFloat(root.getPropertyValue('--space-body')) };
+        const tokens = { tight: parseFloat(root.getPropertyValue('--space-tight')), body: parseFloat(root.getPropertyValue('--space-body')), copy: parseFloat(root.getPropertyValue('--space-copy')) };
         const items = [...document.querySelectorAll('.ww-list > li')];
         const cells = items.map((li, i) => {
           const cs = getComputedStyle(li);
@@ -633,7 +633,7 @@ describe('WORKS-WITH: design rebuild, the card grid as rendered', { timeout: 120
     }
   }
 
-  it('at 375 every card is compact and horizontal: a 28 box on the left level with the name, padding 16, 8 between cards, the three size classes alike', async (t) => {
+  it('at 375 every card is compact and horizontal: a 28 box on the left level with the name, padding 16, 24 between cards, the three size classes alike', async (t) => {
     if (!ok) { t.skip('playwright not resolvable'); return; }
     const m = await measureCompact(375);
     assert.equal(m.cells.length, 19, 'positive control: 19 cards');
@@ -654,7 +654,7 @@ describe('WORKS-WITH: design rebuild, the card grid as rendered', { timeout: 120
       assert.equal(c.labelSize, 13, `${c.size}: the label is 13`);
       assert.equal(c.noteSize, 13, `${c.size}: the note is 13`);
     }
-    for (const c of m.cells.slice(0, -1)) assert.equal(c.gapBelow, m.tokens.tight, 'cards sit --space-tight (8) apart');
+    for (const c of m.cells.slice(0, -1)) assert.equal(c.gapBelow, m.tokens.copy, 'cards sit --space-copy (24) apart, as cards in a grid do on every page');
     for (const key of ['boxW', 'boxH', 'boxLeftInCard', 'nameLeftOfBox', 'nameSize', 'labelSize', 'noteSize']) {
       const vals = [...new Set(m.cells.map((c) => c[key]))];
       assert.equal(vals.length, 1, `all three size classes share one ${key}, got ${vals.join(',')}`);

@@ -117,13 +117,13 @@ describe('WAVE-D1 type pairing: tokens + @font-face', () => {
 
   // Wave D1 fix pass (F3, 2026-09-06): the three font files now ship
   // content-hashed (an 8-hex-char sha256 short-sum inserted before the
-  // extension, e.g. ArchivoVariable.1b4d984f.woff2) so server.js can cache
+  // extension, e.g. ArchivoVariable.cfd841fc.woff2) so server.js can cache
   // them immutably for a year — a byte change forces a new URL. Matchers
   // below are hash-agnostic ([0-9a-f]{8}) so a legitimate future re-hash
   // (the font bytes changing) doesn't require touching this test.
   const HASH = '[0-9a-f]{8}';
 
-  it('three real-font @font-face rules exist (Archivo variable 100-900, IBM Plex Mono 400, Newsreader 300), each on a content-hashed woff2 URL, plus three size-adjust fallback faces; the Plex Mono 500 face is retired', () => {
+  it('three real-font @font-face rules exist (Archivo variable 400-600, IBM Plex Mono 400, Newsreader 300), each on a content-hashed woff2 URL, plus three size-adjust fallback faces; the Plex Mono 500 face is retired', () => {
     const faceBlocks = [...STYLES.matchAll(/@font-face\s*\{([^}]*)\}/g)].map((m) => m[1]);
     // Wave E2 item 11: two synthetic local()-only fallback faces
     // ('Archivo Fallback', 'IBM Plex Mono Fallback') were added alongside
@@ -135,7 +135,10 @@ describe('WAVE-D1 type pairing: tokens + @font-face', () => {
 
     const archivo = faceBlocks.find((b) => /font-family:\s*'Archivo'/.test(b));
     assert.ok(archivo, 'an Archivo @font-face rule exists');
-    assert.match(archivo, /font-weight:\s*100 900/);
+    // The shipped file is the variable font instanced to weights 400 to 600 and subset to Latin plus
+    // Latin Extended-A, so the face declares exactly that range (a request outside it is a defect).
+    assert.match(archivo, /font-weight:\s*400 600\s*;/);
+    assert.doesNotMatch(archivo, /font-weight:\s*100 900/);
     assert.match(archivo, new RegExp(`url\\('\\/fonts\\/ArchivoVariable\\.${HASH}\\.woff2'\\)\\s*format\\('woff2'\\)`));
 
     const plex400 = faceBlocks.find((b) => /font-family:\s*'IBM Plex Mono'/.test(b) && /font-weight:\s*400\b/.test(b));
@@ -164,7 +167,7 @@ describe('WAVE-D1 type pairing: tokens + @font-face', () => {
 
   it('the three self-hosted font files exist on disk (content-hashed names) within the byte ceilings, and the retired Plex Mono 500 file is gone', () => {
     const prefixes = [
-      ['ArchivoVariable', 70 * 1024],
+      ['ArchivoVariable', 40 * 1024],
       ['PlexMono400', 28 * 1024],
       ['NewsreaderDisplay300', 30 * 1024],
     ];
