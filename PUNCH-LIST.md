@@ -1032,15 +1032,29 @@ The money model: a balance is held in dollars, a pack adds what was paid, an unl
 
 > **SITE-PM closed 2026-10-02 on the owner's word.** Production is Fly v152, built from main `9fb2133`. The look and feel of the site belongs to the design session (the Art Director leads, the owner's instruction 2026-10-02). The rows above that named SITE-PM as owner and are still open pass to the owner named in each row. The private handoff carries the detail.
 
+## 38. Site Design and User Experience (2026-10-02)
+
+The owner, 2026-10-02: a separate session for the design and user experience of the website, led by the Art Director, working until the site stands beside the reference sites he named. Logos do not change. Every ruled string stays word for word. Colour, type, graphics, layout, components, navigation design, motion and page structure are open. Nothing reaches production without his word.
+
+Direction: every page opens on a dark first screen and turns to warm paper, each section pairs one claim with a drawing of the real product, display type is a light serif, the triangle mark is the one graphic device, and gold marks the ask.
+
+| ID | Item | Priority | Owner | Status |
+|---|---|---|---|---|
+| DSN-1 | Reference study, audit of the live site against it, one direction chosen, homepage design composed. | P1 | Design session | DONE 2026-10-02 |
+| DSN-2 | Shared stylesheet and homepage rebuilt to the direction on branch `design/site-1002`. | P1 | Design session | IN BUILD |
+| DSN-3 | Every other public page, the legal page template, the dashboard and its sign-in screen, the two emails and the share image carried to the same direction. Closes SLW-22. | P1 | Design session | OPEN |
+| DSN-4 | Proof: every page rendered at 1280, 768 and 375, side by side sheets against the references, an independent review on written principles, accessibility audit with measured contrast, page weight and paint no worse than v152, spacing measured by test. | P1 | Design session | OPEN |
+| DSN-5 | Release: full battery in a fresh clone, boot check on a copy of the production backup, the owner's word, deploy, verify live, CI read. | P1 | Design session + Tyler | OPEN |
+
 ## Counts
 
 | Priority | Open | On Hold | Deferred | Done/Verified | Total |
 |----------|------|---------|----------|---------------|-------|
 | P0 (blocks launch) | **1** | 0 | 0 | **34** | 35 |
-| P1 (blocks real money / production) | **22** | 6 | 2 | 89 | 119 |
+| P1 (blocks real money / production) | **26** | 6 | 2 | 90 | 124 |
 | P2 (blocks scale) | **35** | 1 | 0 | 30 | 66 |
 | P3 (polish) | **6** | 0 | 0 | 6 | 12 |
-| **Total** | **64** | **7** | **2** | **159** | **232** |
+| **Total** | **68** | **7** | **2** | **160** | **237** |
 
 > **Section 37 (SITE-PM, 2026-10-02).** The table includes the 25 rows SLW-1 to SLW-25 (14 P1, 8 P2, 3 P3). SLW-1 to SLW-4 and SLW-17 to SLW-21 are counted done. The other 16 are open.
 
