@@ -483,7 +483,7 @@
     ]
   },
   "/for-builders": {
-    "sectionCount": 8,
+    "sectionCount": 9,
     "headingCounts": {
       "h1": 1,
       "h2": 7,
@@ -544,106 +544,6 @@
         "color": "rgb(250, 250, 248)"
       },
       {
-        "key": "s1.h2[0]",
-        "fontSize": "46px",
-        "fontWeight": "300",
-        "lineHeight": "50.6px",
-        "fontFamily": "Newsreader, \"Newsreader Fallback\", Georgia, serif",
-        "letterSpacing": "-0.736px",
-        "textTransform": "none",
-        "color": "rgb(10, 10, 10)"
-      },
-      {
-        "key": "s1.h3[0]",
-        "fontSize": "19px",
-        "fontWeight": "500",
-        "lineHeight": "24.7px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "-0.19px",
-        "textTransform": "none",
-        "color": "rgb(10, 10, 10)"
-      },
-      {
-        "key": "s1.p[0]",
-        "fontSize": "15px",
-        "fontWeight": "400",
-        "lineHeight": "24px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "normal",
-        "textTransform": "none",
-        "color": "rgb(69, 69, 63)"
-      },
-      {
-        "key": "s1.h3[1]",
-        "fontSize": "19px",
-        "fontWeight": "500",
-        "lineHeight": "24.7px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "-0.19px",
-        "textTransform": "none",
-        "color": "rgb(10, 10, 10)"
-      },
-      {
-        "key": "s1.p[1]",
-        "fontSize": "15px",
-        "fontWeight": "400",
-        "lineHeight": "24px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "normal",
-        "textTransform": "none",
-        "color": "rgb(69, 69, 63)"
-      },
-      {
-        "key": "s1.h3[2]",
-        "fontSize": "19px",
-        "fontWeight": "500",
-        "lineHeight": "24.7px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "-0.19px",
-        "textTransform": "none",
-        "color": "rgb(10, 10, 10)"
-      },
-      {
-        "key": "s1.p[2]",
-        "fontSize": "15px",
-        "fontWeight": "400",
-        "lineHeight": "24px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "normal",
-        "textTransform": "none",
-        "color": "rgb(69, 69, 63)"
-      },
-      {
-        "key": "s1.a[0]",
-        "fontSize": "15px",
-        "fontWeight": "400",
-        "lineHeight": "24px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "normal",
-        "textTransform": "none",
-        "color": "rgb(10, 10, 10)"
-      },
-      {
-        "key": "s1.p[3]",
-        "fontSize": "14px",
-        "fontWeight": "400",
-        "lineHeight": "22.4px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "normal",
-        "textTransform": "none",
-        "color": "rgb(94, 94, 87)"
-      },
-      {
-        "key": "s1.a[1]",
-        "fontSize": "14px",
-        "fontWeight": "400",
-        "lineHeight": "22.4px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "normal",
-        "textTransform": "none",
-        "color": "rgb(10, 10, 10)"
-      },
-      {
         "key": "s2.h2[0]",
         "fontSize": "46px",
         "fontWeight": "300",
@@ -654,14 +554,94 @@
         "color": "rgb(10, 10, 10)"
       },
       {
-        "key": "s2.p[0]",
+        "key": "s2.h3[0]",
         "fontSize": "19px",
+        "fontWeight": "500",
+        "lineHeight": "24.7px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "-0.19px",
+        "textTransform": "none",
+        "color": "rgb(10, 10, 10)"
+      },
+      {
+        "key": "s2.p[0]",
+        "fontSize": "15px",
         "fontWeight": "400",
-        "lineHeight": "29.45px",
+        "lineHeight": "24px",
         "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
         "letterSpacing": "normal",
         "textTransform": "none",
         "color": "rgb(69, 69, 63)"
+      },
+      {
+        "key": "s2.h3[1]",
+        "fontSize": "19px",
+        "fontWeight": "500",
+        "lineHeight": "24.7px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "-0.19px",
+        "textTransform": "none",
+        "color": "rgb(10, 10, 10)"
+      },
+      {
+        "key": "s2.p[1]",
+        "fontSize": "15px",
+        "fontWeight": "400",
+        "lineHeight": "24px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
+        "textTransform": "none",
+        "color": "rgb(69, 69, 63)"
+      },
+      {
+        "key": "s2.h3[2]",
+        "fontSize": "19px",
+        "fontWeight": "500",
+        "lineHeight": "24.7px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "-0.19px",
+        "textTransform": "none",
+        "color": "rgb(10, 10, 10)"
+      },
+      {
+        "key": "s2.p[2]",
+        "fontSize": "15px",
+        "fontWeight": "400",
+        "lineHeight": "24px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
+        "textTransform": "none",
+        "color": "rgb(69, 69, 63)"
+      },
+      {
+        "key": "s2.a[0]",
+        "fontSize": "15px",
+        "fontWeight": "400",
+        "lineHeight": "24px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
+        "textTransform": "none",
+        "color": "rgb(10, 10, 10)"
+      },
+      {
+        "key": "s2.p[3]",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "lineHeight": "22.4px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
+        "textTransform": "none",
+        "color": "rgb(94, 94, 87)"
+      },
+      {
+        "key": "s2.a[1]",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "lineHeight": "22.4px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
+        "textTransform": "none",
+        "color": "rgb(10, 10, 10)"
       },
       {
         "key": "s3.h2[0]",
@@ -675,113 +655,13 @@
       },
       {
         "key": "s3.p[0]",
-        "fontSize": "16px",
-        "fontWeight": "400",
-        "lineHeight": "26.4px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "normal",
-        "textTransform": "none",
-        "color": "rgb(69, 69, 63)"
-      },
-      {
-        "key": "s3.h3[0]",
         "fontSize": "19px",
-        "fontWeight": "500",
-        "lineHeight": "24.7px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "-0.19px",
-        "textTransform": "none",
-        "color": "rgb(10, 10, 10)"
-      },
-      {
-        "key": "s3.p[1]",
-        "fontSize": "16px",
         "fontWeight": "400",
-        "lineHeight": "26.4px",
+        "lineHeight": "29.45px",
         "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
         "letterSpacing": "normal",
         "textTransform": "none",
         "color": "rgb(69, 69, 63)"
-      },
-      {
-        "key": "s3.p[2]",
-        "fontSize": "13px",
-        "fontWeight": "400",
-        "lineHeight": "20.8px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "normal",
-        "textTransform": "none",
-        "color": "rgb(94, 94, 87)"
-      },
-      {
-        "key": "s3.a[0]",
-        "fontSize": "13px",
-        "fontWeight": "400",
-        "lineHeight": "20.8px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "normal",
-        "textTransform": "none",
-        "color": "rgb(10, 10, 10)"
-      },
-      {
-        "key": "s3.button[0]",
-        "fontSize": "13px",
-        "fontWeight": "400",
-        "lineHeight": "normal",
-        "fontFamily": "\"IBM Plex Mono\", \"IBM Plex Mono Fallback\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-        "letterSpacing": "0.65px",
-        "textTransform": "none",
-        "color": "rgb(250, 250, 248)"
-      },
-      {
-        "key": "s3.p[3]",
-        "fontSize": "13px",
-        "fontWeight": "400",
-        "lineHeight": "20.8px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "normal",
-        "textTransform": "none",
-        "color": "rgb(94, 94, 87)"
-      },
-      {
-        "key": "s3.a[1]",
-        "fontSize": "15px",
-        "fontWeight": "500",
-        "lineHeight": "24.75px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "-0.15px",
-        "textTransform": "none",
-        "color": "rgb(10, 10, 10)"
-      },
-      {
-        "key": "s3.button[1]",
-        "fontSize": "13px",
-        "fontWeight": "400",
-        "lineHeight": "normal",
-        "fontFamily": "\"IBM Plex Mono\", \"IBM Plex Mono Fallback\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-        "letterSpacing": "0.65px",
-        "textTransform": "none",
-        "color": "rgb(250, 250, 248)"
-      },
-      {
-        "key": "s3.button[2]",
-        "fontSize": "13px",
-        "fontWeight": "400",
-        "lineHeight": "normal",
-        "fontFamily": "\"IBM Plex Mono\", \"IBM Plex Mono Fallback\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-        "letterSpacing": "0.65px",
-        "textTransform": "none",
-        "color": "rgb(250, 250, 248)"
-      },
-      {
-        "key": "s3.p[4]",
-        "fontSize": "13px",
-        "fontWeight": "400",
-        "lineHeight": "20.8px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "normal",
-        "textTransform": "none",
-        "color": "rgb(94, 94, 87)"
       },
       {
         "key": "s4.h2[0]",
@@ -795,16 +675,36 @@
       },
       {
         "key": "s4.p[0]",
-        "fontSize": "13px",
+        "fontSize": "16px",
         "fontWeight": "400",
-        "lineHeight": "20.8px",
+        "lineHeight": "26.4px",
         "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
         "letterSpacing": "normal",
         "textTransform": "none",
-        "color": "rgb(94, 94, 87)"
+        "color": "rgb(69, 69, 63)"
+      },
+      {
+        "key": "s4.h3[0]",
+        "fontSize": "19px",
+        "fontWeight": "500",
+        "lineHeight": "24.7px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "-0.19px",
+        "textTransform": "none",
+        "color": "rgb(10, 10, 10)"
       },
       {
         "key": "s4.p[1]",
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "lineHeight": "26.4px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
+        "textTransform": "none",
+        "color": "rgb(69, 69, 63)"
+      },
+      {
+        "key": "s4.p[2]",
         "fontSize": "13px",
         "fontWeight": "400",
         "lineHeight": "20.8px",
@@ -814,14 +714,74 @@
         "color": "rgb(94, 94, 87)"
       },
       {
-        "key": "s4.p[2]",
-        "fontSize": "28px",
-        "fontWeight": "300",
-        "lineHeight": "35px",
-        "fontFamily": "Newsreader, \"Newsreader Fallback\", Georgia, serif",
-        "letterSpacing": "-0.336px",
+        "key": "s4.a[0]",
+        "fontSize": "13px",
+        "fontWeight": "400",
+        "lineHeight": "20.8px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
         "textTransform": "none",
         "color": "rgb(10, 10, 10)"
+      },
+      {
+        "key": "s4.button[0]",
+        "fontSize": "13px",
+        "fontWeight": "400",
+        "lineHeight": "normal",
+        "fontFamily": "\"IBM Plex Mono\", \"IBM Plex Mono Fallback\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+        "letterSpacing": "0.65px",
+        "textTransform": "none",
+        "color": "rgb(250, 250, 248)"
+      },
+      {
+        "key": "s4.p[3]",
+        "fontSize": "13px",
+        "fontWeight": "400",
+        "lineHeight": "20.8px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
+        "textTransform": "none",
+        "color": "rgb(94, 94, 87)"
+      },
+      {
+        "key": "s4.a[1]",
+        "fontSize": "15px",
+        "fontWeight": "500",
+        "lineHeight": "24.75px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "-0.15px",
+        "textTransform": "none",
+        "color": "rgb(10, 10, 10)"
+      },
+      {
+        "key": "s4.button[1]",
+        "fontSize": "13px",
+        "fontWeight": "400",
+        "lineHeight": "normal",
+        "fontFamily": "\"IBM Plex Mono\", \"IBM Plex Mono Fallback\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+        "letterSpacing": "0.65px",
+        "textTransform": "none",
+        "color": "rgb(250, 250, 248)"
+      },
+      {
+        "key": "s4.button[2]",
+        "fontSize": "13px",
+        "fontWeight": "400",
+        "lineHeight": "normal",
+        "fontFamily": "\"IBM Plex Mono\", \"IBM Plex Mono Fallback\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+        "letterSpacing": "0.65px",
+        "textTransform": "none",
+        "color": "rgb(250, 250, 248)"
+      },
+      {
+        "key": "s4.p[4]",
+        "fontSize": "13px",
+        "fontWeight": "400",
+        "lineHeight": "20.8px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
+        "textTransform": "none",
+        "color": "rgb(94, 94, 87)"
       },
       {
         "key": "s5.h2[0]",
@@ -835,21 +795,31 @@
       },
       {
         "key": "s5.p[0]",
-        "fontSize": "16px",
+        "fontSize": "13px",
         "fontWeight": "400",
-        "lineHeight": "26.4px",
+        "lineHeight": "20.8px",
         "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
         "letterSpacing": "normal",
         "textTransform": "none",
-        "color": "rgb(69, 69, 63)"
+        "color": "rgb(94, 94, 87)"
       },
       {
-        "key": "s5.a[0]",
-        "fontSize": "16px",
+        "key": "s5.p[1]",
+        "fontSize": "13px",
         "fontWeight": "400",
-        "lineHeight": "26.4px",
+        "lineHeight": "20.8px",
         "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
         "letterSpacing": "normal",
+        "textTransform": "none",
+        "color": "rgb(94, 94, 87)"
+      },
+      {
+        "key": "s5.p[2]",
+        "fontSize": "28px",
+        "fontWeight": "300",
+        "lineHeight": "35px",
+        "fontFamily": "Newsreader, \"Newsreader Fallback\", Georgia, serif",
+        "letterSpacing": "-0.336px",
         "textTransform": "none",
         "color": "rgb(10, 10, 10)"
       },
@@ -864,80 +834,20 @@
         "color": "rgb(10, 10, 10)"
       },
       {
-        "key": "s6.button[0]",
-        "fontSize": "17px",
-        "fontWeight": "500",
-        "lineHeight": "23.8px",
+        "key": "s6.p[0]",
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "lineHeight": "26.4px",
         "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
         "letterSpacing": "normal",
         "textTransform": "none",
-        "color": "rgb(10, 10, 10)"
+        "color": "rgb(69, 69, 63)"
       },
       {
-        "key": "s6.button[1]",
-        "fontSize": "17px",
-        "fontWeight": "500",
-        "lineHeight": "23.8px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "normal",
-        "textTransform": "none",
-        "color": "rgb(10, 10, 10)"
-      },
-      {
-        "key": "s6.button[2]",
-        "fontSize": "17px",
-        "fontWeight": "500",
-        "lineHeight": "23.8px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "normal",
-        "textTransform": "none",
-        "color": "rgb(10, 10, 10)"
-      },
-      {
-        "key": "s6.button[3]",
-        "fontSize": "17px",
-        "fontWeight": "500",
-        "lineHeight": "23.8px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "normal",
-        "textTransform": "none",
-        "color": "rgb(10, 10, 10)"
-      },
-      {
-        "key": "s6.button[4]",
-        "fontSize": "17px",
-        "fontWeight": "500",
-        "lineHeight": "23.8px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "normal",
-        "textTransform": "none",
-        "color": "rgb(10, 10, 10)"
-      },
-      {
-        "key": "s6.button[5]",
-        "fontSize": "17px",
-        "fontWeight": "500",
-        "lineHeight": "23.8px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "normal",
-        "textTransform": "none",
-        "color": "rgb(10, 10, 10)"
-      },
-      {
-        "key": "s6.button[6]",
-        "fontSize": "17px",
-        "fontWeight": "500",
-        "lineHeight": "23.8px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "normal",
-        "textTransform": "none",
-        "color": "rgb(10, 10, 10)"
-      },
-      {
-        "key": "s6.button[7]",
-        "fontSize": "17px",
-        "fontWeight": "500",
-        "lineHeight": "23.8px",
+        "key": "s6.a[0]",
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "lineHeight": "26.4px",
         "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
         "letterSpacing": "normal",
         "textTransform": "none",
@@ -951,10 +861,100 @@
         "fontFamily": "Newsreader, \"Newsreader Fallback\", Georgia, serif",
         "letterSpacing": "-0.736px",
         "textTransform": "none",
+        "color": "rgb(10, 10, 10)"
+      },
+      {
+        "key": "s7.button[0]",
+        "fontSize": "17px",
+        "fontWeight": "500",
+        "lineHeight": "23.8px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
+        "textTransform": "none",
+        "color": "rgb(10, 10, 10)"
+      },
+      {
+        "key": "s7.button[1]",
+        "fontSize": "17px",
+        "fontWeight": "500",
+        "lineHeight": "23.8px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
+        "textTransform": "none",
+        "color": "rgb(10, 10, 10)"
+      },
+      {
+        "key": "s7.button[2]",
+        "fontSize": "17px",
+        "fontWeight": "500",
+        "lineHeight": "23.8px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
+        "textTransform": "none",
+        "color": "rgb(10, 10, 10)"
+      },
+      {
+        "key": "s7.button[3]",
+        "fontSize": "17px",
+        "fontWeight": "500",
+        "lineHeight": "23.8px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
+        "textTransform": "none",
+        "color": "rgb(10, 10, 10)"
+      },
+      {
+        "key": "s7.button[4]",
+        "fontSize": "17px",
+        "fontWeight": "500",
+        "lineHeight": "23.8px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
+        "textTransform": "none",
+        "color": "rgb(10, 10, 10)"
+      },
+      {
+        "key": "s7.button[5]",
+        "fontSize": "17px",
+        "fontWeight": "500",
+        "lineHeight": "23.8px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
+        "textTransform": "none",
+        "color": "rgb(10, 10, 10)"
+      },
+      {
+        "key": "s7.button[6]",
+        "fontSize": "17px",
+        "fontWeight": "500",
+        "lineHeight": "23.8px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
+        "textTransform": "none",
+        "color": "rgb(10, 10, 10)"
+      },
+      {
+        "key": "s7.button[7]",
+        "fontSize": "17px",
+        "fontWeight": "500",
+        "lineHeight": "23.8px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
+        "textTransform": "none",
+        "color": "rgb(10, 10, 10)"
+      },
+      {
+        "key": "s8.h2[0]",
+        "fontSize": "46px",
+        "fontWeight": "300",
+        "lineHeight": "50.6px",
+        "fontFamily": "Newsreader, \"Newsreader Fallback\", Georgia, serif",
+        "letterSpacing": "-0.736px",
+        "textTransform": "none",
         "color": "rgb(250, 250, 248)"
       },
       {
-        "key": "s7.p[0]",
+        "key": "s8.p[0]",
         "fontSize": "17px",
         "fontWeight": "400",
         "lineHeight": "28.05px",
@@ -964,7 +964,7 @@
         "color": "rgb(167, 172, 178)"
       },
       {
-        "key": "s7.button[0]",
+        "key": "s8.button[0]",
         "fontSize": "15px",
         "fontWeight": "600",
         "lineHeight": "normal",
@@ -974,7 +974,7 @@
         "color": "rgb(10, 10, 10)"
       },
       {
-        "key": "s7.p[1]",
+        "key": "s8.p[1]",
         "fontSize": "14px",
         "fontWeight": "400",
         "lineHeight": "23.1px",
@@ -984,7 +984,7 @@
         "color": "rgb(139, 146, 154)"
       },
       {
-        "key": "s7.a[0]",
+        "key": "s8.a[0]",
         "fontSize": "14px",
         "fontWeight": "400",
         "lineHeight": "23.1px",
@@ -994,7 +994,7 @@
         "color": "rgb(167, 172, 178)"
       },
       {
-        "key": "s7.a[1]",
+        "key": "s8.a[1]",
         "fontSize": "14px",
         "fontWeight": "400",
         "lineHeight": "23.1px",
@@ -1004,7 +1004,7 @@
         "color": "rgb(167, 172, 178)"
       },
       {
-        "key": "s7.a[2]",
+        "key": "s8.a[2]",
         "fontSize": "14px",
         "fontWeight": "400",
         "lineHeight": "23.1px",
@@ -1014,7 +1014,7 @@
         "color": "rgb(167, 172, 178)"
       },
       {
-        "key": "s7.a[3]",
+        "key": "s8.a[3]",
         "fontSize": "14px",
         "fontWeight": "400",
         "lineHeight": "23.1px",
@@ -1024,7 +1024,7 @@
         "color": "rgb(167, 172, 178)"
       },
       {
-        "key": "s7.a[4]",
+        "key": "s8.a[4]",
         "fontSize": "14px",
         "fontWeight": "400",
         "lineHeight": "23.1px",
@@ -1034,7 +1034,7 @@
         "color": "rgb(167, 172, 178)"
       },
       {
-        "key": "s7.a[5]",
+        "key": "s8.a[5]",
         "fontSize": "14px",
         "fontWeight": "400",
         "lineHeight": "23.1px",
@@ -3956,11 +3956,11 @@
       },
       {
         "key": "s1.h2[0]",
-        "fontSize": "46px",
+        "fontSize": "30px",
         "fontWeight": "300",
-        "lineHeight": "50.6px",
+        "lineHeight": "36px",
         "fontFamily": "Newsreader, \"Newsreader Fallback\", Georgia, serif",
-        "letterSpacing": "-0.736px",
+        "letterSpacing": "-0.48px",
         "textTransform": "none",
         "color": "rgb(10, 10, 10)"
       },
@@ -3976,11 +3976,11 @@
       },
       {
         "key": "s2.h2[0]",
-        "fontSize": "46px",
+        "fontSize": "30px",
         "fontWeight": "300",
-        "lineHeight": "50.6px",
+        "lineHeight": "36px",
         "fontFamily": "Newsreader, \"Newsreader Fallback\", Georgia, serif",
-        "letterSpacing": "-0.736px",
+        "letterSpacing": "-0.48px",
         "textTransform": "none",
         "color": "rgb(10, 10, 10)"
       },
@@ -3996,11 +3996,11 @@
       },
       {
         "key": "s3.h2[0]",
-        "fontSize": "46px",
+        "fontSize": "30px",
         "fontWeight": "300",
-        "lineHeight": "50.6px",
+        "lineHeight": "36px",
         "fontFamily": "Newsreader, \"Newsreader Fallback\", Georgia, serif",
-        "letterSpacing": "-0.736px",
+        "letterSpacing": "-0.48px",
         "textTransform": "none",
         "color": "rgb(10, 10, 10)"
       },
@@ -4036,11 +4036,11 @@
       },
       {
         "key": "s4.h2[0]",
-        "fontSize": "46px",
+        "fontSize": "30px",
         "fontWeight": "300",
-        "lineHeight": "50.6px",
+        "lineHeight": "36px",
         "fontFamily": "Newsreader, \"Newsreader Fallback\", Georgia, serif",
-        "letterSpacing": "-0.736px",
+        "letterSpacing": "-0.48px",
         "textTransform": "none",
         "color": "rgb(10, 10, 10)"
       },
@@ -4066,11 +4066,11 @@
       },
       {
         "key": "s5.h2[0]",
-        "fontSize": "46px",
+        "fontSize": "30px",
         "fontWeight": "300",
-        "lineHeight": "50.6px",
+        "lineHeight": "36px",
         "fontFamily": "Newsreader, \"Newsreader Fallback\", Georgia, serif",
-        "letterSpacing": "-0.736px",
+        "letterSpacing": "-0.48px",
         "textTransform": "none",
         "color": "rgb(10, 10, 10)"
       },
@@ -4096,11 +4096,11 @@
       },
       {
         "key": "s6.h2[0]",
-        "fontSize": "46px",
+        "fontSize": "30px",
         "fontWeight": "300",
-        "lineHeight": "50.6px",
+        "lineHeight": "36px",
         "fontFamily": "Newsreader, \"Newsreader Fallback\", Georgia, serif",
-        "letterSpacing": "-0.736px",
+        "letterSpacing": "-0.48px",
         "textTransform": "none",
         "color": "rgb(10, 10, 10)"
       },
@@ -4146,11 +4146,11 @@
       },
       {
         "key": "s7.h2[0]",
-        "fontSize": "46px",
+        "fontSize": "30px",
         "fontWeight": "300",
-        "lineHeight": "50.6px",
+        "lineHeight": "36px",
         "fontFamily": "Newsreader, \"Newsreader Fallback\", Georgia, serif",
-        "letterSpacing": "-0.736px",
+        "letterSpacing": "-0.48px",
         "textTransform": "none",
         "color": "rgb(10, 10, 10)"
       },
@@ -4196,11 +4196,11 @@
       },
       {
         "key": "s8.h2[0]",
-        "fontSize": "46px",
+        "fontSize": "30px",
         "fontWeight": "300",
-        "lineHeight": "50.6px",
+        "lineHeight": "36px",
         "fontFamily": "Newsreader, \"Newsreader Fallback\", Georgia, serif",
-        "letterSpacing": "-0.736px",
+        "letterSpacing": "-0.48px",
         "textTransform": "none",
         "color": "rgb(10, 10, 10)"
       },
@@ -4246,11 +4246,11 @@
       },
       {
         "key": "s9.h2[0]",
-        "fontSize": "46px",
+        "fontSize": "30px",
         "fontWeight": "300",
-        "lineHeight": "50.6px",
+        "lineHeight": "36px",
         "fontFamily": "Newsreader, \"Newsreader Fallback\", Georgia, serif",
-        "letterSpacing": "-0.736px",
+        "letterSpacing": "-0.48px",
         "textTransform": "none",
         "color": "rgb(10, 10, 10)"
       },
@@ -4296,11 +4296,11 @@
       },
       {
         "key": "s10.h2[0]",
-        "fontSize": "46px",
+        "fontSize": "30px",
         "fontWeight": "300",
-        "lineHeight": "50.6px",
+        "lineHeight": "36px",
         "fontFamily": "Newsreader, \"Newsreader Fallback\", Georgia, serif",
-        "letterSpacing": "-0.736px",
+        "letterSpacing": "-0.48px",
         "textTransform": "none",
         "color": "rgb(10, 10, 10)"
       },
@@ -4316,11 +4316,11 @@
       },
       {
         "key": "s11.h2[0]",
-        "fontSize": "46px",
+        "fontSize": "30px",
         "fontWeight": "300",
-        "lineHeight": "50.6px",
+        "lineHeight": "36px",
         "fontFamily": "Newsreader, \"Newsreader Fallback\", Georgia, serif",
-        "letterSpacing": "-0.736px",
+        "letterSpacing": "-0.48px",
         "textTransform": "none",
         "color": "rgb(10, 10, 10)"
       },
