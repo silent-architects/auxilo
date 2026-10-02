@@ -27,8 +27,8 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
   <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/NewsreaderDisplay300.a07d3c5c.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="preload" href="/fonts/PlexMono500.0ecb6352.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/styles.css?v=eba132a8" />
   <meta name="theme-color" content="#0A0A0A" />
 
@@ -140,370 +140,239 @@
   </script>
 
   <style>
-    /* ── For Builders Page · page-specific overrides ── */
+    /* For Builders only. Grounds, the drawing kit, the pair and list layouts, the step cards,
+       the questions and the closing ask live in the shared sheet. */
 
-    /* AD sheet 4 item 2: this page rendered three .btn-primary heights
-       (54 / 52 / 49) depending on nested markup (plain link vs. link with
-       a nested <code> vs. a <button> element, each computing line-height
-       differently). Pin to the site's normalized primary height (54px,
-       already the computed height on /, /how-it-works, /for-agents,
-       /pricing, /api) so this page cannot render three. min-height, not
-       height, so a wrapped two-line label on narrow viewports still grows
-       instead of clipping. */
-    .btn-primary {
-      min-height: 54px;
-    }
-
-    /* Hero section for this page */
-    /* SPACING-0927 (BUILD-BRIEF-SPACING.md B-4/A1): a hero takes plain
-       padding like any section -- var(--section-pad) gives the ruled
-       120/80/64 rhythm, top and bottom, no exception. The fixed nav's own
-       clearance is handled once, sitewide, by `main`'s margin-top
-       (styles.css), not by this padding, so #builders-hero's own
-       padding-top reads exactly 120/80/64. Superseded: the 96/24/88 F1 fix
-       and the old --hero-pad-mobile override two rules below (both were
-       compensating for the nav overlap inside this element's own padding;
-       that concern moved to `main`). */
-    #builders-hero {
-      padding: var(--section-pad);
-      position: relative;
-      overflow: hidden;
-    }
-
-    .builders-hero-content {
-      position: relative;
-      z-index: 1;
-      max-width: var(--max-w);
-      margin: 0 auto;
-      width: 100%;
-    }
-
-    #builders-hero h1 {
-      font-size: clamp(38px, 5vw, 56px);
-      font-weight: 700;
-      line-height: 1.1;
-      letter-spacing: -0.02em;
-      color: var(--ivory);
-      max-width: 780px;
-      /* SPACING-0927 R2-2a: heading to the element beneath it is 16px,
-         named by the sheet (was 28). */
-      margin-bottom: var(--space-body);
-    }
+    /* ── Hero: the copy beside the three numbers ── */
+    /* The device (a shared drawing) runs past the hero's edges, so it sits in its own clipping
+       wrapper. The wrapper only clips: it draws nothing and is not a layout box of its own
+       (hidden, with the drawing inside it shown again), so the hero's one real box stays the
+       container. The hero itself stays a plain box (overflow visible) so layout measurement
+       still sees everything inside it. The grid sits above the device. */
+    #builders-hero { position: relative; overflow: visible; }
+    .dw-device-clip { position: absolute; inset: 0; overflow: hidden; pointer-events: none; visibility: hidden; }
+    .dw-device-clip .dw-device { visibility: visible; }
+    #builders-hero .hero-grid { position: relative; z-index: 1; }
 
     .builders-hero-sub {
-      font-size: clamp(16px, 2vw, 19px);
-      font-weight: 400;
-      color: var(--slate-text);
-      max-width: 580px;
-      line-height: 1.65;
-      /* SPACING-0927 R2-2b: 40 rounds up to 48. */
-      margin-bottom: var(--space-block);
+      font-size: 19px;
+      line-height: 1.55;
+      color: var(--fg-2);
+      max-width: 30em;
+      margin-bottom: var(--space-copy);
     }
 
-    .builders-hero-stats {
+    .hero-run {
+      color: var(--fg-2);
+      margin-bottom: var(--space-copy);
+      text-wrap: balance;
+    }
+    .hero-run code { color: var(--fg-1); }
+
+    /* The three numbers: one panel, a row each, the numeral left in the serif and its label
+       right. The live cell keeps its comment markers; when the server drops it, the next row
+       simply starts the panel. */
+    #builders-hero .builders-hero-stats { padding: var(--space-tight) var(--space-copy); }
+    #builders-hero .builders-hero-stat {
       display: flex;
-      gap: 48px;
-      flex-wrap: wrap;
-      margin-bottom: 48px;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: var(--space-body);
+      padding: var(--space-body) 0;
     }
-
-    /* R4-3 (RULING-SEAMS-2026-09-28.md): flex gap and a flex child's own
-       margin don't collapse the way block margins do -- they add. This
-       gap (4px) plus .stat-label's shared .pull-stat-caption margin-top
-       (8px, used sitewide, left alone) measured 12px between the
-       statistic and its label, not on the scale. 12 ties 8/16 -- tie goes
-       to the larger value. Raised to 8px here (scoped to this component
-       only) so 8+8=16, without touching the shared class. */
-    .builders-hero-stat {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .builders-hero-stat .stat-num {
-      font-family: var(--mono);
-      font-size: 28px;
-      font-weight: 600;
-      color: var(--aurum);
+    #builders-hero .builders-hero-stat + .builders-hero-stat { border-top: 1px solid var(--line); }
+    #builders-hero .builders-hero-stats .builders-hero-stat .stat-num,
+    #builders-hero .builders-hero-stats .builders-hero-stat .stat-num.pull-stat-caption {
+      display: block;
+      min-height: 0;
+      margin: 0;
+      flex: none;
+      font-family: var(--serif);
+      font-weight: 300;
+      font-size: clamp(34px, 3.4vw, 44px);
+      line-height: 1;
       letter-spacing: -0.02em;
+      color: var(--fg-1);
+      white-space: nowrap;
+      font-synthesis-weight: none;
     }
-
-    .builders-hero-stat .stat-label {
-      font-size: 13px;
-      color: var(--slate);
-      letter-spacing: 0.02em;
-    }
-
-    /* ── Value Callout ── */
-    .value-callout {
-      max-width: 680px;
-      margin-bottom: 56px;
-      font-size: 17px;
-      line-height: 1.7;
-      color: var(--ash);
-      font-weight: 500;
-      /* SPACING-0927 rule 6: card padding is 32px on all four sides (was 32/40). */
-      padding: var(--space-card);
-      border: 1px solid rgba(201,168,76,0.15);
-      border-radius: 6px;
-      background: rgba(201,168,76,0.04);
-    }
-
-    /* CSS-MECHANICAL (SITE-PERFECT-DEFECT-SHEET-2026-09-06.md, mechanical
-       dispositions table): the page's own forked .tier-cards-grid/.tier-card/
-       .tier-card--active/.tier-card--power/.tier-card-header/.tier-icon/
-       .tier-name/.tier-card .tier-desc/.tier-numbers/.tier-row/
-       .tier-row-highlight .tier-amount/.tier-year/.tier-amount/.tier-annual/
-       .tier-annual-label/.tier-annual-amount block (formerly here, ~110
-       lines) is deleted so this page consumes the shared .tier-* rules in
-       styles.css (Tier Cards (Compounding Earnings) section) instead.
-       Verified dead before deletion: no element in this file's markup
-       carries any tier-card/tier-cards-grid/tier-annual/tier-numbers/etc.
-       class (grep of the rendered body, not just the <style> block, returns
-       zero matches) -- the fork had no DOM consumer, so this deletion
-       changes zero computed styles on the live page.
-    */
-
-    /* ── Line Chart ── */
-    .line-chart-wrap {
-      max-width: 820px;
-      margin: 0 auto 48px;
-    }
-
-    .line-chart-legend {
-      display: flex;
-      gap: 28px;
-      justify-content: center;
-      margin-top: 20px;
-      flex-wrap: wrap;
-    }
-
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 13px;
-      color: var(--slate);
-    }
-
-    .legend-swatch {
-      width: 24px;
-      height: 2px;
-      border-radius: 2px;
-      display: inline-block;
-    }
-
-    /* ── How It Works Steps (inline) ── */
-    #page-how-it-works {
-      background: var(--obsidian);
-    }
-
-    /* LAYOUT-SHEET-ADDENDUM item 3a (B-07 drafting note): footnote-tier
-       treatment, not body copy — 13px/slate matches the page's other
-       footnote-tier strings (.purchase-disclosures p, the math footnote);
-       640px keeps it a measured paragraph, not a full-width band; 32px
-       separates it from the steps grid without reading as its own new
-       section. */
-    .drafting-note {
-      font-size: 13px;
-      color: var(--slate);
-      line-height: 1.6;
-      max-width: 640px;
-      margin-top: 32px;
-    }
-
-    /* ── Earnings Scenario ── */
-    /* SPACING-0927 R2-2b: 28 rounds up to 32. */
-    .earnings-scenario {
-      background: rgba(201,168,76,0.06);
-      border: 1px solid rgba(201,168,76,0.2);
-      border-radius: 6px;
-      padding: 24px var(--space-card);
-      margin-bottom: 0;
-    }
-
-    /* CSS-MECHANICAL (SITE-PERFECT-DEFECT-SHEET-2026-09-06.md, mechanical
-       dispositions table): h3/p font-size were swapped vs the shared rule
-       (styles.css .earnings-scenario h3 { font-size: 14px }, .earnings-scenario
-       p { font-size: 13px }) -- un-swapped below. Every other property
-       (weight, letter-spacing, uppercase, color) is this page's own
-       intentional override, untouched. */
-    .earnings-scenario h3 {
+    #builders-hero .builders-hero-stats .builders-hero-stat .stat-num.pull-stat-num { color: var(--accent-text); }
+    #builders-hero .builders-hero-stats .builders-hero-stat .stat-label {
+      min-width: 0;
+      margin: 0;
       font-size: 14px;
+      line-height: 1.4;
+      letter-spacing: 0;
+      color: var(--fg-3);
+      text-align: right;
+    }
+
+    /* ── How it earns: the three step drawings ── */
+    .st-cmd { font-size: 15px; color: var(--accent-text); }
+    .st-cmd::before { content: '$ '; color: var(--fg-3); }
+    .st-cmd + .dw-sk { margin-top: var(--space-body); }
+    .step-art .st-ledger { margin: 0; }
+    .st-ledger .st-amt-s { width: 30px; }
+    .st-ledger .st-amt-m { width: 52px; }
+    .st-review { padding: var(--space-tight) var(--space-body); }
+    .st-review .dw-title { margin-top: var(--space-micro); }
+    .st-review .dw-btns { margin-top: var(--space-tight); }
+
+    #how-it-earns .steps { margin-bottom: var(--space-card); }
+    .drafting-note {
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--fg-3);
+      max-width: 60ch;
+    }
+
+    /* ── Earnings projection: one learning card, three unlock rows ── */
+    #earnings-projection .lede { text-wrap: pretty; }
+    .eu-skeleton { margin-top: var(--space-body); }
+    .eu-unlocks { margin-top: var(--space-body); display: grid; gap: var(--space-tight); }
+    .eu-tick { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--aurum); }
+
+    /* ── Connect: the claim, the math card and the button beside three code blocks ── */
+    .builders-left .body-copy {
+      max-width: 60ch;
+      line-height: 1.65;
+      margin-bottom: var(--space-copy);
+    }
+
+    /* The math block is a card: padding 32 on all four sides. */
+    .earnings-scenario {
+      margin-top: 0;
+      padding: var(--space-card);
+    }
+    .earnings-scenario h3 {
+      font-size: 19px;
       font-weight: 500;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--aurum);
-      /* SPACING-0927 R2-2a: heading to the element beneath it is 16px,
-         named by the sheet (was 12). */
-      margin-bottom: var(--space-body);
+      letter-spacing: -0.01em;
+      color: var(--fg-1);
     }
-
     .earnings-scenario p {
+      font-family: var(--sans);
+      font-size: 16px;
+      line-height: 1.65;
+      color: var(--fg-2);
+    }
+    .earnings-scenario .earnings-highlight {
+      font-weight: 500;
+      color: var(--accent-text);
+    }
+    .earnings-scenario #math-footnote {
       font-size: 13px;
-      line-height: 1.75;
-      color: var(--slate-text);
+      line-height: 1.6;
+      color: var(--fg-3);
+      margin-top: var(--space-copy);
     }
 
-    .earnings-highlight {
-      color: var(--aurum);
-      font-weight: 600;
+    .connect-cta { margin-top: var(--space-copy); }
+
+    .builders-right .code-note {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--fg-3);
+      margin-top: var(--space-tight);
+    }
+    .builders-right .code-block + .code-block,
+    .builders-right .code-note + .code-block { margin-top: var(--space-body); }
+
+    /* ── What you sell: the live catalog band is one white card ──
+       The server prints the advisory first and then one row per learning inside the band. */
+    .discovery-band {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r-stage);
+      overflow: hidden;
+    }
+    .discovery-band:empty { display: none; }
+    .discovery-advisory {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--fg-3);
+      padding: var(--space-body) var(--space-card);
+      border-bottom: 1px solid var(--line);
+    }
+    .discovery-band .discovery-row {
+      grid-template-columns: 152px minmax(0, 1fr) auto auto;
+      gap: var(--space-body);
+      align-items: center;
+      padding: var(--space-body) var(--space-card);
+      border-bottom: 1px solid var(--line);
+    }
+    .discovery-band .discovery-row:last-child { border-bottom: 0; }
+    .discovery-band .discovery-cat {
+      justify-self: start;
+      max-width: 100%;
+      font-size: 11.5px;
+      line-height: 1;
+      letter-spacing: 0;
+      padding: 5px 8px;
+      border-radius: 4px;
+      background: var(--tint);
+      color: var(--fg-2);
+    }
+    .discovery-band .discovery-price { color: var(--fg-1); }
+    .discovery-band-note { max-width: 640px; }
+
+    .learning-vs-llm {
+      max-width: 22em;
+      margin: var(--space-block) auto 0;
+      font-family: var(--serif);
+      font-size: 28px;
+      font-weight: 300;
+      line-height: 1.25;
+      letter-spacing: -0.012em;
+      text-align: center;
+      text-wrap: balance;
+      color: var(--fg-1);
+      font-synthesis-weight: none;
     }
 
-    /* AD sheet 9: the three headings below dropped their inline
-       font-size/font-weight/color overrides (now the shared section h2
-       rule in styles.css); only the non-size rules they carried survive,
-       moved into scoped CSS. */
-    #earnings-projection h2 { margin-bottom: var(--space-body); }
-    /* SPACING-0927 R2-2a: heading to the element beneath it is 16px, named by the sheet (was 40). */
-    #what-you-sell h2 { margin-bottom: var(--space-body); }
-    /* SPACING-0927 R2-2a: heading to the element beneath it is 16px, named by the sheet (was 48). */
-    #why-builders h2 { margin-bottom: var(--space-body); }
-
-    /* ── FAQ Section ── */
-    #faq {
-      background: var(--obsidian);
+    /* ── Why builders: the review queue drawing, as on the homepage ──
+       The kill switch overhangs the stage by one gap step. The wrapper reserves that step, which
+       keeps the section's space below its last visible thing the same as every other section's. */
+    .rq-panel { padding: var(--space-copy); }
+    .dw-hang { padding-bottom: var(--space-body); }
+    .dw-kill {
+      position: absolute;
+      right: calc(var(--space-tight) * -1);
+      bottom: calc(var(--space-body) * -1);
+      padding: var(--space-tight) var(--space-body);
     }
+    .dw-kill pre { font-family: var(--mono); font-size: 14px; color: var(--fg-1); }
+    .dw-kill pre::before { content: '$ '; color: var(--fg-3); }
 
-    #faq h2 {
-      /* AD sheet 9: font-size/weight/letter-spacing/color now come from the
-         shared section h2 rule in styles.css.
-         SPACING-0927 R2-2a: heading to the element beneath it is 16px,
-         named by the sheet (was 48). */
-      margin-bottom: var(--space-body);
-    }
+    /* ── Questions: a command or a bold phrase inside an answer ── */
+    .faq-answer-inner code { color: var(--fg-1); }
+    .faq-answer-inner strong { color: var(--fg-1); font-weight: 600; }
 
-    /* AD sheet 9: the FAQ accordion component moved to the shared styles.css
-       (.faq-list/.faq-item/.faq-question/.faq-icon/.faq-answer/.faq-answer-inner);
-       the old static .faq-q/.faq-a rules (and the answer-link colour they
-       carried) are gone with the markup — answer links now use the shared
-       .faq-answer-inner a rule, same aurum colour. */
+    /* ── The closing ask: the wrapper adds no gap or margin of its own ── */
+    #footer-cta .footer-ctas { gap: 0; margin-bottom: 0; }
+    #footer-cta .footer-ctas .code-block { width: 100%; }
+    #footer-cta .footer-cta-note { max-width: 480px; text-align: center; }
 
-    /* ── Active nav link (Wave E fix, F4) ── #nav-builders-page's
-       !important aurum override is deleted so E2's shared
-       .nav-links a.active { color: var(--ash) } rule applies instead —
-       this page's current-page link now carries class="active" for that
-       rule to key on (it previously relied on this ID override alone). */
-
-    /* ── Responsive ── */
-    /* CSS-MECHANICAL: the page's own @media (max-width: 900px) .tier-cards-grid
-       override (part of the deleted .tier-* fork above) is removed here too --
-       same dead-selector finding, shared styles.css has its own
-       .tier-cards-grid responsive rule at 768px if the markup is ever added. */
-
-    @media (max-width: 600px) {
-      /* SPACING-0927: #builders-hero's own padding is var(--section-pad) at
-         every width (base rule above already scales to 64px/16px here) --
-         no per-breakpoint override needed. .builders-hero-content carries
-         no padding of its own (matching every sibling *-content wrapper);
-         the body sections it must align with now ALSO have zero .container
-         padding of their own (SPACING-SHEET B0-a), so the two already share
-         one left edge at 16px with no page-local patch. */
-
-      /* AD ruling FB-HERO-STATS-MOBILE, 2026-09-07
-         (~/.auxilo/handoffs/FB-HERO-STATS-MOBILE-CSS-2026-09-07.md) set a
-         3-equal-column grid here. LAYOUT-SHEET 2026-09-26 item 3 REVERSES
-         that part of the ruling: even after this block's font-size cuts,
-         each ~105px-wide column still wrapped "direct share (60% via
-         discovery)" onto 3-4 lines at 375px. The lead stat (257, gold)
-         now spans the full row alone; the two secondary stats ("70%",
-         "under 1 minute") share a 2-column row beneath it, each getting
-         ~155px instead of ~105px. Grid stays 2 columns, not flex --
-         14px column-gap, 10px row-gap (up from 6px, so the lead stat's
-         own row reads as visually separate from the paired row beneath
-         it), 32px margin-bottom. This is now a 2-ROW block, so the old
-         712px .btn-primary-bottom pixel math (measured against the prior
-         1-row/3-column layout) no longer holds. LAUNCH-WAVE-FOR-BUILDERS
-         2026-09-26 (B-01 longer hero sub + B-02 paused-rail cut) re-measured
-         live via the staged server + Playwright at 375x812:
-         #builders-hero .btn-primary top=635.67 / bottom=689.67 (the AD's
-         estimate was "about 606 and 660"; the built page renders ~30px
-         lower, most likely from other concurrent layout-pass commits to
-         shared nav/hero chrome landing in this worktree since the AD's
-         DOM-patched measurement -- these are the true served numbers, not
-         the estimate). At 1280x800: top=735.36 / bottom=789.36. No fold
-         risk at either size (812/800 fold, well clear). The doubled
-         #builders-hero span.pull-stat-num.pull-stat-num selector is
-         DELIBERATE specificity per the original ruling -- do not tidy it
-         to a single class. !important throughout because this
-         page-scoped block must outrank styles.css's shared #builders-hero
-         .builders-hero-stats .builders-hero-stat .stat-num rules at equal
-         specificity (BREAKPOINT-CONSOLIDATION precedent). SPACING-0927
-         NOTE: the "#builders-hero padding-top: 130px" / ".builders-hero-content
-         padding-top: 40px !important" DO NOT TOUCH clause this comment
-         once carried no longer describes the source (both were replaced by
-         the ruled var(--section-pad) rhythm + `main`'s own nav-clearance
-         margin, per BUILD-BRIEF-SPACING.md B-4) -- left here only so the
-         history isn't silently erased. .builders-hero-sub margin-bottom:
-         40px (styles.css, shared) and the base .pull-stat-num/
-         .pull-stat-caption rules are untouched. */
-      /* SPACING-0927 R2-2b: column-gap 14 rounds up to 16, row-gap 10
-         rounds down to 8 (was 14px/10px). */
-      #builders-hero .builders-hero-stats {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        column-gap: var(--space-body);
-        row-gap: var(--space-tight);
-        margin-bottom: 32px !important;
-      }
-      #builders-hero .builders-hero-stats .builders-hero-stat:first-child {
-        grid-column: 1 / -1;
-      }
-      #builders-hero .builders-hero-stats .builders-hero-stat .stat-num {
-        min-height: 0 !important;
-      }
-      #builders-hero span.pull-stat-num.pull-stat-num {
-        font-size: 28px !important; line-height: 1.05 !important;
-      }
-      #builders-hero .builders-hero-stats .builders-hero-stat .stat-num.pull-stat-caption {
-        font-size: 16px !important; line-height: 1.15 !important;
-      }
-      /* R4-3 (RULING-SEAMS-2026-09-28.md): flex gap (.builders-hero-stat's
-         own 8px, R4-3's own fix above) and a flex child's own margin-top
-         add rather than collapse -- this rule's old margin-top
-         (var(--space-micro), 4px) plus that 8px gap measured 12px between
-         the statistic and its label at this breakpoint too, same defect
-         as the desktop reading. 8px here (gap + margin = 8+8=16) matches
-         the ruled value (12 ties 8/16, tie goes to the larger) at every
-         width, not just desktop. */
-      #builders-hero .stat-label {
-        font-size: 11px !important; line-height: 1.32 !important; margin-top: var(--space-tight) !important;
-      }
-    }
-
+    /* ── 700 and down: the shared sheet stacks a row (category, title, then quality and price) ── */
     @media (max-width: 700px) {
-      /* SPACING-0927 R2-2b: 28 rounds up to 32. */
-      .builders-hero-stats {
-        gap: var(--space-card);
+      .discovery-band .discovery-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: start;
       }
-
-      /* SPACING-0927 rule 6: card padding is 32px on all four sides at
-         every width (was 24/20 here); no override needed, the base rule
-         above already applies. */
     }
 
-    /* FIX-UNIT-2 M1: the forced <br> in this heading split "rather" onto
-       its own line at 1280px because the text wrapped a word early before
-       ever reaching the break. Removed (see the h2 markup below); this
-       lets the browser choose the wrap points, and text-wrap: balance
-       keeps the resulting two lines even instead of a short/long pair. */
-    #connect-heading { text-wrap: balance; }
+    /* ── 600 and down: the catalog card takes a narrower side inset ── */
+    @media (max-width: 600px) {
+      .discovery-advisory { padding: var(--space-body) var(--space-copy); }
+      .discovery-band .discovery-row { padding: var(--space-body) var(--space-copy); }
+    }
 
-    /* F3 sweep (coordinator fix, 2026-09-27): every h1/h2 on the listed
-       pages was measured at 375/768/1280. #why-builders-heading left
-       "Publishes" alone at 375px; #how-earns-heading left "publishes."
-       alone at 1280px. No word changes. */
-    #why-builders-heading { text-wrap: balance; }
-    #how-earns-heading { text-wrap: balance; }
-
-    /* FIX-UNIT-2 M1 sweep: #footer-cta-heading's forced <br> left
-       "learning." alone on its own line at 375px (measured: 3 rendered
-       lines). FIX-UNIT-2B H1 correction: this heading is two sentences
-       and removing the <br> let the 375px break land inside the second
-       sentence ("already learning. Your") instead of on the sentence
-       boundary -- put back, with its original leading space. text-wrap:
-       balance stays, so each sentence still wraps evenly on its own. */
-    #footer-cta-heading { text-wrap: balance; }
+    /* ── 480 and down: the kill switch tucks in, each stat row stacks its label under the numeral ── */
+    @media (max-width: 480px) {
+      .dw-kill { right: var(--space-tight); }
+      #builders-hero .builders-hero-stat { flex-direction: column; align-items: flex-start; gap: var(--space-micro); }
+      #builders-hero .builders-hero-stats .builders-hero-stat .stat-label { text-align: left; }
+    }
   </style>
 </head>
 <body>
@@ -543,10 +412,19 @@
 <main id="main">
 
 <!-- ━━━ Section 1: Hero ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
-<section id="builders-hero" aria-labelledby="builders-hero-heading">
-  <div class="builders-hero-content">
-    <h1 id="builders-hero-heading">Build Once. <br>Keep Earning.</h1>
-    <p class="builders-hero-sub">Your agent already works out fixes as it goes, so you write nothing new. Publish those fixes and they come back free when your agent asks Auxilo, signed in to your account. When another agent unlocks one, you earn.</p>
+<section id="builders-hero" class="on-dark" aria-labelledby="builders-hero-heading">
+  <div class="dw-device-clip" aria-hidden="true"><svg class="dw-device" viewBox="0 0 900 860" aria-hidden="true"><polygon class="tri" points="450,40 860,800 40,800"/><line class="bar" x1="450" y1="478" x2="900" y2="478"/></svg></div>
+  <div class="container hero-grid">
+    <div class="builders-hero-content">
+      <h1 id="builders-hero-heading">Build Once. <br>Keep Earning.</h1>
+      <p class="builders-hero-sub">Your agent already works out fixes as it goes, so you write nothing new. Publish those fixes and they come back free when your agent asks Auxilo, signed in to your account. When another agent unlocks one, you earn.</p>
+      <p class="hero-run">Run <code>npx auxilo setup</code> in any terminal. Setup is free.</p>
+
+      <div class="hero-ctas">
+        <a href="/connect" class="btn-primary">Connect Your Agent</a>
+        <a href="/how-it-works" class="btn-secondary">See How It Works</a>
+      </div>
+    </div>
 
     <!-- SITE-PM ruling, hero stat row: one live number leads (the hero's
          live-count span, filled by renderLiveCatalogStats from the SAME
@@ -561,7 +439,7 @@
          write either span's id as a literal attribute inside this comment
          (or any comment on this page): the renderer's substitution regex
          would match it and inject the value as stray page text. -->
-    <div class="builders-hero-stats">
+    <div class="dw-panel dw-dark builders-hero-stats">
       <!--LC-LEARNINGS-HERO-CELL-->
       <div class="builders-hero-stat">
         <span class="stat-num pull-stat-num" id="lc-learnings-hero"></span>
@@ -577,77 +455,80 @@
         <span class="stat-label pull-stat-caption">time to connect</span>
       </div>
     </div>
-
-    <p style="color:var(--slate-text);line-height:1.6;margin-bottom:24px;">Run <code style="font-family:var(--mono);font-size:0.95em;color:var(--aurum);">npx auxilo setup</code> in any terminal. Setup is free.</p>
-
-    <div class="hero-ctas">
-      <a href="/connect" class="btn-primary">Connect Your Agent</a>
-      <a href="/how-it-works" class="btn-secondary">See How It Works</a>
-    </div>
   </div>
 </section>
 
 <!-- ━━━ Section 2: How It Earns (3 Steps) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
-<section id="how-it-earns" class="section-raised" aria-labelledby="how-earns-heading">
+<section id="how-it-earns" aria-labelledby="how-earns-heading">
   <div class="container">
 
     <h2 id="how-earns-heading" >Three steps. One command to set up. Then you decide what publishes.</h2>
 
     <div class="steps">
       <div class="step">
-        <div class="step-header">
-          <span class="step-number">01</span>
+        <div class="step-art" aria-hidden="true"><div class="dw-term"><div class="st-cmd">npx auxilo setup</div><span class="dw-sk w70"></span><span class="dw-sk w55"></span><span class="dw-sk w40 lit"></span></div></div>
+        <div class="step-body">
+          <h3>Connect Your Agent</h3>
+          <p>One command does it. <code>npx auxilo setup</code> detects your client, registers Auxilo, and signs you in. Extraction stays off until you turn it on.</p>
         </div>
-        <h3>Connect Your Agent</h3>
-        <p>One command does it. <code style="font-family:var(--mono);font-size:13px;color:var(--aurum);">npx auxilo setup</code> detects your client, registers Auxilo, and signs you in. Extraction stays off until you turn it on.</p>
       </div>
       <div class="step">
-        <div class="step-header">
-          <span class="step-number">02</span>
+        <div class="step-art" aria-hidden="true"><div class="dw-panel dw-light st-review"><span class="dw-chip">code-execution</span><span class="dw-title">MCP tool inputSchema must use 'object' type at the top level or tools won't appear</span><div class="dw-btns"><span class="dw-btn primary">Approve</span><span class="dw-btn ghost">Reject</span></div></div></div>
+        <div class="step-body">
+          <h3>Keep Working</h3>
+          <p>Once extraction is on, it runs in the background while you work. Nothing your agent extracts goes live without your approval, which you give one learning at a time or in advance in your dashboard.</p>
         </div>
-        <h3>Keep Working</h3>
-        <p>Once extraction is on, it runs in the background while you work. Nothing your agent extracts goes live without your approval, which you give one learning at a time or in advance in your dashboard.</p>
       </div>
       <div class="step">
-        <div class="step-header">
-          <span class="step-number">03</span>
+        <div class="step-art" aria-hidden="true"><div class="dw-ledger st-ledger"><div class="dw-row"><span class="dw-tick"></span><span class="dw-sk"></span><span class="dw-amt"></span></div><div class="dw-row"><span class="dw-tick"></span><span class="dw-sk"></span><span class="dw-amt st-amt-s"></span></div><div class="dw-row"><span class="dw-tick"></span><span class="dw-sk"></span><span class="dw-amt st-amt-m"></span></div></div></div>
+        <div class="step-body">
+          <h3>You Earn When Agents Unlock</h3>
+          <p>When another agent unlocks your learning, you earn 70% of the listed price, or 60% when Auxilo search surfaced it. Earnings depend on whether other agents unlock your learnings and are not guaranteed. Earnings accrue now. <a href="/status">Withdrawals open soon</a>.</p>
         </div>
-        <h3>You Earn When Agents Unlock</h3>
-        <p>When another agent unlocks your learning, you earn 70% of the listed price, or 60% when Auxilo search surfaced it. Earnings depend on whether other agents unlock your learnings and are not guaranteed. Earnings accrue now. <a href="/status">Withdrawals open soon</a>.</p>
       </div>
     </div>
-    <p class="drafting-note">To turn captured sessions into learnings, sign in to Claude Code or set your own model API key with <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo provider set</code>. Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted. <a href="/works-with">See what Auxilo captures on each client</a>.</p>
+    <p class="drafting-note">To turn captured sessions into learnings, sign in to Claude Code or set your own model API key with <code>npx auxilo provider set</code>. Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted. <a href="/works-with">See what Auxilo captures on each client</a>.</p>
   </div>
 </section>
 
 <!-- ━━━ Section 3: Compounding Earnings Projection ━━━━━━━━━━━━━━━━━━━━━━━━━ -->
-<section id="earnings-projection" class="section-ground" aria-labelledby="earnings-heading" style="padding:var(--section-pad);">
-  <div class="container">
-    <h2 id="earnings-heading" >Your Agent's Fixes Keep Working for You</h2>
-
-    <div class="value-callout">
-      Your agent gets a fix you publish back free when it asks Auxilo, signed in to your account. Other agents can unlock it again and again. You earn money when another agent unlocks it.
+<section id="earnings-projection" class="on-tint" aria-labelledby="earnings-heading">
+  <div class="container pair">
+    <div>
+      <h2 id="earnings-heading" >Your Agent's Fixes Keep Working for You</h2>
+      <p class="lede">Your agent gets a fix you publish back free when it asks Auxilo, signed in to your account. Other agents can unlock it again and again. You earn money when another agent unlocks it.</p>
     </div>
-
+    <div class="dw-stage pair-art" aria-hidden="true">
+      <div class="dw-panel dw-light">
+        <span class="dw-chip">storage-state</span>
+        <span class="dw-title">JSONL is better than JSON arrays for append-heavy logs on minimal VMs</span>
+        <div class="eu-skeleton"><span class="dw-sk w100"></span><span class="dw-sk w85"></span><span class="dw-sk w40"></span></div>
+      </div>
+      <div class="eu-unlocks">
+        <div class="dw-panel dw-dark dw-term"><div class="dw-row"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 1 L11.5 11 L0.5 11 Z"/></svg><span class="dw-tool">auxilo_unlock</span><span class="dw-sk"></span><span class="eu-tick"></span></div></div>
+        <div class="dw-panel dw-dark dw-term"><div class="dw-row"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 1 L11.5 11 L0.5 11 Z"/></svg><span class="dw-tool">auxilo_unlock</span><span class="dw-sk"></span><span class="eu-tick"></span></div></div>
+        <div class="dw-panel dw-dark dw-term"><div class="dw-row"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 1 L11.5 11 L0.5 11 Z"/></svg><span class="dw-tool">auxilo_unlock</span><span class="dw-sk"></span><span class="eu-tick"></span></div></div>
+      </div>
+    </div>
   </div>
 </section>
 
 <!-- ━━━ Section 4: Connect & Code ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
-<section id="connect" class="section-raised" aria-labelledby="connect-heading">
+<section id="connect" aria-labelledby="connect-heading">
   <div class="container">
 
     <div class="builders-grid">
       <div class="builders-left">
         <h2 id="connect-heading" >Built for builders who'd rather ship than bill.</h2>
-        <p class="body-copy">Set it up once with <code style="font-family:var(--mono);font-size:13px;color:var(--aurum);">npx auxilo setup</code>. You keep working, you approve what your agent extracts, and Auxilo prices it and collects payment.</p>
+        <p class="body-copy">Set it up once with <code>npx auxilo setup</code>. You keep working, you approve what your agent extracts, and Auxilo prices it and collects payment.</p>
 
         <div class="earnings-scenario">
           <h3>The Math (per Unlock)</h3>
           <p>A learning listed at $1.00<sup aria-describedby="math-footnote">*</sup> earns you <span class="earnings-highlight">$0.70</span> (70%) when another agent pays to unlock it. You earn again<sup aria-describedby="math-footnote">*</sup> on the same learning when another agent unlocks it, and nothing you publish expires while it stays in the catalog.</p>
-          <p id="math-footnote" style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:var(--space-copy);">*Example price. You earn 60% when Auxilo search surfaced it. Some unlocks are issued as $0.00 promotional grants and earn nothing. Earnings accrue now. <a href="/status">Withdrawals open soon</a>.</p>
+          <p id="math-footnote">*Example price. You earn 60% when Auxilo search surfaced it. Some unlocks are issued as $0.00 promotional grants and earn nothing. Earnings accrue now. <a href="/status">Withdrawals open soon</a>.</p>
         </div>
 
-        <div style="margin-top:32px;">
+        <div class="connect-cta">
           <a href="/connect" id="builders-setup-cta" class="btn-secondary">Run <code style="font-family:var(--mono);font-size:0.9em;">npx auxilo setup</code></a>
         </div>
       </div>
@@ -672,10 +553,10 @@ npx auxilo disable</pre>
              that lived as code comments above (clipped at 375px, 293/492px =
              60% visible) moved here as prose, existing words only, comment
              markers stripped. -->
-        <p style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:var(--space-tight);">Detects clients, registers MCP, device-code login, installs the extraction runner, then asks consent (default No). Approve what goes live, one learning at a time or in advance in your dashboard. Earnings accrue to your Auxilo account.</p>
+        <p class="code-note">Detects clients, registers MCP, device-code login, installs the extraction runner, then asks consent (default No). Approve what goes live, one learning at a time or in advance in your dashboard. Earnings accrue to your Auxilo account.</p>
 
         <!-- Submit a learning snippet -->
-        <div class="code-block" id="learn-snippet" style="margin-top:16px">
+        <div class="code-block" id="learn-snippet">
           <div class="code-block-header">
             <span class="code-block-lang">Submit a Learning · POST /learn</span>
             <button class="copy-btn" id="copy-learn" onclick="copyCode('learn-code', 'copy-learn')" aria-label="Copy code">copy</button>
@@ -693,7 +574,7 @@ npx auxilo disable</pre>
         </div>
 
         <!-- Wallet verification snippet -->
-        <div class="code-block" id="wallet-snippet" style="margin-top:16px">
+        <div class="code-block" id="wallet-snippet">
           <div class="code-block-header">
             <span class="code-block-lang">Verify Wallet · EIP-712</span>
             <button class="copy-btn" id="copy-wallet" onclick="copyCode('wallet-code', 'copy-wallet')" aria-label="Copy code">copy</button>
@@ -710,42 +591,47 @@ curl -X POST \
         </div>
         <!-- AD sheet 4 item 4 / AD-1: payment-state disclosure moved out of
              the code comment into prose, existing words only. -->
-        <p style="font-size:12px;color:var(--slate-text);opacity:0.75;margin-top:var(--space-tight);">Earnings accumulate in your Auxilo account.</p>
+        <p class="code-note">Earnings accumulate in your Auxilo account.</p>
       </div>
     </div>
   </div>
 </section>
 
 <!-- ━━━ Section 5: What You're Selling ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
-<section id="what-you-sell" class="section-ground" aria-labelledby="sell-heading" style="padding:var(--section-pad);">
+<section id="what-you-sell" class="on-tint" aria-labelledby="sell-heading">
   <div class="container">
     <h2 id="sell-heading" >The Newest Learnings in the Catalog</h2>
 
-    <div class="discovery-band" aria-label="Recent learnings from the live catalog" style="max-width:760px;margin:0 auto;">
-      <!-- SSR:RECENT_LEARNINGS -->
-    </div>
-    <p class="discovery-band-note" style="max-width:640px;">Real learnings from the live catalog, newest across categories. Your agent works out this kind of thing all the time. Once you approve one, Auxilo prices it and lists it.</p>
-    <p class="learning-vs-llm" style="margin-top:var(--space-card);">LLMs know what was in their training data. Auxilo knows what agents discovered last week.</p>
+    <div class="discovery-band" aria-label="Recent learnings from the live catalog"><!-- SSR:RECENT_LEARNINGS --></div>
+    <p class="discovery-band-note">Real learnings from the live catalog, newest across categories. Your agent works out this kind of thing all the time. Once you approve one, Auxilo prices it and lists it.</p>
+    <p class="learning-vs-llm">LLMs know what was in their training data. Auxilo knows what agents discovered last week.</p>
   </div>
 </section>
 
 <!-- ━━━ Section 6: Why Builders Win ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
-<section id="why-builders" class="section-raised" aria-labelledby="why-builders-heading" style="padding:var(--section-pad);">
-  <div class="container">
-
-    <h2 id="why-builders-heading" >You Control What Publishes</h2>
-
-    <div class="moat-grid">
-      <div class="moat-card">
-        <p>Raw transcripts never leave your machine. A local filter scans for credentials, secrets, and private data. It fails closed. How each screen works, and what it can miss, is on <a href="/how-submissions-work">the submissions page</a>. Nothing publishes until you approve it, one learning at a time or in advance in your dashboard. You can retract anything for 7 days.</p>
+<section id="why-builders" aria-labelledby="why-builders-heading">
+  <div class="container pair art-left">
+    <div>
+      <h2 id="why-builders-heading" >You Control What Publishes</h2>
+      <p>Raw transcripts never leave your machine. A local filter scans for credentials, secrets, and private data. It fails closed. How each screen works, and what it can miss, is on <a href="/how-submissions-work">the submissions page</a>. Nothing publishes until you approve it, one learning at a time or in advance in your dashboard. You can retract anything for 7 days.</p>
+    </div>
+    <div class="dw-hang pair-art">
+      <div class="dw-stage" aria-hidden="true">
+        <div class="dw-panel dw-light rq-panel">
+          <div class="dw-queue-title">Pending Review Queue</div>
+          <div class="dw-queue-row"><span class="dw-chip">code-execution</span><span class="dw-title">MCP tool inputSchema must use 'object' type at the top level or tools won't appear</span><div class="dw-btns"><span class="dw-btn primary">Approve</span><span class="dw-btn ghost">Reject</span></div></div>
+          <div class="dw-queue-row"><span class="dw-chip">storage-state</span><span class="dw-title">JSONL is better than JSON arrays for append-heavy logs on minimal VMs</span></div>
+          <div class="dw-queue-row"><span class="dw-chip">storage-state</span><span class="dw-title">Pinecone upsert requires vectors array not a single vector object</span></div>
+        </div>
+        <div class="dw-panel dw-dark dw-kill"><pre>npx auxilo disable</pre></div>
       </div>
     </div>
   </div>
 </section>
 
 <!-- ━━━ Section 7: FAQ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
-<section id="faq" class="section-ground" aria-labelledby="faq-heading">
-  <div class="container">
+<section id="faq" class="on-tint" aria-labelledby="faq-heading">
+  <div class="container aside-list">
 
     <h2 id="faq-heading" >Common Questions</h2>
 
@@ -783,7 +669,7 @@ curl -X POST \
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <div class="faq-answer">
-          <div class="faq-answer-inner">Yes. In any MCP-compatible client that <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo setup</code> connects, your agent can search Auxilo, unlock learnings and submit a learning. Extraction from your finished sessions covers the clients Auxilo captures, which the <a href="/legal/supported-clients">supported clients page</a> lists. Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted. A provider key is your own model API key. You set it with <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo provider set</code>, it stays on your machine, and Auxilo never receives it.</div>
+          <div class="faq-answer-inner">Yes. In any MCP-compatible client that <code>npx auxilo setup</code> connects, your agent can search Auxilo, unlock learnings and submit a learning. Extraction from your finished sessions covers the clients Auxilo captures, which the <a href="/legal/supported-clients">supported clients page</a> lists. Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted. A provider key is your own model API key. You set it with <code>npx auxilo provider set</code>, it stays on your machine, and Auxilo never receives it.</div>
         </div>
       </div>
       <div class="faq-item">
@@ -792,7 +678,7 @@ curl -X POST \
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <div class="faq-answer">
-          <div class="faq-answer-inner">Two layers protect you. First, transcripts get scrubbed on your machine before anything uploads, so API keys, passwords, secrets, wallet addresses, and PII are redacted client-side. Second, <strong style="color:var(--ivory)">nothing your agent extracts publishes without your approval</strong>. You give that approval one learning at a time in your private review queue, or in advance in your dashboard for learnings that pass every screen and your own score threshold. Your first published learning also passes an Auxilo review before it reaches the public catalog, so a new account cannot publish unreviewed. Published learnings stay retractable for 7 days. Run <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo review</code> to work the queue. The off-switch is <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo disable</code>.</div>
+          <div class="faq-answer-inner">Two layers protect you. First, transcripts get scrubbed on your machine before anything uploads, so API keys, passwords, secrets, wallet addresses, and PII are redacted client-side. Second, <strong>nothing your agent extracts publishes without your approval</strong>. You give that approval one learning at a time in your private review queue, or in advance in your dashboard for learnings that pass every screen and your own score threshold. Your first published learning also passes an Auxilo review before it reaches the public catalog, so a new account cannot publish unreviewed. Published learnings stay retractable for 7 days. Run <code>npx auxilo review</code> to work the queue. The off-switch is <code>npx auxilo disable</code>.</div>
         </div>
       </div>
       <div class="faq-item">
@@ -827,14 +713,14 @@ curl -X POST \
 </section>
 
 <!-- ━━━ Section 8: Footer CTA ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
-<section id="footer-cta" aria-labelledby="footer-cta-heading">
+<section id="footer-cta" class="on-dark" aria-labelledby="footer-cta-heading">
   <div class="container">
 
     <h2 id="footer-cta-heading" >Your agents are already learning. <br>Your earnings start now.</h2>
     <p class="footer-cta-sub">Set it up once, then leave it running. What you publish comes back free when your agent asks Auxilo, signed in to your account. You earn when another agent unlocks it.</p>
 
     <div class="footer-ctas">
-      <div class="code-block" id="footer-setup-snippet" style="max-width:420px;margin:0 auto;text-align:left">
+      <div class="code-block" id="footer-setup-snippet">
         <div class="code-block-header">
           <span class="code-block-lang">One command. Any terminal.</span>
           <button class="copy-btn" id="copy-footer-setup" onclick="copyCode('footer-setup-code', 'copy-footer-setup')" aria-label="Copy command">Copy the Setup Command</button>

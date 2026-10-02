@@ -238,10 +238,14 @@ describe('VISION PASS (V-29/P-3): the surviving hero row — new caption text, n
     const heroStart = STATIC_HTML.indexOf('<section id="builders-hero"');
     const heroEnd = STATIC_HTML.indexOf('</section>', heroStart);
     const heroSection = STATIC_HTML.slice(heroStart, heroEnd);
-    const statsEndIdx = heroSection.indexOf('</div>', heroSection.indexOf('class="builders-hero-stats"')) + '</div>'.length;
+    // Design rebuild: the three numbers are one dark panel beside the copy (after it in the document,
+    // so on a phone it follows the buttons). The setup line now sits directly under the lede and
+    // directly above the buttons, in the copy column.
+    const subIdx = heroSection.indexOf('<p class="builders-hero-sub">');
+    const statsIdx = heroSection.search(/class="[^"]*\bbuilders-hero-stats\b[^"]*"/);
     const ctasIdx = heroSection.indexOf('<div class="hero-ctas">');
-    assert.ok(statsEndIdx > 0 && ctasIdx > statsEndIdx, 'stat row and CTA row located, in order');
-    const between = heroSection.slice(statsEndIdx, ctasIdx);
-    assert.match(between, /Run\s*<code[^>]*>npx auxilo setup<\/code>\s*in any terminal\. Setup is free\./, 'P-3 text sits between the stat row and the CTA row, command as code');
+    assert.ok(subIdx > 0 && ctasIdx > subIdx && statsIdx > ctasIdx, 'lede, CTA row and stat panel located, in that order');
+    const between = heroSection.slice(heroSection.indexOf('</p>', subIdx) + '</p>'.length, ctasIdx);
+    assert.match(between, /^\s*<p class="hero-run">Run\s*<code>npx auxilo setup<\/code>\s*in any terminal\. Setup is free\.<\/p>\s*$/, 'P-3 text sits alone between the lede and the CTA row, command as code');
   });
 });

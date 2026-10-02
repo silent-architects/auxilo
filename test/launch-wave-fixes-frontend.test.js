@@ -255,10 +255,13 @@ describe('FIX-UNIT L10: dead CSS removed, stale comments fixed', () => {
     assert.ok(!/centers it/.test(region), 'the comment must no longer claim the rule centers the ledger (it left-aligns)');
   });
 
-  it('the pricing.html comment above the max-width:600px .pricing-hero-stats override no longer describes a deleted base rule as if it still exists', () => {
-    const region = sliceBetween(PRICING_HTML, '/* FIX-UNIT L10:', '.pricing-hero-stats { max-width: 320px; }');
-    assert.match(region, /removed outright/i, 'comment must say the base rule was removed, not describe it as current behavior');
-    assert.ok(!/text-align: left is a no-op/.test(region), 'the old stale wording must be gone');
+  // Design rebuild: no element on /pricing ever carried .pricing-hero-stats, so the override
+  // rule and the comment above it are gone with the page's old block. The stale wording must
+  // not come back, and the positive control proves the page's own style block is still read.
+  it('pricing.html carries no .pricing-hero-stats rule and none of the stale comment wording', () => {
+    assert.ok(/\.pricing-packs\s*\{/.test(PRICING_HTML), 'positive control: the page style block still declares .pricing-packs');
+    assert.ok(!PRICING_HTML.includes('.pricing-hero-stats'), 'the dead .pricing-hero-stats rule must not return');
+    assert.ok(!/text-align: left is a no-op/.test(PRICING_HTML), 'the old stale wording must be gone');
   });
 });
 

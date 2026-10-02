@@ -170,25 +170,26 @@ describe('CSS-MECHANICAL (static): the four no-judgment-required token dispositi
     assert.match(token, /--max-w:\s*1100px/, '--max-w is still 1100px, the exact value both selectors used to hardcode');
   });
 
-  it('how-submissions-work.html\'s .page-hero-content (max-width: 820px, a genuinely different value, out of the sheet\'s scope for this row) is untouched', () => {
+  it('how-submissions-work.html no longer carries its own .page-hero-content width (design system pass: its hero takes the shared one-column hero, whose copy width is 720px)', () => {
     const html = readPublic('how-submissions-work.html');
-    const rule = ruleBody(html, '\\.page-hero-content\\s*\\{');
-    assert.ok(rule, '.page-hero-content rule exists in how-submissions-work.html');
-    assert.match(rule, /max-width:\s*820px/, 'not var(--max-w) -- 820px is a real, different value, correctly out of scope');
+    assert.equal(ruleBody(html, '\\.page-hero-content\\s*\\{'), null, 'the page-scoped .page-hero-content rule (max-width: 820px) is gone');
+    // Positive control: the hero is the shared hero-one layout, and the shared sheet sets its copy width.
+    assert.match(html, /<div class="container hero-one">\s*<h1 id="page-hero-heading">/, 'the trust page hero uses the shared hero-one layout');
+    assert.match(ruleBody(STYLES, '\\.hero-one > \\*\\s*\\{') || '', /max-width:\s*720px/, 'the shared hero-one copy width is 720px');
   });
 
-  it('for-builders.html .earnings-scenario h3/p font-size are un-swapped: h3 14px, p 13px, matching the shared styles.css rule', () => {
+  // Design rebuild: the math block is a card whose heading takes the site h3 (19px, weight 500) and
+  // whose body is 16px running text, so the page rules now set 19px and 16px. The heading stays
+  // larger than the body (the un-swap this test guards). The shared sheet's own rule still reads
+  // the old 14px/13px data-box label, so the pin to "matching the shared rule" is gone.
+  it('for-builders.html .earnings-scenario h3/p font-size are un-swapped: h3 19px, p 16px, the heading larger than the body', () => {
     const html = readPublic('for-builders.html');
     const h3 = ruleBody(html, '\\.earnings-scenario h3\\s*\\{');
     const p = ruleBody(html, '\\.earnings-scenario p\\s*\\{');
     assert.ok(h3 && p, 'for-builders.html .earnings-scenario h3/p rules exist');
-    assert.match(h3, /font-size:\s*14px/);
-    assert.match(p, /font-size:\s*13px/);
-
-    const sharedH3 = ruleBody(STYLES, '\\.earnings-scenario h3\\s*\\{');
-    const sharedP = ruleBody(STYLES, '\\.earnings-scenario p\\s*\\{');
-    assert.match(sharedH3, /font-size:\s*14px/, 'shared styles.css .earnings-scenario h3 is 14px');
-    assert.match(sharedP, /font-size:\s*13px/, 'shared styles.css .earnings-scenario p is 13px');
+    assert.match(h3, /font-size:\s*19px/);
+    assert.match(p, /font-size:\s*16px/);
+    assert.ok(parseInt(h3.match(/font-size:\s*(\d+)px/)[1], 10) > parseInt(p.match(/font-size:\s*(\d+)px/)[1], 10), 'the heading is larger than the body');
   });
 
   it('for-builders.html no longer carries its own .tier-card / .tier-cards-grid fork (falls through to shared styles.css)', () => {
@@ -332,8 +333,8 @@ describe('Tier 2 (dynamic, playwright)', () => {
       // this asserts it stays gone.
       assert.notEqual(formInfo.outlineStyle, 'none',
         '.form-input should render a visible focus outline (its old unconditional `outline: none` must not have returned)');
-      // Design system pass: the sign-in field sits on the paper ground, so its ring is ink.
-      assert.equal(formInfo.outlineColor, 'rgb(10, 10, 10)');
+      // Design system pass: the sign-in screen is a dark ground, so its field's ring is gold.
+      assert.equal(formInfo.outlineColor, 'rgb(201, 168, 76)');
     } finally {
       await ctx.close();
     }
@@ -458,7 +459,7 @@ describe('Tier 2 (dynamic, playwright)', () => {
     }
   });
 
-  it('CSS-MECHANICAL: /for-builders .earnings-scenario h3/p resolve to 14px/13px live', async (t) => {
+  it('CSS-MECHANICAL: /for-builders .earnings-scenario h3/p resolve to 19px/16px live', async (t) => {
     if (!tier2ok) { t.skip('playwright not resolvable'); return; }
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const p = await ctx.newPage();
@@ -472,8 +473,8 @@ describe('Tier 2 (dynamic, playwright)', () => {
           p: para ? getComputedStyle(para).fontSize : null,
         };
       });
-      assert.equal(sizes.h3, '14px');
-      assert.equal(sizes.p, '13px');
+      assert.equal(sizes.h3, '19px');
+      assert.equal(sizes.p, '16px');
     } finally {
       await ctx.close();
     }

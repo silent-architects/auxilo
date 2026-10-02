@@ -217,8 +217,16 @@ describe('ASK-WAVE A: homepage gold-event + hero-secondary invariants', () => {
     assert.match(stylesCss, /\.hero-setup-block \.copy-btn[^{]*\{[^}]*background:\s*var\(--aurum\)/, 'the shared sheet fills .hero-setup-block .copy-btn with --aurum');
   });
 
-  it("connect.html's own #install .copy-btn gold fill is untouched", () => {
-    assert.match(connectHtml, /#install \.copy-btn\s*\{[^}]*background:\s*var\(--aurum\)/);
+  // Design rebuild: /connect takes the same shared rule as the homepage ask. Its block carries
+  // .hero-setup-block (gold frame, gold button, the `$ ` drawn by CSS), so the page-scoped
+  // `#install .copy-btn` override is gone and the button still takes the gold fill.
+  it("connect.html's setup button still carries its gold fill: the block is .hero-setup-block, the shared sheet fills it with --aurum, and the page holds no override of its own", () => {
+    assert.match(connectHtml, /<div class="code-block hero-setup-block" id="install">[\s\S]*?<button class="copy-btn" id="copy-connect-setup"/, 'the connect copy button sits inside .hero-setup-block');
+    assert.match(connectHtml, /<pre id="connect-setup-code">npx auxilo setup<\/pre>/, 'the pre holds only the command (the `$ ` is drawn by CSS)');
+    assert.doesNotMatch(connectHtml, /#install \.copy-btn/, 'the page-scoped override is gone from connect.html');
+    const stylesCss = fs.readFileSync(path.join(PUBLIC_DIR, 'styles.css'), 'utf8');
+    assert.match(stylesCss, /\.hero-setup-block \.copy-btn[^{]*\{[^}]*background:\s*var\(--aurum\)/, 'the shared sheet fills .hero-setup-block .copy-btn with --aurum');
+    assert.match(stylesCss, /\.hero-setup-block pre::before[^{]*\{[^}]*content:\s*'\$ '/, 'the shared sheet draws the `$ ` before the command');
   });
 });
 

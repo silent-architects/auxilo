@@ -150,6 +150,9 @@ describe('SPACING-0927 Part A (the frame), measured the Art Director\'s way', { 
       // centering check and, for the V-4 boxes, a dedicated half-pixel
       // test below, not by rule 2's page-gutter match.
       narrowColumnWrapperSelectors: new Set(['div.page-hero-content', 'div.callout-bordered', 'div.ledger-card']),
+      // Design rebuild: a band is a section with no heading that holds one row of figures. The homepage's
+      // client band and /for-agents' catalog figures (#catalog-stats) both take the band rhythm.
+      bandSelectors: ['works-with-band', 'catalog-stats'],
     });
   });
 

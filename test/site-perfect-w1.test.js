@@ -156,27 +156,32 @@ describe('SITE-PERFECT-W1 item 3: /works-with h1 matches /pricing h1 at 1440px',
 
   // SPACING-0927 R2-2a: heading to the element beneath it is 16px, named
   // by the sheet (was 20). Pin moved, not weakened -- font-size untouched.
-  it('/works-with .ww-h1 computes font-size: 56px, margin-bottom: 16px', async (t) => {
+  // Design rebuild: the page's own .ww-h1 rule is gone. The /works-with h1 (#ww-hero-heading) takes the
+  // shared h1 size, clamp(40px, 5vw, 64px), which is its 64px ceiling at 1440. Its gap to the lede is
+  // the shared heading gap: 16px today, 24px once sheet v2 re-rules a heading over text.
+  it('/works-with h1 computes the shared h1 size: font-size 64px at 1440, margin-bottom on the heading gap (16px or sheet v2 24px)', async (t) => {
     if (!ok) { t.skip('playwright not resolvable'); return; }
-    const m = await measureH1('works-with.html', '.ww-h1');
-    assert.ok(m, '.ww-h1 not found on /works-with');
-    assert.equal(m.fontSize, '56px', `.ww-h1 font-size: got ${m.fontSize}`);
-    assert.equal(m.marginBottom, '16px', `.ww-h1 margin-bottom: got ${m.marginBottom}`);
+    const m = await measureH1('works-with.html', '#ww-hero-heading');
+    assert.ok(m, '#ww-hero-heading not found on /works-with');
+    assert.equal(m.fontSize, '64px', `/works-with h1 font-size: got ${m.fontSize}`);
+    assert.ok(['16px', '24px'].includes(m.marginBottom), `/works-with h1 margin-bottom: got ${m.marginBottom}`);
   });
 
   // SPACING-0927 R2-2a: heading to the element beneath it is 16px, named
   // by the sheet (was 20). Pin moved, not weakened -- font-size untouched.
-  it('/pricing .pricing-page-header h1 computes font-size: 56px, margin-bottom: 16px', async (t) => {
+  // Design rebuild: the /pricing h1 takes the shared h1 size, clamp(40px, 5vw, 64px), the 64px ceiling
+  // at 1440. Its gap to the lede is the shared heading gap: 16px today, 24px once sheet v2 re-rules it.
+  it('/pricing .pricing-page-header h1 computes the shared h1 size: font-size 64px at 1440, margin-bottom on the heading gap (16px or sheet v2 24px)', async (t) => {
     if (!ok) { t.skip('playwright not resolvable'); return; }
     const m = await measureH1('pricing.html', '.pricing-page-header h1');
     assert.ok(m, '.pricing-page-header h1 not found on /pricing');
-    assert.equal(m.fontSize, '56px', `pricing h1 font-size: got ${m.fontSize}`);
-    assert.equal(m.marginBottom, '16px', `pricing h1 margin-bottom: got ${m.marginBottom}`);
+    assert.equal(m.fontSize, '64px', `pricing h1 font-size: got ${m.fontSize}`);
+    assert.ok(['16px', '24px'].includes(m.marginBottom), `pricing h1 margin-bottom: got ${m.marginBottom}`);
   });
 
   it('/works-with and /pricing h1 computed values are equal (the required proof)', async (t) => {
     if (!ok) { t.skip('playwright not resolvable'); return; }
-    const ww = await measureH1('works-with.html', '.ww-h1');
+    const ww = await measureH1('works-with.html', '#ww-hero-heading');
     const pricing = await measureH1('pricing.html', '.pricing-page-header h1');
     assert.equal(ww.fontSize, pricing.fontSize, `font-size mismatch: works-with=${ww.fontSize} pricing=${pricing.fontSize}`);
     assert.equal(ww.marginBottom, pricing.marginBottom, `margin-bottom mismatch: works-with=${ww.marginBottom} pricing=${pricing.marginBottom}`);

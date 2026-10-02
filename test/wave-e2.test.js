@@ -243,7 +243,10 @@ describe('Wave E2 item 14: about.html and writing/index.html inline <style> shra
     for (const dead of ['.overall-status {', '.status-dot {', '.badge {', '.links-grid {', '.health-block {', '.contact-block {']) {
       assert.ok(!about.includes(dead), `about.html should no longer declare ${dead}`);
     }
-    assert.match(about, /\.page-title\s*\{[^}]*line-height:\s*1\.1/, 'about.html .page-title carries the 1.1 leading fix');
+    // Design pass: the h1 takes the shared display scale (serif, 1.04 leading) instead of a page rule
+    // with 1.1 leading, so the page declares no .page-title rule. Positive control: the h1 is still there.
+    assert.match(about, /<h1 class="page-title">About Auxilo<\/h1>/, 'about.html still carries its page-title h1');
+    assert.doesNotMatch(about, /\.page-title\s*\{/, 'about.html declares no local .page-title rule (the h1 uses the shared display scale)');
   });
 
   it('writing/index.html no longer defines the dead status/badge/waitlist/health/contact component CSS', () => {
@@ -251,7 +254,9 @@ describe('Wave E2 item 14: about.html and writing/index.html inline <style> shra
     for (const dead of ['.overall-status {', '.status-dot {', '.badge {', '.waitlist-row {', '.links-grid {', '.health-block {', '.contact-block {']) {
       assert.ok(!writing.includes(dead), `writing/index.html should no longer declare ${dead}`);
     }
-    assert.match(writing, /\.page-title\s*\{[^}]*line-height:\s*1\.1/, 'writing/index.html .page-title carries the 1.1 leading fix');
+    // Design pass: same as /about, the h1 uses the shared display scale and the page declares no .page-title rule.
+    assert.match(writing, /<h1 class="page-title">Writing<\/h1>/, 'writing/index.html still carries its page-title h1');
+    assert.doesNotMatch(writing, /\.page-title\s*\{/, 'writing/index.html declares no local .page-title rule (the h1 uses the shared display scale)');
   });
 
   it('both pages\' combined <style> block bytes shrank well below their original 11-13KB', () => {

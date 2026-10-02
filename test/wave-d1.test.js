@@ -211,13 +211,50 @@ describe('WAVE-D1 type pairing: tokens + @font-face', () => {
     assert.equal(plex.length, 20, `expected 20 inline SVG labels on the IBM Plex Mono stack, found ${plex.length}`);
   });
 
-  it('og-image.svg names Archivo (not Inter), keeping the Helvetica/Arial fallback', () => {
+  it('og-image.svg headline names Newsreader (Georgia, serif fallback) and the wordmark stays on Archivo with the Helvetica/Arial fallback', () => {
     const svg = fs.readFileSync(path.join(PUBLIC_DIR, 'og-image.svg'), 'utf8');
     const matches = [...svg.matchAll(/font-family="([^"]*)"/g)].map((m) => m[1]);
     assert.ok(matches.length > 0, 'og-image.svg should carry font-family attributes');
-    for (const m of matches) {
-      assert.match(m, /^Archivo, Helvetica, Arial, sans-serif$/, `og-image.svg font-family should read Archivo first, got: ${m}`);
+    const headline = matches.filter((m) => m === 'Newsreader, Georgia, serif');
+    const wordmark = matches.filter((m) => m === 'Archivo, Helvetica, Arial, sans-serif');
+    assert.equal(headline.length, 2, 'both headline lines name Newsreader first');
+    assert.equal(wordmark.length, 1, 'the wordmark names Archivo first');
+    assert.equal(headline.length + wordmark.length, matches.length, 'no other font-family appears (no Inter, no bare generic)');
+    for (const line of ['A marketplace for', 'what agents learn']) {
+      assert.match(svg, new RegExp(`font-family="Newsreader, Georgia, serif"[^>]*>${line}</text>`), `"${line}" is set in Newsreader`);
     }
+    assert.match(svg, /font-family="Archivo, Helvetica, Arial, sans-serif" font-weight="500"[^>]*>auxilo<\/text>/, 'the wordmark is Archivo weight 500');
+  });
+
+  it('og-image.svg look: near-black ground, two light-serif headline lines at x=72, the mark as a faint device running off the right edge, no tile pattern or glow', () => {
+    const svg = fs.readFileSync(path.join(PUBLIC_DIR, 'og-image.svg'), 'utf8');
+    // positive controls: the new look is present
+    assert.ok(svg.includes('<rect width="1200" height="630" fill="#0A0A0A"/>'), 'ground is #0A0A0A, full frame');
+    const headlines = [...svg.matchAll(/<text x="72" y="(\d+)" font-family="Newsreader, Georgia, serif" font-weight="300" font-size="84" fill="#FAFAF8" letter-spacing="-1\.68">([^<]*)<\/text>/g)];
+    assert.deepEqual(headlines.map((m) => m[2]), ['A marketplace for', 'what agents learn'], 'two headline lines, left aligned at x=72, weight 300 at 84px, tracking -0.02em');
+    assert.ok(Number(headlines[1][1]) > Number(headlines[0][1]), 'the second line sits below the first');
+    // the device: the mark's own geometry, scaled up, faint, crossbar in gold leaving the frame
+    const device = svg.match(/<g transform="translate\(([-\d.]+),([-\d.]+)\) scale\(([\d.]+)\)">\s*<polygon points="256,88 434,404 78,404" fill="none" stroke="#FAFAF8" stroke-opacity="0\.08"[^>]*\/>\s*<line x1="256" y1="272" x2="([\d.]+)" y2="272" stroke="#C9A84C" stroke-opacity="0\.4"[^>]*\/>\s*<\/g>/);
+    assert.ok(device, 'the device group carries the mark geometry, ivory outline at 0.08 and gold crossbar at 0.4');
+    const [, tx, , k, barEnd] = device;
+    assert.ok(Number(k) >= 2, 'the device is drawn large (at least twice the mark geometry)');
+    assert.ok(Number(tx) + Number(barEnd) * Number(k) > 1200, 'the crossbar runs off the right edge of the 1200 frame');
+    // the corner wordmark is exactly as it was drawn
+    assert.ok(svg.includes(`<g transform="translate(72,534) scale(1.600)">
+  <polygon points="22,4 40,36 4,36" fill="none" stroke="#C9A84C" stroke-width="3" stroke-linejoin="round"/>
+  <line x1="22" y1="22.5" x2="40" y2="22.5" stroke="#C9A84C" stroke-width="2.4"/>
+  <text x="54" y="31" font-family="Archivo, Helvetica, Arial, sans-serif" font-weight="500" font-size="24" fill="#FAFAF8" letter-spacing="-0.01">auxilo</text>
+</g>`), 'mark and wordmark unchanged in geometry, gold stroke and Archivo 500');
+    // retired: the tile pattern and the radial glow (and any gradient)
+    assert.doesNotMatch(svg, /<pattern|<radialGradient|<linearGradient|url\(#/, 'no tile pattern, glow or gradient');
+  });
+
+  it('og-image.png is a 1200 by 630 PNG under 120KB', () => {
+    const png = fs.readFileSync(path.join(PUBLIC_DIR, 'og-image.png'));
+    assert.equal(png.subarray(1, 4).toString('latin1'), 'PNG', 'PNG signature');
+    assert.equal(png.readUInt32BE(16), 1200, 'width');
+    assert.equal(png.readUInt32BE(20), 630, 'height');
+    assert.ok(png.length < 120 * 1024, `the share image stays under 120KB, got ${png.length} bytes`);
   });
 
   it('every numeral/figure-bearing class sitewide renders on var(--mono) (inherently tabular — no sans element carries a figure)', () => {

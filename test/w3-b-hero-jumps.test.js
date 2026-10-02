@@ -122,14 +122,14 @@ describe('W3-B static: hero jump buttons and target ids present in markup', () =
 
   it('#how-to-start-earning is the upload/earning section (aria-labelledby="upload-heading")', () => {
     assert.ok(
-      /<section class="hiw-upload-section section-raised" id="how-to-start-earning" aria-labelledby="upload-heading">/.test(HTML),
+      /<section class="hiw-upload-section" id="how-to-start-earning" aria-labelledby="upload-heading">/.test(HTML),
       'expected id="how-to-start-earning" on the existing How to Start Earning <section>'
     );
   });
 
   it('#how-to-access-knowledge is the download/access section (aria-labelledby="download-heading")', () => {
     assert.ok(
-      /<section class="hiw-download-section section-ground" id="how-to-access-knowledge" aria-labelledby="download-heading">/.test(HTML),
+      /<section class="hiw-download-section on-tint" id="how-to-access-knowledge" aria-labelledby="download-heading">/.test(HTML),
       'expected id="how-to-access-knowledge" on the existing How to Access Knowledge <section>'
     );
   });

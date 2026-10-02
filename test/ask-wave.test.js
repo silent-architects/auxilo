@@ -179,7 +179,12 @@ describe('ASK-WAVE treatment tests', { timeout: 120_000 }, () => {
     return p.evaluate((props) => {
       return Array.from(document.querySelectorAll('.btn-primary')).map((el) => {
         const cs = getComputedStyle(el);
-        const out = { label: (el.textContent || '').trim().replace(/\s+/g, ' ') };
+        const out = {
+          label: (el.textContent || '').trim().replace(/\s+/g, ' '),
+          // Design rebuild: the primary button is ground-aware (gold fill on a dark ground, ink
+          // fill on a light one), so "identical" holds between buttons on the same ground.
+          ground: el.closest('.on-dark') ? 'dark' : 'light',
+        };
         for (const prop of props) out[prop] = cs[prop];
         return out;
       });
@@ -264,9 +269,11 @@ describe('ASK-WAVE treatment tests', { timeout: 120_000 }, () => {
         }
       });
       assert.ok(results.length > 0, 'expected at least one .btn-primary across /for-builders, /for-agents, /pricing');
-      const first = results[0];
+      const firstByGround = new Map();
       const mismatches = [];
-      for (const r of results.slice(1)) {
+      for (const r of results) {
+        const first = firstByGround.get(r.ground);
+        if (!first) { firstByGround.set(r.ground, r); continue; }
         for (const prop of BTN_PRIMARY_PROPS) {
           if (r[prop] !== first[prop]) {
             mismatches.push(`${r.page} "${r.label}" ${prop}: got ${r[prop]}, expected ${first[prop]} (from ${first.page} "${first.label}")`);

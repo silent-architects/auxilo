@@ -267,10 +267,11 @@ describe('FAQ consolidation: positive control for the moved question', () => {
 
   it('keeps the moved capture claim byte-identical and appends the D1 drafting boundary in both answer forms', () => {
     const html = readPublic('for-agents.html');
-    // Rendered answer (verbatim from the pre-move /for-builders markup, incl. inline <strong>/<a>).
+    // Rendered answer (verbatim from the pre-move /for-builders markup, incl. inline <strong>/<a>; the
+    // design pass moved the strong tags' inline colour into the page's style block, the words are unchanged).
     assert.ok(
       html.includes(
-        '<div class="faq-answer-inner">Background extraction, the hands-free contribution engine, runs on <strong style="color:var(--ivory)">Claude Code</strong>, <strong style="color:var(--ivory)">Codex</strong>, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue. Best-effort capture covers several more clients, and any other MCP-compatible client can connect manually to search, unlock, and contribute from inside the client. See <a href="/legal/supported-clients">supported clients</a> for the full tier map. Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted.</div>'
+        '<div class="faq-answer-inner">Background extraction, the hands-free contribution engine, runs on <strong>Claude Code</strong>, <strong>Codex</strong>, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue. Best-effort capture covers several more clients, and any other MCP-compatible client can connect manually to search, unlock, and contribute from inside the client. See <a href="/legal/supported-clients">supported clients</a> for the full tier map. Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted.</div>'
       ),
       'rendered answer on /for-agents retains the pre-move claim and appends the approved boundary'
     );

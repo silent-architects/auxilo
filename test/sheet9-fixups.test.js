@@ -127,14 +127,17 @@ describe('B1 (static, SUPERSEDED by the wave D1 AD design-tells sweep): .moat-ca
     assert.doesNotMatch(mediaBlock, /\.moat-grid\s*\{/, 'no .moat-grid override remains in the <=900px block');
   });
 
-  it('/for-builders renders .moat-grid/.moat-card but never .moat-icon', () => {
+  // Design rebuild: the "You Control What Publishes" block on /for-builders is a claim beside the
+  // review-queue drawing (a .pair), so its paragraph no longer sits in a .moat-grid/.moat-card
+  // wrapper. The shared rules above are untouched (the positive control is the .moat-card rule
+  // still existing in the shared sheet), and the paragraph itself is still served.
+  it('/for-builders no longer wraps its "You Control What Publishes" paragraph in .moat-grid/.moat-card, and never renders .moat-icon', () => {
     const html = readPublic('for-builders.html');
-    assert.match(html, /<div class="moat-grid">/);
-    // Wave E3 item 7 removed the dead scroll-reveal system (and every
-    // class="reveal" attribute) from for-builders.html, so .moat-card no
-    // longer carries a trailing " reveal".
-    assert.match(html, /<div class="moat-card">/);
+    assert.doesNotMatch(html, /class="moat-grid"/);
+    assert.doesNotMatch(html, /class="moat-card"/);
     assert.doesNotMatch(html, /class="moat-icon"/, '.moat-icon markup is gone from /for-builders');
+    assert.match(html, /<section id="why-builders"[^>]*>\s*<div class="container pair art-left">\s*<div>\s*<h2 id="why-builders-heading" >You Control What Publishes<\/h2>\s*<p>Raw transcripts never leave your machine\./, 'the paragraph is the claim beside the drawing');
+    assert.ok(ruleBody(STYLES, '^\\.moat-card\\s*\\{'), 'positive control: the shared .moat-card rule still exists');
   });
 });
 
@@ -326,49 +329,33 @@ describe('Tier 2 (dynamic, playwright)', () => {
     }
   }
 
-  it('B1 (SUPERSEDED): .moat-icon renders nowhere and .moat-card renders full-width (ruled list, not a grid) at both 1440px and 800px', async (t) => {
+  // Design rebuild: /for-builders carries no .moat-grid/.moat-card any more (see the static test
+  // above), so the full-width check is replaced by: no .moat-icon or .moat-card renders, and the
+  // "You Control What Publishes" paragraph renders as the claim beside the drawing, at both widths.
+  it('B1 (SUPERSEDED): .moat-icon and .moat-card render nowhere on /for-builders, and the You Control paragraph renders in the claim column at both 1440px and 800px', async (t) => {
     if (!tier2ok) { t.skip('playwright not resolvable'); return; }
-    const wide = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-    const wp = await wide.newPage();
-    try {
-      await wp.goto(`${base}/for-builders.html`, { waitUntil: 'networkidle' });
-      const iconCount = await wp.evaluate(() => document.querySelectorAll('.moat-icon').length);
-      assert.equal(iconCount, 0, '.moat-icon should render nowhere (icon-as-marker tell removed)');
-
-      const widths = await wp.evaluate(() => {
-        const grid = document.querySelector('.moat-grid');
-        const cards = [...document.querySelectorAll('.moat-card')];
-        return {
-          gridW: grid.getBoundingClientRect().width,
-          cardWs: cards.map((c) => c.getBoundingClientRect().width),
-        };
-      });
-      for (const cardW of widths.cardWs) {
-        assert.ok(Math.abs(cardW - widths.gridW) <= 1,
-          `each .moat-card should span the full .moat-grid width (ruled list, not a 2-col grid): card ${cardW} vs grid ${widths.gridW}`);
+    for (const width of [1440, 800]) {
+      const ctx = await browser.newContext({ viewport: { width, height: 900 } });
+      const p = await ctx.newPage();
+      try {
+        await p.goto(`${base}/for-builders.html`, { waitUntil: 'networkidle' });
+        const found = await p.evaluate(() => {
+          const para = document.querySelector('#why-builders .pair > div:first-child > p');
+          const r = para ? para.getBoundingClientRect() : null;
+          return {
+            icons: document.querySelectorAll('.moat-icon').length,
+            cards: document.querySelectorAll('.moat-card, .moat-grid').length,
+            paraWidth: r ? r.width : 0,
+            colWidth: para ? para.parentElement.getBoundingClientRect().width : 0,
+          };
+        });
+        assert.equal(found.icons, 0, `.moat-icon should render nowhere at ${width}px`);
+        assert.equal(found.cards, 0, `.moat-card/.moat-grid should render nowhere on /for-builders at ${width}px`);
+        assert.ok(found.paraWidth > 0, `positive control: the You Control paragraph renders at ${width}px`);
+        assert.ok(found.paraWidth <= found.colWidth + 1, `the paragraph fits its claim column at ${width}px: ${found.paraWidth} vs ${found.colWidth}`);
+      } finally {
+        await ctx.close();
       }
-    } finally {
-      await wide.close();
-    }
-
-    const narrow = await browser.newContext({ viewport: { width: 800, height: 900 } });
-    const np = await narrow.newPage();
-    try {
-      await np.goto(`${base}/for-builders.html`, { waitUntil: 'networkidle' });
-      const widths = await np.evaluate(() => {
-        const grid = document.querySelector('.moat-grid');
-        const cards = [...document.querySelectorAll('.moat-card')];
-        return {
-          gridW: grid.getBoundingClientRect().width,
-          cardWs: cards.map((c) => c.getBoundingClientRect().width),
-        };
-      });
-      for (const cardW of widths.cardWs) {
-        assert.ok(Math.abs(cardW - widths.gridW) <= 1,
-          `each .moat-card should still span the full width at 800px: card ${cardW} vs grid ${widths.gridW}`);
-      }
-    } finally {
-      await narrow.close();
     }
   });
 
@@ -543,9 +530,16 @@ describe('Tier 2 (dynamic, playwright)', () => {
         await ctx.close();
       }
     };
-    const short = await measureAt(2000);
-    const tall = await measureAt(3200);
-    assert.ok(Math.abs(short - 2000) <= 2, `footer bottom at a 2000px viewport should be ~2000, got ${short}`);
-    assert.ok(Math.abs(tall - 3200) <= 2, `footer bottom at a 3200px viewport should be ~3200, got ${tall}`);
+    // Design system pass: the page's own height changed with the section rhythm, so the two
+    // tall viewports are taken relative to the page's natural height (measured in the same
+    // run at a short viewport, where the footer bottom is the document height) instead of two
+    // fixed numbers that the content could outgrow.
+    const natural = await measureAt(700);
+    const shortH = Math.ceil(natural) + 400;
+    const tallH = Math.ceil(natural) + 1600;
+    const short = await measureAt(shortH);
+    const tall = await measureAt(tallH);
+    assert.ok(Math.abs(short - shortH) <= 2, `footer bottom at a ${shortH}px viewport should be ~${shortH}, got ${short}`);
+    assert.ok(Math.abs(tall - tallH) <= 2, `footer bottom at a ${tallH}px viewport should be ~${tallH}, got ${tall}`);
   });
 });

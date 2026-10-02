@@ -125,7 +125,8 @@ describe('Wave E fix F2: for-builders hero stat rule scoped to #builders-hero, n
     const html = readPublic('for-builders.html');
     const heroSection = html.match(/<section id="builders-hero"[\s\S]*?<\/section>/);
     assert.ok(heroSection, '#builders-hero section found');
-    assert.match(heroSection[0], /class="builders-hero-stats"/, 'the top strip is inside #builders-hero');
+    // Design rebuild: the strip is one dark panel (class list "dw-panel dw-dark builders-hero-stats").
+    assert.match(heroSection[0], /class="[^"]*\bbuilders-hero-stats\b[^"]*"/, 'the top strip is inside #builders-hero');
     assert.ok(!html.includes('id="lc-unlocks"'), 'the second (ledger) strip no longer exists anywhere on the page — VISION PASS row V-04 cut it, not just moved it');
     // Positive control: the top strip's own stat cells are still there.
     assert.equal((heroSection[0].match(/class="builders-hero-stat"/g) || []).length, 3, 'positive control: the top strip\'s three stat cells are still present');

@@ -103,10 +103,12 @@ describe('SITE-RESTRUCTURE-W3 item C — /pricing 9 -> 6 sections', () => {
     assert.equal(pricing.match(/<section id="credit-packs"/), null);
   });
 
-  it('exactly six top-level sections remain: the hero div plus 5 <section id> elements', () => {
-    assert.match(pricing, /<div id="pricing-hero" class="pricing-page-header">/);
+  // Design rebuild: the hero is a dark <section> of its own, so six <section id> elements remain.
+  it('exactly six top-level sections remain: the dark hero section plus 5 body <section id> elements', () => {
+    assert.match(pricing, /<section id="pricing-hero" class="pricing-page-header on-dark"/);
     const sectionIds = [...pricing.matchAll(/<section id="([^"]+)"/g)].map((m) => m[1]);
     assert.deepEqual(sectionIds, [
+      'pricing-hero',
       'how-pricing-works',
       'for-agents-pricing',
       'for-builders-pricing',
@@ -132,22 +134,33 @@ describe('SITE-RESTRUCTURE-W3 item C — /pricing 9 -> 6 sections', () => {
       'Credit Packs must sit below Payment Methods within the section');
   });
 
-  it('background alternation is re-established strictly A/B/A/B/A across the 5 body sections', () => {
+  // Design rebuild: the grounds are the design system's classes. The dark hero opens the page,
+  // the body alternates paper and tint, and the closing ask is dark again.
+  it('the grounds run dark, paper, tint, paper, tint, dark down the page and no two neighbours share one', () => {
     const expected = [
-      ['how-pricing-works', 'section-raised'],
-      ['for-agents-pricing', 'section-ground'],
-      ['for-builders-pricing', 'section-raised'],
-      ['faq', 'section-ground'],
-      ['pricing-cta', 'section-raised'],
+      ['pricing-hero', 'dark'],
+      ['how-pricing-works', 'paper'],
+      ['for-agents-pricing', 'tint'],
+      ['for-builders-pricing', 'paper'],
+      ['faq', 'tint'],
+      ['pricing-cta', 'dark'],
     ];
-    for (const [id, cls] of expected) {
-      const re = new RegExp(`<section id="${id}"[^>]*class="[^"]*\\b${cls}\\b[^"]*"`);
-      assert.match(pricing, re, `#${id} must carry ${cls}`);
+    const groundOf = (id) => {
+      const tag = pricing.match(new RegExp(`<section id="${id}"[^>]*>`));
+      assert.ok(tag, `expected <section id="${id}">`);
+      const cls = (tag[0].match(/class="([^"]*)"/) || [null, ''])[1].split(/\s+/);
+      assert.ok(!cls.includes('section-raised') && !cls.includes('section-ground'), `#${id} carries a retired ground class`);
+      if (cls.includes('on-dark')) return 'dark';
+      if (cls.includes('on-tint')) return 'tint';
+      return 'paper';
+    };
+    for (const [id, ground] of expected) {
+      assert.equal(groundOf(id), ground, `#${id} must sit on ${ground}`);
     }
-    // No two adjacent body sections share a background class.
-    const classes = expected.map(([, cls]) => cls);
-    for (let i = 1; i < classes.length; i++) {
-      assert.notEqual(classes[i], classes[i - 1], `sections at index ${i - 1} and ${i} must alternate`);
+    // No two adjacent sections share a ground.
+    const grounds = expected.map(([id]) => groundOf(id));
+    for (let i = 1; i < grounds.length; i++) {
+      assert.notEqual(grounds[i], grounds[i - 1], `sections at index ${i - 1} and ${i} must alternate`);
     }
   });
 
@@ -173,8 +186,8 @@ describe('SITE-RESTRUCTURE-W3 item C — /pricing 9 -> 6 sections', () => {
   });
 
   it('VISION PASS (V-20/V-21): the live-ledger stat strip and its marker comments are gone from the hero entirely, no <a>/<button> (ask-wave.test.js\'s existing "pricing hero ships no action" invariant still holds)', () => {
-    const heroStart = pricing.indexOf('<div id="pricing-hero" class="pricing-page-header">');
-    const firstSectionStart = pricing.indexOf('<section id=');
+    const heroStart = pricing.indexOf('<section id="pricing-hero" class="pricing-page-header on-dark"');
+    const firstSectionStart = pricing.indexOf('<section id="how-pricing-works"');
     assert.ok(heroStart !== -1 && firstSectionStart !== -1 && heroStart < firstSectionStart,
       'expected the pricing hero block before the first <section>');
     const hero = pricing.slice(heroStart, firstSectionStart);

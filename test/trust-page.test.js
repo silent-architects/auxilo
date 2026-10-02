@@ -337,12 +337,12 @@ describe('Trust page: route, redirects, head tags, h1, forbidden strings', { tim
     // test/launch-wave-for-builders.test.js for the positive control on the
     // /works-with link and the page's Codex-free state.
     const captures = [
-      [AGENTS_HTML, 'Background extraction runs on <strong style="color:var(--slate-text)">Claude Code</strong>, <strong style="color:var(--slate-text)">Codex</strong>, and the other clients with a supported extraction hook. Best-effort capture covers several more, and the <a href="/legal/supported-clients">supported clients page</a> maps every tier.', 1],
-      [HOW_IT_WORKS_HTML, '<strong style="color:var(--ivory)">Claude Code</strong>, <strong style="color:var(--ivory)">Codex</strong>, and the other hook-capable clients run it reliably, best-effort capture reaches several more clients, and the <a href="/legal/supported-clients">supported clients page</a> maps every tier.', 1],
+      [AGENTS_HTML, 'Background extraction runs on <strong>Claude Code</strong>, <strong>Codex</strong>, and the other clients with a supported extraction hook. Best-effort capture covers several more, and the <a href="/legal/supported-clients">supported clients page</a> maps every tier.', 1],
+      [HOW_IT_WORKS_HTML, '<strong>Claude Code</strong>, <strong>Codex</strong>, and the other hook-capable clients run it reliably, best-effort capture reaches several more clients, and the <a href="/legal/supported-clients">supported clients page</a> maps every tier.', 1],
       [HOW_IT_WORKS_HTML, 'Auxilo captures them. On Claude Code, Codex, and the other supported-tier clients, a local runner reads each finished session in the background and identifies specific, actionable operational knowledge. This happens automatically, with no work from you.', 1],
       [AGENTS_HTML, 'Background extraction, which turns finished sessions into learnings, runs on Claude Code, Codex, and the other clients with a supported extraction hook.', 2],
       [AGENTS_HTML, 'Background extraction, the hands-free contribution engine, runs on Claude Code, Codex, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue.', 1],
-      [AGENTS_HTML, 'Background extraction, the hands-free contribution engine, runs on <strong style="color:var(--ivory)">Claude Code</strong>, <strong style="color:var(--ivory)">Codex</strong>, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue.', 1],
+      [AGENTS_HTML, 'Background extraction, the hands-free contribution engine, runs on <strong>Claude Code</strong>, <strong>Codex</strong>, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue.', 1],
     ];
     for (const [html, literal, expected] of captures) {
       assert.equal(countLiteral(html, literal), expected, `capture claim preserved exactly ${expected} time(s): ${stripHtml(literal).slice(0, 72)}...`);
@@ -471,7 +471,7 @@ describe('Trust page: route, redirects, head tags, h1, forbidden strings', { tim
   });
 
   it('§1b immediately follows §1 in DOM order (ship-rev header rider)', () => {
-    const sectionIds = [...TRUST_HTML.matchAll(/<section aria-labelledby="([^"]+)">/g)].map((m) => m[1]);
+    const sectionIds = [...TRUST_HTML.matchAll(/<section aria-labelledby="([^"]+)"(?: class="[^"]*")?>/g)].map((m) => m[1]);
     const s1Index = sectionIds.indexOf('what-auxilo-is-heading');
     assert.ok(s1Index >= 0, '§1 section present');
     assert.equal(sectionIds[s1Index + 1], 'earnings-heading', '§1b is the very next <section> after §1');

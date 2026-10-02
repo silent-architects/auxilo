@@ -284,3 +284,36 @@ describe('/connect: SITE-PM packet 13 rev 2', { timeout: 180_000 }, () => {
     assert.match(SERVER_SRC, /app\.get\('\/connect',\s*\(c\)\s*=>\s*\{[\s\S]{0,200}connect\.html/);
   });
 });
+
+// ── Design rebuild: a dark first screen, then the five steps on paper ──
+describe('/connect: design rebuild, markup and the ask', () => {
+  it('opens on a dark hero (h1 and intro), then one paper section holding the five steps and the foot link', () => {
+    const heroAt = CONNECT_HTML.indexOf('<section id="connect-hero" class="on-dark"');
+    const stepsAt = CONNECT_HTML.indexOf('<section id="connect-steps-section">');
+    assert.ok(heroAt > -1 && stepsAt > heroAt, 'hero (dark) then steps (paper)');
+    const hero = CONNECT_HTML.slice(heroAt, stepsAt);
+    assert.match(hero, /<h1 id="connect-hero-heading">Connect Your Agent<\/h1>/);
+    assert.match(hero, /<p class="lede">One command, and your agent stops starting over on problems it already solved\. Everything after that is your choice\.<\/p>/);
+    const steps = CONNECT_HTML.slice(stepsAt, CONNECT_HTML.indexOf('</main>'));
+    assert.equal((steps.match(/<li>/g) || []).length, 5, 'five steps');
+    assert.ok(steps.indexOf('<ol class="connect-steps">') < steps.indexOf('class="page-foot"'), 'the foot link follows the steps');
+    assert.doesNotMatch(CONNECT_HTML, /page-title|page-intro|section-raised/, 'no dark-era page shell remains');
+  });
+
+  it('the setup command block is the page ask exactly as the homepage builds it: .hero-setup-block, the pre holds only the command, no override of its own', () => {
+    const block = CONNECT_HTML.match(/<div class="code-block hero-setup-block" id="install">[\s\S]*?<\/div>\s*<p>/);
+    assert.ok(block, 'the block carries code-block hero-setup-block and keeps id="install"');
+    assert.ok(block[0].includes('<pre id="connect-setup-code">npx auxilo setup</pre>'), 'pre holds only `npx auxilo setup`');
+    assert.ok(!block[0].includes('$ '), 'the `$ ` is drawn by CSS, not written in the markup');
+    assert.ok(block[0].includes('onclick="copyCode(\'connect-setup-code\', \'copy-connect-setup\')"'), 'the copy hook is unchanged');
+    assert.equal((CONNECT_HTML.match(/class="[^"]*hero-setup-block/g) || []).length, 1, 'one ask block on the page');
+    const styleBlock = CONNECT_HTML.slice(CONNECT_HTML.indexOf('<style>'), CONNECT_HTML.indexOf('</style>'));
+    assert.doesNotMatch(styleBlock, /#install|\.copy-btn|var\(--(ivory|slate|ash|obsidian|aurum)\)/, 'the page block restyles neither the ask nor any ground-blind colour');
+  });
+
+  it('preloads the Newsreader display face and does not preload the retired PlexMono500 face', () => {
+    assert.ok(CONNECT_HTML.includes('<link rel="preload" href="/fonts/NewsreaderDisplay300.a07d3c5c.woff2" as="font" type="font/woff2" crossorigin />'), 'Newsreader preload present');
+    assert.ok(!/PlexMono500/.test(CONNECT_HTML), 'no PlexMono500 reference');
+    assert.ok(CONNECT_HTML.includes('PlexMono400.0698749e.woff2'), 'positive control: the 400 face is still preloaded');
+  });
+});

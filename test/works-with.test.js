@@ -359,3 +359,138 @@ describe('WORKS-WITH: live routes', { timeout: 180_000 }, () => {
     assert.equal(res.status, 404, 'a missing logo file 404s rather than falling through');
   });
 });
+
+// ── Design rebuild: the page is a dark first screen, light cards on paper, the key on tint ──
+describe('WORKS-WITH: design rebuild, static markup and head', () => {
+  it('opens on a dark hero, then the client cards on paper, then the key on tint, with no leftover dark-era wrapper', () => {
+    const heroAt = WORKS_WITH_HTML.indexOf('<section id="ww-hero" class="on-dark"');
+    const listAt = WORKS_WITH_HTML.indexOf('<section id="ww-list-section">');
+    const keyAt = WORKS_WITH_HTML.indexOf('<section id="ww-key-section" class="on-tint">');
+    assert.ok(heroAt > -1 && listAt > heroAt && keyAt > listAt, 'hero (dark), list (paper), key (tint), in that order');
+    assert.ok(WORKS_WITH_HTML.indexOf('<ul class="ww-list">') > listAt && WORKS_WITH_HTML.indexOf('<ul class="ww-list">') < keyAt, 'the client list sits in the paper section');
+    assert.match(WORKS_WITH_HTML, /<main id="main">/, 'main is plain');
+    assert.doesNotMatch(WORKS_WITH_HTML, /ww-main|ww-wrap|ww-h1|section-raised/, 'no dark-era wrapper, h1 class or raised section remains');
+    assert.match(WORKS_WITH_HTML, /<h1 id="ww-hero-heading">Works With the Client You Already Run<\/h1>/, 'positive control: the h1 is the page h1');
+  });
+
+  it('preloads the Newsreader display face and does not preload the retired PlexMono500 face', () => {
+    assert.ok(WORKS_WITH_HTML.includes('<link rel="preload" href="/fonts/NewsreaderDisplay300.a07d3c5c.woff2" as="font" type="font/woff2" crossorigin />'), 'Newsreader preload present');
+    assert.ok(!/PlexMono500/.test(WORKS_WITH_HTML), 'no PlexMono500 reference');
+    assert.ok(WORKS_WITH_HTML.includes('PlexMono400.0698749e.woff2'), 'positive control: the 400 face is still preloaded');
+  });
+
+  it('the page block does not recolour, resize or redraw a client mark: it only moves the mask to the left edge, and colours come from tokens', () => {
+    const styleBlock = WORKS_WITH_HTML.slice(WORKS_WITH_HTML.indexOf('<style>'), WORKS_WITH_HTML.indexOf('</style>'));
+    const logoRule = styleBlock.match(/\.ww-logo-box \.ww-logo\s*\{([^}]*)\}/);
+    assert.ok(logoRule, 'the page has a .ww-logo-box .ww-logo rule');
+    assert.ok(!/background|(?<![-\w])color\s*:|filter|opacity|transform|width|height/.test(logoRule[1]), 'that rule sets only the mask position');
+    assert.ok(/mask-position:\s*left center/.test(logoRule[1]), 'the mark sits on the left edge');
+    assert.doesNotMatch(styleBlock, /var\(--(ivory|slate|ash|obsidian)\)/, 'no ground-blind colour token in the page block');
+  });
+});
+
+describe('WORKS-WITH: design rebuild, the card grid as rendered', { timeout: 120_000 }, () => {
+  const http = require('node:http');
+  let server;
+  let browser;
+  let base;
+  let ok = false;
+
+  before(async () => {
+    try { require.resolve('playwright', { paths: [REPO] }); } catch (e) { return; }
+    const publicDir = path.join(REPO, 'public');
+    const MIME = { '.html': 'text/html', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.js': 'application/javascript' };
+    server = http.createServer((req, res) => {
+      const urlPath = decodeURIComponent(req.url.split('?')[0]);
+      const filePath = path.join(publicDir, urlPath);
+      if (!filePath.startsWith(publicDir)) { res.writeHead(403); res.end(); return; }
+      fs.readFile(filePath, (err, data) => {
+        if (err) { res.writeHead(404); res.end('not found'); return; }
+        res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream' });
+        res.end(data);
+      });
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    base = `http://127.0.0.1:${server.address().port}`;
+    try {
+      const { chromium } = require(require.resolve('playwright', { paths: [REPO] }));
+      browser = await chromium.launch();
+      ok = true;
+    } catch (e) {
+      ok = false;
+    }
+  });
+
+  after(async () => {
+    if (browser) await browser.close();
+    if (server) server.close();
+  });
+
+  async function measure(width) {
+    const ctx = await browser.newContext({ viewport: { width, height: 900 } });
+    const page = await ctx.newPage();
+    try {
+      await page.goto(`${base}/works-with.html`, { waitUntil: 'networkidle' });
+      return await page.evaluate(() => {
+        const cells = [...document.querySelectorAll('.ww-list > li')].map((li) => {
+          const r = li.getBoundingClientRect();
+          const name = li.querySelector('.ww-client-name').getBoundingClientRect();
+          const size = ['large', 'medium', 'small'].find((s) => li.classList.contains('ww-size-' + s));
+          const mark = li.querySelector('.ww-logo');
+          return {
+            size, top: Math.round(r.top * 100) / 100, left: Math.round(r.left * 100) / 100, height: Math.round(r.height * 100) / 100,
+            nameOffset: Math.round((name.top - r.top) * 100) / 100, hasMark: !!mark,
+            markInk: mark ? getComputedStyle(mark).backgroundColor : null,
+          };
+        });
+        return { cells, scrollWidth: document.documentElement.scrollWidth, viewport: window.innerWidth };
+      });
+    } finally {
+      await ctx.close();
+    }
+  }
+
+  const distinct = (arr) => [...new Set(arr)];
+
+  it('at 1280: large cards four across, medium and small three across, large first, cards in a row equal in height', async (t) => {
+    if (!ok) { t.skip('playwright not resolvable'); return; }
+    const m = await measure(1280);
+    assert.equal(m.cells.length, 19, 'positive control: 19 cards');
+    const bySize = (s) => m.cells.filter((c) => c.size === s);
+    for (const [size, across] of [['large', 4], ['medium', 3], ['small', 3]]) {
+      const cells = bySize(size);
+      const rows = distinct(cells.map((c) => c.top));
+      assert.equal(cells.length / rows.length, across, `${size}: ${across} across`);
+      for (const top of rows) {
+        const heights = distinct(cells.filter((c) => c.top === top).map((c) => c.height));
+        assert.equal(heights.length, 1, `${size} row at ${top}: every card the same height, got ${heights.join(',')}`);
+      }
+    }
+    assert.ok(Math.max(...bySize('large').map((c) => c.top)) < Math.min(...bySize('medium').map((c) => c.top)), 'large before medium');
+    assert.ok(Math.max(...bySize('medium').map((c) => c.top)) < Math.min(...bySize('small').map((c) => c.top)), 'medium before small');
+    assert.equal(m.scrollWidth, m.viewport, 'no horizontal scroll');
+  });
+
+  it('in every tier the name sits at the same offset in cards with a mark and cards without one, and the marks are ink, not transparent', async (t) => {
+    if (!ok) { t.skip('playwright not resolvable'); return; }
+    const m = await measure(1280);
+    for (const size of ['large', 'medium', 'small']) {
+      const cells = m.cells.filter((c) => c.size === size);
+      assert.ok(cells.some((c) => c.hasMark) && cells.some((c) => !c.hasMark) || size === 'large', `${size}: positive control, both kinds present (large has only marks)`);
+      assert.equal(distinct(cells.map((c) => c.nameOffset)).length, 1, `${size}: name offset identical across the tier, got ${distinct(cells.map((c) => c.nameOffset)).join(',')}`);
+    }
+    for (const c of m.cells.filter((x) => x.hasMark)) {
+      assert.equal(c.markInk, 'rgb(10, 10, 10)', 'a mark is painted in the ink of the light ground');
+    }
+  });
+
+  it('at 768 the cards go two across, at 375 one across, with no horizontal scroll', async (t) => {
+    if (!ok) { t.skip('playwright not resolvable'); return; }
+    const tablet = await measure(768);
+    assert.equal(distinct(tablet.cells.map((c) => c.left)).length, 2, '768: two columns');
+    assert.equal(tablet.scrollWidth, tablet.viewport, '768: no horizontal scroll');
+    const phone = await measure(375);
+    assert.equal(distinct(phone.cells.map((c) => c.left)).length, 1, '375: one column');
+    assert.equal(phone.scrollWidth, phone.viewport, '375: no horizontal scroll');
+  });
+});

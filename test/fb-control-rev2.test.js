@@ -78,8 +78,14 @@ describe('FB-CONTROL-REV2: /for-builders why-builders section — label promoted
       assert.equal(countOccurrences(STATIC_HTML, NEW_BODY), 1, 'new body copy must appear exactly once, with the /how-submissions-work page link intact');
     });
 
-    it('section#why-builders keeps its id and background-alternation class', () => {
-      assert.match(STATIC_HTML, /<section id="why-builders" class="section-raised"/, 'section must keep its id and section-raised background slot');
+    // Design rebuild: a section's ground is a scope class now (on-dark, on-tint, or none for paper).
+    // This section sits on paper between two tint sections, so it carries no ground class and no
+    // longer the retired section-raised one.
+    it('section#why-builders keeps its id, sits on paper (no ground class), and no longer carries section-raised', () => {
+      assert.match(STATIC_HTML, /<section id="why-builders" aria-labelledby="why-builders-heading">/, 'section keeps its id and takes the paper ground (no class)');
+      assert.doesNotMatch(STATIC_HTML, /<section id="why-builders"[^>]*section-raised/, 'the retired section-raised class is gone from this section');
+      assert.match(STATIC_HTML, /<section id="what-you-sell" class="on-tint"/, 'positive control: the section before it is the tint ground, so paper alternates');
+      assert.match(STATIC_HTML, /<section id="faq" class="on-tint"/, 'positive control: the section after it is the tint ground, so paper alternates');
     });
 
     it('/for-builders total <h2> count is unchanged at 7', () => {
