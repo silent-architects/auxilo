@@ -123,7 +123,7 @@ describe('WAVE-D1 type pairing: tokens + @font-face', () => {
   // (the font bytes changing) doesn't require touching this test.
   const HASH = '[0-9a-f]{8}';
 
-  it('three real-font @font-face rules exist (Archivo variable 400-600, IBM Plex Mono 400, Newsreader 300), each on a content-hashed woff2 URL, plus three size-adjust fallback faces; the Plex Mono 500 face is retired', () => {
+  it('four real-font @font-face rules exist (Archivo core and Archivo Ext, both variable 400-600, IBM Plex Mono 400, Newsreader 300), each on a content-hashed woff2 URL, plus three size-adjust fallback faces; the Plex Mono 500 face is retired', () => {
     const faceBlocks = [...STYLES.matchAll(/@font-face\s*\{([^}]*)\}/g)].map((m) => m[1]);
     // Wave E2 item 11: two synthetic local()-only fallback faces
     // ('Archivo Fallback', 'IBM Plex Mono Fallback') were added alongside
@@ -131,15 +131,41 @@ describe('WAVE-D1 type pairing: tokens + @font-face', () => {
     // 5 total, not 3. The three real-font assertions below are unchanged.
     // Design system pass: Newsreader (display, weight 300) and its fallback join; the Plex Mono 500
     // face leaves. 3 real fonts + 3 size-adjust fallbacks (Archivo, Plex Mono, Newsreader) = 6.
-    assert.equal(faceBlocks.length, 6, `expected 6 @font-face rules (3 real fonts + 3 size-adjust fallbacks), found ${faceBlocks.length}`);
+    // Sweep: Archivo ships as two files (core Latin, and a second file for the rarer characters of the
+    // original, split by unicode-range), so 4 real faces + 3 fallbacks = 7.
+    assert.equal(faceBlocks.length, 7, `expected 7 @font-face rules (4 real fonts + 3 size-adjust fallbacks), found ${faceBlocks.length}`);
 
-    const archivo = faceBlocks.find((b) => /font-family:\s*'Archivo'/.test(b));
-    assert.ok(archivo, 'an Archivo @font-face rule exists');
+    const archivoFaces = faceBlocks.filter((b) => /font-family:\s*'Archivo'/.test(b));
+    assert.equal(archivoFaces.length, 2, 'Archivo has exactly two faces, core and Ext');
+    const archivo = archivoFaces.find((b) => /ArchivoVariable\.[0-9a-f]{8}\.woff2/.test(b));
+    assert.ok(archivo, 'an Archivo core @font-face rule exists');
     // The shipped file is the variable font instanced to weights 400 to 600 and subset to Latin plus
     // Latin Extended-A, so the face declares exactly that range (a request outside it is a defect).
     assert.match(archivo, /font-weight:\s*400 600\s*;/);
     assert.doesNotMatch(archivo, /font-weight:\s*100 900/);
     assert.match(archivo, new RegExp(`url\\('\\/fonts\\/ArchivoVariable\\.${HASH}\\.woff2'\\)\\s*format\\('woff2'\\)`));
+    assert.match(archivo, /font-display:\s*swap/);
+    assert.match(archivo, /unicode-range:\s*U\+0020-007E, U\+00A0-017F,/, 'the core face covers basic Latin and Latin Extended-A');
+
+    const archivoExt = archivoFaces.find((b) => /ArchivoVariableExt\.[0-9a-f]{8}\.woff2/.test(b));
+    assert.ok(archivoExt, 'an Archivo Ext @font-face rule exists');
+    assert.match(archivoExt, /font-weight:\s*400 600\s*;/);
+    assert.match(archivoExt, /font-display:\s*swap/);
+    assert.match(archivoExt, new RegExp(`url\\('\\/fonts\\/ArchivoVariableExt\\.${HASH}\\.woff2'\\)\\s*format\\('woff2'\\)`));
+    const extRange = archivoExt.match(/unicode-range:\s*([^;]+);/);
+    assert.ok(extRange, 'the Ext face carries a unicode-range');
+    assert.match(extRange[1], /U\+1EA0-1EF9/, 'the Ext face covers the Vietnamese block');
+    assert.match(extRange[1], /U\+0218|U\+01FA-021B/, 'the Ext face covers the Romanian comma-below letters');
+    // The two ranges never overlap, so a character has exactly one source.
+    const expand = (list) => list.split(',').map((t) => t.trim().replace(/^U\+/, '')).flatMap((t) => {
+      const [a, b] = t.split('-').map((h) => parseInt(h, 16));
+      return b === undefined ? [a] : Array.from({ length: b - a + 1 }, (_, i) => a + i);
+    });
+    const coreSet = new Set(expand(archivo.match(/unicode-range:\s*([^;]+);/)[1]));
+    const overlap = expand(extRange[1]).filter((cp) => coreSet.has(cp));
+    assert.deepEqual(overlap, [], 'the core and Ext unicode-ranges do not overlap');
+    // Positive control for the overlap check: the expander sees a shared code point.
+    assert.deepEqual(expand('U+0041-0043').filter((cp) => new Set(expand('U+0042')).has(cp)), [0x42]);
 
     const plex400 = faceBlocks.find((b) => /font-family:\s*'IBM Plex Mono'/.test(b) && /font-weight:\s*400\b/.test(b));
     assert.ok(plex400, 'an IBM Plex Mono 400 @font-face rule exists');
@@ -165,9 +191,10 @@ describe('WAVE-D1 type pairing: tokens + @font-face', () => {
     assert.match(newsFallback, /descent-override:\s*\d+(\.\d+)?%/);
   });
 
-  it('the three self-hosted font files exist on disk (content-hashed names) within the byte ceilings, and the retired Plex Mono 500 file is gone', () => {
+  it('the four self-hosted font files exist on disk (content-hashed names) within the byte ceilings, and the retired Plex Mono 500 file is gone', () => {
     const prefixes = [
       ['ArchivoVariable', 40 * 1024],
+      ['ArchivoVariableExt', 20 * 1024],
       ['PlexMono400', 28 * 1024],
       ['NewsreaderDisplay300', 30 * 1024],
     ];
@@ -514,7 +541,7 @@ describe('WAVE-D1 fix pass: font cache immutability, CSP tightened, for-agents r
   it('every shipped font filename under public/fonts/ matches the immutable route\'s hash pattern', () => {
     const fontsDir = path.join(PUBLIC_DIR, 'fonts');
     const woff2Files = fs.readdirSync(fontsDir).filter((f) => f.endsWith('.woff2'));
-    assert.equal(woff2Files.length, 3, `expected 3 woff2 files in ${fontsDir}, found ${woff2Files.length}`);
+    assert.equal(woff2Files.length, 4, `expected 4 woff2 files in ${fontsDir}, found ${woff2Files.length}`);
     for (const f of woff2Files) {
       assert.match(f, /^[A-Za-z0-9]+\.[0-9a-f]{8}\.woff2$/,
         `${f} should be named <name>.<8-hex-hash>.woff2 to match the immutable /fonts/ cache route`);
@@ -578,12 +605,12 @@ describe('integration: .dw-title sets its own face, and the shared drawing helpe
   });
 
   // The homepage and /for-builders each carried a copy of the device's clipping wrapper and the
-  // review-queue drawing's kill-switch helpers. They live in the shared sheet now, once. The device
-  // itself is no longer markup: the shared sheet paints it as a background image on the first dark
-  // section, so a page carries no device svg, and the old clipping wrapper's only rule is the one
-  // that hides any copy a page still carries.
-  it('.dw-device-clip, .dw-hang and .dw-kill are defined once in styles.css and in no page', () => {
-    for (const selector of ['.dw-device-clip', '.dw-hang', '.dw-kill']) {
+  // review-queue drawing's kill-switch helpers. The kill-switch helpers live in the shared sheet now, once.
+  // The device itself is no longer markup: the shared sheet paints it as a background image on the first
+  // dark section, so no page carries a device svg or the old clipping wrapper, and the sheet has no rule
+  // left for that wrapper.
+  it('.dw-hang and .dw-kill are defined once in styles.css and in no page; no page or sheet carries the old .dw-device-clip', () => {
+    for (const selector of ['.dw-hang', '.dw-kill']) {
       const defs = [...STYLES.matchAll(new RegExp(`^${selector.replace('.', '\\.')}\\s*\\{`, 'gm'))];
       assert.equal(defs.length, 1, `${selector} is defined exactly once in styles.css, found ${defs.length}`);
     }
@@ -596,10 +623,13 @@ describe('integration: .dw-title sets its own face, and the shared drawing helpe
       // Positive control: the markup still uses the shared kill-switch panel.
       assert.match(html, /dw-kill/, `${page} still uses the shared kill-switch panel`);
     }
-    // The homepage no longer carries the device as markup, and the wrapper's one shared rule hides it.
-    assert.ok(!/dw-device/.test(readPage('index.html')), 'index.html carries no device markup');
-    const clip = STYLES.match(/^\.dw-device-clip\s*\{([^}]*)\}/m);
-    assert.ok(clip && /display:\s*none/.test(clip[1]), 'the shared wrapper rule hides any inline device a page still carries');
+    // No page carries the device as markup, and the sheet has no rule for the old wrapper.
+    for (const page of ALL_PAGES) {
+      assert.ok(!/dw-device/.test(readPage(page)), `${page} carries no device markup`);
+    }
+    assert.ok(!/dw-device-clip/.test(STYLES), 'styles.css carries no rule for the old inline device wrapper');
+    // Positive control: the shared sheet does paint the device, so the absence above is about the markup.
+    assert.match(STYLES, /--device:\s*url\(/, 'the sheet defines the device image');
   });
 
   it('the homepage style block carries no second .hero-grid (the shared sheet has it)', () => {

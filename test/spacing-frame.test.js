@@ -318,6 +318,88 @@ describe('SPACING-0927 Part A (the frame), measured the Art Director\'s way', { 
       console.log('\n=== DOCUMENTED EXCEPTIONS (counted as passing, reason attached) ===');
       for (const ex of evalResult.documentedExceptions) console.log('  ' + ex);
     }
+    // Rule 5's beside exemption, named: every heading the rule did not measure, and how many per width.
+    console.log(`\n=== HEADINGS EXEMPT AS BESIDE (rule 5), per width ${JSON.stringify(evalResult.besideExemptCount)} ===`);
+    for (const b of evalResult.besideExempt) console.log('  ' + b.replace(/\s+/g, ' '));
     assert.ok(true);
+  });
+
+  // Rule 5's beside exemption is pinned per width. A heading is exempt only where the unit after it sits beside
+  // it (the heading-left layout, from 1025 up), so every exemption is at 1280 and none at 768 or 375. A new
+  // heading-left section changes the number and fails here, on purpose: raise it knowingly, with the report.
+  const BESIDE_EXEMPT_PINNED = { 1280: 17, 768: 0, 375: 0 };
+  it('rule 5: the beside exemption is reported and pinned per width, so a new silent exemption fails', (t) => {
+    if (bootSkipReason) { t.skip(bootSkipReason); return; }
+    if (!playwrightOk) { t.skip('playwright not resolvable'); return; }
+    assert.deepEqual(evalResult.besideExemptCount, BESIDE_EXEMPT_PINNED, `the exempt headings per width:\n${evalResult.besideExempt.map((b) => '  ' + b.replace(/\s+/g, ' ')).join('\n')}`);
+    assert.equal(evalResult.besideExempt.length, Object.values(BESIDE_EXEMPT_PINNED).reduce((a, b) => a + b, 0), 'the list and the counts agree');
+    // positive control: the exempt list is not empty, and each entry names its page, width and heading
+    assert.ok(evalResult.besideExempt.length > 0 && evalResult.besideExempt.every((b) => /^\/[^ ]* @ \d+: h[123]/.test(b)));
+  });
+
+  it('rule 6: every card is logged (pass or fail), and the documented card exceptions are all still in use', (t) => {
+    if (bootSkipReason) { t.skip(bootSkipReason); return; }
+    if (!playwrightOk) { t.skip('playwright not resolvable'); return; }
+    assert.ok(evalResult.totalChecks[6] >= 20, `positive control: cards were found and logged (${evalResult.totalChecks[6]})`);
+    assert.equal(evalResult.totalChecks[6], evalResult.passCounts[6] + evalResult.failures[6].length, 'every card is a pass or a failure, none silent');
+    assert.deepEqual(evalResult.unusedCardExceptions, [], 'a card-padding exception no card matches any more must be removed');
+  });
+});
+
+// ── The evaluator itself, on records made by hand (no server, no browser) ──
+// Each rule is shown to fail on input that breaks it and to pass on input that keeps it, so a report of zero
+// failures means the rule looked and found none, not that it could not see.
+describe('the rule evaluator sees an overlap, an uneven card and an unlisted exemption', () => {
+  const emptyRec = () => ({
+    sections: [], seams: [], headingGaps: [], repeatedGroups: [], cards: [], joinedRows: [], siblingGaps: [],
+    nav: null, footer: null,
+  });
+  const evalOne = (rec, page = '/probe') => evaluateRules({ [page]: { 1280: rec, 768: emptyRec(), 375: emptyRec() } }, {});
+  const heading = (over) => Object.assign({
+    heading: 'h2#probe', headingTag: 'h2', headingText: 'Probe', headingBottom: 200, headingLeft: 90, headingRight: 500,
+    followingUnitLeft: 90, followingUnitRight: 1190, followingUnitTop: 224, firstThingKind: 'text', firstThingText: 'under', gap: 24,
+  }, over);
+  const card = (padding, over) => Object.assign({
+    parentSelector: 'div.grid', className: 'probe-card', inGrid: true, gaps: [], bg: 'a', surface: 'a', borderColor: 'b', line: 'b',
+    borderWidths: [1, 1, 1, 1], radii: [14, 14, 14, 14], padding, paddingUniform: true,
+  }, over);
+
+  it('rule 5: a thing under the heading at 24 passes; at 30 fails', () => {
+    assert.equal(evalOne(Object.assign(emptyRec(), { headingGaps: [heading({})] })).failures[5].length, 0);
+    assert.equal(evalOne(Object.assign(emptyRec(), { headingGaps: [heading({ gap: 30, followingUnitTop: 230 })] })).failures[5].length, 1);
+  });
+
+  it('rule 5: a unit that starts above the heading\'s bottom edge and overlaps it horizontally FAILS, it is not exempt', () => {
+    const r = evalOne(Object.assign(emptyRec(), { headingGaps: [heading({ followingUnitTop: 150, gap: -50 })] }));
+    assert.equal(r.failures[5].length, 1, 'a real overlap fails');
+    assert.match(r.failures[5][0], /real overlap/);
+    assert.equal(r.besideExempt.length, 0, 'and is not listed as exempt');
+  });
+
+  it('rule 5: a unit beside the heading is exempt, listed, and counted at its width', () => {
+    const r = evalOne(Object.assign(emptyRec(), { headingGaps: [heading({ followingUnitLeft: 600, followingUnitRight: 1190, followingUnitTop: 120, gap: -80 })] }));
+    assert.equal(r.failures[5].length, 0);
+    assert.equal(r.besideExempt.length, 1);
+    assert.deepEqual(r.besideExemptCount, { 1280: 1, 768: 0, 375: 0 });
+  });
+
+  it('rule 6: a card with 32 on all four sides passes; 24, or uneven sides, or an uneven group fails', () => {
+    const run = (cards) => evalOne(Object.assign(emptyRec(), { cards })).failures[6].length;
+    assert.equal(run([card({ top: 32, right: 32, bottom: 32, left: 32 })]), 0);
+    assert.equal(run([card({ top: 24, right: 24, bottom: 24, left: 24 })]), 1, 'equal but not 32');
+    assert.equal(run([card({ top: 32, right: 32, bottom: 24, left: 32 })]), 1, 'not equal on four sides');
+    assert.equal(run([card({ top: 32, right: 32, bottom: 32, left: 32 }, { paddingUniform: false })]), 1, 'not the same on every card of the group');
+  });
+
+  it('rule 6: every card is logged, and a card family on the documented list is counted as passing with its reason', () => {
+    const r = evalOne(Object.assign(emptyRec(), { cards: [card({ top: 32, right: 32, bottom: 32, left: 32 }), card({ top: 0, right: 0, bottom: 0, left: 0 }, { parentSelector: 'div.steps', className: 'step' })] }));
+    assert.equal(r.totalChecks[6], 2, 'both cards were logged');
+    assert.equal(r.failures[6].length, 0);
+    assert.ok(r.documentedExceptions.some((e) => /rule 6/.test(e) && /step card/.test(e)), 'the exception is named in the report');
+    assert.ok(!r.unusedCardExceptions.includes('step') && r.unusedCardExceptions.includes('flow-step'), 'used and unused exceptions are told apart');
+    // the same family at an uncovered size would fail: the client card exception is for 375 only
+    const phone = (w) => evaluateRules({ '/probe': { 1280: emptyRec(), 768: emptyRec(), 375: emptyRec(), [w]: Object.assign(emptyRec(), { cards: [card({ top: 16, right: 16, bottom: 16, left: 16 }, { parentSelector: 'ul.ww-list', className: 'ww-cell ww-size-medium' })] }) } }, {});
+    assert.equal(phone(375).failures[6].length, 0, 'at 375 the compact client card is a documented exception');
+    assert.equal(phone(1280).failures[6].length, 1, 'at 1280 it is not');
   });
 });

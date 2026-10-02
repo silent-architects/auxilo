@@ -128,7 +128,7 @@ describe('BUILD-BRIEF-TERMS-SCROLL Part T: read-to-the-end Terms acceptance', { 
   // and minus the page's own <h1> (R2-3: the dialog title already says
   // "Terms of Service"; everything AFTER that h1 is shown).
   function expectedTermsText(termsHtml) {
-    const wrapStart = termsHtml.indexOf('<div class="legal-wrap">');
+    const wrapStart = termsHtml.indexOf('<div class="legal-wrap"');
     const wrapEnd = termsHtml.indexOf('</div>\n\n<!-- Wave C.3b');
     const inner = termsHtml.slice(wrapStart, wrapEnd === -1 ? undefined : wrapEnd);
     return inner

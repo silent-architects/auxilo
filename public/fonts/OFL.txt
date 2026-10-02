@@ -5,9 +5,11 @@ each project's own license file, are reproduced below, followed by the OFL
 bodies, differing only in their copyright line).
 
 -----------------------------------------------------------
-Archivo (ArchivoVariable.*.woff2: the shipped file is instanced to weights
-400 to 600 and subset to Latin and Latin Extended-A from the upstream
-variable font)
+Archivo (ArchivoVariable.*.woff2 and ArchivoVariableExt.*.woff2: the shipped
+files are instanced to weights 400 to 600 from the upstream variable font; the
+first is subset to Latin and Latin Extended-A, the second holds the rarer
+characters of the original, such as Romanian and Vietnamese, and loads only on
+a page that uses one of them)
 Source: https://github.com/Omnibus-Type/Archivo
 -----------------------------------------------------------
 
@@ -30,7 +32,7 @@ This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
 
 -----------------------------------------------------------
-IBM Plex Mono (PlexMono400.*.woff2, PlexMono500.*.woff2)
+IBM Plex Mono (PlexMono400.*.woff2)
 Source: https://github.com/IBM/plex
 -----------------------------------------------------------
 

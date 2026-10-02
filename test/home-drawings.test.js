@@ -11,7 +11,9 @@
  *     arrowheads; stacked (480 and down) it is a vertical hairline through the node column
  *   - its motion: only inside no-preference and 481 and up, finished inside 2.4 seconds, a
  *     leg draws as its panel starts to rise and never before the panel it leaves exists
- *   - the device is one shared background image on the first dark section of every page, 12% ivory, no gold
+ *   - the device is one shared background image on the first dark section of every page, 12% ivory, no gold;
+ *     at 1024 and down it is a small cropped corner confined to the section's top padding band, so it never
+ *     sits behind text; the dashboard carries none
  *   - the two hero notes take the body colour and 15px from 481 up, 14px below
  *   - the recall drawing shows the same learning in both panels, the short way's card dominant and the long way's dimmed
  *   - code blocks that scroll sideways keep a thin scrollbar on the dark ground
@@ -114,30 +116,43 @@ describe('home drawings: the source', () => {
 
   // Round 3: the device is no longer markup. One shared rule paints the mark's own geometry (the two
   // sides of the triangle and its crossbar) as a background image on the first dark section of every page.
-  // Two inline svg data URIs carry it, one at desktop size and one at the size a tablet and a phone get.
+  // Three inline svg data URIs carry it: the desktop drawing, and two small corners for a tablet and a phone
+  // (each exactly as tall as the padding band it sits in, drawn at 1:1 so the line is 1.5px).
   const deviceSvg = (name) => {
     const m = css.match(new RegExp(`${name}:\\s*url\\("data:image/svg\\+xml,([^"]*)"\\)`));
-    assert.ok(m, `${name} is defined as an svg data URI`);
+    if (!m) throw new Error(`${name} is not defined as an svg data URI`);
     return decodeURIComponent(m[1]);
   };
 
   it('the device is one faint ivory line for both strokes, 1.5px at the size it is drawn, with no gold', () => {
-    for (const [name, drawn] of [['--device', 1300], ['--device-small', 806]]) {
+    for (const [name, w, h] of [['--device', 1300, 1300], ['--device-band', 200, 72], ['--device-band-phone', 140, 56]]) {
       const svg = deviceSvg(name);
       assert.ok(/<path /.test(svg) && /<line /.test(svg), `${name} draws the triangle's sides and its crossbar`);
       assert.match(svg, /stroke='#FAFAF8'/, `${name} is ivory`);
       assert.match(svg, /stroke-opacity='\.12'/, `${name} is 12% ivory`);
       assert.ok(!/201,\s*168,\s*76|aurum|c9a84c/i.test(svg), `${name} carries no gold`);
-      const width = Number(svg.match(/\swidth='(\d+)'/)[1]);
+      assert.equal(Number(svg.match(/\swidth='(\d+)'/)[1]), w, `${name} is drawn ${w}px wide`);
+      assert.equal(Number(svg.match(/\sheight='(\d+)'/)[1]), h, `${name} is drawn ${h}px tall`);
+      // drawn 1:1 (the viewBox is the drawn size), so the rendered line is the stroke width
+      const vb = svg.match(/viewBox='0 0 (\d+) (\d+)'/);
+      assert.ok(vb, `${name} has a viewBox`);
+      const scale = w / Number(vb[1]);
       const strokeWidth = Number(svg.match(/stroke-width='([\d.]+)'/)[1]);
-      assert.equal(width, drawn, `${name} is drawn at ${drawn}px`);
-      // the viewBox is 1300 wide, so the rendered line is the stroke width scaled by drawn / 1300
-      assert.ok(Math.abs(strokeWidth * (width / 1300) - 1.5) <= 0.02, `${name} renders a 1.5px line (${strokeWidth * (width / 1300)})`);
+      assert.ok(Math.abs(strokeWidth * scale - 1.5) <= 0.02, `${name} renders a 1.5px line (${strokeWidth * scale})`);
+    }
+    // the two corners are drawn 1:1
+    for (const name of ['--device-band', '--device-band-phone']) {
+      const svg = deviceSvg(name);
+      assert.equal(`0 0 ${svg.match(/\swidth='(\d+)'/)[1]} ${svg.match(/\sheight='(\d+)'/)[1]}`, svg.match(/viewBox='([^']*)'/)[1], `${name} is drawn 1:1`);
     }
     // positive control: the rule that paints it is on the first dark section, and it is not on a dark ground rule
     assert.match(css, /main > \.on-dark:first-child,[\s\S]*?background-image:\s*var\(--device\)/, 'the shared rule paints --device on main > .on-dark:first-child');
     assert.ok(/body \.legal-wrap > h1::before/.test(css), 'the legal template\'s hero band takes it too');
-    assert.ok(/\.dash-wrap > \.dash-band:first-child/.test(css), 'the dashboard header band takes it too');
+    // the dashboard is an application surface: the header band takes no device and the sign-in screen is cleared
+    assert.ok(!/\.dash-wrap > \.dash-band:first-child/.test(css), 'the dashboard header band takes no device');
+    assert.match(css, /main > #login-view\s*\{[^}]*background-image:\s*none/, 'the dashboard sign-in screen carries no device');
+    // the old inline clipping wrapper has no rule left, since no page carries it
+    assert.ok(!/\.dw-device-clip/.test(css), 'the shared sheet carries no rule for the old inline device wrapper');
   });
 
   it('the device keeps the dimmest text on the dark ground above 4.5 to 1, even directly under the line', () => {
@@ -374,15 +389,14 @@ describe('home drawings: the render', { timeout: 180_000 }, () => {
 
   // ── the device ──
   // The first dark section of every page carries the shared background image, at the size and anchor the
-  // viewport gets, and never gold. A page that still draws its own inline device does not show it.
+  // viewport gets, and never gold. No page carries device markup of its own.
   const FIRST_DARK = 'main > .on-dark:first-child';
   for (const route of ['/', '/for-builders', '/pricing', '/about', '/status']) {
     it(`the device on ${route} at 1280: the shared image on the first dark section, anchored right, 1300px, no gold`, async (t) => {
       const d = await at(t, 1280, route, (page) => page.evaluate((sel) => {
         const el = document.querySelector(sel);
         const cs = el ? getComputedStyle(el) : null;
-        const clip = document.querySelector('.dw-device-clip');
-        return cs && { image: cs.backgroundImage, size: cs.backgroundSize, pos: cs.backgroundPosition, repeat: cs.backgroundRepeat, clipShown: clip ? getComputedStyle(clip).display !== 'none' : false };
+        return cs && { image: cs.backgroundImage, size: cs.backgroundSize, pos: cs.backgroundPosition, repeat: cs.backgroundRepeat, hasClip: !!document.querySelector('.dw-device-clip') };
       }, FIRST_DARK));
       if (!d) return;
       assert.match(d.image, /^url\("data:image\/svg\+xml,/, 'the first dark section paints the device svg');
@@ -390,7 +404,7 @@ describe('home drawings: the render', { timeout: 180_000 }, () => {
       assert.equal(d.size, '1300px 1300px');
       assert.equal(d.repeat, 'no-repeat');
       assert.match(d.pos, /^calc\(100% [+-] \d+px\) /, 'anchored to the right edge (a calc on 100%)');
-      assert.equal(d.clipShown, false, 'no inline clipping wrapper is drawn on the page');
+      assert.equal(d.hasClip, false, 'no page carries an inline device wrapper');
     });
   }
 
@@ -406,17 +420,143 @@ describe('home drawings: the render', { timeout: 180_000 }, () => {
     assert.equal(d.width, d.vw, 'positive control: the band is the full width of the window');
   });
 
-  for (const [width, size] of [[768, '806px 806px'], [375, '806px 806px']]) {
-    it(`the device at ${width}: a cropped corner of the same drawing, drawn smaller, still behind the first dark section`, async (t) => {
-      const d = await at(t, width, '/', (page) => page.evaluate((sel) => {
-        const cs = getComputedStyle(document.querySelector(sel));
-        return { image: cs.backgroundImage, size: cs.backgroundSize, scrollW: document.documentElement.scrollWidth };
-      }, FIRST_DARK));
+  // Below 1025 the device is a small cropped corner at the right edge, as tall as less than the section's
+  // top padding, so it never sits behind a heading, a line of copy, a button or a drawing. The painted box is
+  // computed from the section's box and its background-size and background-position, and compared with the
+  // box of every text element in the hero, all in one run (no pixel literals).
+  const BAND = { 768: ['200px 72px', 72], 375: ['140px 56px', 56] };
+  const HERO_ROUTES = ['/', '/for-builders', '/for-agents', '/how-it-works', '/pricing', '/works-with', '/about', '/connect', '/how-submissions-work', '/status', '/api', '/writing', '/writing/agents-message-board', '/terms', '/privacy'];
+
+  // Run in the page. Returns the painted device box, the section's box and padding, the text boxes in the hero
+  // and, for the reading pages at 1280, the device's left-hand side as a line.
+  const deviceProbe = () => {
+    const legal = document.querySelector('.legal-wrap > h1');
+    let section; let cs; let box;
+    if (legal) {
+      cs = getComputedStyle(legal, '::before');
+      const h = legal.getBoundingClientRect();
+      box = { left: h.left + parseFloat(cs.left), top: h.top + parseFloat(cs.top), width: parseFloat(cs.width), height: parseFloat(cs.height) };
+      section = legal.parentElement;
+    } else {
+      section = document.querySelector('main > .on-dark:first-child');
+      cs = getComputedStyle(section);
+      const r = section.getBoundingClientRect();
+      box = { left: r.left, top: r.top, width: r.width, height: r.height };
+    }
+    const pad = parseFloat(getComputedStyle(section).paddingTop);
+    const [sw, sh] = cs.backgroundSize.split(' ').map(parseFloat);
+    const [, px, py] = cs.backgroundPosition.match(/^(calc\([^)]*\)|\S+)\s+(calc\([^)]*\)|\S+)$/);
+    // a position is a percentage or a calc on 100% plus or minus px
+    const at = (pos, free) => {
+      let m = pos.match(/^calc\(([\d.]+)% ([+-]) ([\d.]+)px\)$/);
+      if (m) return (Number(m[1]) / 100) * free + (m[2] === '+' ? 1 : -1) * Number(m[3]);
+      m = pos.match(/^(-?[\d.]+)%$/);
+      if (m) return (Number(m[1]) / 100) * free;
+      m = pos.match(/^(-?[\d.]+)px$/);
+      if (m) return Number(m[1]);
+      return NaN;
+    };
+    const painted = { left: box.left + at(px, box.width - sw), top: box.top + at(py, box.height - sh), width: sw, height: sh };
+    // the hero: the whole first dark section, or, on the legal template, the back link and the h1 (never the body below)
+    const heroParts = legal ? [legal.parentElement.querySelector('.legal-back'), legal] : [section];
+    const inHero = (el) => heroParts.some((part) => part && part.contains(el));
+    // text boxes: every line box of every text node in the hero, plus the element box of each element that has text of its own
+    const texts = [];
+    for (const part of heroParts) {
+      const walker = document.createTreeWalker(part, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        const n = walker.currentNode;
+        if (!n.textContent.trim() || !n.parentElement || getComputedStyle(n.parentElement).display === 'none') continue;
+        const rg = document.createRange(); rg.selectNodeContents(n);
+        for (const r of rg.getClientRects()) if (r.width > 0 && r.height > 0) texts.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom, tag: n.parentElement.tagName.toLowerCase() });
+      }
+    }
+    const els = heroParts.flatMap((part) => (part ? [part, ...part.querySelectorAll('h1, h2, h3, p, a, button, li, code, pre, span')] : [])).filter((el) => inHero(el) && getComputedStyle(el).display !== 'none' && [...el.childNodes].some((c) => c.nodeType === 3 && c.textContent.trim()))
+      .map((el) => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, tag: el.tagName.toLowerCase() }; });
+    return { painted, box, pad, vw: window.innerWidth, texts, els, image: cs.backgroundImage, size: cs.backgroundSize, scrollW: document.documentElement.scrollWidth };
+  };
+  const intersects = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+  const paintedRect = (p) => ({ left: p.left, top: p.top, right: p.left + p.width, bottom: p.top + p.height });
+
+  it('control: the intersection check flags a box that overlaps and passes one that does not', () => {
+    const a = { left: 0, top: 0, right: 10, bottom: 10 };
+    assert.equal(intersects(a, { left: 5, top: 5, right: 15, bottom: 15 }), true);
+    assert.equal(intersects(a, { left: 10, top: 0, right: 20, bottom: 10 }), false, 'touching edges do not overlap');
+    assert.equal(intersects(a, { left: 0, top: 11, right: 10, bottom: 20 }), false);
+  });
+
+  for (const width of [768, 375]) {
+    for (const route of HERO_ROUTES) {
+      it(`the device at ${width} on ${route}: a small corner in the top padding band, clear of every text element in the hero`, async (t) => {
+        const d = await at(t, width, route, (page) => page.evaluate(deviceProbe), { height: width === 375 ? 812 : 1024 });
+        if (!d) return;
+        assert.match(d.image, /^url\("data:image\/svg\+xml,/, 'the first dark section paints the device svg');
+        assert.equal(d.size, BAND[width][0], 'the corner is the small image, not the desktop drawing');
+        assert.ok(d.scrollW <= width, 'the device adds no sideways scroll');
+        assert.ok(d.texts.length > 0 && d.els.length > 0, `positive control: the hero's text was found (${d.texts.length} line boxes, ${d.els.length} elements)`);
+        const dev = paintedRect(d.painted);
+        // it is at the right edge and at the top of the section
+        assert.ok(Math.abs(dev.right - (d.box.left + d.box.width)) <= 0.5, `anchored to the right edge: ${dev.right} vs ${d.box.left + d.box.width}`);
+        assert.ok(Math.abs(dev.top - d.box.top) <= 0.5, `at the top of the section: ${dev.top} vs ${d.box.top}`);
+        // and no taller than the section's top padding
+        assert.ok(d.painted.height <= d.pad, `its ${d.painted.height}px height is no more than the ${d.pad}px top padding`);
+        assert.equal(d.painted.height, BAND[width][1]);
+        for (const box of [...d.texts, ...d.els]) {
+          assert.equal(intersects(dev, box), false, `the device ${JSON.stringify(dev)} crosses a ${box.tag} at ${JSON.stringify(box)}`);
+        }
+      });
+    }
+  }
+
+  it('control: at 768 the old tablet drawing (806px, the full triangle) WOULD have crossed the hero text, so the check can see an overlap', async (t) => {
+    const d = await at(t, 768, '/', (page) => page.evaluate(deviceProbe), { height: 1024 });
+    if (!d) return;
+    // the old geometry: an 806px square, its right edge 283px beyond the section's right edge, 20px above the top
+    const old = { left: d.box.left + d.box.width - 806 + 283, top: d.box.top - 20, width: 806, height: 806 };
+    assert.ok([...d.texts, ...d.els].some((b) => intersects(paintedRect(old), b)), 'the old drawing overlapped some hero text at 768');
+  });
+
+  // At 1280 on a reading page the copy is a centred 720 column, and the device sits to the right of it: the
+  // left-hand side of the triangle, at every height of the hero, is to the right of the column and of every
+  // line of text in the hero (the heading included).
+  for (const route of ['/about', '/connect', '/writing', '/writing/agents-message-board', '/terms']) {
+    it(`the device at 1280 on ${route}: right of the 720 column, and it does not cross the heading or any hero text`, async (t) => {
+      const d = await at(t, 1280, route, (page) => page.evaluate(deviceProbe), { height: 900 });
       if (!d) return;
-      assert.match(d.image, /^url\("data:image\/svg\+xml,/);
-      assert.equal(d.size, size);
-      assert.ok(/stroke-width='2\.42'/.test(decodeURIComponent(d.image)), 'the small drawing still renders a 1.5px line');
-      assert.ok(d.scrollW <= width, 'the device adds no sideways scroll');
+      assert.equal(d.size, '1300px 1300px');
+      assert.ok(d.texts.length > 0, 'positive control: hero text was found');
+      // the triangle's left side in page coordinates: image x 650 at y 40, falling to x -84 at y 1400
+      const slope = 734 / 1360;
+      const sideX = (y) => d.painted.left + 650 - slope * Math.max(0, y - d.painted.top - 40);
+      const heroBottom = d.box.top + d.box.height;
+      const columnRight = (d.vw + 720) / 2;
+      assert.ok(sideX(heroBottom) >= columnRight, `at the foot of the hero the side (${Math.round(sideX(heroBottom))}) is right of the column edge (${columnRight})`);
+      for (const b of d.texts) {
+        assert.ok(b.right < sideX(b.bottom), `a ${b.tag} line ends at ${Math.round(b.right)}, left of the side at ${Math.round(sideX(b.bottom))}`);
+      }
+      // positive control for the line: a text box pushed to the side's x at its own height would be crossed
+      assert.ok(sideX(heroBottom) < d.vw, 'positive control: the side is on screen at the foot of the hero');
+    });
+  }
+
+  // The dashboard is an application surface: no device, neither on the sign-in screen nor on the signed-in band.
+  for (const width of [1280, 768, 375]) {
+    it(`the dashboard at ${width}: no device on the sign-in screen or the signed-in header band`, async (t) => {
+      const d = await at(t, width, '/dashboard', (page) => page.evaluate(() => {
+        const login = document.querySelector('#login-view');
+        const band = document.querySelector('.dash-wrap > .dash-band');
+        // a positive control, from the same page: the shared rule would paint the first dark section of main
+        const probe = document.createElement('section');
+        probe.className = 'on-dark';
+        document.querySelector('main').prepend(probe);
+        const control = getComputedStyle(probe).backgroundImage;
+        probe.remove();
+        return { login: getComputedStyle(login).backgroundImage, band: getComputedStyle(band).backgroundImage, control };
+      }), { height: 900 });
+      if (!d) return;
+      assert.equal(d.login, 'none', 'the sign-in screen paints no device');
+      assert.equal(d.band, 'none', 'the signed-in header band paints no device');
+      assert.match(d.control, /^url\("data:image\/svg\+xml,/, 'positive control: the shared rule does paint a first dark section in main');
     });
   }
 

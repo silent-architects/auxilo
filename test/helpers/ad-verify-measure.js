@@ -294,7 +294,10 @@ function extractPageMetrics() {
   // ── Main root + top-level blocks ────────────────────────────────────
   const mainRoot = document.querySelector('main') || document.body;
   const skipTags = new Set(['SCRIPT', 'STYLE', 'TEMPLATE', 'NOSCRIPT']);
-  const blocks = Array.from(mainRoot.children).filter((el) => isVisible(el) && !skipTags.has(el.tagName));
+  // The skip link is the first element in body on every page. On a page with no <main> (the legal template,
+  // whose wrapper carries role="main"), the blocks are body's children, and a skip link is not a section.
+  const isSkipLink = (el) => el.classList && el.classList.contains('skip-to-content');
+  const blocks = Array.from(mainRoot.children).filter((el) => isVisible(el) && !skipTags.has(el.tagName) && !isSkipLink(el));
 
   out.sections = blocks.map((el, idx) => {
     const secRect = rect(el);
@@ -682,6 +685,9 @@ function extractPageMetrics() {
       line: gt.line,
       borderWidths: [ls.top, ls.right, ls.bottom, ls.left],
       radii: rads,
+      // Rule 6: the padding on each side, of the first card and whether every card of the group takes the same.
+      padding: paddingOf(first),
+      paddingUniform: g.els.map(paddingOf).every((p) => p.top === paddingOf(first).top && p.right === paddingOf(first).right && p.bottom === paddingOf(first).bottom && p.left === paddingOf(first).left),
       gaps,
     });
   }
@@ -814,7 +820,7 @@ function foldCheck({ vw, vh }) {
     const r = el.getBoundingClientRect();
     return r.width > 0 && r.height > 0;
   }
-  const firstBlock = Array.from(mainRoot.children).find((el) => vis(el) && !skip.has(el.tagName)) || mainRoot;
+  const firstBlock = Array.from(mainRoot.children).find((el) => vis(el) && !skip.has(el.tagName) && !(el.classList && el.classList.contains('skip-to-content'))) || mainRoot;
   const codeBlock = firstBlock.querySelector('.hero-install, .code-block, pre');
   const primaryBtn = firstBlock.querySelector('.btn-primary, #hero-cta-secondary, .hero-cta-link');
   function safeRect(el) { return el ? rect(el) : null; }

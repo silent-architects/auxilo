@@ -441,7 +441,7 @@ describe('WORKS-WITH: design rebuild, static markup and head', () => {
 
   it('the client list is a real list to assistive technology (list-style none drops the role in some browsers)', () => {
     assert.match(WORKS_WITH_HTML, /<ul class="ww-list" role="list">/);
-    assert.match(WORKS_WITH_HTML, /<ul class="nav-links" role="list">/, 'positive control: the nav list carries the same attribute');
+    assert.match(WORKS_WITH_HTML, /<ul class="nav-links" id="nav-menu" role="list">/, 'positive control: the nav list carries the same attribute, plus the id the hamburger controls');
   });
 });
 

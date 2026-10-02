@@ -130,11 +130,18 @@ describe('ASK-WAVE A: new strings land exactly once', () => {
     // the same "Copy the Setup Command" label as the hero button
     // (already applied by micro-2) -- pushing the whole-file count from
     // 1 to 2. See the re-pinned footer assertion below.
-    assert.equal(countOccurrences(indexHtml, 'Copy the Setup Command'), 2);
+    // Accessibility sweep (WCAG 2.5.3, label in name): the button's aria-label is now the same string as its
+    // visible text, so the label stands twice per button in the file. The visible label still stands twice.
+    assert.equal(countOccurrences(indexHtml, '>Copy the Setup Command</button>'), 2);
+    assert.equal(countOccurrences(indexHtml, 'aria-label="Copy the Setup Command"'), 2);
+    assert.equal(countOccurrences(indexHtml, 'Copy the Setup Command'), 4);
   });
 
   it('/connect copy button reads "Copy the Setup Command" (count 1, connect.html)', () => {
-    assert.equal(countOccurrences(connectHtml, 'Copy the Setup Command'), 1);
+    // Accessibility sweep: the aria-label carries the same string as the visible text (label in name).
+    assert.equal(countOccurrences(connectHtml, '>Copy the Setup Command</button>'), 1);
+    assert.equal(countOccurrences(connectHtml, 'aria-label="Copy the Setup Command"'), 1);
+    assert.equal(countOccurrences(connectHtml, 'Copy the Setup Command'), 2);
   });
 
   it('the footer copy buttons follow the SITE-PM label ruling ("Copy the Setup Command", not lowercase "copy")', () => {
@@ -146,13 +153,13 @@ describe('ASK-WAVE A: new strings land exactly once', () => {
     // button on the site (already applied by micro-2). Re-pinned here.
     const footerStart = indexHtml.indexOf('id="footer-setup-snippet"');
     assert.notEqual(footerStart, -1);
-    const footerButtonMatch = indexHtml.slice(footerStart, footerStart + 400).match(/aria-label="Copy command">([^<]*)</);
+    const footerButtonMatch = indexHtml.slice(footerStart, footerStart + 400).match(/aria-label="Copy the Setup Command">([^<]*)</);
     assert.ok(footerButtonMatch, 'footer setup button not found');
     assert.equal(footerButtonMatch[1], 'Copy the Setup Command');
 
     const fbFooterStart = forBuildersHtml.indexOf('id="footer-setup-snippet"');
     assert.notEqual(fbFooterStart, -1);
-    const fbFooterButtonMatch = forBuildersHtml.slice(fbFooterStart, fbFooterStart + 400).match(/aria-label="Copy command">([^<]*)</);
+    const fbFooterButtonMatch = forBuildersHtml.slice(fbFooterStart, fbFooterStart + 400).match(/aria-label="Copy the Setup Command">([^<]*)</);
     assert.ok(fbFooterButtonMatch, 'for-builders footer setup button not found');
     assert.equal(fbFooterButtonMatch[1], 'Copy the Setup Command');
   });
@@ -231,17 +238,28 @@ describe('ASK-WAVE A: homepage gold-event + hero-secondary invariants', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════
-// Nav markup: byte-identical to origin/main (only .nav-cta's CSS changed)
+// Nav markup: byte-identical to origin/main (only .nav-cta's CSS changed), except the two attributes the
+// accessibility sweep added so the hamburger controls the menu by id: id="nav-menu" on the list and
+// aria-controls="nav-menu" on the button. Each is present once, and with just those two removed the block is
+// the origin's, byte for byte.
 // ═══════════════════════════════════════════════════════════════════════
 
 describe('ASK-WAVE A: nav markup unchanged vs origin/main', { timeout: 30_000 }, () => {
-  it('index.html <nav> block is byte-identical to origin/main', () => {
+  const withoutSweepAttrs = (block) => block.replace(' id="nav-menu"', '').replace(' aria-controls="nav-menu"', '');
+
+  it('index.html <nav> block is byte-identical to origin/main, apart from the menu id and aria-controls', () => {
     const origin = originMainFile('public/index.html');
-    assert.equal(navBlock(indexHtml), navBlock(origin));
+    const block = navBlock(indexHtml);
+    assert.equal(countOccurrences(block, ' id="nav-menu"'), 1, 'positive control: the menu id is on the list once');
+    assert.equal(countOccurrences(block, ' aria-controls="nav-menu"'), 1, 'positive control: the button controls it once');
+    assert.equal(withoutSweepAttrs(block), navBlock(origin));
   });
 
-  it('connect.html <nav> block is byte-identical to origin/main', () => {
+  it('connect.html <nav> block is byte-identical to origin/main, apart from the menu id and aria-controls', () => {
     const origin = originMainFile('public/connect.html');
-    assert.equal(navBlock(connectHtml), navBlock(origin));
+    const block = navBlock(connectHtml);
+    assert.equal(countOccurrences(block, ' id="nav-menu"'), 1, 'positive control: the menu id is on the list once');
+    assert.equal(countOccurrences(block, ' aria-controls="nav-menu"'), 1, 'positive control: the button controls it once');
+    assert.equal(withoutSweepAttrs(block), navBlock(origin));
   });
 });

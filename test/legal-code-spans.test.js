@@ -65,7 +65,7 @@ function stripTags(html) {
 // Only the .legal-wrap content -- the shared nav/footer never changes here
 // and carries its own unrelated text that is not this fix's concern.
 function legalWrap(html) {
-  const start = html.indexOf('<div class="legal-wrap">');
+  const start = html.indexOf('<div class="legal-wrap"');
   const end = html.indexOf('</div>\n\n<!-- Wave C.3b', start);
   return html.slice(start, end === -1 ? undefined : end);
 }

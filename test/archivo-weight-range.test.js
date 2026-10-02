@@ -180,13 +180,23 @@ describe('Archivo weight range, static: nothing declares a sans weight outside 4
   });
 
   it('the Archivo @font-face declares exactly the weights the file holds, 400 to 600', () => {
-    const face = [...stripComments(sheet).matchAll(/@font-face\s*\{([^}]*)\}/g)].map((m) => m[1]).find((b) => /font-family:\s*'Archivo'/.test(b));
-    assert.ok(face, 'an Archivo @font-face exists');
-    assert.match(face, /font-weight:\s*400 600\s*;/);
+    const faces = [...stripComments(sheet).matchAll(/@font-face\s*\{([^}]*)\}/g)].map((m) => m[1]).filter((b) => /font-family:\s*'Archivo'/.test(b));
+    assert.ok(faces.length >= 1, 'an Archivo @font-face exists');
+    // Archivo ships as a core file and an Ext file (split by unicode-range), both instanced to 400 to 600.
+    for (const face of faces) assert.match(face, /font-weight:\s*400 600\s*;/);
   });
 
   it('strong and b take weight 600 from the shared sheet, so the browser default (700) is never requested', () => {
     assert.match(stripComments(sheet), /(^|\})\s*strong\s*,\s*b\s*\{[^}]*font-weight:\s*600\s*;/m);
+  });
+
+  it('mono inside strong or b takes weight 400, the only mono weight that ships', () => {
+    const css = stripComments(sheet);
+    assert.match(css, /(^|\})\s*strong code\s*,\s*b code\s*\{[^}]*font-weight:\s*400\s*;/m);
+    // Positive control: the mono face is declared at 400 and no 500 mono face exists.
+    const mono = [...css.matchAll(/@font-face\s*\{([^}]*)\}/g)].map((m) => m[1]).filter((b) => /font-family:\s*'IBM Plex Mono'\s*;/.test(b));
+    assert.equal(mono.length, 1);
+    assert.match(mono[0], /font-weight:\s*400\s*;/);
   });
 
   // ── Positive controls: the checker reports input that breaks the rule ──

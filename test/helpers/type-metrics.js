@@ -81,6 +81,10 @@ function extractTypeMetrics() {
       if (!TRACKED_TAGS.includes(el.tagName)) continue;
       if (!isVisible(el)) continue;
       if (isExcluded(el)) continue;
+      // The skip link is parked off screen until it is focused. On every page with a <main> it sits outside
+      // the measured root; on the legal template (no <main>, root is body) it would be counted, and every
+      // link after it would shift by one. It is not content, so it is not measured.
+      if (el.classList.contains('skip-to-content')) continue;
       const tag = el.tagName.toLowerCase();
       const ordinal = perTagOrder[tag] || 0;
       perTagOrder[tag] = ordinal + 1;

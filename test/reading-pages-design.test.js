@@ -126,9 +126,26 @@ describe('The essay: set differently, worded the same', () => {
     assert.match(rule[1], /font-size:\s*var\(--h2-section\)/);
   });
 
-  it('keeps its reading column at 680 wide and its body type at 18px on a 1.7 line', () => {
+  // Sweep: the page's own 680 column rule is gone. The shared reading frame (the end of styles.css) sets the
+  // one centred 720 column for the hero and the body of every reading page, and it out-ranked the page's rule.
+  it('takes its reading column from the shared reading frame, and keeps its body type at 18px on a 1.7 line', () => {
     const css = styleBlocks(read(ESSAY));
-    assert.match(css, /\.essay-body > \*\s*\{\s*max-width:\s*680px;\s*\}/);
+    assert.doesNotMatch(css, /\.essay-body > \*\s*\{[^}]*max-width/, 'the page block carries no column rule of its own');
+    const sheet = read('styles.css');
+    assert.match(sheet, /#essay-body \.essay-body > \*\s*\{[^}]*max-width:\s*var\(--read-w\)/, 'the shared frame sets the essay column');
+    assert.match(sheet, /--read-w:\s*calc\(720px - 2 \* var\(--gutter-base\)\)/, 'positive control: the frame names the 720 column');
     assert.match(css, /\.essay-body p\s*\{[^}]*font-size:\s*18px;[^}]*line-height:\s*1\.7;/);
+  });
+
+  it('control: the other reading pages carry no column rule of their own either, and their column is the frame\'s', () => {
+    const ABOUT = styleBlocks(read('about.html'));
+    const CONNECT = styleBlocks(read('connect.html'));
+    const WRITING = styleBlocks(read('writing/index.html'));
+    assert.doesNotMatch(ABOUT, /\.read > \*\s*\{[^}]*max-width/);
+    assert.doesNotMatch(CONNECT, /(\.connect-steps|\.page-foot)\s*\{[^}]*max-width:\s*720px/);
+    assert.doesNotMatch(CONNECT, /#connect-hero \.hero-one > \*\s*\{/);
+    assert.doesNotMatch(WRITING, /#writing-hero h1\s*\{[^}]*max-width/);
+    // positive control: the same checks see a rule when one is there
+    assert.match('.read > * { max-width: 680px; }', /\.read > \*\s*\{[^}]*max-width/);
   });
 });

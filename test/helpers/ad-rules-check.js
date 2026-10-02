@@ -19,8 +19,16 @@
  *   rule 5: an h1 or h2 to the first visible thing under it is 24 when that
  *     thing is text and 48 when it is a box (a card, a grid, a table, a list of
  *     rows, a drawing, a code block); an h3 is 16. A heading with its content
- *     BESIDE it (the heading-left layout) is not measured, and is listed in
- *     `besideExempt` so the report can name every one.
+ *     BESIDE it (the heading-left layout: the following unit does not overlap
+ *     the heading horizontally) is not measured, and is listed in
+ *     `besideExempt` (and counted per width in `besideExemptCount`) so the
+ *     report can name every one and a test can pin how many there are. A
+ *     following unit that overlaps the heading horizontally and starts above
+ *     the heading's bottom edge is a real overlap, and FAILS.
+ *   rule 6: a card (the elements rule 9 identifies: a repeated, boxed element in
+ *     a grid or flex parent, outside any drawing; a panel inside a drawing, a chip
+ *     and a button are not cards) has the same padding on all four sides, and it
+ *     is 32. Every card is logged, pass or fail.
  *   rule 7: cards in a grid are 24 apart; rows joined by a 1px line have equal
  *     top and bottom padding of 16 or 24.
  *   rule 9: a card is the surface colour, a 1px line and a 14px radius, on
@@ -53,6 +61,18 @@ const SEAM_TOL = 1;
 
 function near(a, b, tol = TOL) { return Math.abs(a - b) <= tol; }
 
+// Rule 6. Card families that do not take 32 on all four sides, each by a layout the Art Director ruled.
+// They are logged as passing with the reason attached, listed in the report, and pinned: a new family fails,
+// and an entry no card matches any more is reported as unused, so this list cannot go stale in silence.
+//  - a step card is a white card with a full-bleed dark drawing on top and a padded body under it (the
+//    homepage comp's own .step and .step-body): the card itself carries no padding, the body 24.
+//  - a client card on a phone (480 and down) is the compact card (padding 16), ruled in round 3.
+const CARD_PADDING_EXCEPTIONS = [
+  { id: 'step', match: /^div\.steps > step$/, reason: 'a step card: a full-bleed dark drawing over a body padded 24 (the comp\'s .step and .step-body)' },
+  { id: 'flow-step', match: /^div\.flow-track > flow-step$/, reason: 'a flow step is the shared step card: a full-bleed dark drawing over a padded body' },
+  { id: 'ww-cell-phone', match: /^ul\.ww-list > ww-cell\b/, widths: [375], reason: 'a client card on a phone is the compact card (padding 16), ruled in round 3' },
+];
+
 // Every page is a stack of sections now: /about and /connect carry the
 // standard gutter, and the legal pages (the only reading pages left) are
 // measured through the .legal-wrap block like any other.
@@ -65,8 +85,8 @@ const RULE_NAMES = {
   2: 'A3-2 section gutter = nav gutter = footer gutter',
   3: 'A3-3 section padding-top = padding-bottom = rhythm, hero included',
   4: 'A3-4 seam = sum of adjacent section paddings',
-  5: 'A3-5 h1/h2 -> first thing = 24 (text) or 48 (box); h3 -> first thing = 16; beside is exempt',
-  6: 'A3-6 card padding equal 4 sides = 32',
+  5: 'A3-5 h1/h2 -> first thing = 24 (text) or 48 (box); h3 -> first thing = 16; beside is exempt and counted, an overlap fails',
+  6: 'A3-6 card padding equal 4 sides = 32 (every card logged)',
   7: 'A3-7 cards in a grid 24 apart; rows joined by a 1px line pad 16 or 24, top = bottom',
   8: 'A3-8 every margin/padding/gap is a scale value',
   9: 'A3-9 a card is the surface colour, a 1px line and a 14px radius, on its own ground',
@@ -89,6 +109,9 @@ function evaluateRules(d, fold, opts) {
   const passCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
   const totalChecks = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
   const besideExempt = [];
+  const besideExemptCount = { 1280: 0, 768: 0, 375: 0 };
+  const documentedExceptions = [];
+  const usedCardExceptions = new Set();
 
   function log(rule, page, width, msg, pass) {
     totalChecks[rule]++;
@@ -194,9 +217,12 @@ function evaluateRules(d, fold, opts) {
       // Rule 5 (sheet v2): a heading to the first visible thing under it.
       // h1 and h2: 24 when that thing is text, 48 when it is a box (a card,
       // a grid, a table, a list of rows, a drawing, a code block). h3: 16.
-      // A heading whose content sits BESIDE it is not measured: the first
-      // visible thing does not overlap the heading horizontally (the
-      // heading-left layout), or it starts above the heading's bottom edge.
+      // A heading whose content sits BESIDE it is not measured: the unit that
+      // follows it does not overlap the heading horizontally (the
+      // heading-left layout). Each such heading is listed and counted, so a
+      // new silent exemption changes a number a test pins. A following unit
+      // that DOES overlap the heading horizontally yet starts above the
+      // heading's bottom edge is a real overlap: it fails, it is not exempt.
       for (const hg of rec.headingGaps || []) {
         if (hg.gap == null) continue;
         // Judged on the unit that follows the heading (the child of the
@@ -204,8 +230,13 @@ function evaluateRules(d, fold, opts) {
         // table's first cell sits at the table's own left edge.
         const overlapX = Math.min(hg.headingRight, hg.followingUnitRight) - Math.max(hg.headingLeft, hg.followingUnitLeft);
         const startsAbove = hg.followingUnitTop < hg.headingBottom - 2;
-        if (overlapX <= 1 || startsAbove) {
+        if (overlapX <= 1) {
           besideExempt.push(`${page} @ ${width}: ${hg.heading} "${hg.headingText}" -> [${hg.firstThingKind}] "${hg.firstThingText}" (beside)`);
+          besideExemptCount[width]++;
+          continue;
+        }
+        if (startsAbove) {
+          log(5, page, width, `${hg.heading} "${hg.headingText}" -> [${hg.firstThingKind}] "${hg.firstThingText}" starts at ${hg.followingUnitTop}, above the heading's bottom edge ${hg.headingBottom}, and overlaps it horizontally by ${Math.round(overlapX)}px: a real overlap, not a beside layout`, false);
           continue;
         }
         // The legal pages draw their h1 as a full-bleed dark band (the
@@ -218,14 +249,22 @@ function evaluateRules(d, fold, opts) {
         log(5, page, width, `${hg.heading} "${hg.headingText}" -> [${hg.firstThingKind}] "${hg.firstThingText}" gap=${hg.gap}, ruled=${want}`, ok);
       }
 
-      // Rule 6: card padding equal 4 sides = 32.
-      for (const g of rec.repeatedGroups) {
-        if (g.count < 2) continue;
-        const looksLikeCard = g.padding.top > 0 && (g.parentDisplay === 'grid' || g.parentDisplay === 'flex');
-        if (!looksLikeCard) continue;
-        const padEq = near(g.padding.top, g.padding.right) && near(g.padding.top, g.padding.bottom) && near(g.padding.top, g.padding.left);
-        if (padEq && g.paddingUniform) {
-          log(6, page, width, `${g.className} padding all sides ${g.padding.top}/${g.padding.right}/${g.padding.bottom}/${g.padding.left}`, true);
+      // Rule 6: a card has the same padding on all four sides, and it is 32.
+      // Cards are the elements rule 9 identifies (rec.cards). Every card is
+      // logged: a card whose four paddings differ, or are not 32, fails.
+      for (const c of rec.cards || []) {
+        const p = c.padding;
+        const equal = near(p.top, p.right) && near(p.top, p.bottom) && near(p.top, p.left);
+        const is32 = near(p.top, 32) && near(p.right, 32) && near(p.bottom, 32) && near(p.left, 32);
+        const ok = equal && is32 && c.paddingUniform !== false;
+        const msg = `${c.parentSelector} > ${c.className} card padding ${p.top}/${p.right}/${p.bottom}/${p.left}${c.paddingUniform ? '' : ' (not the same on every card of the group)'}, ruled 32 on all four sides`;
+        const exception = ok ? null : CARD_PADDING_EXCEPTIONS.find((e) => e.match.test(`${c.parentSelector} > ${c.className}`) && (!e.widths || e.widths.includes(Number(width))));
+        if (exception) {
+          usedCardExceptions.add(exception.id);
+          documentedExceptions.push(`rule 6, ${page} @ ${width}: ${msg} -- ${exception.reason}`);
+          log(6, page, width, msg, true);
+        } else {
+          log(6, page, width, msg, ok);
         }
       }
 
@@ -310,7 +349,6 @@ function evaluateRules(d, fold, opts) {
     ['td.tier-name->td', 'a table cell\'s own row -- the named table-cell exclusion'],
     ['span->span', 'inside <button class="hamburger"> -- the mobile nav toggle\'s own three icon bars (.hamburger{gap:5px}), the named "inside a button" exclusion'],
   ]);
-  const documentedExceptions = [];
   const repeatedOffScale = [...offScale.entries()].filter(([, n]) => n >= 3).sort((a, b) => b[1] - a[1]);
   for (const [key, n] of repeatedOffScale) {
     totalChecks[8]++;
@@ -325,11 +363,15 @@ function evaluateRules(d, fold, opts) {
   }
   if (totalChecks[8] === 0) { totalChecks[8] = 1; passCounts[8] = 1; }
 
-  return { totalChecks, passCounts, failures, RULE_NAMES, SCALE, RHYTHM, PAGE_GUTTER, READING_GUTTER, documentedExceptions, besideExempt };
+  return { totalChecks, passCounts, failures, RULE_NAMES, SCALE, RHYTHM, PAGE_GUTTER, READING_GUTTER, documentedExceptions, besideExempt, besideExemptCount, unusedCardExceptions: CARD_PADDING_EXCEPTIONS.filter((e) => !usedCardExceptions.has(e.id)).map((e) => e.id) };
 }
 
 function printReport(evalResult, fold) {
   const { totalChecks, passCounts, failures, RULE_NAMES } = evalResult;
+  if (evalResult.besideExempt) {
+    console.log(`\n=== HEADINGS EXEMPT AS BESIDE (rule 5): ${JSON.stringify(evalResult.besideExemptCount)} ===`);
+    for (const b of evalResult.besideExempt) console.log('  ' + b.replace(/\s+/g, ' '));
+  }
   for (const rule of Object.keys(RULE_NAMES)) {
     const total = totalChecks[rule];
     const pass = passCounts[rule];

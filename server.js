@@ -4260,7 +4260,7 @@ function renderUnlockEmailPrefsPage(state, token) {
   // in one; this route was the only one missing it.
   // FIX-UNIT-2 V8: skip link, same class and text as every other page's,
   // first element in <body>, pointing at this <main>'s new id.
-  return `<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Stop Unlock Emails | Auxilo</title><link rel="stylesheet" href="/styles.css?v=30220da2"/>${styleBlock}</head><body><a href="#main" class="skip-to-content">Skip to content</a><main class="unsub-wrap" id="main">${logoRow}${body}</main></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Stop Unlock Emails | Auxilo</title><link rel="stylesheet" href="/styles.css?v=93f38fbc"/>${styleBlock}</head><body><a href="#main" class="skip-to-content">Skip to content</a><main class="unsub-wrap" id="main">${logoRow}${body}</main></body></html>`;
 }
 
 app.get('/account/email-prefs/unsubscribe', (c) => {
@@ -13491,7 +13491,7 @@ function serveLegalPage(c, filename, title, seo) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>${title} | Auxilo</title>
   ${seoTags}
-  <link rel="stylesheet" href="/styles.css?v=30220da2"/>
+  <link rel="stylesheet" href="/styles.css?v=93f38fbc"/>
   <style>
     .legal-wrap{--lw-rhythm:120px;--lw-wide:min(var(--max-w),calc(100vw - 2 * var(--gutter-base)));position:relative;z-index:0;max-width:720px;margin-left:auto;margin-right:auto;font-size:17px;line-height:1.7;overflow-wrap:break-word}
     @media (max-width:900px){.legal-wrap{--lw-rhythm:80px}}
@@ -13527,6 +13527,7 @@ function serveLegalPage(c, filename, title, seo) {
   </style>
 </head>
 <body>
+<a href="#main" class="skip-to-content">Skip to content</a>
 <nav id="main-nav" aria-label="Main navigation">
   <div class="nav-row">
     <a href="/" class="nav-logo" id="nav-logo">
@@ -13553,7 +13554,7 @@ function serveLegalPage(c, filename, title, seo) {
     <a href="/dashboard" id="nav-dashboard">Sign in</a>
   </div>
 </nav>
-  <div class="legal-wrap">
+  <div class="legal-wrap" id="main" role="main">
     <a href="/" class="legal-back">← Back to Auxilo</a>
     ${body}
   </div>
@@ -13569,16 +13570,16 @@ function serveLegalPage(c, filename, title, seo) {
       <span class="wordmark">auxilo</span>
     </a>
     <p class="footer-meta">
-      Your agent already solved this. Auxilo remembers. ·
-      <a href="/api">API</a> ·
-      <a href="/about">About</a> ·
-      <a href="/writing">Writing</a> ·
-      <a href="/status">Status</a> ·
-      <a href="/.well-known/security.txt">Security</a> ·
-      <a href="/.well-known/agent.json">Agent card</a> ·
-      <a href="/terms">Terms</a> ·
-      <a href="/privacy">Privacy</a> ·
-      <a href="https://github.com/silent-architects/auxilo">GitHub</a>
+      Your agent already solved this. Auxilo remembers.<span class="fm-item"> ·</span>
+      <span class="fm-item"><a href="/api">API</a> ·</span>
+      <span class="fm-item"><a href="/about">About</a> ·</span>
+      <span class="fm-item"><a href="/writing">Writing</a> ·</span>
+      <span class="fm-item"><a href="/status">Status</a> ·</span>
+      <span class="fm-item"><a href="/.well-known/security.txt">Security</a> ·</span>
+      <span class="fm-item"><a href="/.well-known/agent.json">Agent card</a> ·</span>
+      <span class="fm-item"><a href="/terms">Terms</a> ·</span>
+      <span class="fm-item"><a href="/privacy">Privacy</a> ·</span>
+      <span class="fm-item"><a href="https://github.com/silent-architects/auxilo">GitHub</a></span>
     </p>
   </div>
 </footer>

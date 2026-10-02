@@ -9,14 +9,14 @@
   <link rel="preload" href="/fonts/ArchivoVariable.cfd841fc.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/NewsreaderDisplay300.a07d3c5c.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=30220da2" />
+  <link rel="stylesheet" href="/styles.css?v=93f38fbc" />
   <style>
     /* Sign-in and the account dashboard. Look only: every id, hook, string and
        script is unchanged. Grounds, tokens, type and the ask come from the shared
        sheet; this block keeps only what is particular to this page.
 
-       Two legacy token names are still painted by the markup and by the scripts
-       (var(--ivory), var(--slate), var(--ash) in inline styles). On the light body
+       Four legacy token names are still painted by the markup and by the scripts
+       (var(--ivory), var(--slate), var(--ash), var(--gold) in inline styles). On the light body
        and in the Terms dialog they are aliased to the ground-aware text tokens
        below, so every inline colour reads correctly without touching a script. */
 
@@ -32,6 +32,7 @@
       --ivory: var(--fg-1);
       --slate: var(--fg-3);
       --ash: var(--fg-2);
+      --gold: var(--accent-text);
     }
 
     /* ── Sign-in: a dark first screen, the form in a 400 column ──────── */
@@ -1265,7 +1266,7 @@
       </svg>
       <span class="wordmark">auxilo</span>
     </a>
-    <ul class="nav-links" role="list">
+    <ul class="nav-links" id="nav-menu" role="list">
       <li><a href="/for-builders" id="nav-builders">For Builders</a></li>
       <li><a href="/for-agents" id="nav-agents">For Agents</a></li>
       <li><a href="/how-it-works" id="nav-how">How It Works</a></li>
@@ -1273,12 +1274,12 @@
       <li><a href="/pricing" id="nav-pricing">Pricing</a></li>
       <li><a href="/connect" id="nav-cta-access" class="nav-cta">Connect Your Agent</a></li>
     </ul>
-    <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
+    <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-menu" onclick="toggleNav()">
       <span></span><span></span><span></span>
     </button>
   </div>
   <div class="nav-strip">
-    <a href="/dashboard" id="nav-dashboard" class="active">Dashboard</a>
+    <a href="/dashboard" id="nav-dashboard" class="active" aria-current="page">Dashboard</a>
   </div>
 </nav>
 
@@ -1396,7 +1397,7 @@
         <div class="code-block" id="dash-setup-block" style="margin-bottom:16px">
           <div class="code-block-header">
             <span class="code-block-lang">One command. Any terminal.</span>
-            <button class="copy-btn" id="copy-dash-setup" onclick="copyDashSetupCode()" aria-label="Copy command">Copy the Setup Command</button>
+            <button class="copy-btn" id="copy-dash-setup" onclick="copyDashSetupCode()" aria-label="Copy the Setup Command">Copy the Setup Command</button>
           </div>
           <pre id="dash-setup-code">npx auxilo setup</pre>
         </div>
@@ -1607,15 +1608,15 @@
       <span class="wordmark">auxilo</span>
     </a>
     <p class="footer-meta">
-      <a href="/api">API</a> ·
-      <a href="/about">About</a> ·
-      <a href="/writing">Writing</a> ·
-      <a href="/status">Status</a> ·
-      <a href="/.well-known/security.txt">Security</a> ·
-      <a href="/.well-known/agent.json">Agent card</a> ·
-      <a href="/terms">Terms</a> ·
-      <a href="/privacy">Privacy</a> ·
-      <a href="https://github.com/silent-architects/auxilo">GitHub</a>
+      <span class="fm-item"><a href="/api">API</a> ·</span>
+      <span class="fm-item"><a href="/about">About</a> ·</span>
+      <span class="fm-item"><a href="/writing">Writing</a> ·</span>
+      <span class="fm-item"><a href="/status">Status</a> ·</span>
+      <span class="fm-item"><a href="/.well-known/security.txt">Security</a> ·</span>
+      <span class="fm-item"><a href="/.well-known/agent.json">Agent card</a> ·</span>
+      <span class="fm-item"><a href="/terms">Terms</a> ·</span>
+      <span class="fm-item"><a href="/privacy">Privacy</a> ·</span>
+      <span class="fm-item"><a href="https://github.com/silent-architects/auxilo">GitHub</a></span>
     </p>
   </div>
 </footer>
@@ -4368,14 +4369,6 @@
     el.appendChild(table);
   }
 
-  // ── Navigation toggle (mobile) ───────────────────────────────────────
-  window.toggleNav = function () {
-    var nav = document.querySelector('.nav-links');
-    var btn = document.getElementById('hamburger');
-    if (!nav) return;
-    var isOpen = nav.classList.toggle('nav-open');
-    if (btn) btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-  };
 
   // ── Boot ─────────────────────────────────────────────────────────────
   function boot() {
@@ -4477,5 +4470,81 @@
 })();
 </script>
 
+<script>
+// ── Mobile navigation (the same block on every page) ──
+// Open: the page behind the menu goes inert and focus moves to the first link. Tab and Shift+Tab
+// stay inside the menu. Escape, the button, a chosen link, or a window wide enough to show the
+// links in a row closes it and hands the page back; Escape and the button return focus to the button.
+(function () {
+  var bar = document.getElementById('main-nav');
+  var nav = document.querySelector('.nav-links');
+  var btn = document.getElementById('hamburger');
+  if (!bar || !nav || !btn) return;
+  var wide = window.matchMedia('(min-width: 901px)');
+  var held = [];
+
+  function isOpen() { return nav.classList.contains('nav-open'); }
+
+  function open() {
+    nav.classList.add('nav-open');
+    btn.setAttribute('aria-expanded', 'true');
+    // Behind the menu: everything outside the navigation, and the logo and the sign-in strip, which the open menu covers.
+    var behind = Array.prototype.filter.call(document.body.children, function (el) {
+      return el !== bar && !/^(SCRIPT|STYLE|LINK|TEMPLATE|NOSCRIPT)$/.test(el.tagName);
+    });
+    Array.prototype.push.apply(behind, bar.querySelectorAll('.nav-logo, .nav-strip'));
+    behind.forEach(function (el) {
+      if (!el.hasAttribute('inert')) { el.setAttribute('inert', ''); held.push(el); }
+    });
+    var first = nav.querySelector('a');
+    if (first) first.focus();
+  }
+
+  function close(refocus) {
+    nav.classList.remove('nav-open');
+    btn.setAttribute('aria-expanded', 'false');
+    held.forEach(function (el) { el.removeAttribute('inert'); });
+    held = [];
+    if (refocus) btn.focus();
+  }
+
+  window.toggleNav = function toggleNav() {
+    if (isOpen()) close(true); else open();
+  };
+
+  Array.prototype.forEach.call(nav.querySelectorAll('a'), function (a) {
+    a.addEventListener('click', function () { if (isOpen()) close(false); });
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (!isOpen()) return;
+    if (e.key === 'Escape' || e.key === 'Esc') {
+      e.preventDefault();
+      close(true);
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    // The controls the open menu shows, in reading order: its links, then the button.
+    var ring = Array.prototype.slice.call(nav.querySelectorAll('a')).concat(btn);
+    var first = ring[0];
+    var last = ring[ring.length - 1];
+    var at = document.activeElement;
+    if (ring.indexOf(at) === -1) {
+      e.preventDefault();
+      (e.shiftKey ? last : first).focus();
+    } else if (e.shiftKey && at === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && at === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  });
+
+  if (wide.addEventListener) {
+    wide.addEventListener('change', function (e) { if (e.matches && isOpen()) close(false); });
+  }
+})();
+</script>
 </body>
 </html>

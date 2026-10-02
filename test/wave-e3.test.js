@@ -277,7 +277,7 @@ describe('WAVE-E3 item 3: /about and /writing/index.html moved onto the shared #
     it(`${page} carries <nav id="main-nav"> with the shared .nav-links list`, () => {
       const html = readPublic(page);
       assert.match(html, /<nav id="main-nav" aria-label="Main navigation">/);
-      assert.match(html, /<ul class="nav-links" role="list">/);
+      assert.match(html, /<ul class="nav-links" id="nav-menu" role="list">/);
       assert.match(html, /class="hamburger" id="hamburger"/);
     });
 

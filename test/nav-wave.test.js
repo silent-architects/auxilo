@@ -276,11 +276,11 @@ describe('NAV-WAVE A: every tracked public HTML page carries the shared #main-na
         .split('\n')
         .map((line) => line.trimStart())
         .join('\n')
-        .replace(/ id="nav-how"(?: class="active")?/, ' id="nav-how"')
-        .replace(/ id="nav-agents"(?: class="active")?/, ' id="nav-agents"')
-        .replace(/ id="nav-builders"(?: class="active")?/, ' id="nav-builders"')
-        .replace(/ id="nav-pricing"(?: class="active")?/, ' id="nav-pricing"')
-        .replace(/ id="nav-works-with"(?: class="active")?/, ' id="nav-works-with"')
+        .replace(/ id="nav-how"(?: class="active" aria-current="page")?/, ' id="nav-how"')
+        .replace(/ id="nav-agents"(?: class="active" aria-current="page")?/, ' id="nav-agents"')
+        .replace(/ id="nav-builders"(?: class="active" aria-current="page")?/, ' id="nav-builders"')
+        .replace(/ id="nav-pricing"(?: class="active" aria-current="page")?/, ' id="nav-pricing"')
+        .replace(/ id="nav-works-with"(?: class="active" aria-current="page")?/, ' id="nav-works-with"')
         // NAV-WAVE amendment (sign-in utility strip): the auth-slot link
         // moved out of a <li> inside .nav-links into <a> inside
         // .nav-strip (no <li> wrapper there — the strip isn't a list).

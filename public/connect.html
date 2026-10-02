@@ -21,26 +21,19 @@
   <link rel="preload" href="/fonts/ArchivoVariable.cfd841fc.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/NewsreaderDisplay300.a07d3c5c.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=30220da2" />
+  <link rel="stylesheet" href="/styles.css?v=93f38fbc" />
   <style>
     /* Connect: a dark first screen, then the five steps on paper. This is a reading page:
        one centred 720 column, the hero copy and the steps on the same left edge.
        Grounds, type, the hero layout and the setup command block (.hero-setup-block,
-       the page's ask) live in the shared sheet. This block holds the column and the step rows. */
-
-    /* ── The reading column: 720 wide, centred, in the hero and in the body alike ── */
-    #connect-hero .hero-one > * {
-      margin-left: auto;
-      margin-right: auto;
-    }
+       the page's ask) live in the shared sheet, and so does the reading column (the shared
+       reading frame: one centred 720 column, in the hero and in the body alike). This block
+       holds the step rows. */
 
     /* ── The steps: a row each, the number in the serif in a 48px gutter, joined by 1px lines ── */
     .connect-steps {
       list-style: none;
       counter-reset: connect-step;
-      max-width: 720px;
-      margin-left: auto;
-      margin-right: auto;
     }
     .connect-steps li {
       counter-increment: connect-step;
@@ -72,8 +65,7 @@
 
     /* The foot link: a plain ink link, 44px tall */
     .page-foot {
-      max-width: 720px;
-      margin: var(--space-block) auto 0;
+      margin-top: var(--space-block);
     }
     .page-foot a {
       display: inline-flex;
@@ -98,7 +90,7 @@
         </svg>
         <span class="wordmark">auxilo</span>
       </a>
-      <ul class="nav-links" role="list">
+      <ul class="nav-links" id="nav-menu" role="list">
         <li><a href="/for-builders" id="nav-builders">For Builders</a></li>
         <li><a href="/for-agents" id="nav-agents">For Agents</a></li>
         <li><a href="/how-it-works" id="nav-how">How It Works</a></li>
@@ -106,7 +98,7 @@
         <li><a href="/pricing" id="nav-pricing">Pricing</a></li>
         <li><a href="/connect" id="nav-cta-access" class="nav-cta">Connect Your Agent</a></li>
       </ul>
-      <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
+      <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-menu" onclick="toggleNav()">
         <span></span><span></span><span></span>
       </button>
     </div>
@@ -134,7 +126,7 @@
           <div class="code-block hero-setup-block" id="install">
             <div class="code-block-header">
               <span class="code-block-lang">One command. Any terminal.</span>
-              <button class="copy-btn" id="copy-connect-setup" onclick="copyCode('connect-setup-code', 'copy-connect-setup')" aria-label="Copy command">Copy the Setup Command</button>
+              <button class="copy-btn" id="copy-connect-setup" onclick="copyCode('connect-setup-code', 'copy-connect-setup')" aria-label="Copy the Setup Command">Copy the Setup Command</button>
             </div>
             <pre id="connect-setup-code">npx auxilo setup</pre>
           </div>
@@ -178,53 +170,21 @@
         <span class="wordmark">auxilo</span>
       </a>
       <p class="footer-meta">
-        Your agent already solved this. Auxilo remembers. ·
-        <a href="/api">API</a> ·
-        <a href="/about">About</a> ·
-        <a href="/writing">Writing</a> ·
-        <a href="/status">Status</a> ·
-        <a href="/.well-known/security.txt">Security</a> ·
-        <a href="/.well-known/agent.json">Agent card</a> ·
-        <a href="/terms">Terms</a> ·
-        <a href="/privacy">Privacy</a> ·
-        <a href="https://github.com/silent-architects/auxilo">GitHub</a>
+        Your agent already solved this. Auxilo remembers.<span class="fm-item"> ·</span>
+        <span class="fm-item"><a href="/api">API</a> ·</span>
+        <span class="fm-item"><a href="/about">About</a> ·</span>
+        <span class="fm-item"><a href="/writing">Writing</a> ·</span>
+        <span class="fm-item"><a href="/status">Status</a> ·</span>
+        <span class="fm-item"><a href="/.well-known/security.txt">Security</a> ·</span>
+        <span class="fm-item"><a href="/.well-known/agent.json">Agent card</a> ·</span>
+        <span class="fm-item"><a href="/terms">Terms</a> ·</span>
+        <span class="fm-item"><a href="/privacy">Privacy</a> ·</span>
+        <span class="fm-item"><a href="https://github.com/silent-architects/auxilo">GitHub</a></span>
       </p>
     </div>
   </footer>
 
   <script>
-    // ── Hamburger nav toggle ───────────────────────────────────────────
-    function toggleNav() {
-      const nav = document.querySelector('.nav-links');
-      const btn = document.getElementById('hamburger');
-      const expanded = btn.getAttribute('aria-expanded') === 'true';
-      btn.setAttribute('aria-expanded', !expanded);
-      nav.classList.toggle('nav-open');
-    }
-
-    // Close mobile nav on link click
-    document.querySelectorAll('.nav-links a').forEach(a => {
-      a.addEventListener('click', () => {
-        const nav = document.querySelector('.nav-links');
-        const btn = document.getElementById('hamburger');
-        if (nav.classList.contains('nav-open')) {
-          nav.classList.remove('nav-open');
-          btn.setAttribute('aria-expanded', 'false');
-        }
-      });
-    });
-
-    // Close mobile nav on Escape key
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        const nav = document.querySelector('.nav-links');
-        const btn = document.getElementById('hamburger');
-        if (nav && nav.classList.contains('nav-open')) {
-          nav.classList.remove('nav-open');
-          btn.setAttribute('aria-expanded', 'false');
-        }
-      }
-    });
 
     // ── Copy-to-clipboard for the install command (shared behavior with
     //    index.html's hero install control; copyCode() reused verbatim). ──
@@ -263,5 +223,81 @@
       });
     }
   </script>
+<script>
+// ── Mobile navigation (the same block on every page) ──
+// Open: the page behind the menu goes inert and focus moves to the first link. Tab and Shift+Tab
+// stay inside the menu. Escape, the button, a chosen link, or a window wide enough to show the
+// links in a row closes it and hands the page back; Escape and the button return focus to the button.
+(function () {
+  var bar = document.getElementById('main-nav');
+  var nav = document.querySelector('.nav-links');
+  var btn = document.getElementById('hamburger');
+  if (!bar || !nav || !btn) return;
+  var wide = window.matchMedia('(min-width: 901px)');
+  var held = [];
+
+  function isOpen() { return nav.classList.contains('nav-open'); }
+
+  function open() {
+    nav.classList.add('nav-open');
+    btn.setAttribute('aria-expanded', 'true');
+    // Behind the menu: everything outside the navigation, and the logo and the sign-in strip, which the open menu covers.
+    var behind = Array.prototype.filter.call(document.body.children, function (el) {
+      return el !== bar && !/^(SCRIPT|STYLE|LINK|TEMPLATE|NOSCRIPT)$/.test(el.tagName);
+    });
+    Array.prototype.push.apply(behind, bar.querySelectorAll('.nav-logo, .nav-strip'));
+    behind.forEach(function (el) {
+      if (!el.hasAttribute('inert')) { el.setAttribute('inert', ''); held.push(el); }
+    });
+    var first = nav.querySelector('a');
+    if (first) first.focus();
+  }
+
+  function close(refocus) {
+    nav.classList.remove('nav-open');
+    btn.setAttribute('aria-expanded', 'false');
+    held.forEach(function (el) { el.removeAttribute('inert'); });
+    held = [];
+    if (refocus) btn.focus();
+  }
+
+  window.toggleNav = function toggleNav() {
+    if (isOpen()) close(true); else open();
+  };
+
+  Array.prototype.forEach.call(nav.querySelectorAll('a'), function (a) {
+    a.addEventListener('click', function () { if (isOpen()) close(false); });
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (!isOpen()) return;
+    if (e.key === 'Escape' || e.key === 'Esc') {
+      e.preventDefault();
+      close(true);
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    // The controls the open menu shows, in reading order: its links, then the button.
+    var ring = Array.prototype.slice.call(nav.querySelectorAll('a')).concat(btn);
+    var first = ring[0];
+    var last = ring[ring.length - 1];
+    var at = document.activeElement;
+    if (ring.indexOf(at) === -1) {
+      e.preventDefault();
+      (e.shiftKey ? last : first).focus();
+    } else if (e.shiftKey && at === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && at === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  });
+
+  if (wide.addEventListener) {
+    wide.addEventListener('change', function (e) { if (e.matches && isOpen()) close(false); });
+  }
+})();
+</script>
 </body>
 </html>

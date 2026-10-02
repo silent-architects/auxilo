@@ -10,6 +10,14 @@
 @font-face {
   font-family: 'Archivo'; font-style: normal; font-weight: 400 600; font-display: swap;
   src: url('/fonts/ArchivoVariable.cfd841fc.woff2') format('woff2');
+  unicode-range: U+0020-007E, U+00A0-017F, U+2010-2011, U+2013-2015, U+2017-201A, U+201C-201E, U+2020-2022, U+2026, U+2030, U+2032-2033, U+2039-203A, U+20A1, U+20A3-20A4, U+20A6-20A7, U+20A9, U+20AB-20AD, U+20B1-20B2, U+20B5, U+20B9-20BA, U+20BC-20BD, U+2122, U+2191, U+2193, U+2212, U+FEFF;
+}
+/* The rarer characters of the original (Romanian, Vietnamese and others) sit in a second
+   file the browser fetches only on a page that uses one of them. It is not preloaded. */
+@font-face {
+  font-family: 'Archivo'; font-style: normal; font-weight: 400 600; font-display: swap;
+  src: url('/fonts/ArchivoVariableExt.ff8ec503.woff2') format('woff2');
+  unicode-range: U+018F, U+0192, U+019D, U+01A0-01A1, U+01AF-01B0, U+01C4-01DC, U+01E6-01E7, U+01EA-01EB, U+01FA-021B, U+022A-022D, U+0230-0233, U+0237, U+0259, U+0272, U+02B9-02BA, U+02BC, U+02C6-02C7, U+02C9, U+02DA, U+02DC-02DD, U+0304, U+0308, U+1E24-1E25, U+1E62-1E63, U+1E6C-1E6D, U+1E80-1E85, U+1E9E, U+1EA0-1EF9, U+2009, U+203E, U+2044, U+2052, U+2074, U+2113, U+2215;
 }
 @font-face {
   font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap;
@@ -282,6 +290,8 @@ body {
    default for strong and b (bolder, which lands on 700) would ask for a weight it does
    not have. Low specificity: any rule that sets its own weight on one still wins. */
 strong, b { font-weight: 600; }
+/* Mono ships at weight 400 only, so mono inside bold text never asks for another weight. */
+strong code, b code { font-weight: 400; }
 
 /* Base link — bare <a> in prose. Low specificity so styled nav/button/footer
    links (which carry their own classes) win and render unchanged. Browser-default
@@ -665,6 +675,15 @@ body .legal-wrap h3 {
 .nav-links a:hover { color: var(--fg-1); }
 /* Wave E2 item 10: active-link gold -> ash. */
 .nav-links a.active { color: var(--fg-1); }
+/* The link for the current page differs by more than colour: a 1.5px underline in the
+   link's own colour, 6px under the text (aria-current carries it for assistive technology). */
+.nav-links a.active,
+#main-nav a[aria-current="page"] {
+  text-decoration: underline;
+  text-decoration-color: currentColor;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 6px;
+}
 
 /* AD sheet 9: nav CTA >= 36px tall (measured 35px live).
    Wave E2 item 12: raised to 44px (measured 40.4px live, AD-STEP4-FINAL
@@ -1381,6 +1400,9 @@ footer {
 }
 
 .footer-meta a:hover { color: var(--fg-1); }
+/* Each link travels with the separator that follows it, so the line breaks between items
+   and a line never starts with a middot. */
+.footer-meta .fm-item { white-space: nowrap; }
 
 /* ── AD sheet 9: one FAQ accordion component, site-wide ──────────────────────
    Matches how-it-works' pattern (the only page with a working accordion
@@ -2376,10 +2398,12 @@ pre code {
   }
 }
 
-/* ── Heading left, list right (page index, questions, any list of definitions) ── */
+/* ── Heading left, list right (page index, questions, any list of definitions) ──
+   The heading takes 5 of 12 columns and the list 7, so a two-word heading at the h2 size
+   (Common Questions, Dive Deeper) stays on one line wherever it fits. */
 .aside-list {
   display: grid;
-  grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
   gap: var(--space-wide);
   align-items: start;
 }
@@ -2636,26 +2660,31 @@ pre code {
 
 /* ── The device ──
    The mark's own geometry, a triangle and its crossbar, as one background image on the
-   first dark section of every page. It is anchored right, so a hero that is only text is
-   no longer empty on its right, and a hero with a picture on the right has it behind
-   the picture (the panels are opaque). Ivory at 12%, 1.5px, no gold. The two sides run
-   on past the bottom of any hero and the crossbar leaves the frame to the right, so a
-   hero shows a cropped part of the triangle, never its base. The image is an inline SVG
-   data URI (the content security policy allows data: images), drawn at the size it is
-   shown at, so the line is 1.5px at every size. A 12% line over the dark ground keeps
-   the dimmest text on it above 4.5 to 1, so it never takes a reader's text below the
-   floor. The first dark section is the first child of main when that child is on-dark
-   (every page's hero, the status band, the sign-in view), the dashboard's header band,
-   and the legal template's hero band (its h1's ::before, which the template paints as a
-   full width dark band). Pages carry no device markup, and no hero sets a background of
-   its own, which would lose the image.
+   first dark section of every page. At 1025 and up the copy sits on the left and the
+   device on the right: it is anchored right, so a hero that is only text is no longer
+   empty on its right, and a hero with a picture on the right has it behind the picture
+   (the panels are opaque). Ivory at 12%, 1.5px, no gold. The two sides run on past the
+   bottom of any hero and the crossbar leaves the frame to the right, so a hero shows a
+   cropped part of the triangle, never its base. The image is an inline SVG data URI (the
+   content security policy allows data: images), drawn at the size it is shown at, so the
+   line is 1.5px at every size. A 12% line over the dark ground keeps the dimmest text on
+   it above 4.5 to 1, so it never takes a reader's text below the floor.
+   At 1024 and down the device never sits behind text: it is a cropped corner at the right
+   edge, drawn as its own small image (apex, sides and crossbar), as tall as 72px on a
+   tablet and 56px on a phone, which is less than the section's top padding at every width
+   in range (80 and 64), so it stays inside the padding band above the heading. The
+   dashboard is an application surface and carries no device.
+   The first dark section is the first child of main when that child is on-dark (every
+   page's hero, the status band), and the legal template's hero band (its h1's ::before,
+   which the template paints as a full width dark band). Pages carry no device markup, and
+   no hero sets a background of its own, which would lose the image.
    --device-a is how far the apex sits in from the right edge of the section. */
 :root {
   --device: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1300' height='1300' viewBox='0 0 1300 1300' fill='none' stroke='%23FAFAF8' stroke-opacity='.12' stroke-width='1.5' stroke-linejoin='round'%3E%3Cpath d='M-84 1400L650 40L1384 1400'/%3E%3Cline x1='650' y1='478' x2='1300' y2='478'/%3E%3C/svg%3E");
-  --device-small: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='806' height='806' viewBox='0 0 1300 1300' fill='none' stroke='%23FAFAF8' stroke-opacity='.12' stroke-width='2.42' stroke-linejoin='round'%3E%3Cpath d='M-84 1400L650 40L1384 1400'/%3E%3Cline x1='650' y1='478' x2='1300' y2='478'/%3E%3C/svg%3E");
+  --device-band: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='72' viewBox='0 0 200 72' fill='none' stroke='%23FAFAF8' stroke-opacity='.12' stroke-width='1.5' stroke-linejoin='round'%3E%3Cpath d='M101.7 72L140 1L178.3 72'/%3E%3Cline x1='140' y1='42' x2='200' y2='42'/%3E%3C/svg%3E");
+  --device-band-phone: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='56' viewBox='0 0 140 56' fill='none' stroke='%23FAFAF8' stroke-opacity='.12' stroke-width='1.5' stroke-linejoin='round'%3E%3Cpath d='M66.3 56L96 1L125.7 56'/%3E%3Cline x1='96' y1='34' x2='140' y2='34'/%3E%3C/svg%3E");
 }
 main > .on-dark:first-child,
-.dash-wrap > .dash-band:first-child,
 body .legal-wrap > h1::before {
   --device-a: 230px;
   background-image: var(--device);
@@ -2670,30 +2699,25 @@ body .legal-wrap > h1::before {
 body .legal-wrap > h1::before {
   --device-a: 30px;
 }
-/* The old inline device (a clipping wrapper and an svg a page carried itself) is
-   retired. Any page that still carries one does not draw it, so it cannot double up. */
-.dw-device-clip {
-  display: none;
+/* The dashboard's sign-in screen is an application surface: no device. */
+main > #login-view {
+  background-image: none;
 }
 @media (max-width: 1024px) {
   main > .on-dark:first-child,
-  .dash-wrap > .dash-band:first-child,
   body .legal-wrap > h1::before,
   :is(#about-hero, #connect-hero, #writing-hero, #essay-hero) {
-    --device-a: 120px;
-    background-image: var(--device-small);
-    background-size: 806px 806px;
-    background-position: right calc(var(--device-a) - 403px) top -20px;
+    background-image: var(--device-band);
+    background-size: 200px 72px;
+    background-position: right top;
   }
 }
-/* On a phone it is a cropped corner of the same drawing: the apex and the crossbar at
-   the top right, the rest leaving the frame. */
 @media (max-width: 600px) {
   main > .on-dark:first-child,
-  .dash-wrap > .dash-band:first-child,
   body .legal-wrap > h1::before,
   :is(#about-hero, #connect-hero, #writing-hero, #essay-hero) {
-    --device-a: 80px;
+    background-image: var(--device-band-phone);
+    background-size: 140px 56px;
   }
 }
 
