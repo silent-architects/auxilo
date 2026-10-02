@@ -2100,7 +2100,67 @@
         "color": "rgb(69, 69, 63)"
       },
       {
+        "key": "s1.p[15]",
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "lineHeight": "26.4px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
+        "textTransform": "none",
+        "color": "rgb(69, 69, 63)"
+      },
+      {
+        "key": "s1.p[16]",
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "lineHeight": "26.4px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
+        "textTransform": "none",
+        "color": "rgb(69, 69, 63)"
+      },
+      {
         "key": "s1.h4[0]",
+        "fontSize": "16px",
+        "fontWeight": "500",
+        "lineHeight": "20.8px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "-0.16px",
+        "textTransform": "none",
+        "color": "rgb(10, 10, 10)"
+      },
+      {
+        "key": "s1.p[17]",
+        "fontSize": "15px",
+        "fontWeight": "400",
+        "lineHeight": "24px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
+        "textTransform": "none",
+        "color": "rgb(69, 69, 63)"
+      },
+      {
+        "key": "s1.h4[1]",
+        "fontSize": "16px",
+        "fontWeight": "500",
+        "lineHeight": "20.8px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "-0.16px",
+        "textTransform": "none",
+        "color": "rgb(10, 10, 10)"
+      },
+      {
+        "key": "s1.p[18]",
+        "fontSize": "15px",
+        "fontWeight": "400",
+        "lineHeight": "24px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
+        "textTransform": "none",
+        "color": "rgb(69, 69, 63)"
+      },
+      {
+        "key": "s1.h4[2]",
         "fontSize": "16px",
         "fontWeight": "500",
         "lineHeight": "20.8px",
@@ -2150,7 +2210,7 @@
         "color": "rgb(69, 69, 63)"
       },
       {
-        "key": "s1.h4[1]",
+        "key": "s1.h4[3]",
         "fontSize": "16px",
         "fontWeight": "500",
         "lineHeight": "20.8px",
@@ -2194,66 +2254,6 @@
         "fontSize": "15px",
         "fontWeight": "400",
         "lineHeight": "22.5px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "normal",
-        "textTransform": "none",
-        "color": "rgb(69, 69, 63)"
-      },
-      {
-        "key": "s1.p[15]",
-        "fontSize": "16px",
-        "fontWeight": "400",
-        "lineHeight": "26.4px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "normal",
-        "textTransform": "none",
-        "color": "rgb(69, 69, 63)"
-      },
-      {
-        "key": "s1.p[16]",
-        "fontSize": "16px",
-        "fontWeight": "400",
-        "lineHeight": "26.4px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "normal",
-        "textTransform": "none",
-        "color": "rgb(69, 69, 63)"
-      },
-      {
-        "key": "s1.h4[2]",
-        "fontSize": "16px",
-        "fontWeight": "500",
-        "lineHeight": "20.8px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "-0.16px",
-        "textTransform": "none",
-        "color": "rgb(10, 10, 10)"
-      },
-      {
-        "key": "s1.p[17]",
-        "fontSize": "15px",
-        "fontWeight": "400",
-        "lineHeight": "24px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "normal",
-        "textTransform": "none",
-        "color": "rgb(69, 69, 63)"
-      },
-      {
-        "key": "s1.h4[3]",
-        "fontSize": "16px",
-        "fontWeight": "500",
-        "lineHeight": "20.8px",
-        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
-        "letterSpacing": "-0.16px",
-        "textTransform": "none",
-        "color": "rgb(10, 10, 10)"
-      },
-      {
-        "key": "s1.p[18]",
-        "fontSize": "15px",
-        "fontWeight": "400",
-        "lineHeight": "24px",
         "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
         "letterSpacing": "normal",
         "textTransform": "none",
