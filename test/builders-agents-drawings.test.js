@@ -358,3 +358,158 @@ describe('measured: code panels, the MCP stack, the catalog card and the first s
     assert.ok(Math.abs(m.h1 - m.drawing) <= 1, `the headline (${m.h1}) and the exchange (${m.drawing}) start on one line, so the first thing under the navigation is on the section rhythm`);
   });
 });
+
+// ── round 5: the unlock chips, the figures on the card columns, the command block, the exchange spacing ──
+
+describe('round 5 (static): three unlocks by three different agents, and the figures in one three-column grid', () => {
+  it('the three auxilo_unlock rows in the earnings stage each carry a different category chip, and the drawing rule still holds', () => {
+    const stage = BUILDERS_DRAWINGS.stages[0];
+    const rows = [...stage.matchAll(/<div class="dw-row"><span class="dw-tool">auxilo_unlock<\/span><span class="dw-sk"><\/span><span class="dw-chip">([^<]+)<\/span><\/div>/g)].map((m) => m[1]);
+    assert.equal(rows.length, 3, 'positive control: three unlock rows, each with a chip');
+    assert.equal(new Set(rows).size, 3, `three different chips (${rows.join(', ')})`);
+    for (const c of rows) assert.ok(CATEGORIES.includes(c), `${c} is a real category`);
+    assert.equal((stage.match(/<span class="dw-tool">auxilo_unlock<\/span>/g) || []).length, 3, 'and every unlock row is one of them');
+    // and the negative control: the old row, one tool name and a bar, is not left anywhere
+    assert.doesNotMatch(stage, /<span class="dw-tool">auxilo_unlock<\/span><span class="dw-sk"><\/span><\/div>/);
+  });
+
+  it('/for-builders sets its figures as a three-column grid with the steps\' own gap, not a spread flex row', () => {
+    const css = style(BUILDERS);
+    const rule = css.match(/\.cat-stats\s*\{([^}]*)\}/)[1];
+    assert.match(rule, /display:\s*grid/);
+    assert.match(rule, /grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
+    assert.match(rule, /gap:\s*var\(--space-card\) var\(--space-copy\)/);
+    assert.doesNotMatch(rule, /justify-content|flex/);
+    // /for-agents' own figures row keeps its flex layout: the change is /for-builders only
+    assert.match(style(AGENTS).match(/\.cat-stats\s*\{([^}]*)\}/)[1], /display:\s*flex/);
+  });
+
+  it('the command block under "Built for builders" is never stretched to the claim beside it', () => {
+    const css = style(BUILDERS);
+    assert.match(css, /#connect \.builders-grid\s*\{\s*align-items:\s*start;\s*\}/);
+    assert.doesNotMatch(css, /#connect \.builders-grid\s*\{[^}]*stretch/);
+    assert.doesNotMatch(css, /\.builders-right \.code-block\s*\{[^}]*flex:\s*1 1 auto/, 'the block no longer grows to fill its column');
+  });
+});
+
+describe('round 5 (measured): the figures on the step columns, the command block, the exchange', { timeout: 180_000 }, () => {
+  let ok = false;
+  let server;
+  let base;
+  let browser;
+
+  before(async () => {
+    if (!isPlaywrightAvailable()) return;
+    server = await startStaticServer(PUBLIC_DIR);
+    base = `http://127.0.0.1:${server.address().port}`;
+    const { chromium } = require('playwright');
+    browser = await chromium.launch();
+    ok = true;
+  });
+
+  after(async () => {
+    if (browser) await browser.close();
+    if (server) server.close();
+  });
+
+  async function onPage(file, width, fn) {
+    const ctx = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: 'reduce' });
+    const page = await ctx.newPage();
+    try {
+      await page.goto(`${base}/${file}`, { waitUntil: 'networkidle' });
+      await page.evaluate(() => document.fonts.ready);
+      return await fn(page);
+    } finally {
+      await ctx.close();
+    }
+  }
+
+  for (const width of [1280, 1100]) {
+    it(`/for-builders at ${width}: the three figures start on the three column lines of the step cards, with the same gap`, async (t) => {
+      if (!ok) { t.skip('playwright not resolvable'); return; }
+      const m = await onPage('for-builders.html', width, (p) => p.evaluate(() => {
+        const L = (sel) => [...document.querySelectorAll(sel)].map((e) => { const r = e.getBoundingClientRect(); return { left: r.left, right: r.right }; });
+        return { figures: L('#builders-stats .cat-stat'), cards: L('#how-it-earns .steps .step') };
+      }));
+      assert.equal(m.figures.length, 3, 'positive control: three figures');
+      assert.equal(m.cards.length, 3, 'positive control: three step cards');
+      m.figures.forEach((f, i) => assert.ok(Math.abs(f.left - m.cards[i].left) < 0.5, `figure ${i + 1} starts on the left line of card ${i + 1} (${f.left} and ${m.cards[i].left})`));
+      assert.ok(Math.abs((m.figures[1].left - m.figures[0].right) - (m.cards[1].left - m.cards[0].right)) < 0.5, 'and the gap between figure columns is the gap between the cards');
+    });
+  }
+
+  for (const width of [768, 375]) {
+    it(`/for-builders at ${width}: the figures stay one grid with no horizontal scroll`, async (t) => {
+      if (!ok) { t.skip('playwright not resolvable'); return; }
+      const m = await onPage('for-builders.html', width, (p) => p.evaluate(() => ({
+        cols: getComputedStyle(document.querySelector('#builders-stats .cat-stats')).gridTemplateColumns.split(' ').length,
+        overflow: document.documentElement.scrollWidth - window.innerWidth,
+      })));
+      assert.equal(m.cols, width === 768 ? 3 : 1, 'three columns on a tablet, one on a phone');
+      assert.ok(m.overflow <= 0, 'no horizontal scroll');
+    });
+  }
+
+  it('/for-builders at 1280: the "Built for builders" command block ends under its last line, and the claim beside it is the taller column', async (t) => {
+    if (!ok) { t.skip('playwright not resolvable'); return; }
+    const m = await onPage('for-builders.html', 1280, (p) => p.evaluate(() => {
+      const block = document.getElementById('openclaw-snippet');
+      const pre = document.getElementById('openclaw-code');
+      const range = document.createRange();
+      range.selectNodeContents(pre);
+      const lines = [...range.getClientRects()];
+      const last = lines.reduce((a, r) => (r.bottom > a.bottom ? r : a), lines[0]);
+      const cs = getComputedStyle(pre);
+      // the glyph box of the last line, grown by the half-leading the line height adds under it: the foot of the line box
+      const lastLine = last.bottom + (parseFloat(cs.lineHeight) - last.height) / 2;
+      return {
+        blockBottom: block.getBoundingClientRect().bottom,
+        preBottom: pre.getBoundingClientRect().bottom,
+        lastLine,
+        padBottom: parseFloat(cs.paddingBottom),
+        borderBottom: parseFloat(cs.borderBottomWidth),
+        align: getComputedStyle(document.querySelector('#connect .builders-grid')).alignItems,
+        leftHeight: document.querySelector('#connect .builders-left').getBoundingClientRect().height,
+        blockHeight: block.getBoundingClientRect().height,
+      };
+    }));
+    assert.equal(m.align, 'start');
+    assert.ok(m.leftHeight > m.blockHeight, `positive control: the claim column (${m.leftHeight}) is taller than the block (${m.blockHeight}), so a stretch would have shown`);
+    assert.ok(m.preBottom - m.lastLine <= m.padBottom + m.borderBottom + 1, `nothing empty under the last line: ${m.preBottom - m.lastLine} against a padding of ${m.padBottom}`);
+    assert.ok(m.preBottom - m.lastLine >= m.padBottom - 1, 'positive control: the measure sees the padding, so it would see more');
+    assert.ok(Math.abs(m.blockBottom - m.preBottom) <= 1, 'the block ends where its code ends');
+  });
+
+  for (const width of [1280, 768]) {
+    it(`/for-agents at ${width}: each hero panel overlaps the one above by 16, with 16 clear between its edge and the last row above`, async (t) => {
+      if (!ok) { t.skip('playwright not resolvable'); return; }
+      const m = await onPage('for-agents.html', width, (p) => p.evaluate(() => {
+        const panels = ['.hx-1', '.hx-2', '.hx-3'].map((s) => document.querySelector(s));
+        const lastMark = (panel) => Math.max(...[...panel.querySelectorAll('.dw-chip, .dw-sk, .dw-tool, .dw-title')].map((e) => e.getBoundingClientRect().bottom));
+        const r = panels.map((e) => e.getBoundingClientRect());
+        return {
+          overlaps: [r[0].bottom - r[1].top, r[1].bottom - r[2].top],
+          margins: [parseFloat(getComputedStyle(panels[1]).marginTop), parseFloat(getComputedStyle(panels[2]).marginTop)],
+          clears: [r[1].top - lastMark(panels[0]), r[2].top - lastMark(panels[1])],
+        };
+      }));
+      m.overlaps.forEach((o, i) => {
+        assert.ok(Math.abs(o - 16) < 0.5, `panel ${i + 2} overlaps panel ${i + 1} by ${o}, a ruled 16`);
+        assert.ok(Math.abs(o + m.margins[i]) < 0.5, `and that is its margin, not an accident of line height (${m.margins[i]})`);
+        assert.ok(m.clears[i] >= 16, `panel ${i + 2}'s edge is ${m.clears[i]} clear of the last row above it`);
+      });
+    });
+  }
+
+  it('/for-agents at 375: the three panels stack with a 16 gap and no overlap', async (t) => {
+    if (!ok) { t.skip('playwright not resolvable'); return; }
+    const m = await onPage('for-agents.html', 375, (p) => p.evaluate(() => {
+      const r = ['.hx-1', '.hx-2', '.hx-3'].map((s) => document.querySelector(s).getBoundingClientRect());
+      const pads = ['.hx-1', '.hx-2', '.hx-3'].map((s) => { const cs = getComputedStyle(document.querySelector(s)); return [parseFloat(cs.paddingTop), parseFloat(cs.paddingBottom)]; });
+      return { gaps: [r[1].top - r[0].bottom, r[2].top - r[1].bottom], pads, overflow: document.documentElement.scrollWidth - window.innerWidth };
+    }));
+    assert.ok(m.gaps.every((g) => Math.abs(g - 16) < 0.5), `gaps ${m.gaps.join(', ')}`);
+    assert.ok(m.pads.every(([top, bottom]) => top === bottom), 'top equals bottom on every panel when nothing overlaps it');
+    assert.ok(m.overflow <= 0, 'no horizontal scroll');
+  });
+});

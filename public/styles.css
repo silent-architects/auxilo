@@ -1968,8 +1968,15 @@ pre code {
 .dw-twoup .dw-panel {
   padding: 16px;
 }
-.dw-long .dw-sk {
-  opacity: 0.14;
+/* the long way is a short run of lines with a category chip between each, a column on the 16 step; the
+   card at its foot sits 24 under the last chip (the 16 step plus 8) */
+.dw-twoup .dw-long {
+  display: grid;
+  gap: var(--space-body);
+  align-content: start;
+}
+.dw-twoup .dw-long .dw-found {
+  margin-top: var(--space-tight);
 }
 
 .dw-twoup .dw-found {
@@ -1998,6 +2005,12 @@ pre code {
 }
 /* The dashboard's sign-in screen is an application surface: no device. */
 main > #login-view {
+  background-image: none;
+}
+/* The device belongs to a hero with no drawing. Its left leg runs down under a hero's panels, so the
+   five heroes that hold a drawing (home, for-builders, for-agents, pricing, how-it-works) carry none.
+   An id outranks the shared rule above, so this wins at every width without touching the media block. */
+main > :is(#hero, #builders-hero, #page-hero, #pricing-hero, .hiw-hero) {
   background-image: none;
 }
 
@@ -2115,11 +2128,13 @@ main > #login-view {
   .hero-sub {
     font-size: 17px;
   }
+  /* One inset for every code block at phone width, on every page: the header's label and the code
+     both start 16 from the frame's outer edge (the frame's 1px border plus 15 of padding). */
   .code-block-header {
     flex-direction: column;
     align-items: stretch;
     gap: var(--space-tight);
-    padding: var(--space-body);
+    padding: var(--space-body) calc(var(--space-body) - 1px);
   }
   .code-block-header .copy-btn {
     width: 100%;
@@ -2129,12 +2144,21 @@ main > #login-view {
     font-size: 17px;
     padding: 16px;
   }
+  .code-block pre,
+  .hero-install .hero-setup-block pre,
+  #footer-setup-snippet pre {
+    padding-inline: calc(var(--space-body) - 1px);
+  }
   .dive-row {
     grid-template-columns: 1fr;
     gap: 4px;
   }
   .dw-twoup {
     grid-template-columns: 1fr;
+  }
+  /* stacked, the long way is full width: its lines stay short, with the chips between, so it never reads as a slab */
+  .dw-long .dw-sk {
+    max-width: 40%;
   }
   /* the footer's meta line breaks only between its items, never inside one */
   .footer-meta {

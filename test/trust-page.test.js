@@ -498,6 +498,27 @@ describe('Trust page: route, redirects, head tags, h1, forbidden strings', { tim
     assert.equal((body.match(/<tr>\s*<td>/g) || []).length, 11, 'eleven rows');
     assert.doesNotMatch(TRUST_HTML, /\.trust-table-wrap\s*\{[^}]*(background|border-radius|padding)/, 'the table wrapper is not a card');
   });
+
+  // Round 5: a reading document takes one ground. The hero is dark and every section after it is paper, so no
+  // section carries a ground class, and the page block holds them to the reading rhythm (half of 64, 48 and 32
+  // above and below, the hero keeping the shared section rhythm). The measured gap is pinned in
+  // test/spacing-frame.test.js; this pins the source of it.
+  it('the sections after the hero are one paper ground at the reading rhythm, and the hero keeps its dark ground and the full rhythm', () => {
+    const main = TRUST_HTML.slice(TRUST_HTML.indexOf('<main id="main">'), TRUST_HTML.indexOf('</main>'));
+    const sections = [...main.matchAll(/<section aria-labelledby="([^"]+)"(?: class="([^"]*)")?>/g)].map((m) => ({ id: m[1], cls: m[2] || '' }));
+    assert.equal(sections.length, 12, 'positive control: the hero and eleven sections');
+    assert.equal(sections[0].id, 'page-hero-heading');
+    assert.equal(sections[0].cls, 'on-dark', 'positive control: the hero is the dark ground, so a ground class is visible to this test');
+    for (const s of sections.slice(1)) assert.equal(s.cls, '', `${s.id}: paper, with no ground class`);
+    assert.ok(!/on-tint/.test(main), 'no tint ground remains in the body');
+    const css = TRUST_HTML.slice(TRUST_HTML.indexOf('<style>'), TRUST_HTML.indexOf('</style>'));
+    const reading = 'main > section:not\\(\\[aria-labelledby="page-hero-heading"\\]\\)';
+    const pads = (token) => new RegExp(`${reading}\\s*\\{\\s*padding-top:\\s*var\\(--${token}\\);\\s*padding-bottom:\\s*var\\(--${token}\\);\\s*\\}`);
+    assert.match(css, pads('space-card'), 'half of 64 above and below at 1280');
+    assert.match(css, new RegExp(`@media \\(max-width: 900px\\)\\s*\\{\\s*${reading}\\s*\\{\\s*padding-top:\\s*var\\(--space-copy\\);\\s*padding-bottom:\\s*var\\(--space-copy\\);`), 'half of 48 at 768');
+    assert.match(css, new RegExp(`@media \\(max-width: 600px\\)\\s*\\{\\s*${reading}\\s*\\{\\s*padding-top:\\s*var\\(--space-body\\);\\s*padding-bottom:\\s*var\\(--space-body\\);`), 'half of 32 at 375');
+    assert.doesNotMatch(css, /section\[aria-labelledby="page-hero-heading"\]\s*\{[^}]*padding/, 'the hero keeps the shared section rhythm');
+  });
 });
 
 // ─── TRUST-PAGE-SSR fixtures (module scope — CH-7 guard: no assert-bearing

@@ -9,7 +9,7 @@
   <link rel="preload" href="/fonts/ArchivoVariable.cfd841fc.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/NewsreaderDisplay300.a07d3c5c.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=8d9e4176" />
+  <link rel="stylesheet" href="/styles.css?v=cdb50f10" />
   <style>
     /* Sign-in and the account dashboard. Look only: every id, hook, string and
        script is unchanged. Grounds, tokens, type and the ask come from the shared
@@ -226,9 +226,12 @@
     /* Card text measure: no line of reading text runs past 70 characters, so a
        card at 1100 wide never stretches a sentence across it. The caps sit on
        the blocks that hold text; tables, the code panel and the controls keep
-       their own widths. */
-    .dash-card :is(p, .empty-state, .loading-text, .alert, .wallet-note, .purchase-legal,
+       their own widths. The wallet box in Payouts is a box, not a block of text:
+       it takes the card's full width and its lines (the heading, the address,
+       the notes) carry the cap. */
+    .dash-card :is(p, .empty-state, .loading-text, .alert, .purchase-legal,
                    #clean-lane-terms, #credit-balance-sub, #credit-balance-frozen),
+    .dash-card .wallet-note > *,
     .dash-body .dash-inner > .alert {
       max-width: 70ch;
     }
@@ -1089,6 +1092,21 @@
         vertical-align: middle;
         width: 100%;
         min-height: 44px;
+      }
+    }
+
+    /* A phone: the meta line (score, category, lane, date) and the reason line run
+       the row's whole width, under the checkbox as well as under the title. The
+       score, the category and the lane chip then share the first line (a ready
+       row's three take 235 of the row's 277), and only the date, which comes last,
+       drops to the second. Beside the title column they had 225, and the lane chip
+       fell to the second line. */
+    @media (max-width: 600px) {
+      .triage-table tr.triage-data-row {
+        grid-template-areas:
+          "check title"
+          "meta  meta"
+          "why   why";
       }
     }
 

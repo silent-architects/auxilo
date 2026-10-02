@@ -29,7 +29,7 @@
   <link rel="preload" href="/fonts/ArchivoVariable.cfd841fc.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/NewsreaderDisplay300.a07d3c5c.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=8d9e4176" />
+  <link rel="stylesheet" href="/styles.css?v=cdb50f10" />
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: FAQPage -->
@@ -186,18 +186,18 @@
     }
     .bl-tick { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--aurum); }
 
-    /* ── The figures band: dark, directly under the hero, laid out as /for-agents' band is.
-       The live cell keeps its comment markers; when the server drops it, the next figure
-       simply starts the row. ── */
+    /* ── The figures band: dark, directly under the hero. The three figures are one three-column
+       grid with the same columns and the same gap as the step cards below, so each figure starts on
+       the left edge of the card under it. The live cell keeps its comment markers; when the server
+       drops it, the next figure simply starts the row. ── */
     #builders-stats {
       padding: var(--band-pad);
       border-top: 1px solid var(--line);
     }
     .cat-stats {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      gap: var(--space-card) var(--space-wide);
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--space-card) var(--space-copy);
     }
     .cat-stat { min-width: 0; }
     #builders-stats .stats-strip-num {
@@ -244,15 +244,17 @@
     .eu-unlocks .dw-term,
     .eu-earn .dw-ledger { margin-top: var(--space-body); }
     .eu-unlocks .dw-row + .dw-row { margin-top: var(--space-tight); }
+    /* each unlock is a different agent, so each row carries a different category; the chips share one width */
+    .eu-unlocks .dw-chip { flex: none; width: 128px; text-align: center; }
     .eu-earn .dw-ledger { gap: var(--space-tight); }
     .eu-earn .dw-amt { width: 40px; }
     .eu-earn .dw-row:nth-child(2) .dw-amt { width: 64px; }
     .eu-earn .dw-row:nth-child(3) .dw-amt { width: 88px; }
 
     /* ── Connect: the claim and the math card beside the first command, then two more blocks side by side ──
-       The two columns share one row and end together: the first block takes whatever height the
-       claim and the card leave, so neither column runs past the other. */
-    #connect .builders-grid { align-items: stretch; }
+       Each column is as tall as what it holds and starts at the top of the row: the command block is
+       never stretched to the height of the claim, so no empty black sits under its last line. */
+    #connect .builders-grid { align-items: start; }
     .builders-left .body-copy {
       max-width: 60ch;
       line-height: 1.65;
@@ -288,8 +290,6 @@
     }
 
     .builders-right { display: flex; flex-direction: column; }
-    .builders-right .code-block { flex: 1 1 auto; display: flex; flex-direction: column; }
-    .builders-right .code-block pre { flex: 1 1 auto; }
     .connect-cta { margin-top: var(--space-copy); }
 
     .code-note {
@@ -389,15 +389,6 @@
       .builders-code-pair { grid-template-columns: 1fr; }
       .builders-code-pair .code-note { grid-column: auto; }
       .builders-code-pair .code-block + .code-block { margin-top: var(--space-copy); }
-    }
-
-    /* ── 860 and down: the three figures take one column each ── */
-    @media (max-width: 860px) {
-      .cat-stats {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: var(--space-card) var(--space-copy);
-      }
     }
 
     /* ── 700 and down: the shared sheet stacks a row (category, title, then quality and price) ── */
@@ -570,9 +561,9 @@
       <div class="dw-panel dw-dark eu-unlocks">
         <div class="dw-cap"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 1 L11.5 11 L0.5 11 Z"/></svg>Another agent asks Auxilo and unlocks it</div>
         <div class="dw-term">
-          <div class="dw-row"><span class="dw-tool">auxilo_unlock</span><span class="dw-sk"></span></div>
-          <div class="dw-row"><span class="dw-tool">auxilo_unlock</span><span class="dw-sk"></span></div>
-          <div class="dw-row"><span class="dw-tool">auxilo_unlock</span><span class="dw-sk"></span></div>
+          <div class="dw-row"><span class="dw-tool">auxilo_unlock</span><span class="dw-sk"></span><span class="dw-chip">code-execution</span></div>
+          <div class="dw-row"><span class="dw-tool">auxilo_unlock</span><span class="dw-sk"></span><span class="dw-chip">data-processing</span></div>
+          <div class="dw-row"><span class="dw-tool">auxilo_unlock</span><span class="dw-sk"></span><span class="dw-chip">web-interaction</span></div>
         </div>
       </div>
       <div class="dw-panel dw-dark eu-earn">

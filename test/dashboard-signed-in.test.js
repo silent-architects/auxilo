@@ -720,7 +720,8 @@ describe('dashboard signed in (rendered)', { timeout: 240_000 }, () => {
     try {
       const m = await page.evaluate(() => {
         const out = [];
-        for (const el of document.querySelectorAll('.dash-card p, .dash-card .alert, .dash-card .wallet-note, .dash-card #clean-lane-terms')) {
+        // The wallet box in Payouts is a box that takes the card's width; its lines carry the measure.
+        for (const el of document.querySelectorAll('.dash-card p, .dash-card .alert, .dash-card .wallet-note > *, .dash-card #clean-lane-terms')) {
           if (!el.getClientRects().length) continue;
           const probe = document.createElement('div');
           probe.style.cssText = 'position:absolute;visibility:hidden;height:0;width:70ch;';
@@ -735,6 +736,65 @@ describe('dashboard signed in (rendered)', { timeout: 240_000 }, () => {
       assert.ok(long.length >= 4, 'positive control: the page has long card paragraphs');
       assert.ok(m.out.every((x) => x.w <= x.limit + 1), `every block is at most 70ch: ${JSON.stringify(m.out.filter((x) => x.w > x.limit + 1))}`);
       assert.deepEqual(long.filter((x) => x.w >= m.card - 100), [], 'a long block is narrower than its card, so the cap is what limits it');
+    } finally { await ctx.close(); }
+  });
+
+  // ── The wallet box and the lane chip ────────────────────────────────────
+
+  it('the wallet box in Payouts takes the card\'s full width, paused or linked, and its lines keep the 70 character measure', async (t) => {
+    if (skip) { t.skip(skip); return; }
+    const linked = { payouts_paused: false, can_withdraw: true, wallet: '0x1111222233334444555566667777888899990000' };
+    for (const width of [1280, 375]) {
+      for (const [name, earnings] of [['paused', {}], ['linked', linked]]) {
+        const { ctx, page } = await open(width, { earnings });
+        try {
+          const m = await page.evaluate(() => {
+            const box = document.querySelector('#payout-content .wallet-note');
+            const slot = document.getElementById('payout-content');
+            const lines = [...box.children].map((el) => {
+              const probe = document.createElement('div');
+              probe.style.cssText = 'position:absolute;visibility:hidden;height:0;width:70ch;';
+              el.appendChild(probe);
+              const limit = probe.getBoundingClientRect().width;
+              probe.remove();
+              return { text: el.textContent.slice(0, 30), w: el.getBoundingClientRect().width, limit };
+            });
+            return { box: box.getBoundingClientRect().width, slot: slot.getBoundingClientRect().width, lines };
+          });
+          assert.ok(m.lines.length >= 2, `positive control: ${name} ${width} has a heading and text inside the wallet box`);
+          assert.ok(Math.abs(m.box - m.slot) <= 0.5, `${name} ${width}: the wallet box is as wide as the card's content (${m.box} against ${m.slot})`);
+          assert.ok(m.lines.every((x) => x.w <= x.limit + 1), `${name} ${width}: every line inside it is at most 70ch: ${JSON.stringify(m.lines.filter((x) => x.w > x.limit + 1))}`);
+          if (width === 1280) assert.ok(m.lines.some((x) => x.limit < m.box - 100), `${name}: positive control, the box is wider than a line of text, so the cap is on the lines`);
+        } finally { await ctx.close(); }
+      }
+    }
+  });
+
+  it('at 375 a ready row keeps its lane chip on the first line beside the score and the category, and no chip passes the row\'s edge', async (t) => {
+    if (skip) { t.skip(skip); return; }
+    const { ctx, page } = await open(375);
+    try {
+      const rows = await page.evaluate(() => [...document.querySelectorAll('.triage-data-row')].map((row) => {
+        const r = row.getBoundingClientRect();
+        const items = [...row.querySelectorAll('.triage-cell-meta-mobile > *')].map((el) => {
+          const b = el.getBoundingClientRect();
+          return { cls: el.className, text: el.textContent.trim(), left: b.left, right: b.right, top: b.top };
+        });
+        return { id: row.id, left: r.left, right: r.right, items };
+      }));
+      const ready = rows.filter((row) => row.items.some((i) => /tag-clean/.test(i.cls)));
+      assert.equal(ready.length, 2, 'positive control: two ready rows were found');
+      for (const row of ready) {
+        const score = row.items[0];
+        const category = row.items.find((i) => /tag-category/.test(i.cls));
+        const lane = row.items.find((i) => /tag-clean/.test(i.cls));
+        assert.ok(Math.abs(lane.top - category.top) <= 4 && Math.abs(score.top - category.top) <= 4, `${row.id}: the score, the category and the lane chip share the first line`);
+      }
+      for (const row of rows) {
+        for (const i of row.items) {
+          assert.ok(i.left >= row.left - 0.5 && i.right <= row.right + 0.5, `${row.id}: "${i.text}" stays inside the row (${i.left}-${i.right} in ${row.left}-${row.right})`);
+        }
+      }
     } finally { await ctx.close(); }
   });
 });

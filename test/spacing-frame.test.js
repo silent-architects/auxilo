@@ -32,7 +32,7 @@ const {
   stopServer,
 } = require('./helpers/staged-server');
 const { extractPageMetrics, foldCheck } = require('./helpers/ad-verify-measure');
-const { evaluateRules, RULE_NAMES } = require('./helpers/ad-rules-check');
+const { evaluateRules, RULE_NAMES, READING_RHYTHM } = require('./helpers/ad-rules-check');
 
 const REPO = path.join(__dirname, '..');
 const WIDTHS = [1280, 768, 375];
@@ -180,8 +180,10 @@ describe('SPACING-0927 Part A (the frame), measured the Art Director\'s way', { 
 
   // ── /how-submissions-work: a reading document in the shared 720 frame ──
   // The hero copy and every section (heading, prose, the table of rows, the live count) sit on one left
-  // edge and in one column, the heading above its text at every width, and no box remains. Every pin is one
-  // measurement compared with another taken in the same run.
+  // edge and in one column, the heading above its text at every width, and no box remains. After the dark
+  // hero the sections are one paper ground and the gap between two of them is the reading rhythm (64, 48,
+  // 32), half above and half below each section. Every pin is one measurement compared with another taken
+  // in the same run, except the reading rhythm, which is the one design value the helper names.
   for (const width of WIDTHS) {
     it(`/how-submissions-work @ ${width}: the hero copy and every section share one left edge and one column, each heading sits above its text, and no box remains`, async (t) => {
       if (bootSkipReason) { t.skip(bootSkipReason); return; }
@@ -208,6 +210,18 @@ describe('SPACING-0927 Part A (the frame), measured the Art Director\'s way', { 
             stat: box(document.querySelector('#s7-learnings-count')),
             counts: ['s7-learnings-count', 's7-unlocks-count'].map((id) => !!document.getElementById(id)),
             sheetAside: document.querySelectorAll('main .aside-list').length,
+            ground: (() => {
+              const secs = [...document.querySelectorAll('main > section')];
+              const last = (sec) => sec.querySelector('.trust-prose, .ledger-card-body, .trust-table-wrap');
+              const pad = (sec) => { const cs = getComputedStyle(sec); return { top: parseFloat(cs.paddingTop), bottom: parseFloat(cs.paddingBottom) }; };
+              return {
+                hero: getComputedStyle(secs[0]).backgroundColor,
+                bodyGrounds: secs.slice(1).map((s) => getComputedStyle(s).backgroundColor),
+                tinted: document.querySelectorAll('main > section.on-tint, main > section.on-dark:not(:first-child)').length,
+                pads: secs.slice(1).map(pad),
+                gaps: secs.slice(2).map((s, i) => s.querySelector('h2').getBoundingClientRect().top - last(secs[i + 1]).getBoundingClientRect().bottom),
+              };
+            })(),
           };
         });
         assert.equal(m.boxes, 0, 'no callout or ledger card box remains');
@@ -230,6 +244,25 @@ describe('SPACING-0927 Part A (the frame), measured the Art Director\'s way', { 
         assert.ok(Math.abs(m.table.left - edge) <= 0.5 && Math.abs(m.table.width - col) <= 0.5, `the table of rows sits in the same column (${m.table.left}, ${m.table.width} vs ${edge}, ${col})`);
         // the live-count figures start on the same edge
         assert.ok(Math.abs(m.stat.left - edge) <= 0.5, `the first live figure starts at the shared left edge (${m.stat.left} vs ${edge})`);
+        // one ground: every section after the hero draws the same (the page's paper), none is tint, and the
+        // dark hero does not (positive control: a difference between grounds is visible to this measurement)
+        assert.notEqual(m.ground.hero, m.ground.bodyGrounds[0], 'positive control: the hero ground differs from the body ground');
+        assert.equal(m.ground.bodyGrounds.length, 11, 'positive control: all eleven body sections were measured');
+        assert.equal(new Set(m.ground.bodyGrounds).size, 1, `the eleven sections after the hero share one ground (${[...new Set(m.ground.bodyGrounds)].join(' | ')})`);
+        assert.equal(m.ground.tinted, 0, 'no section after the hero is on the tint or the dark ground');
+        // the reading rhythm: each section carries half of the gap above and the same below, and the gap
+        // between two sections, measured box to box, is the sum of the two paddings and the ruled value
+        const gapRuled = READING_RHYTHM['/how-submissions-work'][width];
+        assert.equal(m.ground.gaps.length, 10, 'positive control: ten gaps between eleven sections');
+        m.ground.pads.forEach((p, i) => {
+          assert.ok(Math.abs(p.top - p.bottom) <= 0.5, `section ${i + 1}: padding above equals padding below (${p.top} / ${p.bottom})`);
+          assert.ok(Math.abs(p.top - gapRuled / 2) <= 0.5, `section ${i + 1}: padding is half of the reading gap ${gapRuled} (${p.top})`);
+        });
+        m.ground.gaps.forEach((g, i) => {
+          const sum = m.ground.pads[i].bottom + m.ground.pads[i + 1].top;
+          assert.ok(Math.abs(g - sum) <= 1, `gap ${i + 1} is the sum of the two paddings (${g} vs ${sum})`);
+          assert.ok(Math.abs(g - gapRuled) <= 1, `gap ${i + 1} is the reading rhythm ${gapRuled} at ${width} (${g})`);
+        });
       } finally {
         await ctx.close();
       }
@@ -442,6 +475,40 @@ describe('the rule evaluator sees an overlap, an uneven card and an unlisted exe
     assert.equal(r.failures[5].length, 0);
     assert.equal(r.besideExempt.length, 1);
     assert.deepEqual(r.besideExemptCount, { 1280: 1, 768: 0, 375: 0 });
+  });
+
+  // The reading rhythm: a reading document's sections after the hero carry half of the gap each side, and the
+  // gap between two of them is the whole gap. Any other route keeps the full rhythm, so the same record fails there.
+  describe('the reading rhythm', () => {
+    const sec = (index, top, bottom) => ({ index, selector: `section#s${index}`, padding: { top, bottom }, boxGutterLeft: 90, boxGutterRight: 90 });
+    const doc = (heroPad, pad, gap) => Object.assign(emptyRec(), {
+      sections: [sec(0, heroPad, heroPad), sec(1, pad, pad), sec(2, pad, pad)],
+      seams: [
+        { from: 'section#s0', to: 'section#s1', contentGap: heroPad + pad },
+        { from: 'section#s1', to: 'section#s2', contentGap: gap },
+      ],
+    });
+    const run = (rec, page) => evaluateRules({ [page]: { 1280: rec, 768: emptyRec(), 375: emptyRec() } }, {});
+
+    it('a hero at 120 and sections at 32 with a 64 gap pass rules 3 and 4 on the reading route', () => {
+      const r = run(doc(120, 32, 64), '/how-submissions-work');
+      assert.equal(r.failures[3].length, 0, r.failures[3].join('\n'));
+      assert.equal(r.failures[4].length, 0, r.failures[4].join('\n'));
+      assert.ok(r.totalChecks[4] >= 3, 'positive control: the extra reading-seam check ran as well as the two sums');
+    });
+
+    it('sections at the full 120, or a gap that is not 64, fail on the reading route', () => {
+      assert.ok(run(doc(120, 120, 240), '/how-submissions-work').failures[3].length >= 2, 'the full rhythm is not the reading rhythm');
+      const wide = run(doc(120, 32, 80), '/how-submissions-work');
+      assert.ok(wide.failures[4].some((f) => /reading seam/.test(f)), 'a 80 gap fails the reading seam check');
+    });
+
+    it('the same record on any other route is measured exactly as before: 32 fails rule 3 there', () => {
+      const r = run(doc(120, 32, 64), '/pricing');
+      assert.equal(r.failures[3].length, 2, 'the two 32px sections fail the full rhythm of 120');
+      assert.equal(r.failures[4].length, 0, 'the seams are sums of the paddings, as before');
+      assert.equal(r.totalChecks[4], 2, 'no reading-seam check runs on another route');
+    });
   });
 
   it('rule 6: a card with 32 on all four sides passes; 24, or uneven sides, or an uneven group fails', () => {

@@ -71,10 +71,10 @@
   <link rel="preload" href="/fonts/ArchivoVariable.cfd841fc.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/NewsreaderDisplay300.a07d3c5c.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=8d9e4176" />
+  <link rel="stylesheet" href="/styles.css?v=cdb50f10" />
   <style>
-    /* /how-submissions-work is a reading document: a dark first screen, then paper and tint
-       sections, all in the shared reading frame (one centred 720 column, copy and body on
+    /* /how-submissions-work is a reading document: a dark first screen, then one paper
+       ground, all in the shared reading frame (one centred 720 column, copy and body on
        one left edge). The frame is the same formula the shared sheet sets for /connect,
        /about and the essay; the shared rule names those pages by id, so this page applies
        it to its own hero and its own sections. Grounds, type, the hero layout and the link
@@ -85,6 +85,27 @@
       max-width: var(--read-w);
       margin-left: max(0px, calc((100% - var(--read-w)) / 2));
       margin-right: 0;
+    }
+
+    /* The reading rhythm. The sections after the hero are one document on one ground, so
+       the gap between two of them is 64 at 1280, 48 at 768 and 32 at 375: half above
+       and half below each section, the same on both sides. The hero keeps the full
+       section rhythm of the shared sheet. */
+    main > section:not([aria-labelledby="page-hero-heading"]) {
+      padding-top: var(--space-card);
+      padding-bottom: var(--space-card);
+    }
+    @media (max-width: 900px) {
+      main > section:not([aria-labelledby="page-hero-heading"]) {
+        padding-top: var(--space-copy);
+        padding-bottom: var(--space-copy);
+      }
+    }
+    @media (max-width: 600px) {
+      main > section:not([aria-labelledby="page-hero-heading"]) {
+        padding-top: var(--space-body);
+        padding-bottom: var(--space-body);
+      }
     }
 
     /* The lede keeps this page's own class, set at lede size. */
@@ -271,7 +292,7 @@
 
 <!-- ━━━ §1 — What Auxilo is (E2, noun bind plus the band retirement — ship-rev
      2026-09-06 rev 1a). ━━━ -->
-<section aria-labelledby="what-auxilo-is-heading" class="on-tint">
+<section aria-labelledby="what-auxilo-is-heading">
   <div class="container trust-read">
     <h2 id="what-auxilo-is-heading">What Auxilo Is</h2>
     <div class="trust-prose">
@@ -298,7 +319,7 @@
 <!-- ━━━ §2 — Where learnings come from (E4/E5, ship-rev 2026-09-06 rev 1a,
      vendor-neutral / the consent flip). §2b follows immediately below,
      per the build spec's ordering note. ━━━ -->
-<section aria-labelledby="learnings-source-heading" class="on-tint">
+<section aria-labelledby="learnings-source-heading">
   <div class="container trust-read">
     <h2 id="learnings-source-heading">Where Learnings Come From</h2>
     <div class="trust-prose">
@@ -371,7 +392,7 @@
 <!-- ━━━ §3 — The submission path (heading is the spec's, finding 1; ship-rev
      2026-09-06 rev 1a, verbatim). §3b follows immediately below, per the
      build spec's ordering note. ━━━ -->
-<section aria-labelledby="submission-path-heading" class="on-tint">
+<section aria-labelledby="submission-path-heading">
   <div class="container trust-read">
     <h2 id="submission-path-heading">The Submission Path</h2>
     <div class="trust-prose">
@@ -411,7 +432,7 @@
      computePartition() call. The raw HTML
      never carries both branches — only ever the one string the server
      injects, or nothing. ━━━ -->
-<section aria-labelledby="accountability-heading" class="on-tint">
+<section aria-labelledby="accountability-heading">
   <div class="container trust-read">
     <h2 id="accountability-heading">Accountability</h2>
     <div class="trust-prose">
@@ -458,7 +479,7 @@
      one thing rendered live. Static default "…" on both counts, fail-closed
      — never a stale or hardcoded digit, matching the existing
      lc-unlocks/ll-unlocks convention. ━━━ -->
-<section aria-labelledby="live-count-heading" class="on-tint">
+<section aria-labelledby="live-count-heading">
   <div class="container trust-read">
     <h2 id="live-count-heading">The Live Catalog Count</h2>
     <div class="ledger-card-body">

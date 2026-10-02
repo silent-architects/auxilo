@@ -34,6 +34,11 @@
  *   rule 9: a card is the surface colour, a 1px line and a 14px radius, on
  *     whichever ground it sits.
  *
+ * Round 5 (reading document): a route named in READING_RHYTHM is one ground in one column, so rule 3
+ * holds each section after the hero to half of the reading gap on each side and rule 4 holds the gap
+ * between two such sections to the reading gap (64 at 1280, 48 at 768, 32 at 375). Nothing else changes:
+ * every other route is measured exactly as it was, and no rule is loosened.
+ *
  * V-7 (band rhythm): "A band is a section with no heading that holds a
  * single row. A band's top and bottom padding is the band rhythm: 64 at
  * 1280, 48 at 768, 32 at 375." Rule 10 (the Art Director's own bands/
@@ -50,6 +55,14 @@
 const READING_PAGES = new Set(['/terms', '/privacy', '/legal/subprocessors', '/legal/supported-clients']);
 const RHYTHM = { '1280': 120, '768': 80, '375': 64 };
 const BAND_RHYTHM = { '1280': 64, '768': 48, '375': 32 };
+// A reading document: one ground, one column, read top to bottom. The gap between two of its sections is
+// 64 at 1280, 48 at 768 and 32 at 375 (box to box, rule 4), so each section carries half of it above and half
+// below (rule 3). The first section, the dark hero, keeps the full rhythm. The map names the routes that are
+// measured this way; every other route is measured exactly as before. (The page stays on the page gutter and
+// keeps its hero heading rule, so it is not in READING_PAGES, which is the legal pages' wider gutter.)
+const READING_RHYTHM = {
+  '/how-submissions-work': { '1280': 64, '768': 48, '375': 32 },
+};
 const PAGE_GUTTER = { '1280': 90, '768': 20, '375': 16 };
 const READING_GUTTER = { '1280': 304, '768': 44, '375': 16 };
 const SCALE = [2, 4, 8, 16, 24, 32, 48, 64, 80, 90, 120, 304, 44]; // content + layout tokens
@@ -124,6 +137,8 @@ function evaluateRules(d, fold, opts) {
       const rec = d[page] && d[page][width];
       if (!rec || rec.error) continue;
       const chromeTags = new Set(['nav#main-nav', 'footer']);
+      // The gap between two sections of a reading document at this width (null on every other route).
+      const readingGap = READING_RHYTHM[page] ? READING_RHYTHM[page][width] : null;
 
       // Rule 1: box-gutter-left = box-gutter-right.
       for (const s of rec.sections) {
@@ -168,11 +183,13 @@ function evaluateRules(d, fold, opts) {
         // uses the band rhythm here, not the full section rhythm -- but
         // top must still equal bottom, at that value.
         const isBand = bandSelectors.some((sel) => s.selector.includes(sel));
-        const rhythmForThis = isBand ? BAND_RHYTHM[width] : RHYTHM[width];
+        // A section after the hero on a reading document carries half of the reading gap on each side.
+        const isReadingSection = readingGap != null && s.index > 0;
+        const rhythmForThis = isReadingSection ? readingGap / 2 : (isBand ? BAND_RHYTHM[width] : RHYTHM[width]);
         const topOk = near(s.padding.top, rhythmForThis);
         const botOk = near(s.padding.bottom, rhythmForThis);
         const eqOk = near(s.padding.top, s.padding.bottom);
-        log(3, page, width, `${s.selector} padding-top=${s.padding.top} padding-bottom=${s.padding.bottom}, ruled=${rhythmForThis}/${rhythmForThis}${isBand ? ' (band rhythm)' : ''}`, topOk && botOk && eqOk);
+        log(3, page, width, `${s.selector} padding-top=${s.padding.top} padding-bottom=${s.padding.bottom}, ruled=${rhythmForThis}/${rhythmForThis}${isReadingSection ? ' (reading rhythm, half of the gap between sections)' : (isBand ? ' (band rhythm)' : '')}`, topOk && botOk && eqOk);
       }
 
       // Rule 4 / the seam test (RULING-SEAMS-2026-09-28.md, verbatim):
@@ -212,6 +229,12 @@ function evaluateRules(d, fold, opts) {
         // (was 6, to absorb this exact unexplained residual).
         const ok = near(seam.contentGap, expected, SEAM_TOL);
         log(4, page, width, `seam ${seam.from}->${seam.to} = ${seam.contentGap}, expected ${expected} (${fromSec.padding.bottom}+${toSec.padding.top}${borderSum ? `+${borderSum}border` : ''})`, ok);
+        // A reading document: the gap between two of its sections is the reading rhythm itself, not only
+        // the sum of whatever the two paddings happen to be (the hero's seam is the full rhythm and is
+        // judged by the sum above).
+        if (readingGap != null && fromSec.index > 0 && toSec.index > 0) {
+          log(4, page, width, `reading seam ${seam.from}->${seam.to} = ${seam.contentGap}, ruled ${readingGap} between two sections of a reading document`, near(seam.contentGap, readingGap, SEAM_TOL));
+        }
       }
 
       // Rule 5 (sheet v2): a heading to the first visible thing under it.
@@ -398,4 +421,4 @@ function printReport(evalResult, fold) {
   }
 }
 
-module.exports = { evaluateRules, printReport, RULE_NAMES, RHYTHM, PAGE_GUTTER, READING_GUTTER, SCALE, READING_PAGES, RHYTHM_EXEMPT_SELECTORS };
+module.exports = { evaluateRules, printReport, RULE_NAMES, RHYTHM, READING_RHYTHM, PAGE_GUTTER, READING_GUTTER, SCALE, READING_PAGES, RHYTHM_EXEMPT_SELECTORS };
