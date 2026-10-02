@@ -173,18 +173,20 @@ describe('FIX-UNIT A7: review-queue scroll region is keyboard reachable', () => 
   });
 });
 
-// ─── L9: /for-agents five-step grid, no empty tile at 601-1099px ───────────
+// ─── L9: /for-agents five-step grid, no empty tile at 601-1024px ───────────
 //
-// REVIEW-CODE-SECURITY.md L9: at 3 columns (601-1099px), row 2 holds only
-// steps 04-05, leaving the 6th cell an empty tinted tile. Fix: step 05
-// spans the row's last two columns at that width, and is reset to auto at
-// <=600px so it never spans beyond the single column that exists there.
+// REVIEW-CODE-SECURITY.md L9: when the five cards sit in an even column count, the last row
+// must not leave an empty tile. Round 3 moved the wide layout to three over two (a six-column
+// grid with spans, so the second row is the wider one) and made 1024 and down two across with
+// step 05 spanning the whole last row; at 600 and down it is one column and the span is reset
+// to auto, so it never requests a column that does not exist.
 
-describe('FIX-UNIT L9: /for-agents five-step grid has no empty tile between 601 and 1099px', () => {
-  it('the 1099px tier gives .flow-step:last-child grid-column: span 2, and the 600px tier resets it to auto', () => {
-    const tier1099 = sliceBetween(FOR_AGENTS_HTML, '@media (max-width: 1099px) {', '@media (max-width: 900px) {');
-    assert.match(tier1099, /\.flow-track\s*\{\s*grid-template-columns:\s*repeat\(3,\s*1fr\);\s*\}/, 'sanity: still 3 columns at this tier');
-    assert.match(tier1099, /\.flow-step:last-child\s*\{\s*grid-column:\s*span 2;\s*\}/, 'step 05 must span the last two columns so row 2 has no empty cell');
+describe('FIX-UNIT L9: /for-agents five-step grid has no empty tile between 601 and 1024px', () => {
+  it('the 1024px tier gives .flow-step:last-child grid-column: span 2 over two columns, and the 600px tier resets it to auto', () => {
+    const tier1024 = sliceBetween(FOR_AGENTS_HTML, '@media (max-width: 1024px) {', '@media (max-width: 900px) {');
+    assert.match(tier1024, /\.flow-track\s*\{\s*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);\s*\}/, 'sanity: two columns at this tier');
+    assert.match(tier1024, /\.flow-step:last-child\s*\{\s*grid-column:\s*span 2;\s*\}/, 'step 05 must span both columns so the last row has no empty cell');
+    assert.match(tier1024, /\.flow-step:nth-child\(n\+4\)\s*\{\s*grid-column:\s*auto;\s*\}/, 'the wide-layout spans are cleared at this tier, so the cards are not asked for more columns than exist');
 
     // SPACING-0927 (BUILD-BRIEF-SPACING.md): the old end marker
     // ('.page-hero { padding: var(--hero-pad-mobile); }') was removed --
@@ -198,7 +200,7 @@ describe('FIX-UNIT L9: /for-agents five-step grid has no empty tile between 601 
   });
 
   it('there are exactly 5 .flow-step elements (01-05), so ":last-child" unambiguously targets step 05', () => {
-    const matches = FOR_AGENTS_HTML.match(/<div class="flow-step">/g) || [];
+    const matches = FOR_AGENTS_HTML.match(/<div class="flow-step"[^>]*>/g) || [];
     assert.equal(matches.length, 5, 'expected exactly 5 .flow-step elements');
   });
 });

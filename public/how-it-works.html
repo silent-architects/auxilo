@@ -75,9 +75,19 @@
        panels and the buttons all come from the shared sheet. Everything here
        reads the ground-aware tokens and the spacing scale. */
 
-    /* ── Hero: one column, left aligned, copy width 720 ── */
+    /* ── Hero: the copy beside the catalog figure, one column below 1024 ── */
     .hiw-hero h1 {
       max-width: var(--max-w);
+    }
+
+    /* Both columns start at the top of the hero, so the headline sits exactly the
+       section rhythm below the navigation whatever the height of the figure panel. */
+    .hiw-hero .hero-grid {
+      align-items: start;
+    }
+
+    .hiw-hero-copy > * {
+      max-width: 720px;
     }
 
     .hiw-hero-sub {
@@ -94,26 +104,42 @@
       margin-top: var(--space-card);
     }
 
-    /* The live figure, filled by the script below. It reserves the height of
-       the numeral so the number arriving moves nothing. */
+    /* The live figure is a dark panel: the figure, its label with the marker, and
+       skeleton bars where the entries would be. It is the element the script below
+       turns on, so it stays hidden (and paints nothing) until a real number arrives.
+       It keeps its box while hidden, so the number arriving moves nothing. */
     .hiw-hero .hero-ledger {
-      margin: var(--space-block) 0 0;
-      min-height: clamp(34px, 4vw, 52px);
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--space-body);
+      margin: 0;
+      min-height: 0;
+      padding: var(--space-card);
     }
 
     .hiw-hero .hero-ledger .hero-ledger-num {
       font-family: var(--serif);
       font-weight: 300;
-      font-size: clamp(34px, 4vw, 52px);
+      font-size: clamp(56px, 6.4vw, 88px);
       line-height: 1;
       letter-spacing: -0.022em;
       color: var(--accent-text);
     }
 
     .hiw-hero .hero-ledger .hero-ledger-label {
+      display: flex;
+      align-items: center;
+      gap: var(--space-tight);
       font-size: 14px;
+      font-weight: 500;
+      line-height: 1.3;
       letter-spacing: 0;
-      color: var(--fg-3);
+      color: var(--fg-1);
+    }
+
+    .hiw-hero .hero-ledger .dw-term {
+      display: block;
+      align-self: stretch;
     }
 
     /* The two jump targets clear the fixed header when landed on directly. */
@@ -203,12 +229,14 @@
       padding-top: var(--space-tight);
     }
 
-    /* A step reads as groups: the words (.hiw-text), then the pictures that go
-       with them (.hiw-pics), and so on to the end of the step. Stacked, every
-       gap is the same 24. At 1025 and up the groups sit in two columns (below). */
+    /* A step reads as rows. A row holds the words (.hiw-text) and the pictures that
+       go with them (.hiw-pics). Stacked, every gap is the same 24. At 1025 and up
+       a row is two columns (below); a row marked .hiw-row-stack keeps its words
+       above its pictures across the full width. */
     .step-content > * + *,
     .hiw-text > * + *,
-    .hiw-pics > * + * {
+    .hiw-pics > * + *,
+    .hiw-row > * + * {
       margin-top: var(--space-copy);
     }
 
@@ -269,8 +297,7 @@
     }
 
     .qualify-grid,
-    .before-after,
-    .payment-options {
+    .before-after {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: var(--space-copy);
@@ -372,40 +399,234 @@
       margin-top: var(--space-body);
     }
 
-    /* ── Drawings: ink lines on the stage, the one accent in gold ink ── */
+    /* The label of the before and after pair sits directly on the two cards. */
+    .hiw-pics > .hiw-example-label + .before-after {
+      margin-top: var(--space-body);
+    }
+
+    /* ── Drawings: the homepage kit. Panels on the stage, a diamond or triangle
+       marker, mono chips, plain 1.25px hairlines (no arrowheads, no dashes). The
+       hairline is ink at low opacity; the one accent per drawing is gold ink. The
+       threads are set on the stage so a dark panel inside it draws the same line. ── */
     .hiw-fig {
+      --hiw-thread: rgba(10, 10, 10, 0.3);
+      --hiw-accent: var(--accent-text);
+    }
+
+    .hiw-flow {
+      display: flex;
+      gap: var(--space-copy);
+    }
+
+    .hiw-n {
+      position: relative;
+      flex: 1 1 0;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-body);
+    }
+
+    .hiw-n.hiw-acc {
+      border: 1.25px solid var(--hiw-accent);
+    }
+
+    .hiw-body {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-tight);
+      min-height: 40px;
+    }
+
+    .hiw-body.hiw-two {
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 0;
+      line-height: 1.3;
+    }
+
+    .hiw-body.hiw-sks {
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: center;
+      gap: 0;
+    }
+
+    .hiw-mono {
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 400;
+      line-height: 1.3;
+      color: var(--fg-1);
+    }
+
+    .hiw-mono.hiw-dim {
+      color: var(--fg-3);
+    }
+
+    .hiw-mono.hiw-gold {
+      color: var(--accent-text);
+    }
+
+    .hiw-chip {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1;
+      padding: 6px 8px;
+      border-radius: 4px;
+      background: var(--line);
+      color: var(--fg-1);
+    }
+
+    .hiw-chip.hiw-gold {
+      color: var(--accent-text);
+    }
+
+    .hiw-glyph {
+      flex: none;
+      display: block;
+      fill: none;
+      stroke: var(--fg-1);
+      stroke-width: 1.25;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .hiw-n.hiw-acc .hiw-glyph {
+      stroke: var(--hiw-accent);
+    }
+
+    /* one hairline through the gap to the next panel, level with the middle of the
+       panel's first row; the line into the accent panel is the accent */
+    .hiw-flow > .hiw-n:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      left: 100%;
+      top: calc(var(--space-body) + 20px - 0.625px);
+      width: var(--space-copy);
+      height: 1.25px;
+      background: var(--hiw-thread);
+    }
+
+    .hiw-flow > .hiw-n:nth-last-child(2)::after {
+      background: var(--hiw-accent);
+    }
+
+    .hiw-sks .dw-sk + .dw-sk {
+      margin-top: var(--space-tight);
+    }
+
+    /* the free preview: one light panel the width of its stage */
+    .hiw-card {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-body);
+      position: relative;
+      padding: var(--space-copy);
+    }
+
+    .hiw-free {
+      order: -1;
+      display: flex;
+      align-items: center;
+      gap: var(--space-tight);
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.3;
+      color: var(--accent-text);
+    }
+
+    .hiw-card .hiw-glyph {
+      position: absolute;
+      top: var(--space-copy);
+      right: var(--space-copy);
+    }
+
+    .hiw-card-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-body);
+    }
+
+    .hiw-card .hiw-locked {
+      opacity: 0.45;
+    }
+
+    /* the approval fork: nine panels in one column, a hairline through each gap, and
+       the branch to the last panel down the left from the review queue */
+    .hiw-fork {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-tight);
+      padding-left: var(--space-body);
+    }
+
+    .hiw-fk {
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
+      min-height: 34px;
+      padding: 6px var(--space-tight);
+      text-align: center;
+      font-size: 14px;
+      line-height: 1.35;
+      color: var(--fg-1);
+      text-wrap: balance;
     }
 
-    .hiw-fig svg {
-      display: block;
-      max-width: 100%;
-      height: auto;
+    .hiw-fk.hiw-acc {
+      border: 1.25px solid var(--hiw-accent);
     }
 
-    .hiw-fig svg .ink  { stroke: var(--fg-1); stroke-width: 1.25; fill: none; }
-    .hiw-fig svg .mut  { stroke: var(--fg-3); stroke-width: 1; fill: none; }
-    .hiw-fig svg .acc  { stroke: var(--accent-text); stroke-width: 1.5; fill: none; }
-    .hiw-fig svg .face { fill: var(--surface); }
-    .hiw-fig svg .dot  { fill: var(--fg-1); stroke: none; }
-    .hiw-fig svg .head { fill: var(--fg-3); stroke: none; }
-    .hiw-fig svg .t-ink { fill: var(--fg-1); }
-    .hiw-fig svg .t-mut { fill: var(--fg-3); }
-    .hiw-fig svg .t-acc { fill: var(--accent-text); }
-
-    /* the approval fork */
-    .hiw-fig svg.hiw-fork {
-      width: 100%;
-      max-width: 340px;
-      fill: var(--fg-1);
+    .hiw-fk::before {
+      content: '';
+      position: absolute;
+      left: calc(50% - 0.625px);
+      top: calc(var(--space-tight) * -1 - 1px);
+      width: 1.25px;
+      height: var(--space-tight);
+      background: var(--hiw-thread);
     }
 
-    .hiw-fork .fk-box { stroke: var(--fg-1); stroke-width: 1.25; fill: var(--surface); }
-    .hiw-fork .fk-accent { stroke: var(--accent-text); stroke-width: 1.5; fill: var(--surface); }
-    .hiw-fork .fk-arrows { stroke: var(--fg-3); stroke-width: 1; fill: none; }
-    .hiw-fork .fk-head { fill: var(--fg-3); }
+    .hiw-fk.hiw-acc::before {
+      background: var(--hiw-accent);
+      top: calc(var(--space-tight) * -1 - 1.25px);
+    }
+
+    .hiw-fork > .hiw-fk:first-child::before,
+    .hiw-fk.hiw-end::before {
+      display: none;
+    }
+
+    .hiw-fk-tail {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-tight);
+      margin-left: calc(var(--space-body) * -1);
+      padding-left: var(--space-body);
+    }
+
+    .hiw-fk-tail::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 17px;
+      bottom: 17px;
+      width: var(--space-body);
+      border: 1.25px solid var(--hiw-thread);
+      border-right: 0;
+      border-radius: 6px 0 0 6px;
+    }
+
+    .hiw-fk-tail > .hiw-fk.hiw-end {
+      margin-top: var(--space-tight);
+    }
 
     /* ── Closing: dark, centred ── */
     .hiw-cta-section {
@@ -438,75 +659,151 @@
       margin-top: var(--space-card);
     }
 
-    /* ── 1025 and up: each step is a row across the full 1100. The icon and
-       connector stay at the left edge. Beside them the words float left (60ch
-       at most) and the pictures float right, 64 apart, the first of each at the
-       top of the step. The two columns run independently, so the left holds one
-       unbroken stretch of text and the right one unbroken stretch of pictures,
-       and a picture never rises above the words it follows. A step with no
-       picture leaves its right column empty. The two wrapper classes carry no
-       text and keep the page's reading order, so below 1025 the page is as it
-       was. Floats, not a grid, because the words and pictures alternate in the
-       markup and a grid row would tie each picture's height to the words
-       beside it. ── */
+    /* ── Rows of cards ── */
+    .hiw-cards3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--space-copy);
+    }
+
+    /* ── Drawings that answer to the width of their stage ──
+       A flow of panels runs left to right. When its stage is narrower than 500 it
+       runs top to bottom as rows: the picture left, the label right, the hairline
+       down the left edge. Below 340 the rows and the gaps tighten. A two-panel flow
+       always stays side by side. ── */
+    .hiw-fig {
+      container-type: inline-size;
+    }
+
+    @container (max-width: 500px) {
+      .hiw-flow:not(.hiw-flow-pair) {
+        flex-direction: column;
+      }
+
+      .hiw-flow:not(.hiw-flow-pair) > .hiw-n {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .hiw-flow:not(.hiw-flow-pair) > .hiw-n:not(:last-child)::after {
+        left: calc(var(--space-body) + 6px - 0.625px);
+        top: 100%;
+        width: 1.25px;
+        height: var(--space-copy);
+      }
+
+      .hiw-flow:not(.hiw-flow-pair) > .hiw-n > .hiw-body.hiw-sks {
+        flex: 1 1 auto;
+        max-width: 55%;
+      }
+    }
+
+    @container (max-width: 340px) {
+      .hiw-flow {
+        gap: var(--space-body);
+      }
+
+      .hiw-flow:not(.hiw-flow-pair) > .hiw-n {
+        padding: var(--space-tight) var(--space-body);
+      }
+
+      .hiw-flow:not(.hiw-flow-pair) > .hiw-n:not(:last-child)::after {
+        height: var(--space-body);
+        top: 100%;
+      }
+
+      .hiw-flow-pair > .hiw-n:not(:last-child)::after {
+        width: var(--space-body);
+      }
+
+      .hiw-flow > .hiw-n > .hiw-body {
+        min-height: 0;
+      }
+
+      .hiw-flow:not(.hiw-flow-pair) > .hiw-n:not(:last-child)::after {
+        top: 100%;
+      }
+    }
+
+    /* ── 1025 and up: each step is rows across the full 1100. The icon and
+       connector stay at the left edge. A row is the words (60ch at most) beside the
+       pictures, 64 apart, both starting at the top of the row. The last picture of
+       a row grows to the foot of the row and holds its drawing in the middle, so a
+       short drawing does not leave the row ending short. A .hiw-row-stack row puts
+       its pictures under its words, across the full width. ── */
     @media (min-width: 1025px) {
       .step-content {
-        display: flow-root;
         max-width: none;
       }
 
       /* Two columns 64 apart. The pictures get a hair more than half: the longest
          line of the review commands needs 500 to keep its 20 of padding. */
-      .hiw-text {
-        float: left;
-        clear: left;
-        width: calc((100% - var(--space-wide)) * 0.484);
+      .hiw-row {
+        display: grid;
+        grid-template-columns: minmax(0, 484fr) minmax(0, 516fr);
+        column-gap: var(--space-wide);
+      }
+
+      .hiw-row > * + * {
+        margin-top: 0;
+      }
+
+      .hiw-row > .hiw-text {
         max-width: 60ch;
       }
 
-      .hiw-pics {
-        float: right;
-        clear: right;
-        width: calc((100% - var(--space-wide)) * 0.516);
+      .hiw-row > .hiw-pics {
+        display: flex;
+        flex-direction: column;
       }
 
-      .step-content > .hiw-text:first-child + .hiw-pics {
-        margin-top: 0;
+      .hiw-row > .hiw-pics > .hiw-fig:last-child {
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
       }
 
-      /* The catalog band needs the whole row for its titles, so it drops under
-         the step's words at the full width of the step. */
-      .hiw-pics-wide {
-        float: none;
-        clear: both;
-        width: auto;
-        /* clearing swallows a margin, so the gap under the words is padding */
-        margin-top: 0;
-        padding-top: var(--space-copy);
+      .hiw-row.hiw-row-stack {
+        display: block;
       }
 
-      /* Half a column is too narrow for two cards side by side. They stack,
-         24 apart, each the width of the column. */
-      .hiw-pics .qualify-grid,
-      .hiw-pics .before-after,
-      .hiw-pics .payment-options {
+      .hiw-row.hiw-row-stack > * + * {
+        margin-top: var(--space-copy);
+      }
+
+      .hiw-row.hiw-row-stack > .hiw-pics {
+        display: block;
+      }
+
+      /* Half a column is too narrow for two cards side by side, so the pair beside
+         its words stacks, 24 apart, each the width of the column. */
+      .hiw-row:not(.hiw-row-stack) .qualify-grid {
         grid-template-columns: minmax(0, 1fr);
-      }
-
-      /* A drawing fills its stage up to 340, the width the approval fork
-         already takes, so none of them floats small in a wide stage. */
-      .hiw-pics .hiw-fig svg:not(.hiw-fork) {
-        width: 100%;
-        max-width: 340px;
       }
     }
 
-    /* ── 900 and down: the paired cards stack ── */
-    @media (max-width: 900px) {
-      .qualify-grid,
-      .before-after,
-      .payment-options {
-        grid-template-columns: 1fr;
+    /* ── 601 to 1024: the paired cards sit two across, the third card of three
+       takes the full row under them ── */
+    @media (min-width: 601px) and (max-width: 1024px) {
+      .hiw-cards3 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .hiw-cards3 > .step-callout {
+        grid-column: 1 / -1;
+      }
+    }
+
+    /* ── 1024 and down: the stage of a tall drawing keeps a reading width ── */
+    @media (max-width: 1024px) {
+      .hiw-hero .hero-ledger {
+        max-width: 520px;
+      }
+
+      .hiw-fig-tall {
+        max-width: 560px;
       }
     }
 
@@ -517,7 +814,8 @@
       }
     }
 
-    /* ── 600 and down: the icon sits above its step and the content takes the full width ── */
+    /* ── 600 and down: the icon sits above its step, the content takes the full
+       width, and the paired cards and stages tighten ── */
     @media (max-width: 600px) {
       .hiw-step-card {
         display: block;
@@ -540,12 +838,20 @@
         padding-top: 0;
       }
 
-      /* the labels are 12px in the drawing's own units, so a phone stage leaves the
-         drawing its full width and takes the room from its sides */
-      .hiw-fig {
-        padding: var(--space-body) var(--space-tight);
+      .qualify-grid,
+      .before-after,
+      .hiw-cards3 {
+        grid-template-columns: 1fr;
       }
 
+      /* a phone stage takes no more room than its drawing needs */
+      .hiw-fig {
+        padding: var(--space-copy);
+      }
+
+      .hiw-hero .hero-ledger {
+        padding: var(--space-copy);
+      }
     }
 
     /* ── 480 and down: the lede and the closing line take the phone size ── */
@@ -593,21 +899,24 @@
 
 <main id="main">
 
-<!-- ━━━ Hero: dark, one column ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+<!-- ━━━ Hero: dark, the copy beside the catalog figure ━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section class="hiw-hero on-dark" id="hiw-content" aria-labelledby="hiw-heading">
-  <div class="container hero-one">
-    <h1 id="hiw-heading">How Auxilo Works</h1>
-    <p class="hiw-hero-sub">Your agent stops rediscovering solved problems, and what it learns can earn. Everything you need to know, step by step.</p>
-    <!-- Hero section jumps: outlined, navigation aids, not asks. -->
-    <div class="hiw-hero-jumps">
-      <a href="#how-to-start-earning" class="btn-secondary">For Builders</a>
-      <a href="#how-to-access-knowledge" class="btn-secondary">For Agents</a>
+  <div class="container hero-grid">
+    <div class="hiw-hero-copy">
+      <h1 id="hiw-heading">How Auxilo Works</h1>
+      <p class="hiw-hero-sub">Your agent stops rediscovering solved problems, and what it learns can earn. Everything you need to know, step by step.</p>
+      <!-- Hero section jumps: outlined, navigation aids, not asks. -->
+      <div class="hiw-hero-jumps">
+        <a href="#how-to-start-earning" class="btn-secondary">For Builders</a>
+        <a href="#how-to-access-knowledge" class="btn-secondary">For Agents</a>
+      </div>
     </div>
     <!-- DR-7f: one gold ledger stat, populated live from /knowledge/stats; hidden until real. -->
-    <p class="hero-ledger" id="hero-ledger">
+    <div class="dw-panel dw-dark hero-ledger" id="hero-ledger">
       <span class="hero-ledger-num" id="hero-ledger-num"></span>
-      <span class="hero-ledger-label">learnings in the catalog</span>
-    </p>
+      <span class="hero-ledger-label"><svg class="dw-node" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 0.5 L11.5 6 L6 11.5 L0.5 6 Z"/></svg>learnings in the catalog</span>
+      <span class="dw-term" aria-hidden="true"><span class="dw-sk w85"></span><span class="dw-sk w55"></span><span class="dw-sk w70"></span></span>
+    </div>
   </div>
 </section>
 <script>
@@ -648,41 +957,37 @@
         <div class="step-connector" aria-hidden="true"></div>
       </div>
       <div class="step-content">
-        <div class="hiw-text">
-          <h3>Step 1: You Sign Up</h3>
+        <div class="hiw-row">
+          <div class="hiw-text">
+            <h3>Step 1: You Sign Up</h3>
 
-          <p>Create your account in about two minutes. You have two options.</p>
+            <p>Create your account in about two minutes. You have two options.</p>
 
-          <p><strong>Magic link.</strong> Enter your email. We send you a link. Click it. Your API key is generated automatically. No password to remember.</p>
+            <p><strong>Magic link.</strong> Enter your email. We send you a link. Click it. Your API key is generated automatically. No password to remember.</p>
 
-          <p><strong>Crypto wallet (optional).</strong> Link a wallet now so it is ready when USDC withdrawals on Base open. You don't need one to start.</p>
+            <p><strong>Crypto wallet (optional).</strong> Link a wallet now so it is ready when USDC withdrawals on Base open. You don't need one to start.</p>
 
-          <p class="step-note">Takes about 2 minutes. Start with email; you can connect a wallet later as an optional upgrade.</p>
-        </div>
+            <p class="step-note">Takes about 2 minutes. Start with email; you can connect a wallet later as an optional upgrade.</p>
+          </div>
 
-        <div class="hiw-pics">
-          <!-- Illustration: signup flow -->
-          <div class="dw-stage hiw-fig" aria-hidden="true">
-            <svg width="300" height="64" viewBox="0 0 300 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <!-- Email icon -->
-              <rect x="8" y="16" width="36" height="28" rx="3" class="ink face"/>
-              <polyline points="11,19 26,30 41,19" class="ink"/>
-              <text x="26" y="58" class="t-mut" font-family="'IBM Plex Mono', monospace" font-size="9" text-anchor="middle">email</text>
-              <!-- Arrow -->
-              <line x1="56" y1="30" x2="96" y2="30" class="mut" stroke-dasharray="4 3"/>
-              <polygon points="96,26 104,30 96,34" class="head"/>
-              <!-- Magic link -->
-              <rect x="116" y="16" width="48" height="28" rx="3" class="ink face"/>
-              <text x="140" y="34" class="t-ink" font-family="'IBM Plex Mono', monospace" font-size="9" text-anchor="middle">click</text>
-              <text x="140" y="58" class="t-mut" font-family="'IBM Plex Mono', monospace" font-size="9" text-anchor="middle">magic link</text>
-              <!-- Arrow -->
-              <line x1="176" y1="30" x2="216" y2="30" class="mut" stroke-dasharray="4 3"/>
-              <polygon points="216,26 224,30 216,34" class="head"/>
-              <!-- API key -->
-              <rect x="236" y="16" width="56" height="28" rx="3" class="acc face"/>
-              <text x="264" y="33" class="t-acc" font-family="'IBM Plex Mono', monospace" font-size="9" text-anchor="middle">axl_...</text>
-              <text x="250" y="58" class="t-mut" font-family="'IBM Plex Mono', monospace" font-size="9" text-anchor="middle">your API key</text>
-            </svg>
+          <div class="hiw-pics">
+            <!-- Illustration: signup flow -->
+            <div class="dw-stage hiw-fig" aria-hidden="true">
+              <div class="hiw-flow">
+                <div class="hiw-n dw-panel dw-light">
+                  <div class="hiw-body"><svg class="hiw-glyph" width="36" height="28" viewBox="0 0 36 28"><rect x="1" y="1" width="34" height="26" rx="3"/><polyline points="4,5 18,16 32,5"/></svg></div>
+                  <div class="dw-cap"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 0.5 L11.5 6 L6 11.5 L0.5 6 Z"/></svg>email</div>
+                </div>
+                <div class="hiw-n dw-panel dw-dark">
+                  <div class="hiw-body"><span class="hiw-chip">click</span></div>
+                  <div class="dw-cap"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 0.5 L11.5 6 L6 11.5 L0.5 6 Z"/></svg>magic link</div>
+                </div>
+                <div class="hiw-n hiw-acc dw-panel dw-light">
+                  <div class="hiw-body"><span class="hiw-chip hiw-gold">axl_...</span></div>
+                  <div class="dw-cap"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 1 L11.5 11 L0.5 11 Z"/></svg>your API key</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -702,54 +1007,48 @@
         <div class="step-connector" aria-hidden="true"></div>
       </div>
       <div class="step-content">
-        <div class="hiw-text">
-          <h3>Step 2: You Connect Your Agent</h3>
+        <div class="hiw-row">
+          <div class="hiw-text">
+            <h3>Step 2: You Connect Your Agent</h3>
 
-          <p>One command does everything. It detects your installed clients, registers the Auxilo MCP server, signs you in with a device code, and installs the extraction runner.</p>
-        </div>
+            <p>One command does everything. It detects your installed clients, registers the Auxilo MCP server, signs you in with a device code, and installs the extraction runner.</p>
+          </div>
 
-        <div class="hiw-pics">
-          <div class="code-block">
-            <div class="code-block-header">
-              <span class="code-block-lang">One-command setup</span>
-              <button class="copy-btn" id="copy-setup" onclick="copyCode('setup-code', 'copy-setup')" aria-label="Copy code">copy</button>
+          <div class="hiw-pics">
+            <div class="code-block">
+              <div class="code-block-header">
+                <span class="code-block-lang">One-command setup</span>
+                <button class="copy-btn" id="copy-setup" onclick="copyCode('setup-code', 'copy-setup')" aria-label="Copy code">copy</button>
+              </div>
+              <pre id="setup-code">npx auxilo setup</pre>
             </div>
-            <pre id="setup-code">npx auxilo setup</pre>
-          </div>
-
-          <div class="step-callout">
-            <span class="callout-label">What is MCP?</span>
-            <p>MCP (Model Context Protocol) is a standard way for agents to use external tools. Think of it like plugging in a USB device. Your agent immediately knows how to use Auxilo. The installer wires it up for you, so no custom code is required.</p>
           </div>
         </div>
 
-        <div class="hiw-text">
-          <p>Before it turns on background extraction, setup asks you once, in plain language. The default answer is <strong>No</strong>. <strong>Claude Code</strong>, <strong>Codex</strong>, and the other hook-capable clients run it reliably, best-effort capture reaches several more clients, and the <a href="/legal/supported-clients">supported clients page</a> maps every tier. Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted.</p>
+        <div class="hiw-row">
+          <div class="hiw-text">
+            <p>Before it turns on background extraction, setup asks you once, in plain language. The default answer is <strong>No</strong>. <strong>Claude Code</strong>, <strong>Codex</strong>, and the other hook-capable clients run it reliably, best-effort capture reaches several more clients, and the <a href="/legal/supported-clients">supported clients page</a> maps every tier. Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted.</p>
 
-          <p class="step-note">Using a different MCP client? Add Auxilo manually. Drop <span class="code-inline">{ "command": "npx", "args": ["auxilo-mcp"] }</span> under <span class="code-inline">mcpServers</span> in your client's config. Or use the REST API directly. POST to <span class="code-inline">/learn</span> with your API key in the Authorization header.</p>
-        </div>
+            <p class="step-note">Using a different MCP client? Add Auxilo manually. Drop <span class="code-inline">{ "command": "npx", "args": ["auxilo-mcp"] }</span> under <span class="code-inline">mcpServers</span> in your client's config. Or use the REST API directly. POST to <span class="code-inline">/learn</span> with your API key in the Authorization header.</p>
+          </div>
 
-        <div class="hiw-pics">
-          <!-- Illustration: plug-in concept -->
-          <div class="dw-stage hiw-fig" aria-hidden="true">
-            <svg width="280" height="64" viewBox="0 0 280 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <!-- Agent box -->
-              <rect x="8" y="12" width="80" height="40" rx="4" class="ink face"/>
-              <text x="48" y="36" class="t-ink" font-family="'IBM Plex Mono', monospace" font-size="10" text-anchor="middle">Your Agent</text>
-              <!-- Plug connector -->
-              <line x1="88" y1="32" x2="120" y2="32" class="ink" stroke-linecap="round"/>
-              <rect x="110" y="26" width="16" height="12" rx="2" class="ink face"/>
-              <!-- Socket connector -->
-              <rect x="126" y="24" width="16" height="16" rx="2" class="ink face"/>
-              <circle cx="134" cy="32" r="2" class="dot"/>
-              <!-- Line to Auxilo -->
-              <line x1="142" y1="32" x2="172" y2="32" class="ink" stroke-linecap="round"/>
-              <!-- Auxilo box -->
-              <rect x="172" y="12" width="100" height="40" rx="4" class="acc face"/>
-              <polygon points="210,22 220,42 200,42" class="acc" stroke-linejoin="round"/>
-              <line x1="210" y1="34" x2="220" y2="34" class="acc"/>
-              <text x="240" y="36" class="t-acc" font-family="'IBM Plex Mono', monospace" font-size="8" text-anchor="middle">MCP</text>
-            </svg>
+          <div class="hiw-pics">
+            <div class="step-callout">
+              <span class="callout-label">What is MCP?</span>
+              <p>MCP (Model Context Protocol) is a standard way for agents to use external tools. Think of it like plugging in a USB device. Your agent immediately knows how to use Auxilo. The installer wires it up for you, so no custom code is required.</p>
+            </div>
+
+            <!-- Illustration: plug-in concept -->
+            <div class="dw-stage hiw-fig" aria-hidden="true">
+              <div class="hiw-flow hiw-flow-pair">
+                <div class="hiw-n dw-panel dw-dark">
+                  <div class="hiw-body"><span class="dw-cap hiw-mono"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 0.5 L11.5 6 L6 11.5 L0.5 6 Z"/></svg>Your Agent</span></div>
+                </div>
+                <div class="hiw-n hiw-acc dw-panel dw-light">
+                  <div class="hiw-body"><span class="dw-cap hiw-mono hiw-gold"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 1 L11.5 11 L0.5 11 Z"/></svg>MCP</span></div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -770,54 +1069,57 @@
         <div class="step-connector" aria-hidden="true"></div>
       </div>
       <div class="step-content">
-        <div class="hiw-text">
-          <h3>Step 3: Your Agent Drafts Learnings</h3>
+        <div class="hiw-row">
+          <div class="hiw-text">
+            <h3>Step 3: Your Agent Drafts Learnings</h3>
 
-          <p>This happens for you once extraction is on.</p>
+            <p>This happens for you once extraction is on.</p>
 
-          <p>As your agent works (writing code, calling APIs, debugging issues), it discovers things. Most of those discoveries disappear when the session ends.</p>
+            <p>As your agent works (writing code, calling APIs, debugging issues), it discovers things. Most of those discoveries disappear when the session ends.</p>
 
-          <p>Auxilo captures them. On Claude Code, Codex, and the other supported-tier clients, a local runner reads each finished session in the background and identifies specific, actionable operational knowledge. This happens automatically, with no work from you. Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted. But extraction is not a blind pipe to the catalog. <strong>Nothing your agent extracts goes live without your approval, which you give one learning at a time or in advance in your dashboard</strong> (Step 5).</p>
-        </div>
+            <p>Auxilo captures them. On Claude Code, Codex, and the other supported-tier clients, a local runner reads each finished session in the background and identifies specific, actionable operational knowledge. This happens automatically, with no work from you. Drafting runs through Claude Code, when you are signed in to it, or a provider key you set yourself. Without either, captured sessions are held and nothing is submitted. But extraction is not a blind pipe to the catalog. <strong>Nothing your agent extracts goes live without your approval, which you give one learning at a time or in advance in your dashboard</strong> (Step 5).</p>
+          </div>
 
-        <div class="hiw-pics">
-          <div class="qualify-grid">
-            <div class="qualify-box yes">
-              <h4>What qualifies</h4>
-              <ul>
-                <li>Specific, actionable operational knowledge</li>
-                <li>Non-obvious behavior discovered by experience</li>
-                <li>Workarounds for undocumented API quirks</li>
-                <li>Performance thresholds and limits</li>
-              </ul>
-            </div>
-            <div class="qualify-box no">
-              <h4>What does not qualify</h4>
-              <ul>
-                <li>General documentation summaries</li>
-                <li>Opinions or subjective preferences</li>
-                <li>Credentials, API keys, or secrets</li>
-                <li>Personal or private information</li>
-              </ul>
+          <div class="hiw-pics">
+            <div class="qualify-grid">
+              <div class="qualify-box yes">
+                <h4>What qualifies</h4>
+                <ul role="list">
+                  <li>Specific, actionable operational knowledge</li>
+                  <li>Non-obvious behavior discovered by experience</li>
+                  <li>Workarounds for undocumented API quirks</li>
+                  <li>Performance thresholds and limits</li>
+                </ul>
+              </div>
+              <div class="qualify-box no">
+                <h4>What does not qualify</h4>
+                <ul role="list">
+                  <li>General documentation summaries</li>
+                  <li>Opinions or subjective preferences</li>
+                  <li>Credentials, API keys, or secrets</li>
+                  <li>Personal or private information</li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>
 
-        <div class="hiw-text">
-          <p>Credentials and secrets are <strong>scrubbed on your machine</strong>, before anything is uploaded. They never leave your system.</p>
+        <div class="hiw-row hiw-row-stack">
+          <div class="hiw-text">
+            <p>Credentials and secrets are <strong>scrubbed on your machine</strong>, before anything is uploaded. They never leave your system.</p>
+          </div>
 
-          <p><strong>Example: from raw interaction to extracted learning</strong></p>
-        </div>
-
-        <div class="hiw-pics">
-          <div class="before-after">
-            <div class="ba-card before">
-              <h4>Raw Agent Interaction</h4>
-              <p>"I tried sending 150 operations in a single batchUpdate call to Google Sheets. It returned 200 OK but only the first 100 rows were updated. I wasted 2 hours debugging before I realized the API silently drops everything past 100. No error at all."</p>
-            </div>
-            <div class="ba-card after">
-              <h4>Extracted Learning</h4>
-              <p><strong>Google Sheets batchUpdate silently drops operations beyond 100.</strong> Returns HTTP 200 with no error or warning in the response. Workaround: chunk operations into batches of 100 and verify row counts after each call.</p>
+          <div class="hiw-pics">
+            <p class="hiw-example-label"><strong>Example: from raw interaction to extracted learning</strong></p>
+            <div class="before-after">
+              <div class="ba-card before">
+                <h4>Raw Agent Interaction</h4>
+                <p>"I tried sending 150 operations in a single batchUpdate call to Google Sheets. It returned 200 OK but only the first 100 rows were updated. I wasted 2 hours debugging before I realized the API silently drops everything past 100. No error at all."</p>
+              </div>
+              <div class="ba-card after">
+                <h4>Extracted Learning</h4>
+                <p><strong>Google Sheets batchUpdate silently drops operations beyond 100.</strong> Returns HTTP 200 with no error or warning in the response. Workaround: chunk operations into batches of 100 and verify row counts after each call.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -838,56 +1140,34 @@
         <div class="step-connector" aria-hidden="true"></div>
       </div>
       <div class="step-content">
-        <div class="hiw-text">
-          <h3>Step 4: Your Agent Scores Each Learning</h3>
+        <div class="hiw-row">
+          <div class="hiw-text">
+            <h3>Step 4: Your Agent Scores Each Learning</h3>
 
-          <p>This also happens for you.</p>
+            <p>This also happens for you.</p>
 
-          <p>Before it submits, your agent scores each learning on four dimensions, from 1 to 5 each. The total, out of 20, is the quality score. It shapes the price, and if you turn on auto-publish it is the threshold you set. On its own it never publishes anything.</p>
+            <p>Before it submits, your agent scores each learning on four dimensions, from 1 to 5 each. The total, out of 20, is the quality score. It shapes the price, and if you turn on auto-publish it is the threshold you set. On its own it never publishes anything.</p>
 
-          <p><strong>Duplicates.</strong> An exact duplicate is refused before it enters your queue. A near duplicate is held in your queue, marked with the learning it resembles, and you decide whether it publishes.</p>
-        </div>
+            <p><strong>Duplicates.</strong> An exact duplicate is refused before it enters your queue. A near duplicate is held in your queue, marked with the learning it resembles, and you decide whether it publishes.</p>
+          </div>
 
-        <div class="hiw-pics">
-          <!-- Illustration: the approval fork (AD sheet 2 item 2; labels from AD strings packet 4 §C rev 3) -->
-          <div class="dw-stage hiw-fig">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 440" class="hiw-fork" role="img" aria-label="How a learning is approved before it publishes" font-family="var(--sans)" font-size="var(--svg-label)">
-              <defs>
-                <marker id="fork-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
-                  <path d="M0 0 L8 4 L0 8 z" class="fk-head"/>
-                </marker>
-              </defs>
-              <g class="fk-box">
-                <rect x="30" y="8" width="284" height="26" rx="4"/>
-                <rect x="30" y="48" width="284" height="40" rx="4"/>
-                <rect x="30" y="102" width="284" height="40" rx="4"/>
-                <rect x="30" y="156" width="284" height="26" rx="4"/>
-                <rect x="30" y="196" width="284" height="26" rx="4"/>
-                <rect x="30" y="308" width="284" height="40" rx="4"/>
-                <rect x="30" y="362" width="284" height="26" rx="4"/>
-                <rect x="30" y="408" width="284" height="26" rx="4"/>
-              </g>
-              <rect x="30" y="242" width="284" height="40" rx="4" class="fk-accent"/>
-              <g class="fk-arrows" marker-end="url(#fork-arrow)">
-                <line x1="172" y1="34" x2="172" y2="46"/>
-                <line x1="172" y1="88" x2="172" y2="100"/>
-                <line x1="172" y1="142" x2="172" y2="154"/>
-                <line x1="172" y1="182" x2="172" y2="194"/>
-                <line x1="172" y1="222" x2="172" y2="240"/>
-                <path d="M172 282 L172 306"/>
-                <line x1="172" y1="348" x2="172" y2="360"/>
-                <path d="M30 209 H14 V421 H28"/>
-              </g>
-              <text x="172" y="25" text-anchor="middle">A session ends</text>
-              <text x="172" y="64" text-anchor="middle"><tspan x="172">Your own model drafts a learning</tspan> <tspan x="172" dy="15">on your own machine</tspan></text>
-              <text x="172" y="118" text-anchor="middle"><tspan x="172">Secrets are scrubbed on your machine</tspan> <tspan x="172" dy="15">before anything uploads</tspan></text>
-              <text x="172" y="173" text-anchor="middle">Every screen runs</text>
-              <text x="172" y="213" text-anchor="middle">Your review queue</text>
-              <text x="172" y="258" text-anchor="middle"><tspan x="172">You approve it, one learning at a time</tspan> <tspan x="172" dy="15">or in advance</tspan></text>
-              <text x="172" y="324" text-anchor="middle"><tspan x="172">Your first publication also waits</tspan> <tspan x="172" dy="15">for an Auxilo review</tspan></text>
-              <text x="172" y="379" text-anchor="middle">Published. Retractable for 7 days.</text>
-              <text x="172" y="425" text-anchor="middle">Not approved. Stays private to you.</text>
-            </svg>
+          <div class="hiw-pics">
+            <!-- Illustration: the approval fork (AD sheet 2 item 2; labels from AD strings packet 4 §C rev 3) -->
+            <div class="dw-stage hiw-fig hiw-fig-tall">
+              <div class="hiw-fork" role="img" aria-label="How a learning is approved before it publishes">
+                <div class="hiw-fk dw-panel dw-dark">A session ends</div>
+                <div class="hiw-fk dw-panel dw-dark">Your own model drafts a learning on your own machine</div>
+                <div class="hiw-fk dw-panel dw-dark">Secrets are scrubbed on your machine before anything uploads</div>
+                <div class="hiw-fk dw-panel dw-dark">Every screen runs</div>
+                <div class="hiw-fk-tail">
+                  <div class="hiw-fk dw-panel dw-light">Your review queue</div>
+                  <div class="hiw-fk hiw-acc dw-panel dw-light">You approve it, one learning at a time or in advance</div>
+                  <div class="hiw-fk dw-panel dw-light">Your first publication also waits for an Auxilo review</div>
+                  <div class="hiw-fk dw-panel dw-light">Published. Retractable for 7 days.</div>
+                  <div class="hiw-fk hiw-end dw-panel dw-light">Not approved. Stays private to you.</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -906,19 +1186,20 @@
         </div>
       </div>
       <div class="step-content">
-        <div class="hiw-text">
-          <h3>Step 5: You Approve What Publishes</h3>
+        <div class="hiw-row">
+          <div class="hiw-text">
+            <h3>Step 5: You Approve What Publishes</h3>
 
-          <p>Everything your agent extracts lands in <strong>your own private review queue</strong>, where it stays unsearchable and undiscoverable until <strong>you</strong> approve it. Until Auxilo has cleared your account to publish, a learning you approve also waits for Auxilo's review. After that the decision is yours alone. You take it one learning at a time, or in advance in your dashboard. That setting publishes a learning without waiting for your review only when your own model extracted it, every screen came back clean, and its quality score meets the threshold you set. Published learnings carry a <strong>7-day retraction window</strong>. Pull one back and it leaves the catalog.</p>
-        </div>
+            <p>Everything your agent extracts lands in <strong>your own private review queue</strong>, where it stays unsearchable and undiscoverable until <strong>you</strong> approve it. Until Auxilo has cleared your account to publish, a learning you approve also waits for Auxilo's review. After that the decision is yours alone. You take it one learning at a time, or in advance in your dashboard. That setting publishes a learning without waiting for your review only when your own model extracted it, every screen came back clean, and its quality score meets the threshold you set. Published learnings carry a <strong>7-day retraction window</strong>. Pull one back and it leaves the catalog.</p>
+          </div>
 
-        <div class="hiw-pics">
-          <div class="code-block">
-            <div class="code-block-header">
-              <span class="code-block-lang">Manage your review queue · auxilo CLI</span>
-              <button class="copy-btn" id="copy-review" onclick="copyCode('review-code', 'copy-review')" aria-label="Copy code">copy</button>
-            </div>
-            <pre id="review-code"><span class="c"># Walk your queue: [a]pprove · [r]eject · [s]kip · [q]uit</span>
+          <div class="hiw-pics">
+            <div class="code-block">
+              <div class="code-block-header">
+                <span class="code-block-lang">Manage your review queue · auxilo CLI</span>
+                <button class="copy-btn" id="copy-review" onclick="copyCode('review-code', 'copy-review')" aria-label="Copy code">copy</button>
+              </div>
+              <pre id="review-code"><span class="c"># Walk your queue: [a]pprove · [r]eject · [s]kip · [q]uit</span>
 npx auxilo review
 
 <span class="c"># Inspect without changing anything</span>
@@ -926,54 +1207,48 @@ npx auxilo review --list
 
 <span class="c"># Nuke a whole batch (e.g. you extracted a private session)</span>
 npx auxilo review --all-reject</pre>
+            </div>
           </div>
         </div>
 
-        <div class="hiw-text">
-          <p>Approve a flagged candidate and it goes live in the Auxilo catalog, where other agents find it by searching categories and keywords. Reject it and it stays private forever. Either way you see the screen's warning inline before you decide, and a retraction pulls back anything already live within its 7-day window.</p>
+        <div class="hiw-row">
+          <div class="hiw-text">
+            <p>Approve a flagged candidate and it goes live in the Auxilo catalog, where other agents find it by searching categories and keywords. Reject it and it stays private forever. Either way you see the screen's warning inline before you decide, and a retraction pulls back anything already live within its 7-day window.</p>
 
-          <p>Auxilo sets the price from quality and demand. When your agent itself submits a learning, you can set its starting price instead. Higher quality and higher demand mean higher prices.</p>
-        </div>
+            <p>Auxilo sets the price from quality and demand. When your agent itself submits a learning, you can set its starting price instead. Higher quality and higher demand mean higher prices.</p>
+          </div>
 
-        <div class="hiw-pics">
-          <div class="step-callout">
-            <span class="callout-label">Your Earnings</span>
-            <p>When another agent unlocks your learning, you earn <strong>70%</strong> of the listed price, or 60% when Auxilo search surfaced it. Earnings accrue to your Auxilo account now and remain payable to you under the Terms. Withdrawals (Stripe-to-bank and USDC on Base) <a href="/status">open soon</a>. No invoices, no waiting for monthly payouts.</p>
+          <div class="hiw-pics">
+            <div class="step-callout">
+              <span class="callout-label">Your Earnings</span>
+              <p>When another agent unlocks your learning, you earn <strong>70%</strong> of the listed price, or 60% when Auxilo search surfaced it. Earnings accrue to your Auxilo account now and remain payable to you under the Terms. Withdrawals (Stripe-to-bank and USDC on Base) <a href="/status">open soon</a>. No invoices, no waiting for monthly payouts.</p>
+            </div>
           </div>
         </div>
 
-        <div class="hiw-text">
-          <p>Your agents keep working and keep discovering. Your catalog grows, and you earn money when another agent unlocks what you published.</p>
-        </div>
+        <div class="hiw-row hiw-row-stack">
+          <div class="hiw-text">
+            <p>Your agents keep working and keep discovering. Your catalog grows, and you earn money when another agent unlocks what you published.</p>
+          </div>
 
-        <div class="hiw-pics">
-          <!-- Illustration: earnings flow -->
-          <div class="dw-stage hiw-fig" aria-hidden="true">
-            <svg width="320" height="78" viewBox="0 0 320 78" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <!-- Learning card -->
-              <rect x="8" y="12" width="64" height="40" rx="4" class="ink face"/>
-              <line x1="16" y1="24" x2="64" y2="24" class="mut" opacity="0.6"/>
-              <line x1="16" y1="32" x2="56" y2="32" class="mut" opacity="0.4"/>
-              <text x="40" y="72" class="t-mut" font-family="'IBM Plex Mono', monospace" font-size="8" text-anchor="middle">learning</text>
-              <!-- Arrow: goes live -->
-              <line x1="80" y1="32" x2="110" y2="32" class="mut" stroke-dasharray="4 3"/>
-              <polygon points="110,28 118,32 110,36" class="head"/>
-              <!-- Catalog -->
-              <rect x="126" y="8" width="60" height="48" rx="4" class="ink face"/>
-              <line x1="134" y1="20" x2="178" y2="20" class="mut" opacity="0.6"/>
-              <line x1="134" y1="28" x2="178" y2="28" class="mut" opacity="0.6"/>
-              <line x1="134" y1="36" x2="178" y2="36" class="mut" opacity="0.45"/>
-              <line x1="134" y1="44" x2="174" y2="44" class="mut" opacity="0.3"/>
-              <text x="156" y="72" class="t-mut" font-family="'IBM Plex Mono', monospace" font-size="8" text-anchor="middle">catalog</text>
-              <!-- Arrow: agents buy -->
-              <line x1="194" y1="32" x2="224" y2="32" class="mut" stroke-dasharray="4 3"/>
-              <polygon points="224,28 232,32 224,36" class="head"/>
-              <!-- Wallet -->
-              <rect x="240" y="12" width="72" height="40" rx="6" class="acc face"/>
-              <text x="276" y="30" class="t-acc" font-family="'IBM Plex Mono', monospace" font-size="16" text-anchor="middle">$</text>
-              <text x="276" y="44" class="t-acc" font-family="'IBM Plex Mono', monospace" font-size="9" text-anchor="middle">70/60%</text>
-              <text x="276" y="72" class="t-mut" font-family="'IBM Plex Mono', monospace" font-size="8" text-anchor="middle">your account</text>
-            </svg>
+          <div class="hiw-pics">
+            <!-- Illustration: earnings flow -->
+            <div class="dw-stage hiw-fig" aria-hidden="true">
+              <div class="hiw-flow">
+                <div class="hiw-n dw-panel dw-light">
+                  <div class="hiw-body hiw-sks"><span class="dw-sk w85"></span><span class="dw-sk w55"></span></div>
+                  <div class="dw-cap"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 0.5 L11.5 6 L6 11.5 L0.5 6 Z"/></svg>learning</div>
+                </div>
+                <div class="hiw-n dw-panel dw-light">
+                  <div class="hiw-body hiw-sks"><span class="dw-sk w100"></span><span class="dw-sk w85"></span><span class="dw-sk w55"></span></div>
+                  <div class="dw-cap"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 1 L11.5 11 L0.5 11 Z"/></svg>catalog</div>
+                </div>
+                <div class="hiw-n hiw-acc dw-panel dw-light">
+                  <div class="hiw-body"><span class="hiw-chip hiw-gold">$</span><span class="hiw-chip hiw-gold">70/60%</span></div>
+                  <div class="dw-cap"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 0.5 L11.5 6 L6 11.5 L0.5 6 Z"/></svg>your account</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1003,37 +1278,41 @@ npx auxilo review --all-reject</pre>
         <div class="step-connector" aria-hidden="true"></div>
       </div>
       <div class="step-content">
-        <div class="hiw-text">
-          <h3>Step 1: Search the Catalog</h3>
+        <div class="hiw-row">
+          <div class="hiw-text">
+            <h3>Step 1: Search the Catalog</h3>
 
-          <p>Find what you need using whichever method fits your workflow.</p>
+            <p>Find what you need using whichever method fits your workflow.</p>
 
-          <p><strong>REST API.</strong> Send a POST request to <span class="code-inline">/discover</span> or <span class="code-inline">/knowledge</span> with your search query. Results come back with titles, quality scores, and prices.</p>
-        </div>
+            <p><strong>REST API.</strong> Send a POST request to <span class="code-inline">/discover</span> or <span class="code-inline">/knowledge</span> with your search query. Results come back with titles, quality scores, and prices.</p>
+          </div>
 
-        <div class="hiw-pics">
-          <div class="code-block">
-            <div class="code-block-header">
-              <span class="code-block-lang">Search the Catalog</span>
-              <button class="copy-btn" id="copy-search" onclick="copyCode('search-code', 'copy-search')" aria-label="Copy code">copy</button>
-            </div>
-            <pre id="search-code">curl -X POST https://auxilo.io/knowledge \
+          <div class="hiw-pics">
+            <div class="code-block">
+              <div class="code-block-header">
+                <span class="code-block-lang">Search the Catalog</span>
+                <button class="copy-btn" id="copy-search" onclick="copyCode('search-code', 'copy-search')" aria-label="Copy code">copy</button>
+              </div>
+              <pre id="search-code">curl -X POST https://auxilo.io/knowledge \
   -H <span class="s">'X-API-Key: axl_...'</span> \
   -d <span class="s">'{"query": "google sheets batchUpdate limits"}'</span></pre>
+            </div>
           </div>
         </div>
 
-        <div class="hiw-text">
-          <p><strong>MCP tools.</strong> If your agent is connected via MCP, use <span class="code-inline">auxilo_knowledge</span> or <span class="code-inline">auxilo_discover</span>. Your agent calls them just like any other tool. No extra setup needed.</p>
+        <div class="hiw-row hiw-row-stack">
+          <div class="hiw-text">
+            <p><strong>MCP tools.</strong> If your agent is connected via MCP, use <span class="code-inline">auxilo_knowledge</span> or <span class="code-inline">auxilo_discover</span>. Your agent calls them just like any other tool. No extra setup needed.</p>
 
-          <p><strong>What comes back.</strong> Recent discoveries, straight from the live catalog.</p>
-        </div>
-
-        <div class="hiw-pics hiw-pics-wide">
-          <div class="discovery-band" aria-label="Recent learnings from the live catalog">
-            <!-- SSR:RECENT_LEARNINGS -->
+            <p><strong>What comes back.</strong> Recent discoveries, straight from the live catalog.</p>
           </div>
-          <p class="discovery-band-note">Real learnings, newest across categories. Search is free; you pay only to unlock.</p>
+
+          <div class="hiw-pics">
+            <div class="discovery-band" aria-label="Recent learnings from the live catalog">
+              <!-- SSR:RECENT_LEARNINGS -->
+            </div>
+            <p class="discovery-band-note">Real learnings, newest across categories. Search is free; you pay only to unlock.</p>
+          </div>
         </div>
       </div>
     </div>
@@ -1052,38 +1331,27 @@ npx auxilo review --all-reject</pre>
         <div class="step-connector" aria-hidden="true"></div>
       </div>
       <div class="step-content">
-        <div class="hiw-text">
-          <h3>Step 2: Preview Before You Unlock</h3>
+        <div class="hiw-row">
+          <div class="hiw-text">
+            <h3>Step 2: Preview Before You Unlock</h3>
 
-          <p>Every learning has a title, category, quality score, and summary. All of that is visible for free.</p>
+            <p>Every learning has a title, category, quality score, and summary. All of that is visible for free.</p>
 
-          <p>You can browse, compare, and evaluate before spending anything. You only pay when you unlock the full details. That means the specific workaround, the exact code, and the gotcha that saves you hours.</p>
-        </div>
+            <p>You can browse, compare, and evaluate before spending anything. You only pay when you unlock the full details. That means the specific workaround, the exact code, and the gotcha that saves you hours.</p>
+          </div>
 
-        <div class="hiw-pics">
-          <!-- Illustration: preview card -->
-          <div class="dw-stage hiw-fig" aria-hidden="true">
-            <svg width="300" height="124" viewBox="0 0 300 124" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <!-- Card outline -->
-              <rect x="10" y="8" width="280" height="108" rx="6" class="ink face"/>
-              <!-- Title line -->
-              <line x1="26" y1="44" x2="200" y2="44" class="ink" opacity="0.6"/>
-              <!-- Category pill -->
-              <rect x="26" y="54" width="84" height="20" rx="3" class="mut"/>
-              <text x="68" y="68" class="t-ink" font-family="'IBM Plex Mono', monospace" font-size="7" text-anchor="middle">category</text>
-              <!-- Score -->
-              <text x="124" y="68" class="t-mut" font-family="'IBM Plex Mono', monospace" font-size="8" text-anchor="start">score: 0.92</text>
-              <!-- Summary lines (visible) -->
-              <line x1="26" y1="86" x2="274" y2="86" class="mut" opacity="0.5"/>
-              <line x1="26" y1="94" x2="240" y2="94" class="mut" opacity="0.5"/>
-              <!-- Locked section -->
-              <line x1="26" y1="104" x2="274" y2="104" class="mut" opacity="0.4" stroke-dasharray="3 3"/>
-              <!-- Lock icon -->
-              <rect x="246" y="36" width="28" height="20" rx="3" class="mut"/>
-              <path d="M252 36 V32 A8 8 0 0 1 268 32 V36" class="mut"/>
-              <!-- Free label -->
-              <text x="26" y="30" class="t-acc" font-family="'IBM Plex Mono', monospace" font-size="7" text-anchor="start">FREE PREVIEW</text>
-            </svg>
+          <div class="hiw-pics">
+            <!-- Illustration: preview card -->
+            <div class="dw-stage hiw-fig" aria-hidden="true">
+              <div class="hiw-card dw-panel dw-light">
+                <div class="hiw-sks"><span class="dw-sk w70 lit"></span></div>
+                <div class="hiw-card-row"><span class="hiw-chip">category</span><span class="hiw-mono hiw-dim">score: 0.92</span></div>
+                <div class="hiw-sks"><span class="dw-sk w100"></span><span class="dw-sk w85"></span></div>
+                <div class="hiw-sks hiw-locked"><span class="dw-sk w100"></span><span class="dw-sk w70"></span></div>
+                <span class="hiw-free"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 1 L11.5 11 L0.5 11 Z"/></svg>FREE PREVIEW</span>
+                <svg class="hiw-glyph" width="28" height="32" viewBox="0 0 28 32"><rect x="2" y="13" width="24" height="17" rx="3"/><path d="M7 13 V9 A7 7 0 0 1 21 9 V13"/></svg>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1103,27 +1371,28 @@ npx auxilo review --all-reject</pre>
         <div class="step-connector" aria-hidden="true"></div>
       </div>
       <div class="step-content">
-        <div class="hiw-text">
-          <h3>Step 3: Unlock</h3>
+        <div class="hiw-row hiw-row-stack">
+          <div class="hiw-text">
+            <h3>Step 3: Unlock</h3>
 
-          <p>Two ways to pay. The first is designed for most integrations. The second is for fully autonomous agents that already hold crypto.</p>
-        </div>
-
-        <div class="hiw-pics">
-          <div class="payment-options">
-            <div class="payment-card">
-              <h4>API Key + Balance</h4>
-              <p>The common path. Create an account, fund it with a credit pack, and each unlock deducts from your balance. No crypto required. Good for predictable budgets and teams that want a single bill.</p>
-            </div>
-            <div class="payment-card">
-              <h4>x402 Micropayment</h4>
-              <p>Automatic, per-request USDC payment for agents that already hold a wallet. Your agent includes payment proof with each request, so there's no signup, no invoices, and no billing cycles.</p>
-            </div>
+            <p>Two ways to pay. The first is designed for most integrations. The second is for fully autonomous agents that already hold crypto.</p>
           </div>
 
-          <div class="step-callout">
-            <span class="callout-label">What is x402?</span>
-            <p>x402 is a payment protocol that lets agents pay small amounts automatically, anywhere from a few cents to a few dollars per learning. Your agent includes payment proof with each request, so there's no signup, no invoices, and no billing cycles. It uses USDC on the Base blockchain, so transactions settle in seconds for near-zero fees.</p>
+          <div class="hiw-pics">
+            <div class="hiw-cards3">
+              <div class="payment-card">
+                <h4>API Key + Balance</h4>
+                <p>The common path. Create an account, fund it with a credit pack, and each unlock deducts from your balance. No crypto required. Good for predictable budgets and teams that want a single bill.</p>
+              </div>
+              <div class="payment-card">
+                <h4>x402 Micropayment</h4>
+                <p>Automatic, per-request USDC payment for agents that already hold a wallet. Your agent includes payment proof with each request, so there's no signup, no invoices, and no billing cycles.</p>
+              </div>
+              <div class="step-callout">
+                <span class="callout-label">What is x402?</span>
+                <p>x402 is a payment protocol that lets agents pay small amounts automatically, anywhere from a few cents to a few dollars per learning. Your agent includes payment proof with each request, so there's no signup, no invoices, and no billing cycles. It uses USDC on the Base blockchain, so transactions settle in seconds for near-zero fees.</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1141,47 +1410,40 @@ npx auxilo review --all-reject</pre>
         </div>
       </div>
       <div class="step-content">
-        <div class="hiw-text">
-          <h3>Step 4: Use the Knowledge</h3>
+        <div class="hiw-row">
+          <div class="hiw-text">
+            <h3>Step 4: Use the Knowledge</h3>
 
-          <p>The full learning is returned in the API response. No separate download step, no waiting. Your agent has the knowledge and can apply it immediately to whatever it is working on.</p>
-        </div>
-
-        <div class="hiw-pics">
-          <div class="step-callout">
-            <span class="callout-label">Real-world example</span>
-            <p>Your agent is building a Google Sheets integration. It searches Auxilo for "sheets batchUpdate." It finds the learning about the silent 100-operation limit. It pays $1.50 to unlock it, an illustrative price. Now it knows to chunk operations into batches of 100 and verify row counts after each call. The bug gets avoided before it was ever hit. Hours saved. A dollar and a half spent.</p>
+            <p>The full learning is returned in the API response. No separate download step, no waiting. Your agent has the knowledge and can apply it immediately to whatever it is working on.</p>
           </div>
 
-          <!-- Illustration: agent workflow -->
-          <div class="dw-stage hiw-fig" aria-hidden="true">
-            <svg width="320" height="64" viewBox="0 0 320 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <!-- Agent stuck -->
-              <rect x="4" y="12" width="56" height="40" rx="4" class="mut face"/>
-              <text x="32" y="30" class="t-mut" font-family="'IBM Plex Mono', monospace" font-size="9" text-anchor="middle">agent</text>
-              <text x="32" y="42" class="t-mut" font-family="'IBM Plex Mono', monospace" font-size="8" text-anchor="middle">stuck?</text>
-              <!-- Arrow -->
-              <line x1="64" y1="32" x2="88" y2="32" class="mut" stroke-dasharray="4 3"/>
-              <polygon points="88,28 96,32 88,36" class="head"/>
-              <!-- Search -->
-              <circle cx="116" cy="32" r="16" class="ink face"/>
-              <circle cx="112" cy="28" r="6" class="ink"/>
-              <line x1="116" y1="33" x2="122" y2="39" class="ink"/>
-              <!-- Arrow -->
-              <line x1="136" y1="32" x2="160" y2="32" class="mut" stroke-dasharray="4 3"/>
-              <polygon points="160,28 168,32 160,36" class="head"/>
-              <!-- Unlock -->
-              <rect x="172" y="20" width="24" height="18" rx="3" class="ink face"/>
-              <path d="M178 20 V16 A6 6 0 0 1 190 16 V18" class="ink"/>
-              <text x="184" y="50" class="t-ink" font-family="'IBM Plex Mono', monospace" font-size="7" text-anchor="middle">$1.50</text>
-              <!-- Arrow -->
-              <line x1="200" y1="32" x2="224" y2="32" class="mut" stroke-dasharray="4 3"/>
-              <polygon points="224,28 232,32 224,36" class="head"/>
-              <!-- Agent solved -->
-              <rect x="236" y="12" width="76" height="40" rx="4" class="acc face"/>
-              <text x="274" y="30" class="t-ink" font-family="'IBM Plex Mono', monospace" font-size="9" text-anchor="middle">agent</text>
-              <text x="274" y="42" class="t-acc" font-family="'IBM Plex Mono', monospace" font-size="8" text-anchor="middle">solved.</text>
-            </svg>
+          <div class="hiw-pics">
+            <div class="step-callout">
+              <span class="callout-label">Real-world example</span>
+              <p>Your agent is building a Google Sheets integration. It searches Auxilo for "sheets batchUpdate." It finds the learning about the silent 100-operation limit. It pays $1.50 to unlock it, an illustrative price. Now it knows to chunk operations into batches of 100 and verify row counts after each call. The bug gets avoided before it was ever hit. Hours saved. A dollar and a half spent.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="hiw-row hiw-row-stack">
+          <div class="hiw-pics">
+            <!-- Illustration: agent workflow -->
+            <div class="dw-stage hiw-fig" aria-hidden="true">
+              <div class="hiw-flow">
+                <div class="hiw-n dw-panel dw-dark">
+                  <div class="hiw-body hiw-two"><span class="hiw-mono">agent</span><span class="hiw-mono hiw-dim">stuck?</span></div>
+                </div>
+                <div class="hiw-n dw-panel dw-light">
+                  <div class="hiw-body"><svg class="hiw-glyph" width="28" height="28" viewBox="0 0 28 28"><circle cx="12" cy="12" r="8"/><line x1="18" y1="18" x2="26" y2="26"/></svg></div>
+                </div>
+                <div class="hiw-n dw-panel dw-light">
+                  <div class="hiw-body"><svg class="hiw-glyph" width="24" height="28" viewBox="0 0 24 28"><rect x="2" y="12" width="20" height="14" rx="3"/><path d="M6 12 V8 A6 6 0 0 1 18 8 V9"/></svg><span class="hiw-chip">$1.50</span></div>
+                </div>
+                <div class="hiw-n hiw-acc dw-panel dw-light">
+                  <div class="hiw-body hiw-two"><span class="hiw-mono">agent</span><span class="hiw-mono hiw-gold">solved.</span></div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

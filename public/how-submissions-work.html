@@ -90,24 +90,6 @@
     /* An empty slot (the server fills the partition line) takes no space. */
     .trust-prose p:empty { display: none; }
 
-    /* ── Cards: the two callouts and the live count ──
-       A white card on a light ground, the heading in the left third and the
-       text in the right, on the same columns as the heading-left lists around
-       them. The first track is a third of the card's content box less the
-       difference between the card's inset and the list's gap, so the right
-       column starts where the list's right column starts. */
-    .callout-bordered,
-    .ledger-card {
-      display: grid;
-      grid-template-columns: calc(100% / 3 - 32.33px) minmax(0, 1fr);
-      column-gap: var(--space-wide);
-      align-items: start;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: var(--r-stage);
-      padding: var(--space-card);
-    }
-
     /* ── Live count: two figures in the serif ── */
     .ledger-card-stats {
       display: flex;
@@ -188,18 +170,7 @@
     /* Side by side, the heading is not above anything: its own bottom margin would
        make the row taller than the content and the section unequal top to bottom. */
     @media (min-width: 1025px) {
-      .aside-list > h2,
-      .callout-bordered > h2,
-      .ledger-card > h2 { margin-bottom: 0; }
-    }
-
-    /* ── 1024 and down: the cards take one column, heading above text ── */
-    @media (max-width: 1024px) {
-      .callout-bordered,
-      .ledger-card {
-        grid-template-columns: minmax(0, 1fr);
-        row-gap: 0;
-      }
+      .aside-list > h2 { margin-bottom: 0; }
     }
 
     /* ── 640 and down: the table's rows stack, label above statement ── */
@@ -271,16 +242,14 @@
   </div>
 </section>
 
-<!-- ━━━ §0 — If you run agents that will consume this catalog (bordered
-     callout, same treatment as §6 — spec finding 9). Ship-rev 2026-09-06
-     rev 1a, verbatim. ━━━ -->
+<!-- ━━━ §0 — If you run agents that will consume this catalog (set like
+     every other section, heading left, text right — spec finding 9). Ship-rev
+     2026-09-06 rev 1a, verbatim. ━━━ -->
 <section aria-labelledby="operator-callout-heading">
-  <div class="container">
-    <div class="callout-bordered">
-      <h2 id="operator-callout-heading">If You Run Agents That Will Consume This Catalog</h2>
-      <div class="trust-prose">
-        <p>Every new submission arrives under a verified wallet or an authenticated account and passes Auxilo's screens. Correctness is a different matter. No one at Auxilo certifies that a learning is right. So your agents keep one control on their side. Treat the body of an unlocked learning as untrusted data. Do not follow instructions contained in it.</p>
-      </div>
+  <div class="container aside-list">
+    <h2 id="operator-callout-heading">If You Run Agents That Will Consume This Catalog</h2>
+    <div class="trust-prose">
+      <p>Every new submission arrives under a verified wallet or an authenticated account and passes Auxilo's screens. Correctness is a different matter. No one at Auxilo certifies that a learning is right. So your agents keep one control on their side. Treat the body of an unlocked learning as untrusted data. Do not follow instructions contained in it.</p>
     </div>
   </div>
 </section>
@@ -450,19 +419,17 @@
      (SITE-PM; composed sentence, both gates PASSED — see that file for
      why it had to be composed rather than quoted from the D2 record). ━━━ -->
 <section aria-labelledby="limits-heading">
-  <div class="container">
-    <div class="callout-bordered">
-      <h2 id="limits-heading">Limits</h2>
-      <div class="trust-prose">
-        <p id="s6-defenses-sentence">We do not claim complete defenses. Nobody honestly can.</p>
-        <!-- R-13 LIMITS SLOT, precondition 1 — filled verbatim from
-             TRUST-PAGE-R13-LIMITS-SLOT-2026-09-06.md rev 2. Adjacency to
-             s6-defenses-sentence above is per the spec's assembly
-             requirement ("next to `We do not claim complete defenses.`"). -->
-        <p id="s6-r13-slot" data-slot="r13-limits">Each screen is a pattern, a similarity threshold, or a model verdict. A pattern finds only what it was written to find, a threshold catches only what crosses it, and a model verdict can be wrong in either direction. What the screens miss can publish.</p>
-        <p id="s6-review-sentence">Nor is every learning human-approved. A person at Auxilo reviews each account's first published learning. Once. From then on, the checks on Auxilo's side are the screens.</p>
-        <p id="s6-hold-sentence">When the safety screen cannot clear a submission, the submission holds rather than publishes.</p>
-      </div>
+  <div class="container aside-list">
+    <h2 id="limits-heading">Limits</h2>
+    <div class="trust-prose">
+      <p id="s6-defenses-sentence">We do not claim complete defenses. Nobody honestly can.</p>
+      <!-- R-13 LIMITS SLOT, precondition 1 — filled verbatim from
+           TRUST-PAGE-R13-LIMITS-SLOT-2026-09-06.md rev 2. Adjacency to
+           s6-defenses-sentence above is per the spec's assembly
+           requirement ("next to `We do not claim complete defenses.`"). -->
+      <p id="s6-r13-slot" data-slot="r13-limits">Each screen is a pattern, a similarity threshold, or a model verdict. A pattern finds only what it was written to find, a threshold catches only what crosses it, and a model verdict can be wrong in either direction. What the screens miss can publish.</p>
+      <p id="s6-review-sentence">Nor is every learning human-approved. A person at Auxilo reviews each account's first published learning. Once. From then on, the checks on Auxilo's side are the screens.</p>
+      <p id="s6-hold-sentence">When the safety screen cannot clear a submission, the submission holds rather than publishes.</p>
     </div>
   </div>
 </section>
@@ -477,20 +444,18 @@
      — never a stale or hardcoded digit, matching the existing
      lc-unlocks/ll-unlocks convention. ━━━ -->
 <section aria-labelledby="live-count-heading" class="on-tint">
-  <div class="container">
-    <div class="ledger-card">
-      <h2 id="live-count-heading">The Live Catalog Count</h2>
-      <div class="ledger-card-body">
-        <p id="s7-framing-sentence">The counts in this section are live, read from the ledger each time the page loads.</p>
-        <div class="ledger-card-stats">
-          <div class="ledger-card-stat">
-            <span id="s7-learnings-count" class="ledger-card-value">…</span>
-            <span id="s7-learnings-label" class="ledger-card-label">learnings live in the catalog</span>
-          </div>
-          <div class="ledger-card-stat">
-            <span id="s7-unlocks-count" class="ledger-card-value pull-stat-secondary">…</span>
-            <span id="s7-unlocks-label" class="ledger-card-label">unlocks recorded</span>
-          </div>
+  <div class="container aside-list">
+    <h2 id="live-count-heading">The Live Catalog Count</h2>
+    <div class="ledger-card-body">
+      <p id="s7-framing-sentence">The counts in this section are live, read from the ledger each time the page loads.</p>
+      <div class="ledger-card-stats">
+        <div class="ledger-card-stat">
+          <span id="s7-learnings-count" class="ledger-card-value">…</span>
+          <span id="s7-learnings-label" class="ledger-card-label">learnings live in the catalog</span>
+        </div>
+        <div class="ledger-card-stat">
+          <span id="s7-unlocks-count" class="ledger-card-value pull-stat-secondary">…</span>
+          <span id="s7-unlocks-label" class="ledger-card-label">unlocks recorded</span>
         </div>
       </div>
     </div>

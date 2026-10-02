@@ -29,53 +29,51 @@
 
     /* ── The client cards: one list, cards by size class, large first ──
        Twelve columns: large spans three (four across), medium and small span four
-       (three across). Cards in one row stretch to the same height. */
+       (three across). Cards in one row stretch to the same height. Every card takes
+       the same 32 padding. The size classes differ only in their columns, the size of
+       the mark and the size of the name. */
     .ww-list {
       display: grid;
       grid-template-columns: repeat(12, minmax(0, 1fr));
       gap: var(--space-copy);
       list-style: none;
     }
-    .ww-size-large { grid-column: span 3; }
-    .ww-size-medium,
-    .ww-size-small { grid-column: span 4; }
+    .ww-size-large { grid-column: span 3; --ww-mark: 40px; }
+    .ww-size-medium { grid-column: span 4; --ww-mark: 32px; }
+    .ww-size-small { grid-column: span 4; --ww-mark: 28px; }
 
+    /* The name starts every card at the top left. The mark, where a client has one, sits in
+       the card's top right corner on the same first row. That row is as tall as the mark in
+       every card, so a card without a mark keeps its label on the same line as a card with one. */
     .ww-cell {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-tight);
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-rows: minmax(var(--ww-mark), auto);
+      align-content: start;
+      row-gap: var(--space-tight);
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: var(--r-stage);
       padding: var(--space-card);
     }
-    .ww-size-small { padding: var(--space-copy); }
-
-    /* The mark box is on every card, so a card without a mark puts its name on the same
-       line as a card with one. A CSS mask needs a box with a real height. */
-    .ww-logo-box {
-      display: flex;
-      align-items: flex-end;
-      margin-bottom: var(--space-tight);
+    .ww-cell > * { grid-column: 1 / -1; }
+    .ww-cell > .ww-client-name {
+      grid-column: 1;
+      grid-row: 1;
+      align-self: start;
     }
-    .ww-size-large .ww-logo-box  { height: 48px; max-width: 135.6px; }
-    .ww-size-medium .ww-logo-box { height: 34.56px; max-width: 105.6px; }
-    .ww-size-small .ww-logo-box  { height: 24.32px; max-width: 90.88px; }
+    .ww-cell > .ww-logo-box {
+      grid-column: 2;
+      grid-row: 1;
+      width: var(--ww-mark);
+      height: var(--ww-mark);
+      margin-left: var(--space-body);
+    }
     /* .ww-logo (shared sheet) paints each mark through its SVG mask in the ink of the ground.
-       Only its position changes here: the mark sits on the card's left edge, in line with the name. */
+       Only its position changes here: the mark sits against the card's right edge. */
     .ww-logo-box .ww-logo {
-      -webkit-mask-position: left center;
-      mask-position: left center;
-    }
-    /* A client with no mark file gets one generic placeholder glyph, a tiny terminal prompt, in the
-       same box. It fills the box exactly as a real mark does (full width and height, drawn square at
-       the left edge and centred vertically), so a card without a mark keeps its name on the same line.
-       It is quieter than a mark on purpose: note ink, not heading ink. */
-    .ww-logo-box .ww-glyph {
-      display: block;
-      width: 100%;
-      height: 100%;
-      color: var(--fg-3);
+      -webkit-mask-position: right center;
+      mask-position: right center;
     }
 
     .ww-client-name {
@@ -105,7 +103,18 @@
     .ww-size-small .ww-client-note { font-size: 12px; }
 
     /* ── The key: the lead sentence in the left third, the definitions as rows on the right ── */
-    .ww-key-lead { color: var(--fg-1); }
+    /* The lead acts as the section heading, so it is set like an h2 at the small end of the
+       scale: the serif at 30, whatever its tag. */
+    .ww-key-lead {
+      font-family: var(--serif);
+      font-size: 30px;
+      font-weight: 300;
+      line-height: 1.2;
+      letter-spacing: -0.016em;
+      color: var(--fg-1);
+      text-wrap: balance;
+      font-synthesis-weight: none;
+    }
 
     .ww-key { max-width: 62ch; }
     .ww-key .ww-key-row {
@@ -154,7 +163,7 @@
       .ww-size-large,
       .ww-size-medium,
       .ww-size-small { grid-column: auto; }
-      .ww-key-lead { margin-bottom: var(--space-copy); }
+      .ww-key-lead { margin-bottom: var(--space-block); }
     }
 
     /* ── 600 and down: one across ── */
@@ -162,37 +171,27 @@
       .ww-list { grid-template-columns: minmax(0, 1fr); }
     }
 
-    /* ── 480 and down: every card compact and horizontal ──
-       The mark (or the placeholder glyph) sits in a fixed 28 box on the left, level with the name;
-       the name, the label and the note stack on the right. The three size classes look the same here. */
+    /* ── 480 and down: every card compact ──
+       The name, the label and the note stack on the left; the mark, where there is one, sits
+       in the top right corner in a fixed 28 box, level with the name. A client without a mark
+       has no box at all. The three size classes look the same here. */
     @media (max-width: 480px) {
-      .ww-list { gap: var(--space-copy); }
       .ww-cell,
+      .ww-size-large,
+      .ww-size-medium,
       .ww-size-small {
-        display: grid;
-        grid-template-columns: 28px minmax(0, 1fr);
-        column-gap: var(--space-body);
-        row-gap: 0;
-        align-items: start;
+        --ww-mark: 28px;
+        row-gap: var(--space-micro);
         padding: var(--space-body);
       }
-      .ww-cell > * { grid-column: 2; }
-      .ww-cell > .ww-logo-box { grid-column: 1; grid-row: 1; }
-      .ww-size-large .ww-logo-box,
-      .ww-size-medium .ww-logo-box,
-      .ww-size-small .ww-logo-box {
-        align-items: center;
-        width: 28px;
-        height: 28px;
-        max-width: 28px;
-        margin-bottom: 0;
-      }
       /* The name sits in a row as tall as the mark box, so the two share one centre line. */
+      .ww-cell > .ww-client-name,
       .ww-size-large .ww-client-name,
       .ww-size-medium .ww-client-name,
       .ww-size-small .ww-client-name {
         display: flex;
         align-items: center;
+        align-self: stretch;
         min-height: 28px;
         font-size: 16px;
       }
@@ -247,117 +246,107 @@
     <!-- The clients: one list of cards, large first -->
     <section id="ww-list-section">
       <div class="container">
-        <ul class="ww-list">
+        <ul class="ww-list" role="list">
           <li class="ww-cell ww-size-large">
-            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Claude Code" style="--logo:url(/logos/claude-code.svg)"></span></div>
             <div class="ww-client-name">Claude Code</div>
+            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Claude Code" style="--logo:url(/logos/claude-code.svg)"></span></div>
             <div class="ww-client-label">supported, hook capture</div>
             <div class="ww-client-note"></div>
           </li>
           <li class="ww-cell ww-size-large">
-            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Cursor" style="--logo:url(/logos/cursor.svg)"></span></div>
             <div class="ww-client-name">Cursor</div>
+            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Cursor" style="--logo:url(/logos/cursor.svg)"></span></div>
             <div class="ww-client-label">supported, hook capture</div>
             <div class="ww-client-note"></div>
           </li>
           <li class="ww-cell ww-size-large">
-            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="GitHub Copilot" style="--logo:url(/logos/github-copilot.svg)"></span></div>
             <div class="ww-client-name">GitHub Copilot</div>
+            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="GitHub Copilot" style="--logo:url(/logos/github-copilot.svg)"></span></div>
             <div class="ww-client-label">supported, hook capture</div>
             <div class="ww-client-note">hooks are a VS Code Preview feature</div>
           </li>
           <li class="ww-cell ww-size-large">
-            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Gemini CLI" style="--logo:url(/logos/gemini-cli.svg)"></span></div>
             <div class="ww-client-name">Gemini CLI</div>
+            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Gemini CLI" style="--logo:url(/logos/gemini-cli.svg)"></span></div>
             <div class="ww-client-label">unverified</div>
             <div class="ww-client-note">Capture wired; not yet confirmed on a live session.</div>
           </li>
           <li class="ww-cell ww-size-medium">
-            <div class="ww-logo-box"><svg class="ww-glyph" viewBox="0 0 24 24" preserveAspectRatio="xMinYMid meet" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M7.5 8.5L11.5 12L7.5 15.5"/><path d="M13.5 15.5H17.5"/></svg></div>
             <div class="ww-client-name">Codex</div>
             <div class="ww-client-label">supported, hook capture (CLI) &middot; best-effort, sweep capture (Desktop)</div>
             <div class="ww-client-note">Desktop app currently does not execute hooks (upstream openai/codex#21639); sweep covers it.</div>
           </li>
           <li class="ww-cell ww-size-medium">
-            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Devin Desktop" style="--logo:url(/logos/devin.svg)"></span></div>
             <div class="ww-client-name">Devin Desktop</div>
+            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Devin Desktop" style="--logo:url(/logos/devin.svg)"></span></div>
             <div class="ww-client-label">best-effort, sweep capture</div>
             <div class="ww-client-note">Formerly Windsurf. Verified against a live install.</div>
           </li>
           <li class="ww-cell ww-size-medium">
-            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Claude Desktop" style="--logo:url(/logos/claude-desktop.svg)"></span></div>
             <div class="ww-client-name">Claude Desktop</div>
+            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Claude Desktop" style="--logo:url(/logos/claude-desktop.svg)"></span></div>
             <div class="ww-client-label">probabilistic, no capture, MCP only</div>
             <div class="ww-client-note">no extraction surface exists</div>
           </li>
           <li class="ww-cell ww-size-medium">
-            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Cline" style="--logo:url(/logos/cline.svg)"></span></div>
             <div class="ww-client-name">Cline</div>
+            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Cline" style="--logo:url(/logos/cline.svg)"></span></div>
             <div class="ww-client-label">best-effort, sweep capture</div>
             <div class="ww-client-note">NOT locally verified; strict format probe fails silent on storage-shape drift</div>
           </li>
           <li class="ww-cell ww-size-medium">
-            <div class="ww-logo-box"><svg class="ww-glyph" viewBox="0 0 24 24" preserveAspectRatio="xMinYMid meet" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M7.5 8.5L11.5 12L7.5 15.5"/><path d="M13.5 15.5H17.5"/></svg></div>
             <div class="ww-client-name">Continue.dev</div>
             <div class="ww-client-label">best-effort, sweep capture</div>
             <div class="ww-client-note">NOT locally verified; strict format probe fails silent on storage-shape drift</div>
           </li>
           <li class="ww-cell ww-size-medium">
-            <div class="ww-logo-box"><svg class="ww-glyph" viewBox="0 0 24 24" preserveAspectRatio="xMinYMid meet" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M7.5 8.5L11.5 12L7.5 15.5"/><path d="M13.5 15.5H17.5"/></svg></div>
             <div class="ww-client-name">Roo Code</div>
             <div class="ww-client-label">best-effort, sweep capture</div>
             <div class="ww-client-note">NOT locally verified; strict format probe fails silent on storage-shape drift</div>
           </li>
           <li class="ww-cell ww-size-small">
-            <div class="ww-logo-box"><svg class="ww-glyph" viewBox="0 0 24 24" preserveAspectRatio="xMinYMid meet" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M7.5 8.5L11.5 12L7.5 15.5"/><path d="M13.5 15.5H17.5"/></svg></div>
             <div class="ww-client-name">Antigravity</div>
             <div class="ww-client-label">supported early, hook capture</div>
             <div class="ww-client-note">hook schema young; verified against live install</div>
           </li>
           <li class="ww-cell ww-size-small">
-            <div class="ww-logo-box"><svg class="ww-glyph" viewBox="0 0 24 24" preserveAspectRatio="xMinYMid meet" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M7.5 8.5L11.5 12L7.5 15.5"/><path d="M13.5 15.5H17.5"/></svg></div>
             <div class="ww-client-name">Amp</div>
             <div class="ww-client-label">probabilistic, no capture, MCP only</div>
             <div class="ww-client-note">threads are server-side</div>
           </li>
           <li class="ww-cell ww-size-small">
-            <div class="ww-logo-box"><svg class="ww-glyph" viewBox="0 0 24 24" preserveAspectRatio="xMinYMid meet" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M7.5 8.5L11.5 12L7.5 15.5"/><path d="M13.5 15.5H17.5"/></svg></div>
             <div class="ww-client-name">Factory droid</div>
             <div class="ww-client-label">unverified</div>
             <div class="ww-client-note">Capture wired; not yet confirmed on a live session.</div>
           </li>
           <li class="ww-cell ww-size-small">
-            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="JetBrains Junie" style="--logo:url(/logos/jetbrains-junie.svg)"></span></div>
             <div class="ww-client-name">JetBrains Junie</div>
+            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="JetBrains Junie" style="--logo:url(/logos/jetbrains-junie.svg)"></span></div>
             <div class="ww-client-label">probabilistic, no capture, MCP only</div>
             <div class="ww-client-note"></div>
           </li>
           <li class="ww-cell ww-size-small">
-            <div class="ww-logo-box"><svg class="ww-glyph" viewBox="0 0 24 24" preserveAspectRatio="xMinYMid meet" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M7.5 8.5L11.5 12L7.5 15.5"/><path d="M13.5 15.5H17.5"/></svg></div>
             <div class="ww-client-name">Kiro</div>
             <div class="ww-client-label">probabilistic, no capture, MCP only</div>
             <div class="ww-client-note"></div>
           </li>
           <li class="ww-cell ww-size-small">
-            <div class="ww-logo-box"><svg class="ww-glyph" viewBox="0 0 24 24" preserveAspectRatio="xMinYMid meet" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M7.5 8.5L11.5 12L7.5 15.5"/><path d="M13.5 15.5H17.5"/></svg></div>
             <div class="ww-client-name">OpenHands</div>
             <div class="ww-client-label">probabilistic, no capture, MCP only</div>
             <div class="ww-client-note">(best-effort adapter planned)</div>
           </li>
           <li class="ww-cell ww-size-small">
-            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="opencode" style="--logo:url(/logos/opencode.svg)"></span></div>
             <div class="ww-client-name">opencode</div>
+            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="opencode" style="--logo:url(/logos/opencode.svg)"></span></div>
             <div class="ww-client-label">probabilistic, no capture, MCP only</div>
             <div class="ww-client-note">(plugin planned)</div>
           </li>
           <li class="ww-cell ww-size-small">
-            <div class="ww-logo-box"><svg class="ww-glyph" viewBox="0 0 24 24" preserveAspectRatio="xMinYMid meet" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M7.5 8.5L11.5 12L7.5 15.5"/><path d="M13.5 15.5H17.5"/></svg></div>
             <div class="ww-client-name">OpenClaw</div>
             <div class="ww-client-label">best-effort, sweep paused</div>
             <div class="ww-client-note">NOT locally verified; reads the legacy sessions/*.jsonl layout. Current OpenClaw builds keep transcripts in a per-agent SQLite store, so capture is paused until the adapter is re-pointed; dedicated plugin + clawhub listing planned</div>
           </li>
           <li class="ww-cell ww-size-small">
-            <div class="ww-logo-box"><svg class="ww-glyph" viewBox="0 0 24 24" preserveAspectRatio="xMinYMid meet" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M7.5 8.5L11.5 12L7.5 15.5"/><path d="M13.5 15.5H17.5"/></svg></div>
             <div class="ww-client-name">Other MCP clients</div>
             <div class="ww-client-label">probabilistic, no capture, MCP only</div>
             <div class="ww-client-note"></div>
@@ -370,7 +359,7 @@
     <section id="ww-key-section" class="on-tint">
       <div class="container">
         <div class="aside-list">
-          <p class="ww-key-lead lede">Supported, best-effort and probabilistic are the client matrix's own words.</p>
+          <p class="ww-key-lead lede" role="heading" aria-level="2">Supported, best-effort and probabilistic are the client matrix's own words.</p>
           <div>
             <dl class="ww-key">
               <div class="ww-key-row"><dt>Supported</dt><dd>: the client fires a session-end-class hook that hands the local runner the transcript. Reliable.</dd></div>

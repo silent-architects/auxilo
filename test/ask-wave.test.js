@@ -386,50 +386,47 @@ describe('ASK-WAVE treatment tests', { timeout: 120_000 }, () => {
     }
   }
 
-  // ── gold-event collector deliberately keys on background-color, not text
-  // colour: /for-builders' hero ledger number (.pull-stat-num, "228") is
-  // gold TEXT (color: var(--aurum)) sitting on a transparent background,
-  // by design (row FB-HERO-STATS-MOBILE comment in for-builders.html: "228
-  // stays the sole ledger-tier number ... gold TEXT, not a gold-fill").
-  // goldElements() above only inspects `cs.backgroundColor` (see its body),
-  // so this was already correct behaviour, incidentally, not on purpose --
-  // pin it explicitly so nobody "fixes" goldElements() to also match on
-  // `color` and starts double-counting every gold-text ledger number as a
-  // second gold-fill event (which would break case (ii)'s "at most one
-  // gold-event group" invariant on every page that carries a ledger stat
-  // next to a real gold-fill CTA). ──
+  // ── Round 3: no figure beside the gold button is gold. /for-builders' first hero figure
+  // (.pull-stat-num, the live learnings count) used to be gold TEXT on a transparent background.
+  // A gold button is on that screen, so the figure is ink (the same colour as the figures under
+  // it), and it is still never counted as a gold-fill event. goldElements() keys on
+  // background-color only; the last assertion keeps it that way. ──
   for (const viewport of VIEWPORTS) {
-    it(`.pull-stat-num gold TEXT on /for-builders is not counted as a gold-fill event at ${viewport.name}`, async (t) => {
+    it(`.pull-stat-num on /for-builders is ink like its neighbour figure, not gold, and not a gold-fill event at ${viewport.name}`, async (t) => {
       if (!ok) { t.skip('playwright not resolvable'); return; }
       await withPage(viewport, async (p) => {
         await goto(p, 'for-builders.html');
         const aurum = await resolveToken(p, '--aurum');
         const aurumHi = await resolveToken(p, '--aurum-hi');
-        // Design system pass: on a light ground the same gold is drawn as --gold-ink (--accent-text);
-        // solid --aurum is for fills and for text on a dark ground.
         const goldInk = await resolveToken(p, '--gold-ink');
-        const numEl = await p.evaluate(() => {
-          const el = document.querySelector('.pull-stat-num');
-          if (!el) return null;
-          const cs = getComputedStyle(el);
-          return { color: cs.color, backgroundColor: cs.backgroundColor };
+        const figs = await p.evaluate(() => {
+          const one = (el) => {
+            if (!el) return null;
+            const cs = getComputedStyle(el);
+            return { color: cs.color, backgroundColor: cs.backgroundColor, size: parseFloat(cs.fontSize) };
+          };
+          const hero = document.querySelector('#builders-hero');
+          return {
+            first: one(hero.querySelector('.pull-stat-num')),
+            // the second figure, 70%, is the first row that carries no live id
+            second: one(hero.querySelector('.stat-num.pull-stat-caption')),
+          };
         });
-        assert.ok(numEl, '.pull-stat-num not found on /for-builders');
-        // The number's own text colour IS the solid gold token (that's the
-        // ledger-tier hierarchy row FB-HERO-STATS-MOBILE preserved)...
-        assert.ok(
-          numEl.color === aurum || numEl.color === aurumHi || numEl.color === goldInk,
-          `.pull-stat-num text colour at ${viewport.name}: got ${numEl.color}, expected the gold token (--aurum/--aurum-hi, or --gold-ink on a light ground)`,
-        );
-        // ...but its background is NOT gold, so the collector (which keys
-        // on background-color only) must not surface it as a gold-fill
-        // event.
-        assert.notEqual(numEl.backgroundColor, aurum, `.pull-stat-num background at ${viewport.name} unexpectedly equals solid --aurum — gold TEXT must not read as a gold fill`);
-        assert.notEqual(numEl.backgroundColor, aurumHi, `.pull-stat-num background at ${viewport.name} unexpectedly equals solid --aurum-hi — gold TEXT must not read as a gold fill`);
+        assert.ok(figs.first, '.pull-stat-num not found on /for-builders');
+        assert.ok(figs.second, 'positive control: the neighbour figure is found');
+        // A gold token has to be one of the three, so the positive control proves the check can see gold:
+        assert.ok([aurum, aurumHi, goldInk].every((c) => /^rgb/.test(c)), 'positive control: the gold tokens resolve to colours');
+        for (const gold of [aurum, aurumHi, goldInk]) {
+          assert.notEqual(figs.first.color, gold, `.pull-stat-num text colour at ${viewport.name} is the gold token ${gold}, but a gold button is on screen`);
+        }
+        assert.equal(figs.first.color, figs.second.color, `.pull-stat-num shares its neighbour figure's colour at ${viewport.name}`);
+        assert.equal(figs.first.size, 34, `the hero figures are 34px so the h1 leads, at ${viewport.name}`);
+        assert.notEqual(figs.first.backgroundColor, aurum, `.pull-stat-num background at ${viewport.name} unexpectedly equals solid --aurum`);
+        assert.notEqual(figs.first.backgroundColor, aurumHi, `.pull-stat-num background at ${viewport.name} unexpectedly equals solid --aurum-hi`);
 
         const els = await goldElements(p, aurum, aurumHi, false);
         const numInResults = els.some((e) => e.className && e.className.split(/\s+/).includes('pull-stat-num'));
-        assert.ok(!numInResults, `.pull-stat-num at ${viewport.name} was incorrectly included in goldElements() output — gold text must not be counted as a gold-fill event`);
+        assert.ok(!numInResults, `.pull-stat-num at ${viewport.name} must not be included in goldElements() output`);
       });
     });
   }

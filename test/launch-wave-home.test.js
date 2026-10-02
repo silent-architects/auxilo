@@ -110,8 +110,10 @@ describe('LAUNCH-WAVE-0926: homepage hero + #setup-detail section', () => {
 
     assert.match(setupDetail, /<h2 id="setup-detail-heading">You Control What Publishes<\/h2>/, 'h2 exact text');
 
-    const copyMatch = setupDetail.match(/<div class="container pair">\s*<div>([\s\S]*?)<\/div>\s*<div class="dw-hang">\s*<div class="dw-stage pair-art"/);
-    assert.ok(copyMatch, 'the copy column is found ahead of the review-queue drawing');
+    // Round 3: the section is the page's one wide section. The copy sits in a 60ch column (.setup-copy), and
+    // under it one product window runs the full content width (a light panel, hidden from assistive tech).
+    const copyMatch = setupDetail.match(/<div class="container">\s*<div class="setup-copy">([\s\S]*?)<\/div>\s*<div class="dw-panel dw-light dw-window" aria-hidden="true">/);
+    assert.ok(copyMatch, 'the copy column is found ahead of the review-queue window');
     const visibleCopy = visibleTextOf(copyMatch[1]);
     const expectedCopy = normalize(
       'You Control What Publishes ' +
@@ -124,8 +126,27 @@ describe('LAUNCH-WAVE-0926: homepage hero + #setup-detail section', () => {
 
     assert.match(setupDetail, /<a href="\/how-submissions-work">the submissions page<\/a>/, 'link to /how-submissions-work present');
     assert.match(setupDetail, /<code class="cmd-chip">npx auxilo disable<\/code> is the kill switch\./, 'kill switch sentence with the command in a cmd-chip <code>');
-    assert.match(setupDetail, /<div class="dw-stage pair-art" aria-hidden="true">/, 'the review-queue drawing is present and hidden from assistive tech (it repeats the copy beside it)');
-    assert.match(setupDetail, /Pending Review Queue/, 'the drawing carries the real dashboard label');
+    assert.match(setupDetail, /<div class="dw-panel dw-light dw-window" aria-hidden="true">/, 'the review-queue window is present and hidden from assistive tech (it repeats the copy above it)');
+    assert.match(setupDetail, /Pending Review Queue/, 'the window carries the real dashboard label');
+    // The window holds the six real categories as a chip row, then three queue rows with the three real titles,
+    // the first row carrying Approve and Reject, and the kill-switch chip in its bottom corner.
+    const win = setupDetail.slice(setupDetail.indexOf('dw-window"'));
+    const cats = win.match(/<div class="dw-window-cats">([\s\S]*?)<\/div>/);
+    assert.ok(cats, 'the category chip row is found');
+    assert.deepEqual([...cats[1].matchAll(/<span class="dw-chip">([^<]+)<\/span>/g)].map((m) => m[1]),
+      ['data-processing', 'web-interaction', 'code-execution', 'storage-state', 'payment-financial', 'monitoring'], 'the six real categories, in order');
+    const rows = [...win.matchAll(/<div class="dw-window-row">([\s\S]*?)<\/div>\s*(?=<div class="dw-window-row">|<div class="dw-window-foot">)/g)].map((m) => m[1]);
+    assert.equal(rows.length, 3, 'three queue rows');
+    assert.deepEqual(rows.map((r) => (r.match(/<span class="dw-title">([^<]+)<\/span>/) || [])[1]), [
+      "MCP tool inputSchema must use 'object' type at the top level or tools won't appear",
+      'JSONL is better than JSON arrays for append-heavy logs on minimal VMs',
+      'Pinecone upsert requires vectors array not a single vector object',
+    ], 'the three real titles, in order');
+    for (const r of rows) assert.equal((r.match(/<span class="dw-sk /g) || []).length, 2, 'two skeleton lines of body in each row');
+    assert.ok(win.includes('<span class="dw-btn primary">Approve</span><span class="dw-btn ghost">Reject</span>'), 'Approve and Reject are drawn');
+    assert.equal((win.match(/<span class="dw-btn /g) || []).length, 2, 'Approve and Reject once, on the first row only');
+    assert.ok(win.indexOf('dw-btn primary') < win.indexOf('dw-window-row">', win.indexOf('dw-window-row">') + 1), 'the buttons sit in the first row');
+    assert.match(win, /<div class="dw-window-foot"><div class="dw-panel dw-dark dw-kill"><pre>npx auxilo disable<\/pre><\/div><\/div>\s*<\/div>/, 'the kill-switch chip closes the window');
     // Removed: the old exchange figure and its wrapper (positive control above proves the section was read).
     assert.ok(!/class="hero-figure"/.test(setupDetail), 'the hero-figure wrapper is gone from #setup-detail');
     assert.ok(!/class="hero-exchange"/.test(setupDetail), 'the old exchange SVG is gone from #setup-detail');

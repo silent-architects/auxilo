@@ -88,10 +88,10 @@ describe('WORKS-WITH: structural — public/works-with.html, public/index.html b
     assert.equal(h1Count, 1, 'exactly one <h1>');
     assert.equal(h2Count, 0, 'zero <h2> (the three visually-hidden tier headings are gone)');
 
-    const listOpen = (WORKS_WITH_HTML.match(/<ul class="ww-list">/g) || []).length;
-    assert.equal(listOpen, 1, 'exactly one client <ul class="ww-list">');
+    const listOpen = (WORKS_WITH_HTML.match(/<ul class="ww-list" role="list">/g) || []).length;
+    assert.equal(listOpen, 1, 'exactly one client <ul class="ww-list" role="list">');
 
-    const start = WORKS_WITH_HTML.indexOf('<ul class="ww-list">');
+    const start = WORKS_WITH_HTML.indexOf('<ul class="ww-list" role="list">');
     const end = WORKS_WITH_HTML.indexOf('</ul>', start);
     assert.ok(start > -1 && end > start, 'ww-list has a matching </ul>');
     const listBlock = WORKS_WITH_HTML.slice(start, end);
@@ -367,7 +367,7 @@ describe('WORKS-WITH: design rebuild, static markup and head', () => {
     const listAt = WORKS_WITH_HTML.indexOf('<section id="ww-list-section">');
     const keyAt = WORKS_WITH_HTML.indexOf('<section id="ww-key-section" class="on-tint">');
     assert.ok(heroAt > -1 && listAt > heroAt && keyAt > listAt, 'hero (dark), list (paper), key (tint), in that order');
-    assert.ok(WORKS_WITH_HTML.indexOf('<ul class="ww-list">') > listAt && WORKS_WITH_HTML.indexOf('<ul class="ww-list">') < keyAt, 'the client list sits in the paper section');
+    assert.ok(WORKS_WITH_HTML.indexOf('<ul class="ww-list" role="list">') > listAt && WORKS_WITH_HTML.indexOf('<ul class="ww-list" role="list">') < keyAt, 'the client list sits in the paper section');
     assert.match(WORKS_WITH_HTML, /<main id="main">/, 'main is plain');
     assert.doesNotMatch(WORKS_WITH_HTML, /ww-main|ww-wrap|ww-h1|section-raised/, 'no dark-era wrapper, h1 class or raised section remains');
     assert.match(WORKS_WITH_HTML, /<h1 id="ww-hero-heading">Works With the Client You Already Run<\/h1>/, 'positive control: the h1 is the page h1');
@@ -379,68 +379,69 @@ describe('WORKS-WITH: design rebuild, static markup and head', () => {
     assert.ok(WORKS_WITH_HTML.includes('PlexMono400.0698749e.woff2'), 'positive control: the 400 face is still preloaded');
   });
 
-  it('the page block does not recolour, resize or redraw a client mark: it only moves the mask to the left edge, and colours come from tokens', () => {
+  it('the page block does not recolour, resize or redraw a client mark: it only moves the mask to the right edge, and colours come from tokens', () => {
     const styleBlock = WORKS_WITH_HTML.slice(WORKS_WITH_HTML.indexOf('<style>'), WORKS_WITH_HTML.indexOf('</style>'));
     const logoRule = styleBlock.match(/\.ww-logo-box \.ww-logo\s*\{([^}]*)\}/);
     assert.ok(logoRule, 'the page has a .ww-logo-box .ww-logo rule');
     assert.ok(!/background|(?<![-\w])color\s*:|filter|opacity|transform|width|height/.test(logoRule[1]), 'that rule sets only the mask position');
-    assert.ok(/mask-position:\s*left center/.test(logoRule[1]), 'the mark sits on the left edge');
+    assert.ok(/mask-position:\s*right center/.test(logoRule[1]), 'the mark sits against the right edge, in the card\'s top right corner');
     assert.doesNotMatch(styleBlock, /var\(--(ivory|slate|ash|obsidian)\)/, 'no ground-blind colour token in the page block');
   });
 
-  it('every client card has either a real mark or the one placeholder glyph, never neither and never both, and the glyph carries no text', () => {
-    const listStart = WORKS_WITH_HTML.indexOf('<ul class="ww-list">');
+  it('every client with a mark file shows it, after its name in a mark box; a client without one has no mark box; no placeholder exists', () => {
+    const listStart = WORKS_WITH_HTML.indexOf('<ul class="ww-list"');
     const listBlock = WORKS_WITH_HTML.slice(listStart, WORKS_WITH_HTML.indexOf('</ul>', listStart));
     const cards = [...listBlock.matchAll(/<li class="ww-cell[^"]*">([\s\S]*?)<\/li>/g)].map((m) => m[1]);
     assert.equal(cards.length, 19, 'positive control: 19 cards');
 
-    const MARK = /<span class="ww-logo" role="img"/g;
-    const GLYPH = /<svg class="ww-glyph"/g;
+    // The name leads every card; where there is a mark it follows the name, in its own box, before the label.
     let marks = 0;
-    let glyphs = 0;
+    let boxes = 0;
     for (const card of cards) {
       const name = (card.match(/<div class="ww-client-name">([^<]+)<\/div>/) || [, '?'])[1];
-      const m = (card.match(MARK) || []).length;
-      const g = (card.match(GLYPH) || []).length;
-      assert.equal(m + g, 1, `${name}: exactly one of a real mark or the placeholder, got ${m} mark and ${g} glyph`);
-      assert.ok(/<div class="ww-logo-box">(?:<span class="ww-logo"|<svg class="ww-glyph")/.test(card), `${name}: the mark or glyph sits first in the mark box`);
+      assert.match(card, /^\s*<div class="ww-client-name">/, `${name}: the name is the first thing in the card`);
+      const m = (card.match(/<span class="ww-logo" role="img"/g) || []).length;
+      const b = (card.match(/<div class="ww-logo-box">/g) || []).length;
+      assert.equal(m, b, `${name}: a mark box exists exactly when a mark does (${m} marks, ${b} boxes)`);
+      assert.ok(m <= 1, `${name}: at most one mark`);
+      if (m) {
+        assert.ok(card.indexOf('<div class="ww-client-name">') < card.indexOf('<div class="ww-logo-box">'), `${name}: the mark box follows the name`);
+        assert.ok(card.indexOf('<div class="ww-logo-box">') < card.indexOf('<div class="ww-client-label">'), `${name}: the mark box comes before the label`);
+        assert.match(card, /<div class="ww-logo-box"><span class="ww-logo" role="img"/, `${name}: the mark is the only thing in its box`);
+      }
       marks += m;
-      glyphs += g;
+      boxes += b;
     }
     assert.equal(marks, 9, 'positive control: nine real marks, untouched');
-    assert.equal(glyphs, 10, 'ten markless clients carry the placeholder');
+    assert.equal(boxes, 9, 'nine mark boxes, none empty');
 
-    const markless = ['Codex', 'Continue.dev', 'Roo Code', 'Antigravity', 'Amp', 'Factory droid', 'Kiro', 'OpenHands', 'OpenClaw', 'Other MCP clients'];
-    for (const name of markless) {
-      const card = cards.find((c) => c.includes(`<div class="ww-client-name">${name}</div>`));
-      assert.ok(card, `${name}: card present`);
-      assert.match(card, /<svg class="ww-glyph"/, `${name}: carries the placeholder`);
+    // Every mark file shipped under public/logos is shown on the page.
+    const files = fs.readdirSync(LOGOS_DIR).filter((f) => f.endsWith('.svg'));
+    assert.ok(files.length >= 9, `positive control: the logo directory holds the mark files, found ${files.length}`);
+    for (const f of files) {
+      assert.ok(WORKS_WITH_HTML.includes(`--logo:url(/logos/${f})`), `${f}: a mark file that exists is shown on the page`);
     }
 
-    // The placeholder: decorative, drawn only from a rounded square, a chevron and a tick, no text of any kind.
-    const glyphMarkup = [...listBlock.matchAll(/<svg class="ww-glyph"[\s\S]*?<\/svg>/g)].map((x) => x[0]);
-    assert.equal(glyphMarkup.length, 10, 'positive control: ten placeholder drawings found');
-    for (const svg of glyphMarkup) {
-      assert.match(svg, /aria-hidden="true"/, 'the placeholder is hidden from assistive technology');
-      assert.match(svg, /viewBox="0 0 24 24"/, 'a 24 viewBox');
-      assert.match(svg, /stroke="currentColor"/, 'the stroke is currentColor');
-      assert.match(svg, /stroke-width="1\.25"/, 'a 1.25 stroke');
-      assert.match(svg, /<rect [^>]*rx="4"/, 'a rounded square with a 4 corner radius');
-      assert.equal((svg.match(/<path /g) || []).length, 2, 'two paths: the chevron and the tick');
-      assert.doesNotMatch(svg, /<(text|tspan|title|desc|image|use|foreignObject)\b/i, 'no text, title or embedded element');
-      assert.equal(svg.replace(/<[^>]*>/g, '').trim(), '', 'no character of text inside the drawing');
-    }
-    assert.ok(glyphMarkup.every((svg) => svg === glyphMarkup[0]), 'the same glyph on every markless card');
+    // No placeholder: no glyph drawing in the markup, and no rule for one in the page block.
+    const styleBlock = WORKS_WITH_HTML.slice(WORKS_WITH_HTML.indexOf('<style>'), WORKS_WITH_HTML.indexOf('</style>'));
+    assert.doesNotMatch(WORKS_WITH_HTML.slice(WORKS_WITH_HTML.indexOf('</style>')), /ww-glyph|<svg class="ww-/, 'no placeholder glyph in the markup');
+    assert.doesNotMatch(styleBlock, /ww-glyph/, 'no placeholder rule in the page block');
+    assert.ok(styleBlock.includes('.ww-logo-box'), 'positive control: the page block still styles the mark box');
   });
 
-  it('the placeholder fills the mark box like a real mark and takes its colour from the note token', () => {
+  it('the key lead acts as a section heading: set in the serif at 30, whatever its tag', () => {
     const styleBlock = WORKS_WITH_HTML.slice(WORKS_WITH_HTML.indexOf('<style>'), WORKS_WITH_HTML.indexOf('</style>'));
-    const rule = styleBlock.match(/\.ww-logo-box \.ww-glyph\s*\{([^}]*)\}/);
-    assert.ok(rule, 'the page has a .ww-logo-box .ww-glyph rule');
-    assert.match(rule[1], /width:\s*100%/, 'full width of the box');
-    assert.match(rule[1], /height:\s*100%/, 'full height of the box');
-    assert.match(rule[1], /color:\s*var\(--fg-3\)/, 'note ink');
-    assert.match(WORKS_WITH_HTML, /<svg class="ww-glyph"[^>]*preserveAspectRatio="xMinYMid meet"/, 'drawn square at the left edge, centred vertically, as a mask is');
+    const rule = styleBlock.match(/\.ww-key-lead\s*\{([^}]*)\}/);
+    assert.ok(rule, 'the page has a .ww-key-lead rule');
+    assert.match(rule[1], /font-family:\s*var\(--serif\)/, 'the serif');
+    assert.match(rule[1], /font-size:\s*30px/, 'the small end of the heading scale');
+    assert.match(rule[1], /font-weight:\s*300/, 'weight 300');
+    assert.match(WORKS_WITH_HTML, /<p class="ww-key-lead lede" role="heading" aria-level="2">/, 'it is announced as a level 2 heading');
+  });
+
+  it('the client list is a real list to assistive technology (list-style none drops the role in some browsers)', () => {
+    assert.match(WORKS_WITH_HTML, /<ul class="ww-list" role="list">/);
+    assert.match(WORKS_WITH_HTML, /<ul class="nav-links" role="list">/, 'positive control: the nav list carries the same attribute');
   });
 });
 
@@ -539,88 +540,51 @@ describe('WORKS-WITH: design rebuild, the card grid as rendered', { timeout: 120
     }
   });
 
-  // The mark and the placeholder box, measured inside the card. Taken at 1280 (the cards stack their parts
-  // and the box scales by tier) and at 375 (every card is compact and horizontal and every tier takes one box).
-  async function measureMarkBoxes(width) {
-    const ctx = await browser.newContext({ viewport: { width, height: 900 } });
-    const page = await ctx.newPage();
-    try {
-      await page.goto(`${base}/works-with.html`, { waitUntil: 'networkidle' });
-      return await page.evaluate(() => [...document.querySelectorAll('.ww-list > li')].map((li) => {
-        const r = li.getBoundingClientRect();
-        const art = li.querySelector('.ww-logo, .ww-glyph');
-        const a = art.getBoundingClientRect();
-        const note = li.querySelector('.ww-client-note');
-        return {
-          size: ['large', 'medium', 'small'].find((s) => li.classList.contains('ww-size-' + s)),
-          kind: art.classList.contains('ww-glyph') ? 'glyph' : 'mark',
-          box: [a.left - r.left, a.top - r.top, a.width, a.height].map((n) => Math.round(n * 100) / 100).join(','),
-          ink: getComputedStyle(art).color,
-          noteInk: getComputedStyle(note).color,
-          text: art.textContent.trim(),
-        };
-      }));
-    } finally {
-      await ctx.close();
-    }
-  }
-
-  it('in every tier the placeholder glyph takes the box a real mark takes in that tier, and is drawn in the note colour', async (t) => {
-    if (!ok) { t.skip('playwright not resolvable'); return; }
-    for (const width of [1280, 375]) {
-      const cells = await measureMarkBoxes(width);
-      assert.equal(cells.length, 19, `${width}: positive control: 19 cards`);
-      for (const size of ['medium', 'small']) {
-        const inTier = cells.filter((c) => c.size === size);
-        const marks = inTier.filter((c) => c.kind === 'mark');
-        const glyphs = inTier.filter((c) => c.kind === 'glyph');
-        assert.ok(marks.length > 0 && glyphs.length > 0, `${width} ${size}: positive control, both kinds present`);
-        for (const g of glyphs) {
-          assert.equal(g.box, marks[0].box, `${width} ${size}: the glyph takes the box (left, top, width, height inside its card) a real mark takes`);
-        }
-      }
-      for (const g of cells.filter((c) => c.kind === 'glyph')) {
-        assert.equal(g.ink, g.noteInk, `${width}: the glyph is drawn in the colour of the note text`);
-        assert.equal(g.text, '', `${width}: the glyph holds no text`);
-      }
-    }
-  });
-
-  // At 480 and down every card is compact and horizontal: a fixed 28 box on the left (mark or glyph),
-  // level with the name, the name, label and note on the right. All three size classes look the same.
-  // Every value is compared with another measurement from the same run, or with a spacing token.
-  async function measureCompact(width) {
+  // The card's parts, measured inside the card. Taken at 1280 (large four across), 768 (two across) and 375
+  // (compact). Every value is compared with another measurement from the same run, or with a spacing token.
+  async function measureCards(width) {
     const ctx = await browser.newContext({ viewport: { width, height: 900 } });
     const page = await ctx.newPage();
     try {
       await page.goto(`${base}/works-with.html`, { waitUntil: 'networkidle' });
       return await page.evaluate(() => {
         const root = getComputedStyle(document.documentElement);
-        const tokens = { tight: parseFloat(root.getPropertyValue('--space-tight')), body: parseFloat(root.getPropertyValue('--space-body')), copy: parseFloat(root.getPropertyValue('--space-copy')) };
+        const tokens = { tight: parseFloat(root.getPropertyValue('--space-tight')), body: parseFloat(root.getPropertyValue('--space-body')), copy: parseFloat(root.getPropertyValue('--space-copy')), card: parseFloat(root.getPropertyValue('--space-card')) };
         const items = [...document.querySelectorAll('.ww-list > li')];
         const cells = items.map((li, i) => {
           const cs = getComputedStyle(li);
           const r = li.getBoundingClientRect();
-          const box = li.querySelector('.ww-logo-box').getBoundingClientRect();
-          const art = li.querySelector('.ww-logo, .ww-glyph').getBoundingClientRect();
           const name = li.querySelector('.ww-client-name');
           const nameBox = name.getBoundingClientRect();
           const nameCs = getComputedStyle(name);
-          const label = getComputedStyle(li.querySelector('.ww-client-label'));
+          const label = li.querySelector('.ww-client-label');
+          const labelCs = getComputedStyle(label);
           const note = getComputedStyle(li.querySelector('.ww-client-note'));
+          const box = li.querySelector('.ww-logo-box');
+          const bx = box ? box.getBoundingClientRect() : null;
           const mark = li.querySelector('.ww-logo');
+          const mx = mark ? mark.getBoundingClientRect() : null;
           const next = items[i + 1] ? items[i + 1].getBoundingClientRect() : null;
+          const lb = label.getBoundingClientRect();
           return {
             size: ['large', 'medium', 'small'].find((s) => li.classList.contains('ww-size-' + s)),
+            top: Math.round(r.top * 100) / 100,
             pad: [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft].map(parseFloat),
-            gapBelow: next ? next.top - r.bottom : null,
-            boxW: box.width, boxH: box.height, artW: art.width, artH: art.height,
-            boxLeftInCard: box.left - r.left,
-            boxCentreY: box.top + box.height / 2,
+            border: parseFloat(cs.borderLeftWidth),
+            gapBelow: next && Math.abs(next.top - r.top) > 1 ? next.top - r.bottom : null,
+            nameLeftInCard: Math.round((nameBox.left - r.left) * 100) / 100,
+            nameTopInCard: Math.round((nameBox.top - r.top) * 100) / 100,
+            labelTopInCard: Math.round((lb.top - r.top) * 100) / 100,
+            hasBox: !!box,
+            boxW: bx ? bx.width : null, boxH: bx ? bx.height : null,
+            artW: mx ? mx.width : null, artH: mx ? mx.height : null,
+            markRightGap: mx ? r.right - mx.right : null,
+            markTopGap: mx ? mx.top - r.top : null,
+            boxCentreY: bx ? bx.top + bx.height / 2 : null,
             nameCentreY: nameBox.top + nameBox.height / 2,
-            nameLeftOfBox: nameBox.left - (box.left + box.width),
+            nameRightToBox: bx ? bx.left - nameBox.right : null,
             nameFamily: nameCs.fontFamily, nameWeight: nameCs.fontWeight, nameSize: parseFloat(nameCs.fontSize),
-            labelFamily: label.fontFamily, labelSize: parseFloat(label.fontSize),
+            labelFamily: labelCs.fontFamily, labelSize: parseFloat(labelCs.fontSize),
             noteSize: parseFloat(note.fontSize),
             markInk: mark ? getComputedStyle(mark).backgroundColor : null,
             markMask: mark ? (getComputedStyle(mark).maskSize || getComputedStyle(mark).webkitMaskSize) : null,
@@ -633,29 +597,81 @@ describe('WORKS-WITH: design rebuild, the card grid as rendered', { timeout: 120
     }
   }
 
-  it('at 375 every card is compact and horizontal: a 28 box on the left level with the name, padding 16, 24 between cards, the three size classes alike', async (t) => {
+  it('every card takes the same 32 padding, and the name starts at the same left edge in every card (cards with a mark and without one)', async (t) => {
     if (!ok) { t.skip('playwright not resolvable'); return; }
-    const m = await measureCompact(375);
+    for (const width of [1280, 768]) {
+      const m = await measureCards(width);
+      assert.equal(m.cells.length, 19, `${width}: positive control: 19 cards`);
+      for (const c of m.cells) {
+        assert.deepEqual(c.pad, [m.tokens.card, m.tokens.card, m.tokens.card, m.tokens.card], `${width} ${c.size}: card padding is --space-card on all four sides`);
+        assert.equal(c.nameLeftInCard, m.tokens.card + c.border, `${width} ${c.size}: the name starts at the card's padding edge, top left`);
+        assert.equal(c.nameTopInCard, m.tokens.card + c.border, `${width} ${c.size}: the name starts at the card's top padding edge`);
+      }
+      assert.equal(new Set(m.cells.map((c) => c.nameLeftInCard)).size, 1, `${width}: one left edge for the name in every card`);
+      assert.ok(m.cells.some((c) => c.hasBox) && m.cells.some((c) => !c.hasBox), `${width}: positive control: cards with a mark and without one are both present`);
+    }
+  });
+
+  it('the mark sits in the card\'s top right corner, inside the padding, in a square box that is 40, 32 and 28 by size class; the label starts on the same line with or without a mark', async (t) => {
+    if (!ok) { t.skip('playwright not resolvable'); return; }
+    for (const width of [1280, 768]) {
+      const m = await measureCards(width);
+      const sizes = { large: 40, medium: 32, small: 28 };
+      for (const size of ['large', 'medium', 'small']) {
+        const inTier = m.cells.filter((c) => c.size === size);
+        const marked = inTier.filter((c) => c.hasBox);
+        assert.ok(marked.length > 0, `${width} ${size}: positive control, a card with a mark`);
+        for (const c of marked) {
+          assert.equal(c.boxW, sizes[size], `${width} ${size}: the mark box is ${sizes[size]} wide`);
+          assert.equal(c.boxH, sizes[size], `${width} ${size}: the mark box is ${sizes[size]} tall (square, so a mark is never stretched)`);
+          assert.equal(c.artW, c.boxW, `${width} ${size}: the mark fills its box, wide`);
+          assert.equal(c.artH, c.boxH, `${width} ${size}: the mark fills its box, tall`);
+          assert.equal(c.markRightGap, m.tokens.card + c.border, `${width} ${size}: the mark ends at the right padding edge`);
+          assert.equal(c.markTopGap, m.tokens.card + c.border, `${width} ${size}: the mark starts at the top padding edge`);
+          assert.ok(c.nameRightToBox > 0, `${width} ${size}: the name ends before the mark begins`);
+        }
+        // Cards of one tier in one row keep their label on one line, with or without a mark.
+        const rows = [...new Set(inTier.map((c) => c.top))];
+        for (const top of rows) {
+          const row = inTier.filter((c) => c.top === top);
+          assert.equal(new Set(row.map((c) => c.labelTopInCard)).size, 1, `${width} ${size} row at ${top}: the label starts at the same offset in every card of the row`);
+        }
+      }
+      assert.ok(m.cells.filter((c) => c.hasBox).every((c) => c.markInk === 'rgb(10, 10, 10)'), `${width}: a mark stays monochrome ink`);
+      assert.ok(m.cells.filter((c) => c.hasBox).every((c) => c.markMask === 'contain'), `${width}: a mark keeps its shape (contained, never stretched)`);
+    }
+  });
+
+  // At 480 and down every card is compact: padding 16, the name, label and note on the left, the mark (where there
+  // is one) in a fixed 28 box in the top right corner, level with the name. A client with no mark has no box.
+  it('at 375 every card is compact: a 28 box in the top right level with the name where a mark exists, none where it does not, padding 16, 24 between cards, the three size classes alike', async (t) => {
+    if (!ok) { t.skip('playwright not resolvable'); return; }
+    const m = await measureCards(375);
     assert.equal(m.cells.length, 19, 'positive control: 19 cards');
     assert.equal(m.scrollWidth, m.viewport, '375: no horizontal scroll');
     for (const c of m.cells) {
       assert.deepEqual(c.pad, [m.tokens.body, m.tokens.body, m.tokens.body, m.tokens.body], `${c.size}: card padding is --space-body on all four sides`);
-      assert.equal(c.boxW, 28, `${c.size}: the mark box is 28 wide`);
-      assert.equal(c.boxH, 28, `${c.size}: the mark box is 28 tall`);
-      assert.equal(c.artW, 28, `${c.size}: the mark or glyph fills the 28 box, wide`);
-      assert.equal(c.artH, 28, `${c.size}: the mark or glyph fills the 28 box, tall`);
-      assert.equal(c.boxLeftInCard, m.tokens.body + 1, `${c.size}: the box sits on the card's left padding edge (padding plus the 1px line)`);
-      assert.ok(Math.abs(c.boxCentreY - c.nameCentreY) <= 0.5, `${c.size}: the mark box and the name share one centre line (box ${c.boxCentreY}, name ${c.nameCentreY})`);
-      assert.ok(c.nameLeftOfBox > 0, `${c.size}: the name sits to the right of the mark box`);
+      assert.equal(c.nameLeftInCard, m.tokens.body + c.border, `${c.size}: the name starts at the card's left padding edge`);
       assert.match(c.nameFamily, /Archivo/, `${c.size}: the name is Archivo`);
       assert.equal(c.nameWeight, '500', `${c.size}: the name is weight 500`);
       assert.equal(c.nameSize, 16, `${c.size}: the name is 16`);
       assert.match(c.labelFamily, /Plex Mono/i, `${c.size}: the label is mono`);
       assert.equal(c.labelSize, 13, `${c.size}: the label is 13`);
       assert.equal(c.noteSize, 13, `${c.size}: the note is 13`);
+      if (c.hasBox) {
+        assert.equal(c.boxW, 28, `${c.size}: the mark box is 28 wide`);
+        assert.equal(c.boxH, 28, `${c.size}: the mark box is 28 tall`);
+        assert.equal(c.artW, 28, `${c.size}: the mark fills the 28 box, wide`);
+        assert.equal(c.artH, 28, `${c.size}: the mark fills the 28 box, tall`);
+        assert.equal(c.markRightGap, m.tokens.body + c.border, `${c.size}: the mark sits on the card's right padding edge`);
+        assert.ok(Math.abs(c.boxCentreY - c.nameCentreY) <= 0.5, `${c.size}: the mark box and the name share one centre line (box ${c.boxCentreY}, name ${c.nameCentreY})`);
+        assert.ok(c.nameRightToBox > 0, `${c.size}: the name sits to the left of the mark box`);
+      } else {
+        assert.equal(c.boxW, null, `${c.size}: a client without a mark has no mark box at all`);
+      }
     }
     for (const c of m.cells.slice(0, -1)) assert.equal(c.gapBelow, m.tokens.copy, 'cards sit --space-copy (24) apart, as cards in a grid do on every page');
-    for (const key of ['boxW', 'boxH', 'boxLeftInCard', 'nameLeftOfBox', 'nameSize', 'labelSize', 'noteSize']) {
+    for (const key of ['nameLeftInCard', 'nameSize', 'labelSize', 'noteSize']) {
       const vals = [...new Set(m.cells.map((c) => c[key]))];
       assert.equal(vals.length, 1, `all three size classes share one ${key}, got ${vals.join(',')}`);
     }
@@ -668,14 +684,14 @@ describe('WORKS-WITH: design rebuild, the card grid as rendered', { timeout: 120
     }
   });
 
-  it('at 480 the cards are still compact and at 481 they are the stacked cards again', async (t) => {
+  it('at 480 the cards are still compact and at 481 they are the larger cards again', async (t) => {
     if (!ok) { t.skip('playwright not resolvable'); return; }
-    const narrow = await measureCompact(480);
-    const wide = await measureCompact(481);
-    assert.ok(narrow.cells.every((c) => c.boxW === 28 && c.nameLeftOfBox > 0), '480: compact and horizontal');
-    assert.ok(wide.cells.every((c) => c.nameLeftOfBox < 0), '481: the name sits under the mark again, as before');
-    assert.ok(wide.cells.every((c) => c.pad.every((p) => p > wide.tokens.body)), '481: every card keeps its own, larger padding');
-    assert.ok(wide.cells.some((c) => c.boxW !== 28), '481: the mark boxes keep their tier sizes');
+    const narrow = await measureCards(480);
+    const wide = await measureCards(481);
+    assert.ok(narrow.cells.every((c) => c.pad.every((p) => p === narrow.tokens.body)), '480: every card is compact, padding 16');
+    assert.ok(narrow.cells.filter((c) => c.hasBox).every((c) => c.boxW === 28 && c.nameRightToBox > 0), '480: the mark box is 28, to the right of the name');
+    assert.ok(wide.cells.every((c) => c.pad.every((p) => p === wide.tokens.card)), '481: every card takes the 32 padding again');
+    assert.ok(wide.cells.some((c) => c.hasBox && c.boxW !== 28), '481: the mark boxes keep their tier sizes');
   });
 
   it('at 768 the cards go two across, at 375 one across, with no horizontal scroll', async (t) => {

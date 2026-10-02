@@ -222,6 +222,16 @@
     /* The single-item result line under an opened learning's actions. */
     .triage-detail-cell > .alert { margin: var(--space-body) 0 0 !important; }
 
+    /* Card text measure: no line of reading text runs past 70 characters, so a
+       card at 1100 wide never stretches a sentence across it. The caps sit on
+       the blocks that hold text; tables, the code panel and the controls keep
+       their own widths. */
+    .dash-card :is(p, .empty-state, .loading-text, .alert, .wallet-note, .purchase-legal,
+                   #clean-lane-terms, #credit-balance-sub, #credit-balance-frozen),
+    .dash-body .dash-inner > .alert {
+      max-width: 70ch;
+    }
+
     :is(.dash-card, #welcome-card-a, #welcome-card-b, #earnings-content, #clean-lane-content,
         #clean-lane-grant-form, #clean-lane-on, #credits-content, #payout-content,
         #pending-content, #withdraw-wrap) > :is(.btn, .hero-cta-link, select) {
@@ -248,10 +258,26 @@
     }
 
     /* ── Earnings grid ──────────────────────────────────────────────── */
+    /* An even grid at every count: four figures sit four across, five (an
+       account whose earlier receipts wait on the Terms) sit three over two with
+       the second row's cells wider, so no figure ever stands alone on a row.
+       Two across below 900, one across on a phone. */
     .earnings-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: var(--space-card) var(--space-copy);
+    }
+    @media (max-width: 899px) {
+      .earnings-grid > .earnings-item:last-child:nth-child(odd) { grid-column: 1 / -1; }
+    }
+    @media (max-width: 640px) {
+      .earnings-grid { grid-template-columns: minmax(0, 1fr); }
+    }
+    @media (min-width: 900px) {
+      .earnings-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .earnings-grid:has(> .earnings-item:nth-child(5)) { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+      .earnings-grid:has(> .earnings-item:nth-child(5)) > .earnings-item { grid-column: span 2; }
+      .earnings-grid:has(> .earnings-item:nth-child(5)) > .earnings-item:nth-child(n+4) { grid-column: span 3; }
     }
 
     .earnings-item {
@@ -259,11 +285,19 @@
       padding-top: var(--space-body);
     }
 
+    /* The label takes a fixed two-line box, so every figure in a row starts at
+       the same height and sits on one baseline whether its label is one line or
+       two. On a phone the figures stack, so the box is released. */
     .earnings-label {
       font-size: 14px;
+      line-height: 1.5;
+      min-height: calc(2 * 1.5em);
       color: var(--fg-3);
       margin-bottom: var(--space-tight);
       font-weight: 400;
+    }
+    @media (max-width: 640px) {
+      .earnings-label { min-height: 0; }
     }
 
     /* Money figures are set in the serif. */
@@ -278,7 +312,9 @@
       font-synthesis-weight: none;
     }
 
-    .earnings-value.aurum { color: var(--accent-text); }
+    /* No figure on this page is gold. The script still marks a real amount with
+       the .aurum class; the class carries no colour here, so the figure stays ink
+       in the serif and the gold on a screen is the setup command's button. */
 
     /* ── Credits card (CREDITS-CONTROL PART 1) ─────────────────────────
        GOV-2 A6: this card and the Earnings card above share the dashboard
@@ -343,7 +379,20 @@
       text-decoration: none;
     }
 
-    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    /* A disabled button reads as disabled at a glance: a quiet tint fill, note
+       ink, no visible border, a not-allowed cursor, and full opacity so the label
+       stays at 4.5 to 1 or better (5.9 on the tint). On a dark ground the same
+       idea takes the raised dark fill and the dark-ground note ink (5.8). */
+    .btn:disabled,
+    .btn:disabled:hover {
+      background: var(--tint);
+      color: var(--fg-3);
+      border-color: transparent;
+      opacity: 1;
+      cursor: not-allowed;
+    }
+    .on-dark .btn:disabled,
+    .on-dark .btn:disabled:hover { background: var(--raise-dark); }
 
     /* Primary: gold on the dark ground, ink on a light one (the tokens do it). */
     .btn-primary {
@@ -667,10 +716,13 @@
       gap: var(--space-tight);
     }
 
-    /* Chips: ink text. The lane and the signal read from the border or the fill. */
+    /* One chip style for the category, the lane and every signal: a tint fill
+       and ink text, no outline. The words say which it is. The script still puts
+       .tag-category, .tag-clean, .tag-warn and .tag-danger on a chip; none of
+       them draws anything of its own. A chip never breaks across lines. */
     .tag {
       display: inline-block;
-      padding: 2px var(--space-tight);
+      padding: 3px var(--space-tight);
       border-radius: var(--r-control);
       font-family: var(--mono);
       font-size: 13px;
@@ -680,13 +732,9 @@
       letter-spacing: 0;
       color: var(--fg-1);
       background: var(--tint);
-      border: 1px solid var(--line);
+      border: 0;
+      white-space: nowrap;
     }
-
-    .tag-category { background: var(--tint); }
-    .tag-clean { background: var(--card); border-color: var(--fg-1); }
-    .tag-warn { background: var(--tint-deep); }
-    .tag-danger { background: var(--card); border-color: #8C2F1B; }
 
     /* ── Auto-review triage additions ───────────────────────────── */
     .count-badge {
@@ -695,8 +743,8 @@
       padding: 2px var(--space-tight);
       margin-left: var(--space-tight);
       border-radius: 999px;
-      background: var(--tint-deep);
-      border: 1px solid var(--line);
+      background: var(--tint);
+      border: 0;
       color: var(--fg-1);
       font-family: var(--sans);
       font-size: 14px;
@@ -711,6 +759,28 @@
       gap: var(--space-tight);
       align-items: center;
       flex-wrap: wrap;
+    }
+    /* Where the six actions no longer fit one row (below 1024) they form an even
+       grid, three across on a tablet and two across on a phone, each button the
+       full width of its cell and each row the height of its tallest label. */
+    @media (max-width: 1023px) {
+      .bulk-bar {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        align-items: stretch;
+      }
+      .bulk-bar > .btn.btn-sm {
+        width: 100%;
+        min-width: 0;
+        text-align: center;
+      }
+    }
+    @media (max-width: 640px) {
+      .bulk-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .bulk-bar > .btn.btn-sm {
+        padding-left: var(--space-tight);
+        padding-right: var(--space-tight);
+      }
     }
 
     .triage-table-wrap { overflow-x: auto; }
@@ -742,6 +812,21 @@
 
     .triage-table th:first-child, .triage-table td:first-child { padding-left: 0; }
     .triage-table th:last-child, .triage-table td:last-child { padding-right: 0; }
+
+    /* The category column never wraps a chip: the cell holds its chip on one
+       line and keeps a floor wide enough for the longest category name
+       (payment-financial) with the cell's own padding. The lane and signal chips
+       sit in a wrapping row with one gap; whole chips move, never their words. */
+    .triage-table td.triage-cell-category {
+      white-space: nowrap;
+      min-width: 10.5rem;
+    }
+    .triage-cell-lane > span {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-tight);
+    }
+    .triage-cell-lane .tag { margin-right: 0 !important; }
 
     .triage-cell-quality, .triage-cell-submitted, .triage-meta-badge {
       font-family: var(--mono);
@@ -782,6 +867,7 @@
       font-family: var(--sans);
       font-size: 15px;
       font-weight: 500;
+      line-height: 1.4;
       cursor: pointer;
       text-align: left;
       text-decoration: underline;
@@ -963,6 +1049,9 @@
         flex: 0 0 auto;
         max-width: 100%;
       }
+      /* A chip is one line at every real width; only a run wider than the whole
+         row (no real category or signal is) may break, as a last resort. */
+      .triage-cell-meta-mobile .tag { white-space: normal; }
 
       /* The desktop copies (nested under the title; the four cells above)
          are hidden below the breakpoint -- the separate mobile cells take over so
@@ -1229,6 +1318,10 @@
     <button class="btn btn-primary" id="login-btn" onclick="submitMagicLink()" style="width:100%">Send magic link</button>
   </div>
 
+  <!-- The status container is always rendered (never display:none) so the
+       confirmation inside it, which appears when #login-sent is shown, is
+       announced by a screen reader. -->
+  <div role="status">
   <div id="login-sent" style="display:none">
     <div class="alert alert-success" id="login-sent-msg"></div>
     <p style="font-size:13px;color:var(--slate);line-height:1.6">
@@ -1236,6 +1329,7 @@
       If you did not receive it, check your spam folder or
       <button onclick="showLoginForm()" style="background:none;border:none;color:var(--aurum);cursor:pointer;font-size:13px;padding:0;font-family:var(--sans)">try again</button>.
     </p>
+  </div>
   </div>
   </div>
 </div>
@@ -1485,7 +1579,7 @@
   <div id="terms-dialog" role="dialog" aria-modal="true" aria-labelledby="terms-dialog-title">
     <h2 id="terms-dialog-title" class="dash-card-title">Terms of Service</h2>
     <div id="terms-gate-alert" class="alert" role="alert" style="display:none;margin-bottom:12px"></div>
-    <div id="terms-scroll-region" tabindex="0" aria-label="Terms of Service, scrollable"></div>
+    <div id="terms-scroll-region" role="region" tabindex="0" aria-label="Terms of Service, scrollable"></div>
     <div id="terms-load-error" style="display:none">
       <p style="font-size:14px;color:var(--slate);margin:12px 0 10px;line-height:1.6">The Terms did not load. Try again.</p>
       <button class="btn btn-ghost btn-sm" id="terms-retry-btn" onclick="loadTermsDialogContent()">Try Again</button>
@@ -1708,6 +1802,21 @@
     hide('login-sent');
     hideAlert('login-alert');
   };
+
+  // Enter in the email field does what a click on "Send magic link" does: it
+  // calls the same function, and does nothing while the button is disabled (a
+  // request is in flight), exactly as a click on a disabled button does nothing.
+  (function () {
+    var emailField = document.getElementById('login-email');
+    if (!emailField) return;
+    emailField.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' || e.isComposing) return;
+      var sendBtn = document.getElementById('login-btn');
+      if (sendBtn && sendBtn.disabled) return;
+      e.preventDefault();
+      window.submitMagicLink();
+    });
+  }());
 
   // ── Sign out ────────────────────────────────────────────────────────
   window.signOut = function () {
@@ -3452,6 +3561,7 @@
     var box = document.createElement('input');
     box.type = 'checkbox';
     box.id = 'triage-check-' + row.id;
+    box.setAttribute('aria-labelledby', 'triage-title-' + row.id);
     box.onchange = function () { setRowChecked(row.id, box.checked); };
     checkLabel.appendChild(box);
     tdCheck.appendChild(checkLabel);
@@ -3502,6 +3612,9 @@
     tdTitle.setAttribute('role', 'cell');
     var titleBtn = document.createElement('button');
     titleBtn.className = 'triage-title-btn';
+    titleBtn.id = 'triage-title-' + row.id;
+    titleBtn.setAttribute('aria-expanded', 'false');
+    titleBtn.setAttribute('aria-controls', 'triage-detail-' + row.id);
     titleBtn.textContent = row.title || '(no title)'; // textContent -- safe
     titleBtn.onclick = function () { toggleTriageDetail(row, tr); };
     tdTitle.appendChild(titleBtn);
@@ -3613,8 +3726,13 @@
   }
 
   function toggleTriageDetail(row, tr) {
+    var toggleBtn = tr.querySelector('.triage-title-btn');
     var existing = document.getElementById('triage-detail-' + row.id);
-    if (existing) { existing.remove(); return; }
+    if (existing) {
+      existing.remove();
+      if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'false');
+      return;
+    }
 
     var detailTr = document.createElement('tr');
     detailTr.id = 'triage-detail-' + row.id;
@@ -3659,6 +3777,7 @@
 
     detailTr.appendChild(td);
     tr.parentNode.insertBefore(detailTr, tr.nextSibling);
+    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
 
     ensurePendingBodies()
       .then(function (map) {

@@ -274,11 +274,13 @@ describe('BUILD-BRIEF-TERMS-SCROLL Part T: read-to-the-end Terms acceptance', { 
           const h = document.getElementById('terms-scroll-hint');
           return {
             disabled: b.disabled,
+            bg: getComputedStyle(b).backgroundColor,
             describedby: b.getAttribute('aria-describedby'),
             hintVisible: getComputedStyle(h).visibility !== 'hidden',
           };
         });
         assert.equal(partial.disabled, true, `partial scroll leaves Accept disabled at ${viewport.width}`);
+        assert.notEqual(partial.bg, readBtnBg, 'a disabled Accept does not wear the primary fill');
         assert.equal(partial.describedby, 'terms-scroll-hint', 'aria-describedby points at the hint while disabled (R2-1)');
         assert.equal(partial.hintVisible, true, 'the hint is visible while disabled (R2-1)');
 
@@ -286,12 +288,16 @@ describe('BUILD-BRIEF-TERMS-SCROLL Part T: read-to-the-end Terms acceptance', { 
           const r = document.getElementById('terms-scroll-region');
           r.scrollTop = r.scrollHeight;
         });
-        // R2-2: wait for the STATE (computed opacity actually settled at 1),
-        // never a fixed time -- .btn transitions opacity over 150ms, so the
-        // `disabled` DOM property flips well before the button visually
-        // reaches full strength; a screenshot or assertion taken right after
-        // the property flips still shows the dimmed, mid-transition frame.
-        await page.waitForFunction(() => getComputedStyle(document.getElementById('terms-accept-btn')).opacity === '1');
+        // R2-2: wait for the STATE (the button enabled and its fill settled on
+        // the primary fill), never a fixed time -- .btn transitions its
+        // background over 150ms, so the `disabled` DOM property flips before
+        // the button visually reaches full strength; an assertion taken right
+        // after the property flips still sees the mid-transition frame.
+        await page.waitForFunction((refBg) => {
+          const b = document.getElementById('terms-accept-btn');
+          const cs = getComputedStyle(b);
+          return !b.disabled && cs.backgroundColor === refBg && cs.opacity === '1';
+        }, readBtnBg);
         const reached = await page.evaluate((refBg) => {
           const b = document.getElementById('terms-accept-btn');
           const h = document.getElementById('terms-scroll-hint');

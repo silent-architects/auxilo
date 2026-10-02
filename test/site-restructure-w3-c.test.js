@@ -206,8 +206,8 @@ describe('SITE-RESTRUCTURE-W3 item C — /pricing 9 -> 6 sections', () => {
   });
 });
 
-// Design rebuild, cold-reader fix: /pricing was the one centred hero on the site. It is now the shared
-// left-aligned hero-one, like every other page: the copy in the shared 720 width, flush left.
+// Design rebuild, cold-reader fix: /pricing was the one centred hero on the site. It is left aligned, like every
+// other page. Round 3: the copy sits beside the tier drawing (the shared hero-grid), flush left in its column.
 describe('/pricing hero is left aligned like every other hero', { timeout: 120_000 }, () => {
   const http = require('node:http');
   const STYLES = fs.readFileSync(path.join(REPO, 'public', 'styles.css'), 'utf8');
@@ -215,8 +215,9 @@ describe('/pricing hero is left aligned like every other hero', { timeout: 120_0
   const hero = pricing.slice(heroStart, pricing.indexOf('<section id="how-pricing-works"'));
   const styleBlock = pricing.slice(pricing.indexOf('<style>'), pricing.indexOf('</style>'));
 
-  it('the hero container is the shared hero-one with no centring class, and the page block sets no hero width or alignment of its own', () => {
-    assert.match(hero, /<div class="container hero-one">/, 'the hero uses the shared hero-one layout');
+  it('the hero container is the shared hero-grid with the copy in its own column and no centring class, and the page block sets no hero width or alignment of its own', () => {
+    assert.match(hero, /<div class="container hero-grid">\s*<div class="pricing-hero-copy">/, 'the hero uses the shared hero-grid layout, the copy first');
+    assert.doesNotMatch(hero, /hero-one/, 'the copy-alone layout is gone from the hero');
     assert.doesNotMatch(hero, /hero-centred/, 'no centring class on the hero');
     assert.doesNotMatch(styleBlock, /hero-centred/, 'the page block does not centre the hero');
     const heroRules = styleBlock.match(/\.pricing-page-header[^{]*\{[^}]*\}/g) || [];
@@ -224,7 +225,19 @@ describe('/pricing hero is left aligned like every other hero', { timeout: 120_0
     for (const rule of heroRules) {
       assert.doesNotMatch(rule, /max-width|text-align|margin-(left|right)|text-wrap:\s*balance/, `the hero rule leaves width and alignment to the shared sheet: ${rule}`);
     }
-    assert.match(STYLES.match(/\.hero-one > \*\s*\{[^}]*\}/)[0], /max-width:\s*720px/, 'positive control: the shared hero-one copy width is 720');
+    assert.match(STYLES, /^\.hero-grid\s*\{/m, 'positive control: the shared sheet defines .hero-grid');
+  });
+
+  it('the hero drawing lists the four tiers and ranges exactly as the table names them, in the same order, and is hidden from assistive technology', () => {
+    const panel = hero.match(/<div class="dw-panel dw-dark pricing-tier-panel" aria-hidden="true">([\s\S]*?)<\/div>\s*<\/div>\s*<\/section>/);
+    assert.ok(panel, 'the hero carries a dark panel marked aria-hidden="true"');
+    const drawn = [...panel[1].matchAll(/<span class="pt-name">([^<]+)<\/span><span class="pt-range">([^<]+)<\/span>/g)].map((m) => [m[1], m[2]]);
+    const tableAt = pricing.indexOf('<table class="value-tiers-table">');
+    const table = pricing.slice(tableAt, pricing.indexOf('</table>', tableAt));
+    const real = [...table.matchAll(/<td class="tier-name">([^<]+)<\/td>\s*<td>[^<]*<\/td>\s*<td class="price-range">([^<]+)<\/td>/g)].map((m) => [m[1], m[2]]);
+    assert.equal(real.length, 4, 'positive control: the table holds the four tiers');
+    assert.deepEqual(drawn, real, 'the drawing repeats the table\'s tier names and ranges exactly');
+    assert.doesNotMatch(panel[1], /<(a|button|h[1-6]|p)[\s>]/, 'the drawing is spans and divs only: no link, button, heading or paragraph');
   });
 
   it('rendered at 1280 and 375, the h1 and both paragraphs start at the same left edge, are left aligned, and fit the 720 copy width', async (t) => {

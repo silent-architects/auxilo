@@ -113,10 +113,50 @@ describe('api.html design pass: the documentation content survives the re-layout
   });
 
   it('both tables keep their accessible names and the endpoint table keeps its seven rows', () => {
-    assert.match(MAIN, /<table class="endpoint-table doc-table" aria-label="Core API endpoints">/);
-    assert.match(MAIN, /<table class="endpoint-table doc-table pay-table" aria-label="Payment paths">/);
-    const endpoints = MAIN.match(/<table class="endpoint-table doc-table" aria-label="Core API endpoints">[\s\S]*?<\/table>/)[0];
-    assert.equal((endpoints.match(/<tr>/g) || []).length, 8, 'a header row plus seven endpoints');
+    // Round 3: each table also carries its explicit table roles, so assistive technology keeps the
+    // table when the narrow layout turns its rows into blocks.
+    assert.match(MAIN, /<table class="endpoint-table doc-table" aria-label="Core API endpoints" role="table">/);
+    assert.match(MAIN, /<table class="endpoint-table doc-table pay-table" aria-label="Payment paths" role="table">/);
+    const endpoints = MAIN.match(/<table class="endpoint-table doc-table" aria-label="Core API endpoints" role="table">[\s\S]*?<\/table>/)[0];
+    assert.equal((endpoints.match(/<tr role="row">/g) || []).length, 8, 'a header row plus seven endpoints');
+  });
+
+  it('the stacked rows draw their labels from data-label, whose values are the existing column heading texts', () => {
+    const tables = [...MAIN.matchAll(/<table class="endpoint-table doc-table[^"]*" aria-label="[^"]*" role="table">[\s\S]*?<\/table>/g)].map((m) => m[0]);
+    assert.equal(tables.length, 2, 'positive control: both tables found');
+    for (const table of tables) {
+      const heads = [...table.matchAll(/<th role="columnheader">([^<]*)<\/th>/g)].map((m) => m[1]);
+      assert.ok(heads.length >= 3, 'positive control: the column headings were read');
+      const rows = [...table.matchAll(/<tbody role="rowgroup">([\s\S]*?)<\/tbody>/g)][0][1].split('</tr>').filter((r) => r.includes('<td'));
+      assert.ok(rows.length >= 7, 'positive control: the body rows were read');
+      for (const row of rows) {
+        [...row.matchAll(/<td([^>]*)>/g)].forEach((cell, i) => {
+          const label = (cell[1].match(/data-label="([^"]*)"/) || [])[1];
+          if (heads[i] === '') {
+            assert.equal(label, undefined, 'the unnamed first column of the payment table carries no label (its cell is the row title)');
+          } else {
+            assert.equal(label, heads[i], `cell ${i + 1} is labelled with its column heading "${heads[i]}"`);
+          }
+        });
+      }
+    }
+    assert.match(STYLE, /content:\s*attr\(data-label\)/, 'the label is drawn by CSS from the attribute');
+    assert.doesNotMatch(STYLE, /\.doc-table\s*\{[^}]*min-width/, 'no table keeps a minimum width, so none scrolls sideways at 375');
+  });
+
+  it('the code panels that can scroll sideways are reachable by keyboard and named from the panel label already on the page; the lists that drop their markers keep their role', () => {
+    const pres = [...MAIN.matchAll(/<pre id="([a-z0-9-]+)"([^>]*)>/g)];
+    assert.equal(pres.length, 10, 'positive control: ten code panels');
+    const scrollers = pres.filter((m) => /tabindex="0"/.test(m[2]));
+    assert.equal(scrollers.length, 9, 'nine scrollers take the keyboard; the one-line install command does not scroll');
+    for (const [, id, attrs] of scrollers) {
+      const named = (attrs.match(/aria-labelledby="([^"]+)"/) || [])[1];
+      assert.ok(named, `${id}: named by an existing element`);
+      assert.match(attrs, /role="region"/, `${id}: a region, so its name is announced`);
+      assert.match(MAIN, new RegExp(`<span class="code-block-lang" id="${named}">[^<]+</span>`), `${id}: the name is the panel's own label text`);
+    }
+    assert.match(STYLE, /\.code-block pre:focus-visible\s*\{[^}]*outline-offset:\s*-4px/, 'the ring sits inside the clipping box');
+    assert.match(MAIN, /<ul class="annotation-list" role="list">/);
   });
 
   it('the closing is dark and centred and its main action keeps the shared primary button', () => {

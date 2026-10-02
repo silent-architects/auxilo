@@ -296,7 +296,9 @@ describe('/connect: design rebuild, markup and the ask', () => {
     assert.match(hero, /<p class="lede">One command, and your agent stops starting over on problems it already solved\. Everything after that is your choice\.<\/p>/);
     const steps = CONNECT_HTML.slice(stepsAt, CONNECT_HTML.indexOf('</main>'));
     assert.equal((steps.match(/<li>/g) || []).length, 5, 'five steps');
-    assert.ok(steps.indexOf('<ol class="connect-steps">') < steps.indexOf('class="page-foot"'), 'the foot link follows the steps');
+    const olAt = steps.indexOf('<ol class="connect-steps" role="list">');
+    assert.ok(olAt > -1, 'the steps are an ordered list that keeps its list role (list-style none drops it in some browsers)');
+    assert.ok(olAt < steps.indexOf('class="page-foot"'), 'the foot link follows the steps');
     assert.doesNotMatch(CONNECT_HTML, /page-title|page-intro|section-raised/, 'no dark-era page shell remains');
   });
 

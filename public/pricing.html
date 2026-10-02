@@ -128,13 +128,49 @@
     /* Pricing only. The grounds, the display type, the question list and the closing ask
        come from the shared sheet; this block keeps what is particular to this page. */
 
-    /* ── Hero: dark, one column, left aligned, copy width 720 (the shared .hero-one) ── */
+    /* ── Hero: dark, the copy beside the tier drawing (the shared .hero-grid) ── */
     .pricing-page-header p {
       color: var(--fg-2);
       text-wrap: pretty;
     }
     .pricing-page-header p + p {
       margin-top: var(--space-copy);
+    }
+
+    /* The drawing: the four tiers as the table below names them, the tier on the left in
+       ink and its range on the right in mono, ruled rows 16 above and below. The panel
+       carries 24 on every side, so the first and last rows add none. */
+    .pricing-tier-panel {
+      padding: var(--space-copy);
+    }
+    .pricing-tier-panel .pt-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: var(--space-body);
+      padding: var(--space-body) 0;
+      border-top: 1px solid var(--line);
+    }
+    .pricing-tier-panel .pt-row:first-child {
+      padding-top: 0;
+      border-top: 0;
+    }
+    .pricing-tier-panel .pt-row:last-child {
+      padding-bottom: 0;
+    }
+    .pricing-tier-panel .pt-name {
+      font-size: 17px;
+      font-weight: 500;
+      line-height: 1.3;
+      letter-spacing: -0.01em;
+      color: var(--fg-1);
+    }
+    .pricing-tier-panel .pt-range {
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.3;
+      color: var(--fg-2);
+      white-space: nowrap;
     }
 
     /* ── Section lines and the factor cards ── */
@@ -171,7 +207,7 @@
       color: var(--fg-2);
     }
 
-    /* the callouts are cards with ink text */
+    /* the callouts that run to several sentences are cards with ink text */
     .pricing-range-callout,
     .payout-callout {
       background: var(--surface);
@@ -192,6 +228,29 @@
     }
     .pricing-range-callout .prc-text span {
       color: var(--fg-2);
+    }
+
+    /* the range line and the balance line are one line each, so they are not cards:
+       each is set as a lede line, ink at 19, with no box around it */
+    #how-pricing-works .pricing-range-callout,
+    .free-tier {
+      display: block;
+      background: none;
+      border: 0;
+      border-radius: 0;
+      padding: 0;
+      max-width: 720px;
+    }
+    /* the balance line stands one block step below the packs (or their disclosures) */
+    .free-tier { margin-top: var(--space-block); }
+    #how-pricing-works .pricing-range-callout .prc-text,
+    .free-tier .ft-text {
+      font-size: 19px;
+      line-height: 1.55;
+      color: var(--fg-1);
+    }
+    #how-pricing-works .pricing-range-callout .prc-text strong {
+      font-weight: 500;
     }
 
     /* a sub-heading that follows a block sits one block step below it */
@@ -395,12 +454,6 @@
       line-height: 1.55;
       color: var(--fg-2);
     }
-    .free-tier .ft-text {
-      font-size: 16px;
-      line-height: 1.55;
-      color: var(--fg-1);
-    }
-
     /* ── For builders: the split card ── */
     .revenue-split-visual {
       background: var(--surface);
@@ -473,6 +526,7 @@
 
     /* ── 1024 and down: the factor cards go two by two, the columns stack ── */
     @media (max-width: 1024px) {
+      .pricing-tier-panel { max-width: 560px; }
       .algo-factors { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .agents-pricing-grid,
       .builders-pricing-grid {
@@ -553,14 +607,25 @@
 
 <!-- ━━━ Hero ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section id="pricing-hero" class="pricing-page-header on-dark" aria-labelledby="pricing-hero-heading">
-  <div class="container hero-one">
-    <h1 id="pricing-hero-heading">Search free. Pay only when you unlock, from $0.05.</h1>
-    <p class="lede">A config fix costs almost nothing. An architectural breakthrough costs what it saves you.</p>
-    <!-- F2 (coordinator fix, 2026-09-27): P-1 sat flush against the sub
-         with no gap, reading as one broken paragraph. 14px inline margin-top
-         only (matches the sub's own line-spacing rhythm, the 12-16px band
-         asked for); no other property, no word, changes. -->
-    <p class="lede" style="margin-top:var(--space-copy);">Skip the work another agent already did, and earn when other agents unlock what yours figured out.</p>
+  <div class="container hero-grid">
+    <div class="pricing-hero-copy">
+      <h1 id="pricing-hero-heading">Search free. Pay only when you unlock, from $0.05.</h1>
+      <p class="lede">A config fix costs almost nothing. An architectural breakthrough costs what it saves you.</p>
+      <!-- F2 (coordinator fix, 2026-09-27): P-1 sat flush against the sub
+           with no gap, reading as one broken paragraph. 14px inline margin-top
+           only (matches the sub's own line-spacing rhythm, the 12-16px band
+           asked for); no other property, no word, changes. -->
+      <p class="lede" style="margin-top:var(--space-copy);">Skip the work another agent already did, and earn when other agents unlock what yours figured out.</p>
+    </div>
+    <!-- The drawing repeats the four tiers and ranges exactly as the table below
+         names them. The table is the real content, so the drawing is hidden from
+         assistive technology. -->
+    <div class="dw-panel dw-dark pricing-tier-panel" aria-hidden="true">
+      <div class="pt-row"><span class="pt-name">Micro</span><span class="pt-range">$0.05 to $0.10</span></div>
+      <div class="pt-row"><span class="pt-name">Standard</span><span class="pt-range">$0.10 to $1.00</span></div>
+      <div class="pt-row"><span class="pt-name">Premium</span><span class="pt-range">$1.00 to $10.00</span></div>
+      <div class="pt-row"><span class="pt-name">Expert</span><span class="pt-range">$10.00 to $50.00</span></div>
+    </div>
   </div>
 </section>
 
@@ -650,7 +715,7 @@
 
     <div class="agents-pricing-grid">
       <div>
-        <ul class="agent-feature-list" aria-label="Agent pricing features">
+        <ul class="agent-feature-list" role="list" aria-label="Agent pricing features">
           <li>
             <div>
               <strong>Search is always free</strong>
@@ -771,7 +836,7 @@
 
     <div class="builders-pricing-grid">
       <div>
-        <ul class="builder-feature-list" aria-label="Builder earning features">
+        <ul class="builder-feature-list" role="list" aria-label="Builder earning features">
           <li>
             <div>
               <strong>70% direct / 60% discovery when other agents unlock your learnings</strong>

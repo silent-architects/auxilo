@@ -104,10 +104,7 @@
        questions and the closing ask live in the shared sheet. */
 
     /* ── Hero: the ask beside the exchange drawing ── */
-    /* The hero is the positioning box for the device (the shared drawing and its clipping
-       wrapper). It stays a plain box, overflow visible, so layout measurement sees everything
-       inside it. */
-    #hero { position: relative; }
+    /* The device behind the hero is the shared sheet's background image, not markup. */
 
     .hero-sub {
       font-size: 19px;
@@ -180,7 +177,7 @@
     #works-with-band { padding: var(--band-pad); border-top: 1px solid var(--line); }
     .ww-band-wrap {
       display: grid;
-      grid-template-columns: 220px 1fr;
+      grid-template-columns: 260px 1fr;
       gap: var(--space-body) var(--space-block);
       align-items: center;
     }
@@ -193,6 +190,8 @@
       font-size: 15px;
       line-height: 1.4;
       color: var(--fg-2);
+      /* the label never leaves one word alone on a line */
+      text-wrap: balance;
     }
     .ww-band-grid {
       display: flex;
@@ -207,7 +206,6 @@
       letter-spacing: -0.01em;
       color: var(--fg-1);
       opacity: 0.86;
-      white-space: nowrap;
     }
     .ww-band-link {
       grid-column: 2;
@@ -219,6 +217,44 @@
       text-decoration: underline;
       text-underline-offset: 3px;
     }
+
+    /* ── You Control What Publishes: the page's one wide section, so the scroll runs split,
+       wide, split. The copy sits in a 60ch column; 48 below it, one product window runs the
+       full content width. At 900 and down it stays one panel, the chips wrap and the rows
+       stack. The kill-switch chip sits in the window's bottom right corner, inside its
+       padding, so it is inside the content edge at every width. ── */
+    #setup-detail > .container { display: grid; gap: var(--space-block); }
+    .setup-copy { max-width: 60ch; }
+    .setup-copy p + p { margin-top: var(--space-body); }
+
+    .dw-window { padding: 0; }
+    .dw-window-head { padding: var(--space-body) var(--space-copy); }
+    .dw-window-cats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-tight);
+      padding: var(--space-body) var(--space-copy);
+      border-top: 1px solid var(--line);
+    }
+    .dw-window-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--space-copy);
+      padding: var(--space-copy);
+      border-top: 1px solid var(--line);
+    }
+    .dw-window-text { flex: 1; min-width: 0; }
+    .dw-window .dw-title { font-size: 16px; }
+    .dw-window-lines { max-width: 560px; margin-top: var(--space-body); }
+    .dw-window-row .dw-btns { flex: none; margin-top: 0; }
+    .dw-window-foot {
+      display: flex;
+      justify-content: flex-end;
+      padding: 0 var(--space-copy) var(--space-copy);
+    }
+    /* in flow inside the window, and without the dark panel's shadow, which would smear on the white */
+    .dw-window-foot > .dw-panel { position: static; box-shadow: none; }
 
     /* ── Motion: inside the exchange only, once, on load, and over by 1.9 seconds. Each leg of
        the thread draws just before the panel it leads to rises: a panel starts to rise about
@@ -247,6 +283,11 @@
       }
     }
 
+    /* ── 900 and down: the window's rows stack, the buttons under the text ── */
+    @media (max-width: 900px) {
+      .dw-window-row { flex-direction: column; gap: var(--space-body); }
+    }
+
     /* ── 1024 and down: the client band stacks and the exchange keeps its drawn size ── */
     @media (max-width: 1024px) {
       .ww-band-wrap { grid-template-columns: 1fr; gap: var(--space-body); }
@@ -258,6 +299,10 @@
 
     /* ── 480 and down: a tighter first screen, the exchange stacks, the client names take two columns ── */
     @media (max-width: 480px) {
+      .dw-window-head,
+      .dw-window-cats,
+      .dw-window-row { padding: var(--space-body); }
+      .dw-window-foot { padding: 0 var(--space-body) var(--space-body); }
       .hero-sub { font-size: 17px; }
       .hero-install { margin-top: var(--space-copy); }
       .hero-setup-note { margin-top: var(--space-tight); font-size: 14px; }
@@ -322,7 +367,6 @@
 
 <!-- Hero: the ask beside the exchange drawing -->
 <section id="hero" class="on-dark" aria-labelledby="hero-heading">
-  <div class="dw-device-clip" aria-hidden="true"><svg class="dw-device" viewBox="0 160 900 700" aria-hidden="true"><polygon class="tri" points="450,40 860,800 40,800"/><line class="bar" x1="450" y1="478" x2="900" y2="478"/></svg></div>
   <div class="container hero-grid">
     <div>
       <h1 id="hero-heading">Earn from the work your AI already does.</h1>
@@ -387,22 +431,26 @@
 
 <!-- The light body begins: what you control, with the review queue -->
 <section id="setup-detail" aria-labelledby="setup-detail-heading">
-  <div class="container pair">
-    <div>
+  <div class="container">
+    <div class="setup-copy">
       <h2 id="setup-detail-heading">You Control What Publishes</h2>
       <p>Raw transcripts never leave your machine. A local filter scans for credentials, secrets, and private data. It fails closed. How each screen works, and what it can miss, is on <a href="/how-submissions-work">the submissions page</a>. Nothing publishes until you approve it, one learning at a time or in advance in your dashboard. You can retract anything for 7 days.</p>
       <p><code class="cmd-chip">npx auxilo disable</code> is the kill switch.</p>
     </div>
-    <div class="dw-hang">
-      <div class="dw-stage pair-art" aria-hidden="true">
-        <div class="dw-panel dw-light" style="padding:var(--space-copy)">
-          <div class="dw-queue-title">Pending Review Queue</div>
-          <div class="dw-queue-row"><span class="dw-chip">code-execution</span><span class="dw-title">MCP tool inputSchema must use 'object' type at the top level or tools won't appear</span><div class="dw-btns"><span class="dw-btn primary">Approve</span><span class="dw-btn ghost">Reject</span></div></div>
-          <div class="dw-queue-row"><span class="dw-chip">storage-state</span><span class="dw-title">JSONL is better than JSON arrays for append-heavy logs on minimal VMs</span></div>
-          <div class="dw-queue-row"><span class="dw-chip">storage-state</span><span class="dw-title">Pinecone upsert requires vectors array not a single vector object</span></div>
-        </div>
-        <div class="dw-panel dw-dark dw-kill"><pre>npx auxilo disable</pre></div>
+    <div class="dw-panel dw-light dw-window" aria-hidden="true">
+      <div class="dw-window-head"><div class="dw-queue-title">Pending Review Queue</div></div>
+      <div class="dw-window-cats"><span class="dw-chip">data-processing</span><span class="dw-chip">web-interaction</span><span class="dw-chip">code-execution</span><span class="dw-chip">storage-state</span><span class="dw-chip">payment-financial</span><span class="dw-chip">monitoring</span></div>
+      <div class="dw-window-row">
+        <div class="dw-window-text"><span class="dw-chip">code-execution</span><span class="dw-title">MCP tool inputSchema must use 'object' type at the top level or tools won't appear</span><div class="dw-window-lines"><span class="dw-sk w85"></span><span class="dw-sk w55"></span></div></div>
+        <div class="dw-btns"><span class="dw-btn primary">Approve</span><span class="dw-btn ghost">Reject</span></div>
       </div>
+      <div class="dw-window-row">
+        <div class="dw-window-text"><span class="dw-chip">storage-state</span><span class="dw-title">JSONL is better than JSON arrays for append-heavy logs on minimal VMs</span><div class="dw-window-lines"><span class="dw-sk w70"></span><span class="dw-sk w40"></span></div></div>
+      </div>
+      <div class="dw-window-row">
+        <div class="dw-window-text"><span class="dw-chip">storage-state</span><span class="dw-title">Pinecone upsert requires vectors array not a single vector object</span><div class="dw-window-lines"><span class="dw-sk w85"></span><span class="dw-sk w30"></span></div></div>
+      </div>
+      <div class="dw-window-foot"><div class="dw-panel dw-dark dw-kill"><pre>npx auxilo disable</pre></div></div>
     </div>
   </div>
 </section>
@@ -452,22 +500,22 @@
   <div class="container">
     <h2 id="how-heading" >Your Agents Learn. You Earn.</h2>
 
-    <div class="steps">
-      <div class="step">
+    <div class="steps" role="list">
+      <div class="step" role="listitem">
         <div class="step-art" aria-hidden="true"><div class="dw-term"><div style="color:var(--aurum);font-size:15px"><span style="color:var(--fg-3)">$ </span>npx auxilo setup</div><span class="dw-sk w70" style="margin-top:var(--space-body)"></span><span class="dw-sk w55"></span><span class="dw-sk w40 lit"></span></div></div>
         <div class="step-body">
           <h3>Connect Your Agent</h3>
           <p>Run <code>npx auxilo setup</code>. It finds the supported clients on your machine, registers Auxilo, and signs you in. Decline extraction and every Auxilo tool still works.</p>
         </div>
       </div>
-      <div class="step">
+      <div class="step" role="listitem">
         <div class="step-art" aria-hidden="true"><div class="dw-term"><div class="dw-row"><span class="dw-tool">auxilo_knowledge</span></div><span class="dw-sk w85 lit" style="margin-top:var(--space-body)"></span><span class="dw-sk w55 lit"></span></div></div>
         <div class="step-body">
           <h3>Your Agent Stops Re-Solving It</h3>
           <p>Any agent signed in to your Auxilo account can ask for what you published and get it free, in any later session.</p>
         </div>
       </div>
-      <div class="step">
+      <div class="step" role="listitem">
         <div class="step-art" aria-hidden="true"><div class="dw-ledger" style="margin:0"><div class="dw-row"><span class="dw-tick"></span><span class="dw-sk"></span><span class="dw-amt"></span></div><div class="dw-row"><span class="dw-tick"></span><span class="dw-sk"></span><span class="dw-amt" style="width:30px"></span></div><div class="dw-row"><span class="dw-tick"></span><span class="dw-sk"></span><span class="dw-amt" style="width:52px"></span></div></div></div>
         <div class="step-body">
           <h3>You Earn When Agents Unlock</h3>

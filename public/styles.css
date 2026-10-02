@@ -161,7 +161,9 @@
   --r-stage: 14px;
   --shadow-panel: 0 1px 2px rgba(10, 10, 10, 0.06), 0 12px 32px -8px rgba(10, 10, 10, 0.16);
   --shadow-panel-dark: 0 1px 0 rgba(250, 250, 248, 0.04) inset, 0 24px 48px -16px rgba(0, 0, 0, 0.7);
-  --h1: clamp(40px, 5vw, 64px);
+  /* The h1 scale: 1025 and up it is 48 to 64. At 1024 and down it is 40 to 56, so a tablet
+     gets a larger headline than a phone (the media block right after this one). */
+  --h1: clamp(48px, 5vw, 64px);
 
   /* ground-aware tokens: light values here, dark values in the dark scope below */
   --bg: var(--paper);
@@ -178,6 +180,10 @@
   --ctrl-line: #0A0A0A;
   --btn-fill: #0A0A0A;
   --btn-ink: #FAFAF8;
+}
+
+@media (max-width: 1024px) {
+  :root { --h1: clamp(40px, 6.2vw, 56px); }
 }
 
 /* ── Ground scopes ──────────────────────────────────────────────────────────
@@ -250,7 +256,13 @@ body .unsub-wrap h1.unsub-heading { font-weight: 300; }
   color: var(--fg-2);
 }
 
-html { scroll-behavior: smooth; }
+/* The navigation is fixed at every width, so an anchor jump or a control focused with
+   Shift+Tab must land below it at every width, not only inside the 900-and-down block
+   (that block keeps its own larger, header-h clearance). */
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: var(--nav-clear);
+}
 
 /* Global horizontal-overflow backstop. clip (not hidden) avoids breaking
    position:sticky and iOS momentum-scroll. Per-element fixes below are the
@@ -812,6 +824,17 @@ body .legal-wrap h3 {
   color: var(--fg-3);
   /* SPACING-0927 R2-2b: 12 ties 8/16 -- tie goes to the larger value. */
   margin-top: var(--space-body);
+  /* the note never leaves a single word alone on its last line */
+  text-wrap: balance;
+}
+/* On a phone the setup link is a 44px target. The padding grows its hit area and the
+   equal negative margin takes it back out of the line, so the note keeps its height. */
+@media (max-width: 600px) {
+  .footer-cta-note a {
+    display: inline-block;
+    padding: 11px 0;
+    margin: -11px 0;
+  }
 }
 
 /* AD design-tells sweep: the #learning-example section and its whole card
@@ -1632,12 +1655,18 @@ footer {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
+/* A code block that scrolls sideways is a focusable scroller inside a clipping box, so
+   its ring is drawn inside the box, where the clip cannot cut it off. */
+pre:focus-visible {
+  outline-offset: -4px;
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+  html { scroll-behavior: auto; }
 }
 
 abbr[title] {
@@ -1932,9 +1961,9 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   font-size: 11px;
   color: var(--fg-3);
   letter-spacing: 0.04em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* a category name wraps rather than clip, so widened text spacing never cuts it off */
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .discovery-title {
@@ -2298,6 +2327,13 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   font-size: 19px;
   line-height: 1.55;
 }
+/* A single sentence is not a card. A one-sentence callout is a lede line in heading ink,
+   not a boxed panel. */
+.lede-line {
+  font-size: 19px;
+  line-height: 1.55;
+  color: var(--fg-1);
+}
 
 /* a command, a tool name or any data in running copy is mono at weight 400 */
 code,
@@ -2582,47 +2618,83 @@ pre code {
 .dw-long .dw-sk {
   opacity: 0.14;
 }
-/* the found learning: the same light card at the foot of the long way and under the
-   one tool row of the short way, so the two panels end on the same thing */
+/* the found learning. The short way's returned card is the dominant thing in the drawing:
+   full contrast, a roomier card, a 16px title, under its one tool row. The long way keeps
+   its small card at the foot, dimmed, so the two never read as a duplicate. */
 .dw-twoup .dw-found {
   margin-top: var(--space-copy);
 }
+.dw-twoup .dw-long .dw-found {
+  opacity: 0.6;
+}
+.dw-twoup .dw-panel:not(.dw-long) .dw-found {
+  padding: var(--space-copy);
+}
+.dw-twoup .dw-panel:not(.dw-long) .dw-found .dw-title {
+  font-size: 16px;
+}
 
-/* the device: our own mark, very large and very faint, behind a hero only. The
-   triangle and its crossbar are the same faint ivory line; there is no gold in it.
-   It runs past the hero's edges, so it sits in its own clipping wrapper. The
-   wrapper only clips: it draws nothing and is not a layout box of its own (hidden,
-   with the drawing inside it shown again), so the hero's one real box stays the
-   container. The hero itself stays a plain box (overflow visible) so layout
-   measurement still sees everything inside it, and the copy sits above the device.
-   The drawing's own box starts where the hero's content starts (120px, the section
-   rhythm at the widths the device shows), so nothing sits under the navigation.
-   Its viewBox is offset by the same amount and the svg paints outside its box, so
-   the triangle's apex still meets the top edge of the hero. */
+/* ── The device ──
+   The mark's own geometry, a triangle and its crossbar, as one background image on the
+   first dark section of every page. It is anchored right, so a hero that is only text is
+   no longer empty on its right, and a hero with a picture on the right has it behind
+   the picture (the panels are opaque). Ivory at 12%, 1.5px, no gold. The two sides run
+   on past the bottom of any hero and the crossbar leaves the frame to the right, so a
+   hero shows a cropped part of the triangle, never its base. The image is an inline SVG
+   data URI (the content security policy allows data: images), drawn at the size it is
+   shown at, so the line is 1.5px at every size. A 12% line over the dark ground keeps
+   the dimmest text on it above 4.5 to 1, so it never takes a reader's text below the
+   floor. The first dark section is the first child of main when that child is on-dark
+   (every page's hero, the status band, the sign-in view), the dashboard's header band,
+   and the legal template's hero band (its h1's ::before, which the template paints as a
+   full width dark band). Pages carry no device markup, and no hero sets a background of
+   its own, which would lose the image.
+   --device-a is how far the apex sits in from the right edge of the section. */
+:root {
+  --device: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1300' height='1300' viewBox='0 0 1300 1300' fill='none' stroke='%23FAFAF8' stroke-opacity='.12' stroke-width='1.5' stroke-linejoin='round'%3E%3Cpath d='M-84 1400L650 40L1384 1400'/%3E%3Cline x1='650' y1='478' x2='1300' y2='478'/%3E%3C/svg%3E");
+  --device-small: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='806' height='806' viewBox='0 0 1300 1300' fill='none' stroke='%23FAFAF8' stroke-opacity='.12' stroke-width='2.42' stroke-linejoin='round'%3E%3Cpath d='M-84 1400L650 40L1384 1400'/%3E%3Cline x1='650' y1='478' x2='1300' y2='478'/%3E%3C/svg%3E");
+}
+main > .on-dark:first-child,
+.dash-wrap > .dash-band:first-child,
+body .legal-wrap > h1::before {
+  --device-a: 230px;
+  background-image: var(--device);
+  background-repeat: no-repeat;
+  background-size: 1300px 1300px;
+  background-position: right calc(var(--device-a) - 650px) top -40px;
+}
+/* A reading page's copy is a centred column, so the copy runs further right than on a
+   page whose copy hugs the left edge. The device sits further right there, a cropped
+   corner clear of the column (see the reading frame at the end of this sheet). */
+:is(#about-hero, #connect-hero, #writing-hero, #essay-hero),
+body .legal-wrap > h1::before {
+  --device-a: 30px;
+}
+/* The old inline device (a clipping wrapper and an svg a page carried itself) is
+   retired. Any page that still carries one does not draw it, so it cannot double up. */
 .dw-device-clip {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  visibility: hidden;
+  display: none;
 }
-.dw-device-clip .dw-device {
-  visibility: visible;
+@media (max-width: 1024px) {
+  main > .on-dark:first-child,
+  .dash-wrap > .dash-band:first-child,
+  body .legal-wrap > h1::before,
+  :is(#about-hero, #connect-hero, #writing-hero, #essay-hero) {
+    --device-a: 120px;
+    background-image: var(--device-small);
+    background-size: 806px 806px;
+    background-position: right calc(var(--device-a) - 403px) top -20px;
+  }
 }
-.dw-device {
-  position: absolute;
-  right: -140px;
-  top: 120px;
-  width: 900px;
-  height: 700px;
-  overflow: visible;
-  pointer-events: none;
-}
-.dw-device .tri,
-.dw-device .bar {
-  fill: none;
-  stroke: rgba(250, 250, 248, 0.07);
-  stroke-width: 1;
+/* On a phone it is a cropped corner of the same drawing: the apex and the crossbar at
+   the top right, the rest leaving the frame. */
+@media (max-width: 600px) {
+  main > .on-dark:first-child,
+  .dash-wrap > .dash-band:first-child,
+  body .legal-wrap > h1::before,
+  :is(#about-hero, #connect-hero, #writing-hero, #essay-hero) {
+    --device-a: 80px;
+  }
 }
 
 /* ── Step cards: a dark drawing on top, h3 and text below. No numerals. ──
@@ -2737,14 +2809,12 @@ pre code {
   .steps {
     grid-template-columns: 1fr;
   }
-  .dw-device {
-    display: none;
-  }
 }
 
 /* ── Responsive: 480 and down ── */
 @media (max-width: 480px) {
   .lede,
+  .lede-line,
   .hero-sub {
     font-size: 17px;
   }
@@ -2779,6 +2849,8 @@ pre code {
   }
   .footer-meta a {
     white-space: nowrap;
+    /* a box of its own, as tall as the 1.8 line (25px), so the link is at least a 24px target */
+    display: inline-block;
   }
 }
 
@@ -2806,4 +2878,40 @@ pre code {
     grid-template-columns: 1fr;
     gap: var(--space-block);
   }
+}
+
+/* ── Reading pages share one frame ──
+   /connect, /about, /writing, the essay and the legal pages all set their copy in one
+   centred column, the hero's copy and the body on the same left edge. The legal pages
+   already do (a 720 box with the page gutter inside it, so the text is 672 at 1280 and
+   starts at 304); these selectors give the other four the same geometry at every width.
+   The container each page's copy sits in is untouched (it keeps the page gutter that the
+   navigation and footer share), so what narrows is the copy itself: every block is at
+   most the column wide, and its left margin is half of what is left, so a link that
+   shrink-wraps (the essay's way back) starts on the same edge as the headline. */
+:is(#about-hero, #connect-hero, #writing-hero, #essay-hero) .hero-one > *,
+#about-body .read > *,
+#connect-steps-section .container > *,
+#writing-entries .container > *,
+#essay-body .essay-body > * {
+  --read-w: calc(720px - 2 * var(--gutter-base));
+  max-width: var(--read-w);
+  margin-left: max(0px, calc((100% - var(--read-w)) / 2));
+  margin-right: 0;
+}
+
+/* ── A block label that acts as a section heading is set like an h2 ──
+   At the small end of the scale (the serif, 30px, weight 300), whatever its tag: the
+   service, link, health and contact labels on /status and the key's lead sentence on
+   /works-with. */
+main .component-label,
+main .ww-key-lead {
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 300;
+  line-height: 1.1;
+  letter-spacing: -0.016em;
+  color: var(--fg-1);
+  text-wrap: balance;
+  font-synthesis-weight: none;
 }

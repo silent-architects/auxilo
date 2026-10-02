@@ -146,10 +146,10 @@ describe('SPACING-0927 Part A (the frame), measured the Art Director\'s way', { 
 
     evalResult = evaluateRules(measurements, foldResults, {
       // Deliberately narrower, centred columns within a section (A1b-style
-      // reading columns and the two V-4 boxes) -- covered by rule 1's
-      // centering check and, for the V-4 boxes, a dedicated half-pixel
-      // test below, not by rule 2's page-gutter match.
-      narrowColumnWrapperSelectors: new Set(['div.page-hero-content', 'div.callout-bordered', 'div.ledger-card']),
+      // reading columns) -- covered by rule 1's centering check, not by
+      // rule 2's page-gutter match. (The two boxes on /how-submissions-work
+      // that used to be named here are gone: the page has no box left.)
+      narrowColumnWrapperSelectors: new Set(['div.page-hero-content']),
       // Design rebuild: a band is a section with no heading that holds one row of figures. The homepage's
       // client band and /for-agents' catalog figures (#catalog-stats) both take the band rhythm.
       bandSelectors: ['works-with-band', 'catalog-stats'],
@@ -177,29 +177,47 @@ describe('SPACING-0927 Part A (the frame), measured the Art Director\'s way', { 
     });
   }
 
-  // ── V-4: the two off-centre boxes on /how-submissions-work, half-pixel ──
+  // ── /how-submissions-work: no boxed section, one rhythm ──
+  // Round 3: the page had three boxed sections (the operator callout, Limits, the live count) among eight
+  // heading-left sections. All three are now set like the others: no card, the heading on the left, the
+  // text on the right. Measured against a section that was never boxed, in the same run.
   for (const width of WIDTHS) {
-    for (const cls of ['.callout-bordered', '.ledger-card']) {
-      it(`/how-submissions-work @ ${width}: ${cls} is centred (space left == space right, within half a pixel)`, async (t) => {
-        if (bootSkipReason) { t.skip(bootSkipReason); return; }
-        if (!playwrightOk) { t.skip('playwright not resolvable'); return; }
-        const ctx = await browser.newContext({ viewport: { width, height: HEIGHTS[width] } });
-        const page = await ctx.newPage();
-        try {
-          await page.goto(`${baseUrl}/how-submissions-work`, { waitUntil: 'networkidle' });
-          const boxes = await page.evaluate((sel) => [...document.querySelectorAll(sel)].map((el) => {
-            const r = el.getBoundingClientRect();
-            return { left: r.left, right: window.innerWidth - r.right };
-          }), cls);
-          assert.ok(boxes.length > 0, `at least one ${cls} found`);
-          for (const b of boxes) {
-            assert.ok(Math.abs(b.left - b.right) <= 0.5, `${cls} not centred: left=${b.left} right=${b.right}`);
-          }
-        } finally {
-          await ctx.close();
+    it(`/how-submissions-work @ ${width}: the three sections that were cards sit on the same heading and text edges as every other section, and no box remains`, async (t) => {
+      if (bootSkipReason) { t.skip(bootSkipReason); return; }
+      if (!playwrightOk) { t.skip('playwright not resolvable'); return; }
+      const ctx = await browser.newContext({ viewport: { width, height: HEIGHTS[width] } });
+      const page = await ctx.newPage();
+      try {
+        await page.goto(`${baseUrl}/how-submissions-work`, { waitUntil: 'networkidle' });
+        const m = await page.evaluate(() => {
+          const section = (headingId) => {
+            const h = document.getElementById(headingId);
+            const sec = h && h.closest('section');
+            const body = sec && sec.querySelector('.trust-prose, .ledger-card-body');
+            return h && body ? { h: h.getBoundingClientRect().left, body: body.getBoundingClientRect().left, hTop: h.getBoundingClientRect().top, bodyTop: body.getBoundingClientRect().top } : null;
+          };
+          return {
+            boxes: document.querySelectorAll('.callout-bordered, .ledger-card').length,
+            reference: section('what-auxilo-is-heading'),
+            former: ['operator-callout-heading', 'limits-heading', 'live-count-heading'].map((id) => [id, section(id)]),
+          };
+        });
+        assert.equal(m.boxes, 0, 'no callout or ledger card box remains');
+        assert.ok(m.reference, 'positive control: a section that was never boxed was measured');
+        assert.equal(m.former.length, 3);
+        for (const [id, sec] of m.former) {
+          assert.ok(sec, `${id}: found, with its text beside or under it`);
+          assert.ok(Math.abs(sec.h - m.reference.h) <= 0.5, `${id}: the heading starts at the same left edge as the other sections' (${sec.h} vs ${m.reference.h})`);
+          assert.ok(Math.abs(sec.body - m.reference.body) <= 0.5, `${id}: the text starts at the same left edge as the other sections' (${sec.body} vs ${m.reference.body})`);
         }
-      });
-    }
+        for (const [id, sec] of [['reference', m.reference], ...m.former]) {
+          if (width > 1024) assert.ok(sec.body > sec.h && Math.abs(sec.bodyTop - sec.hTop) < 24, `${id}: side by side, the text starts to the right of the heading and level with it`);
+          else assert.ok(sec.bodyTop > sec.hTop, `${id}: stacked, the text sits under the heading`);
+        }
+      } finally {
+        await ctx.close();
+      }
+    });
   }
 
   // ── B-4: the homepage first screen ────────────────────────────────────

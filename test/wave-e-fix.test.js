@@ -137,33 +137,56 @@ describe('Wave E fix F2: for-builders hero stat rule scoped to #builders-hero, n
 // F3: how-it-works.html SVG label repositioned
 // ═══════════════════════════════════════════════════════════════════════
 
-describe('Wave E fix F3: how-it-works.html "your API key" label stays inside its 300-wide viewBox', () => {
+// Design rebuild round 3: the step diagrams are panels in the homepage kit (HTML), not SVG
+// wireframes. What the old F3 pinned was the SVG geometry of one label (x=250 inside a 300-wide
+// viewBox) and the count of 29 SVG <text> nodes. Both are SVG structure that no longer exists, so
+// they are replaced by the thing they protected: the same 29 labels, character for character and
+// in the same reading order, now as HTML text; and none of the old wireframe parts returns.
+describe('Wave E fix F3: how-it-works.html diagram labels survive the panel rebuild, in order, with no arrowheads or dashes', () => {
   const HIW = readPublic('how-it-works.html');
+  const body = HIW.slice(HIW.indexOf('<body>'))
+    .replace(/<script[\s\S]*?<\/script>/g, '')
+    .replace(/<style[\s\S]*?<\/style>/g, '');
+  const tokens = body.split(/<[^>]*>/).map((t) => t.replace(/\s+/g, ' ').trim()).filter(Boolean);
 
-  it('the label\'s x moved off 264 (the value that overflowed at 12px)', () => {
-    assert.doesNotMatch(
-      HIW,
-      /x="264" y="58"[^>]*>your API key</,
-      'the "your API key" text should no longer sit at x="264"'
-    );
+  // The 29 labels of the six diagrams, in the order the page reads them.
+  const LABELS = [
+    'email', 'click', 'magic link', 'axl_...', 'your API key',
+    'Your Agent', 'MCP',
+    'A session ends',
+    'Your own model drafts a learning on your own machine',
+    'Secrets are scrubbed on your machine before anything uploads',
+    'Every screen runs',
+    'Your review queue',
+    'You approve it, one learning at a time or in advance',
+    'Your first publication also waits for an Auxilo review',
+    'Published. Retractable for 7 days.',
+    'Not approved. Stays private to you.',
+    'learning', 'catalog', '$', '70/60%', 'your account',
+    'category', 'score: 0.92', 'FREE PREVIEW',
+    'agent', 'stuck?', '$1.50', 'agent', 'solved.',
+  ];
+
+  it('all 29 labels are present as text, in the same reading order as before', () => {
+    assert.equal(LABELS.length, 29);
+    let at = -1;
+    for (const label of LABELS) {
+      const i = tokens.indexOf(label, at + 1);
+      assert.ok(i > at, `label "${label}" is missing or out of order (searched after token ${at})`);
+      at = i;
+    }
   });
 
-  it('the label now sits at x="250", inside the 0 0 300 64 viewBox with margin at 12px font-size', () => {
-    assert.match(HIW, /<text x="250" y="58"[^>]*>your API key<\/text>/);
-    // Same width math the promoted font-size rule uses: chars * 0.6 * 12px,
-    // text-anchor="middle" so the box straddles x. "your API key" is 12
-    // characters (incl. spaces) -> ~86.4px wide, half-width ~43.2px.
-    const text = 'your API key';
-    const halfWidth = (text.length * 0.6 * 12) / 2;
-    const x = 250;
-    const viewBoxWidth = 300;
-    assert.ok(x + halfWidth <= viewBoxWidth - 3, `right edge (${x + halfWidth}) should sit at least 3px inside ${viewBoxWidth}`);
-    assert.ok(x - halfWidth >= 0, `left edge (${x - halfWidth}) should not go negative`);
+  it('the diagrams keep their accessible names: the fork is role="img" with its label, the rest stay aria-hidden', () => {
+    assert.match(HIW, /<div class="hiw-fork" role="img" aria-label="How a learning is approved before it publishes">/);
+    assert.equal((HIW.match(/<div class="dw-stage hiw-fig"[^>]*aria-hidden="true">/g) || []).length, 5, 'the five other stages are aria-hidden');
   });
 
-  it('the diagram still ships all 29 <text> nodes (nothing else moved)', () => {
-    const count = (HIW.match(/<text /g) || []).length;
-    assert.equal(count, 29);
+  it('no arrowhead, no dashed line, no SVG text: the connections are plain hairlines', () => {
+    assert.doesNotMatch(HIW, /stroke-dasharray|<marker|marker-end/, 'no dashes or arrowhead markers in the diagrams');
+    assert.equal((HIW.match(/<text[ >]/g) || []).length, 0, 'no SVG text nodes');
+    // positive control: the hairline is drawn, 1.25px wide, by the page rule
+    assert.match(HIW, /height:\s*1\.25px/);
   });
 });
 

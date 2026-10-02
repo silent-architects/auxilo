@@ -207,12 +207,22 @@ describe('WAVE-D1 type pairing: tokens + @font-face', () => {
       'styles.css should carry no hardcoded legacy font-family reference');
   });
 
-  it('how-it-works.html: all 20 inline SVG label texts use the IBM Plex Mono stack, not bare "monospace"', () => {
+  // Design rebuild round 3: the step diagrams are panels in the homepage kit, not inline SVG
+  // wireframes, so their mono labels take the shared --mono token (IBM Plex Mono first) from
+  // the page's own classes. Before: 20 SVG labels pinned on the "'IBM Plex Mono', monospace"
+  // attribute. Now: no SVG label text and no bare "monospace" attribute remain, and the mono
+  // label classes read var(--mono) (positive control: the classes exist and are used).
+  it('how-it-works.html: the diagram labels are HTML set in the shared --mono token, not bare "monospace" SVG text', () => {
     const html = readPage('how-it-works.html');
     const bare = [...html.matchAll(/font-family="monospace"/g)];
     assert.equal(bare.length, 0, 'no inline SVG text should carry bare font-family="monospace"');
-    const plex = [...html.matchAll(/font-family="'IBM Plex Mono', monospace"/g)];
-    assert.equal(plex.length, 20, `expected 20 inline SVG labels on the IBM Plex Mono stack, found ${plex.length}`);
+    assert.equal([...html.matchAll(/<text[ >]/g)].length, 0, 'the diagrams carry no SVG text nodes');
+    for (const cls of ['hiw-mono', 'hiw-chip']) {
+      const rule = html.match(new RegExp(`\\.${cls}\\s*\\{([^}]*)\\}`));
+      assert.ok(rule, `.${cls} rule exists`);
+      assert.match(rule[1], /font-family:\s*var\(--mono\)/, `.${cls} sets the shared --mono token`);
+      assert.ok(html.includes(`class="${cls}`) || html.includes(` ${cls}`), `positive control: ${cls} is used in the markup`);
+    }
   });
 
   it('og-image.svg headline names Newsreader (Georgia, serif fallback) and the wordmark stays on Archivo with the Helvetica/Arial fallback', () => {
@@ -568,7 +578,10 @@ describe('integration: .dw-title sets its own face, and the shared drawing helpe
   });
 
   // The homepage and /for-builders each carried a copy of the device's clipping wrapper and the
-  // review-queue drawing's kill-switch helpers. They live in the shared sheet now, once.
+  // review-queue drawing's kill-switch helpers. They live in the shared sheet now, once. The device
+  // itself is no longer markup: the shared sheet paints it as a background image on the first dark
+  // section, so a page carries no device svg, and the old clipping wrapper's only rule is the one
+  // that hides any copy a page still carries.
   it('.dw-device-clip, .dw-hang and .dw-kill are defined once in styles.css and in no page', () => {
     for (const selector of ['.dw-device-clip', '.dw-hang', '.dw-kill']) {
       const defs = [...STYLES.matchAll(new RegExp(`^${selector.replace('.', '\\.')}\\s*\\{`, 'gm'))];
@@ -580,10 +593,13 @@ describe('integration: .dw-title sets its own face, and the shared drawing helpe
       for (const selector of ['.dw-device-clip', '.dw-hang', '.dw-kill']) {
         assert.ok(!style.includes(`${selector} {`) && !style.includes(`${selector}{`), `${page} carries no copy of ${selector}`);
       }
-      // Positive control: the markup still uses the shared helpers.
-      assert.match(html, /class="dw-device-clip"/, `${page} still draws the device through the shared wrapper`);
+      // Positive control: the markup still uses the shared kill-switch panel.
       assert.match(html, /dw-kill/, `${page} still uses the shared kill-switch panel`);
     }
+    // The homepage no longer carries the device as markup, and the wrapper's one shared rule hides it.
+    assert.ok(!/dw-device/.test(readPage('index.html')), 'index.html carries no device markup');
+    const clip = STYLES.match(/^\.dw-device-clip\s*\{([^}]*)\}/m);
+    assert.ok(clip && /display:\s*none/.test(clip[1]), 'the shared wrapper rule hides any inline device a page still carries');
   });
 
   it('the homepage style block carries no second .hero-grid (the shared sheet has it)', () => {

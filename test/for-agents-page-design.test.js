@@ -94,21 +94,54 @@ describe('for-agents.html design pass: live figures and the catalog band keep th
 });
 
 describe('for-agents.html design pass: the five discovery cards', () => {
-  const track = (MAIN.match(/<div class="flow-track">([\s\S]*?)<\/div>\s*<\/div>\s*<\/section>/) || [, ''])[1];
-  const steps = [...track.matchAll(/<div class="flow-step">([\s\S]*?)<\/div>\s*(?=<!--|<div class="flow-step">|$)/g)].map((m) => m[1]);
+  // Round 3: the list is a role="list" and each card a role="listitem"; each card is a dark drawing
+  // (.step-art) over its text (.step-body), and the text ends in the tag.
+  const track = (MAIN.match(/<div class="flow-track"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/section>/) || [, ''])[1];
+  const steps = [...track.matchAll(/<div class="flow-step"[^>]*>([\s\S]*?)<\/div>\s*(?=<!--|<div class="flow-step"|$)/g)].map((m) => m[1]);
 
   it('positive control: five cards, in order Search, Preview, Unlock, Use, Share', () => {
     assert.equal(steps.length, 5);
     assert.deepEqual(steps.map((s) => (s.match(/<h3>([^<]+)<\/h3>/) || [])[1]), ['Search', 'Preview', 'Unlock', 'Use', 'Share']);
   });
 
+  it('the cards are a list: role="list" on the track and role="listitem" on each of the five cards', () => {
+    assert.match(MAIN, /<div class="flow-track" role="list">/);
+    assert.equal((MAIN.match(/<div class="flow-step" role="listitem">/g) || []).length, 5);
+    // positive control: the count of plain cards is the same, so the regex above counts real cards
+    assert.equal((MAIN.match(/<div class="flow-step"/g) || []).length, 5);
+  });
+
   it('each card ends in its tag, and the ornamental step numbers are gone from the markup and from the page block', () => {
-    assert.deepEqual(steps.map((s) => (s.match(/<span class="flow-step-tag (free|paid)">([^<]+)<\/span>\s*$/) || [])[2]), ['free', 'free', 'paid', 'immediate', 'free']);
-    // positive control: each card opens on its h3 and the tag rule is still in the page block
-    assert.equal(steps.filter((s) => /^\s*<h3>/.test(s)).length, 5, 'every card opens on its h3');
+    assert.deepEqual(steps.map((s) => (s.match(/<span class="flow-step-tag (free|paid)">([^<]+)<\/span>\s*(?:<\/div>\s*)?$/) || [])[2]), ['free', 'free', 'paid', 'immediate', 'free']);
+    // positive control: each card opens on its drawing, its text opens on the h3, and the tag rule is still in the page block
+    assert.equal(steps.filter((s) => /^\s*<div class="step-art" aria-hidden="true">/.test(s)).length, 5, 'every card opens on its drawing');
+    assert.equal(steps.filter((s) => /<div class="step-body">\s*<h3>/.test(s)).length, 5, 'every card text opens on its h3');
     assert.match(STYLE, /\.flow-step-tag\s*\{/, 'positive control: the tag rule is still in the page block');
     assert.doesNotMatch(HTML, /flow-step-num/, 'no step number element or rule remains');
     assert.doesNotMatch(track, />\s*0[1-5]\s*</, 'no 01 to 05 numeral remains in the cards');
+  });
+
+  it('each drawing holds only its own card\'s tool and path names and skeleton bars', () => {
+    const art = (s) => (s.match(/<div class="step-art"[\s\S]*?<\/div><\/div>\s*(?=<div class="step-body">)/) || [''])[0];
+    const names = (html) => [...html.replace(/<[^>]+>/g, ' ').matchAll(/[\w/:.-]+/g)].map((m) => m[0]).filter((w) => /^(auxilo_\w+|\/[\w/:]+)$/.test(w));
+    const body = (s) => (s.match(/<p>([\s\S]*?)<\/p>/) || [, ''])[1];
+    steps.forEach((s, i) => {
+      const drawn = names(art(s));
+      const own = names(body(s));
+      for (const n of drawn) assert.ok(own.includes(n), `card ${i + 1} draws ${n}, which is not named in its own text`);
+      assert.ok(!/\d/.test(art(s).replace(/<[^>]+>/g, '')), `card ${i + 1} drawing carries no digit`);
+      assert.ok(/class="dw-sk/.test(art(s)), `card ${i + 1} drawing has skeleton bars`);
+    });
+    // positive control: the search, unlock and share drawings do name their tools and paths
+    assert.deepEqual(names(art(steps[0])), ['auxilo_knowledge', '/knowledge']);
+    assert.deepEqual(names(art(steps[2])), ['auxilo_unlock', '/knowledge/:id']);
+    assert.deepEqual(names(art(steps[4])), ['auxilo_contribute', '/learn']);
+  });
+
+  it('the grid is three over two: six columns, two columns each for the first three cards and three each for the last two', () => {
+    assert.match(STYLE, /\.flow-track\s*\{[^}]*grid-template-columns:\s*repeat\(6,\s*minmax\(0,\s*1fr\)\)/);
+    assert.match(STYLE, /\.flow-step\s*\{[^}]*grid-column:\s*span 2/);
+    assert.match(STYLE, /\.flow-step:nth-child\(n\+4\)\s*\{\s*grid-column:\s*span 3;\s*\}/);
   });
 
   it('inline code inside a card is plain code (no inline colour), styled as a chip by the page block', () => {
@@ -143,11 +176,31 @@ describe('for-agents.html design pass: no decoration carried over from the dark 
     }
   });
 
-  it('the featured payment card is marked by an ink top edge, not a gold one', () => {
+  it('the featured payment card is marked by a full 1px ink border (no tapering 2px top edge), not a gold one', () => {
     const rule = STYLE.match(/\.auth-compare-card\.featured\s*\{([^}]*)\}/);
     assert.ok(rule);
-    assert.match(rule[1], /border-top-color:\s*var\(--fg-1\)/);
+    assert.match(rule[1], /border-color:\s*var\(--fg-1\)/);
+    const card = STYLE.match(/\.auth-compare-card\s*\{([^}]*)\}/);
+    assert.ok(card, 'positive control: the base card rule is in the page block');
+    assert.match(card[1], /border:\s*1px solid var\(--line\)/);
+    assert.doesNotMatch(card[1], /border-top/, 'no separate top edge on the card');
     assert.doesNotMatch(STYLE, /aurum|accent-text[^;]*;[^}]*auth-compare/);
+  });
+
+  it('the lists styled without markers are lists to assistive technology', () => {
+    assert.equal((MAIN.match(/<ul class="auth-trait-list" role="list">/g) || []).length, 2);
+    assert.match(MAIN, /<ul class="endpoint-list" aria-label="Core API endpoints" role="list">/);
+    // positive control: the page holds exactly these three unordered lists inside main
+    assert.equal((MAIN.match(/<ul\b/g) || []).length, 3);
+  });
+
+  it('the figures band numerals scale from 30 to 44 and no figure beside the gold button is gold', () => {
+    const rule = STYLE.match(/#catalog-stats \.stats-strip-num\s*\{([^}]*)\}/);
+    assert.ok(rule);
+    assert.match(rule[1], /font-size:\s*clamp\(30px,\s*3\.4vw,\s*44px\)/);
+    assert.doesNotMatch(STYLE, /#catalog-stats #lc-learnings\s*\{[^}]*accent-text/);
+    // positive control: the figure is still the one the server fills
+    assert.match(MAIN, /id="lc-learnings"/);
   });
 
   it('motion lives only inside the drawing, inside the reduced-motion guard', () => {

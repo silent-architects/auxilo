@@ -11,9 +11,9 @@
  *     arrowheads; stacked (480 and down) it is a vertical hairline through the node column
  *   - its motion: only inside no-preference and 481 and up, finished inside 2.4 seconds, a
  *     leg draws as its panel starts to rise and never before the panel it leaves exists
- *   - the device carries no gold, here and on /for-builders
+ *   - the device is one shared background image on the first dark section of every page, 12% ivory, no gold
  *   - the two hero notes take the body colour and 15px from 481 up, 14px below
- *   - the recall drawing shows the same learning card in both panels
+ *   - the recall drawing shows the same learning in both panels, the short way's card dominant and the long way's dimmed
  *   - code blocks that scroll sideways keep a thin scrollbar on the dark ground
  *   - the footer meta line is 14px, left under the logo, and its links never break inside
  *
@@ -112,14 +112,41 @@ describe('home drawings: the source', () => {
     assert.ok(!/animation\s*:|animation-delay|stroke-dasharray|stroke-dashoffset/.test(outside), 'no animation, dash or delay outside it');
   });
 
-  it('the device is one faint ivory line for both strokes, with no gold', () => {
-    const rules = [...css.matchAll(/([^{}]*\.dw-device[^{}]*)\{([^}]*)\}/g)].map((m) => m[0]);
-    assert.ok(rules.length >= 3, 'positive control: the device rules were found');
-    const joined = rules.join('\n');
-    assert.ok(!/201,\s*168,\s*76|aurum|c9a84c/i.test(joined), 'no gold anywhere in the device rules');
-    const strokeRule = rules.find((r) => /\.dw-device \.tri/.test(r) && /\.dw-device \.bar/.test(r));
-    assert.ok(strokeRule, 'the triangle and the crossbar share one rule');
-    assert.match(strokeRule, /stroke:\s*rgba\(250, 250, 248, 0\.07\)/);
+  // Round 3: the device is no longer markup. One shared rule paints the mark's own geometry (the two
+  // sides of the triangle and its crossbar) as a background image on the first dark section of every page.
+  // Two inline svg data URIs carry it, one at desktop size and one at the size a tablet and a phone get.
+  const deviceSvg = (name) => {
+    const m = css.match(new RegExp(`${name}:\\s*url\\("data:image/svg\\+xml,([^"]*)"\\)`));
+    assert.ok(m, `${name} is defined as an svg data URI`);
+    return decodeURIComponent(m[1]);
+  };
+
+  it('the device is one faint ivory line for both strokes, 1.5px at the size it is drawn, with no gold', () => {
+    for (const [name, drawn] of [['--device', 1300], ['--device-small', 806]]) {
+      const svg = deviceSvg(name);
+      assert.ok(/<path /.test(svg) && /<line /.test(svg), `${name} draws the triangle's sides and its crossbar`);
+      assert.match(svg, /stroke='#FAFAF8'/, `${name} is ivory`);
+      assert.match(svg, /stroke-opacity='\.12'/, `${name} is 12% ivory`);
+      assert.ok(!/201,\s*168,\s*76|aurum|c9a84c/i.test(svg), `${name} carries no gold`);
+      const width = Number(svg.match(/\swidth='(\d+)'/)[1]);
+      const strokeWidth = Number(svg.match(/stroke-width='([\d.]+)'/)[1]);
+      assert.equal(width, drawn, `${name} is drawn at ${drawn}px`);
+      // the viewBox is 1300 wide, so the rendered line is the stroke width scaled by drawn / 1300
+      assert.ok(Math.abs(strokeWidth * (width / 1300) - 1.5) <= 0.02, `${name} renders a 1.5px line (${strokeWidth * (width / 1300)})`);
+    }
+    // positive control: the rule that paints it is on the first dark section, and it is not on a dark ground rule
+    assert.match(css, /main > \.on-dark:first-child,[\s\S]*?background-image:\s*var\(--device\)/, 'the shared rule paints --device on main > .on-dark:first-child');
+    assert.ok(/body \.legal-wrap > h1::before/.test(css), 'the legal template\'s hero band takes it too');
+    assert.ok(/\.dash-wrap > \.dash-band:first-child/.test(css), 'the dashboard header band takes it too');
+  });
+
+  it('the device keeps the dimmest text on the dark ground above 4.5 to 1, even directly under the line', () => {
+    // 12% ivory over #0A0A0A, then the contrast of the dimmest on-dark text (#8B929A) against that
+    const lum = (rgb) => { const c = rgb.map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+    const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+    const under = [10, 10, 10].map((d, i) => d * 0.88 + [250, 250, 248][i] * 0.12);
+    assert.ok(ratio([0x8B, 0x92, 0x9A], under) >= 4.5, `the dimmest note colour keeps ${ratio([0x8B, 0x92, 0x9A], under).toFixed(2)} to 1 under the line`);
+    assert.ok(ratio([0xA7, 0xAC, 0xB2], under) > ratio([0x8B, 0x92, 0x9A], under), 'positive control: the body colour keeps more than the note colour');
   });
 
   it('the recall drawing holds the same card twice: the same chip and the same title, in both panels', () => {
@@ -346,27 +373,52 @@ describe('home drawings: the render', { timeout: 180_000 }, () => {
   });
 
   // ── the device ──
-  for (const route of ['/', '/for-builders']) {
-    it(`the device on ${route} at 1280: the triangle and the crossbar are the same faint ivory stroke, no gold`, async (t) => {
-      const d = await at(t, 1280, route, (page) => page.evaluate(() => {
-        const get = (sel) => { const el = document.querySelector(sel); if (!el) return null; const cs = getComputedStyle(el); return { stroke: cs.stroke, width: cs.strokeWidth, opacity: cs.strokeOpacity }; };
-        const dev = document.querySelector('.dw-device');
-        return { tri: get('.dw-device .tri'), bar: get('.dw-device .bar'), shown: dev ? getComputedStyle(dev).display !== 'none' : false };
-      }));
+  // The first dark section of every page carries the shared background image, at the size and anchor the
+  // viewport gets, and never gold. A page that still draws its own inline device does not show it.
+  const FIRST_DARK = 'main > .on-dark:first-child';
+  for (const route of ['/', '/for-builders', '/pricing', '/about', '/status']) {
+    it(`the device on ${route} at 1280: the shared image on the first dark section, anchored right, 1300px, no gold`, async (t) => {
+      const d = await at(t, 1280, route, (page) => page.evaluate((sel) => {
+        const el = document.querySelector(sel);
+        const cs = el ? getComputedStyle(el) : null;
+        const clip = document.querySelector('.dw-device-clip');
+        return cs && { image: cs.backgroundImage, size: cs.backgroundSize, pos: cs.backgroundPosition, repeat: cs.backgroundRepeat, clipShown: clip ? getComputedStyle(clip).display !== 'none' : false };
+      }, FIRST_DARK));
       if (!d) return;
-      assert.ok(d.shown, 'positive control: the device shows at 1280');
-      assert.ok(d.tri && d.bar, 'both strokes exist');
-      assert.equal(d.tri.stroke, IVORY_DEVICE);
-      assert.equal(d.bar.stroke, d.tri.stroke, 'the crossbar is the triangle\'s stroke');
-      assert.equal(d.bar.width, d.tri.width);
+      assert.match(d.image, /^url\("data:image\/svg\+xml,/, 'the first dark section paints the device svg');
+      assert.ok(!/201,\s*168,\s*76|c9a84c|aurum/i.test(decodeURIComponent(d.image)), 'no gold in it');
+      assert.equal(d.size, '1300px 1300px');
+      assert.equal(d.repeat, 'no-repeat');
+      assert.match(d.pos, /^calc\(100% [+-] \d+px\) /, 'anchored to the right edge (a calc on 100%)');
+      assert.equal(d.clipShown, false, 'no inline clipping wrapper is drawn on the page');
     });
   }
 
-  it('the device is hidden at 768', async (t) => {
-    const d = await at(t, 768, '/', (page) => page.evaluate(() => getComputedStyle(document.querySelector('.dw-device')).display));
+  it('the device on the legal template band: the same image, on the h1\'s ::before', async (t) => {
+    const d = await at(t, 1280, '/terms', (page) => page.evaluate(() => {
+      const h1 = document.querySelector('.legal-wrap > h1');
+      const cs = getComputedStyle(h1, '::before');
+      return { image: cs.backgroundImage, size: cs.backgroundSize, width: parseFloat(cs.width), vw: window.innerWidth };
+    }));
     if (!d) return;
-    assert.equal(d, 'none');
+    assert.match(d.image, /^url\("data:image\/svg\+xml,/);
+    assert.equal(d.size, '1300px 1300px');
+    assert.equal(d.width, d.vw, 'positive control: the band is the full width of the window');
   });
+
+  for (const [width, size] of [[768, '806px 806px'], [375, '806px 806px']]) {
+    it(`the device at ${width}: a cropped corner of the same drawing, drawn smaller, still behind the first dark section`, async (t) => {
+      const d = await at(t, width, '/', (page) => page.evaluate((sel) => {
+        const cs = getComputedStyle(document.querySelector(sel));
+        return { image: cs.backgroundImage, size: cs.backgroundSize, scrollW: document.documentElement.scrollWidth };
+      }, FIRST_DARK));
+      if (!d) return;
+      assert.match(d.image, /^url\("data:image\/svg\+xml,/);
+      assert.equal(d.size, size);
+      assert.ok(/stroke-width='2\.42'/.test(decodeURIComponent(d.image)), 'the small drawing still renders a 1.5px line');
+      assert.ok(d.scrollW <= width, 'the device adds no sideways scroll');
+    });
+  }
 
   // ── the hero notes ──
   for (const [width, size] of [[1280, '15px'], [481, '15px'], [480, '14px'], [375, '14px']]) {
@@ -396,20 +448,30 @@ describe('home drawings: the render', { timeout: 180_000 }, () => {
   }
 
   // ── the recall drawing ──
-  it('the recall drawing at 1280: bottoms aligned, the long way taller, the two cards the same size and at the same offset from the bottom', async (t) => {
+  it('the recall drawing at 1280: bottoms aligned, the long way taller, the short way\'s card the dominant one and the long way\'s dimmed', async (t) => {
     const m = await at(t, 1280, '/', (page) => page.evaluate(() => {
       const panels = [...document.querySelectorAll('#own-learnings-free .dw-twoup > .dw-dark')].map((p) => p.getBoundingClientRect());
-      const cards = [...document.querySelectorAll('#own-learnings-free .dw-found')].map((c) => c.getBoundingClientRect());
-      return { panels: panels.map((r) => ({ t: r.top, b: r.bottom, w: r.width })), cards: cards.map((r) => ({ t: r.top, b: r.bottom, h: r.height, w: r.width })) };
+      const found = [...document.querySelectorAll('#own-learnings-free .dw-found')];
+      const cards = found.map((c) => c.getBoundingClientRect());
+      return {
+        panels: panels.map((r) => ({ t: r.top, b: r.bottom, w: r.width })),
+        cards: cards.map((r) => ({ t: r.top, b: r.bottom, h: r.height, w: r.width })),
+        opacity: found.map((c) => parseFloat(getComputedStyle(c).opacity)),
+        title: found.map((c) => parseFloat(getComputedStyle(c.querySelector('.dw-title')).fontSize)),
+      };
     }));
     if (!m) return;
     assert.equal(m.panels.length, 2);
     assert.equal(m.cards.length, 2);
     assert.ok(Math.abs(m.panels[0].b - m.panels[1].b) <= 0.5, 'bottoms aligned');
     assert.ok(m.panels[0].b - m.panels[0].t > m.panels[1].b - m.panels[1].t + 20, 'the long way is taller than the short way');
-    assert.ok(Math.abs(m.cards[0].h - m.cards[1].h) <= 0.5 && Math.abs(m.cards[0].w - m.cards[1].w) <= 0.5, 'the same card, the same size');
+    assert.ok(m.cards[1].h > m.cards[0].h + 8, 'the short way\'s returned card is the larger card, so the two never read as a duplicate');
     assert.ok(Math.abs(m.cards[0].b - m.cards[1].b) <= 0.5, 'the cards sit level');
     assert.ok(Math.abs((m.panels[0].b - m.cards[0].b) - (m.panels[1].b - m.cards[1].b)) <= 0.5, 'the same space under each card');
+    assert.equal(m.opacity[0], 0.6, 'the long way keeps its small card at the foot, dimmed to 60%');
+    assert.equal(m.opacity[1], 1, 'the short way\'s card is at full contrast');
+    assert.equal(m.title[1], 16, 'its title is 16px');
+    assert.ok(m.title[0] < m.title[1], 'positive control: the dimmed card\'s title is smaller');
   });
 
   for (const width of [480, 375]) {

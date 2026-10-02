@@ -182,7 +182,7 @@ describe('FIX-UNIT-2: dashboard + email-prefs (staged server)', { timeout: 180_0
     }
   });
 
-  it('V2: a real nonzero pending balance still renders WITH the .aurum gold class (positive control — the highlight is not simply removed)', async (t) => {
+  it('V2: a real nonzero pending balance still carries the .aurum class (positive control for the zero check), and no dashboard figure is gold: it paints ink', async (t) => {
     if (bootSkipReason) { t.skip(bootSkipReason); return; }
     if (!tier2ok) { t.skip('playwright not resolvable'); return; }
     const { ctx, page } = await loadDashboardAs(tokenPaid);
@@ -196,9 +196,11 @@ describe('FIX-UNIT-2: dashboard + email-prefs (staged server)', { timeout: 180_0
       assert.ok(info, 'earnings row "Your earnings (accrued)" found');
       assert.equal(info.text, '$12.34');
       assert.equal(info.hasAurum, true, 'nonzero balance must still carry .aurum');
-      // Design system pass: the figure sits on a white card, and gold text never sits on a light
-      // ground, so the one gold figure takes the gold-ink token (#7A5D10) instead of the gold fill.
-      assert.equal(info.color, 'rgb(122, 93, 16)', 'computed color must be the gold-ink token');
+      // No figure on the dashboard is gold: a money figure is ink in the serif. The class is still
+      // set by the script, so this is the same selector that painted the gold-ink token before.
+      assert.equal(info.color, 'rgb(10, 10, 10)', 'computed color must be the ink token');
+      assert.notEqual(info.color, 'rgb(122, 93, 16)', 'computed color must not be the gold-ink token');
+      assert.notEqual(info.color, 'rgb(201, 168, 76)', 'computed color must not be the gold token');
     } finally {
       await ctx.close();
     }
@@ -849,7 +851,9 @@ describe('FIX-UNIT-2B H2/H3: homepage hero h1 width + CTA link placement', { tim
     // Design rebuild: the display face is a lighter, narrower serif and the hero grid's copy
     // column is wider, so the headline now sets on ONE line at 768 (was 2). 375 and 1280 are
     // unchanged. A single line is never a single-word line, so the orphan check below holds.
-    const expected = { 375: 3, 768: 1, 1280: 2 };
+    // Round 3: the h1 scale is clamp(40px, 6.2vw, 56px) at 1024 and down, so a tablet gets a larger headline
+    // than a phone (47.6px at 768, was 40px), and it sets on two balanced lines there, never one word alone.
+    const expected = { 375: 3, 768: 2, 1280: 2 };
     for (const width of [375, 768, 1280]) {
       const height = width === 375 ? 812 : (width === 768 ? 1024 : 800);
       const ctx = await browser.newContext({ viewport: { width, height } });
@@ -941,7 +945,13 @@ describe('FIX-UNIT-2B H4: /works-with h1 text-wrap: balance', () => {
     assert.ok(m, 'shared h1, h2 rule found');
     assert.match(m[1], /text-wrap:\s*balance/);
     const styleBlock = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
-    assert.doesNotMatch(styleBlock, /text-wrap:\s*(?!balance)/, 'the page block sets no other text-wrap');
+    // The block may set balance (the key lead is set like a heading); it may set nothing else. The check is
+    // `text-wrap:` then optional space then a value that is not balance, so `text-wrap: balance` passes.
+    const OTHER_WRAP = /text-wrap:\s*(?!balance\b)\S/;
+    assert.match('text-wrap: pretty', OTHER_WRAP, 'positive control: another value is caught');
+    assert.match('text-wrap:wrap', OTHER_WRAP, 'positive control: another value with no space is caught');
+    assert.doesNotMatch('text-wrap: balance', OTHER_WRAP, 'positive control: balance is allowed');
+    assert.doesNotMatch(styleBlock, OTHER_WRAP, 'the page block sets no other text-wrap');
   });
 });
 

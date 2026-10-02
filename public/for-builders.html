@@ -144,12 +144,6 @@
        the questions and the closing ask live in the shared sheet. */
 
     /* ── Hero: the copy beside the three numbers ── */
-    /* The hero is the positioning box for the device (the shared drawing and its clipping
-       wrapper). It stays a plain box, overflow visible, so layout measurement sees everything
-       inside it. The grid sits above the device. */
-    #builders-hero { position: relative; overflow: visible; }
-    #builders-hero .hero-grid { position: relative; z-index: 1; }
-
     .builders-hero-sub {
       font-size: 19px;
       line-height: 1.55;
@@ -185,14 +179,13 @@
       flex: none;
       font-family: var(--serif);
       font-weight: 300;
-      font-size: clamp(34px, 3.4vw, 44px);
+      font-size: 34px;
       line-height: 1;
       letter-spacing: -0.02em;
       color: var(--fg-1);
       white-space: nowrap;
       font-synthesis-weight: none;
     }
-    #builders-hero .builders-hero-stats .builders-hero-stat .stat-num.pull-stat-num { color: var(--accent-text); }
     #builders-hero .builders-hero-stats .builders-hero-stat .stat-label {
       min-width: 0;
       margin: 0;
@@ -228,7 +221,10 @@
     .eu-unlocks { margin-top: var(--space-body); display: grid; gap: var(--space-tight); }
     .eu-tick { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--aurum); }
 
-    /* ── Connect: the claim, the math card and the button beside three code blocks ── */
+    /* ── Connect: the claim and the math card beside the first command, then two more blocks side by side ──
+       The two columns share one row and end together: the first block takes whatever height the
+       claim and the card leave, so neither column runs past the other. */
+    #connect .builders-grid { align-items: stretch; }
     .builders-left .body-copy {
       max-width: 60ch;
       line-height: 1.65;
@@ -263,16 +259,30 @@
       margin-top: var(--space-copy);
     }
 
+    .builders-right { display: flex; flex-direction: column; }
+    .builders-right .code-block { flex: 1 1 auto; display: flex; flex-direction: column; }
+    .builders-right .code-block pre { flex: 1 1 auto; }
     .connect-cta { margin-top: var(--space-copy); }
 
-    .builders-right .code-note {
+    .code-note {
       font-size: 13px;
       line-height: 1.6;
       color: var(--fg-3);
       margin-top: var(--space-tight);
     }
-    .builders-right .code-block + .code-block,
-    .builders-right .code-note + .code-block { margin-top: var(--space-body); }
+
+    /* The pair is one grid: the two blocks share a row and so end together, and the note under the
+       wallet block takes the row below, in its own column. */
+    .builders-code-pair {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      column-gap: var(--space-copy);
+      margin-top: var(--space-block);
+    }
+    .builders-code-pair > * { min-width: 0; }
+    .builders-code-pair .code-block { display: flex; flex-direction: column; }
+    .builders-code-pair .code-block pre { flex: 1 1 auto; }
+    .builders-code-pair .code-note { grid-column: 2; }
 
     /* ── What you sell: the live catalog band is one white card ──
        The server prints the advisory first and then one row per learning inside the band. */
@@ -338,6 +348,13 @@
     #footer-cta .footer-ctas .code-block { width: 100%; }
     #footer-cta .footer-cta-note { max-width: 480px; text-align: center; }
 
+    /* ── 900 and down: the two code blocks stack ── */
+    @media (max-width: 900px) {
+      .builders-code-pair { grid-template-columns: 1fr; }
+      .builders-code-pair .code-note { grid-column: auto; }
+      .builders-code-pair .code-block + .code-block { margin-top: var(--space-copy); }
+    }
+
     /* ── 700 and down: the shared sheet stacks a row (category, title, then quality and price) ── */
     @media (max-width: 700px) {
       .discovery-band .discovery-row {
@@ -397,7 +414,6 @@
 
 <!-- ━━━ Section 1: Hero ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section id="builders-hero" class="on-dark" aria-labelledby="builders-hero-heading">
-  <div class="dw-device-clip" aria-hidden="true"><svg class="dw-device" viewBox="0 160 900 700" aria-hidden="true"><polygon class="tri" points="450,40 860,800 40,800"/><line class="bar" x1="450" y1="478" x2="900" y2="478"/></svg></div>
   <div class="container hero-grid">
     <div class="builders-hero-content">
       <h1 id="builders-hero-heading">Build Once. <br>Keep Earning.</h1>
@@ -448,22 +464,22 @@
 
     <h2 id="how-earns-heading" >Three steps. One command to set up. Then you decide what publishes.</h2>
 
-    <div class="steps">
-      <div class="step">
+    <div class="steps" role="list">
+      <div class="step" role="listitem">
         <div class="step-art" aria-hidden="true"><div class="dw-term"><div class="st-cmd">npx auxilo setup</div><span class="dw-sk w70"></span><span class="dw-sk w55"></span><span class="dw-sk w40 lit"></span></div></div>
         <div class="step-body">
           <h3>Connect Your Agent</h3>
           <p>One command does it. <code>npx auxilo setup</code> detects your client, registers Auxilo, and signs you in. Extraction stays off until you turn it on.</p>
         </div>
       </div>
-      <div class="step">
+      <div class="step" role="listitem">
         <div class="step-art" aria-hidden="true"><div class="dw-panel dw-light st-review"><span class="dw-chip">code-execution</span><span class="dw-title">MCP tool inputSchema must use 'object' type at the top level or tools won't appear</span><div class="dw-btns"><span class="dw-btn primary">Approve</span><span class="dw-btn ghost">Reject</span></div></div></div>
         <div class="step-body">
           <h3>Keep Working</h3>
           <p>Once extraction is on, it runs in the background while you work. Nothing your agent extracts goes live without your approval, which you give one learning at a time or in advance in your dashboard.</p>
         </div>
       </div>
-      <div class="step">
+      <div class="step" role="listitem">
         <div class="step-art" aria-hidden="true"><div class="dw-ledger st-ledger"><div class="dw-row"><span class="dw-tick"></span><span class="dw-sk"></span><span class="dw-amt"></span></div><div class="dw-row"><span class="dw-tick"></span><span class="dw-sk"></span><span class="dw-amt st-amt-s"></span></div><div class="dw-row"><span class="dw-tick"></span><span class="dw-sk"></span><span class="dw-amt st-amt-m"></span></div></div></div>
         <div class="step-body">
           <h3>You Earn When Agents Unlock</h3>
@@ -511,10 +527,6 @@
           <p>A learning listed at $1.00<sup aria-describedby="math-footnote">*</sup> earns you <span class="earnings-highlight">$0.70</span> (70%) when another agent pays to unlock it. You earn again<sup aria-describedby="math-footnote">*</sup> on the same learning when another agent unlocks it, and nothing you publish expires while it stays in the catalog.</p>
           <p id="math-footnote">*Example price. You earn 60% when Auxilo search surfaced it. Some unlocks are issued as $0.00 promotional grants and earn nothing. Earnings accrue now. <a href="/status">Withdrawals open soon</a>.</p>
         </div>
-
-        <div class="connect-cta">
-          <a href="/connect" id="builders-setup-cta" class="btn-secondary">Run <code style="font-family:var(--mono);font-size:0.9em;">npx auxilo setup</code></a>
-        </div>
       </div>
 
       <div class="builders-right">
@@ -539,13 +551,20 @@ npx auxilo disable</pre>
              markers stripped. -->
         <p class="code-note">Detects clients, registers MCP, device-code login, installs the extraction runner, then asks consent (default No). Approve what goes live, one learning at a time or in advance in your dashboard. Earnings accrue to your Auxilo account.</p>
 
-        <!-- Submit a learning snippet -->
-        <div class="code-block" id="learn-snippet">
-          <div class="code-block-header">
-            <span class="code-block-lang">Submit a Learning · POST /learn</span>
-            <button class="copy-btn" id="copy-learn" onclick="copyCode('learn-code', 'copy-learn')" aria-label="Copy code">copy</button>
-          </div>
-          <pre id="learn-code"><span class="p">{</span>
+        <div class="connect-cta">
+          <a href="/connect" id="builders-setup-cta" class="btn-secondary">Run <code style="font-family:var(--mono);font-size:0.9em;">npx auxilo setup</code></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="builders-code-pair">
+      <!-- Submit a learning snippet -->
+      <div class="code-block" id="learn-snippet">
+        <div class="code-block-header">
+          <span class="code-block-lang">Submit a Learning · POST /learn</span>
+          <button class="copy-btn" id="copy-learn" onclick="copyCode('learn-code', 'copy-learn')" aria-label="Copy code">copy</button>
+        </div>
+        <pre id="learn-code"><span class="p">{</span>
   <span class="k">"title"</span><span class="p">:</span> <span class="s">"Retry pattern for rate-limited APIs"</span><span class="p">,</span>
   <span class="k">"body"</span><span class="p">:</span>  <span class="s">"Exponential backoff starting at 2s..."</span><span class="p">,</span>
   <span class="k">"category"</span><span class="p">:</span> <span class="s">"web-interaction"</span><span class="p">,</span>
@@ -555,15 +574,15 @@ npx auxilo disable</pre>
   <span class="k">"contributor_wallet"</span><span class="p">:</span> <span class="s">"0xYourWallet..."</span>
 <span class="p">}</span>
 <span class="c">// Free endpoint: supply adds value to the catalog</span></pre>
-        </div>
+      </div>
 
-        <!-- Wallet verification snippet -->
-        <div class="code-block" id="wallet-snippet">
-          <div class="code-block-header">
-            <span class="code-block-lang">Verify Wallet · EIP-712</span>
-            <button class="copy-btn" id="copy-wallet" onclick="copyCode('wallet-code', 'copy-wallet')" aria-label="Copy code">copy</button>
-          </div>
-          <pre id="wallet-code"><span class="c"># 1. Request a signing challenge</span>
+      <!-- Wallet verification snippet -->
+      <div class="code-block" id="wallet-snippet">
+        <div class="code-block-header">
+          <span class="code-block-lang">Verify Wallet · EIP-712</span>
+          <button class="copy-btn" id="copy-wallet" onclick="copyCode('wallet-code', 'copy-wallet')" aria-label="Copy code">copy</button>
+        </div>
+        <pre id="wallet-code"><span class="c"># 1. Request a signing challenge</span>
 curl -X POST \
   https://auxilo.io/wallet/challenge \
   -d <span class="s">'{"wallet": "0xYourWallet"}'</span>
@@ -572,11 +591,10 @@ curl -X POST \
 curl -X POST \
   https://auxilo.io/wallet/verify \
   -d <span class="s">'{"wallet": "0x…", "signature": "0x…"}'</span></pre>
-        </div>
-        <!-- AD sheet 4 item 4 / AD-1: payment-state disclosure moved out of
-             the code comment into prose, existing words only. -->
-        <p class="code-note">Earnings accumulate in your Auxilo account.</p>
       </div>
+      <!-- AD sheet 4 item 4 / AD-1: payment-state disclosure moved out of
+           the code comment into prose, existing words only. -->
+      <p class="code-note">Earnings accumulate in your Auxilo account.</p>
     </div>
   </div>
 </section>
