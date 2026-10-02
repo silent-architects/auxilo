@@ -205,3 +205,71 @@ describe('SITE-RESTRUCTURE-W3 item C — /pricing 9 -> 6 sections', () => {
     assert.ok(hero.includes('Search free. Pay only when you unlock, from $0.05.'), 'positive control: hero h1 text present');
   });
 });
+
+// Design rebuild, cold-reader fix: /pricing was the one centred hero on the site. It is now the shared
+// left-aligned hero-one, like every other page: the copy in the shared 720 width, flush left.
+describe('/pricing hero is left aligned like every other hero', { timeout: 120_000 }, () => {
+  const http = require('node:http');
+  const STYLES = fs.readFileSync(path.join(REPO, 'public', 'styles.css'), 'utf8');
+  const heroStart = pricing.indexOf('<section id="pricing-hero"');
+  const hero = pricing.slice(heroStart, pricing.indexOf('<section id="how-pricing-works"'));
+  const styleBlock = pricing.slice(pricing.indexOf('<style>'), pricing.indexOf('</style>'));
+
+  it('the hero container is the shared hero-one with no centring class, and the page block sets no hero width or alignment of its own', () => {
+    assert.match(hero, /<div class="container hero-one">/, 'the hero uses the shared hero-one layout');
+    assert.doesNotMatch(hero, /hero-centred/, 'no centring class on the hero');
+    assert.doesNotMatch(styleBlock, /hero-centred/, 'the page block does not centre the hero');
+    const heroRules = styleBlock.match(/\.pricing-page-header[^{]*\{[^}]*\}/g) || [];
+    assert.ok(heroRules.length > 0, 'positive control: the page block still styles the hero paragraphs');
+    for (const rule of heroRules) {
+      assert.doesNotMatch(rule, /max-width|text-align|margin-(left|right)|text-wrap:\s*balance/, `the hero rule leaves width and alignment to the shared sheet: ${rule}`);
+    }
+    assert.match(STYLES.match(/\.hero-one > \*\s*\{[^}]*\}/)[0], /max-width:\s*720px/, 'positive control: the shared hero-one copy width is 720');
+  });
+
+  it('rendered at 1280 and 375, the h1 and both paragraphs start at the same left edge, are left aligned, and fit the 720 copy width', async (t) => {
+    let chromium;
+    try { ({ chromium } = require(require.resolve('playwright', { paths: [REPO] }))); } catch (e) { t.skip('playwright not resolvable'); return; }
+    const publicDir = path.join(REPO, 'public');
+    const MIME = { '.html': 'text/html', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.js': 'application/javascript' };
+    const server = http.createServer((req, res) => {
+      const filePath = path.join(publicDir, decodeURIComponent(req.url.split('?')[0]));
+      if (!filePath.startsWith(publicDir)) { res.writeHead(403); res.end(); return; }
+      fs.readFile(filePath, (err, data) => {
+        if (err) { res.writeHead(404); res.end('not found'); return; }
+        res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream' });
+        res.end(data);
+      });
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    let browser;
+    try {
+      browser = await chromium.launch();
+      for (const width of [1280, 375]) {
+        const ctx = await browser.newContext({ viewport: { width, height: 900 } });
+        const page = await ctx.newPage();
+        await page.goto(`http://127.0.0.1:${server.address().port}/pricing.html`, { waitUntil: 'networkidle' });
+        const m = await page.evaluate(() => {
+          const box = document.querySelector('#pricing-hero .container');
+          const cs = getComputedStyle(box);
+          const edge = box.getBoundingClientRect().left + parseFloat(cs.paddingLeft);
+          const els = [...document.querySelectorAll('#pricing-hero h1, #pricing-hero p')];
+          return {
+            edge,
+            els: els.map((el) => ({ tag: el.tagName, left: el.getBoundingClientRect().left, width: el.getBoundingClientRect().width, align: getComputedStyle(el).textAlign })),
+          };
+        });
+        await ctx.close();
+        assert.equal(m.els.length, 3, `${width}: positive control: the h1 and two paragraphs`);
+        for (const el of m.els) {
+          assert.ok(['start', 'left'].includes(el.align), `${width}: ${el.tag} is left aligned, got ${el.align}`);
+          assert.ok(Math.abs(el.left - m.edge) <= 0.5, `${width}: ${el.tag} starts at the container's left edge (${el.left} vs ${m.edge})`);
+          assert.ok(el.width <= 720 + 0.5, `${width}: ${el.tag} fits the shared 720 copy width, got ${el.width}`);
+        }
+      }
+    } finally {
+      if (browser) await browser.close();
+      server.close();
+    }
+  });
+});

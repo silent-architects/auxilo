@@ -128,14 +128,10 @@
     /* Pricing only. The grounds, the display type, the question list and the closing ask
        come from the shared sheet; this block keeps what is particular to this page. */
 
-    /* ── Hero: dark, one column, centred ── */
-    .pricing-page-header h1 {
-      max-width: 16em;
-    }
+    /* ── Hero: dark, one column, left aligned, copy width 720 (the shared .hero-one) ── */
     .pricing-page-header p {
-      max-width: 34em;
       color: var(--fg-2);
-      text-wrap: balance;
+      text-wrap: pretty;
     }
     .pricing-page-header p + p {
       margin-top: var(--space-copy);
@@ -557,7 +553,7 @@
 
 <!-- ━━━ Hero ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <section id="pricing-hero" class="pricing-page-header on-dark" aria-labelledby="pricing-hero-heading">
-  <div class="container hero-one hero-centred">
+  <div class="container hero-one">
     <h1 id="pricing-hero-heading">Search free. Pay only when you unlock, from $0.05.</h1>
     <p class="lede">A config fix costs almost nothing. An architectural breakthrough costs what it saves you.</p>
     <!-- F2 (coordinator fix, 2026-09-27): P-1 sat flush against the sub

@@ -539,14 +539,14 @@ describe('WORKS-WITH: design rebuild, the card grid as rendered', { timeout: 120
     }
   });
 
-  it('in every tier the placeholder glyph takes the box a real mark takes in that tier, and is drawn in the note colour', async (t) => {
-    if (!ok) { t.skip('playwright not resolvable'); return; }
-    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  // The mark and the placeholder box, measured inside the card. Taken at 1280 (the cards stack their parts
+  // and the box scales by tier) and at 375 (every card is compact and horizontal and every tier takes one box).
+  async function measureMarkBoxes(width) {
+    const ctx = await browser.newContext({ viewport: { width, height: 900 } });
     const page = await ctx.newPage();
-    let cells;
     try {
       await page.goto(`${base}/works-with.html`, { waitUntil: 'networkidle' });
-      cells = await page.evaluate(() => [...document.querySelectorAll('.ww-list > li')].map((li) => {
+      return await page.evaluate(() => [...document.querySelectorAll('.ww-list > li')].map((li) => {
         const r = li.getBoundingClientRect();
         const art = li.querySelector('.ww-logo, .ww-glyph');
         const a = art.getBoundingClientRect();
@@ -563,20 +563,119 @@ describe('WORKS-WITH: design rebuild, the card grid as rendered', { timeout: 120
     } finally {
       await ctx.close();
     }
-    assert.equal(cells.length, 19, 'positive control: 19 cards');
-    for (const size of ['medium', 'small']) {
-      const inTier = cells.filter((c) => c.size === size);
-      const marks = inTier.filter((c) => c.kind === 'mark');
-      const glyphs = inTier.filter((c) => c.kind === 'glyph');
-      assert.ok(marks.length > 0 && glyphs.length > 0, `${size}: positive control, both kinds present`);
-      for (const g of glyphs) {
-        assert.equal(g.box, marks[0].box, `${size}: the glyph takes the box (left, top, width, height inside its card) a real mark takes`);
+  }
+
+  it('in every tier the placeholder glyph takes the box a real mark takes in that tier, and is drawn in the note colour', async (t) => {
+    if (!ok) { t.skip('playwright not resolvable'); return; }
+    for (const width of [1280, 375]) {
+      const cells = await measureMarkBoxes(width);
+      assert.equal(cells.length, 19, `${width}: positive control: 19 cards`);
+      for (const size of ['medium', 'small']) {
+        const inTier = cells.filter((c) => c.size === size);
+        const marks = inTier.filter((c) => c.kind === 'mark');
+        const glyphs = inTier.filter((c) => c.kind === 'glyph');
+        assert.ok(marks.length > 0 && glyphs.length > 0, `${width} ${size}: positive control, both kinds present`);
+        for (const g of glyphs) {
+          assert.equal(g.box, marks[0].box, `${width} ${size}: the glyph takes the box (left, top, width, height inside its card) a real mark takes`);
+        }
+      }
+      for (const g of cells.filter((c) => c.kind === 'glyph')) {
+        assert.equal(g.ink, g.noteInk, `${width}: the glyph is drawn in the colour of the note text`);
+        assert.equal(g.text, '', `${width}: the glyph holds no text`);
       }
     }
-    for (const g of cells.filter((c) => c.kind === 'glyph')) {
-      assert.equal(g.ink, g.noteInk, 'the glyph is drawn in the colour of the note text');
-      assert.equal(g.text, '', 'the glyph holds no text');
+  });
+
+  // At 480 and down every card is compact and horizontal: a fixed 28 box on the left (mark or glyph),
+  // level with the name, the name, label and note on the right. All three size classes look the same.
+  // Every value is compared with another measurement from the same run, or with a spacing token.
+  async function measureCompact(width) {
+    const ctx = await browser.newContext({ viewport: { width, height: 900 } });
+    const page = await ctx.newPage();
+    try {
+      await page.goto(`${base}/works-with.html`, { waitUntil: 'networkidle' });
+      return await page.evaluate(() => {
+        const root = getComputedStyle(document.documentElement);
+        const tokens = { tight: parseFloat(root.getPropertyValue('--space-tight')), body: parseFloat(root.getPropertyValue('--space-body')) };
+        const items = [...document.querySelectorAll('.ww-list > li')];
+        const cells = items.map((li, i) => {
+          const cs = getComputedStyle(li);
+          const r = li.getBoundingClientRect();
+          const box = li.querySelector('.ww-logo-box').getBoundingClientRect();
+          const art = li.querySelector('.ww-logo, .ww-glyph').getBoundingClientRect();
+          const name = li.querySelector('.ww-client-name');
+          const nameBox = name.getBoundingClientRect();
+          const nameCs = getComputedStyle(name);
+          const label = getComputedStyle(li.querySelector('.ww-client-label'));
+          const note = getComputedStyle(li.querySelector('.ww-client-note'));
+          const mark = li.querySelector('.ww-logo');
+          const next = items[i + 1] ? items[i + 1].getBoundingClientRect() : null;
+          return {
+            size: ['large', 'medium', 'small'].find((s) => li.classList.contains('ww-size-' + s)),
+            pad: [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft].map(parseFloat),
+            gapBelow: next ? next.top - r.bottom : null,
+            boxW: box.width, boxH: box.height, artW: art.width, artH: art.height,
+            boxLeftInCard: box.left - r.left,
+            boxCentreY: box.top + box.height / 2,
+            nameCentreY: nameBox.top + nameBox.height / 2,
+            nameLeftOfBox: nameBox.left - (box.left + box.width),
+            nameFamily: nameCs.fontFamily, nameWeight: nameCs.fontWeight, nameSize: parseFloat(nameCs.fontSize),
+            labelFamily: label.fontFamily, labelSize: parseFloat(label.fontSize),
+            noteSize: parseFloat(note.fontSize),
+            markInk: mark ? getComputedStyle(mark).backgroundColor : null,
+            markMask: mark ? (getComputedStyle(mark).maskSize || getComputedStyle(mark).webkitMaskSize) : null,
+          };
+        });
+        return { tokens, cells, scrollWidth: document.documentElement.scrollWidth, viewport: window.innerWidth };
+      });
+    } finally {
+      await ctx.close();
     }
+  }
+
+  it('at 375 every card is compact and horizontal: a 28 box on the left level with the name, padding 16, 8 between cards, the three size classes alike', async (t) => {
+    if (!ok) { t.skip('playwright not resolvable'); return; }
+    const m = await measureCompact(375);
+    assert.equal(m.cells.length, 19, 'positive control: 19 cards');
+    assert.equal(m.scrollWidth, m.viewport, '375: no horizontal scroll');
+    for (const c of m.cells) {
+      assert.deepEqual(c.pad, [m.tokens.body, m.tokens.body, m.tokens.body, m.tokens.body], `${c.size}: card padding is --space-body on all four sides`);
+      assert.equal(c.boxW, 28, `${c.size}: the mark box is 28 wide`);
+      assert.equal(c.boxH, 28, `${c.size}: the mark box is 28 tall`);
+      assert.equal(c.artW, 28, `${c.size}: the mark or glyph fills the 28 box, wide`);
+      assert.equal(c.artH, 28, `${c.size}: the mark or glyph fills the 28 box, tall`);
+      assert.equal(c.boxLeftInCard, m.tokens.body + 1, `${c.size}: the box sits on the card's left padding edge (padding plus the 1px line)`);
+      assert.ok(Math.abs(c.boxCentreY - c.nameCentreY) <= 0.5, `${c.size}: the mark box and the name share one centre line (box ${c.boxCentreY}, name ${c.nameCentreY})`);
+      assert.ok(c.nameLeftOfBox > 0, `${c.size}: the name sits to the right of the mark box`);
+      assert.match(c.nameFamily, /Archivo/, `${c.size}: the name is Archivo`);
+      assert.equal(c.nameWeight, '500', `${c.size}: the name is weight 500`);
+      assert.equal(c.nameSize, 16, `${c.size}: the name is 16`);
+      assert.match(c.labelFamily, /Plex Mono/i, `${c.size}: the label is mono`);
+      assert.equal(c.labelSize, 13, `${c.size}: the label is 13`);
+      assert.equal(c.noteSize, 13, `${c.size}: the note is 13`);
+    }
+    for (const c of m.cells.slice(0, -1)) assert.equal(c.gapBelow, m.tokens.tight, 'cards sit --space-tight (8) apart');
+    for (const key of ['boxW', 'boxH', 'boxLeftInCard', 'nameLeftOfBox', 'nameSize', 'labelSize', 'noteSize']) {
+      const vals = [...new Set(m.cells.map((c) => c[key]))];
+      assert.equal(vals.length, 1, `all three size classes share one ${key}, got ${vals.join(',')}`);
+    }
+    for (const size of ['large', 'medium', 'small']) assert.ok(m.cells.some((c) => c.size === size), `positive control: a ${size} card is present`);
+    const marks = m.cells.filter((c) => c.markInk);
+    assert.equal(marks.length, 9, 'positive control: the nine real marks');
+    for (const c of marks) {
+      assert.equal(c.markInk, 'rgb(10, 10, 10)', 'a mark stays monochrome ink');
+      assert.equal(c.markMask, 'contain', 'a mark keeps its shape (contained, never stretched)');
+    }
+  });
+
+  it('at 480 the cards are still compact and at 481 they are the stacked cards again', async (t) => {
+    if (!ok) { t.skip('playwright not resolvable'); return; }
+    const narrow = await measureCompact(480);
+    const wide = await measureCompact(481);
+    assert.ok(narrow.cells.every((c) => c.boxW === 28 && c.nameLeftOfBox > 0), '480: compact and horizontal');
+    assert.ok(wide.cells.every((c) => c.nameLeftOfBox < 0), '481: the name sits under the mark again, as before');
+    assert.ok(wide.cells.every((c) => c.pad.every((p) => p > wide.tokens.body)), '481: every card keeps its own, larger padding');
+    assert.ok(wide.cells.some((c) => c.boxW !== 28), '481: the mark boxes keep their tier sizes');
   });
 
   it('at 768 the cards go two across, at 375 one across, with no horizontal scroll', async (t) => {

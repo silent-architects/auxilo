@@ -161,6 +161,48 @@
     @media (max-width: 600px) {
       .ww-list { grid-template-columns: minmax(0, 1fr); }
     }
+
+    /* ── 480 and down: every card compact and horizontal ──
+       The mark (or the placeholder glyph) sits in a fixed 28 box on the left, level with the name;
+       the name, the label and the note stack on the right. The three size classes look the same here. */
+    @media (max-width: 480px) {
+      .ww-list { gap: var(--space-tight); }
+      .ww-cell,
+      .ww-size-small {
+        display: grid;
+        grid-template-columns: 28px minmax(0, 1fr);
+        column-gap: var(--space-body);
+        row-gap: 0;
+        align-items: start;
+        padding: var(--space-body);
+      }
+      .ww-cell > * { grid-column: 2; }
+      .ww-cell > .ww-logo-box { grid-column: 1; grid-row: 1; }
+      .ww-size-large .ww-logo-box,
+      .ww-size-medium .ww-logo-box,
+      .ww-size-small .ww-logo-box {
+        align-items: center;
+        width: 28px;
+        height: 28px;
+        max-width: 28px;
+        margin-bottom: 0;
+      }
+      /* The name sits in a row as tall as the mark box, so the two share one centre line. */
+      .ww-size-large .ww-client-name,
+      .ww-size-medium .ww-client-name,
+      .ww-size-small .ww-client-name {
+        display: flex;
+        align-items: center;
+        min-height: 28px;
+        font-size: 16px;
+      }
+      .ww-size-large .ww-client-label,
+      .ww-size-medium .ww-client-label,
+      .ww-size-small .ww-client-label,
+      .ww-size-large .ww-client-note,
+      .ww-size-medium .ww-client-note,
+      .ww-size-small .ww-client-note { font-size: 13px; }
+    }
   </style>
 </head>
 <body>

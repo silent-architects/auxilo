@@ -502,6 +502,53 @@ describe('NAV-WAVE D: the wordmark stroke is currentColor, not a fixed gold — 
     assert.ok(loginLogoSlice.includes(WORDMARK_LINE), 'login-logo line stroke must be currentColor');
   });
 
+  // Design rebuild, cold-reader fix: the navigation already carries the Auxilo logo, so the sign-in screen no
+  // longer draws it a second time above the heading. The block stays in the markup and is only not drawn.
+  it('dashboard.html: the sign-in column does not draw a second logo (the block stays in the markup, hidden by the page block), and the navigation keeps its own', async (t) => {
+    const html = readFile('public/dashboard.html');
+    const style = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
+    const rule = style.match(/\.login-logo\s*\{([^}]*)\}/);
+    assert.ok(rule, 'the page block has a .login-logo rule');
+    assert.match(rule[1], /display:\s*none/, 'the sign-in logo block is not drawn');
+    assert.ok(html.includes('<div class="login-logo">'), 'positive control: the block is still in the markup');
+    assert.match(html, /<a href="\/" class="nav-logo" id="nav-logo">/, 'positive control: the navigation logo is still there');
+
+    let chromium;
+    try { ({ chromium } = require(require.resolve('playwright', { paths: [REPO] }))); } catch (e) { return; }
+    const http = require('node:http');
+    const publicDir = path.join(REPO, 'public');
+    const MIME = { '.html': 'text/html', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.js': 'application/javascript' };
+    const server = http.createServer((req, res) => {
+      const filePath = path.join(publicDir, decodeURIComponent(req.url.split('?')[0]));
+      if (!filePath.startsWith(publicDir)) { res.writeHead(403); res.end(); return; }
+      fs.readFile(filePath, (err, data) => {
+        if (err) { res.writeHead(404); res.end('not found'); return; }
+        res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream' });
+        res.end(data);
+      });
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    let browser;
+    try {
+      browser = await chromium.launch();
+      for (const width of [1280, 375]) {
+        const ctx = await browser.newContext({ viewport: { width, height: 900 } });
+        const page = await ctx.newPage();
+        await page.goto(`http://127.0.0.1:${server.address().port}/dashboard.html`, { waitUntil: 'domcontentloaded' });
+        const m = await page.evaluate(() => ({
+          logoDisplay: getComputedStyle(document.querySelector('.login-logo')).display,
+          navLogoDisplay: getComputedStyle(document.querySelector('#nav-logo')).display,
+        }));
+        await ctx.close();
+        assert.equal(m.logoDisplay, 'none', `${width}: the sign-in logo block computes to display none`);
+        assert.notEqual(m.navLogoDisplay, 'none', `${width}: positive control: the navigation logo is drawn`);
+      }
+    } finally {
+      if (browser) await browser.close();
+      server.close();
+    }
+  });
+
   it('no page or the legal shell ships the retired fixed-gold wordmark pair anywhere', () => {
     const scopeFiles = [...ALL_PUBLIC_HTML, 'server.js'];
     for (const rel of scopeFiles) {
