@@ -1023,21 +1023,26 @@ The money model: a balance is held in dollars, a pack adds what was paid, an unl
 | SLW-17 | Dashboard review table below 900 wide: each learning is a stacked block with its title in view, and a badge never breaks inside a word. From 900 wide the table is unchanged. | P3 | SITE-PM | SHIPPED 2026-09-28, verified live |
 | SLW-18 | Terms acceptance on the dashboard: read the Terms to the end, then accept (the owner's ruling 2026-09-27). A session that has ended returns to the sign-in screen. Legal pages render inline code. Adversarial review and accessibility audit run, every finding ruled and fixed. | P1 | SITE-PM | SHIPPED 2026-09-27, verified live |
 | SLW-19 | Homepage headline `Earn from the work your AI already does.` and its lede (the owner's pick, 2026-09-27). | P1 | SITE-PM | SHIPPED 2026-09-28, verified live |
-| SLW-20 | Uniform spacing across the site, to the Art Director's measured sheet: one gutter, one section rhythm, one scale (the owner's instruction, 2026-09-27). | P1 | SITE-PM | IN BUILD, ships when the Art Director's own measurement passes every rule |
+| SLW-20 | Uniform spacing across the site, to the Art Director's measured sheet: one gutter, one section rhythm, one scale (the owner's instruction, 2026-09-27). | P1 | SITE-PM | SHIPPED 2026-09-28, verified live. The Art Director's own measurement passes every rule. Legal pages clear the fixed navigation |
 | SLW-21 | The site says `earn money` and `earnings`, never `a share`, on every served surface (the owner's ruling, 2026-09-28). `test/earn-money-guard.test.js` keeps it so. | P1 | SITE-PM | SHIPPED 2026-09-28, verified live |
-| SLW-22 | `/for-builders`: the hero's main button sits below the first screen at desktop and phone sizes. Needs a layout ruling from the Art Director. | P2 | SITE-PM | OPEN |
+| SLW-22 | `/for-builders`: the hero's main button sits below the first screen at desktop and phone sizes. Needs a layout ruling from the Art Director. | P2 | Design session | OPEN |
+| SLW-23 | CI on main: the Security Audit job fails on one high advisory in `fast-uri`, reached through the MCP SDK. A lockfile fix is built and verified (commit `592b617`, local branch `site/deps-0928`). It is not on main and not deployed. | P1 | TECH-PM | OPEN, CI stays red until it lands |
+| SLW-24 | Two Terms dialog tests fail now and then in CI (`R3-5`, `R3-10`). The fix is built (commit `753b645`, local branch `site/integ-0928`). Its adversarial review was not finished. Review it before it merges. | P2 | TECH-PM | OPEN |
+| SLW-25 | Moderate advisories in production dependencies. (H) | P1 | TECH-PM + GOV-3 | OPEN |
+
+> **SITE-PM closed 2026-10-02 on the owner's word.** Production is Fly v152, built from main `9fb2133`. The look and feel of the site belongs to the design session (the Art Director leads, the owner's instruction 2026-10-02). The rows above that named SITE-PM as owner and are still open pass to the owner named in each row. The private handoff carries the detail.
 
 ## Counts
 
 | Priority | Open | On Hold | Deferred | Done/Verified | Total |
 |----------|------|---------|----------|---------------|-------|
 | P0 (blocks launch) | **1** | 0 | 0 | **34** | 35 |
-| P1 (blocks real money / production) | **21** | 6 | 2 | 88 | 117 |
-| P2 (blocks scale) | **34** | 1 | 0 | 30 | 65 |
+| P1 (blocks real money / production) | **22** | 6 | 2 | 89 | 119 |
+| P2 (blocks scale) | **35** | 1 | 0 | 30 | 66 |
 | P3 (polish) | **6** | 0 | 0 | 6 | 12 |
-| **Total** | **62** | **7** | **2** | **158** | **229** |
+| **Total** | **64** | **7** | **2** | **159** | **232** |
 
-> **Section 37 (SITE-PM, 2026-09-27).** The table includes the 22 rows SLW-1 to SLW-22 (12 P1, 7 P2, 3 P3). SLW-1 to SLW-4, SLW-17 to SLW-19 and SLW-21 are counted done. The other 14 are open.
+> **Section 37 (SITE-PM, 2026-10-02).** The table includes the 25 rows SLW-1 to SLW-25 (14 P1, 8 P2, 3 P3). SLW-1 to SLW-4 and SLW-17 to SLW-21 are counted done. The other 16 are open.
 
 > **Counts caveat (PM, 2026-08-28).** The table above now includes the nine §34 rows and the fifteen §35 rows (AD-1..AD-15: 3 P1, 11 P2, 1 P3). It still does NOT include `R13-CLOSE` and `GTM-HF` (§29) — their statuses have not been re-derived, so the totals remain understated by at least those two rows and want a full recount by whoever owns them.
 
