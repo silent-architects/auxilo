@@ -2,18 +2,14 @@
 /* Brand: Obsidian #0A0A0A | Ivory #FAFAF8 | Aurum #C9A84C | Slate #8B929A | Ash #E5E5E3 */
 /* Typography: Newsreader (h1, h2) | Archivo (body, h3) | IBM Plex Mono (code, weight 400 only) */
 /* Grounds: paper by default, dark where a scope class says so (see Ground scopes under the tokens). */
+/* Short labels only: the reasoning behind each rule lives in the git history of this file. */
 
-/* AD type pairing 2026-09-06: Archivo (sans) + IBM Plex Mono (mono),
-   self-hosted, subset latin + latin-ext. Both SIL OFL 1.1. The Archivo file is
-   instanced to the weights the site uses (400 to 600) and subset to Latin plus
-   Latin Extended-A, so nothing may ask the sans for a weight outside 400 to 600. */
 @font-face {
   font-family: 'Archivo'; font-style: normal; font-weight: 400 600; font-display: swap;
   src: url('/fonts/ArchivoVariable.cfd841fc.woff2') format('woff2');
   unicode-range: U+0020-007E, U+00A0-017F, U+2010-2011, U+2013-2015, U+2017-201A, U+201C-201E, U+2020-2022, U+2026, U+2030, U+2032-2033, U+2039-203A, U+20A1, U+20A3-20A4, U+20A6-20A7, U+20A9, U+20AB-20AD, U+20B1-20B2, U+20B5, U+20B9-20BA, U+20BC-20BD, U+2122, U+2191, U+2193, U+2212, U+FEFF;
 }
-/* The rarer characters of the original (Romanian, Vietnamese and others) sit in a second
-   file the browser fetches only on a page that uses one of them. It is not preloaded. */
+
 @font-face {
   font-family: 'Archivo'; font-style: normal; font-weight: 400 600; font-display: swap;
   src: url('/fonts/ArchivoVariableExt.ff8ec503.woff2') format('woff2');
@@ -23,9 +19,7 @@
   font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap;
   src: url('/fonts/PlexMono400.0698749e.woff2') format('woff2');
 }
-/* Design system pass: Newsreader display cut, weight 300, used for h1 and h2 only
-   (SIL OFL 1.1, same-origin, one file). The weight 500 face of IBM Plex Mono is
-   retired: every mono use is weight 400. */
+
 @font-face {
   font-family: 'Newsreader'; font-style: normal; font-weight: 300; font-display: swap;
   src: url('/fonts/NewsreaderDisplay300.a07d3c5c.woff2') format('woff2');
@@ -40,48 +34,19 @@
   --aurum: #C9A84C;
   --aurum-dim: rgba(201, 168, 76, 0.15);
   --aurum-border: rgba(201, 168, 76, 0.35);
-  /* AD nav re-rule sheet 2026-09-06 §2: the nav CTA's hover ground —
-     "an ash-filled button on obsidian is a louder event than a gold-filled
-     one. P2.10 was correct for an outlined ghost button and wrong for a
-     filled one." Used only by .nav-cta:hover. */
+
   --aurum-hi: #D8B95F;
   --slate: #8B929A;
   --slate-text: #8B929A;
   --ash: #E5E5E3;
-  /* Wave E2 item 10 sent the nav's active-link gold and .nav-cta's gold
-     border/text to ash. The AD nav re-rule sheet (2026-09-06 §2/§4)
-     supersedes the .nav-cta half of that call (back to a filled gold
-     button, --aurum-hi above); the active-link half is untouched by this
-     pass — see .nav-links a.active below. This token mirrors
-     --aurum-border's alpha (0.35) on ash and is still used there. The
-     wordmark triangle stroke (inline SVG in each page) is no longer a
-     fixed gold — the NAV-WAVE amendment moved it to currentColor, so
-     .nav-logo's ivory carries it and the CTA is the band's one gold
-     element. */
+
   --ash-border: rgba(229, 229, 227, 0.35);
   --code-bg: #111111;
   --section-pad: 120px 24px;
-  /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-7): "A band is a section
-     with no heading that holds a single row. A band's top and bottom
-     padding is the band rhythm: 64 at 1280, 48 at 768, 32 at 375." Half
-     the section rhythm at each width, same horizontal gutter as
-     --section-pad. */
+
   --band-pad: 64px 24px;
   --max-w: 1100px;
-  /* SPACING-0927 (BUILD-BRIEF-SPACING.md, Art Director's SPACING-SHEET.md):
-     the ruled uniform-spacing system. --gutter-base mirrors --section-pad's
-     own horizontal component at the same two breakpoints below (24/20/16)
-     -- it exists as its own token because the nav and footer need just the
-     horizontal number, not the vertical+horizontal shorthand.
-     --nav-clear is the fixed header's exact rendered height in this
-     project's own Playwright test harness (nav-row's 72px content + the
-     nav-strip's 26px + the 1px border = 99px, live-measured identical at
-     1280/768/375 -- confirmed via getBoundingClientRect, not the declared-
-     box estimate). Unlike --header-h (deliberately padded for cross-browser
-     safety margin, per its own comment below), this one is used only where
-     a test demands the exact rendered clearance, so it carries no buffer.
-     The content scale (A2): every non-zero spacing value below the layout
-     tier is one of these seven multiples of 4. */
+
   --gutter-base: 24px;
   --nav-clear: 99px;
   --space-micro: 4px;
@@ -92,72 +57,19 @@
   --space-block: 48px;
   --space-wide: 64px;
   --space-hairline: 2px;
-  /* Wave E2 item 11: the size-adjust'd fallback faces (defined near the
-     end of this sheet, next to the @font-face rules they support) sit
-     right after the primary font, ahead of the original raw fallback
-     names — a system with neither Menlo/Helvetica Neue installed just
-     falls through local()'s failure to the original chain. */
+
   --mono: 'IBM Plex Mono', 'IBM Plex Mono Fallback', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --sans: 'Archivo', 'Archivo Fallback', 'Helvetica Neue', Arial, system-ui, sans-serif;
   --serif: 'Newsreader', 'Newsreader Fallback', Georgia, serif;
 
-  /* ── AD sheet 9: site-wide tokens ─────────────────────────────────────
-     One section-h2 size, one closing-CTA h2 size, and one hero mobile
-     padding pair, replacing the per-page values audited in
-     AD-STEP4-RESPONSIVE-QC-2026-09-06.md §1.3 and §1.9. */
-  /* Design system pass: the h2 scale is clamp(30px, 3.6vw, 46px) for sections and
-     closing asks alike; the h1 scale (--h1, below) is one size on every page. */
   --h2-section: clamp(30px, 3.6vw, 46px);
-  /* Wave E2 item 9: one large headline per page — the closing-CTA h2 drops
-     to the section size (42) so the h1 (56, 72 on /) is the single
-     dominant type event; amends the earlier 60-closing/42-section pair.
-     Set equal to --h2-section (rather than repointing the #footer-cta h2
-     etc. selector at var(--h2-section) directly) so --h2-cta stays a valid,
-     independently-settable token for any future page that still wants to
-     reference "the closing-CTA size" by name. /earnings' #earnings-cta h2
-     has its own hardcoded clamp(30px,4vw,52px) in earnings.html, a file
-     outside this builder's ownership — not reachable from here. */
-  --h2-cta: clamp(30px, 3.6vw, 46px);
-  /* MOBILE-HEADER-OFFSET (PUNCH-LIST, SITE-PM v102 find): #main-nav is
-     `position: fixed` at every width (see the Navigation section below), so
-     the first section on every page must reserve at least the header's
-     rendered height or its content renders underneath it. --header-h is the
-     single source of truth for that clearance, derived from THIS sheet's own
-     declared box values for #main-nav's children rather than a bare guess:
-     .nav-row's 14px+14px vertical padding + its tallest child's 44px
-     min-height (.nav-logo / .nav-cta) = 72px, + .nav-strip's explicit 26px
-     height = 98px, + #main-nav's 1px border-bottom = 99px declared-box sum.
-     Live Chrome at 375px (the SITE-PM MOBILE-HEADER-OFFSET measurement)
-     rendered the same header at 113.8px -- 14.8px taller than that sum, from
-     real font/line-height metrics the min-height floor doesn't capture. The
-     +31px on top of the 99px sum covers that 14.8px gap, the 8px minimum
-     clearance every consumer below must hold (h1.top >= header.bottom + 8),
-     and headroom for other engines/OSes, so --header-h clears the header on
-     any browser, not just the one that produced the 99px estimate. */
-  --header-h: calc(44px + 28px + 26px + 1px + 31px);
-  /* --hero-pad-mobile (was: var(--header-h) 16px 60px) is retired by
-     SPACING-0927: every hero now takes plain var(--section-pad) at every
-     width, and nav clearance moved to `main`'s own margin-top (see the
-     Layout Primitives section below) -- no hero needs a bespoke mobile
-     padding shorthand any more. */
 
-  /* Wave C.3b: one label-size token for the three inline drawings' SVG text
-     (index hero exchange, how-it-works approval fork, for-agents demand
-     exchange). Re-measured live at a 375px viewport (getBoundingClientRect
-     vs viewBox, per drawing): index scale 0.8605, fork scale 0.8156, demand
-     scale 0.9026. At 14px the fork's effective size was 14 * 0.8156 = 11.42,
-     under the 12px floor. 15px is the smallest whole value that clears the
-     floor on all three (fork: 15 * 0.8156 = 12.23, the tightest of the
-     three; index: 15 * 0.8605 = 12.91; demand: 15 * 0.9026 = 13.54 as the
-     token, but demand overrides back to 14 locally — see for-agents.html's
-     demand exchange <g> — because its widest label (345.8 of 364 viewBox
-     units at 14) would overflow its rect at 15 (370.7 of 364). */
+  --h2-cta: clamp(30px, 3.6vw, 46px);
+
+  --header-h: calc(44px + 28px + 26px + 1px + 31px);
+
   --svg-label: 15px;
 
-  /* ── Design system tokens: grounds, ink, shape ───────────────────────────
-     Paper by default. A dark scope (below) redefines the ground-aware tokens
-     so every rule that reads --bg / --surface / --fg-* / --line / --accent-text
-     is correct on either ground without a second rule. */
   --paper: #FAFAF8;
   --tint: #F1EFE9;
   --tint-deep: #E6E3DA;
@@ -169,8 +81,7 @@
   --r-stage: 14px;
   --shadow-panel: 0 1px 2px rgba(10, 10, 10, 0.06), 0 12px 32px -8px rgba(10, 10, 10, 0.16);
   --shadow-panel-dark: 0 1px 0 rgba(250, 250, 248, 0.04) inset, 0 24px 48px -16px rgba(0, 0, 0, 0.7);
-  /* The h1 scale: 1025 and up it is 48 to 64. At 1024 and down it is 40 to 56, so a tablet
-     gets a larger headline than a phone (the media block right after this one). */
+
   --h1: clamp(48px, 5vw, 64px);
 
   /* ground-aware tokens: light values here, dark values in the dark scope below */
@@ -182,8 +93,7 @@
   --line: #E2E0DA;
   --accent-text: var(--gold-ink);
   --focus-ring: #0A0A0A;
-  /* the four below follow the same rule: link underline, outline-control border,
-     and the primary button's fill and ink (ink on light, gold on dark) */
+
   --link-line: var(--gold-ink);
   --ctrl-line: #0A0A0A;
   --btn-fill: #0A0A0A;
@@ -194,11 +104,6 @@
   :root { --h1: clamp(40px, 6.2vw, 56px); }
 }
 
-/* ── Ground scopes ──────────────────────────────────────────────────────────
-   A section declares its ground with a class: .on-dark, .on-tint, or none
-   (paper). Everything inside reads the tokens, so a card, a table, a link or a
-   focus ring is right on whichever ground it sits. Navigation, footer, code
-   blocks and the dark halves of a drawing are always dark. */
 .on-dark,
 #main-nav,
 body > footer,
@@ -224,20 +129,9 @@ body > footer,
 }
 .on-dark { background: var(--bg); }
 
-/* The unlock-email opt-out page (server route /account/email-prefs/unsubscribe) is
-   a small standalone page with no navigation and no footer, and its own inline
-   style block still reads the colours of the dark site: ivory heading and
-   wordmark, slate sub text. So the whole page is a dark ground. The skip link sits
-   beside the column, not inside it, which is why the body takes the scope too
-   (above, so its focus ring is gold). The column carries its own ground as well, so
-   a browser that cannot match :has() still shows ivory on dark in the column. The
-   page's one action takes the dark-ground button (--btn-fill / --btn-ink resolve
-   gold and ink inside the scope). */
 body:has(> .unsub-wrap) { background: var(--bg); }
 .unsub-wrap { background: var(--bg); }
-/* The page's inline block asks for weight 700. The wordmark is Archivo 500 as in
-   the navigation (the shipped Archivo file stops at 600) and the heading is the
-   display serif, which has no heavier cut. */
+
 body .unsub-wrap .unsub-logo .wordmark { font-weight: 500; }
 body .unsub-wrap h1.unsub-heading { font-weight: 300; }
 
@@ -264,17 +158,11 @@ body .unsub-wrap h1.unsub-heading { font-weight: 300; }
   color: var(--fg-2);
 }
 
-/* The navigation is fixed at every width, so an anchor jump or a control focused with
-   Shift+Tab must land below it at every width, not only inside the 900-and-down block
-   (that block keeps its own larger, header-h clearance). */
 html {
   scroll-behavior: smooth;
   scroll-padding-top: var(--nav-clear);
 }
 
-/* Global horizontal-overflow backstop. clip (not hidden) avoids breaking
-   position:sticky and iOS momentum-scroll. Per-element fixes below are the
-   real fix; this is the safety net. */
 html, body { overflow-x: clip; }
 
 body {
@@ -286,19 +174,10 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Emphasis is Archivo 600. The shipped Archivo file stops at 600, and the browser's own
-   default for strong and b (bolder, which lands on 700) would ask for a weight it does
-   not have. Low specificity: any rule that sets its own weight on one still wins. */
 strong, b { font-weight: 600; }
 /* Mono ships at weight 400 only, so mono inside bold text never asks for another weight. */
 strong code, b code { font-weight: 400; }
 
-/* Base link — bare <a> in prose. Low specificity so styled nav/button/footer
-   links (which carry their own classes) win and render unchanged. Browser-default
-   blue fails WCAG on the dark bg (~2.1:1); aurum on obsidian is 8.66:1. */
-/* Design system pass: gold text never sits on a light ground. A bare link is ink
-   with a gold-ink underline on light, and an ivory-ish underline in a dark scope
-   (--link-line). The fuller treatment for links in running copy is below. */
 a { color: var(--fg-1); text-decoration: underline; text-decoration-color: var(--link-line); }
 
 main p a,
@@ -317,70 +196,17 @@ main li a {
   padding: 0 var(--gutter-base);
 }
 
-/* SPACING-0927 B0-a: a section already supplies the page gutter via its own
-   --section-pad horizontal component. A bare .container nested directly in
-   a section stacked ITS OWN padding on top of that below 1200px (44px/40px
-   instead of the ruled 20px/16px). Fix the cause at every width: a
-   .container that is a section's direct child never carries its own
-   horizontal padding -- the section's padding plus centering math supplies
-   the ruled 90/20/16 gutter alone, the same way the existing >=1200px rule
-   below already does above that width. This scopes narrowly to
-   `section > .container` so the OTHER, non-doubled uses of .container
-   (status.html's .status-hero/.status-body, api.html's #api-hero -- plain
-   divs, not sections, whose own horizontal padding is zero by design and
-   which rely on .container's padding as their ONLY gutter) are untouched
-   and still get the responsive --gutter-base value above. */
 section > .container {
   padding-left: 0;
   padding-right: 0;
 }
 
-/* AD sheet 9: a section already carries --section-pad's own 24px horizontal
-   inset (below); .container's OWN 24px padding then stacks on top of it once
-   the viewport is wide enough for .container's max-width + auto-margin
-   centering to be doing the centering work, pushing content to 194px instead
-   of the intended 170px (measured live: pricing and api hero AND every
-   .container-wrapped body section on every page). Dropping the inner
-   padding at that breakpoint collapses hero and body to the same 170px edge.
-   (AD-STEP4-RESPONSIVE-QC-2026-09-06.md §1.3, §2 P2.13)
-
-   N4: the drop was originally pinned to >= 1150px, which is inside
-   .container's own max-width + auto-margin runway (--max-w: 1100px) — a
-   1150-1199px viewport centers the (padding-less) container with 25-49.5px
-   of auto-margin on each side, but a stray few px of that margin can still
-   read thinner than 24px depending on exact content width, so the gutter
-   was not guaranteed to hold. Pinning the drop to >= 1200px instead keeps
-   .container's own 24px padding the active gutter through 1150-1199px and
-   only hands off to the auto-margin once it's provably >= 24px on both
-   sides at every content width up to --max-w's 1100px. Below 1200px the
-   gutter never drops under 24px. */
 @media (min-width: 1200px) {
   .container { padding-left: 0; padding-right: 0; }
 }
 
 section { padding: var(--section-pad); }
 
-/* SPACING-0927 R2-1 (round 2, coordinator ruling): a section's space above
-   and below its content comes from the section's own padding and nothing
-   else. Below a section (or the legal template's .legal-wrap, or a
-   reading-column <main>), the leading edge of content is whichever element
-   is first in the unbroken chain of first-children from that root, at
-   whatever depth; the trailing edge is the same chain of last-children. A
-   component's own margin-top/bottom on that specific instance is the
-   overage rule 4 (the seam = twice the rhythm) was failing on. `:first-
-   child`/`:last-child` inside a descendant selector matches every element
-   in BOTH chains at once, at any depth -- not just the section's own direct
-   child -- which is what "at every depth" requires; a single pair of rules
-   covers every page without walking each component by hand. !important
-   because this is a sitewide invariant that must win over every existing
-   component rule that (correctly, for a non-edge instance) sets its own
-   margin-top/bottom -- never mind specificity per component.
-   Scope: section, .legal-wrap and reading-column main are the three content
-   roots the sheet's page-gutter system already recognizes (A1/A1b).
-   dashboard.html has no <section> and its own <main> is excluded (via
-   :not(:has(#dash-view)), matched only on that one page) because its
-   signed-in cards, the Terms dialog and the review table are out of scope
-   (R2-3). */
 :is(section, .legal-wrap, main:not(:has(#dash-view))) :first-child {
   margin-top: 0 !important;
 }
@@ -388,41 +214,19 @@ section { padding: var(--section-pad); }
   margin-bottom: 0 !important;
 }
 
-/* SPACING-0927 (A1 hero clearance / A1b reading pages): #main-nav is fixed
-   at every width, so whatever sits first in the document renders under it
-   unless something clears it. One rule, applied once, sitewide: every
-   page's <main> (and the legal template's .legal-wrap, which has no <main>
-   of its own -- see below) is pushed down by exactly the fixed nav's
-   rendered height. This is a MARGIN, deliberately separate from any
-   section's own padding-top, so a hero (or the reading column) still
-   carries a clean, literal padding-top of 120/80/64 (rule 3) while the
-   ACTUAL measured clearance from the nav's bottom edge is that same
-   120/80/64 too: margin-top (99) + the first section's own padding-top
-   (120/80/64) - the nav's real rendered bottom (99) = 120/80/64 exactly. */
 main {
   margin-top: var(--nav-clear);
 }
 
-/* A1b: the four legal routes (server.js's serveLegalPage) render
-   .legal-wrap directly under <nav>, with no <main> wrapper -- server.js
-   itself is out of this build's scope, so the fix lives entirely here.
-   .legal-wrap's own margin carries no rule from server.js's inline style
-   (only padding is set there), so no specificity fight is needed for this
-   part. */
 .legal-wrap {
   margin-top: var(--nav-clear);
 }
 
-/* The legal template (server.js) sets its own vertical padding. The page gutter
-   on each side comes from here, so the 720px column sits inside the same gutter
-   as every other page (304 / 44 / 16 at 1280 / 768 / 375). `body` out-ranks the
-   template's own single-class rule. */
 body .legal-wrap {
   padding-left: var(--gutter-base);
   padding-right: var(--gutter-base);
 }
-/* Its links take `text-decoration: underline`, which resets the underline colour,
-   and its bold lead-ins stay at body colour. Two declarations put both back. */
+
 body .legal-wrap a,
 body .legal-back {
   text-decoration-color: var(--link-line);
@@ -431,12 +235,6 @@ body .legal-wrap strong {
   color: var(--fg-1);
 }
 
-/* AD sheet 9: one section-h2 size site-wide. This is a low-specificity
-   fallback — any section heading without its own per-page rule (e.g.
-   index #own-learnings-free, .explore-section, for-agents #agent-catalog,
-   for-builders #connect) now gets the shared token instead of the browser
-   default; sections that already carry a more specific selector (an id or
-   class) still win the cascade and are unified to the same value below. */
 section h2 {
   font-size: var(--h2-section);
   font-weight: 300;
@@ -448,9 +246,6 @@ section h2 {
   font-synthesis-weight: none;
 }
 
-/* Design system pass: the display type. h1 and h2 are Newsreader 300, never bold
-   (font-synthesis-weight keeps a stray bold request from faking one); h3 is
-   Archivo 500. Page-local rules that still ask for a heavier weight stay light. */
 h1,
 h2 {
   font-family: var(--serif);
@@ -478,15 +273,6 @@ h3 {
   color: var(--fg-1);
 }
 
-/* Sheet v2, heading to the element beneath it. One mechanism, set once: the
-   heading's own margin-bottom is the whole gap (what follows it takes no
-   margin-top, see the rule below). An h3 or smaller gives 16. An h1 or h2
-   gives 24 to text and 48 to a box: a card, a grid of steps, a table, a list of
-   rows, a drawing, a code block. A box is named in the :has() list, so adding
-   a new kind of box under a heading means adding it there. Low specificity as a
-   default for every heading inside a section; a page that needs another value
-   for one heading says so in its own block. R2-1's :last-child rule still wins
-   (!important) for a heading that happens to be a section's own last child. */
 section :is(h1, h2, h3, h4, h5, h6) {
   margin-bottom: var(--space-body);
 }
@@ -496,38 +282,17 @@ section :is(h1, h2) {
 section :is(h1, h2):has(+ :is(.steps, .faq-list, .dive-index, .discovery-band, .code-block, .dw-stage, .dw-panel, .trust-table-wrap, .value-tiers-table-wrap, table, pre)) {
   margin-bottom: var(--space-block);
 }
-/* The legal template (server.js) sets its own heading margins in an inline block
-   that loads after this sheet. Its h3 takes the sheet's 16 under it, with the
-   extra class to out-rank it; the template's h1 band and its h2 (24 to text, 48
-   to a table or code block) already hold the sheet's values. */
+
 body .legal-wrap h3 {
   margin-bottom: var(--space-body);
 }
-/* A heading with its content BESIDE it (the heading-left layout) has nothing
-   under it, so it takes no bottom margin at 1025 and up: a section whose heading
-   is taller than its content keeps equal space above and below. Stacked, below
-   that, it is an ordinary heading and the rules above give its gap. */
+
 @media (min-width: 1025px) {
   section .aside-list > :is(h1, h2) {
     margin-bottom: 0;
   }
 }
 
-/* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-3, root cause): a
-   heading's own margin-bottom (16px, the rule above, or a more specific
-   per-component rule already at 16) only sets the gap to what follows it
-   when nothing collapses against it. Adjacent-sibling margins collapse to
-   whichever is LARGER, not their sum -- so an element that still carries
-   its OWN margin-top (a paragraph at 20/24/32px, a subsection h3/h4 at
-   24px, a numbered-step header, an FAQ h2, etc.) silently overrides the
-   heading's ruled 16px with its own larger value. This is the recurring
-   cause the Art Director's independent measurement found on 8+ pages
-   (numbered-step headings, "Common Questions", legal-page subsection
-   headings all read 20-49px instead of 16) -- fixed once, at the cause,
-   instead of hunting down and patching every individual element's
-   margin-top. Excludes the dashboard's own sign-in screen (#login-view)
-   and post-login cards (.dash-card), both explicitly out of this build's
-   scope. */
 :is(h1, h2, h3, h4, h5, h6) + * {
   margin-top: 0 !important;
 }
@@ -536,8 +301,6 @@ body .legal-wrap h3 {
   margin-top: initial !important;
 }
 
-/* AD sheet 9: one closing-CTA h2 size site-wide, replacing 60/56/52/44px
-   across index, for-builders, how-it-works, for-agents, pricing, api. */
 #footer-cta h2,
 .hiw-cta-section h2,
 .agent-cta-section h2,
@@ -548,16 +311,7 @@ body .legal-wrap h3 {
 }
 
 /* ── Navigation ────────────────────────────────────────────────────────────── */
-/* AD nav re-rule sheet 2026-09-06 §1: #main-nav is now the fixed HEADER
-   BLOCK holding two stacked children — .nav-strip (the sign-in utility
-   line) and .nav-row (the existing logo/links/hamburger row). One glass
-   ground (::before below) and one bottom rule for the whole block; neither
-   child gets its own. flex-direction:column stacks them in DOM order, but
-   .nav-strip carries order:-1 so it always renders above .nav-row
-   regardless of source order (kept second in source so the byte-order the
-   existing nav tests read — the 5 labels, then the CTA — is unaffected by
-   this restructuring; the auth-slot link simply moved out of .nav-links
-   into .nav-strip, which itself sits after .nav-row in the HTML). */
+
 #main-nav {
   position: fixed;
   top: 0;
@@ -570,42 +324,13 @@ body .legal-wrap h3 {
   background: var(--bg);
 }
 
-/* DR-1 fix: the glass background lives on a pseudo-element, not on #main-nav
-   itself. backdrop-filter on #main-nav would establish a containing block for
-   position:fixed descendants -- including .nav-links, the mobile menu overlay
-   -- collapsing its "fixed to viewport" box down to #main-nav's own ~84px bar.
-   A pseudo-element has no descendants, so it carries the same visual blur
-   without ever becoming a containing-block trap for .nav-links. */
-/* Design system pass: the glass ground is gone. #main-nav is a solid #0A0A0A with
-   no backdrop-filter anywhere, so the containing-block trap described above cannot
-   come back and the ::before layer that worked around it is removed. */
-
-/* AD nav re-rule sheet §1: the sign-in utility strip. Height 26px, right
-   aligned on the nav's own 24px gutter (same horizontal padding as
-   .nav-row, so the strip word and the CTA share one right margin), 12px
-   IBM Plex Mono / weight 400 / letter-spacing 0.06em, sentence case,
-   vertically centered. Colour at rest var(--slate), hover var(--ash) —
-   never ivory, never gold. Holds "Sign in" or "Dashboard" only, same href
-   (/dashboard) both states — the label swaps per served page, not the
-   link. Part of the fixed band (inside #main-nav), so it never scrolls
-   away, and it does not collapse at any width — unlike .nav-row's links,
-   it never merges into the hamburger menu. order:-1 (see #main-nav above)
-   renders it above .nav-row. */
 .nav-strip {
   order: -1;
   height: 26px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  /* SPACING-0927 B0-b: the nav has no centered max-width wrapper of its own
-     (it is the fixed full-width bar), so it cannot reuse the section+
-     container centering trick directly. This formula reproduces the exact
-     same resolved number: below the point where a 1100px column would
-     center inside the viewport, max() falls back to the flat gutter-base
-     (24/20/16, responsive at the same breakpoints --section-pad uses);
-     above it, the calc() term (identical to a centered --max-w column's own
-     margin) takes over and matches the section gutter exactly (verified
-     90px at 1280). */
+
   padding: 0 max(var(--gutter-base), calc((100vw - var(--max-w)) / 2));
   font-family: var(--mono);
   font-size: 12px;
@@ -623,10 +348,6 @@ body .legal-wrap h3 {
   color: var(--fg-1);
 }
 
-/* AD nav re-rule sheet §1: height is paid for out of the nav row, not the
-   page. Vertical padding drops from 20px to 14px so the header block lands
-   at the sheet's target height net of the 26px strip added above (net
-   cost 14px over the pre-strip 20px×2 nav alone). */
 .nav-row {
   display: flex;
   align-items: center;
@@ -675,8 +396,7 @@ body .legal-wrap h3 {
 .nav-links a:hover { color: var(--fg-1); }
 /* Wave E2 item 10: active-link gold -> ash. */
 .nav-links a.active { color: var(--fg-1); }
-/* The link for the current page differs by more than colour: a 1.5px underline in the
-   link's own colour, 6px under the text (aria-current carries it for assistive technology). */
+
 .nav-links a.active,
 #main-nav a[aria-current="page"] {
   text-decoration: underline;
@@ -685,19 +405,6 @@ body .legal-wrap h3 {
   text-underline-offset: 6px;
 }
 
-/* AD sheet 9: nav CTA >= 36px tall (measured 35px live).
-   Wave E2 item 12: raised to 44px (measured 40.4px live, AD-STEP4-FINAL
-   P3.18). Wave E2 item 10 sent this to an ash ghost button ("one accent
-   event per screen"); the AD nav re-rule sheet (2026-09-06 §2/§6)
-   superseded that call for a FILLED button, and ASK-WAVE (2026-09-07,
-   THE-ASK-PACKET §3) supersedes THAT: the homepage command block is now
-   the property's single gold event, so the nav pill demotes sitewide to
-   an outlined ivory ghost button — same box (44px min-height, 8px 18px
-   pad), same position, persistence and label. Ground transparent, text
-   var(--ivory), border rgba(229,229,227,0.35) — mirrors .btn-secondary's
-   outline pattern. Hover tints to rgba(255,255,255,0.04), text stays
-   ivory. --aurum-hi is no longer referenced by this rule (left defined,
-   unused). */
 .nav-cta {
   font-size: 15px !important;
   font-weight: 500 !important;
@@ -726,22 +433,14 @@ body .legal-wrap h3 {
 }
 
 /* ── Hero ──────────────────────────────────────────────────────────────────── */
-/* A hero takes plain section padding like any other section (120 / 80 / 64), and
-   the fixed navigation's clearance is `main`'s own margin-top (below), so the
-   hero's own padding-top reads exactly the rhythm. */
+
 #hero h1 {
   font-size: var(--h1);
   font-weight: 300;
   line-height: 1.04;
   letter-spacing: -0.022em;
   color: var(--fg-1);
-  /* FIX-UNIT-2B H2: was 820px, which wrapped this 10-word h1 to 3 lines at
-     1280px with "before." orphaned alone on the last line. 950px is the
-     smallest width (of 820/850/880/900/920/950px, measured live) that
-     reaches 2 lines with no single-word line at 1280, with no font-size
-     change. Narrower viewports never reach this max-width in the first
-     place (the section's own padding/container constrain them well below
-     it), so 375/768 are unaffected -- verified unchanged. */
+
   max-width: 950px;
   font-family: var(--serif);
   text-wrap: balance;
@@ -761,19 +460,10 @@ body .legal-wrap h3 {
   flex-wrap: wrap;
 }
 
-/* ASK-WAVE (2026-09-07, THE-ASK-PACKET §1 item 4, AD ruling): the hero's
-   lone secondary text link sits beside the #install block itself, not
-   beneath the whole copy column — spec correction: the tree's real hero
-   grid breakpoint is 981px (index.html §"@media (min-width: 981px)"), not
-   the packet draft's 900px. Below 981px this stacks (link under the
-   block); at 981px+ it sits to the right, baseline-aligned with the
-   command block's bottom edge. */
-
 .hero-cta-link {
   display: inline-flex;
   align-items: center;
-  /* FIX-UNIT A6+L8: 44px touch target. Already inline-flex/align-items:center,
-     so the text stays centered in place and simply gets more box around it. */
+
   min-height: 44px;
   color: var(--fg-1);
   font-family: var(--sans);
@@ -790,11 +480,6 @@ body .legal-wrap h3 {
   text-decoration-color: var(--fg-1);
 }
 
-/* Wave E2 item 12: pinned to 54px (was 52px — .btn-secondary's 1px border
-   adds the 2px .btn-primary lacked, AD-STEP4-FINAL-2026-09-06.md §4: 52px
-   at 375 on how-it-works/for-agents/pricing/api, 52px at both widths on
-   earnings, vs .btn-secondary's 54px). A transparent 1px border matches
-   btn-secondary's box-model exactly without changing the visible fill. */
 .btn-primary {
   display: inline-flex;
   align-items: center;
@@ -846,8 +531,7 @@ body .legal-wrap h3 {
   /* the note never leaves a single word alone on its last line */
   text-wrap: balance;
 }
-/* On a phone the setup link is a 44px target. The padding grows its hit area and the
-   equal negative margin takes it back out of the line, so the note keeps its height. */
+
 @media (max-width: 600px) {
   .footer-cta-note a {
     display: inline-block;
@@ -856,11 +540,6 @@ body .legal-wrap h3 {
   }
 }
 
-/* AD design-tells sweep: the #learning-example section and its whole card
-   family (.learning-card, .learning-category, .learning-score, .learning-title,
-   .learning-body, .learning-price, .learning-meta, .learning-explain) are
-   unreferenced by any page's markup — dead CSS, removed. .learning-vs-llm is
-   the one survivor (still used on for-builders.html). */
 .learning-vs-llm {
   max-width: 640px;
   margin: 0 auto;
@@ -870,8 +549,6 @@ body .legal-wrap h3 {
 }
 
 /* ── How It Works ──────────────────────────────────────────────────────────── */
-/* Design system pass: #how-it-works no longer paints its own ground. A section
-   declares its ground with .on-dark / .on-tint, or sits on paper. */
 
 .steps {
   display: grid;
@@ -883,10 +560,7 @@ body .legal-wrap h3 {
 
 .step {
   background: var(--surface);
-  /* SPACING-0927 rule 6 set card padding to 32px on all four sides (was 40/32).
-     Design system pass: a step card is now a dark drawing (.step-art) over a body
-     (.step-body), each carrying its own padding (see the drawing kit below);
-     markup without .step-body keeps the 32px through `.step:not(:has(> .step-body))`. */
+
   border: 1px solid var(--line);
   border-radius: var(--r-stage);
   overflow: hidden;
@@ -975,12 +649,7 @@ body .legal-wrap h3 {
   font-size: 12px;
   color: var(--fg-3);
   letter-spacing: 0.05em;
-  /* R4-3 (RULING-SEAMS-2026-09-28.md): a price and its label is the
-     named label-to-value pairing (8px). Was an inline <span> (the
-     default), measuring 7px purely from its own inline line-box leading
-     against .pill-price's line-height, not an authored margin (both were
-     0). display:block removes the inline-leading artifact; the explicit
-     margin-top makes the named 8px value real rather than accidental. */
+
   display: block;
   margin-top: var(--space-tight);
 }
@@ -1017,9 +686,6 @@ body .legal-wrap h3 {
   max-width: 100%;
 }
 
-/* Grid/flex columns hold a min-content of 'auto' by default, which lets a
-   wide <pre> or long string push the page wide. min-width:0 lets them shrink
-   so the inner overflow-x:auto takes over. Safe at all widths. */
 .agents-copy,
 .builders-grid > * {
   min-width: 0;
@@ -1041,9 +707,6 @@ body .legal-wrap h3 {
   text-transform: uppercase;
 }
 
-/* AD sheet 9: 44px minimum tap target (was 36px), 13px type (was 11px), on
-   every .copy-btn instance site-wide (22 plain instances plus the gold
-   #install variant below, which inherits font-size from here). */
 .copy-btn {
   font-family: var(--mono);
   font-size: 13px;
@@ -1075,8 +738,6 @@ body .legal-wrap h3 {
   tab-size: 2;
 }
 
-/* A block that scrolls sideways shows a thin track on the dark ground, so a phone
-   reader can see there is more to the right. Every pre in a dark panel takes it. */
 .code-block pre,
 .dw-dark pre,
 .dw-stage-dark pre,
@@ -1108,9 +769,6 @@ body .legal-wrap h3 {
   border-radius: 4px;
 }
 
-/* Monochrome-plus-gold syntax (visual pass P7): comments slate, code ivory,
-   only the load-bearing token (key/command) in aurum. No blue, no green;
-   green stays reserved for the /status "operational" semantic only. */
 .code-block pre .c { color: #7C8A9A; } /* comment — #7C8A9A on #111 = 5.36:1 (WCAG AA) */
 .code-block pre .k { color: #C9A84C; } /* keyword / key — the one gold token */
 .code-block pre .s { color: var(--fg-1); } /* string */
@@ -1352,13 +1010,7 @@ tbody tr:hover { background: var(--bg); }
 
 footer {
   border-top: 1px solid var(--line);
-  /* SPACING-0927 B-3: nav and footer both take the page gutter, so the
-     logo's left edge and the content's left edge are the same number at
-     every width. Vertical 32px is unchanged (not part of the section
-     rhythm scale -- footer is not a "section" for rule 3). .footer-inner
-     (below) already has zero own padding + max-width/auto-margin
-     centering, so this footer padding + that centering reproduces
-     90/20/16 exactly, the same math a section+.container pair uses. */
+
   padding: 32px var(--gutter-base);
   text-align: center;
   background: var(--bg);
@@ -1404,17 +1056,6 @@ footer {
    and a line never starts with a middot. */
 .footer-meta .fm-item { white-space: nowrap; }
 
-/* ── AD sheet 9: one FAQ accordion component, site-wide ──────────────────────
-   Matches how-it-works' pattern (the only page with a working accordion
-   before this pass); index, for-agents, for-builders, pricing and api
-   previously rendered a static <p class="faq-q">/<p class="faq-a"> pair with
-   no interaction. Markup for every FAQ item is now
-   <div class="faq-item"><button class="faq-question" onclick="toggleFaq(this)">
-   <span>question</span><svg class="faq-icon">...</svg></button>
-   <div class="faq-answer"><div class="faq-answer-inner">answer</div></div></div>,
-   toggled by the shared toggleFaq() function each page defines locally. The
-   open max-height is set generously above how-it-works' own 400px so longer
-   answers on other pages are never clipped. */
 .faq-list { max-width: 700px; margin: 0 auto; }
 .faq-item { border-bottom: 1px solid var(--line); }
 .faq-item:first-child { border-top: 1px solid var(--line); }
@@ -1446,11 +1087,7 @@ footer {
   transition: transform 0.3s, color 0.3s;
 }
 .faq-item.open .faq-icon { transform: rotate(45deg); color: var(--accent-text); }
-/* N1: visibility:hidden on the closed state pulls any link inside the
-   (still-in-DOM) answer text out of tab order; visibility flips back the
-   instant the item opens (0s delay) but only flips to hidden after the
-   max-height collapse finishes (0.35s delay) so closing doesn't cut the
-   text off mid-animation. */
+
 .faq-answer {
   max-height: 0;
   overflow: hidden;
@@ -1495,26 +1132,6 @@ footer {
   transform: rotate(-45deg) translate(5px, -5px);
 }
 
-/* ── Responsive: nav (Wave E2 item 1, reverted by AD nav re-rule sheet
-   2026-09-06 correction 1) ────────────────────────────────────────────────
-   Wave E2 moved this to 1057px for a wordmark/first-link collision that
-   depended on a seven-label reorder including "Search" and "How submissions
-   work" (158.4px, the widest label the nav would ever have carried). Both
-   labels are gone from the ruled set and 1057 was computed for them, so the
-   AD nav re-rule sheet (correction 1) voids that number: "Live and main
-   still collapse the nav at max-width: 900px. 1057 is wave E P1.1, built
-   but not live... Wave E P1.1 should be dropped, not merged, once the
-   six-label set lands." This NAV-WAVE amendment reverts the breakpoint to
-   900, matching the AD sheet's own arithmetic for the current 5-label
-   interim set (minimum one-line width well under 900). This is the ONLY
-   media query gating the desktop-nav-vs-hamburger switch (confirmed: no
-   other .hamburger/.nav-links rule exists in this sheet, and every other
-   900px query elsewhere in the codebase gates unrelated grids, not this
-   switch) — kept split out from the general-layout 900px block below (that
-   block's unrelated grids/section-pad rules are untouched) rather than
-   merged into it, so the two remain independently editable. Wave E2 item
-   12: the open-menu background stays full opacity (var(--obsidian)) so the
-   hero/gold copy button don't read through it. */
 @media (max-width: 900px) {
   .hamburger {
     display: flex;
@@ -1561,40 +1178,14 @@ footer {
       .pricing-packs { grid-template-columns: repeat(2, 1fr); }
   .auth-options { grid-template-columns: 1fr; }
 
-  /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-5): align-items:center
-     shrinks each stacked child (.footer-logo, .footer-meta) to its own
-     content width and centres that box within the column -- so the
-     box's OWN left edge (what the gutter is measured from) no longer
-     touches the page gutter, and how far off depends on how much text the
-     footer holds. /pricing's footer, with its tagline, happens to render
-     wide enough that the centred box still reads close to the gutter;
-     /dashboard's shorter link-only footer does not (measured 162.97px at
-     768px, ruled 20px). flex-start makes every page's footer content hug
-     the real left edge deterministically, not by content-length
-     coincidence. text-align:center is dropped with it -- once each child
-     is its own natural width (not centred as a shrunk box), it no longer
-     does anything (the text already fills its own box). */
   .footer-inner { flex-direction: column; align-items: flex-start; }
 
-  /* Anchor jumps (in-page # links) must land below the fixed header too --
-     same token, same breakpoint the header itself uses for the
-     hamburger/nav-links switch (see the Navigation section above). */
   html { scroll-padding-top: var(--header-h); }
 }
 
 @media (max-width: 600px) {
   :root { --section-pad: 64px 16px; --gutter-base: 16px; --band-pad: 32px 16px; }
 
-  /* ── DR-3: mobile type ramp — the one-large-headline law holds at 375px ──────
-     Every phone width (<=430px) sits inside this query. Display heads (page/hero
-     h1) stay ~40px; every section H2 steps down to ~25px, so the headline
-     dominates at ~1.6x on the narrowest phone (was ~1.1-1.3x). Desktop scale is
-     APPROVED and untouched — nothing here leaks above 600px. !important is
-     required to defeat the per-page inline hero/section-head sizes (none of which
-     carry a mobile override of their own). */
-  /* Design system pass: the phone sizes are now the tokens themselves (--h1 clamps
-     to 40px, --h2-section to 30px at this width), so the !important override that
-     defeats per-page sizes points at the tokens instead of fixed numbers. */
   #hero h1,
   .pricing-page-header h1,
   .hiw-hero h1,
@@ -1620,17 +1211,10 @@ footer {
 
 /* ── Utilities ─────────────────────────────────────────────────────────────── */
 
-/* AD design-tells sweep P2a: every .reveal block now paints on load (the
-   html.js-reveal opt-in line is gone from every page head, so nothing ever
-   gates this element on a hidden state). The .reveal class attribute stays
-   on markup sitewide — inert — this transition rule is harmless to keep. */
 .reveal { transition: opacity 0.55s ease, transform 0.55s ease; }
 
 /* ── Accessibility ───────────────────────────────────────────────── */
-/* FIX-UNIT A1: shared utility for an off-screen polite live region (the
-   copy-button "copied!" announcement). Standard clip-based hiding -- stays
-   in the accessibility tree and audible to a screen reader, invisible and
-   with no layout footprint for sighted users. */
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -1658,27 +1242,11 @@ footer {
   top: 0;
 }
 
-/* FOCUS-VISIBLE (SITE-PERFECT-DEFECT-SHEET-2026-09-06.md V3): one universal
-   keyboard-focus ring for every focusable element site-wide (nav links,
-   buttons, footer links, form controls, the hamburger toggle). Ivory
-   (var(--ivory) = #FAFAF8 = rgb(250,250,248)), not aurum -- aurum dies
-   against the aurum-filled .nav-cta and other gold grounds the same way
-   the AD sheet's nav-cta override already avoids; making the universal
-   ring ivory means every element gets a ring that survives its own
-   background without a per-component override. The two prior identical
-   `*:focus-visible` / `button,a,input:focus-visible` blocks (both aurum
-   2px, redundant with each other) are consolidated into this one rule.
-   `:focus-visible` (not bare `:focus`) is what already scopes this to
-   keyboard/programmatic focus and skips mouse-click focus -- no separate
-   `:focus:not(:focus-visible)` suppression rule existed or is needed. */
-/* Design system pass: the ring is ground-aware. --focus-ring is ink on a light
-   ground and gold in a dark scope, so one rule is visible everywhere. */
 *:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
-/* A code block that scrolls sideways is a focusable scroller inside a clipping box, so
-   its ring is drawn inside the box, where the clip cannot cut it off. */
+
 pre:focus-visible {
   outline-offset: -4px;
 }
@@ -1697,10 +1265,6 @@ abbr[title] {
   cursor: help;
 }
 
-/* ── Section grounds ──
-   A section names its ground with .on-dark or .on-tint (see Ground scopes under the
-   tokens) or sits on paper. .explore-section is a paper section like any other
-   that names no ground. */
 .explore-section {
   background: var(--paper);
 }
@@ -1766,11 +1330,6 @@ abbr[title] {
   white-space: nowrap;
 }
 
-/* AD sheet 9: .value-tiers-table .example-text is dead — the fabricated
-   EXAMPLE column was removed from pricing.html in an earlier wave (the
-   table is 3 columns now); removed here with the mobile ::before rule
-   below. */
-
 /* ── Earnings Scenario (For Builders) ──────────────────────────────────────── */
 .earnings-scenario {
   margin-top: 32px;
@@ -1832,22 +1391,6 @@ abbr[title] {
   }
 }
 
-/* ── Hero install block (E1: the primary conversion is the command).
-   ASK-WAVE (2026-09-07, THE-ASK-PACKET §1 item 1 + AD ruling): "the ask
-   IS the command block, not a button" — framed, isolated and scaled to
-   read as the fold's single decisive move rather than a code sample near
-   the headline, while `npx auxilo setup` itself stays fully inside the
-   hero fold at both 1440x900 and 375x812 (verified: #hero-setup-snippet's
-   own box, not the whole #install column below it, is the packet's "ask"
-   and the thing required to stay in-fold). Border upgraded from the base
-   .code-block's 0.08-alpha ivory hairline to an aurum-tinted frame with a
-   soft lift shadow; pre text raised from 16px to 18px (16px on mobile, up
-   from the prior 14px base); box widened from 560px to 600px. Kept
-   deliberately modest rather than maximal so the trust-bullet list below
-   it doesn't lose materially more fold real estate than the microcopy
-   line already costs it. The copy button's gold fill (index.html §"#install
-   .copy-btn") is unchanged and is part of this same event, not a second
-   one. */
 .hero-install .hero-setup-block {
   text-align: left;
   border-color: rgba(201, 168, 76, 0.45);
@@ -1892,13 +1435,6 @@ span.pull-stat-secondary.pull-stat-secondary, .pull-stat-secondary.pull-stat-sec
   letter-spacing: -0.02em;
 }
 
-/* LAYOUT-SHEET 2026-09-26 item 8: uppercase transform dropped -- the
-   markup is already authored in sentence case underneath it, and
-   multi-word labels ("direct share (60% via discovery)") were measurably
-   harder to scan uppercased at phone width. Letter-spacing tuned down to
-   match: 0.08em was set for tracked uppercase and reads unnaturally
-   spaced-out on sentence case at 13px. Do not touch .code-block-lang --
-   that is the ruled eyebrow signature, a different component. */
 span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.pull-stat-caption {
   font-size: 13px;
   letter-spacing: 0.02em;
@@ -1906,23 +1442,6 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   margin-top: 8px;
 }
 
-/* ── DR-7d LEDGER CONTAINER FORM RULE ───────────────────────────────────────
-   Ledger stats use the STRIP form: a row of hairline-separated cells with no
-   per-cell card boxes (bg/border/radius). This matches the site's hairline-
-   divider discipline; boxed stat-cards are the drift. Reference: .builders-hero-stats. (earnings .math-stat was flattened from cards
-   to strip cells to conform — see earnings.html.) */
-
-/* ── DR-7f: single gold "ledger stat" for the thin chapter heroes (earnings,
-   pricing, how-it-works). Hidden until a real number arrives from /knowledge/stats
-   — never renders a fabricated or placeholder figure. One gold event per hero. */
-/* Wave E2 item 11: display:none while hidden removed the box from layout
-   entirely, so a min-height on it (see below) was inert — nothing was ever
-   reserved until .is-live flipped display, which is exactly the CLS
-   PageSpeed-FINAL-2026-09-06.md P2.3 measured. Switched to visibility, so
-   the box (and its reserved min-height) stays in flow at all times,
-   painting nothing until live. Still satisfies DR-7f ("never renders a
-   fabricated or placeholder figure"): visibility:hidden paints nothing and
-   is excluded from the accessibility tree, same as display:none was. */
 /* SPACING-0927 R2-2b: margin-top 20 ties 16/24 (tie->larger); gap 10
    rounds down to 8. */
 .hero-ledger {
@@ -1931,13 +1450,11 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   min-height: 26px;
   margin: var(--space-copy) auto 0;
   align-items: baseline;
-  /* LAYOUT-SHEET 2026-09-26 item 5: was justify-content: center. The sole
-     live consumer today (how-it-works.html) is now left-aligned by
-     ruling; flex-start holds that. */
+
   justify-content: flex-start;
   gap: var(--space-tight);
 }
-.hero-ledger.is-live { visibility: visible; } /* FIX-UNIT L10: comment corrected -- justify-content above is flex-start (not center) as of LAYOUT-SHEET 2026-09-26 item 5, so this positions the ledger left, regardless of parent text-align; its sole current consumer (how-it-works.html) is left-aligned by design. A future page reaching for .hero-ledger should not assume the old centered default. */
+.hero-ledger.is-live { visibility: visible; }
 .hero-ledger .hero-ledger-num {
   font-family: var(--mono);
   font-size: 22px;
@@ -1946,9 +1463,7 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   letter-spacing: -0.01em;
   line-height: 1;
 }
-/* LAYOUT-SHEET 2026-09-26 item 8: same two edits as .pull-stat-caption
-   above (same visual role, different component) -- uppercase dropped,
-   letter-spacing tuned down for sentence case. */
+
 .hero-ledger .hero-ledger-label {
   font-size: 12px;
   letter-spacing: 0.02em;
@@ -1966,10 +1481,7 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   grid-template-columns: 150px 1fr auto auto;
   align-items: baseline;
   gap: 16px;
-  /* SPACING-0927 R2-2a: this is a list item; gap between list items is
-     16px, named by the sheet. Each row's own padding-top and padding-
-     bottom supply half the gap to the row above/below (was 14, giving 28
-     between rows; 8+8=16). */
+
   padding: var(--space-tight) 4px;
   border-bottom: 1px solid var(--line);
 }
@@ -2037,9 +1549,6 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   .discovery-price { grid-area: price; }
 }
 
-/* ── Value-tiers table: stacked cards under 600px (visual pass P8) ─────────
-   The PRICE RANGE and EXAMPLE columns are the proof; never push the proof
-   off-screen on the device developers actually browse. */
 @media (max-width: 600px) {
   .value-tiers-table-wrap {
     overflow-x: visible;
@@ -2088,33 +1597,6 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
 
 /* Range strings in a ledger strip: compact mono so the range holds one line */
 
-/* ══════════════════════════════════════════════════════════════════════════
-   Wave E2 (SITE-PM final wave sheet, 2026-09-06) — items 5, 8, 11-13
-   This builder owns styles.css only, plus the <style> block CONTENTS of
-   about.html and writing/index.html (item 14). Every rule below that
-   targets a class/id living in another page's own markup or own <style>
-   block reaches it purely through this sheet's cascade — none of those
-   other HTML files were edited. Where a rule needs !important, it is
-   because that page's own <style> block declares the same property on the
-   same selector and loads AFTER this sheet in <head>, so equal specificity
-   would otherwise resolve to source order, not to this fix.
-   ══════════════════════════════════════════════════════════════════════════ */
-
-/* ── Item 5: /for-builders hero stat row ─────────────────────────────────
-   Markup ships 70% and "under 1 minute" as `.stat-num.pull-stat-caption`
-   (one tier below `.pull-stat-secondary` — AD-STEP4-FINAL-2026-09-06.md §5
-   residual 7: number+label render at the same 13px slate as their own
-   caption, 226 alone at 88px gold). for-builders.html is out of this
-   builder's file ownership so the class can't be renamed in markup; this
-   promotes just those two spans to the pull-stat-secondary treatment.
-   Wave E fix (F2): the original `:not(.reveal)` scope relied on the second,
-   lower "Supply is ahead of demand" stats strip carrying a `.reveal`
-   class to stay excluded. Wave E3 (item 7) stripped every `.reveal` class
-   from this page, so `:not(.reveal)` started matching both strips and the
-   min-height rule below forced dead space above the second strip's
-   `.pull-stat-secondary` numbers. Scoped to `#builders-hero` (the top hero
-   section — the second strip lives in `#earnings-projection`) instead,
-   which doesn't depend on a class either wave might remove next. */
 #builders-hero .builders-hero-stats .builders-hero-stat .stat-num.pull-stat-caption {
   font-size: clamp(28px, 4vw, 40px);
   font-weight: 400;
@@ -2124,10 +1606,7 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   text-transform: none;
   margin-top: 0;
 }
-/* One label baseline across the three cells: reserve the SAME box height
-   (the 226 cell's own clamp) under every stat-num regardless of its own
-   font-size, bottom-aligning the number so the caption beneath always
-   starts at the same y. Fixes the 59.2px label-top break AD measured. */
+
 #builders-hero .builders-hero-stats .builders-hero-stat .stat-num {
   min-height: clamp(48px, 7vw, 88px);
   display: flex;
@@ -2135,46 +1614,6 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   line-height: 1;
 }
 
-/* ── Item 11: .hero-ledger reserved min-height ────────────────────────────
-   Implemented in place on the original .hero-ledger rule above (near the
-   pull-stat section), not here — kept together with the display/visibility
-   fix it depends on. Live-measured (this builder, headless Chrome via the
-   browser tool, same getBoundingClientRect method AD-STEP4 uses) on the
-   running production DOM once .is-live has rendered a real number: 24.70px
-   on /how-it-works at 1280 and 375, 25.30px on /pricing at 1280 (identical
-   num+label markup on both pages; the two are 24.7-25.3 apart only by
-   subpixel/font-hinting noise, not a real per-page difference) — 26px
-   covers both with a small margin. PageSpeed-FINAL-2026-09-06.md P2.3
-   asked for this on /how-it-works and /pricing specifically; the class is
-   shared with /earnings too and this fix is strictly beneficial there as
-   well (same CLS bug, same fix), so it's left in scope rather than
-   excluded. */
-
-/* ── Item 11: size-adjust fallback-metric overrides ───────────────────────
-   PageSpeed-FINAL-2026-09-06.md P2.4 names no target numbers ("no such
-   property exists anywhere in styles.css") — the ratios below come from
-   AD-STEP4-FINAL-2026-09-06.md §2's own live advance-width measurements
-   (Range.getClientRects on the real DOM, woff2 blocked to force the
-   fallback), the best available already-measured data; this builder could
-   not reproduce that block-the-font measurement live against the prod
-   site without editing it. Archivo: 16px regular vs Helvetica Neue,
-   294.9/305.8 = 96.43% (the body-copy weight — the dominant contributor to
-   the swap's ~30px page-height reflow AD measured, not the 72px-bold
-   figure, which is a different, less-representative weight comparison).
-   Plex Mono: 13px vs Menlo, 124.8/125.2 = 99.68% (the exact weight/size
-   Plex Mono ships at everywhere it's used, .code-block pre).
-   Deliberate deviation from a literal reading of "add to both @font-face
-   rules": size-adjust is added to NEW synthetic fallback @font-face
-   declarations, not to Archivo's/Plex Mono's own existing @font-face
-   rules. Putting it on the real webfonts' own faces would scale their
-   PERMANENT rendered size (not just the swap window), shrinking every
-   approved h1/h2/body size on the site by the same ~3.6% this is supposed
-   to only apply to the fallback during the brief pre-load flash — that
-   would be a real, if small, visual regression against every measurement
-   in this whole wave. The fallback face is inserted into --sans/--mono
-   right after the primary font as a local()-only face (an unmatched
-   local() fails closed to the next fallback, so a system with neither
-   Helvetica Neue nor Menlo just falls through to the original chain). */
 @font-face {
   font-family: 'Archivo Fallback';
   src: local('Helvetica Neue'), local('Arial');
@@ -2185,12 +1624,7 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   src: local('Menlo'), local('Consolas');
   size-adjust: 99.68%;
 }
-/* Design system pass: Newsreader's fallback. Measured live (Range widths of ten
-   real headings at 64px, Newsreader vs local Georgia): Newsreader sets 96.9% as
-   wide as Georgia, so size-adjust is 96.9%. Newsreader's own ascent 735 and
-   descent 265 per 1000 em, divided by that ratio, give the overrides below, so a
-   heading set in the fallback occupies the same box (64px tall at 64px) and the
-   swap does not move the lines. */
+
 @font-face {
   font-family: 'Newsreader Fallback';
   src: local('Georgia');
@@ -2201,25 +1635,13 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
 }
 
 /* ── Item 12 (remainder): 44px targets not reachable via a shared class ── */
-/* for-agents.html's own <style> block defines .agent-cta-links a (the six
-   footer links, AD-STEP4-FINAL P3.19: 38.4px) with no display/min-height
-   declared for that selector at all, so these two new properties apply
-   uncontested — no !important needed, nothing else sets them. */
+
 .agent-cta-links a {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
 }
-/* ── Item 13: hero `br` conditional above 768px ──────────────────────────
-   index (#hero h1), for-agents (.page-hero h1) and pricing
-   (.pricing-page-header h1) each hard-code exactly one <br> inside their
-   h1 (verified: one match each), forcing the same two-line break at every
-   width and stranding words at 375 (AD-STEP4-FINAL §2: index "this." at
-   24%, for-agents "what" alone at 26%, pricing "$0.05." orphaned at 38%).
-   Hiding just these three <br>s below 768px lets the h1 wrap naturally on
-   phones without touching any other <br> on the site (for-builders' own
-   "Build Once.<br>Keep Earning." break is deliberately NOT in this
-   selector list and is unaffected). */
+
 @media (max-width: 768px) {
   #hero h1 br,
   .page-hero h1 br,
@@ -2228,63 +1650,10 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   }
 }
 
-/* ── Item 13 (SUPERSEDED by SPACING-0927): pricing measure widening ──────
-   The old fix zeroed .pricing-page-header .container's own padding below
-   600px to cancel a stacked --hero-pad-mobile + .container double inset.
-   SPACING-0927 removes --hero-pad-mobile from every hero (B-4/A1: a hero
-   takes plain padding like any section, nav clearance moves to `main`'s
-   own margin) and gives #pricing-hero zero horizontal padding of its own
-   at every width, delegating the gutter entirely to .container's now-
-   responsive padding (var(--gutter-base)) -- see the Hero section above
-   and #pricing-hero's own rule in pricing.html. Re-zeroing .container here
-   would collapse that gutter back to 0, so this rule is removed rather
-   than kept as a no-op. */
-
-/* ── Item 13 (SUPERSEDED by SPACING-0927): for-builders hero top padding cut
-   The old fix pinned .builders-hero-content's mobile padding-top to 40px
-   to land a combined (hero + content) offset near a "140px" target. Hero
-   nav-clearance is no longer part of any hero's own padding (it is `main`'s
-   margin-top, sitewide, see above), and .builders-hero-content itself now
-   carries no padding of its own at any width (matching every sibling
-   *-content wrapper) -- this !important override would reintroduce an
-   unwanted 40px on top of #builders-hero's own clean rhythm padding, so it
-   is removed rather than kept as a no-op. */
-
-/* ── Item 13: /api method column mono to 13px ─────────────────────────────
-   `.ep-method` (10px) is shared with the compact `.endpoint-list` badges
-   used elsewhere on api.html and on for-agents.html's own MCP quick
-   reference — the wave sheet names only "the /api method column" (the
-   Method column of the two full endpoint-reference TABLES,
-   AD-STEP4-FINAL §2 "Spec table mono": 10px method spans under the 12px
-   floor next to 13px endpoint spans in the same row). `.endpoint-table
-   .ep-method` scopes to just those two tables (api.html has no
-   .endpoint-list at all), leaving the compact-list badges on both pages
-   at their current size. */
 .endpoint-table .ep-method {
   font-size: 13px;
 }
 
-/* ── Item 13: five older how-it-works diagram labels up to the 12px floor ─
-   The three newer drawings (index hero-figure, for-agents hero-exchange,
-   the how-it-works approval fork) already clear the floor via the shared
-   --svg-label token. The five older mini-diagrams on how-it-works
-   (magic-link auth, MCP connection, discovery pricing flow, learning-
-   example card, before/after resolution) instead carry raw
-   font-size="7|8|9|10" presentation attributes directly on their <text>
-   nodes, no class (AD-STEP4-FINAL §2: svg#13 7/8, svg#16 7/8/9, svg#2 9,
-   svg#4 8/10, svg#10 8/9/16). `.hiw-step-card` is the shared wrapper class
-   these five diagrams sit inside — defined only in this sheet, used only
-   by how-it-works.html — so it scopes this cleanly to just those five
-   without touching the approval fork's own text (which has no font-size
-   attribute at all, set once at the parent <svg> via --svg-label, so it
-   can't match these attribute selectors) or any other page's SVGs. CSS
-   `font-size` overrides an SVG presentation attribute at any specificity,
-   so no !important is needed. FLAGGED, not verified live: these five
-   diagrams have small fixed viewBoxes sized around their original 7-10px
-   text; a ~30-70% size jump to 12px risks overflow/collision inside a few
-   of them (e.g. "FREE PREVIEW" at font-size 7) that this builder could not
-   visually confirm without the page live in this wave — recommend a
-   render QA pass before merge. */
 .hiw-step-card svg text[font-size="7"],
 .hiw-step-card svg text[font-size="8"],
 .hiw-step-card svg text[font-size="9"],
@@ -2292,10 +1661,6 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   font-size: 12px;
 }
 
-/* ── The legal routes' h1 and h2 carry the display leading and tracking ──
-   /terms and /privacy are server-rendered by serveLegalPage() in server.js, whose
-   inline <style> block gives `.legal-wrap h1` and `h2` a size and margins only.
-   h1 is 1.04 / -0.022em and h2 is 1.1 / -0.016em, the same as every other page. */
 .legal-wrap h1 {
   line-height: 1.04;
   letter-spacing: -0.022em;
@@ -2305,22 +1670,6 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   letter-spacing: -0.016em;
 }
 
-/* ── LOGOS-INVISIBLE: Works With client marks rendered via CSS mask ───────
-   works-with.html's own <style> block defines the ww-logo-box tier sizing
-   (.ww-size-large/medium/small .ww-logo-box), but this one shared rule
-   lives here instead: every logo SVG under public/logos/ is authored
-   fill="currentColor", and an SVG loaded via <img> is an isolated document
-   -- currentColor never sees this page's `color`, so it resolved to
-   black-on-black against the page's rgb(10,10,10) ground. Nine <img
-   src="/logos/...svg"> tags are replaced with <span class="ww-logo"
-   role="img" aria-label="<client name>" style="--logo:url(/logos/<name>
-   .svg)"> so a real element (background-color: var(--ivory), #FAFAF8 =
-   rgb(250,250,248), this file line 25) paints through the SVG's shape via
-   mask instead of asking the SVG to inherit a color -- always ivory
-   regardless of what the SVG's own fill says. The span fills whatever box
-   its ww-logo-box parent gives it (that box now carries a real `height`,
-   not just `max-height`, precisely so this mask has a real box to paint
-   into); mask-size:contain scales the mark to fit without distortion. */
 .ww-logo {
   display: block;
   width: 100%;
@@ -2329,21 +1678,6 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   -webkit-mask: var(--logo) center / contain no-repeat;
   mask: var(--logo) center / contain no-repeat;
 }
-
-/* ══════════════════════════════════════════════════════════════════════════
-   Drawing kit and layout primitives (design system pass)
-   The shared pieces every page builds from: claim-beside-picture, the stage a
-   drawing sits in, the product panels, the skeleton bars, the step cards, the
-   heading-left list, the index rows. Every colour is a ground-aware token, so
-   the same rule is right on paper, on tint and on dark. A drawing shows the
-   real product and nothing else: skeleton bars stand in wherever text would be.
-   The page-only pieces (the hero grid, the exchange drawing and its thread, the
-   kill-switch chip, the client band layout, the keyframes) live in the page.
-   Every gap, margin and panel padding below is a value of the spacing scale
-   (4, 8, 16, 24, 32, 48, 64): the comp's 9, 10, 12, 14 and 18 are rounded onto it
-   (a tie goes to the larger), because the spacing test measures sibling gaps in a
-   drawing like any others. Control padding (a button, a chip, a badge) is exempt.
-   ══════════════════════════════════════════════════════════════════════════ */
 
 .lede {
   font-size: 19px;
@@ -2377,9 +1711,6 @@ pre code {
   border-radius: 4px;
 }
 
-/* ── Claim beside picture ──
-   The sitewide heading rule (24 to text, 48 to a box, set at the top of this sheet)
-   governs the gap under a heading here, so it is not restated. */
 .pair {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -2398,9 +1729,6 @@ pre code {
   }
 }
 
-/* ── Heading left, list right (page index, questions, any list of definitions) ──
-   The heading takes 5 of 12 columns and the list 7, so a two-word heading at the h2 size
-   (Common Questions, Dive Deeper) stays on one line wherever it fits. */
 .aside-list {
   display: grid;
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
@@ -2607,9 +1935,6 @@ pre code {
   margin-top: var(--space-tight);
 }
 
-/* the kill switch hangs off the stage: it overhangs the stage by one gap step, and the
-   stage's wrapper reserves that step, which keeps the section's space below its last
-   visible thing the same as every other section's */
 .dw-hang {
   padding-bottom: var(--space-body);
 }
@@ -2642,9 +1967,7 @@ pre code {
 .dw-long .dw-sk {
   opacity: 0.14;
 }
-/* the found learning. The short way's returned card is the dominant thing in the drawing:
-   full contrast, a roomier card, a 16px title, under its one tool row. The long way keeps
-   its small card at the foot, dimmed, so the two never read as a duplicate. */
+
 .dw-twoup .dw-found {
   margin-top: var(--space-copy);
 }
@@ -2658,27 +1981,6 @@ pre code {
   font-size: 16px;
 }
 
-/* ── The device ──
-   The mark's own geometry, a triangle and its crossbar, as one background image on the
-   first dark section of every page. At 1025 and up the copy sits on the left and the
-   device on the right: it is anchored right, so a hero that is only text is no longer
-   empty on its right, and a hero with a picture on the right has it behind the picture
-   (the panels are opaque). Ivory at 12%, 1.5px, no gold. The two sides run on past the
-   bottom of any hero and the crossbar leaves the frame to the right, so a hero shows a
-   cropped part of the triangle, never its base. The image is an inline SVG data URI (the
-   content security policy allows data: images), drawn at the size it is shown at, so the
-   line is 1.5px at every size. A 12% line over the dark ground keeps the dimmest text on
-   it above 4.5 to 1, so it never takes a reader's text below the floor.
-   At 1024 and down the device never sits behind text: it is a cropped corner at the right
-   edge, drawn as its own small image (apex, sides and crossbar), as tall as 72px on a
-   tablet and 56px on a phone, which is less than the section's top padding at every width
-   in range (80 and 64), so it stays inside the padding band above the heading. The
-   dashboard is an application surface and carries no device.
-   The first dark section is the first child of main when that child is on-dark (every
-   page's hero, the status band), and the legal template's hero band (its h1's ::before,
-   which the template paints as a full width dark band). Pages carry no device markup, and
-   no hero sets a background of its own, which would lose the image.
-   --device-a is how far the apex sits in from the right edge of the section. */
 :root {
   --device: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1300' height='1300' viewBox='0 0 1300 1300' fill='none' stroke='%23FAFAF8' stroke-opacity='.12' stroke-width='1.5' stroke-linejoin='round'%3E%3Cpath d='M-84 1400L650 40L1384 1400'/%3E%3Cline x1='650' y1='478' x2='1300' y2='478'/%3E%3C/svg%3E");
   --device-band: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='72' viewBox='0 0 200 72' fill='none' stroke='%23FAFAF8' stroke-opacity='.12' stroke-width='1.5' stroke-linejoin='round'%3E%3Cpath d='M101.7 72L140 1L178.3 72'/%3E%3Cline x1='140' y1='42' x2='200' y2='42'/%3E%3C/svg%3E");
@@ -2692,9 +1994,7 @@ body .legal-wrap > h1::before {
   background-size: 1300px 1300px;
   background-position: right calc(var(--device-a) - 650px) top -40px;
 }
-/* A reading page's copy is a centred column, so the copy runs further right than on a
-   page whose copy hugs the left edge. The device sits further right there, a cropped
-   corner clear of the column (see the reading frame at the end of this sheet). */
+
 :is(#about-hero, #connect-hero, #writing-hero, #essay-hero),
 body .legal-wrap > h1::before {
   --device-a: 30px;
@@ -2721,9 +2021,6 @@ main > #login-view {
   }
 }
 
-/* ── Step cards: a dark drawing on top, h3 and text below. No numerals. ──
-   .step itself is the white card (rules above). A .step without a .step-body
-   takes the card padding itself. */
 .step-art {
   background: var(--bg);
   padding: var(--space-copy);
@@ -2772,10 +2069,6 @@ main > #login-view {
   text-underline-offset: 4px;
 }
 
-/* ── The ask: the framed command (the hero block and the closing block only) ──
-   Gold line, a gold button with ink text, the command in gold mono with a dim
-   "$ " drawn by CSS so the copied text stays the bare command. Every other code
-   block on the site stays the plain dark panel with an outline copy button. */
 .hero-setup-block,
 #footer-setup-snippet {
   border-color: rgba(201, 168, 76, 0.45);
@@ -2878,9 +2171,6 @@ main > #login-view {
   }
 }
 
-/* ── Hero layouts, shared by every page ──
-   hero-grid: the copy beside a drawing. hero-one: the copy alone, in a reading
-   width. Both sit inside a dark first section. One column below 1024. */
 .hero-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
@@ -2904,15 +2194,6 @@ main > #login-view {
   }
 }
 
-/* ── Reading pages share one frame ──
-   /connect, /about, /writing, the essay and the legal pages all set their copy in one
-   centred column, the hero's copy and the body on the same left edge. The legal pages
-   already do (a 720 box with the page gutter inside it, so the text is 672 at 1280 and
-   starts at 304); these selectors give the other four the same geometry at every width.
-   The container each page's copy sits in is untouched (it keeps the page gutter that the
-   navigation and footer share), so what narrows is the copy itself: every block is at
-   most the column wide, and its left margin is half of what is left, so a link that
-   shrink-wraps (the essay's way back) starts on the same edge as the headline. */
 :is(#about-hero, #connect-hero, #writing-hero, #essay-hero) .hero-one > *,
 #about-body .read > *,
 #connect-steps-section .container > *,
@@ -2924,10 +2205,6 @@ main > #login-view {
   margin-right: 0;
 }
 
-/* ── A block label that acts as a section heading is set like an h2 ──
-   At the small end of the scale (the serif, 30px, weight 300), whatever its tag: the
-   service, link, health and contact labels on /status and the key's lead sentence on
-   /works-with. */
 main .component-label,
 main .ww-key-lead {
   font-family: var(--serif);
