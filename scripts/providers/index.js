@@ -1,41 +1,19 @@
 'use strict';
 /*
- * scripts/providers/index.js — provider registry + selection
- * (EXTRACT-PER-CLIENT W1 PART A; selection fall-through added in the W1 P1
- * fix — PUNCH-LIST).
- *
- * resolveProvider(): which ONE provider to try first. Selection order:
- * AUXILO_EXTRACTION_PROVIDER env override (wins unconditionally, never
- * persisted — "wins, never writes") → else the persisted `selected` choice
- * from ~/.auxilo/providers.json if it is STILL usable (re-verified via its
- * own detect() every call, never trusted blindly — a stale persisted choice
- * falls through to a full re-scan rather than failing) → else the first
- * provider whose detect() is true, in automatic order (claude-code →
- * byo-key) → else ok:false, with a reason naming every automatic provider
- * tried. codex-cli remains available only through the explicit env override.
- *
- * runModel(): resolves via resolveProvider(), then actually RUNS it. A
- * non-override resolution that fails with a reasonCode meaning "this
- * provider cannot run at all" (NON_RETRYABLE_FOR_THIS_PROVIDER — e.g.
- * unauthenticated, not installed, a billing helper is configured) falls
- * through to the next provider in AUTOMATIC_PROVIDER_ORDER rather than
- * reporting a hard failure; a working provider that merely failed once
- * (timeout, model error) does not fall through — that is still the builder's
- * chosen provider having a bad run, not a reason to switch under them. An
- * explicit env override, including codex-cli, never falls through, honoring
- * the operator's explicit choice. Every automatic provider exhausted →
- * reasonCode 'no-usable-provider' with every attempt's reason summarized in
- * `reason`.
- *
- * codex-cli.js and byo-key.js don't exist yet (PART B/C). loadOptionalProvider()
- * degrades a missing module into a "not installed yet" stub so this file — and
- * everything that calls into it — never throws on a fresh PART A checkout; PART
- * B/C only need to add their files, not touch this registration.
+ * EPC2-2 A+B: routing is pinned per job; initial automatic precedence is
+ * unchanged with Codex dark. An existing binding wins over new configuration.
+ * Only a fresh, continuously owned automatic attempt with no invocation may
+ * fall back on an explicit pre-invocation refusal. CLI model consistency is
+ * observed, not enforced. Runner ownership does not prove a prior remote
+ * request stopped; a recovered request can consume quota or bill a key again.
  */
 
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
+const bindings = require('./route-binding.js');
+const SOURCE_ROUTES = Object.freeze({ 'claude-code': 'claude-code' });
 
 const claudeCode = require('./claude-code.js');
 
@@ -52,6 +30,7 @@ function notInstalledProvider(id) {
         usage: null,
         reasonCode: 'provider-not-installed',
         reason: `${id} support is not installed yet`,
+        refusal: 'pre-invocation',
         authStatus: 'unknown',
       };
     },
@@ -121,6 +100,7 @@ function persistSelected(providerId, opts) {
   try {
     if (typeof byoKey.writeProvidersStateAtomic !== 'function') return; // PART C not installed yet
     const state = readProvidersState(statePath);
+    state.origin = 'auto';
     state.selected = providerId; // merge only this field — `byo` (if present) passes through as-read
     byoKey.writeProvidersStateAtomic(state, opts);
   } catch {
@@ -142,16 +122,18 @@ function persistSelected(providerId, opts) {
 const defaultCache = {};
 
 async function resolveProvider(opts = {}) {
+  const registry = opts.providerRegistry || PROVIDERS;
+  const sourceMap = opts.sourceMap || SOURCE_ROUTES;
   const env = opts.env || process.env;
   const override = env.AUXILO_EXTRACTION_PROVIDER;
   if (override) {
-    if (!Object.prototype.hasOwnProperty.call(PROVIDERS, override)) {
+    if (!Object.prototype.hasOwnProperty.call(registry, override)) {
       return {
         ok: false,
         reason: `AUXILO_EXTRACTION_PROVIDER="${override}" is not a known provider (expected one of: ${KNOWN_PROVIDER_IDS.join(', ')})`,
       };
     }
-    return { ok: true, id: override, module: PROVIDERS[override] };
+    return { ok: true, id: override, module: registry[override] };
   }
 
   // Fast path (EXTRACT-PER-CLIENT W1 FIX, PUNCH-LIST P1, item 3): the
@@ -206,8 +188,8 @@ async function resolveProvider(opts = {}) {
   if (cache.resolved && cache.resolved.id === 'codex-cli') delete cache.resolved;
 
   const persistedId = persistedState.selected;
-  if (typeof persistedId === 'string' && Object.prototype.hasOwnProperty.call(PROVIDERS, persistedId)) {
-    const persistedMod = PROVIDERS[persistedId];
+  if (typeof persistedId === 'string' && Object.prototype.hasOwnProperty.call(registry, persistedId)) {
+    const persistedMod = registry[persistedId];
     let stillUsable = false;
     try {
       stillUsable = await persistedMod.detect(opts);
@@ -223,8 +205,10 @@ async function resolveProvider(opts = {}) {
   }
 
   const tried = [];
-  for (const id of AUTOMATIC_PROVIDER_ORDER) {
-    const mod = PROVIDERS[id];
+  const native = sourceMap[opts.source];
+  const order = [...new Set([...(AUTOMATIC_PROVIDER_ORDER.includes(native) ? [native] : []), ...AUTOMATIC_PROVIDER_ORDER])];
+  for (const id of order) {
+    const mod = registry[id];
     tried.push(id);
     let available = false;
     try {
@@ -242,27 +226,13 @@ async function resolveProvider(opts = {}) {
   return { ok: false, reason: `no extraction model provider available — tried: ${tried.join(', ')}` };
 }
 
-/**
- * reasonCodes meaning "this provider cannot run at all right now" — safe to
- * try the NEXT provider in AUTOMATIC_PROVIDER_ORDER rather than reporting a hard
- * failure (EXTRACT-PER-CLIENT W1 FIX, PUNCH-LIST P1, item 2). Everything
- * else (timeouts, model errors, malformed output, rate limits) means the
- * chosen provider DID run and failed on THIS call — that is not a signal to
- * silently switch providers out from under the builder, so those propagate
- * as-is (a working provider that failed once is still the builder's chosen
- * provider).
- */
+/** Bounded message classification only. Reason codes never authorize fallback. */
 const NON_RETRYABLE_FOR_THIS_PROVIDER = new Set([
   'cli-unauthenticated',
   'cli-not-installed',
   'cli-billing-helper-configured',
   'provider-not-configured',
   'providers-file-mode-unsafe',
-  // EXTRACTION-CHILD-HOOKS (0.9.15): the resolved claude-code CLI doesn't
-  // support --setting-sources, so it can never run isolated — same
-  // "cannot run at all right now" class as the codes above, safe to try the
-  // next automatic provider rather than reporting a hard failure. codex-cli
-  // remains reachable only through the explicit override, which never walks.
   'cli-settings-isolation-unsupported',
 ]);
 
@@ -289,51 +259,23 @@ function hasUsableIdentity(identity) {
   );
 }
 
-/**
- * Derive an identity for the module actually invoked as `id`, used only when
- * that module's own result didn't already carry one. The derivation differs
- * by outcome, because a SUCCESS identity can reach a published learning and
- * the clean-lane calibration gate, while a FAILURE identity is purely
- * diagnostic (extract-local.js returns before stamping anything onto a
- * candidate on `ok:false` — see its `:824-834`):
- *
- * - claude-code: always gets a real, provider-specific identity — it
- *   already has `cliVersion` in hand on every returned result (success or
- *   failure), richer than the null/null/null triple this used to guess, and
- *   claude-code is the one provider documented to never self-stamp
- *   `identity` at all, so this is filling a KNOWN, structural gap, not
- *   papering over a violated contract.
- * - Every other provider on a FAILURE: `{provider:id, model:null,
- *   version:null, vendor:null}` — naming the module we actually invoked is
- *   a plain structural fact (we chose to call it), not a guess, and it is
- *   what lets the per-run `[providers]` log name the provider that actually
- *   ran even when that provider's own failure return carries no identity
- *   (codex-cli and byo-key only self-stamp on their SINGLE success return —
- *   the automatic fall-through failure case is now: claude-code skipped,
- *   byo-key ran and failed, no identity of its own, and the label must name
- *   byo-key rather than be re-guessed as claude-code by the old fallback).
- * - Every other provider on a SUCCESS: `{provider:'unknown', ...}` —
- *   byo-key.js and codex-cli.js both self-stamp `identity` on their only
- *   success return BY CONTRACT; a success with none means that contract was
- *   violated, so this registry has no provider-reported basis for the
- *   claim. Confidently naming the module here would look like provenance
- *   without being backed by anything the provider itself reported — since
- *   this stamp CAN reach a published learning, the fail-closed, honest
- *   answer is 'unknown', never a guess dressed up as a fact.
- */
+/** Report only known provider/version facts; never infer an observed model. */
 function deriveIdentity(id, result) {
   if (id === 'claude-code') {
     return {
       provider: 'claude-code',
       model: null,
+      requested_model: null,
+      observed_model: null,
+      identity_unresolved: 'missing',
       version: (result && result.cliVersion) || null,
       vendor: 'anthropic',
     };
   }
   if (!(result && result.ok)) {
-    return { provider: id, model: null, version: null, vendor: null };
+    return { provider: id, model: null, requested_model: null, observed_model: null, identity_unresolved: 'missing', version: null, vendor: null };
   }
-  return { provider: 'unknown', model: null, version: null, vendor: null };
+  return { provider: 'unknown', model: null, requested_model: null, observed_model: null, identity_unresolved: 'missing', version: null, vendor: null };
 }
 
 /**
@@ -352,88 +294,125 @@ function withIdentity(id, result) {
   return { ...result, identity: deriveIdentity(id, result) };
 }
 
-/**
- * runModel(opts) — resolve a starting provider via resolveProvider(), then
- * walk AUTOMATIC_PROVIDER_ORDER from there, calling each candidate's OWN runModel()
- * (never a separate detect() pre-check — a provider's runModel() already
- * performs the equivalent authoritative check internally and returns a
- * specific, accurate reason, so a second detect() call would only add a
- * redundant probe without adding information). Falls through to the next
- * provider when the current one's failure reasonCode is in
- * NON_RETRYABLE_FOR_THIS_PROVIDER; when resolveProvider itself found no
- * usable provider at all, the walk starts at AUTOMATIC_PROVIDER_ORDER's
- * beginning so every automatic provider still gets an actual runModel()
- * call and contributes its own reason (not just a single generic "no
- * provider available"). An explicit AUXILO_EXTRACTION_PROVIDER override,
- * including codex-cli, never falls through — it is the operator's explicit
- * choice, so its own failure reason is reported as-is. When every provider
- * tried is exhausted, returns reasonCode
- * 'no-usable-provider' with a bounded summary of every provider's reason in
- * `reason` (no secrets — each provider's own reason string is already
- * secret-free by contract) and NO identity — nothing actually ran to
- * completion, so the caller (extract-local.js) stamps `provider:'unknown'`
- * rather than have this registry guess one. Never throws.
- */
+/** Credential-free binding destination, calculated exactly as the adapter does. */
+function routeMetadata(id, opts, origin) {
+  let destinationFingerprint = null;
+  let cliFingerprint = null;
+  let cliVersion = null;
+  if (id === 'byo-key') {
+    const config = byoKey.readByoConfig(opts);
+    if (config) {
+      const vendor = byoKey.resolveVendor(config.provider);
+      destinationFingerprint = bindings.hash(vendor + '\n' + byoKey.baseUrlFor(vendor, config.base_url) + '\n' + config.model);
+    }
+  } else if (id === 'claude-code') {
+    const bin = opts.claudeBin || claudeCode.resolveClaudeBin(opts);
+    cliFingerprint = bindings.hash(bin);
+    cliVersion = claudeCode.getClaudeCliVersion(bin, opts);
+  } else if (id === 'codex-cli') {
+    const bin = opts.codexBin || codexCli.resolveCodexBin(opts);
+    cliFingerprint = bindings.hash(bin);
+    // getCodexVersion is --version, never a model-capable request.
+    cliVersion = codexCli.getCodexVersion(opts);
+  }
+  return { route: id, origin, billingMode: id === 'byo-key' ? 'byo-key' : 'cli-login', destinationFingerprint, cliFingerprint, cliVersion };
+}
+
+function dispositionResult(disposition) {
+  const code = disposition.hold || disposition.deferred;
+  return { ok: false, text: '', usage: null, reasonCode: code, reason: 'job route is held or deferred', authStatus: 'unknown', ...disposition };
+}
+
+function finishJob(context) {
+  if (!context || !context.store) return {};
+  const existing = context.store.disposition;
+  if (existing.hold || existing.deferred) return existing;
+  if (context.hold) return { hold: context.hold };
+  const result = context.store.complete();
+  return result.hold ? { hold: result.hold } : {};
+}
+
 async function runModel(opts = {}) {
   const mode = opts.mode === 'judge' ? 'judge' : 'extract';
-  const env = opts.env || process.env;
-  const override = env.AUXILO_EXTRACTION_PROVIDER;
-
-  if (override) {
-    const resolved = await resolveProvider(opts);
-    if (!resolved.ok) {
-      return {
-        ok: false,
-        text: '',
-        usage: null,
-        reasonCode: 'no-model-provider-available',
-        reason: resolved.reason,
-        authStatus: 'unknown',
-      };
-    }
-    const result = await resolved.module.runModel({ ...opts, mode });
-    return withIdentity(resolved.id, result);
+  const registry = opts.providerRegistry || PROVIDERS;
+  const context = opts.routeContext || {};
+  const standalone = !opts.routeContext;
+  if (context.hold) return dispositionResult({ hold: context.hold });
+  if (!context.store) {
+    const identity = {
+      source: opts.source || '', sessionId: opts.sessionId || opts.runId || crypto.randomUUID(),
+      jobSha: opts.jobSha || bindings.hash(String(opts.input || opts.prompt || '')),
+    };
+    context.store = bindings.createStore(identity, opts);
+    const acquired = await context.store.acquire(async () => {
+      const resolved = await resolveProvider({ ...opts, providerCache: opts.providerCache || {} });
+      const explicit = Boolean((opts.env || process.env).AUXILO_EXTRACTION_PROVIDER);
+      if (!resolved.ok && explicit) return { hold: 'pinned-route-unusable' };
+      return routeMetadata(resolved.ok ? resolved.id : 'claude-code', opts, explicit ? 'explicit' : 'auto');
+    });
+    if (acquired.hold || acquired.deferred) return dispositionResult(context.store.disposition);
   }
-
-  const log = typeof opts.log === 'function' ? opts.log : console.error;
-  const resolved = await resolveProvider(opts);
-  const startIdx = resolved.ok ? AUTOMATIC_PROVIDER_ORDER.indexOf(resolved.id) : -1;
-  const order = startIdx === -1
-    ? AUTOMATIC_PROVIDER_ORDER.slice()
-    : AUTOMATIC_PROVIDER_ORDER.slice(startIdx);
-
+  const store = context.store;
+  if (store.disposition.hold || store.disposition.deferred) return dispositionResult(store.disposition);
+  const record = store.record;
+  const current = routeMetadata(record.route, opts, record.origin);
+  if (['destinationFingerprint', 'cliFingerprint', 'cliVersion', 'billingMode'].some(k => current[k] !== record[k])) {
+    const release = store.hold('pinned-route-changed');
+    context.hold = release.hold || 'pinned-route-changed';
+    return dispositionResult({ hold: context.hold });
+  }
+  const configuredByo = Boolean(byoKey.readByoConfig(opts));
+  // A retained BYO cache refusal rescans the ordinary order, including BYO.
+  const order = [record.route, ...AUTOMATIC_PROVIDER_ORDER.filter(id =>
+    (id !== record.route || record.route === 'byo-key') && (id !== 'byo-key' || configuredByo))];
   const attempts = [];
   for (const id of order) {
-    const mod = PROVIDERS[id];
-    // eslint-disable-next-line no-await-in-loop
-    const rawResult = await mod.runModel({ ...opts, mode });
-    const result = withIdentity(id, rawResult);
-    if (result.ok) return result;
-    attempts.push({ id, reasonCode: result.reasonCode, reason: result.reason });
-    if (!NON_RETRYABLE_FOR_THIS_PROVIDER.has(result.reasonCode)) {
+    if (id !== store.record.route) {
+      const updated = store.mutate(routeMetadata(id, opts, 'auto'));
+      if (updated.hold) return dispositionResult(store.disposition);
+    }
+    const mod = registry[id];
+    let called = false;
+    const beforeModelInvocation = () => {
+      if (called) return false;
+      called = true;
+      return store.beforeInvocation(mode, opts.timeoutMs || 120000);
+    };
+    let raw;
+    try {
+      raw = mod ? await mod.runModel({ ...opts, mode, beforeModelInvocation }) :
+        { ok: false, text: '', usage: null, reason: 'provider is not installed', reasonCode: 'provider-not-installed', refusal: 'pre-invocation' };
+    } catch {
+      raw = { ok: false, text: '', usage: null, reason: 'provider invocation failed', reasonCode: 'unknown' };
+    }
+    let result = withIdentity(id, raw);
+    const stopped = store.disposition;
+    if (stopped.hold || stopped.deferred) return { ...result, ...stopped };
+    if (result.ok) {
+      const observed = store.observe(result.identity && result.identity.observed_model);
+      if (observed && observed.hold) return { ...result, hold: observed.hold };
+      if (standalone) result = { ...result, ...finishJob(context) };
       return result;
     }
-    log(`[providers] ${id} unusable (${result.reasonCode}); trying next provider`);
+    attempts.push(id + '=' + (NON_RETRYABLE_FOR_THIS_PROVIDER.has(result.reasonCode) ? result.reasonCode : 'unavailable'));
+    if (result.refusal !== 'pre-invocation' || !store.canFallback()) {
+      const release = store.hold('pinned-route-unusable');
+      context.hold = release.hold || 'pinned-route-unusable';
+      return { ...result, hold: context.hold };
+    }
+    (opts.log || console.error)('[providers] ' + id + ' refused before invocation; trying next provider');
   }
-
-  const summary = attempts
-    .map((a) => `${a.id}=${a.reasonCode || 'unknown'}`)
-    .join('; ')
-    .slice(0, 480);
-  const lastAttempt = attempts[attempts.length - 1];
-  const lastReason = (lastAttempt && lastAttempt.reason) || resolved.reason || 'no provider available';
-  return {
-    ok: false,
-    text: '',
-    usage: null,
-    reasonCode: 'no-usable-provider',
-    reason: `${lastReason} (tried: ${summary})`.slice(0, 600),
-    authStatus: 'unknown',
-  };
+  const released = store.hold('pinned-route-unusable');
+  context.hold = released.hold || 'pinned-route-unusable';
+  if (!configuredByo && !attempts.some(attempt => attempt.startsWith('byo-key='))) attempts.push('byo-key=provider-not-configured');
+  return { ok: false, text: '', usage: null, authStatus: 'unknown', reasonCode: 'no-usable-provider',
+    reason: 'no usable extraction provider (tried: ' + attempts.join('; ') + ')', hold: context.hold };
 }
 
 module.exports = {
   runModel,
+  finishJob,
+  SOURCE_ROUTES,
   resolveProvider,
   KNOWN_PROVIDER_IDS,
   AUTOMATIC_PROVIDER_ORDER,

@@ -1,4 +1,5 @@
 'use strict';
+const { supportedClaude } = require('./helpers/epc2-fixtures.js');
 /*
  * test/claude-code-provider.test.js — EXTRACT-PER-CLIENT W1 PART A
  * (absorbs 0913 PART A / EXTRACT-TOOLS-LOCK).
@@ -47,6 +48,191 @@ function spawnQueue(responses) {
 function authJson(loggedIn) {
   return { status: 0, stdout: JSON.stringify({ loggedIn }), stderr: '' };
 }
+
+function epcAdapterFixture(t) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'epc2-adapter-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  claudeCode._resetSettingSourcesCacheForTests();
+  const codex = require('../scripts/providers/codex-cli.js'); codex._resetVersionCacheForTests();
+  const byo = require('../scripts/providers/byo-key.js');
+  fs.mkdirSync(path.join(root, '.codex')); fs.writeFileSync(path.join(root, '.codex/auth.json'), '{"auth_mode":"chatgpt"}');
+  const opts = { ...supportedClaude, homeDir: root, cwd: root, claudeBin: '/fixture/PRIVATE_PATH/claude', codexBin: '/fixture/PRIVATE_PATH/codex',
+    systemConfigPaths: [], providersStatePath: path.join(root, 'providers.json'), beforeModelInvocation: () => true,
+    log: () => {}, existsSync: file => String(file).startsWith(root) && fs.existsSync(file),
+    spawnSyncImpl: () => assert.fail('unstubbed model spawn'), fetchImpl: () => assert.fail('unstubbed vendor request') };
+  byo.writeByoConfig({ provider: 'openai', model: 'requested-model', api_key: 'PRIVATE_KEY', base_url: 'https://fixture.invalid/PRIVATE_URL/v1' }, opts);
+  return { root, opts, codex, byo };
+}
+
+const epcWrapper = (fields = {}) => JSON.stringify({ type: 'result', result: '{"learnings":[]}', is_error: false, ...fields });
+function epcClaudeSpawn(stdout, status = 0, stderr = '') {
+  return (_bin, args) => args[0] === 'auth' ? authJson(true) : { status, stdout, stderr };
+}
+function epcFailure(result, reason) {
+  assert.equal(result.ok, false); assert.equal(result.text, ''); assert.equal(result.reason, reason);
+  for (const marker of ['PRIVATE_OUTPUT', 'PRIVATE_ERROR', 'PRIVATE_PATH', 'PRIVATE_URL', 'PRIVATE_KEY', 'PRIVATE_TYPE']) {
+    assert.equal(JSON.stringify(result).includes(marker), false, marker);
+  }
+}
+
+describe('EPC2-2 Part B and mandatory adapter invocation boundary', () => {
+  for (const id of ['claude-code', 'codex-cli', 'byo-key']) {
+    it('hook fail-closed and exactly once before invocation: ' + id + ', both modes', async t => {
+      const f = epcAdapterFixture(t); const adapter = id === 'claude-code' ? claudeCode : id === 'codex-cli' ? f.codex : f.byo;
+      for (const mode of ['extract', 'judge']) {
+        const events = [];
+        const opts = { ...f.opts, mode,
+          spawnSyncImpl: (_bin, args) => {
+            if (args[0] === 'auth') return authJson(true);
+            if (args[0] === '--version') return { status: 0, stdout: 'codex 1.0.0' };
+            events.push('spawn');
+            if (id === 'codex-cli') { fs.writeFileSync(args[args.indexOf('-o') + 1], mode === 'judge' ? '{"decisions":[]}' : '{"learnings":[]}'); return { status: 0, stdout: '{"type":"thread.started"}\n{"type":"turn.completed"}' }; }
+            return { status: 0, stdout: epcWrapper() };
+          },
+          fetchImpl: async () => { events.push('spawn'); return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'answer' } }] }) }; },
+        };
+        const missing = await adapter.runModel({ ...opts, beforeModelInvocation: undefined });
+        epcFailure(missing, 'model invocation requires an ownership hook'); assert.equal(missing.reasonCode, 'invocation-hook-missing'); assert.deepEqual(events, []);
+        for (const value of [false, undefined, 1, 'true', Promise.resolve(true)]) {
+          const refused = await adapter.runModel({ ...opts, beforeModelInvocation: () => { events.push('hook'); return value; } });
+          epcFailure(refused, 'model invocation held by ownership hook'); assert.deepEqual(events.splice(0), ['hook']);
+        }
+        const result = await adapter.runModel({ ...opts, beforeModelInvocation: () => { events.push('hook'); return true; } });
+        assert.equal(result.ok, true); assert.deepEqual(events, ['hook', 'spawn']);
+      }
+    });
+
+    it('pre-invocation refusal does not consult the hook: ' + id, async t => {
+      const f = epcAdapterFixture(t); const adapter = id === 'claude-code' ? claudeCode : id === 'codex-cli' ? f.codex : f.byo;
+      const opts = { ...f.opts, beforeModelInvocation: () => assert.fail('refusal must precede hook') };
+      if (id === 'claude-code') { fs.mkdirSync(path.join(f.root, '.claude')); fs.writeFileSync(path.join(f.root, '.claude/settings.json'), '{"apiKeyHelper":"PRIVATE_KEY"}'); }
+      if (id === 'codex-cli') fs.unlinkSync(path.join(f.root, '.codex/auth.json'));
+      if (id === 'byo-key') fs.unlinkSync(opts.providersStatePath);
+      for (const mode of ['extract', 'judge']) { const result = await adapter.runModel({ ...opts, mode }); assert.equal(result.refusal, 'pre-invocation'); assert.equal(result.ok, false); }
+    });
+  }
+
+  it('legacy extractWithClaudeCode also requires the hook, with no new production callers', t => {
+    const { opts } = epcAdapterFixture(t); let modelCalls = 0;
+    const result = claudeCode.extractWithClaudeCode('PRIVATE_OUTPUT', { ...opts, beforeModelInvocation: undefined,
+      spawnSyncImpl: (_bin, args) => { if (args[0] === 'auth') return authJson(true); modelCalls++; return { status: 0, stdout: epcWrapper() }; },
+    });
+    assert.equal(result.reasonCode, 'invocation-hook-missing'); assert.equal(result.out, ''); assert.equal(modelCalls, 0);
+    const { execFileSync } = require('node:child_process');
+    const matches = execFileSync('git', ['grep', '-n', 'extractWithClaudeCode(', '--', 'scripts/', 'bin/', 'lib/'], { encoding: 'utf8' });
+    assert.equal(matches.split('\n').filter(line => /:\d+:function extractWithClaudeCode\(/.test(line)).length, 1);
+    assert.equal(matches.split('\n').filter(line => /:\d+:\s*(?:return |await |const .*?= )extractWithClaudeCode\(/.test(line)).length, 0);
+  });
+
+  for (const mode of ['extract', 'judge']) {
+    for (const identity of [false, true]) for (const usage of [false, true]) {
+      it(`B1/B2 ${mode}: identity=${identity}, usage=${usage} remain independent`, async t => {
+        const { opts } = epcAdapterFixture(t);
+        const result = await claudeCode.runModel({ ...opts, mode, spawnSyncImpl: epcClaudeSpawn(epcWrapper({
+          ...(identity && { modelUsage: { 'requested-alias[1m]': { canonicalModel: 'actual-model' } } }),
+          ...(usage && { usage: { input_tokens: 5, cache_read_input_tokens: 3, output_tokens: 2 } }),
+        })) });
+        assert.equal(result.ok, true); assert.equal(result.identity.requested_model, null);
+        assert.equal(result.identity.observed_model, identity ? 'actual-model' : null);
+        assert.equal(result.identity.model, identity ? 'actual-model' : null);
+        assert.equal(result.identity.version, '2.1.41'); assert.deepEqual(result.usage, usage ? { input_tokens: 8, output_tokens: 2 } : null);
+        assert.equal(result.identity.identity_unresolved, identity ? undefined : 'missing');
+        assert.equal(JSON.stringify(result.identity).includes('[1m]'), false);
+      });
+    }
+
+    for (const [label, modelUsage, observed, unresolved] of [
+      ['same value twice', { a: { canonicalModel: 'actual' }, b: { canonicalModel: 'actual' } }, 'actual', undefined],
+      ['distinct values', { a: { canonicalModel: 'one' }, b: { canonicalModel: 'two' } }, null, 'ambiguous'],
+      ['keys only', { 'requested[1m]': { cost: 1 } }, null, 'missing'],
+      ['blank values', { a: { canonicalModel: '' }, b: { canonicalModel: ' ' } }, null, 'missing'],
+    ]) it(`B2 ${mode}: ${label}`, async t => {
+      const { opts } = epcAdapterFixture(t); const result = await claudeCode.runModel({ ...opts, mode, spawnSyncImpl: epcClaudeSpawn(epcWrapper({ modelUsage })) });
+      assert.equal(result.identity.observed_model, observed); assert.equal(result.identity.identity_unresolved, unresolved);
+    });
+
+    it(`B3 ${mode}: strict clean/noisy wrappers and all second JSON value types`, async t => {
+      const { opts } = epcAdapterFixture(t); const wrapper = epcWrapper({ result: '  unchanged result bytes\n401 run /login  ' });
+      for (const stdout of [wrapper, 'SDK noise\n' + wrapper + '\nSDK noise']) {
+        const result = await claudeCode.runModel({ ...opts, mode, spawnSyncImpl: epcClaudeSpawn(stdout) });
+        assert.equal(result.ok, true); assert.equal(result.text, '  unchanged result bytes\n401 run /login  ');
+      }
+      for (const extra of ['{}', '[]', 'null', 'true', 'false', '17', '"extra"', '{\n"multiline":true\n}', '[\n1\n]']) {
+        const result = await claudeCode.runModel({ ...opts, mode, spawnSyncImpl: epcClaudeSpawn('noise\n' + wrapper + '\n' + extra) });
+        epcFailure(result, mode === 'judge' ? 'local judge returned malformed JSON wrapper' : 'local model returned malformed JSON wrapper');
+      }
+      for (const obj of [{ result: 'PRIVATE_OUTPUT' }, { type: 'result', result: 3 }, { type: 'result', result: 'PRIVATE_OUTPUT', is_error: true }]) {
+        const result = await claudeCode.runModel({ ...opts, mode, spawnSyncImpl: epcClaudeSpawn(JSON.stringify(obj)) });
+        epcFailure(result, 'local model returned no successful result'); assert.equal(result.reasonCode, 'model-error');
+      }
+    });
+
+    it(`B4 ${mode}: Claude failure exits have pinned reasons and no private output`, async t => {
+      const { opts } = epcAdapterFixture(t);
+      for (const [response, reason] of [
+        [null, 'local model returned no process result'],
+        [{ status: null, signal: 'SIGTERM', stdout: 'PRIVATE_OUTPUT', stderr: 'PRIVATE_ERROR' }, 'local model invocation failed'],
+        [{ error: new Error('PRIVATE_ERROR'), stdout: 'PRIVATE_OUTPUT' }, 'local model invocation failed'],
+        [{ status: 2, stdout: 'PRIVATE_OUTPUT', stderr: 'PRIVATE_ERROR' }, 'local model exited unsuccessfully'],
+        [{ status: 0, stdout: 'PRIVATE_OUTPUT' }, mode === 'judge' ? 'local judge returned malformed JSON wrapper' : 'local model returned malformed JSON wrapper'],
+        [{ status: 1, stdout: 'Please run /login PRIVATE_OUTPUT', stderr: 'PRIVATE_ERROR' }, 'local model not authenticated in this context (run `claude auth login` once); skipping deterministic extraction'],
+        [{ status: 1, stderr: 'You cannot use --strict-mcp-config when an enterprise MCP config is present PRIVATE_ERROR' }, 'Claude Code refused MCP isolation with managed configuration'],
+      ]) epcFailure(await claudeCode.runModel({ ...opts, mode, spawnSyncImpl: (_bin, args) => args[0] === 'auth' ? authJson(true) : response }), reason);
+      epcFailure(await claudeCode.runModel({ ...opts, mode, spawnSyncImpl: (_bin, args) => { if (args[0] === 'auth') return authJson(true); throw new Error('PRIVATE_ERROR'); } }), 'local model spawn failed');
+    });
+  }
+
+  for (const vendor of ['openai', 'anthropic', 'gemini']) it('B6/B7: ' + vendor + ' requested model is never promoted; only vendor response is observed', async t => {
+    const { opts, byo } = epcAdapterFixture(t);
+    byo.writeByoConfig({ provider: vendor, model: 'requested-model', api_key: 'PRIVATE_KEY' }, opts);
+    for (const mode of ['extract', 'judge']) for (const observed of [false, true]) {
+      const data = { choices: [{ message: { content: 'answer' } }], content: [{ type: 'text', text: 'answer' }], candidates: [{ content: { parts: [{ text: 'answer' }] } }],
+        ...(observed && { [vendor === 'gemini' ? 'modelVersion' : 'model']: 'response-model' }) };
+      const result = await byo.runModel({ ...opts, mode, fetchImpl: async () => ({ ok: true, status: 200, json: async () => data }) });
+      assert.equal(result.identity.requested_model, 'requested-model'); assert.equal(result.identity.observed_model, observed ? 'response-model' : null);
+      const stamp = require('../scripts/extract-local.js').resolveExtractionModelIdentity(result);
+      assert.equal(stamp.model, observed ? 'response-model' : null);
+    }
+  });
+
+  it('B4: BYO failure exit matrix hides errors, body, path and configured URL', async t => {
+    const { opts, byo } = epcAdapterFixture(t);
+    for (const mode of ['extract', 'judge']) {
+      for (const [fetchImpl, reason] of [
+        [async () => { throw new Error('PRIVATE_ERROR'); }, 'BYO provider request failed'],
+        [async () => ({ ok: false, status: 429, text: async () => 'PRIVATE_OUTPUT' }), 'BYO provider rate-limited the request (HTTP 429)'],
+        [async () => ({ ok: false, status: 503 }), 'BYO provider returned HTTP 503'],
+        [async () => ({ ok: false, status: 'PRIVATE_ERROR' }), 'BYO provider request failed'],
+        [async () => ({ ok: true, status: 200, json: async () => { throw new Error('PRIVATE_OUTPUT'); } }), 'BYO provider returned a non-JSON body'],
+        [async () => ({ ok: true, status: 200, headers: { get: () => String(8 * 1024 * 1024) } }), 'BYO provider response exceeded the 2097152-byte cap'],
+      ]) epcFailure(await byo.runModel({ ...opts, mode, fetchImpl }), reason);
+    }
+    byo.writeByoConfig({ provider: 'openai', model: 'requested-model', api_key: 'PRIVATE_KEY', base_url: 'http://fixture.invalid/PRIVATE_URL' }, opts);
+    epcFailure(await byo.runModel(opts), 'configured base URL is not https; refusing the request');
+  });
+
+  it('B4/B5: Codex exit matrix, closed item-type list, and exported auth status', async t => {
+    const { opts, codex, root } = epcAdapterFixture(t);
+    assert.equal(typeof codex.checkAuthStatus, 'function'); assert.equal(codex.checkAuthStatus(opts), 'logged-in');
+    for (const mode of ['extract', 'judge']) {
+      for (const [response, reason] of [
+        [null, 'codex spawn returned no process result'],
+        [{ error: Object.assign(new Error('PRIVATE_ERROR'), { code: 'ENOENT' }) }, 'codex binary not found'],
+        [{ error: Object.assign(new Error('PRIVATE_ERROR'), { code: 'ETIMEDOUT' }) }, 'codex exec timed out'],
+        [{ error: new Error('PRIVATE_ERROR') }, 'codex spawn failed'],
+        [{ signal: 'SIGTERM', status: null }, 'codex exec timed out'],
+        [{ status: 1, stdout: 'PRIVATE_OUTPUT', stderr: 'PRIVATE_ERROR' }, 'codex exec failed'],
+        [{ status: 0, stdout: 'PRIVATE_OUTPUT' }, 'codex exec emitted no parseable lifecycle event'],
+        [{ status: 0, stdout: '{"type":"item.completed","item":{"type":"PRIVATE_TYPE"}}' }, 'codex exec emitted disallowed item type: unrecognized'],
+        [{ status: 1, stderr: 'not authenticated PRIVATE_ERROR' }, 'codex CLI reported it is not authenticated'],
+        [{ status: 1, stdout: '{"type":"error","message":"invalid_json_schema PRIVATE_OUTPUT"}' }, 'codex rejected the output schema (invalid_json_schema)'],
+      ]) epcFailure(await codex.runModel({ ...opts, mode, spawnSyncImpl: () => response }), reason);
+      const blockedPath = path.join(root, 'PRIVATE_PATH'); fs.writeFileSync(blockedPath, 'PRIVATE_OUTPUT');
+      epcFailure(await codex.runModel({ ...opts, mode, systemConfigPaths: [blockedPath] }), 'codex system configuration is present');
+    }
+    fs.unlinkSync(path.join(root, '.codex/auth.json')); assert.equal(codex.checkAuthStatus(opts), 'logged-out');
+  });
+});
 
 // ─── (1) Env scrub — completeness ───────────────────────────────────────────
 
@@ -98,23 +284,23 @@ describe('claude-code.js — claudeChildEnv() scrub completeness + preservation'
 
 describe('claude-code.js — runModel argv per mode', () => {
   it("mode:'extract' spawns the literal tool-free, settings-free, strict-MCP argv", async () => {
-    const stub = spawnQueue([authJson(true), { status: 0, stdout: '{"learnings":[]}', stderr: '' }]);
-    const result = await claudeCode.runModel({
+    const stub = spawnQueue([authJson(true), { status: 0, stdout: JSON.stringify({ type: "result", result: '{"learnings":[]}', is_error: false }), stderr: '' }]);
+    const result = await claudeCode.runModel({ ...supportedClaude, beforeModelInvocation: () => true,
       prompt: 'PROMPT', input: 'TRANSCRIPT', mode: 'extract',
       spawnSyncImpl: stub.spawnSyncImpl, claudeBin: 'claude',
     });
     assert.equal(result.ok, true);
-    assert.deepEqual(stub.calls[1].args, ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config']);
-    assert.deepEqual(result.argv, ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config']);
+    assert.deepEqual(stub.calls[1].args, ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config']);
+    assert.deepEqual(result.argv, ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config']);
   });
 
   it("mode:'judge' spawns the literal JSON-output, tool-free, settings-free, strict-MCP argv", async () => {
     const stub = spawnQueue([{
       status: 0,
-      stdout: JSON.stringify({ result: '{"decisions":[]}', is_error: false, usage: { input_tokens: 5, output_tokens: 2 } }),
+      stdout: JSON.stringify({ type: 'result', result: '{"decisions":[]}', is_error: false, usage: { input_tokens: 5, output_tokens: 2 } }),
       stderr: '',
     }]);
-    const result = await claudeCode.runModel({
+    const result = await claudeCode.runModel({ ...supportedClaude, beforeModelInvocation: () => true,
       prompt: 'JUDGE_PROMPT', mode: 'judge',
       spawnSyncImpl: stub.spawnSyncImpl, claudeBin: 'claude',
     });
@@ -127,7 +313,7 @@ describe('claude-code.js — runModel argv per mode', () => {
 describe('CLAUDE-CHILD-MCP-CONTEXT — T1–T6', () => {
   it('T1: both frozen argv constants pin strict MCP isolation without an explicit config', () => {
     assert.deepEqual(claudeCode.EXTRACT_MODE_ARGV,
-      ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config']);
+      ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config']);
     assert.deepEqual(claudeCode.JUDGE_MODE_ARGV,
       ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config']);
     assert.ok(Object.isFrozen(claudeCode.EXTRACT_MODE_ARGV));
@@ -139,7 +325,7 @@ describe('CLAUDE-CHILD-MCP-CONTEXT — T1–T6', () => {
       const replies = mode === 'extract' ? [authJson(true)] : [];
       replies.push({ status: 0, stdout: JSON.stringify({ type: 'result', result: 'OK' }), stderr: '' });
       const stub = spawnQueue(replies);
-      const result = await claudeCode.runModel({ mode, prompt: 'fixture', claudeBin: 'claude', spawnSyncImpl: stub.spawnSyncImpl });
+      const result = await claudeCode.runModel({ ...supportedClaude, beforeModelInvocation: () => true, mode, prompt: 'fixture', claudeBin: 'claude', spawnSyncImpl: stub.spawnSyncImpl });
       assert.equal(result.ok, true);
       const modelCall = stub.calls.find(call => call.args[0] === '-p');
       assert.equal(modelCall.args.at(-1), '--strict-mcp-config');
@@ -178,7 +364,7 @@ describe('CLAUDE-CHILD-MCP-CONTEXT — T1–T6', () => {
       usage: { input_tokens: 5, cache_creation_input_tokens: 7, cache_read_input_tokens: 3, output_tokens: 2 } };
     for (const stdout of [JSON.stringify(wrapper) + '\n' + noise + '\n', noise + '\n' + JSON.stringify(wrapper)]) {
       const stub = spawnQueue([{ status: 0, stdout, stderr: '' }]);
-      const result = await claudeCode.runModel({ mode: 'judge', claudeBin: 'claude', spawnSyncImpl: stub.spawnSyncImpl });
+      const result = await claudeCode.runModel({ ...supportedClaude, beforeModelInvocation: () => true, mode: 'judge', claudeBin: 'claude', spawnSyncImpl: stub.spawnSyncImpl });
       assert.equal(result.ok, true);
       assert.equal(result.text, wrapper.result);
       assert.deepEqual(result.usage, { input_tokens: 15, output_tokens: 2 });
@@ -194,7 +380,7 @@ describe('CLAUDE-CHILD-MCP-CONTEXT — T1–T6', () => {
       'SDK noise\nmore noise', other + '\nSDK noise', 'null\nSDK noise'];
     for (const stdout of invalid) {
       const stub = spawnQueue([{ status: 0, stdout, stderr: '' }]);
-      const result = await claudeCode.runModel({ mode: 'judge', claudeBin: 'claude', spawnSyncImpl: stub.spawnSyncImpl });
+      const result = await claudeCode.runModel({ ...supportedClaude, beforeModelInvocation: () => true, mode: 'judge', claudeBin: 'claude', spawnSyncImpl: stub.spawnSyncImpl });
       assert.equal(result.ok, false, stdout);
       assert.equal(result.reasonCode, 'model-error', stdout);
       assert.equal(result.reason, 'local judge returned malformed JSON wrapper', stdout);
@@ -212,7 +398,7 @@ describe('CLAUDE-CHILD-MCP-CONTEXT — T1–T6', () => {
         }
         const stub = spawnQueue(replies);
         for (let i = 0; i < 2; i += 1) {
-          const result = await claudeCode.runModel({ mode, claudeBin: 'claude', spawnSyncImpl: stub.spawnSyncImpl });
+          const result = await claudeCode.runModel({ ...supportedClaude, beforeModelInvocation: () => true, mode, claudeBin: 'claude', spawnSyncImpl: stub.spawnSyncImpl });
           assert.equal(result.ok, false);
           assert.equal(result.text, '');
           assert.equal(result.reasonCode, 'isolation-unverified');
@@ -227,9 +413,9 @@ describe('CLAUDE-CHILD-MCP-CONTEXT — T1–T6', () => {
         assert.equal(stub.calls.filter(call => call.args[0] === '-p').length, 2);
       }
       const replies = mode === 'extract' ? [authJson(true)] : [];
-      replies.push({ status: 0, stdout: mode === 'extract' ? phrase : JSON.stringify({ type: 'result', result: phrase }), stderr: phrase });
+      replies.push({ status: 0, stdout: JSON.stringify({ type: 'result', result: phrase, is_error: false }), stderr: phrase });
       const stub = spawnQueue(replies);
-      assert.equal((await claudeCode.runModel({ mode, claudeBin: 'claude', spawnSyncImpl: stub.spawnSyncImpl })).ok, true);
+      assert.equal((await claudeCode.runModel({ ...supportedClaude, beforeModelInvocation: () => true, mode, claudeBin: 'claude', spawnSyncImpl: stub.spawnSyncImpl })).ok, true);
     }
   });
 });
@@ -241,17 +427,17 @@ describe('claude-code.js — extraction and judge spawns share one env shape (no
     const originalEnv = process.env;
     process.env = { ...originalEnv, ANTHROPIC_API_KEY: 'leak', AWS_PROFILE: 'leak' };
     try {
-      const extractStub = spawnQueue([authJson(true), { status: 0, stdout: '{"learnings":[]}', stderr: '' }]);
-      await claudeCode.runModel({
+      const extractStub = spawnQueue([authJson(true), { status: 0, stdout: JSON.stringify({ type: "result", result: '{"learnings":[]}', is_error: false }), stderr: '' }]);
+      await claudeCode.runModel({ ...supportedClaude, beforeModelInvocation: () => true,
         prompt: 'P', input: 'T', mode: 'extract',
         spawnSyncImpl: extractStub.spawnSyncImpl, claudeBin: 'claude',
       });
       const extractEnv = extractStub.calls[1].opts.env; // the '-p' spawn, not the auth-status probe
 
       const judgeStub = spawnQueue([{
-        status: 0, stdout: JSON.stringify({ result: '{}', is_error: false }), stderr: '',
+        status: 0, stdout: JSON.stringify({ type: 'result', result: '{}', is_error: false }), stderr: '',
       }]);
-      await claudeCode.runModel({
+      await claudeCode.runModel({ ...supportedClaude, beforeModelInvocation: () => true,
         prompt: 'P', mode: 'judge',
         spawnSyncImpl: judgeStub.spawnSyncImpl, claudeBin: 'claude',
       });
@@ -289,8 +475,8 @@ describe('claude-code.js — EXTRACTION-CHILD-HOOKS: --setting-sources isolation
   afterEach(() => claudeCode._resetSettingSourcesCacheForTests());
 
   it("every real spawn (extract AND judge) carries --setting-sources '' — the shipped narrowest value, verified accepted live", async () => {
-    const extractStub = spawnQueue([authJson(true), { status: 0, stdout: '{"learnings":[]}', stderr: '' }]);
-    const extractResult = await claudeCode.runModel({
+    const extractStub = spawnQueue([authJson(true), { status: 0, stdout: JSON.stringify({ type: "result", result: '{"learnings":[]}', is_error: false }), stderr: '' }]);
+    const extractResult = await claudeCode.runModel({ ...supportedClaude, beforeModelInvocation: () => true,
       prompt: 'P', input: 'T', mode: 'extract', spawnSyncImpl: extractStub.spawnSyncImpl, claudeBin: 'claude',
     });
     assert.ok(extractResult.argv.includes('--setting-sources'));
@@ -298,10 +484,10 @@ describe('claude-code.js — EXTRACTION-CHILD-HOOKS: --setting-sources isolation
 
     const judgeStub = spawnQueue([{
       status: 0,
-      stdout: JSON.stringify({ result: '{"decisions":[]}', is_error: false, usage: {} }),
+      stdout: JSON.stringify({ type: 'result', result: '{"decisions":[]}', is_error: false, usage: {} }),
       stderr: '',
     }]);
-    const judgeResult = await claudeCode.runModel({
+    const judgeResult = await claudeCode.runModel({ ...supportedClaude, beforeModelInvocation: () => true,
       prompt: 'P', mode: 'judge', spawnSyncImpl: judgeStub.spawnSyncImpl, claudeBin: 'claude',
     });
     assert.ok(judgeResult.argv.includes('--setting-sources'));
@@ -325,12 +511,12 @@ describe('claude-code.js — EXTRACTION-CHILD-HOOKS: --setting-sources isolation
     let spawnCalls = 0;
     const responses = [authJson(true), { status: 1, stdout: '', stderr: "error: unknown option '--setting-sources'" }];
     const spawnSyncImpl = () => { spawnCalls += 1; return responses.shift(); };
-    const first = await claudeCode.runModel({ prompt: 'P', input: 'T', mode: 'extract', spawnSyncImpl, claudeBin: 'claude' });
+    const first = await claudeCode.runModel({ ...supportedClaude, beforeModelInvocation: () => true, prompt: 'P', input: 'T', mode: 'extract', spawnSyncImpl, claudeBin: 'claude' });
     assert.equal(first.ok, false);
     assert.equal(first.reasonCode, 'cli-settings-isolation-unsupported');
     assert.equal(spawnCalls, 2, 'the auth check + the one real spawn that revealed unsupported — no separate probe call');
 
-    const second = await claudeCode.runModel({ prompt: 'P', input: 'T', mode: 'extract', spawnSyncImpl, claudeBin: 'claude' });
+    const second = await claudeCode.runModel({ ...supportedClaude, beforeModelInvocation: () => true, prompt: 'P', input: 'T', mode: 'extract', spawnSyncImpl, claudeBin: 'claude' });
     assert.equal(second.ok, false);
     assert.equal(second.reasonCode, 'cli-settings-isolation-unsupported');
     assert.equal(spawnCalls, 2, 'cached: a second call must not spawn again (it must never run without the flag, and re-attempting a doomed spawn is silent waste)');
@@ -340,12 +526,12 @@ describe('claude-code.js — EXTRACTION-CHILD-HOOKS: --setting-sources isolation
     let spawnCalls = 0;
     const responses = [{ status: 1, stdout: '', stderr: "error: unknown option '--setting-sources'" }];
     const spawnSyncImpl = () => { spawnCalls += 1; return responses.shift(); };
-    const first = await claudeCode.runModel({ prompt: 'P', mode: 'judge', spawnSyncImpl, claudeBin: 'claude' });
+    const first = await claudeCode.runModel({ ...supportedClaude, beforeModelInvocation: () => true, prompt: 'P', mode: 'judge', spawnSyncImpl, claudeBin: 'claude' });
     assert.equal(first.ok, false);
     assert.equal(first.reasonCode, 'cli-settings-isolation-unsupported');
     assert.equal(spawnCalls, 1);
 
-    const second = await claudeCode.runModel({ prompt: 'P', mode: 'judge', spawnSyncImpl, claudeBin: 'claude' });
+    const second = await claudeCode.runModel({ ...supportedClaude, beforeModelInvocation: () => true, prompt: 'P', mode: 'judge', spawnSyncImpl, claudeBin: 'claude' });
     assert.equal(second.reasonCode, 'cli-settings-isolation-unsupported');
     assert.equal(spawnCalls, 1, 'cached across modes — extract detecting it also gates judge, and vice versa');
   });
@@ -362,7 +548,7 @@ describe('claude-code.js — EXTRACTION-CHILD-HOOKS: --setting-sources isolation
     const home = tempDir('auxilo-isolation-fallthrough-home-');
     const logLines = [];
     try {
-      const result = await providers.runModel({
+      const result = await providers.runModel({ ...supportedClaude,
         prompt: 'P', input: 'T', mode: 'extract', spawnSyncImpl, claudeBin: 'claude',
         homeDir: home, cwd: home, existsSync: () => false,
         providersStatePath: path.join(home, '.auxilo', 'providers.json'),
@@ -375,11 +561,9 @@ describe('claude-code.js — EXTRACTION-CHILD-HOOKS: --setting-sources isolation
         providerCache: { resolved: { ok: true, id: 'claude-code', module: claudeCode } },
       });
       assert.equal(result.ok, false);
-      assert.notEqual(result.reasonCode, 'cli-settings-isolation-unsupported', 'must not stop at claude-code — the whole point of the retryable set is falling through');
-      assert.ok(
-        logLines.some((line) => line.includes('claude-code unusable (cli-settings-isolation-unsupported); trying next provider')),
-        `expected a claude-code fall-through log line; got: ${JSON.stringify(logLines)}`
-      );
+      assert.equal(result.reasonCode, 'cli-settings-isolation-unsupported');
+      assert.equal(result.hold, 'pinned-route-unusable');
+      assert.equal(logLines.some((line) => line.includes('trying next provider')), false);
     } finally {
       cleanupTempDirs();
     }
@@ -486,7 +670,7 @@ describe('claude-code.js — runModel short-circuits on a billing-helper hit', (
     try {
       let spawnCalls = 0;
       const spawnSyncImpl = () => { spawnCalls += 1; throw new Error('must not spawn'); };
-      const result = await claudeCode.runModel({
+      const result = await claudeCode.runModel({ ...supportedClaude, beforeModelInvocation: () => true,
         prompt: 'P', input: 'T', mode: 'extract', homeDir: home, cwd: home, spawnSyncImpl,
       });
       assert.equal(result.ok, false);
@@ -504,7 +688,7 @@ describe('claude-code.js — runModel short-circuits on a billing-helper hit', (
     try {
       let spawnCalls = 0;
       const spawnSyncImpl = () => { spawnCalls += 1; throw new Error('must not spawn'); };
-      const result = await claudeCode.runModel({ prompt: 'P', mode: 'judge', homeDir: home, cwd: home, spawnSyncImpl });
+      const result = await claudeCode.runModel({ ...supportedClaude, beforeModelInvocation: () => true, prompt: 'P', mode: 'judge', homeDir: home, cwd: home, spawnSyncImpl });
       assert.equal(result.ok, false);
       assert.equal(result.reasonCode, 'cli-billing-helper-configured');
       assert.equal(spawnCalls, 0);
@@ -523,7 +707,7 @@ describe('claude-code.js — detect()', () => {
   // check now ALWAYS runs, regardless of how the binary was found.
   it('a resolvable filesystem candidate alone is NOT enough — the auth check always runs now', () => {
     let spawnCalls = 0;
-    const result = claudeCode.detect({
+    const result = claudeCode.detect({ ...supportedClaude,
       homeDir: '/fixture/home',
       cwd: '/fixture/home',
       existsSync: (candidate) => candidate === '/opt/homebrew/bin/claude',
@@ -541,17 +725,17 @@ describe('claude-code.js — detect()', () => {
   // usable.
   it('logged-in -> true; unknown -> true (cannot prove logged-out); logged-out -> false', () => {
     const loggedIn = spawnQueue([authJson(true)]);
-    assert.equal(claudeCode.detect({
+    assert.equal(claudeCode.detect({ ...supportedClaude,
       homeDir: '/fixture/home', cwd: '/fixture/home', existsSync: () => false, spawnSyncImpl: loggedIn.spawnSyncImpl,
     }), true);
 
     const unknown = spawnQueue([{ status: 1, stdout: '', stderr: 'boom' }]);
-    assert.equal(claudeCode.detect({
+    assert.equal(claudeCode.detect({ ...supportedClaude,
       homeDir: '/fixture/home', cwd: '/fixture/home', existsSync: () => false, spawnSyncImpl: unknown.spawnSyncImpl,
     }), true, "'unknown' auth status must read as usable — the flip half of the W1 P1 fix");
 
     const loggedOut = spawnQueue([authJson(false)]);
-    assert.equal(claudeCode.detect({
+    assert.equal(claudeCode.detect({ ...supportedClaude,
       homeDir: '/fixture/home', cwd: '/fixture/home', existsSync: () => false, spawnSyncImpl: loggedOut.spawnSyncImpl,
     }), false, "a definite 'logged-out' status is the one detect() can act on with confidence");
   });
@@ -565,7 +749,7 @@ describe('claude-code.js — detect()', () => {
     fs.writeFileSync(path.join(home, '.claude', 'settings.json'), JSON.stringify({ apiKeyHelper: '/bin/get-key' }));
     try {
       let spawnCalls = 0;
-      const result = claudeCode.detect({
+      const result = claudeCode.detect({ ...supportedClaude,
         homeDir: home,
         cwd: home,
         existsSync: (c) => c === '/opt/homebrew/bin/claude',
@@ -588,7 +772,7 @@ describe('providers/index.js — resolveProvider selection', () => {
   it('AUXILO_EXTRACTION_PROVIDER override wins unconditionally, without calling detect()', async () => {
     let detectCalls = 0;
     const cache = {};
-    const resolved = await providers.resolveProvider({
+    const resolved = await providers.resolveProvider({ ...supportedClaude,
       env: { AUXILO_EXTRACTION_PROVIDER: 'claude-code' },
       providerCache: cache,
       // detect() would throw if called — proves the override short-circuits it.
@@ -600,7 +784,7 @@ describe('providers/index.js — resolveProvider selection', () => {
   });
 
   it('an unknown override name fails cleanly (not a throw), naming the bad value', async () => {
-    const resolved = await providers.resolveProvider({
+    const resolved = await providers.resolveProvider({ ...supportedClaude,
       env: { AUXILO_EXTRACTION_PROVIDER: 'not-a-real-provider' },
       providerCache: {},
     });
@@ -609,7 +793,7 @@ describe('providers/index.js — resolveProvider selection', () => {
   });
 
   it('absent override picks the first detect()-true provider in automatic order (claude-code first)', async () => {
-    const resolved = await providers.resolveProvider({
+    const resolved = await providers.resolveProvider({ ...supportedClaude,
       env: {},
       providerCache: {},
       homeDir: '/fixture/home',
@@ -625,7 +809,7 @@ describe('providers/index.js — resolveProvider selection', () => {
   });
 
   it('all automatic providers false → ok:false naming every automatic provider tried, in order', async () => {
-    const resolved = await providers.resolveProvider({
+    const resolved = await providers.resolveProvider({ ...supportedClaude,
       env: {},
       providerCache: {},
       homeDir: '/fixture/home',
@@ -651,7 +835,7 @@ describe('providers/index.js — resolveProvider selection', () => {
   it('byo-key resolves to its real module (no longer a stub) and degrades cleanly to provider-not-configured when unconfigured', async () => {
     const statePath = await providers.PROVIDERS_STATE_PATH; // sanity: module loaded without throwing
     assert.equal(typeof statePath, 'string');
-    const resolved = await providers.resolveProvider({
+    const resolved = await providers.resolveProvider({ ...supportedClaude,
       env: { AUXILO_EXTRACTION_PROVIDER: 'byo-key' },
       providerCache: {},
     });
@@ -671,7 +855,7 @@ describe('providers/index.js — resolveProvider selection', () => {
   // and never silently spawns anything real under injected opts that give it
   // no way to authenticate.
   it('codex-cli resolves to its real module (no longer a stub) and degrades cleanly, without spawning, when unauthenticated', async () => {
-    const resolved = await providers.resolveProvider({
+    const resolved = await providers.resolveProvider({ ...supportedClaude,
       env: { AUXILO_EXTRACTION_PROVIDER: 'codex-cli' },
       providerCache: {},
     });
@@ -720,7 +904,7 @@ describe('providers/index.js — resolveProvider caches the resolved auto-detect
 
   it('a fresh providerCache (or none — the module default) re-detects independently', async () => {
     let detectCallsA = 0;
-    const resolvedA = await providers.resolveProvider({
+    const resolvedA = await providers.resolveProvider({ ...supportedClaude,
       env: {},
       providerCache: {},
       homeDir: '/fixture/home',
@@ -730,7 +914,7 @@ describe('providers/index.js — resolveProvider caches the resolved auto-detect
       spawnSyncImpl: () => authJson(true),
     });
     let detectCallsB = 0;
-    const resolvedB = await providers.resolveProvider({
+    const resolvedB = await providers.resolveProvider({ ...supportedClaude,
       env: {},
       providerCache: {},
       homeDir: '/fixture/home',
@@ -769,7 +953,7 @@ describe('extract-local.js — e2e: unavailable forced provider degrades to a na
       let thrown = null;
       let result;
       try {
-        result = await extractLocal.extractLocally('synthetic transcript', 'claude-code', {
+        result = await extractLocal.extractLocally('synthetic transcript', 'claude-code', { ...supportedClaude,
           indexPath, log: () => {}, spawnSyncImpl, claudeBin: 'claude',
         });
       } catch (err) {
@@ -828,7 +1012,7 @@ describe('bin/auxilo-cli.js — extractionProviderLine', () => {
 });
 
 // ─── EXTRACTION-MODEL-PROVENANCE (PUNCH-LIST P1): `auxilo status` no longer
-// calls providers.resolveProvider({}) live — a fresh detect() answering
+// calls providers.resolveProvider({ ...supportedClaude,}) live — a fresh detect() answering
 // "what would run now", not "what ran". lastRecordedProviderResolution()
 // replaces that with two read-only sources: the current env override
 // (a certain fact, not a probe) or providers.json's persisted `selected`
@@ -943,7 +1127,7 @@ describe('extract-local.js — logProviderRunSummary / formatArgvForLog', () => 
       {
         ok: true,
         extractionModel: { provider: 'claude-code', model: null, version: null, vendor: null },
-        argv: ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', ''],
+        argv: ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--setting-sources', ''],
         cliVersion: '2.1.12',
       },
       { judgeAttempted: true, judgeSucceeded: true, judgeReasonCode: null, judgeArgv: ['-p', '--output-format', 'json'], judgeCliVersion: '2.1.12' }
@@ -1015,7 +1199,7 @@ describe('extract-local.js — logProviderRunSummary / formatArgvForLog', () => 
       {
         ok: true,
         extractionModel: { provider: 'claude-code' },
-        argv: ['-p', '--no-session-persistence', '--tools', ''],
+        argv: ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', ''],
         cliVersion: '2.1.12',
       },
       null
@@ -1061,7 +1245,7 @@ describe('extract-local.js — logProviderRunSummary / formatArgvForLog', () => 
         ok: false,
         reasonCode: 'cli-settings-isolation-unsupported',
         extractionModel: { provider: 'claude-code', model: null, version: null, vendor: null },
-        argv: ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', ''],
+        argv: ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--setting-sources', ''],
         cliVersion: '2.1.12',
       },
       null
@@ -1085,7 +1269,7 @@ describe('extract-local.js — logProviderRunSummary / formatArgvForLog', () => 
   it('extractLocally() end to end: emits exactly one run-summary line per run, at the skip exit AND at the success exit', async () => {
     const extractLocal = require('../scripts/extract-local.js');
     const lines = [];
-    const skipResult = await extractLocal.extractLocally('t', 'claude-code', {
+    const skipResult = await extractLocal.extractLocally('t', 'claude-code', { ...supportedClaude,
       log: (l) => { if (l.startsWith('[providers]')) lines.push(l); },
       invokeModel: async () => ({ ok: false, reason: 'fixture-stop', reasonCode: 'cli-unauthenticated' }),
       runId: 'run-skip',
@@ -1096,7 +1280,7 @@ describe('extract-local.js — logProviderRunSummary / formatArgvForLog', () => 
     assert.match(lines[0], /finder=skipped/);
 
     lines.length = 0;
-    const okResult = await extractLocal.extractLocally('t', 'claude-code', {
+    const okResult = await extractLocal.extractLocally('t', 'claude-code', { ...supportedClaude,
       log: (l) => { if (l.startsWith('[providers]')) lines.push(l); },
       invokeModel: async () => ({ ok: true, out: JSON.stringify({ learnings: [] }) }),
       runId: 'run-ok',

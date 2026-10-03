@@ -89,7 +89,7 @@ describe('CODEX-ROUTE-ISOLATION', () => {
           captured = { args, workDir, outputPath, cwd: opts.cwd };
           return { status: 0, stdout: lifecycle(), stderr: '', error: null, signal: null };
         };
-        const result = await codexCli.runModel({
+        const result = await codexCli.runModel({ beforeModelInvocation: () => true,
           mode,
           prompt: 'P',
           input: mode === 'extract' ? 'T' : undefined,
@@ -155,7 +155,7 @@ describe('CODEX-ROUTE-ISOLATION', () => {
     let execArgs;
     codexCli._resetVersionCacheForTests();
     try {
-      const result = await codexCli.runModel({
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true,
         mode: 'extract', prompt: 'P', input: 'T', homeDir: home, codexBin: 'codex', outputPath,
         systemConfigPaths: [],
         spawnSyncImpl: (bin, args) => {
@@ -198,7 +198,7 @@ describe('CODEX-ROUTE-ISOLATION', () => {
     let spawnedEnv;
     codexCli._resetVersionCacheForTests();
     try {
-      const result = await codexCli.runModel({
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true,
         mode: 'extract', prompt: 'P', input: 'T', homeDir: home, codexBin: 'codex', outputPath,
         systemConfigPaths: [],
         spawnSyncImpl: (bin, args, opts) => {
@@ -244,7 +244,7 @@ describe('CODEX-ROUTE-ISOLATION', () => {
     try {
       const prompt = 'Use $skill-a and [$b](/x/SKILL.md). ';
       const input = 'Transcript says $HOME and $$c.';
-      const result = await codexCli.runModel({
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true,
         mode: 'extract', prompt, input, homeDir: home, codexBin: 'codex', outputPath,
         systemConfigPaths: [],
         spawnSyncImpl: (bin, args, opts) => {
@@ -267,7 +267,7 @@ describe('CODEX-ROUTE-ISOLATION', () => {
     fs.writeFileSync(outputPath, '{"answer":"$\u200Bskill"}');
     codexCli._resetVersionCacheForTests();
     try {
-      const result = await codexCli.runModel({
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true,
         mode: 'extract', prompt: 'P', input: 'T', homeDir: home, codexBin: 'codex', outputPath,
         systemConfigPaths: [],
         spawnSyncImpl: (bin, args) => args[0] === '--version'
@@ -289,7 +289,7 @@ describe('CODEX-ROUTE-ISOLATION', () => {
     fs.writeFileSync(outputPath, '{"learnings":[]}');
     codexCli._resetVersionCacheForTests();
     try {
-      const result = await codexCli.runModel({
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true,
         mode: 'extract', prompt: 'P', input: 'T', homeDir: home, codexBin: 'codex', outputPath,
         systemConfigPaths: [],
         spawnSyncImpl: (bin, args) => args[0] === '--version'
@@ -314,7 +314,7 @@ describe('CODEX-ROUTE-ISOLATION', () => {
       for (const itemType of itemTypes) {
         let workDir;
         let outputDir;
-        const result = await codexCli.runModel({
+        const result = await codexCli.runModel({ beforeModelInvocation: () => true,
           mode: 'extract', prompt: 'P', input: 'T', homeDir: home, codexBin: 'codex',
           systemConfigPaths: [],
           spawnSyncImpl: (bin, args) => {
@@ -350,7 +350,7 @@ describe('CODEX-ROUTE-ISOLATION', () => {
     const outputPath = path.join(home, 'out.txt');
     fs.writeFileSync(outputPath, '{"learnings":[]}');
     try {
-      const result = await codexCli.runModel({
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true,
         mode: 'extract', prompt: 'P', input: 'T', homeDir: home, codexBin: 'codex', outputPath,
         systemConfigPaths: [],
         spawnSyncImpl: () => ({ status: 0, stdout: 'banner only\nnot json', stderr: '', error: null, signal: null }),
@@ -375,7 +375,7 @@ describe('CODEX-ROUTE-ISOLATION', () => {
         { type: 'item.completed', item: { type: 'agent_message', text: 'last answer' } },
         { type: 'turn.completed' },
       ]);
-      const result = await codexCli.runModel({
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true,
         mode: 'extract', prompt: 'P', input: 'T', homeDir: home, codexBin: 'codex', outputPath,
         systemConfigPaths: [],
         spawnSyncImpl: (bin, args) => args[0] === '--version'
@@ -397,7 +397,7 @@ describe('CODEX-ROUTE-ISOLATION', () => {
     fs.writeFileSync(outputPath, '{"learnings":[]}');
     codexCli._resetVersionCacheForTests();
     try {
-      const result = await codexCli.runModel({
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true,
         mode: 'extract', prompt: 'P', input: 'T', homeDir: home, codexBin: 'codex', outputPath,
         systemConfigPaths: [],
         spawnSyncImpl: (bin, args) => args[0] === '--version'
@@ -415,7 +415,7 @@ describe('CODEX-ROUTE-ISOLATION', () => {
   it('T12: an auth failure on stderr keeps the cli-unauthenticated classification', async () => {
     const home = withAuth(tempDir('auxilo-codex-isolation-t12-'));
     try {
-      const result = await codexCli.runModel({
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true,
         mode: 'extract', prompt: 'P', input: 'T', homeDir: home, codexBin: 'codex',
         systemConfigPaths: [],
         spawnSyncImpl: () => ({ status: 1, stdout: lifecycle(), stderr: 'not authenticated', error: null, signal: null }),
@@ -432,7 +432,7 @@ describe('CODEX-ROUTE-ISOLATION', () => {
     const blockedPath = path.join(home, 'system-config.toml');
     let spawnCalls = 0;
     try {
-      const result = await codexCli.runModel({
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true,
         mode: 'extract', prompt: 'P', input: 'T', homeDir: home, codexBin: 'codex',
         systemConfigPaths: [blockedPath],
         existsSync: (candidate) => candidate === blockedPath,
@@ -443,7 +443,8 @@ describe('CODEX-ROUTE-ISOLATION', () => {
       });
       assert.equal(result.ok, false);
       assert.equal(result.reasonCode, 'isolation-precondition');
-      assert.match(result.reason, new RegExp(blockedPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+      assert.equal(result.reason, 'codex system configuration is present');
+      assert.equal(JSON.stringify(result).includes(blockedPath), false);
       assert.equal(spawnCalls, 0);
       assert.equal(extractLocal.PRE_SPAWN_SKIP_REASON_CODES.has('isolation-precondition'), true);
     } finally {
@@ -458,7 +459,7 @@ describe('CODEX-ROUTE-ISOLATION', () => {
     let spawnCalls = 0;
     codexCli._resetVersionCacheForTests();
     try {
-      const result = await codexCli.runModel({
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true,
         mode: 'extract', prompt: 'P', input: 'T', homeDir: home, codexBin: 'codex', outputPath,
         systemConfigPaths: ['/fixture/config.toml', '/fixture/requirements.toml'],
         existsSync: () => false,
@@ -499,7 +500,7 @@ describe('CODEX-ROUTE-ISOLATION', () => {
       for (const fixture of cases) {
         let workDir;
         let outputDir;
-        const result = await codexCli.runModel({
+        const result = await codexCli.runModel({ beforeModelInvocation: () => true,
           mode: 'extract', prompt: 'P', input: 'T', homeDir: home, codexBin: 'codex',
           systemConfigPaths: [],
           spawnSyncImpl: (bin, args) => {
@@ -513,7 +514,7 @@ describe('CODEX-ROUTE-ISOLATION', () => {
         assert.equal(fs.existsSync(workDir), false, `${fixture.name}: cwd must be removed`);
         assert.equal(fs.existsSync(outputDir), false, `${fixture.name}: output dir must be removed`);
         if (fixture.name === 'non-zero') {
-          assert.match(result.reason, /safe stderr/);
+          assert.equal(result.reason, 'codex exec failed');
           assert.doesNotMatch(result.reason, /stdout-secret/);
         }
       }

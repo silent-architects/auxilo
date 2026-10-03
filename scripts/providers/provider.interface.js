@@ -17,10 +17,8 @@
  * @typedef {'extract'|'judge'} RunModelMode
  *   'extract' (default) — draft learnings from a transcript.
  *   'judge' — binary anchored-dedup decision against previously captured lessons.
- *   A CLI provider may pick a different argv/parsing variant per mode (Claude Code
- * does — extraction and judge invocations differ today). A provider that has no
- * mode-specific behavior (e.g. codex-cli, PART B) may ignore `mode` and always use
- * the same invocation shape.
+ *   Claude Code uses the same isolated JSON transport and strict decoder in
+ * both modes. Prompt bytes and candidate parsing are separate from transport.
  */
 
 /**
@@ -44,6 +42,15 @@
  * @property {Function} [fetchImpl] - Injectable `fetch` replacement (HTTP providers
  *   only) — the test-injection seam.
  * @property {RunModelMode} [mode] - 'extract' (default) or 'judge'.
+ * @property {Function} beforeModelInvocation - Required at every model-capable
+ *   adapter boundary. Called exactly once immediately before spawn/fetch; only
+ *   literal true authorizes it. The registry supplies the owned binding hook.
+ *   Pre-invocation refusals return without consulting the hook.
+ * @property {string} [source] - Transcript source (unknown means no native route).
+ * @property {string} [sessionId] - Source session identifier.
+ * @property {string} [jobSha] - SHA256 of the exact received transcript bytes.
+ * @property {object} [routeContext] - Job-local owned binding shared by stages.
+ * @property {string} [routeBindingsDir] - Test seam only; never read from env.
  * @property {object} [schema] - Optional JSON-Schema hint a provider MAY use to
  *   constrain its output. Claude Code ignores this — `extractJsonValue`'s
  *   fence-strip + brace-scan parser is already model-agnostic and needs no schema
@@ -63,21 +70,21 @@
  *   (e.g. 'cli-unauthenticated', 'cli-billing-helper-configured', 'model-error',
  *   'isolation-precondition', 'isolation-unverified', 'isolation-violation', 'output-schema-rejected',
  *   'unknown'). Present on both success and failure paths where applicable.
- * @property {string|null} [reason] - Human-readable reason, present when !ok.
+ * @property {string|null} [reason] - Fixed classification, present when !ok;
+ *   never raw output, errors, local paths or configured URLs.
+ * @property {'pre-invocation'} [refusal] - Positive pre-invocation refusal only.
+ * @property {string} [hold] - Blocks further inference, not candidate submission.
+ * @property {string} [deferred] - Ownership or recovery-wait disposition.
  * @property {string} [authStatus] - 'logged-in' | 'logged-out' | 'unknown', when
  *   the provider has a meaningful concept of local auth state.
- * @property {object} [identity] - {provider, model, version, vendor} — which
- *   provider/model actually ran this call, for the extraction_model stamp
- *   (scripts/extract-local.js's resolveExtractionModelIdentity reads THIS
- *   field, not any other name). byo-key.js always sets it (full identity,
- *   read from its stored config). codex-cli.js sets it (provider/version;
- *   model/vendor null — codex exposes no per-call model id without --json).
- *   claude-code.js does not set one yet; resolveExtractionModelIdentity
- *   falls back to the resolved provider id alone when absent (EXTRACT-PER-
- *   CLIENT W1 FIX GATE-A item (a) — codex-cli.js used to export this same
- *   data under the field name `extraction_model`, which nothing here ever
- *   read, so its real version silently never reached the stamp; that field
- *   name survives one more release as a deprecated alias of `identity`).
+ * @property {object} [identity] - {provider, model, requested_model,
+ *   observed_model, version, vendor, identity_unresolved?}. Unknown is null.
+ *   requested_model is the BYO configuration, never evidence of what ran.
+ *   observed_model comes only from the vendor response or Claude canonicalModel;
+ *   zero distinct canonical values means missing, several means ambiguous.
+ *   Codex remains unobserved (missing). Legacy model is observed_model or null.
+ *   version is the actual CLI version. Usage never implies model identity.
+ *   These fields reach the local stamp; server preservation is EPC2-3's scope.
  */
 
 /**

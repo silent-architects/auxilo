@@ -1,4 +1,5 @@
 'use strict';
+const { supportedClaude } = require('./helpers/epc2-fixtures.js');
 /*
  * test/extraction-model-stamp.test.js — EXTRACT-PER-CLIENT W1 PART C
  *
@@ -58,7 +59,7 @@ function authJson(loggedIn) {
   return { status: 0, stdout: JSON.stringify({ loggedIn }), stderr: '' };
 }
 function extractionStdout(learnings) {
-  return { status: 0, stdout: JSON.stringify({ learnings }), stderr: '' };
+  return { status: 0, stdout: JSON.stringify({ type: 'result', result: JSON.stringify({ learnings }), is_error: false }), stderr: '' };
 }
 
 const LEARNING_A = {
@@ -81,12 +82,13 @@ describe('extract-local.js: extractLocally attaches extraction_model per learnin
     const originalEnv = process.env.AUXILO_EXTRACTION_PROVIDER;
     process.env.AUXILO_EXTRACTION_PROVIDER = 'claude-code';
     try {
-      const result = await extractLocal.extractLocally('a synthetic transcript', 'claude-code', {
+      const result = await extractLocal.extractLocally('a synthetic transcript', 'claude-code', { ...supportedClaude,
         indexPath, log: () => {}, spawnSyncImpl, claudeBin: 'claude', homeDir: '/fixture/home', cwd: '/fixture/home',
       });
       assert.equal(result.learnings.length, 1);
       assert.deepEqual(result.learnings[0].extraction_model, {
-        provider: 'claude-code', model: null, version: null, vendor: 'anthropic',
+        provider: 'claude-code', model: null, requested_model: null, observed_model: null,
+        identity_unresolved: 'missing', version: '2.1.41', vendor: 'anthropic',
       });
     } finally {
       cleanupTempDirs();
@@ -113,7 +115,8 @@ describe('extract-local.js: extractLocally attaches extraction_model per learnin
       });
       assert.equal(result.learnings.length, 1);
       assert.deepEqual(result.learnings[0].extraction_model, {
-        provider: 'byo-key', model: 'claude-sonnet-4-5', version: null, vendor: 'anthropic',
+        provider: 'byo-key', model: null, requested_model: 'claude-sonnet-4-5', observed_model: null,
+        identity_unresolved: 'missing', version: null, vendor: 'anthropic',
       });
     } finally {
       cleanupTempDirs();

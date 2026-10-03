@@ -623,6 +623,8 @@ async function postExtractDetailed(transcript, sessionId, sourceType, _scrubRepo
   let skipped;
   let reasonCode;
   let authStatus;
+  let hold;
+  let deferred;
   let authDiscrepancy = false;
   let dedupDropped = 0;
   let promptMemoryTokens = 0;
@@ -636,6 +638,8 @@ async function postExtractDetailed(transcript, sessionId, sourceType, _scrubRepo
       skipped,
       reasonCode,
       authStatus,
+      hold,
+      deferred,
       authDiscrepancy = false,
       dedup_dropped: dedupDropped = 0,
       prompt_memory_tokens: promptMemoryTokens = 0,
@@ -645,6 +649,9 @@ async function postExtractDetailed(transcript, sessionId, sourceType, _scrubRepo
       judge_completion_tokens: judgeCompletionTokens = 0,
     } = await extractLocally(transcript, sourceType, {
       ...opts,
+      source: sourceType,
+      sessionId,
+      jobSha: crypto.createHash('sha256').update(transcript).digest('hex'),
       baseUrl: opts.baseUrl || BASE_URL,
       apiKey: opts.apiKey !== undefined ? opts.apiKey : API_KEY,
       captureVisibility: opts.captureVisibility || CAPTURE_VISIBILITY,
@@ -663,10 +670,14 @@ async function postExtractDetailed(transcript, sessionId, sourceType, _scrubRepo
     runnerLog(`[runner] ${skipped}`);
     return {
       skipped: true,
+      ...(hold && { hold }),
+      ...(deferred && { deferred }),
       reasonCode: reasonCode || 'unknown',
       authStatus: authStatus || 'unknown',
       authDiscrepancy: Boolean(authDiscrepancy),
       result: {
+        ...(hold && { hold }),
+        ...(deferred && { deferred }),
         learnings_published: 0,
         learnings_held: 0,
         learnings_rejected: 0,
@@ -691,10 +702,14 @@ async function postExtractDetailed(transcript, sessionId, sourceType, _scrubRepo
   );
   return {
     skipped: false,
+    ...(hold && { hold }),
+    ...(deferred && { deferred }),
     reasonCode: null,
     authStatus: authStatus || 'unknown',
     authDiscrepancy: false,
     result: {
+      ...(hold && { hold }),
+      ...(deferred && { deferred }),
       learnings_published: published,
       learnings_held: held,
       learnings_rejected: rejected,
@@ -710,20 +725,23 @@ async function postExtract(transcript, sessionId, sourceType, scrubReport, opts 
 
 function renderExtractionResult(detailed, opts = {}) {
   const result = detailed && detailed.result ? detailed.result : {};
+  const routeDisposition = detailed && (detailed.hold || detailed.deferred);
+  const routeStatus = routeDisposition ? ` route=${routeDisposition}` : '';
   if (!isSkippedExtraction(detailed)) {
     if (opts.flushFile) {
       return `[runner] ✓ Flushed ${path.basename(String(opts.flushFile))}: ` +
         `published=${result.learnings_published || 0} held=${result.learnings_held || 0} ` +
-        `rejected=${result.learnings_rejected || 0} ${DIGEST_ACCOUNT}`;
+        `rejected=${result.learnings_rejected || 0} ${DIGEST_ACCOUNT}${routeStatus}`;
     }
     const indent = opts.indent || '';
     return `[runner] ${indent}✓ published=${result.learnings_published || 0} ` +
       `held=${result.learnings_held || 0} rejected=${result.learnings_rejected || 0} ` +
-      `${DIGEST_ACCOUNT} (extraction: ${result.extraction_id})`;
+      `${DIGEST_ACCOUNT} (extraction: ${result.extraction_id})${routeStatus}`;
   }
 
   const reasonCode = detailed.reasonCode || 'unknown';
   const details = [reasonCode];
+  if (routeDisposition) details.push(`route=${routeDisposition}`);
   if (detailed.authStatus === 'logged-in') details.push('loggedIn:true');
   else if (detailed.authStatus === 'logged-out') details.push('loggedIn:false');
   else details.push('auth-status:UNKNOWN');

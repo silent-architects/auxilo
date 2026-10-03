@@ -32,6 +32,12 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const { invocationGate } = require('./route-binding.js');
+
+const KNOWN_DISALLOWED_ITEM_TYPES = Object.freeze([
+  'command_execution', 'file_change', 'mcp_tool_call',
+  'collab_tool_call', 'web_search', 'dynamic_tool_call',
+]);
 
 const { SCRUBBED_CLIENT_ENV_VARS } = require('./claude-code.js');
 
@@ -264,12 +270,12 @@ function makeOutputLocation(opts, mode) {
 
 function classifySpawnError(error, bin) {
   if (error && error.code === 'ENOENT') {
-    return { reasonCode: 'cli-not-installed', reason: `codex binary not found (${bin}) — run \`npm install -g @openai/codex\` or the platform's install path` };
+    return { reasonCode: 'cli-not-installed', reason: 'codex binary not found' };
   }
   if (error && (error.code === 'ETIMEDOUT' || error.code === 'ETIMEOUT')) {
-    return { reasonCode: 'cli-timeout', reason: `codex exec timed out (${bin}): ${error.message}` };
+    return { reasonCode: 'cli-timeout', reason: 'codex exec timed out' };
   }
-  return { reasonCode: 'unknown', reason: `spawn failed (${bin}): ${error ? error.message : 'no process result'}` };
+  return { reasonCode: 'unknown', reason: 'codex spawn failed' };
 }
 
 /**
@@ -304,6 +310,7 @@ function invoke(opts, mode) {
       usage: null,
       reason: 'codex CLI is not authenticated in this context (run `codex login` once); skipping deterministic extraction',
       reasonCode: 'cli-unauthenticated',
+      refusal: 'pre-invocation',
       authStatus: 'logged-out',
     };
   }
@@ -319,8 +326,9 @@ function invoke(opts, mode) {
         ok: false,
         text: '',
         usage: null,
-        reason: `codex system configuration is present at ${systemConfigPath}`,
+        reason: 'codex system configuration is present',
         reasonCode: 'isolation-precondition',
+        refusal: 'pre-invocation',
         authStatus: 'unknown',
       };
     }
@@ -351,6 +359,8 @@ function invoke(opts, mode) {
     ];
 
     let res;
+    const gate = invocationGate(opts);
+    if (gate) return gate;
     try {
       res = spawnSyncImpl(bin, args, {
         input: stdin,
@@ -365,7 +375,7 @@ function invoke(opts, mode) {
       return { ok: false, text: '', usage: null, authStatus: 'unknown', ...classified };
     }
     if (!res) {
-      return { ok: false, text: '', usage: null, reason: `spawn failed (${bin}): no process result`, reasonCode: 'unknown', authStatus: 'unknown' };
+      return { ok: false, text: '', usage: null, reason: 'codex spawn returned no process result', reasonCode: 'unknown', authStatus: 'unknown' };
     }
     if (res.error) {
       const classified = classifySpawnError(res.error, bin);
@@ -374,7 +384,7 @@ function invoke(opts, mode) {
     // spawnSync signals a timeout via `signal` (no `error`) when the child was
     // killed for exceeding `timeout` and didn't set its own exit code.
     if (res.signal && res.status === null) {
-      return { ok: false, text: '', usage: null, reason: `codex exec timed out (${bin}), signal ${res.signal}`, reasonCode: 'cli-timeout', authStatus: 'unknown' };
+      return { ok: false, text: '', usage: null, reason: 'codex exec timed out', reasonCode: 'cli-timeout', authStatus: 'unknown' };
     }
 
     const stdout = String(res.stdout || '');
@@ -395,7 +405,7 @@ function invoke(opts, mode) {
         ok: false,
         text: '',
         usage: null,
-        reason: `codex exec exited ${res.status}: ${stderr.slice(0, 160)}`,
+        reason: 'codex exec failed',
         reasonCode: 'model-error',
         authStatus: 'unknown',
       };
@@ -422,7 +432,7 @@ function invoke(opts, mode) {
           ok: false,
           text: '',
           usage: null,
-          reason: `codex exec emitted disallowed item type: ${itemType}`,
+          reason: `codex exec emitted disallowed item type: ${KNOWN_DISALLOWED_ITEM_TYPES.includes(itemType) ? itemType : 'unrecognized'}`,
           reasonCode: 'isolation-violation',
           authStatus: 'unknown',
         };
@@ -472,6 +482,9 @@ function invoke(opts, mode) {
     const identity = {
       provider: 'codex-cli',
       model: null, // the route intentionally preserves its existing identity contract
+      requested_model: null,
+      observed_model: null,
+      identity_unresolved: 'missing',
       version: getCodexVersion(opts),
       vendor: null,
     };
@@ -503,7 +516,8 @@ function invoke(opts, mode) {
 /** runModel(opts) — the provider.interface.js contract. */
 async function runModel(opts = {}) {
   const mode = opts.mode === 'judge' ? 'judge' : 'extract';
-  return invoke(opts, mode);
+  try { return invoke(opts, mode); }
+  catch { return { ok: false, text: '', usage: null, reason: 'codex invocation failed', reasonCode: 'unknown', authStatus: 'unknown' }; }
 }
 
 module.exports = {
@@ -511,6 +525,8 @@ module.exports = {
   detect,
   resolveCodexBin,
   readAuthMode,
+  checkAuthStatus: opts => readAuthMode(opts) ? 'logged-in' : 'logged-out',
+  KNOWN_DISALLOWED_ITEM_TYPES,
   codexChildEnv,
   getCodexVersion,
   neutralizeSkillMentions,

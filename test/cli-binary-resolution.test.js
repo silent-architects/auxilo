@@ -144,16 +144,16 @@ it('T6: native package version is returned and follows the selected binary into 
   const spawnSyncImpl = (bin, argv) => {
     calls.push({ bin, argv });
     if (argv[0] === 'auth') return { status: 0, stdout: '{"loggedIn":true}' };
-    return { status: 0, stdout: '{"result":"SAME","learnings":[]}' };
+    return { status: 0, stdout: JSON.stringify({ type: 'result', result: '{"result":"SAME","learnings":[]}', is_error: false }) };
   };
   for (const mode of ['extract', 'judge']) {
-    const result = await provider.runModel({ ...f.opts, mode, prompt: 'fixture', input: 'fixture', spawnSyncImpl });
+    const result = await provider.runModel({ beforeModelInvocation: () => true, ...f.opts, mode, prompt: 'fixture', input: 'fixture', spawnSyncImpl });
     assert.equal(result.ok, true, mode);
     assert.equal(result.cliVersion, '2.1.251', mode);
   }
   assert.deepEqual(calls, [
     { bin: NPM, argv: ['auth', 'status'] },
-    { bin: NPM, argv: ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config'] },
+    { bin: NPM, argv: ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config'] },
     { bin: NPM, argv: ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config'] },
   ]);
 });
@@ -205,7 +205,7 @@ it('T9: 2.1.251 and the exact 2.1.41 boundary retain auth status and its five-se
   }
 });
 
-it('T10: bare claude and unreadable versions retain the existing auth probe', () => {
+it('T10: bare claude and unreadable versions skip the auth probe', () => {
   const f = fixture();
   f.add(SYSTEM, 'unreadable');
   for (const bin of ['claude', SYSTEM]) {
@@ -213,8 +213,8 @@ it('T10: bare claude and unreadable versions retain the existing auth probe', ()
     assert.equal(provider.checkAuthStatus({
       ...f.opts, claudeBin: bin,
       spawnSyncImpl: (actualBin, args) => { calls.push({ bin: actualBin, args }); return { status: 0, stdout: '{"loggedIn":false}' }; },
-    }), 'logged-out');
-    assert.deepEqual(calls, [{ bin, args: ['auth', 'status'] }]);
+    }), 'unknown');
+    assert.deepEqual(calls, []);
   }
 });
 
@@ -224,18 +224,18 @@ it('T11: only 2.1.12 installed means detect has zero spawns and extract still in
   assert.equal(provider.detect(f.opts), true);
   assert.deepEqual(f.spawns, []);
   const calls = [];
-  const result = await provider.runModel({
+  const result = await provider.runModel({ beforeModelInvocation: () => true,
     ...f.opts, mode: 'extract', prompt: 'fixture', input: 'transcript',
     spawnSyncImpl: (bin, args) => {
       calls.push({ bin, args });
       if (args[0] === 'auth') throw new Error('known-old CLI must never receive auth status');
-      return { status: 0, stdout: '{"learnings":[]}' };
+      return { status: 0, stdout: JSON.stringify({ type: "result", result: '{"learnings":[]}', is_error: false }) };
     },
   });
   assert.equal(result.ok, true);
   assert.equal(result.authStatus, 'unknown');
   assert.equal(result.cliVersion, '2.1.12');
-  assert.deepEqual(calls, [{ bin: SYSTEM, args: ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config'] }]);
+  assert.deepEqual(calls, [{ bin: SYSTEM, args: ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config'] }]);
 });
 
 it('T12: resolution and version reads tolerate filesystem errors without spawning', () => {
