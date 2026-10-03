@@ -13555,7 +13555,7 @@ function serveLegalPage(c, filename, title, seo) {
   </div>
 </nav>
   <div class="legal-wrap" id="main" role="main">
-    <a href="/" class="legal-back">← Back to Auxilo</a>
+    <a href="/" class="legal-back">Back to Auxilo</a>
     ${body}
   </div>
 

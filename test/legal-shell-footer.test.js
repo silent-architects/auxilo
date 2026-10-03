@@ -174,17 +174,17 @@ describe('LEGAL-SHELL-FOOTER: serveLegalPage routes carry /pricing\'s footer byt
         `${route}'s footer diverges from /pricing's after whitespace normalization`);
     });
 
-    it(`GET ${route} keeps its "← Back to Auxilo" link above the footer`, async (t) => {
+    it(`GET ${route} keeps its "Back to Auxilo" link above the footer`, async (t) => {
       if (bootSkipReason) { t.skip(bootSkipReason); return; }
       const res = await fetch(`${baseUrl}${route}`);
       assert.equal(res.status, 200);
       const body = await res.text();
-      assert.ok(body.includes('class="legal-back">← Back to Auxilo</a>'),
-        `${route} must keep the existing "← Back to Auxilo" link`);
+      assert.ok(body.includes('class="legal-back">Back to Auxilo</a>'),
+        `${route} must keep the existing "Back to Auxilo" link (the arrow glyph came off by the owner's ruling of 2026-10-02)`);
       const backIndex = body.indexOf('legal-back');
       const footerIndex = body.indexOf('<footer>');
       assert.ok(backIndex !== -1 && footerIndex !== -1 && backIndex < footerIndex,
-        `${route}'s "← Back to Auxilo" link must appear before the footer`);
+        `${route}'s "Back to Auxilo" link must appear before the footer`);
     });
   }
 });

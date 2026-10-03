@@ -159,7 +159,7 @@ describe('skip links and landmarks', () => {
     assert.equal((LEGAL_FN.match(/<div class="legal-wrap" id="main" role="main">/g) || []).length, 1);
     assert.equal((LEGAL_FN.match(/<div class="legal-wrap"/g) || []).length, 1, 'one wrapper element in the template');
     // no element was added: the wrapper still holds the back link and the rendered body, and there is no <main> element
-    assert.match(LEGAL_FN, /<div class="legal-wrap" id="main" role="main">\n    <a href="\/" class="legal-back">← Back to Auxilo<\/a>\n    \$\{body\}\n  <\/div>/);
+    assert.match(LEGAL_FN, /<div class="legal-wrap" id="main" role="main">\n    <a href="\/" class="legal-back">Back to Auxilo<\/a>\n    \$\{body\}\n  <\/div>/);
     assert.ok(!/<main\b/.test(LEGAL_FN), 'the template carries no <main> element');
   });
 });
