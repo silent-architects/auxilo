@@ -95,6 +95,8 @@ const isolatedEnv = {
   ...process.env,
   AUXILO_HOME: tmpHome,
   HOME: tmpHome,
+  USERPROFILE: tmpHome,
+  ...(process.platform === 'win32' ? { APPDATA: path.join(tmpHome, 'AppData', 'Roaming'), LOCALAPPDATA: path.join(tmpHome, 'AppData', 'Local') } : {}),
   PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH || defaultPlaywrightBrowsersPath(realHome),
   // RUNNER-AUTO-UPDATE (0.9.16): scripts/runner.js's main() now makes a real
   // registry.npmjs.org network call (offline-tolerant, but still a call) on

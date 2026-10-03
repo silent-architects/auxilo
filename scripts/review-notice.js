@@ -90,7 +90,7 @@ function writeState(homeDir, now = Date.now()) {
 
 /** The one line. Count only — see the header contract. */
 function renderNotice(count) {
-  return `Auxilo: ${count} learning(s) held for your review — run auxilo_review (MCP) or \`npx auxilo review\`.`;
+  return `Auxilo: ${count} ${count === 1 ? 'learning is' : 'learnings are'} waiting for your review. Run auxilo_review (MCP) or \`npx auxilo review\`.`;
 }
 
 /**

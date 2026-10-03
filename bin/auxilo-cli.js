@@ -19,7 +19,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const readline = require('readline');
-const { exec } = require('child_process');
+const { exec, spawnSync } = require('child_process');
 const installer = require('../lib/installer.js');
 const review = require('../lib/review.js');
 const runnerAutoupdate = require('../lib/runner-autoupdate.js');
@@ -244,7 +244,15 @@ async function cmdSetup(flags) {
   console.log('');
   for (const client of chosen.filter((c) => c.mcp)) {
     try {
-      const result = installer.registerMcp(client);
+      const result = installer.registerMcp(client, undefined, { commandRunner: spawnSync });
+      if (client.id === 'claude-code') {
+        if (result.failed) {
+          console.log('Setup could not add Auxilo to Claude Code, so run this command to add it yourself.');
+          console.log(installer.claudeMcpCommand());
+        }
+        console.log(installer.claudeMcpStatusLine(result));
+        continue;
+      }
       console.log(result.changed
         ? `  ✓ ${client.name}: registered Auxilo MCP server (${result.configPath})`
         : `  ✓ ${client.name}: already registered (no changes)`);
@@ -283,7 +291,7 @@ async function cmdSetup(flags) {
       });
       creds = installer.readCredentials(HOME);
       console.log(`  ✓ Logged in as ${result.email || result.account_id}`);
-      console.log(`  ✓ Credentials saved to ~/.auxilo/credentials.json (mode 0600)`);
+      console.log(`  ✓ Credentials saved to ~/.auxilo/credentials.json${process.platform === 'win32' ? '' : ' (mode 0600)'}`);
     } catch (err) {
       console.error(`  ✗ Login failed: ${err.message}`);
       console.error('    MCP registration (above) is still in place. Re-run `auxilo setup` to retry login.');
@@ -505,7 +513,7 @@ async function cmdInit(flags) {
     try {
       const w = installer.writeEnvFile(envPath, { api_key: result.api_key, base_url: baseUrl });
       if (!flags.json) {
-        console.log(`  ✓ ${w.created ? 'Created' : 'Updated'} ${w.path} (AUXILO_API_KEY, mode 0600)`);
+        console.log(`  ✓ ${w.created ? 'Created' : 'Updated'} ${w.path} (AUXILO_API_KEY${process.platform === 'win32' ? '' : ', mode 0600'})`);
       }
     } catch (err) {
       // The key was already minted — surface it rather than losing it.
@@ -523,7 +531,7 @@ async function cmdInit(flags) {
       email: result.email,
       account_id: result.account_id,
     });
-    if (!flags.json) console.log('  ✓ Saved to ~/.auxilo/credentials.json (mode 0600) — this machine now uses this key.');
+    if (!flags.json) console.log(`  ✓ Saved to ~/.auxilo/credentials.json${process.platform === 'win32' ? '' : ' (mode 0600)'} — this machine now uses this key.`);
   }
 
   if (flags.json) {
@@ -553,7 +561,7 @@ async function cmdInit(flags) {
 // ─── auxilo status ──────────────────────────────────────────────────────────
 
 async function cmdStatus() {
-  const s = await installer.getStatus(HOME);
+  const s = await installer.getStatus(HOME, { commandRunner: spawnSync });
 
   console.log('\nAuxilo status');
   console.log('=============');
@@ -561,6 +569,10 @@ async function cmdStatus() {
   console.log('Clients:');
   if (s.clients.length === 0) console.log('  (none detected)');
   for (const c of s.clients) {
+    if (c.id === 'claude-code') {
+      console.log(`  ${installer.claudeMcpStatusLine(c)}`);
+      continue;
+    }
     const reg = c.mcp
       ? (c.registered ? 'MCP registered' : 'detected, MCP NOT registered')
       : 'poll-based source (no MCP config)';
@@ -1121,6 +1133,10 @@ const CLEAN_LANE_AFFIRMATION = 'I understand and choose auto-publish for qualify
  * "readable only by your user account" claim below is never printed false.
  */
 const PROVIDER_KEY_CONSENT_SENTENCE = 'This key is yours. It stays on this machine in ~/.auxilo/providers.json, readable only by your user account, and Auxilo never receives it. It is used for one thing, drafting learnings from your own scrubbed sessions. Drafting sends those sessions to that provider under your own account, and any use is charged to that account, never to Auxilo. Run auxilo provider clear to remove it.';
+const WINDOWS_PROVIDER_KEY_CONSENT_SENTENCE = 'This key is yours. It stays on this machine in your user profile folder, at .auxilo\\providers.json, and Auxilo never receives it. It is used for one thing, drafting learnings from your own scrubbed sessions. Drafting sends those sessions to that provider under your own account, and any use is charged to that account, never to Auxilo. Run auxilo provider clear to remove it.';
+function providerKeyConsentSentence(platform = process.platform) {
+  return platform === 'win32' ? WINDOWS_PROVIDER_KEY_CONSENT_SENTENCE : PROVIDER_KEY_CONSENT_SENTENCE;
+}
 const CLEAN_LANE_UNAVAILABLE = 'Auto-publish for clean learnings is not yet available on this account.';
 // CLEAN-LANE-FLIP Phase B (legal; DRAFT pending Tyler): the full text of ToS
 // §5.9.3(g) (plus its ratchet paragraph) prints ABOVE the affirmation prompt —
@@ -1371,6 +1387,7 @@ const PROVIDER_VENDORS = ['openai', 'anthropic', 'gemini'];
  * reason. Never throws now.
  */
 function providersFileModeUnsafe(target) {
+  if (process.platform === 'win32') return !byoKeyProvider.providersFileInsideProfile(target);
   let stat;
   try {
     stat = fs.statSync(target);
@@ -1382,6 +1399,7 @@ function providersFileModeUnsafe(target) {
 }
 
 async function cmdProvider(flags) {
+  const PROVIDER_KEY_CONSENT_SENTENCE = providerKeyConsentSentence();
   const sub = process.argv[3];
   if (!['status', 'set', 'clear'].includes(sub)) {
     if (sub) console.error(`Unknown provider subcommand: ${sub}`);
@@ -1430,7 +1448,7 @@ async function cmdProvider(flags) {
   // existing providers.json that is not owner-read-only would make the
   // sentence's "readable only by your user account" claim false.
   if (providersFileModeUnsafe(byoKeyProvider.DEFAULT_PROVIDERS_STATE_PATH)) {
-    console.error('auxilo provider set refuses to continue: ~/.auxilo/providers.json exists and is not owner-read-only, so this build cannot truthfully make the consent promise (reasonCode: providers-file-mode-unsafe). Fix its permissions (chmod 600 ~/.auxilo/providers.json) or remove the file, then try again.');
+    console.error(process.platform === 'win32' ? 'The provider key file must be inside your Windows user profile folder. (reasonCode: providers-file-mode-unsafe)' : 'auxilo provider set refuses to continue: ~/.auxilo/providers.json exists and is not owner-read-only, so this build cannot truthfully make the consent promise (reasonCode: providers-file-mode-unsafe). Fix its permissions (chmod 600 ~/.auxilo/providers.json) or remove the file, then try again.');
     process.exit(1);
   }
 
@@ -1515,7 +1533,7 @@ async function cmdProvider(flags) {
     }
     throw err;
   }
-  console.log(`\n✓ Saved to ${written} (mode 0600). This machine drafts through Claude Code first when you are signed in to it; your ${vendor} key only takes over when Claude Code is not usable, and once it does, it keeps drafting even after Claude Code becomes usable again.`);
+  console.log(`\n✓ Saved to ${written}${process.platform === 'win32' ? '' : ' (mode 0600)' }. This machine drafts through Claude Code first when you are signed in to it; your ${vendor} key only takes over when Claude Code is not usable, and once it does, it keeps drafting even after Claude Code becomes usable again.`);
 }
 
 // ─── Entry point ────────────────────────────────────────────────────────────
@@ -1708,6 +1726,7 @@ module.exports = {
   CLEAN_LANE_NO_EMAIL_LINE,
   wrapForTerminal,
   PROVIDER_KEY_CONSENT_SENTENCE,
+  providerKeyConsentSentence,
   CLI_CLEAN_LANE_CALIBRATED_PROVIDERS,
   STATUS_WORTHY_SKIP_REASON_CODES,
   extractionSkipReasonLine,

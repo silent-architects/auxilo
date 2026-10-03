@@ -31,7 +31,7 @@ The installer detects your clients, registers the MCP server in each, signs you 
 
 | Client | Detection | MCP registration | Background extraction | Notes |
 |---|---|---|---|---|
-| **Claude Code** | `~/.claude/` | `~/.claude/settings.json` | ✅ **Supported** — SessionEnd hook | |
+| **Claude Code** | `~/.claude/` | `~/.claude.json`, managed through `claude mcp add --scope user` | ✅ **Supported** — SessionEnd hook | |
 | **Cursor** | `~/.cursor/` | `~/.cursor/mcp.json` | ✅ **Supported** — `stop` hook (`~/.cursor/hooks.json`) | |
 | **Gemini CLI** | `~/.gemini/tmp/` or `~/.gemini/settings.json` | `~/.gemini/settings.json` | ⚠️ **Unverified** — `SessionEnd` hook wired, not confirmed on a live session | Adapter built from Gemini CLI's documented session format; not yet confirmed against a live install. |
 | **Antigravity** | `~/.gemini/antigravity/` | `~/.gemini/config/mcp_config.json` | ⚠️ **Supported (early)** — `Stop` hook (`~/.gemini/config/hooks.json`) | hook schema young; verified against live install |
@@ -79,7 +79,8 @@ Today the runner drafts learnings through the model client you are signed in to 
 
 | Path | Purpose | Mode |
 |---|---|---|
-| client config files above | MCP registration (read-modify-write, atomic; malformed JSON is never overwritten) | unchanged |
+| `~/.claude.json` | Claude Code MCP registration, managed through `claude mcp add --scope user` and checked with `claude mcp get auxilo` | managed by Claude Code |
+| other client config files above | MCP registration (read-modify-write, atomic; malformed JSON is never overwritten) | unchanged |
 | `~/.auxilo/credentials.json` | API key from device-code login | `0600` |
 | `~/.auxilo/bin/` | extraction runner, capture core, source adapters, sensitivity filter, generated hooks/shims | executables `0755` |
 | `~/.claude/settings.json` `hooks.SessionEnd[]` | one structured entry: `~/.auxilo/bin/auxilo-extract.sh` | — |

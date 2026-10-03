@@ -99,7 +99,8 @@ function assertNoCaptureArtifacts(home) {
 /** Consent-independent surfaces present in every scenario (boundary pin). */
 function assertConsentIndependentSurfaces(home) {
   const settings = readJson(path.join(home, '.claude', 'settings.json'));
-  assert.ok(settings.mcpServers && settings.mcpServers.auxilo,
+  const registration = readJson(path.join(home, '.claude.json'));
+  assert.ok(registration.mcpServers && registration.mcpServers.auxilo,
     'MCP registration is NOT consent-gated');
   const flatStart = JSON.stringify(settings.hooks && settings.hooks.SessionStart || []);
   assert.ok(flatStart.includes('auxilo-review-notice'),
@@ -191,10 +192,26 @@ describe('N3 — consent-gate integration (cmdSetup subprocess)', () => {
    */
   function runSetup(home, promptScript, { timeoutMs = 30000 } = {}) {
     return new Promise((resolve, reject) => {
-      const env = { ...process.env, HOME: home, AUXILO_NO_NOTIFY: '1' };
+      const env = { ...process.env, HOME: home, AUXILO_HOME: home, USERPROFILE: home, PATH: '', AUXILO_NO_NOTIFY: '1' };
       delete env.AUXILO_BASE_URL; // the --base-url flag must be the only base
       delete env.AUXILO_EXTRACTING;
-      const child = spawn(process.execPath, [CLI_PATH, 'setup', '--base-url', baseUrl], {
+      const preload = path.join(home, 'fixture-claude-runner.cjs');
+      fs.writeFileSync(preload, `
+        const fs = require('fs');
+        const installer = require(${JSON.stringify(path.join(REPO_ROOT, 'lib', 'installer.js'))});
+        const register = installer.registerMcp;
+        installer.registerMcp = (client, version, opts) => register(client, version, {
+          ...opts, claudeBin: '/fixture/claude', commandRunner(_bin, args) {
+            if (args[1] === 'add') {
+              const at = args.indexOf('--') + 1;
+              fs.writeFileSync(client.configPath, JSON.stringify({ mcpServers: { auxilo: { command: args[at], args: args.slice(at + 1) } } }));
+              return { status: 0 };
+            }
+            return { status: 0, stdout: 'Status: Connected' };
+          }
+        });
+      `);
+      const child = spawn(process.execPath, ['--require', preload, CLI_PATH, 'setup', '--base-url', baseUrl], {
         env, stdio: ['pipe', 'pipe', 'pipe'],
       });
       const script = [...promptScript];
