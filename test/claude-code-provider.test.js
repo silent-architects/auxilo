@@ -552,6 +552,7 @@ describe('claude-code.js — EXTRACTION-CHILD-HOOKS: --setting-sources isolation
         prompt: 'P', input: 'T', mode: 'extract', spawnSyncImpl, claudeBin: 'claude',
         homeDir: home, cwd: home, existsSync: () => false,
         providersStatePath: path.join(home, '.auxilo', 'providers.json'),
+        routeBindingsDir: path.join(home, 'bindings'),
         log: (line) => logLines.push(line),
         // Pre-resolve to claude-code — bypasses resolveProvider()'s own
         // detect() scan (which would otherwise consume this test's crafted
@@ -955,6 +956,7 @@ describe('extract-local.js — e2e: unavailable forced provider degrades to a na
       try {
         result = await extractLocal.extractLocally('synthetic transcript', 'claude-code', { ...supportedClaude,
           indexPath, log: () => {}, spawnSyncImpl, claudeBin: 'claude',
+          routeBindingsDir: path.join(dir, 'bindings'),
         });
       } catch (err) {
         thrown = err;

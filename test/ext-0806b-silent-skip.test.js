@@ -88,6 +88,10 @@ function clientRunnerEnv(home) {
   const env = {
     ...process.env,
     HOME: home,
+    // TEST-HOME-ROUTE-BINDINGS: the spawned runner resolves provider state
+    // (providers.json) from AUXILO_HOME when set; inheriting the parent's
+    // AUXILO_HOME sent it to the parent's home. Pin it to this fixture home.
+    AUXILO_HOME: home,
     PATH: installFakeLoggedOutClaude(home),
     AUXILO_API_KEY: 'focused-test-key',
     AUXILO_NO_NOTIFY: '1',

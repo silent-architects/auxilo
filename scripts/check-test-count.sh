@@ -607,6 +607,20 @@ else
   echo "  ✅ ${ACTUAL_TESTS} tests discovered/executed (pass ${ACTUAL_PASS:-?}, fail ${ACTUAL_FAIL:-0}) — matches the pin"
 fi
 
+# TEST-HOME-ROUTE-BINDINGS: no test may leave Auxilo state under the suite's
+# temp home. Every test is expected to pass an explicit path option (or set its
+# own temp home before requiring the module), so a ${AUXILO_TEST_HOME}/.auxilo
+# directory means some test reached a default state path (the same path a bare
+# `node --test test/<file>` would write into the operator's real ~/.auxilo).
+if [ -e "${AUXILO_TEST_HOME}/.auxilo" ]; then
+  echo "  ❌ DEFAULT STATE PATH: tests left files under the suite's temp home (${AUXILO_TEST_HOME}/.auxilo):"
+  find "${AUXILO_TEST_HOME}/.auxilo" | sed "s#^${AUXILO_TEST_HOME}/##" | sort | sed 's/^/     /'
+  echo "     A test reached a default Auxilo state path without an explicit option."
+  echo "     Give the call an explicit path (e.g. routeBindingsDir, providersStatePath, indexPath)"
+  echo "     inside a temp directory, or set a temp HOME/AUXILO_HOME before requiring the module."
+  FAILED=1
+fi
+
 echo ""
 if [ "${FAILED}" -ne 0 ]; then
   echo "🛑 check-test-count FAILED"

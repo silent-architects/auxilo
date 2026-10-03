@@ -16,10 +16,31 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
+// ── Isolated home (TEST-HOME-ROUTE-BINDINGS) ────────────────────────────────
+// scripts/runner.js builds its queue directory (PENDING_DIR) from
+// os.homedir() at module load and its queue functions take no directory
+// argument by design, so the home override is the seam for this file: HOME
+// and AUXILO_HOME point at a temp directory BEFORE the runner is first
+// required. Without this, running this file alone wrote pending-learnings/
+// queue files under the operator's real ~/.auxilo.
+const TEST_HOME_PRIOR_HOME = process.env.HOME;
+const TEST_HOME_PRIOR_AUXILO_HOME = process.env.AUXILO_HOME;
+const TEST_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'auxilo-p2-1a-runner-home-'));
+process.env.HOME = TEST_HOME;
+process.env.AUXILO_HOME = TEST_HOME;
+
 // ── Load runner module (without executing main) ─────────────────────────────
 let runner;
 before(() => {
   runner = require('../scripts/runner');
+});
+
+after(() => {
+  if (TEST_HOME_PRIOR_HOME === undefined) delete process.env.HOME;
+  else process.env.HOME = TEST_HOME_PRIOR_HOME;
+  if (TEST_HOME_PRIOR_AUXILO_HOME === undefined) delete process.env.AUXILO_HOME;
+  else process.env.AUXILO_HOME = TEST_HOME_PRIOR_AUXILO_HOME;
+  fs.rmSync(TEST_HOME, { recursive: true, force: true });
 });
 
 // ── A5.2: Kill-switch sentinel + recursion guard ────────────────────────────

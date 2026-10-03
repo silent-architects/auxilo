@@ -32,6 +32,18 @@
  * count, since a dropped queue file may not change the directory's own size
  * in a way every filesystem reports usefully).
  *
+ * TEST-HOME-ISOLATION incident 3 (2026-10-02): seven test files, run alone
+ * with `node --test test/<file>`, left Auxilo state under the operator's
+ * real ~/.auxilo: five (provider-selection, extraction-model-provenance,
+ * claude-code-provider, extraction-model-stamp, extract-w1-fix2) called into
+ * scripts/providers/route-binding.js with no routeBindingsDir and wrote 194
+ * route-bindings/ fixture folders. The other two wrote providers.json (a
+ * spawned runner inheriting the parent's AUXILO_HOME) and pending-learnings/
+ * queue files (runner.js builds that directory from os.homedir() at module
+ * load). The binding store's root is now watched below, and
+ * scripts/check-test-count.sh fails the gate if any test leaves a
+ * .auxilo directory under the suite's temp home.
+ *
  * Deliberately uses os.userInfo().homedir, NOT os.homedir() — the whole
  * point of the suite-wide mechanism this guards is to make os.homedir()
  * report a FAKE temp dir for the entire node --test process, so checking
@@ -70,6 +82,8 @@ const WATCHED_PATHS = [
   // fixture rows into, and the pending-learnings dir it touched along the way.
   path.join(REAL_HOME, '.auxilo', 'extracted-index.jsonl'),
   path.join(REAL_HOME, '.auxilo', 'pending-learnings'),
+  // TEST-HOME-ISOLATION incident 3: the route-binding store (194 fixture folders).
+  path.join(REAL_HOME, '.auxilo', 'route-bindings'),
 ];
 
 function snapshot() {
