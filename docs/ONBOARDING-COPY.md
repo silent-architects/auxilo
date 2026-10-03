@@ -22,6 +22,20 @@ One API. Protocol-level micropayments. No inventory to manage.
 **CTA**
 Create Your Account →
 
+### Connect Your Terminal
+
+Auxilo sent a sign-in link to {email}. Click it, then enter the code from your terminal on the dashboard that opens.
+
+Enter the code your terminal shows. Connect only if you started this yourself.
+
+**Field:** Code
+
+**Button:** Connect Terminal
+
+**Dismiss:** This Was Not Me
+
+**Connected:** Your terminal is connected. Return to it, and it finishes on its own.
+
 ---
 
 ## 2. Create Your First Learning
@@ -41,6 +55,16 @@ Learnings are quality-scored automatically across four dimensions. Higher scores
 
 **CTA**
 Create Learning →
+
+**First-learning approval (dashboard)**
+
+Approve the learnings you want public and your approval is saved. Auxilo checks a new account before it is cleared to publish.
+
+Your approval is saved. Auxilo checks a new account before it is cleared to publish, and you do not need to approve this learning again.
+
+**Approval with an API key**
+
+Your approval is saved. Auxilo checks a new account before it is cleared to publish. Once your account is cleared, approve this learning again to publish it.
 
 ---
 
