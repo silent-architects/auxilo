@@ -335,15 +335,17 @@ body .legal-wrap h3 {
   justify-content: flex-end;
 
   padding: 0 max(var(--gutter-base), calc((100vw - var(--max-w)) / 2));
-  font-family: var(--mono);
-  font-size: 12px;
+  font-family: var(--sans);
+  font-size: 14px;
   font-weight: 400;
-  letter-spacing: 0.06em;
+  letter-spacing: 0;
 }
 
+/* the owner, 2026-10-02: the strip's label looked awkward as 12px mono; it is set like a navigation link now */
 .nav-strip a {
-  color: var(--fg-3);
+  color: var(--fg-2);
   text-decoration: none;
+  line-height: 26px;
   transition: color 0.2s;
 }
 
