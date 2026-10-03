@@ -922,7 +922,7 @@ describe('EXT-0806c: an expired-OAuth outage is counted, surfaced and flagged st
     const render = mustFunction(runner, 'renderExtractionStatus');
     const base = { state: { ...ZERO_STATE }, authStatus: 'logged-in' };
     const stale = render({ ...base, ledger: { lastRealExtractionAt: '2026-08-30T11:00:00.000Z' }, now: Date.parse('2026-09-01T12:00:00.000Z') });
-    assert.equal(stale, 'Extraction: STALE — no real extraction for 49h (last 2026-08-30T11:00:00.000Z) — run `claude auth login` and check extract.log');
+    assert.equal(stale, 'Extraction: STALE (no real extraction for 49h, last 2026-08-30T11:00:00.000Z). Run `claude auth login` and check extract.log');
     assert.match(stale, /claude auth login/);
     assert.match(stale, /49h/);
     assert.equal(render({ ...base, ledger: { lastRealExtractionAt: '2026-08-30T11:00:00.000Z' }, now: Date.parse('2026-09-01T10:00:00.000Z') }),

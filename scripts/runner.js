@@ -1094,8 +1094,8 @@ function renderExtractionStatus(opts = {}) {
         : typeof rawNow === 'string' ? Date.parse(rawNow) : Number(rawNow);
     const ageMs = nowMs - Date.parse(timestamp);
     if (Number.isFinite(ageMs) && ageMs > EXTRACTION_STALE_MS) {
-      return `Extraction: STALE — no real extraction for ${Math.floor(ageMs / 3600000)}h (last ${timestamp}) — ` +
-        'run `claude auth login` and check extract.log';
+      return `Extraction: STALE (no real extraction for ${Math.floor(ageMs / 3600000)}h, last ${timestamp}). ` +
+        'Run `claude auth login` and check extract.log';
     }
     return `Extraction: OK (last real extraction ${timestamp})`;
   }
