@@ -366,6 +366,7 @@ async function runModel(opts = {}) {
   const order = [record.route, ...AUTOMATIC_PROVIDER_ORDER.filter(id =>
     (id !== record.route || record.route === 'byo-key') && (id !== 'byo-key' || configuredByo))];
   const attempts = [];
+  let firstFailure = null;
   for (const id of order) {
     if (id !== store.record.route) {
       const updated = store.mutate(routeMetadata(id, opts, 'auto'));
@@ -394,6 +395,7 @@ async function runModel(opts = {}) {
       if (standalone) result = { ...result, ...finishJob(context) };
       return result;
     }
+    if (!attempts.length) firstFailure = result;
     attempts.push(id + '=' + (NON_RETRYABLE_FOR_THIS_PROVIDER.has(result.reasonCode) ? result.reasonCode : 'unavailable'));
     if (result.refusal !== 'pre-invocation' || !store.canFallback()) {
       const release = store.hold('pinned-route-unusable');
@@ -405,7 +407,13 @@ async function runModel(opts = {}) {
   const released = store.hold('pinned-route-unusable');
   context.hold = released.hold || 'pinned-route-unusable';
   if (!configuredByo && !attempts.some(attempt => attempt.startsWith('byo-key='))) attempts.push('byo-key=provider-not-configured');
-  return { ok: false, text: '', usage: null, authStatus: 'unknown', reasonCode: 'no-usable-provider',
+  // EXT-0806c: a generic 'no-usable-provider' reads as UNKNOWN downstream and never alerts. When the
+  // first-choice provider was refused for an unauthenticated CLI, the chain already knows the
+  // actionable cause, so surface it; the attempts list stays in `reason`. Read from the first
+  // attempt's result object, never from the attempts strings.
+  const unauthenticated = Boolean(firstFailure) && firstFailure.reasonCode === 'cli-unauthenticated';
+  return { ok: false, text: '', usage: null, authStatus: unauthenticated ? 'logged-out' : 'unknown',
+    reasonCode: unauthenticated ? 'cli-unauthenticated' : 'no-usable-provider',
     reason: 'no usable extraction provider (tried: ' + attempts.join('; ') + ')', hold: context.hold };
 }
 

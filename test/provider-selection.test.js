@@ -416,7 +416,7 @@ describe('EXTRACT-PER-CLIENT W1 P1 fixture (a): claude installed+logged-out, cod
         outputPath,
       });
       assert.equal(result.ok, false);
-      assert.equal(result.reasonCode, 'no-usable-provider');
+      assert.equal(result.reasonCode, 'cli-unauthenticated');
       assert.doesNotMatch(result.reason, /codex-cli=/);
       assert.ok(
         spawnCalls.some((c) => path.basename(c.bin) === 'claude' && c.args[0] === 'auth'),
@@ -464,7 +464,7 @@ describe('EXTRACT-PER-CLIENT W1 P1 fixture (b): claude logged-out + no codex + n
         spawnSyncImpl,
       });
       assert.equal(result.ok, false);
-      assert.equal(result.reasonCode, 'no-usable-provider');
+      assert.equal(result.reasonCode, 'cli-unauthenticated');
       assert.match(result.reason, /claude-code=cli-unauthenticated/);
       assert.match(result.reason, /byo-key=provider-not-configured/);
       assert.doesNotMatch(result.reason, /codex-cli=/);
@@ -502,7 +502,7 @@ describe('EXTRACT-PER-CLIENT W1 P1 fixture (b): claude logged-out + no codex + n
         }
       );
       assert.equal(detailed.skipped, true);
-      assert.equal(detailed.reasonCode, 'no-usable-provider');
+      assert.equal(detailed.reasonCode, 'cli-unauthenticated');
       assert.equal(detailed.result.extraction_id, 'client-skip');
       assert.equal(
         runner.isSkippedExtraction(detailed),
@@ -1229,5 +1229,37 @@ describe('EPC2-2 E0: approved CLI strings', () => {
       rendered,
       '\n✓ Saved to /tmp/providers.json (mode 0600). This machine drafts through Claude Code first when you are signed in to it; your anthropic key only takes over when Claude Code is not usable, and once it does, it keeps drafting even after Claude Code becomes usable again.'
     );
+  });
+});
+
+describe('EXT-0806c: exhaustion surfaces an unauthenticated first-choice provider', () => {
+  it('(e) probe logged-out and no BYO configured: no-usable-provider becomes cli-unauthenticated / logged-out, attempts stay in reason', async t => {
+    const { opts } = epcFixture(t, false);
+    const calls = [];
+    const result = await providers.runModel({ ...opts, mode: 'extract',
+      spawnSyncImpl: (_bin, args) => {
+        calls.push(args[0]);
+        if (args[0] === 'auth') return { status: 0, stdout: '{"loggedIn":false}', stderr: '' };
+        return assert.fail('a model spawn must never happen while the probe says logged-out');
+      } });
+    assert.equal(result.ok, false);
+    assert.equal(result.reasonCode, 'cli-unauthenticated');
+    assert.equal(result.authStatus, 'logged-out');
+    assert.match(result.reason, /claude-code=cli-unauthenticated/);
+    assert.match(result.reason, /byo-key=provider-not-configured/);
+    assert.ok(calls.length > 0 && calls.every(call => call === 'auth'), 'only the auth probe may spawn');
+  });
+
+  it('(f) billing-helper refusal of the first-choice provider stays no-usable-provider / unknown', async t => {
+    const { root, opts } = epcFixture(t, false);
+    fs.mkdirSync(path.join(root, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(root, '.claude', 'settings.json'), JSON.stringify({ apiKeyHelper: '/bin/get-key' }));
+    const result = await providers.runModel({ ...opts, mode: 'extract',
+      spawnSyncImpl: () => assert.fail('no spawn once the billing-helper detector trips') });
+    assert.equal(result.ok, false);
+    assert.equal(result.reasonCode, 'no-usable-provider');
+    assert.equal(result.authStatus, 'unknown');
+    assert.match(result.reason, /claude-code=cli-billing-helper-configured/);
+    assert.match(result.reason, /byo-key=provider-not-configured/);
   });
 });
