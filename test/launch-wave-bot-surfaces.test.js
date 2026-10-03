@@ -396,7 +396,7 @@ describe('Dash guard: no em dash or en dash in any BOT-xx string placed by this 
 describe('Untouched-surface guard (this unit must not have moved these)', () => {
   it('name, version, url, spec_version are unchanged', () => {
     assert.equal(agent.name, 'Auxilo');
-    assert.equal(agent.version, '0.9.27');
+    assert.equal(agent.version, '0.9.28');
     assert.equal(agent.url, 'https://auxilo.io');
     assert.equal(agent.spec_version, 'a2a/0.1');
   });
