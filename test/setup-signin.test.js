@@ -79,6 +79,18 @@ describe('SETUP-SIGNIN: typed device consent', { timeout: 120000 }, () => {
     assert.equal(await page.getByText('Nothing was connected. You can close this page.').count(), 1);
     assert.equal(calls, 0); assert.equal(await page.locator('#terminal-connect-code').isVisible(), false); await page.close();
   });
+  it('PM review: dismiss cannot deny a connection while authorization is in flight', async () => {
+    const page = await pageFor(await session()); const d = await device();
+    let release, seenResolve; const seen = new Promise(resolve => { seenResolve = resolve; });
+    await page.route('**/auth/device/authorize', async route => {
+      await new Promise(resolve => { release = resolve; seenResolve(); });
+      await route.continue();
+    });
+    await page.fill('#terminal-connect-code', d.user_code); await page.click('#terminal-connect button'); await seen;
+    await page.getByText('This Was Not Me', { exact: true }).click();
+    assert.equal(await page.getByText('Nothing was connected. You can close this page.').count(), 0);
+    release(); await page.getByText('Your terminal is connected. Return to it, and it finishes on its own.').waitFor(); await page.close();
+  });
   it('t5: invalid input makes no POST', async () => {
     const page = await pageFor(await session()); let calls = 0;
     page.on('request', r => { if (r.url().endsWith('/auth/device/authorize')) calls++; });

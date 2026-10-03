@@ -392,8 +392,8 @@ describe('NAV-WAVE B: legal shell routes + /dashboard render the shared nav', { 
     const res = await fetch(`${baseUrl}/dashboard`);
     assert.equal(res.status, 200);
     const body = await res.text();
-    assert.match(body, /Until Auxilo has cleared your account to publish, approval is declined and the item stays in your queue for operator review\./);
-    assert.match(body, /Once your account is cleared, approving publishes each one to the public catalog unless a screen has it held\./);
+    assert.match(body, /Your approval is saved\. Auxilo checks a new account before it is cleared to publish\./);
+    assert.match(body, /Approving publishes each one to the public catalog unless Auxilo has it held\./);
     assert.doesNotMatch(body, /published to the public marketplace immediately/,
       'the retired "immediately" wording (rev 1/2, described a hand-off the code does not perform) must be gone');
   });

@@ -1445,7 +1445,7 @@
       <div id="welcome-card-b" style="display:none">
         <h2 class="dash-card-title">Your Learnings Are Waiting</h2>
         <p style="font-size:14px;color:var(--ivory);margin-bottom:16px;line-height:1.6">Review them in the queue below.</p>
-        <p style="font-size:13px;color:var(--slate);margin-bottom:12px;line-height:1.6">Approving an item keeps it in your queue for operator review until Auxilo has cleared your account to publish.</p>
+        <p style="font-size:13px;color:var(--slate);margin-bottom:12px;line-height:1.6">Approve the learnings you want public and your approval is saved. Auxilo checks a new account before it is cleared to publish.</p>
         <p style="font-size:13px;color:var(--slate);margin-bottom:16px;line-height:1.6">Anything you keep private comes back free to your agent when it asks Auxilo, signed in to your account. It is never published.</p>
         <a href="/how-it-works" class="hero-cta-link">See How It Works</a>
       </div>
@@ -1784,6 +1784,7 @@
     }
     var headers = Object.assign({ 'Content-Type': 'application/json' }, (opts || {}).headers || {});
     headers['Authorization'] = 'Bearer ' + token;
+    headers['X-Auxilo-Client'] = 'dashboard';
     return fetch(path, Object.assign({}, opts || {}, { headers: headers })).then(function (r) {
       // S-2: any account request made WITH the session token that comes back
       // 401 means the stored token no longer works. Handle it once (many
@@ -1813,7 +1814,7 @@
 
     fetch('/auth/magic-link', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Auxilo-Client': 'dashboard' },
       body: JSON.stringify({ email: email }),
     })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
@@ -3209,6 +3210,7 @@
   // in chunks, each with the counted confirm_count the server requires, and
   // never run without a confirm dialog showing the exact count.
 
+  var _clearedToPublish = false;
   var _triageRows = [];          // compact rows from /account/pending/summary
   var _triageBodies = null;      // id -> full learning (lazy, paged fetch)
   var _triageSelected = {};      // id -> true
@@ -3250,6 +3252,7 @@
           if (contentEl) contentEl.textContent = '';
           return;
         }
+        _clearedToPublish = res.data.cleared_to_publish === true;
         _triageRows = res.data.items || [];
         _triageBodies = null;
         _triageSelected = {};
@@ -3635,6 +3638,12 @@
     tdV.setAttribute('role', 'cell');
     tdV.setAttribute('aria-label', 'Lane and signals: ' + laneSignalsAriaText(row));
     tdV.appendChild(verdictTags(row));
+    if (row.contributor_approval_at && row.screens_passed && !row.contributor_approval?.flagged) {
+      var approvedStatus = document.createElement('div');
+      approvedStatus.className = 'recorded-approval-status';
+      approvedStatus.textContent = 'Approved, waiting on Auxilo';
+      tdV.appendChild(approvedStatus);
+    }
     tr.appendChild(tdV);
 
     // Title (click to expand full body + single-item actions). P-1/P-2:
@@ -3840,7 +3849,37 @@
     updateBulkBar();
   }
 
+  function approvalConfirmation(count) {
+    var first = count === 1 ? 'Approve 1 learning?' : 'Approve ' + count + ' learnings?';
+    var body = _clearedToPublish
+      ? 'Approving publishes each one to the public catalog unless Auxilo has it held.'
+      : count === 1
+        ? 'Your approval is saved. Auxilo checks a new account before it is cleared to publish. If a screen flagged this learning, it stays in your queue for you to decide again once your account is cleared. Otherwise it publishes when your account is cleared, without another approval from you.'
+        : 'Your approvals are saved. Auxilo checks a new account before it is cleared to publish. Any learning a screen flagged stays in your queue for you to decide again once your account is cleared, and the rest publish then, without another approval from you.';
+    return first + '\n\n' + body + '\n\nThis confirmation is your approval of every learning you selected.';
+  }
+
+  function recordedApprovalMessage(flagged) {
+    return flagged
+      ? 'Your approval is saved. A screen flagged this learning, so it stays in your queue for you to decide again once your account is cleared to publish.'
+      : "Your approval is saved. This learning now waits for Auxilo's check, and nothing else is needed from you.";
+  }
+
+  function markApprovalRecorded(id, flagged) {
+    var tr = document.getElementById('triage-row-' + id);
+    if (tr && !flagged && !tr.querySelector('.recorded-approval-status')) {
+      var status = document.createElement('div');
+      status.className = 'recorded-approval-status';
+      status.textContent = 'Approved, waiting on Auxilo';
+      tr.querySelector('.triage-cell-lane').appendChild(status);
+    }
+    var box = document.getElementById('triage-check-' + id);
+    if (box) box.checked = false;
+    delete _triageSelected[id];
+  }
+
   function doPendingAction(id, action, detailTr, rowTr) {
+    if (action === 'approve' && !window.confirm(approvalConfirmation(1))) return;
     var resultEl = document.getElementById('pending-result-' + id);
     var btns = detailTr ? detailTr.querySelectorAll('button') : [];
     btns.forEach(function (b) { b.disabled = true; });
@@ -3855,7 +3894,16 @@
     apiFetch(url, fetchOpts)
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); })
       .then(function (res) {
-        if (res.ok) {
+        if (res.data.approval_recorded) {
+          btns.forEach(function (b) { b.disabled = false; });
+          if (resultEl) {
+            resultEl.textContent = recordedApprovalMessage(res.data.approval_flagged);
+            resultEl.className = 'alert alert-success';
+            resultEl.style.display = '';
+          }
+          markApprovalRecorded(id, res.data.approval_flagged);
+          updateBulkBar();
+        } else if (res.ok) {
           if (resultEl) {
             resultEl.textContent = action === 'approve'
               ? 'Approved. This learning is now live.'
@@ -3893,7 +3941,7 @@
     if (ids.length === 0) return;
 
     var confirmMsg = decision === 'approve'
-      ? ('Approve ' + ids.length + ' learning(s)?\n\nUntil Auxilo has cleared your account to publish, approval is declined and the item stays in your queue for operator review. Once your account is cleared, approving publishes each one to the public catalog unless a screen has it held. This confirmation is your approval of every item in the selection.')
+      ? approvalConfirmation(ids.length)
       : decision === 'keep_private'
         ? ('Keep ' + ids.length + ' learning(s) private?\n\nThey stay yours with owner-only recall at $0 and are never published.')
         : ('Reject ' + ids.length + ' learning(s)?\n\nThey will not be published.');
@@ -3909,7 +3957,7 @@
     var chunks = [];
     for (var i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
 
-    var totals = { approved: 0, kept_private: 0, rejected: 0, idempotent: 0, failed: 0 };
+    var totals = { approved: 0, kept_private: 0, rejected: 0, idempotent: 0, failed: 0, recorded: 0, recordedFlagged: 0 };
 
     function runChunk(idx) {
       if (idx >= chunks.length) return Promise.resolve();
@@ -3925,9 +3973,14 @@
           totals.kept_private += res.data.kept_private || 0;
           totals.rejected += res.data.rejected || 0;
           totals.idempotent += res.data.idempotent || 0;
-          totals.failed += res.data.failed || 0;
+          totals.failed += (res.data.failed || 0) - (res.data.recorded || 0);
+          totals.recorded += res.data.recorded || 0;
           (res.data.results || []).forEach(function (r) {
             if (r.ok && r.id) markRowDecided(r.id, decision);
+            if (r.approval_recorded && r.id) {
+              if (r.approval_flagged) totals.recordedFlagged++;
+              markApprovalRecorded(r.id, r.approval_flagged);
+            }
           });
           return runChunk(idx + 1);
         });
@@ -3940,8 +3993,15 @@
         if (totals.kept_private) parts.push(totals.kept_private + ' kept private (owner-only)');
         if (totals.rejected) parts.push(totals.rejected + ' rejected (stay private)');
         if (totals.idempotent) parts.push(totals.idempotent + ' already decided');
+        var saved = [];
+        var cleanRecorded = totals.recorded - totals.recordedFlagged;
+        if (cleanRecorded === 1) saved.push(recordedApprovalMessage(false));
+        else if (cleanRecorded > 1) saved.push("Your approvals are saved. These " + cleanRecorded + " learnings now wait for Auxilo's check, and nothing else is needed from you.");
+        if (totals.recordedFlagged === 1 && !cleanRecorded) saved.push(recordedApprovalMessage(true));
+        else if (totals.recordedFlagged) saved.push('A screen flagged ' + totals.recordedFlagged + ' of them. Those stay in your queue for you to decide again once your account is cleared to publish.');
         if (totals.failed) parts.push(totals.failed + ' failed');
-        showBulkResult((parts.join(', ') || 'No changes') + '.', totals.failed ? 'error' : 'success');
+        if (parts.length) saved.push(parts.join(', ') + '.');
+        showBulkResult(saved.join(' ') || 'No changes.', totals.failed ? 'error' : 'success');
         updateBulkBar();
       })
       .catch(function (err) {
@@ -4442,6 +4502,7 @@
     }
     dismiss.onclick = function (event) {
       event.preventDefault();
+      if (connect.disabled) return;
       finish('Nothing was connected. You can close this page.');
     };
     connect.onclick = function () {
@@ -4499,7 +4560,7 @@
       // Verify the token with the server
       // The token goes in the query string as-is (that is the API contract for
       // GET /auth/verify). The JWT we receive back goes in localStorage only.
-      fetch('/auth/verify?token=' + encodeURIComponent(magicToken))
+      fetch('/auth/verify?token=' + encodeURIComponent(magicToken), { headers: { 'X-Auxilo-Client': 'dashboard' } })
         .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); })
         .then(function (res) {
           if (res.ok && res.data.token) {

@@ -44,6 +44,71 @@
       }
     },
     "schemas": {
+      "ReviewDecisionProvenance": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Decision provenance. Client is a self-declared hint, never authorization. No credentials or hashes.",
+        "properties": {
+          "auth": {
+            "type": "string",
+            "enum": [
+              "session",
+              "api_key",
+              "admin_token"
+            ]
+          },
+          "key_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "client": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 40,
+            "pattern": "^[A-Za-z0-9._/-]+$"
+          },
+          "batch": {
+            "type": "object",
+            "additionalProperties": false,
+            "nullable": true,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "size": {
+                "type": "integer"
+              }
+            }
+          },
+          "action": {
+            "type": "string"
+          },
+          "by": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "flagged": {
+            "type": "boolean"
+          },
+          "approved_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "via": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          }
+        }
+      },
       "Skill": {
         "type": "object",
         "properties": {
@@ -3275,6 +3340,15 @@
                             "type": "string",
                             "format": "date-time",
                             "description": "Optional. Present only on learnings published under clean-lane standing consent: the end of the 7-day retraction window (DELETE /learn/{id}?reason=retract)."
+                          },
+                          "contributor_approval": {
+                            "$ref": "#/components/schemas/ReviewDecisionProvenance"
+                          },
+                          "self_review_action": {
+                            "$ref": "#/components/schemas/ReviewDecisionProvenance"
+                          },
+                          "moderation_action": {
+                            "$ref": "#/components/schemas/ReviewDecisionProvenance"
                           }
                         }
                       }
@@ -3772,6 +3846,17 @@
                           "near_duplicate_evidence": {
                             "type": "object",
                             "description": "Contributor-only predecessor status, winning channel, and deterministic channel scores. All buyer projections strip this field."
+                          },
+                          "contributor_approval_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "contributor_approval": {
+                            "$ref": "#/components/schemas/ReviewDecisionProvenance"
+                          },
+                          "self_review_action": {
+                            "$ref": "#/components/schemas/ReviewDecisionProvenance"
                           }
                         }
                       }
@@ -4051,6 +4136,17 @@
                           "body": {
                             "type": "string",
                             "description": "Only with full=1"
+                          },
+                          "contributor_approval_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "contributor_approval": {
+                            "$ref": "#/components/schemas/ReviewDecisionProvenance"
+                          },
+                          "self_review_action": {
+                            "$ref": "#/components/schemas/ReviewDecisionProvenance"
                           }
                         }
                       }
@@ -4070,6 +4166,9 @@
                           "type": "string"
                         }
                       }
+                    },
+                    "cleared_to_publish": {
+                      "type": "boolean"
                     }
                   }
                 }
@@ -4167,11 +4266,28 @@
             }
           },
           "409": {
-            "description": "Learning is not pending review",
+            "description": "Held for review; approval_recorded is true only after the builder approval is saved. Status remains pending_review.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "approval_recorded": {
+                      "type": "boolean"
+                    },
+                    "approval_flagged": {
+                      "type": "boolean"
+                    },
+                    "id": {
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }
@@ -4425,7 +4541,40 @@
         },
         "responses": {
           "200": {
-            "description": "Per-id outcomes and processed/approved/kept_private/rejected/failed/idempotent/changed counts"
+            "description": "Per-id outcomes and processed/approved/kept_private/rejected/failed/idempotent/changed counts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "recorded": {
+                      "type": "integer",
+                      "description": "Saved contributor approvals, also included in failed for compatibility."
+                    },
+                    "failed": {
+                      "type": "integer"
+                    },
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "approval_recorded": {
+                            "type": "boolean"
+                          },
+                          "approval_flagged": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid decisions or confirm_count mismatch"
@@ -4744,7 +4893,7 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "queue": {
+                    "learnings": {
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -4764,11 +4913,33 @@
                           },
                           "moderation_hold_reason": {
                             "type": "string"
+                          },
+                          "contributor_approval_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "contributor_approval": {
+                            "$ref": "#/components/schemas/ReviewDecisionProvenance"
+                          },
+                          "self_review_action": {
+                            "$ref": "#/components/schemas/ReviewDecisionProvenance"
+                          },
+                          "contributor_approval_flagged": {
+                            "type": "boolean",
+                            "nullable": true
+                          },
+                          "submission_channel": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "moderation_action": {
+                            "$ref": "#/components/schemas/ReviewDecisionProvenance"
                           }
                         }
                       }
                     },
-                    "count": {
+                    "pending_count": {
                       "type": "integer"
                     }
                   }
@@ -5598,6 +5769,18 @@
                     },
                     "title": {
                       "type": "string"
+                    },
+                    "recorded_approval_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "recorded_approvals_applied": {
+                      "type": "boolean"
+                    },
+                    "publication_trust_granted": {
+                      "type": "boolean"
                     }
                   }
                 }
@@ -5633,6 +5816,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "BUILDER_APPROVAL_REQUIRED: an uncleared extraction contributor has not approved the learning."
           }
         }
       }

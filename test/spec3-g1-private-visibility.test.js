@@ -41,7 +41,7 @@ describe('SPEC3-G1 private learnings acceptance pins', () => {
   it('1. count-pins every retained audited raw-read path with stable allow markers', () => {
     const markers = [...SERVER.matchAll(/G1_RAW_READ_ALLOW:(\d+)/g)].map((m) => Number(m[1]));
     const retained = [1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 13, 14, 15, 16,
-      19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 32, 33, 34, 35, 36, 37];
+      19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 32, 33, 34, 35, 36, 37, 38, 39];
     assert.deepEqual([...new Set(markers)].sort((a, b) => a - b), retained);
     assert.equal(markers.length, retained.length,
       'each retained semantic raw-read path has exactly one allow marker');
@@ -54,7 +54,7 @@ describe('SPEC3-G1 private learnings acceptance pins', () => {
       const nestedProperty = SERVER[match.index - 1] === '.';
       return !insideCanonical && !nestedProperty;
     });
-    assert.equal(rawCalls.length, 31,
+    assert.equal(rawCalls.length, 33,
       'post-G1 retained raw-read call-site count drifted; audit and mark any new path');
   });
 
@@ -176,7 +176,7 @@ describe('SPEC3-G1 private learnings acceptance pins', () => {
     assert.deepEqual([...row.required].sort(),
       ['category', 'created_at', 'id', 'status', 'tags', 'title', 'visibility']);
     assert.deepEqual(Object.keys(row.properties).sort(),
-      ['category', 'created_at', 'id', 'published_via', 'retractable_until', 'standing_consent_version', 'status', 'tags', 'title', 'visibility']);
+      ['category', 'contributor_approval', 'created_at', 'id', 'moderation_action', 'published_via', 'retractable_until', 'self_review_action', 'standing_consent_version', 'status', 'tags', 'title', 'visibility']);
     assert.equal(row.additionalProperties, false);
   });
 

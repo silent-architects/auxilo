@@ -343,10 +343,13 @@ describe('SPEC3-F2 GET /account/learnings', { timeout: 180_000 }, () => {
     // appear only on learnings published under standing consent.
     assert.deepEqual(Object.keys(schema.properties).sort(), [
       'category',
+      'contributor_approval',
       'created_at',
       'id',
+      'moderation_action',
       'published_via',
       'retractable_until',
+      'self_review_action',
       'standing_consent_version',
       'status',
       'tags',

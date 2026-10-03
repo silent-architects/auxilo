@@ -31,7 +31,8 @@ const {
   isComparisonEligible,
   comparisonCatalog,
 } = require('./lib/similarity.js'); // LW-14 + SPEC3-G1 comparison scoping
-const { listOwnPending, applySelfDecision, summarizeOwnPending, applyBulkDecisions, selectPendingIdsBySignal, BULK_MAX: SELF_REVIEW_BULK_MAX, meetsQualityFloor, QUALITY_FLOOR_TOTAL, QUALITY_FLOOR_DIMENSION, adoptWalletOrphans, LANES: SELF_REVIEW_LANES, parseCommonDevTerms: parseAccountVocabCommonTerms } = require('./lib/self-review.js'); // LW-15 + review-seamless + AUD19-3/-6 + SPEC3-B1 lanes + SPEC3-B2 by-signal + SPEC3-E1 review-time vocabulary
+const { buildAccountVocabulary } = require('./lib/account-vocab.js');
+const { projectReviewProvenance, screenFlags, listOwnPending, applySelfDecision, summarizeOwnPending, applyBulkDecisions, selectPendingIdsBySignal, BULK_MAX: SELF_REVIEW_BULK_MAX, meetsQualityFloor, QUALITY_FLOOR_TOTAL, QUALITY_FLOOR_DIMENSION, adoptWalletOrphans, LANES: SELF_REVIEW_LANES, parseCommonDevTerms: parseAccountVocabCommonTerms } = require('./lib/self-review.js'); // LW-15 + review-seamless + AUD19-3/-6 + SPEC3-B1 lanes + SPEC3-B2 by-signal + SPEC3-E1 review-time vocabulary
 const ACCOUNT_VOCAB_CONFIG = require('./config/account-vocab.json');
 // INCIDENT 2026-07-26 (SPEC3-E1 deploy): the wordlist MUST live in config/, not
 // data/ — in prod /app/data is the mounted volume, which SHADOWS the image's
@@ -8830,6 +8831,9 @@ app.get('/account/learnings', requireSessionOrApiKey('read'), (c) => {
       // EXTRACT-PER-CLIENT W1 PART C: owner-only provenance — which
       // provider/model extracted this learning, when known.
       ...(learning.extraction_model != null && { extraction_model: learning.extraction_model }),
+      ...(learning.self_review_action && { self_review_action: projectReviewProvenance(learning.self_review_action) }),
+      ...(learning.moderation_action && { moderation_action: projectReviewProvenance(learning.moderation_action) }),
+      ...(learning.contributor_approval && { contributor_approval: projectReviewProvenance(learning.contributor_approval) }),
     }));
 
   if (rawSort === 'desc') {
@@ -11533,6 +11537,12 @@ app.get('/admin/moderation/queue', adminAuth('read'), (c) => {
       contributor_wallet: l.contributor_wallet,
       created_at: l.created_at,
       status: l.status,
+      contributor_approval_at: l.contributor_approval?.at || null,
+      contributor_approval_flagged: l.contributor_approval?.flagged ?? null,
+      submission_channel: l.submission_channel || null,
+      ...(l.contributor_approval && { contributor_approval: projectReviewProvenance(l.contributor_approval) }),
+      ...(l.self_review_action && { self_review_action: projectReviewProvenance(l.self_review_action) }),
+      ...(l.moderation_action && { moderation_action: projectReviewProvenance(l.moderation_action) }),
       // LW-13/LW-14/LW-16: reviewer signals
       ...(l.injection_flags && { injection_flags: l.injection_flags }),
       ...(l.sensitivity_signals && { sensitivity_signals: l.sensitivity_signals }),
@@ -11610,12 +11620,22 @@ app.post('/admin/moderation/:id/approve', adminAuth('admin'), async (c) => {
       }, 409);
     }
 
+    // Consent brake on the operator's action, not a security boundary: the
+    // stored channel must never be treated as publication authority.
+    if (!approval && learning.submission_channel === 'extraction') {
+      const contributor = loadAccounts()[learning.contributor_account_id];
+      if (contributor && !isPublicationTrusted(contributor) &&
+          learning.contributor_approval?.by !== learning.contributor_account_id) {
+        return c.json({ error: 'Its builder has not approved this learning yet, so it cannot be published.', code: 'BUILDER_APPROVAL_REQUIRED', id }, 409);
+      }
+    }
+
     if (!approval) {
       const now = new Date().toISOString();
       learning.status = 'approved';
       learning.visibility = 'public';
       learning.moderation = 'manual'; // LW-13: audit trail — human-approved
-      learning.moderation_action = { action: 'approved', at: now };
+      learning.moderation_action = { action: 'approved', at: now, auth: 'admin_token', scope: c.get('adminScope') };
       learning.updated_at = now;
       safeWrite(LEARNINGS_FILE, learnings);
       approval = {
@@ -11654,11 +11674,53 @@ app.post('/admin/moderation/:id/approve', adminAuth('admin'), async (c) => {
       releaseAccountLock();
     }
   }
+  // Account lock is released before reacquiring the catalog lock. Re-read
+  // trust and current screens; only a saved dashboard approval can take effect.
+  let recordedApprovalIds = [];
+  let recordedApprovalsApplied = true;
+  if (trustGranted) {
+    const releaseRecordedLock = await acquireLearningsLock();
+    try {
+      const account = loadAccounts()[approval.contributorAccountId];
+      if (isPublicationTrusted(account)) {
+        const snapshot = JSON.parse(JSON.stringify(learnings));
+        const matches = reviewVocabulary(approval.contributorAccountId);
+        // G1_RAW_READ_ALLOW:38 — locked R8 scan filters owner and recorded session consent before decisions.
+        for (const learning of learnings) {
+          const recorded = learning.contributor_approval;
+          if (learning.id === id || learning.status !== 'pending_review' ||
+              learning.contributor_account_id !== approval.contributorAccountId ||
+              recorded?.by !== approval.contributorAccountId || recorded?.auth !== 'session' ||
+              screenFlags(learning, { accountVocabMatches: matches[learning.id] || [] }).length > 0) continue;
+          // G1_RAW_READ_ALLOW:39 — decision core rechecks ownership/status/private destination/category/holds.
+          const result = applySelfDecision(learnings, approval.contributorAccountId, learning.id, 'approve', {
+            account, accountVocabMatches: matches[learning.id] || [],
+            reviewContext: { auth: recorded.auth, batch: recorded.batch, client: recorded.client },
+          });
+          if (result.ok) {
+            result.learning.self_review_action.approved_at = recorded.at;
+            result.learning.self_review_action.via = 'recorded_approval';
+            recordedApprovalIds.push(learning.id);
+          }
+        }
+        if (recordedApprovalIds.length) {
+          try { safeWrite(LEARNINGS_FILE, learnings); }
+          catch {
+            restoreReviewState(snapshot);
+            recordedApprovalIds = [];
+            recordedApprovalsApplied = false;
+          }
+        }
+      }
+    } finally { releaseRecordedLock(); }
+  }
   return c.json({
     approved: true,
     id,
     title: approval.title,
     publication_trust_granted: trustGranted,
+    recorded_approval_ids: recordedApprovalIds,
+    recorded_approvals_applied: recordedApprovalsApplied,
     ...(approval.idempotent && { idempotent: true }),
   });
 });
@@ -11724,9 +11786,35 @@ app.post('/admin/moderation/:id/reject', adminAuth('admin'), async (c) => {
 // resolveAccountFromRequest so the web dashboard can review with its login
 // session and the CLI can review with its credentials.json key, so neither has to
 // paste the other's credential. Async (verifyJwt). Suspended/scope enforced.
-function resolveSelfReviewAccount(c, minScope = 'read') {
-  return resolveAccountFromRequest(c, minScope);
+async function resolveSelfReviewAccount(c, minScope = 'read') {
+  const auth = await resolveAccountAndKeyFromRequest(c, minScope);
+  if (auth.error) return auth;
+  // Resolve the presented hash against this account's key records; copy only
+  // the id and label. Neither the presented credential nor its hash is stamped.
+  const key = !auth.viaSession && (loadAccounts()[auth.accountId]?.api_keys || [])
+    .find((entry) => entry.hash === auth.keyHash);
+  const hint = c.req.header('X-Auxilo-Client');
+  return { accountId: auth.accountId, reviewContext: {
+    auth: auth.viaSession ? 'session' : 'api_key',
+    ...(!auth.viaSession && { key_id: key?.id || null, label: key?.label || key?.name || null }),
+    batch: null,
+    // Self-declared provenance only: this header never authorizes a decision.
+    client: typeof hint === 'string' && /^[A-Za-z0-9._/-]{1,40}$/.test(hint) ? hint : null,
+  } };
 }
+
+function reviewBatchContext(auth, size) {
+  return { ...auth.reviewContext, batch: size > 1 ? { id: crypto.randomUUID(), size } : null };
+}
+
+function reviewVocabulary(accountId) {
+  return buildAccountVocabulary(comparisonCatalog(learnings, accountId), ACCOUNT_VOCAB_REVIEW_OPTS).matches_by_learning_id;
+}
+
+function restoreReviewState(snapshot) {
+  learnings.splice(0, learnings.length, ...snapshot);
+}
+
 
 // AUD19-3(b): lazy retroactive orphan cure. Accounts that linked their wallet
 // BEFORE this deploy never re-fire the link-wallet adoption hook, so their
@@ -11799,12 +11887,20 @@ app.post('/account/pending/:id/approve', async (c) => {
   const releaseLearningsLock = await acquireLearningsLock();
   try {
     // G1_RAW_READ_ALLOW:24 — decision core checks ownership before status.
+    const snapshot = JSON.parse(JSON.stringify(learnings));
+    const account = loadAccounts()[accountId] || null;
     const result = applySelfDecision(learnings, accountId, id, 'approve', {
-      account: loadAccounts()[accountId] || null,
+      account,
+      accountVocabMatches: isPublicationTrusted(account) ? [] : reviewVocabulary(accountId)[id] || [],
+      reviewContext: auth.reviewContext,
     });
-    if (!result.ok) return c.json({ error: result.error, code: result.code, id }, result.status);
-
-    safeWrite(LEARNINGS_FILE, learnings);
+    if (result.ok || result.approval_recorded) {
+      try { safeWrite(LEARNINGS_FILE, learnings); }
+      catch (error) { restoreReviewState(snapshot); throw error; }
+    }
+    if (!result.ok) return c.json({ error: result.error, code: result.code, id,
+      ...(result.approval_recorded && { approval_recorded: true, approval_flagged: result.approval_flagged }),
+    }, result.status);
     console.log(`[LW-15] [AUDIT] self_approve account=${accountId} learning=${id}`);
     return c.json({ approved: true, id, title: result.learning.title, status: result.learning.status });
   } finally {
@@ -11822,7 +11918,7 @@ app.post('/account/pending/:id/keep-private', async (c) => {
 
   const releaseLearningsLock = await acquireLearningsLock();
   try {
-    const result = applySelfDecision(learnings, accountId, id, 'keep_private');
+    const result = applySelfDecision(learnings, accountId, id, 'keep_private', { reviewContext: auth.reviewContext });
     if (!result.ok) return c.json({ error: result.error, id }, result.status);
     safeWrite(LEARNINGS_FILE, learnings);
     console.log(`[LW-15] [AUDIT] self_keep_private account=${accountId} learning=${id}`);
@@ -11857,7 +11953,7 @@ app.post('/account/pending/:id/reject', async (c) => {
   const releaseLearningsLock = await acquireLearningsLock();
   try {
     // G1_RAW_READ_ALLOW:25 — decision core checks ownership before status.
-    const result = applySelfDecision(learnings, accountId, id, 'reject', { reason });
+    const result = applySelfDecision(learnings, accountId, id, 'reject', { reason, reviewContext: auth.reviewContext });
     if (!result.ok) return c.json({ error: result.error, id }, result.status);
 
     safeWrite(LEARNINGS_FILE, learnings);
@@ -11935,7 +12031,7 @@ app.get('/account/pending/summary', async (c) => {
 
   // G1_RAW_READ_ALLOW:26 — comparison corpus is public plus caller non-public.
   const summary = summarizeOwnPending(comparisonCatalog(learnings, accountId), accountId, opts);
-  return c.json({ account_id: accountId, ...summary });
+  return c.json({ account_id: accountId, cleared_to_publish: isPublicationTrusted(loadAccounts()[accountId]), ...summary });
 });
 
 // POST /account/pending/bulk: apply approve/reject/keep_private decisions
@@ -11960,16 +12056,20 @@ app.post('/account/pending/bulk', async (c) => {
   const releaseLearningsLock = await acquireLearningsLock();
   try {
     // G1_RAW_READ_ALLOW:27 — bulk core owns the per-item ownership gate.
+    const snapshot = JSON.parse(JSON.stringify(learnings));
+    const account = loadAccounts()[accountId] || null;
     outcome = applyBulkDecisions(learnings, accountId, decisions, {
-      confirmCount,
-      account: loadAccounts()[accountId] || null,
+      confirmCount, account: loadAccounts()[accountId] || null,
+      accountVocabMatchesById: isPublicationTrusted(account) ? {} : reviewVocabulary(accountId),
+      reviewContext: reviewBatchContext(auth, Array.isArray(decisions) ? decisions.length : 0),
     });
     if (!outcome.ok) {
       return c.json({ error: outcome.error, code: outcome.code }, outcome.status);
     }
 
-    if (outcome.counts.changed > 0) {
-      safeWrite(LEARNINGS_FILE, learnings);
+    if (outcome.counts.changed > 0 || outcome.counts.recorded > 0) {
+      try { safeWrite(LEARNINGS_FILE, learnings); }
+      catch (error) { restoreReviewState(snapshot); throw error; }
       for (const r of outcome.results) {
         if (r.ok && r.changed) {
           console.log(`[REVIEW-BULK] [AUDIT] self_${r.decision} account=${accountId} learning=${r.id} (bulk)`);
@@ -12045,11 +12145,12 @@ app.post('/account/pending/reject-by-signal', async (c) => {
 
     // Apply in <=BULK_MAX chunks through the SAME per-item semantics as the
     // counted bulk endpoint (ownership, idempotency, per-entry failure).
+    const reviewContext = reviewBatchContext(auth, ids.length);
     totals = { processed: 0, rejected: 0, idempotent: 0, failed: 0, results: [] };
     for (let i = 0; i < ids.length; i += SELF_REVIEW_BULK_MAX) {
       const chunk = ids.slice(i, i + SELF_REVIEW_BULK_MAX)
         .map((id) => ({ id, decision: 'reject', reason }));
-      const outcome = applyBulkDecisions(learnings, accountId, chunk, { confirmCount: chunk.length });
+      const outcome = applyBulkDecisions(learnings, accountId, chunk, { confirmCount: chunk.length, reviewContext });
       if (!outcome.ok) {
         // Shape errors cannot happen for a server-built chunk; fail loud if so.
         return c.json({ error: outcome.error, code: outcome.code }, outcome.status);
@@ -12412,7 +12513,7 @@ app.post('/account/pending/:id/sanitize', async (c) => {
       current.updated_at = now;
     } else if (current.status === 'pending_review') {
       const rejected = applySelfDecision(learnings, accountId, current.id, 'reject', {
-        reason: 'sanitize-resubmit', now,
+        reason: 'sanitize-resubmit', now, reviewContext: auth.reviewContext,
       });
       if (!rejected.ok) {
         // Cannot happen after the guards above; fail loud without mutating.

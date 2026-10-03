@@ -512,7 +512,8 @@ cd "${REPO_ROOT}"
 # plus 3 tracked-file path guards for the new source, test and fixture helper.
 # Merged onto main at 4921 (design wave) + the 127 above = 5048.
 # SETUP-SIGNIN: 12 integration tests + 1 tracked-file path guard = +13.
-EXPECTED_TEST_COUNT=5071
+# SLW-6: 33 tests + 1 tracked-file guard + 1 SETUP-SIGNIN review regression = +35.
+EXPECTED_TEST_COUNT=5106
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

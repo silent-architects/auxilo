@@ -56,6 +56,16 @@ Learnings are quality-scored automatically across four dimensions. Higher scores
 **CTA**
 Create Learning →
 
+**First-learning approval (dashboard)**
+
+Approve the learnings you want public and your approval is saved. Auxilo checks a new account before it is cleared to publish.
+
+Your approval is saved. Auxilo checks a new account before it is cleared to publish, and you do not need to approve this learning again.
+
+**Approval with an API key**
+
+Your approval is saved. Auxilo checks a new account before it is cleared to publish. Once your account is cleared, approve this learning again to publish it.
+
 ---
 
 ## 3. Set Your Price
