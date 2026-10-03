@@ -364,10 +364,11 @@ async function finalizeExtractionRun(outcomes, opts = {}) {
     : loadExtractionSkipState(opts);
   if (rows.length === 0) return state;
 
-  // A completed real result or a concrete model/API failure proves the local
-  // model was attempted. Either resets both visibility streaks.
-  const resetsAuthStreak = rows.some((row) => !isSkippedExtraction(row)
-    || row.reasonCode === 'model-error');
+  // Only a completed real extraction (a row that is not a skipped extraction)
+  // resets both visibility streaks. A 'model-error' skip is counted as an
+  // unknown skip, never a reset: an expired-OAuth outage once classified as
+  // model-error reset its own alarm on every sweep (EXT-0806c).
+  const resetsAuthStreak = rows.some((row) => !isSkippedExtraction(row));
   if (resetsAuthStreak) {
     const reset = {
       ...zeroExtractionSkipState(),
@@ -383,8 +384,7 @@ async function finalizeExtractionRun(outcomes, opts = {}) {
   const hasUnauthenticated = rows.some((row) => isSkippedExtraction(row)
     && row.reasonCode === 'cli-unauthenticated');
   if (!hasUnauthenticated) {
-    const hasUnknown = rows.some((row) => isSkippedExtraction(row)
-      && row.reasonCode !== 'model-error');
+    const hasUnknown = rows.some((row) => isSkippedExtraction(row));
     if (!hasUnknown) return state;
     const unknown = {
       ...state,
@@ -1066,6 +1066,8 @@ function installDigest() {
 
 // ─── Status (B14) ───────────────────────────────────────────────────────────
 
+const EXTRACTION_STALE_MS = 48 * 60 * 60 * 1000;
+
 function renderExtractionStatus(opts = {}) {
   const state = normalizeExtractionSkipState(opts.state) || zeroExtractionSkipState();
   const ledger = opts.ledger && typeof opts.ledger === 'object' ? opts.ledger : {};
@@ -1086,19 +1088,28 @@ function renderExtractionStatus(opts = {}) {
 
   const timestamp = ledger.lastRealExtractionAt;
   if (typeof timestamp === 'string' && isCanonicalIsoTimestamp(timestamp)) {
+    const rawNow = typeof opts.now === 'function' ? opts.now() : opts.now;
+    const nowMs = rawNow === undefined ? Date.now()
+      : rawNow instanceof Date ? rawNow.getTime()
+        : typeof rawNow === 'string' ? Date.parse(rawNow) : Number(rawNow);
+    const ageMs = nowMs - Date.parse(timestamp);
+    if (Number.isFinite(ageMs) && ageMs > EXTRACTION_STALE_MS) {
+      return `Extraction: STALE — no real extraction for ${Math.floor(ageMs / 3600000)}h (last ${timestamp}) — ` +
+        'run `claude auth login` and check extract.log';
+    }
     return `Extraction: OK (last real extraction ${timestamp})`;
   }
   return 'Extraction: OK (last real extraction unavailable)';
 }
 
-function currentExtractionStatusLine(ledger) {
+function currentExtractionStatusLine(ledger, now) {
   const state = loadExtractionSkipState();
   let authStatus = 'unknown';
   try {
     const { checkClaudeAuthStatus } = require('./extract-local.js');
     authStatus = checkClaudeAuthStatus();
   } catch { /* missing/broken local CLI state is UNKNOWN, never authenticated */ }
-  return renderExtractionStatus({ state, ledger, authStatus });
+  return renderExtractionStatus({ state, ledger, authStatus, now });
 }
 
 async function printStatus() {
@@ -1146,7 +1157,7 @@ async function printStatus() {
   console.log(`Pending queue: ${pendingCount} file(s)`);
 
   // 7. Extraction health — durable skip state plus the authoritative CLI auth probe.
-  console.log(currentExtractionStatusLine(ledger));
+  console.log(currentExtractionStatusLine(ledger, Date.now()));
 }
 
 // ─── Scrub + Verify ─────────────────────────────────────────────────────────

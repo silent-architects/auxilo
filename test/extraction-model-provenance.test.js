@@ -194,7 +194,7 @@ describe('providers/index.js runModel(): every automatic provider exhausted (no-
         providersStatePath: statePath,
       });
       assert.equal(result.ok, false);
-      assert.equal(result.reasonCode, 'no-usable-provider');
+      assert.equal(result.reasonCode, 'cli-unauthenticated');
       assert.equal(result.identity, undefined, 'nothing actually ran to completion — this registry must not fabricate an identity for it');
     }));
   });
@@ -215,7 +215,7 @@ describe('providers/index.js runModel(): every automatic provider exhausted (no-
         indexPath, log: () => {}, providersStatePath: statePath, providerCache: {},
       });
       assert.deepEqual(result.learnings, [], 'no candidates were ever produced — nothing to stamp or publish');
-      assert.equal(result.reasonCode, 'no-usable-provider');
+      assert.equal(result.reasonCode, 'cli-unauthenticated');
     }));
   });
 });

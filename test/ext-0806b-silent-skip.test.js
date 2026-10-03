@@ -341,30 +341,33 @@ describe('EXT-0806b persistent once-per-run state and alerting', () => {
     assert.equal(JSON.parse(fs.readFileSync(statePath, 'utf8')).consecutive_skips, 1);
   });
 
-  it('resets after a real success or a real model failure', async () => {
+  it('resets after a real success; a model-error skip counts as unknown and leaves the auth streak untouched', async () => {
     const finalize = mustFunction(runner, 'finalizeExtractionRun');
-    for (const outcome of [
-      { skipped: false, result: { extraction_id: 'client-real' } },
-      skipOutcome('model-error'),
-    ]) {
-      const statePath = path.join(tempDir(), 'state.json');
-      fs.writeFileSync(statePath, JSON.stringify({
-        consecutive_skips: 7,
-        first_skip_at: '2026-08-20T00:00:00.000Z',
-        last_skip_at: '2026-08-29T00:00:00.000Z',
-        last_alert_at: '2026-08-29T00:00:00.000Z',
-      }));
-      const state = await finalize([outcome], {
-        statePath, now: () => '2026-08-30T12:00:00.000Z', sendOpsAlert: async () => {}, log: () => {},
-      });
-      assert.deepEqual(state, {
-        ...ZERO_STATE,
-        last_alert_at: '2026-08-29T00:00:00.000Z',
-        // PART C: a real success carries no reasonCode (null); a real
-        // model-error carries its own reasonCode through the reset.
-        last_reason_code: outcome.reasonCode || null,
-      });
-    }
+    const seed = {
+      consecutive_skips: 7,
+      first_skip_at: '2026-08-20T00:00:00.000Z',
+      last_skip_at: '2026-08-29T00:00:00.000Z',
+      last_alert_at: '2026-08-29T00:00:00.000Z',
+    };
+    const real = { skipped: false, result: { extraction_id: 'client-real' } };
+    const realPath = path.join(tempDir(), 'state.json');
+    fs.writeFileSync(realPath, JSON.stringify(seed));
+    const realState = await finalize([real], {
+      statePath: realPath, now: () => '2026-08-30T12:00:00.000Z', sendOpsAlert: async () => {}, log: () => {},
+    });
+    assert.deepEqual(realState, {
+      ...ZERO_STATE,
+      last_alert_at: '2026-08-29T00:00:00.000Z',
+      // PART C: a real success carries no reasonCode (null).
+      last_reason_code: null,
+    });
+
+    const modelPath = path.join(tempDir(), 'state.json');
+    fs.writeFileSync(modelPath, JSON.stringify(seed));
+    const modelState = await finalize([skipOutcome('model-error')], {
+      statePath: modelPath, now: () => '2026-08-30T12:00:00.000Z', sendOpsAlert: async () => {}, log: () => {},
+    });
+    assert.deepEqual(modelState, { ...seed, consecutive_unknown: 1, last_reason_code: 'model-error' });
   });
 
   it('keeps UNKNOWN out of the auth counter, increments its own once per run, and never alerts', async () => {
@@ -748,6 +751,7 @@ describe('EXT-0806b status surface', () => {
       state: { ...ZERO_STATE },
       ledger: { lastRealExtractionAt: '2026-08-30T11:00:00.000Z' },
       authStatus: 'logged-in',
+      now: Date.parse('2026-08-30T12:00:00.000Z'),
     }), 'Extraction: OK (last real extraction 2026-08-30T11:00:00.000Z)');
   });
 
@@ -889,5 +893,78 @@ describe('EXT-0806b durable skip retention and ledger concurrency', () => {
     assert.equal(fs.existsSync(queuePath), true, 'skip-classified flush work must stay durable');
     assert.match(result.stdout, /Flush complete: 0\/1 succeeded, 1 retained \(extraction skipped\)/);
     assert.match(result.stdout, /⊘ extraction SKIPPED .*session=flush-retained\.jsonl/);
+  });
+});
+
+describe('EXT-0806c: an expired-OAuth outage is counted, surfaced and flagged stale', () => {
+  const OAUTH_EXPIRED = 'Failed to authenticate: OAuth session expired and could not be refreshed';
+  const quiet = { sendOpsAlert: async () => {}, log: () => {}, threshold: 99 };
+
+  it('(i) a model-error skip never resets the auth streak and counts as unknown; only a real extraction resets', async () => {
+    const finalize = mustFunction(runner, 'finalizeExtractionRun');
+    const statePath = path.join(tempDir(), 'state.json');
+    const first = await finalize([skipOutcome('cli-unauthenticated')], { ...quiet, statePath, now: () => '2026-09-01T00:00:00.000Z' });
+    assert.equal(first.consecutive_skips, 1);
+    const second = await finalize([skipOutcome('cli-unauthenticated')], { ...quiet, statePath, now: () => '2026-09-01T01:00:00.000Z' });
+    assert.equal(second.consecutive_skips, 2);
+    const third = await finalize([skipOutcome('model-error')], { ...quiet, statePath, now: () => '2026-09-01T02:00:00.000Z' });
+    assert.equal(third.consecutive_skips, 2, 'the model-error run must not reset the streak');
+    assert.equal(third.consecutive_unknown, 1, 'the model-error skip increments the unknown counter');
+    assert.equal(third.first_skip_at, '2026-09-01T00:00:00.000Z');
+    assert.equal(third.last_reason_code, 'model-error');
+    assert.deepEqual(JSON.parse(fs.readFileSync(statePath, 'utf8')), third);
+    const fourth = await finalize([{ skipped: false, result: { extraction_id: 'client-real' } }], { ...quiet, statePath });
+    assert.equal(fourth.consecutive_skips, 0);
+    assert.equal(fourth.consecutive_unknown, 0);
+  });
+
+  it('(ii) a clean state reads STALE past 48 hours, OK at 47 hours, and unavailable for an invalid timestamp', () => {
+    const render = mustFunction(runner, 'renderExtractionStatus');
+    const base = { state: { ...ZERO_STATE }, authStatus: 'logged-in' };
+    const stale = render({ ...base, ledger: { lastRealExtractionAt: '2026-08-30T11:00:00.000Z' }, now: Date.parse('2026-09-01T12:00:00.000Z') });
+    assert.equal(stale, 'Extraction: STALE — no real extraction for 49h (last 2026-08-30T11:00:00.000Z) — run `claude auth login` and check extract.log');
+    assert.match(stale, /claude auth login/);
+    assert.match(stale, /49h/);
+    assert.equal(render({ ...base, ledger: { lastRealExtractionAt: '2026-08-30T11:00:00.000Z' }, now: Date.parse('2026-09-01T10:00:00.000Z') }),
+      'Extraction: OK (last real extraction 2026-08-30T11:00:00.000Z)');
+    assert.equal(render({ ...base, ledger: { lastRealExtractionAt: 'not-a-timestamp' }, now: Date.parse('2026-09-01T12:00:00.000Z') }),
+      'Extraction: OK (last real extraction unavailable)');
+  });
+
+  it('(iii) an expired-OAuth exit 1 is a cli-unauthenticated skip, and two such runs make --status read SKIPPING with the remedy', async () => {
+    const finalize = mustFunction(runner, 'finalizeExtractionRun');
+    const load = mustFunction(runner, 'loadExtractionSkipState');
+    const render = mustFunction(runner, 'renderExtractionStatus');
+    const root = tempDir();
+    const statePath = path.join(root, 'state.json');
+    const indexPath = path.join(root, 'extracted-index.jsonl');
+    fs.writeFileSync(indexPath, '');
+    const spawnCalls = [];
+    const outcomes = [];
+    for (const sessionId of ['oauth-run-1', 'oauth-run-2']) {
+      const detailed = await runner.postExtractDetailed(
+        'a synthetic transcript for ' + sessionId + ', long enough to pass any length floor on this path',
+        sessionId, 'claude-code', { clean: true },
+        { ...supportedClaude, indexPath, log: () => {}, homeDir: root, cwd: root, claudeBin: '/fixture/claude',
+          routeBindingsDir: path.join(root, 'bindings'), providersStatePath: path.join(root, 'providers.json'),
+          bindingHost: 'fixture-host', existsSync: () => false,
+          spawnSyncImpl: (_bin, args) => {
+            spawnCalls.push(args[0]);
+            return args[0] === 'auth'
+              ? { status: 0, stdout: '{"loggedIn":true}', stderr: '' }
+              : { status: 1, stdout: '', stderr: OAUTH_EXPIRED };
+          } });
+      assert.equal(detailed.skipped, true);
+      assert.equal(detailed.reasonCode, 'cli-unauthenticated');
+      assert.equal(detailed.result.extraction_id, 'client-skip');
+      outcomes.push(detailed);
+    }
+    assert.ok(spawnCalls.includes('-p'), 'the stubbed model spawn must actually have run');
+    await finalize([outcomes[0]], { ...quiet, statePath, now: () => '2026-09-01T00:00:00.000Z' });
+    const state = await finalize([outcomes[1]], { ...quiet, statePath, now: () => '2026-09-01T01:00:00.000Z' });
+    assert.equal(state.consecutive_skips, 2);
+    const status = render({ state: load({ statePath, log: () => {} }), ledger: {}, authStatus: 'logged-in' });
+    assert.match(status, /^Extraction: SKIPPING since 2026-09-01T00:00:00\.000Z \(2 consecutive/);
+    assert.match(status, /claude auth login/);
   });
 });
