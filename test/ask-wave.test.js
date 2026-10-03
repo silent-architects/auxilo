@@ -179,7 +179,12 @@ describe('ASK-WAVE treatment tests', { timeout: 120_000 }, () => {
     return p.evaluate((props) => {
       return Array.from(document.querySelectorAll('.btn-primary')).map((el) => {
         const cs = getComputedStyle(el);
-        const out = { label: (el.textContent || '').trim().replace(/\s+/g, ' ') };
+        const out = {
+          label: (el.textContent || '').trim().replace(/\s+/g, ' '),
+          // Design rebuild: the primary button is ground-aware (gold fill on a dark ground, ink
+          // fill on a light one), so "identical" holds between buttons on the same ground.
+          ground: el.closest('.on-dark') ? 'dark' : 'light',
+        };
         for (const prop of props) out[prop] = cs[prop];
         return out;
       });
@@ -218,6 +223,10 @@ describe('ASK-WAVE treatment tests', { timeout: 120_000 }, () => {
       for (const el of all) {
         const cs = getComputedStyle(el);
         if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+        // Design rebuild: a gold mark inside a drawing (the exchange's earnings bar and tick)
+        // is illustration, not an ask. Drawings are role="img" or aria-hidden; only real
+        // controls and content count as gold events.
+        if (el.closest('[role="img"], [aria-hidden="true"]')) continue;
         const bg = cs.backgroundColor;
         if (bg !== aurum && bg !== aurumHi) continue;
         const r = el.getBoundingClientRect();
@@ -260,9 +269,11 @@ describe('ASK-WAVE treatment tests', { timeout: 120_000 }, () => {
         }
       });
       assert.ok(results.length > 0, 'expected at least one .btn-primary across /for-builders, /for-agents, /pricing');
-      const first = results[0];
+      const firstByGround = new Map();
       const mismatches = [];
-      for (const r of results.slice(1)) {
+      for (const r of results) {
+        const first = firstByGround.get(r.ground);
+        if (!first) { firstByGround.set(r.ground, r); continue; }
         for (const prop of BTN_PRIMARY_PROPS) {
           if (r[prop] !== first[prop]) {
             mismatches.push(`${r.page} "${r.label}" ${prop}: got ${r[prop]}, expected ${first[prop]} (from ${first.page} "${first.label}")`);
@@ -336,6 +347,29 @@ describe('ASK-WAVE treatment tests', { timeout: 120_000 }, () => {
     }
   }
 
+  // ── (ii-c) positive control for the drawing exclusion in goldElements() above: on /, the
+  // exchange drawing really does carry solid-gold marks, the collector really does skip them,
+  // and the one real ask (the copy button) is still counted. Without this the exclusion could
+  // hide a gold control that was wrongly marked aria-hidden. ──
+  for (const viewport of VIEWPORTS) {
+    it(`(ii-c) the exchange drawing on / carries solid-gold marks that the collector skips, while the copy button still counts, at ${viewport.name}`, async (t) => {
+      if (!ok) { t.skip('playwright not resolvable'); return; }
+      await withPage(viewport, async (p) => {
+        await goto(p, 'index.html');
+        const aurum = await resolveToken(p, '--aurum');
+        const aurumHi = await resolveToken(p, '--aurum-hi');
+        const inDrawing = await p.evaluate(({ a, b }) => [...document.querySelectorAll('.hx *')].filter((el) => {
+          const bg = getComputedStyle(el).backgroundColor;
+          return bg === a || bg === b;
+        }).length, { a: aurum, b: aurumHi });
+        assert.ok(inDrawing >= 1, `expected solid-gold marks inside the .hx drawing at ${viewport.name}, found ${inDrawing}`);
+        const els = await goldElements(p, aurum, aurumHi, false);
+        assert.ok(els.some((e) => e.id === 'copy-hero-setup'), 'the hero copy button is counted as a gold event');
+        assert.ok(!els.some((e) => e.rect && e.className && /dw-(tick|amt)/.test(e.className)), 'no drawing mark is counted');
+      });
+    });
+  }
+
   // ── (ii-b) each page carries >= 1 gold ask somewhere in the document (scroll allowed) ──
   for (const viewport of VIEWPORTS) {
     for (const page of PAGES) {
@@ -352,47 +386,51 @@ describe('ASK-WAVE treatment tests', { timeout: 120_000 }, () => {
     }
   }
 
-  // ── gold-event collector deliberately keys on background-color, not text
-  // colour: /for-builders' hero ledger number (.pull-stat-num, "228") is
-  // gold TEXT (color: var(--aurum)) sitting on a transparent background,
-  // by design (row FB-HERO-STATS-MOBILE comment in for-builders.html: "228
-  // stays the sole ledger-tier number ... gold TEXT, not a gold-fill").
-  // goldElements() above only inspects `cs.backgroundColor` (see its body),
-  // so this was already correct behaviour, incidentally, not on purpose --
-  // pin it explicitly so nobody "fixes" goldElements() to also match on
-  // `color` and starts double-counting every gold-text ledger number as a
-  // second gold-fill event (which would break case (ii)'s "at most one
-  // gold-event group" invariant on every page that carries a ledger stat
-  // next to a real gold-fill CTA). ──
+  // ── Round 3: no figure beside the gold button is gold. /for-builders' first hero figure
+  // (.pull-stat-num, the live learnings count) used to be gold TEXT on a transparent background.
+  // A gold button is on that screen, so the figure is ink (the same colour as the figures under
+  // it), and it is still never counted as a gold-fill event. goldElements() keys on
+  // background-color only; the last assertion keeps it that way. ──
   for (const viewport of VIEWPORTS) {
-    it(`.pull-stat-num gold TEXT on /for-builders is not counted as a gold-fill event at ${viewport.name}`, async (t) => {
+    it(`.pull-stat-num on /for-builders is ink like its neighbour figure, not gold, and not a gold-fill event at ${viewport.name}`, async (t) => {
       if (!ok) { t.skip('playwright not resolvable'); return; }
       await withPage(viewport, async (p) => {
         await goto(p, 'for-builders.html');
         const aurum = await resolveToken(p, '--aurum');
         const aurumHi = await resolveToken(p, '--aurum-hi');
-        const numEl = await p.evaluate(() => {
-          const el = document.querySelector('.pull-stat-num');
-          if (!el) return null;
-          const cs = getComputedStyle(el);
-          return { color: cs.color, backgroundColor: cs.backgroundColor };
+        const goldInk = await resolveToken(p, '--gold-ink');
+        const figs = await p.evaluate(() => {
+          const one = (el) => {
+            if (!el) return null;
+            const cs = getComputedStyle(el);
+            return { color: cs.color, backgroundColor: cs.backgroundColor, size: parseFloat(cs.fontSize) };
+          };
+          // Round 4: the three figures are the dark band directly under the hero.
+          const band = document.querySelector('#builders-stats');
+          return {
+            first: one(band.querySelector('.pull-stat-num')),
+            // the second figure, 70%, is the first one that carries no live id
+            second: one(band.querySelector('.pull-stat-secondary')),
+            vw: window.innerWidth,
+          };
         });
-        assert.ok(numEl, '.pull-stat-num not found on /for-builders');
-        // The number's own text colour IS the solid gold token (that's the
-        // ledger-tier hierarchy row FB-HERO-STATS-MOBILE preserved)...
-        assert.ok(
-          numEl.color === aurum || numEl.color === aurumHi,
-          `.pull-stat-num text colour at ${viewport.name}: got ${numEl.color}, expected the solid --aurum/--aurum-hi token`,
-        );
-        // ...but its background is NOT gold, so the collector (which keys
-        // on background-color only) must not surface it as a gold-fill
-        // event.
-        assert.notEqual(numEl.backgroundColor, aurum, `.pull-stat-num background at ${viewport.name} unexpectedly equals solid --aurum — gold TEXT must not read as a gold fill`);
-        assert.notEqual(numEl.backgroundColor, aurumHi, `.pull-stat-num background at ${viewport.name} unexpectedly equals solid --aurum-hi — gold TEXT must not read as a gold fill`);
+        assert.ok(figs.first, '.pull-stat-num not found on /for-builders');
+        assert.ok(figs.second, 'positive control: the neighbour figure is found');
+        // A gold token has to be one of the three, so the positive control proves the check can see gold:
+        assert.ok([aurum, aurumHi, goldInk].every((c) => /^rgb/.test(c)), 'positive control: the gold tokens resolve to colours');
+        for (const gold of [aurum, aurumHi, goldInk]) {
+          assert.notEqual(figs.first.color, gold, `.pull-stat-num text colour at ${viewport.name} is the gold token ${gold}, but a gold button is on screen`);
+        }
+        assert.equal(figs.first.color, figs.second.color, `.pull-stat-num shares its neighbour figure's colour at ${viewport.name}`);
+        // The band's figures scale with the window exactly as /for-agents' band does: 3.4vw, held between 30 and 44.
+        assert.equal(figs.first.size, Math.min(44, Math.max(30, figs.vw * 0.034)), `the band figures scale from 30 to 44 so the h1 leads, at ${viewport.name}`);
+        assert.equal(figs.first.size, figs.second.size, `the live figure and its neighbour are one size at ${viewport.name}`);
+        assert.notEqual(figs.first.backgroundColor, aurum, `.pull-stat-num background at ${viewport.name} unexpectedly equals solid --aurum`);
+        assert.notEqual(figs.first.backgroundColor, aurumHi, `.pull-stat-num background at ${viewport.name} unexpectedly equals solid --aurum-hi`);
 
         const els = await goldElements(p, aurum, aurumHi, false);
         const numInResults = els.some((e) => e.className && e.className.split(/\s+/).includes('pull-stat-num'));
-        assert.ok(!numInResults, `.pull-stat-num at ${viewport.name} was incorrectly included in goldElements() output — gold text must not be counted as a gold-fill event`);
+        assert.ok(!numInResults, `.pull-stat-num at ${viewport.name} must not be included in goldElements() output`);
       });
     });
   }

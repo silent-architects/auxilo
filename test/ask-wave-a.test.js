@@ -70,9 +70,6 @@ function navBlock(html) {
   return html.slice(start, end + '</nav>'.length);
 }
 
-function originMainFile(relPath) {
-  return execFileSync('git', ['show', `origin/main:${relPath}`], { cwd: REPO, encoding: 'utf8' });
-}
 
 // ═══════════════════════════════════════════════════════════════════════
 // Old strings retired (count 0)
@@ -113,7 +110,8 @@ describe('ASK-WAVE A: old strings retired', () => {
     const rule = stylesCss.slice(ruleStart, ruleEnd) + stylesCss.slice(hoverStart, hoverEnd);
     assert.equal(/var\(--aurum\)|var\(--aurum-hi\)/.test(rule), false, 'a gold token still fills .nav-cta');
     assert.match(rule, /background:\s*transparent/);
-    assert.match(rule, /var\(--ivory\)/);
+    // Design system pass: the text is --fg-1, which the dark nav scope sets to ivory.
+    assert.match(rule, /var\(--fg-1\)/);
   });
 });
 
@@ -129,11 +127,18 @@ describe('ASK-WAVE A: new strings land exactly once', () => {
     // the same "Copy the Setup Command" label as the hero button
     // (already applied by micro-2) -- pushing the whole-file count from
     // 1 to 2. See the re-pinned footer assertion below.
-    assert.equal(countOccurrences(indexHtml, 'Copy the Setup Command'), 2);
+    // Accessibility sweep (WCAG 2.5.3, label in name): the button's aria-label is now the same string as its
+    // visible text, so the label stands twice per button in the file. The visible label still stands twice.
+    assert.equal(countOccurrences(indexHtml, '>Copy the Setup Command</button>'), 2);
+    assert.equal(countOccurrences(indexHtml, 'aria-label="Copy the Setup Command"'), 2);
+    assert.equal(countOccurrences(indexHtml, 'Copy the Setup Command'), 4);
   });
 
   it('/connect copy button reads "Copy the Setup Command" (count 1, connect.html)', () => {
-    assert.equal(countOccurrences(connectHtml, 'Copy the Setup Command'), 1);
+    // Accessibility sweep: the aria-label carries the same string as the visible text (label in name).
+    assert.equal(countOccurrences(connectHtml, '>Copy the Setup Command</button>'), 1);
+    assert.equal(countOccurrences(connectHtml, 'aria-label="Copy the Setup Command"'), 1);
+    assert.equal(countOccurrences(connectHtml, 'Copy the Setup Command'), 2);
   });
 
   it('the footer copy buttons follow the SITE-PM label ruling ("Copy the Setup Command", not lowercase "copy")', () => {
@@ -145,13 +150,13 @@ describe('ASK-WAVE A: new strings land exactly once', () => {
     // button on the site (already applied by micro-2). Re-pinned here.
     const footerStart = indexHtml.indexOf('id="footer-setup-snippet"');
     assert.notEqual(footerStart, -1);
-    const footerButtonMatch = indexHtml.slice(footerStart, footerStart + 400).match(/aria-label="Copy command">([^<]*)</);
+    const footerButtonMatch = indexHtml.slice(footerStart, footerStart + 400).match(/aria-label="Copy the Setup Command">([^<]*)</);
     assert.ok(footerButtonMatch, 'footer setup button not found');
     assert.equal(footerButtonMatch[1], 'Copy the Setup Command');
 
     const fbFooterStart = forBuildersHtml.indexOf('id="footer-setup-snippet"');
     assert.notEqual(fbFooterStart, -1);
-    const fbFooterButtonMatch = forBuildersHtml.slice(fbFooterStart, fbFooterStart + 400).match(/aria-label="Copy command">([^<]*)</);
+    const fbFooterButtonMatch = forBuildersHtml.slice(fbFooterStart, fbFooterStart + 400).match(/aria-label="Copy the Setup Command">([^<]*)</);
     assert.ok(fbFooterButtonMatch, 'for-builders footer setup button not found');
     assert.equal(fbFooterButtonMatch[1], 'Copy the Setup Command');
   });
@@ -206,27 +211,54 @@ describe('ASK-WAVE A: homepage gold-event + hero-secondary invariants', () => {
     assert.match(indexHtml, /<a href="\/how-it-works" id="hero-cta-secondary" class="hero-cta-link">See How It Works<\/a>/);
   });
 
-  it('#install .copy-btn still carries its gold fill, unchanged, in index.html', () => {
-    assert.match(indexHtml, /#install \.copy-btn\s*\{[^}]*background:\s*var\(--aurum\)/);
+  // Design rebuild: the ask's gold fill is one shared rule (the hero block and the closing block
+  // only), no longer a page-scoped `#install .copy-btn` override in index.html. The hero button
+  // still sits inside .hero-setup-block, so it still takes the gold fill.
+  it('the hero copy button still carries its gold fill: index.html keeps it inside .hero-setup-block and the shared sheet fills that button with --aurum', () => {
+    assert.match(indexHtml, /<div class="code-block hero-setup-block" id="hero-setup-snippet">[\s\S]*?<button class="copy-btn" id="copy-hero-setup"/, 'the hero copy button sits inside .hero-setup-block');
+    assert.doesNotMatch(indexHtml, /#install \.copy-btn/, 'the page-scoped override is gone from index.html');
+    const stylesCss = fs.readFileSync(path.join(PUBLIC_DIR, 'styles.css'), 'utf8');
+    assert.match(stylesCss, /\.hero-setup-block \.copy-btn[^{]*\{[^}]*background:\s*var\(--aurum\)/, 'the shared sheet fills .hero-setup-block .copy-btn with --aurum');
   });
 
-  it("connect.html's own #install .copy-btn gold fill is untouched", () => {
-    assert.match(connectHtml, /#install \.copy-btn\s*\{[^}]*background:\s*var\(--aurum\)/);
+  // Design rebuild: /connect takes the same shared rule as the homepage ask. Its block carries
+  // .hero-setup-block (gold frame, gold button, the `$ ` drawn by CSS), so the page-scoped
+  // `#install .copy-btn` override is gone and the button still takes the gold fill.
+  it("connect.html's setup button still carries its gold fill: the block is .hero-setup-block, the shared sheet fills it with --aurum, and the page holds no override of its own", () => {
+    assert.match(connectHtml, /<div class="code-block hero-setup-block" id="install">[\s\S]*?<button class="copy-btn" id="copy-connect-setup"/, 'the connect copy button sits inside .hero-setup-block');
+    assert.match(connectHtml, /<pre id="connect-setup-code">npx auxilo setup<\/pre>/, 'the pre holds only the command (the `$ ` is drawn by CSS)');
+    assert.doesNotMatch(connectHtml, /#install \.copy-btn/, 'the page-scoped override is gone from connect.html');
+    const stylesCss = fs.readFileSync(path.join(PUBLIC_DIR, 'styles.css'), 'utf8');
+    assert.match(stylesCss, /\.hero-setup-block \.copy-btn[^{]*\{[^}]*background:\s*var\(--aurum\)/, 'the shared sheet fills .hero-setup-block .copy-btn with --aurum');
+    assert.match(stylesCss, /\.hero-setup-block pre::before[^{]*\{[^}]*content:\s*'\$ '/, 'the shared sheet draws the `$ ` before the command');
   });
 });
 
 // ═══════════════════════════════════════════════════════════════════════
-// Nav markup: byte-identical to origin/main (only .nav-cta's CSS changed)
+// Nav markup: one block on every page. A test never reads git history (it passes locally and fails in CI
+// the moment the branch becomes main), so the block is compared across pages, not against a ref: the
+// index and connect navs are byte-identical once the per-page current-link marks are stripped, and the
+// accessibility sweep's two attributes (id="nav-menu" on the list, aria-controls="nav-menu" on the
+// button) are present once each on both.
 // ═══════════════════════════════════════════════════════════════════════
 
-describe('ASK-WAVE A: nav markup unchanged vs origin/main', { timeout: 30_000 }, () => {
-  it('index.html <nav> block is byte-identical to origin/main', () => {
-    const origin = originMainFile('public/index.html');
-    assert.equal(navBlock(indexHtml), navBlock(origin));
+describe('ASK-WAVE A: nav markup is one shared block', { timeout: 30_000 }, () => {
+  // the pages indent the block differently; indentation is not markup
+  const withoutPageMarks = (block) => block
+    .replace(/ class="active"/g, '')
+    .replace(/ aria-current="page"/g, '')
+    .replace(/^[ \t]+/gm, '');
+
+  it('index.html <nav> block carries the menu id and aria-controls once each', () => {
+    const block = navBlock(indexHtml);
+    assert.equal(countOccurrences(block, ' id="nav-menu"'), 1, 'the menu id is on the list once');
+    assert.equal(countOccurrences(block, ' aria-controls="nav-menu"'), 1, 'the button controls it once');
   });
 
-  it('connect.html <nav> block is byte-identical to origin/main', () => {
-    const origin = originMainFile('public/connect.html');
-    assert.equal(navBlock(connectHtml), navBlock(origin));
+  it("connect.html <nav> block is byte-identical to index.html's, apart from the current-link marks", () => {
+    const a = withoutPageMarks(navBlock(indexHtml));
+    const b = withoutPageMarks(navBlock(connectHtml));
+    assert.equal(countOccurrences(navBlock(connectHtml), ' id="nav-menu"'), 1, 'the menu id is on the list once');
+    assert.equal(b, a);
   });
 });

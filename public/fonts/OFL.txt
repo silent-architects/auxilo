@@ -1,11 +1,15 @@
-This directory ships two typefaces, each licensed under the SIL Open Font
+This directory ships three typefaces, each licensed under the SIL Open Font
 License, Version 1.1. Their upstream copyright notices, copied verbatim from
 each project's own license file, are reproduced below, followed by the OFL
-1.1 text that governs both (the two upstream files carry byte-identical OFL
+1.1 text that governs all three (the upstream files carry byte-identical OFL
 bodies, differing only in their copyright line).
 
 -----------------------------------------------------------
-Archivo (ArchivoVariable.*.woff2)
+Archivo (ArchivoVariable.*.woff2 and ArchivoVariableExt.*.woff2: the shipped
+files are instanced to weights 400 to 600 from the upstream variable font; the
+first is subset to Latin and Latin Extended-A, the second holds the rarer
+characters of the original, such as Romanian and Vietnamese, and loads only on
+a page that uses one of them)
 Source: https://github.com/Omnibus-Type/Archivo
 -----------------------------------------------------------
 
@@ -16,7 +20,19 @@ This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
 
 -----------------------------------------------------------
-IBM Plex Mono (PlexMono400.*.woff2, PlexMono500.*.woff2)
+Newsreader (NewsreaderDisplay300.*.woff2: the display optical size at
+weight 300, instanced and subset to Latin from the upstream variable font)
+Source: https://github.com/productiontype/Newsreader
+-----------------------------------------------------------
+
+Copyright 2020 The Newsreader Project Authors (http://github.com/productiontype/Newsreader)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+http://scripts.sil.org/OFL
+
+-----------------------------------------------------------
+IBM Plex Mono (PlexMono400.*.woff2)
 Source: https://github.com/IBM/plex
 -----------------------------------------------------------
 

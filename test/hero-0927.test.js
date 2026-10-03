@@ -27,8 +27,10 @@
  *   - H-11: "AI" appears in exactly two homepage strings (the h1, the title)
  *   - H-13: the new headline's rendered line count and no single-word line,
  *     at 375/768/1280
- *   - H-14: the lede's CSS measure (.hero-sub max-width) at 1280 is
- *     unchanged (600px) — no layout rule was touched
+ *   - H-14: the lede's CSS measure (.hero-sub max-width) at 1280 is 30em of
+ *     its own font size (design rebuild; was a fixed 600px)
+ *   - H-16: the hero's copy button is fully inside the first screen at
+ *     1280x720 and 375x667
  *   - H-15: no horizontal scroll at 375
  *
  * Runner: node --test test/hero-0927.test.js
@@ -351,12 +353,17 @@ describe('HERO-0927: H-13/H-14/H-15 rendered checks at 375/768/1280', { timeout:
         if (cur.trim()) lines.push(cur.trim());
         const heroSub = document.querySelector('.hero-sub');
         const heroSubMaxWidth = heroSub ? getComputedStyle(heroSub).maxWidth : null;
+        const heroSubFontSize = heroSub ? getComputedStyle(heroSub).fontSize : null;
+        const copyBtn = document.getElementById('copy-hero-setup');
+        const copyRect = copyBtn ? copyBtn.getBoundingClientRect() : null;
         const heroCS = getComputedStyle(el);
         return {
           lines: lines.filter(Boolean),
           scrollWidth: document.documentElement.scrollWidth,
           clientWidth: document.documentElement.clientWidth,
           heroSubMaxWidth,
+          heroSubFontSize,
+          copyBtnBox: copyRect ? { top: copyRect.top, bottom: copyRect.bottom, left: copyRect.left, right: copyRect.right } : null,
           heroTextWrap: heroCS.textWrap || heroCS.getPropertyValue('text-wrap') || null,
           heroTextWrapStyle: heroCS.textWrapStyle || heroCS.getPropertyValue('text-wrap-style') || null,
         };
@@ -398,27 +405,40 @@ describe('HERO-0927: H-13/H-14/H-15 rendered checks at 375/768/1280', { timeout:
     });
   }
 
-  it('H-14: the lede\'s measure (.hero-sub max-width) at 1280 is unchanged (600px) — no layout rule was touched', async (t) => {
+  // Design rebuild: the lede's measure is 30em of its own size (570px at 19px, 510px at the
+  // 17px used at 480 and down) instead of a fixed 600px. Compared in one run, never against a
+  // literal pixel number: the max-width must equal 30 times the same element's font size.
+  it('H-14: the lede\'s measure (.hero-sub max-width) at 1280 is 30em of its own font size', async (t) => {
     if (bootSkipReason) { t.skip(bootSkipReason); return; }
     if (!playwrightOk) { t.skip('playwright not resolvable'); return; }
-    const { heroSubMaxWidth } = await measureAt(1280, 800);
-    assert.equal(heroSubMaxWidth, '600px', `.hero-sub max-width should be unchanged at 600px, got ${heroSubMaxWidth}`);
+    const { heroSubMaxWidth, heroSubFontSize } = await measureAt(1280, 800);
+    const maxW = parseFloat(heroSubMaxWidth);
+    const fs = parseFloat(heroSubFontSize);
+    assert.ok(fs > 0, `positive control: the lede's font size was measured (${heroSubFontSize})`);
+    assert.ok(Math.abs(maxW - fs * 30) <= 0.5, `.hero-sub max-width ${heroSubMaxWidth} should be 30em of ${heroSubFontSize}`);
   });
 
-  // R2-3 (coordinator, 2026-09-27): the computed text-wrap of the headline is
-  // balance. NOTE ON SCOPE, surfaced rather than hidden: four OTHER
-  // homepage headings (#footer-cta-heading, #recall-heading, #how-heading,
-  // #setup-detail-heading) already carried text-wrap:balance in the clean
-  // starting commit (5b4fbf4), from an earlier, unrelated same-day fix pass
-  // for their own single-word-orphan problems -- confirmed via
-  // `git show 5b4fbf4:public/index.html`, not introduced by this build. "No
-  // other heading on the homepage has it" is therefore not literally true of
-  // the page as shipped; what IS true, and what this test asserts, is that
-  // this build's own R2-1 change added the property to #hero-heading only
-  // and to no other element -- the pre-existing four are read and reported,
-  // not asserted absent, since removing them is out of this build's scope
-  // (only #hero-heading is authorized to change).
-  it('R2-3: #hero-heading computed text-wrap is balance; this build added it nowhere else', async (t) => {
+  // H-16 (design rebuild): the ask is the one control above the fold. The copy button is
+  // fully inside the first screen at the two fold sizes the site holds.
+  for (const [w, h] of [[1280, 720], [375, 667]]) {
+    it(`H-16: the hero copy button is fully inside the first screen at ${w}x${h}`, async (t) => {
+      if (bootSkipReason) { t.skip(bootSkipReason); return; }
+      if (!playwrightOk) { t.skip('playwright not resolvable'); return; }
+      const { copyBtnBox } = await measureAt(w, h);
+      assert.ok(copyBtnBox, '#copy-hero-setup found and measured');
+      assert.ok(copyBtnBox.top >= 0 && copyBtnBox.left >= 0, `${w}x${h}: the button starts inside the screen: ${JSON.stringify(copyBtnBox)}`);
+      assert.ok(copyBtnBox.bottom <= h, `${w}x${h}: the button's bottom edge ${copyBtnBox.bottom} is inside the fold (${h})`);
+      assert.ok(copyBtnBox.right <= w, `${w}x${h}: the button's right edge ${copyBtnBox.right} is inside the screen width`);
+    });
+  }
+
+  // R2-3 (coordinator, 2026-09-27), updated for the design rebuild: the computed text-wrap of
+  // the headline is balance. The design system sets balance once, in the shared sheet, for
+  // every h1 and h2 (no heading may leave a single word alone on a line), so the original
+  // "added to #hero-heading only" scope is retired. What this asserts now: the h1 and every
+  // h2 on the homepage computes balance; the h3 step titles do not (positive control, so the
+  // check cannot pass by matching nothing).
+  it('R2-3: #hero-heading and every h2 compute text-wrap: balance; the h3 step titles do not', async (t) => {
     if (bootSkipReason) { t.skip(bootSkipReason); return; }
     if (!playwrightOk) { t.skip('playwright not resolvable'); return; }
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
@@ -426,24 +446,24 @@ describe('HERO-0927: H-13/H-14/H-15 rendered checks at 375/768/1280', { timeout:
     try {
       await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
       const result = await page.evaluate(() => {
-        const el = document.getElementById('hero-heading');
-        const cs = getComputedStyle(el);
-        const heroValue = cs.textWrapStyle || cs.textWrap || cs.getPropertyValue('text-wrap-style') || cs.getPropertyValue('text-wrap');
-        const others = [...document.querySelectorAll('h1, h2, h3, h4, h5, h6')]
-          .filter((h) => h.id !== 'hero-heading')
-          .map((h) => {
-            const ocs = getComputedStyle(h);
-            const v = ocs.textWrapStyle || ocs.textWrap || ocs.getPropertyValue('text-wrap-style') || ocs.getPropertyValue('text-wrap');
-            return { id: h.id || null, tag: h.tagName, value: v };
-          });
-        return { heroValue, others };
+        const wrap = (h) => {
+          const cs = getComputedStyle(h);
+          return cs.textWrapStyle || cs.textWrap || cs.getPropertyValue('text-wrap-style') || cs.getPropertyValue('text-wrap');
+        };
+        const one = (h) => ({ id: h.id || null, tag: h.tagName, value: wrap(h) });
+        return {
+          h1: one(document.getElementById('hero-heading')),
+          h2s: [...document.querySelectorAll('main h2')].map(one),
+          h3s: [...document.querySelectorAll('main h3')].map(one),
+        };
       });
-      assert.match(result.heroValue, /balance/, `#hero-heading computed text-wrap should be "balance", got ${JSON.stringify(result.heroValue)}`);
-      const othersWithBalance = result.others.filter((o) => /balance/.test(o.value || ''));
-      const knownPreExisting = new Set(['footer-cta-heading', 'recall-heading', 'how-heading', 'setup-detail-heading']);
-      const unexpected = othersWithBalance.filter((o) => !knownPreExisting.has(o.id));
-      console.log('R2-3 headings with computed text-wrap:balance other than #hero-heading:', JSON.stringify(othersWithBalance));
-      assert.deepEqual(unexpected, [], `this build must not add text-wrap:balance to any heading besides #hero-heading; unexpected: ${JSON.stringify(unexpected)}`);
+      assert.match(result.h1.value, /balance/, `#hero-heading computed text-wrap should be "balance", got ${JSON.stringify(result.h1.value)}`);
+      assert.ok(result.h2s.length >= 6, `positive control: the homepage's h2 headings were found (${result.h2s.length})`);
+      const h2sWithout = result.h2s.filter((h) => !/balance/.test(h.value || ''));
+      assert.deepEqual(h2sWithout, [], `every h2 must compute text-wrap: balance; without it: ${JSON.stringify(h2sWithout)}`);
+      assert.ok(result.h3s.length >= 3, `positive control: the three step titles were found (${result.h3s.length})`);
+      const h3sWith = result.h3s.filter((h) => /balance/.test(h.value || ''));
+      assert.deepEqual(h3sWith, [], `step titles (h3) must not compute balance: ${JSON.stringify(h3sWith)}`);
     } finally {
       await ctx.close();
     }

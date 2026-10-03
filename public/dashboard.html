@@ -6,165 +6,361 @@
   <title>Dashboard | Auxilo</title>
   <meta name="robots" content="noindex, nofollow" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/ArchivoVariable.cfd841fc.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/NewsreaderDisplay300.a07d3c5c.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=eba132a8" />
+  <link rel="stylesheet" href="/styles.css?v=f11e9131" />
   <style>
-    /* SPACING-0927 (BUILD-BRIEF-SPACING.md B-9): this build's only
-       authorized effect on this page is what the shared navigation and
-       footer rules bring. styles.css now gives every <main> a sitewide
-       margin-top for nav clearance (B-4/A1) -- opted out here, at equal
-       specificity, loading after that sheet, so it wins by source order
-       with no !important needed. #login-view's and .dash-wrap's own top
-       padding (140px / 100px, both untouched, both already well past the
-       fixed nav) remain this page's sign-in-screen and dashboard-card
-       layout, neither of which this build touches. */
-    main { margin-top: 0; }
+    /* Sign-in and the account dashboard. Look only: every id, hook, string and
+       script is unchanged. Grounds, tokens, type and the ask come from the shared
+       sheet; this block keeps only what is particular to this page.
 
-    /* ── Dashboard layout ───────────────────────────────────────────── */
-    .dash-wrap {
-      max-width: 860px;
+       Four legacy token names are still painted by the markup and by the scripts
+       (var(--ivory), var(--slate), var(--ash), var(--gold) in inline styles). On the light body
+       and in the Terms dialog they are aliased to the ground-aware text tokens
+       below, so every inline colour reads correctly without touching a script. */
+
+    /* ── Page frame ─────────────────────────────────────────────────────
+       <main> clears the fixed navigation through the shared rule. The page is a
+       flex column so the dark sign-in screen, or the tint body, runs down to the
+       footer when the content is short. */
+    body { display: flex; flex-direction: column; min-height: 100vh; }
+    main { flex: 1 0 auto; display: flex; flex-direction: column; }
+
+    .dash-body,
+    #terms-dialog {
+      --ivory: var(--fg-1);
+      --slate: var(--fg-3);
+      --ash: var(--fg-2);
+      --gold: var(--accent-text);
+    }
+
+    /* ── Sign-in: a dark first screen, the form in a 400 column ──────── */
+    #login-view {
+      flex: 1 0 auto;
+      padding: var(--section-pad);
+    }
+
+    .login-col {
+      max-width: 400px;
       margin: 0 auto;
-      padding: 100px 24px 80px;
+    }
+
+    /* The navigation already carries the Auxilo logo, so the sign-in column starts at its heading.
+       The block stays in the markup; it is only not drawn. */
+    .login-logo {
+      display: none;
+    }
+
+    .login-heading {
+      font-size: var(--h2-section);
+      margin-bottom: var(--space-copy);
+    }
+
+    .login-sub {
+      font-size: 16px;
+      line-height: 1.65;
+      color: var(--fg-2);
+      margin-bottom: var(--space-copy);
+    }
+
+    #login-view [style*="font-size:13px"] { font-size: 14px !important; }
+
+    .form-group {
+      margin-bottom: var(--space-body);
+    }
+
+    .form-label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--fg-2);
+      margin-bottom: var(--space-tight);
+    }
+
+    .form-input {
+      width: 100%;
+      min-height: 48px;
+      padding: 0 var(--space-body);
+      background: var(--surface);
+      border: 1px solid var(--ctrl-line);
+      border-radius: var(--r-control);
+      color: var(--fg-1);
+      font-size: 16px;
+      font-family: var(--sans);
+      transition: border-color 0.15s;
+    }
+    /* FOCUS-VISIBLE: this rule never sets outline: none, so the shared
+       *:focus-visible ring (gold on the dark sign-in screen, ink on a light
+       ground) shows on keyboard focus. */
+
+    .form-input:focus {
+      border-color: var(--fg-1);
+    }
+
+    .form-input::placeholder {
+      color: var(--fg-3);
+    }
+
+    /* ── Signed in: the dark header band ────────────────────────────── */
+    .dash-wrap {
+      flex: 1 0 auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #dash-view {
+      flex: 1 0 auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .dash-inner {
+      width: 100%;
+      max-width: var(--max-w);
+      margin: 0 auto;
+    }
+
+    .dash-band {
+      padding: var(--band-pad);
+    }
+
+    .dash-band .dash-inner {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-copy);
     }
 
     .dash-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 40px;
       flex-wrap: wrap;
-      gap: 12px;
+      gap: var(--space-copy);
     }
 
     .dash-title {
-      /* FIX-UNIT A5b: this is now an h1 element (was a div) so the signed-in
-         dashboard has a page-title heading -- margin: 0 resets the browser
-         default h1 top/bottom margin so it renders identically to the old
-         div. (Angle brackets deliberately spelled out as words, not
-         literal tags, in this comment -- a literal "less-than h-one
-         greater-than" sequence here would be mistaken by a naive regex
-         heading-sweep test for a second, malformed heading tag.) */
+      /* FIX-UNIT A5b: this is an h1 element (was a div); margin: 0 resets the
+         browser default so the title sits where the layout puts it. The serif
+         h1 takes the h2 size here: this is an application page, not a hero. */
       margin: 0;
-      font-size: 28px;
-      font-weight: 700;
-      color: var(--ivory);
-      letter-spacing: -0.02em;
+      font-size: var(--h2-section);
     }
 
     .dash-email {
-      font-size: 13px;
-      color: var(--slate);
+      font-size: 14px;
+      color: var(--fg-3);
+      margin-top: var(--space-copy);
     }
+    .dash-email:empty { display: none; }
+
+    /* The one-line summary: a passive readout in the band, hidden (with its
+       gap) until a figure has loaded. */
+    #dash-summary-bar {
+      display: none;
+      margin: 0 !important;
+      font-size: 14px !important;
+    }
+    #dash-summary-bar:has(> span:not([style*="none"])) { display: block; }
+
+    /* ── Signed in: the body on tint, cards white ───────────────────── */
+    .dash-body {
+      flex: 1 0 auto;
+      padding: var(--band-pad);
+    }
+
+    .dash-body .dash-inner {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-copy);
+    }
+
+    /* The page's own alerts sit in the card stack: no stray inline margin. */
+    .dash-body .dash-inner > .alert { margin: 0 !important; }
 
     /* ── Cards ──────────────────────────────────────────────────────── */
     .dash-card {
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(229,229,227,0.1);
-      border-radius: 12px;
-      padding: 28px;
-      margin-bottom: 20px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r-stage);
+      padding: var(--space-card);
     }
 
+    /* Inside a card every direct block is one stack with one gap (the inline
+       margins the markup and scripts carry are cleared), so the space between
+       things is the same everywhere. Controls keep their own width. */
+    .dash-card,
+    #welcome-card-a,
+    #welcome-card-b,
+    #earnings-content,
+    #clean-lane-content,
+    #clean-lane-grant-form,
+    #clean-lane-on,
+    #credits-content,
+    #payout-content,
+    #pending-content,
+    #withdraw-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-body);
+    }
+
+    .dash-card > *,
+    #welcome-card-a > *,
+    #welcome-card-b > *,
+    #earnings-content > *,
+    #clean-lane-content > *,
+    #clean-lane-grant-form > *,
+    #clean-lane-on > *,
+    #credits-content > *,
+    #payout-content > *,
+    #pending-content > *,
+    #withdraw-wrap > * {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+
+    /* The single-item result line under an opened learning's actions. */
+    .triage-detail-cell > .alert { margin: var(--space-body) 0 0 !important; }
+
+    /* Card text measure: no line of reading text runs past 70 characters, so a
+       card at 1100 wide never stretches a sentence across it. The caps sit on
+       the blocks that hold text; tables, the code panel and the controls keep
+       their own widths. The wallet box in Payouts is a box, not a block of text:
+       it takes the card's full width and its lines (the heading, the address,
+       the notes) carry the cap. */
+    .dash-card :is(p, .empty-state, .loading-text, .alert, .purchase-legal,
+                   #clean-lane-terms, #credit-balance-sub, #credit-balance-frozen),
+    .dash-card .wallet-note > *,
+    .dash-body .dash-inner > .alert {
+      max-width: 70ch;
+    }
+
+    :is(.dash-card, #welcome-card-a, #welcome-card-b, #earnings-content, #clean-lane-content,
+        #clean-lane-grant-form, #clean-lane-on, #credits-content, #payout-content,
+        #pending-content, #withdraw-wrap) > :is(.btn, .hero-cta-link, select) {
+      align-self: flex-start;
+    }
+
+    /* A label sits 8 above the field it names: the stack's 16 less 8. */
+    #clean-lane-grant-form > label[for="clean-lane-min-quality"] { margin-bottom: -8px !important; }
+    #unlock-email-help { margin-top: 0 !important; }
+
     .dash-card-title {
-      /* FIX-UNIT A5b: every .dash-card-title is now an h2 element (was a
-         div). margin-top: 0 resets the browser default h2 top margin
-         (0.83em, computed against this rule's own 13px font-size) so the
-         heading renders identically to the old div -- font-size/font-
-         weight/color/etc. below already override every other h2 default
-         that would otherwise differ. (Tag names spelled as words, not
-         literal angle-bracket tags, elsewhere in this comment block too --
-         see the .dash-title rule above for why.) */
+      /* FIX-UNIT A5b: every .dash-card-title is an h2 element (was a div);
+         margin-top: 0 resets the browser default. Card titles are Archivo, not
+         serif. Title to content is 24: this 8 plus the card's 16 stack gap. */
       margin-top: 0;
-      font-size: 13px;
-      font-weight: 600;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--slate);
-      margin-bottom: 20px;
+      font-family: var(--sans);
+      font-size: 19px;
+      font-weight: 500;
+      line-height: 1.3;
+      letter-spacing: -0.01em;
+      color: var(--fg-1);
+      text-wrap: auto;
+      margin-bottom: 8px;
     }
 
     /* ── Earnings grid ──────────────────────────────────────────────── */
+    /* One column grid at every count: four figures sit four across (two across
+       below 900), five (an account whose earlier receipts wait on the Terms) sit
+       three over two from 768 up, the second row on the same column lines as the
+       first. Between 641 and 767 the fifth takes the row under two pairs, and a
+       phone has one across. */
     .earnings-grid {
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 16px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-card) var(--space-copy);
+    }
+    @media (max-width: 767px) {
+      .earnings-grid > .earnings-item:last-child:nth-child(odd) { grid-column: 1 / -1; }
+    }
+    @media (min-width: 768px) {
+      .earnings-grid:has(> .earnings-item:nth-child(5)) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (max-width: 640px) {
+      .earnings-grid { grid-template-columns: minmax(0, 1fr); }
+    }
+    @media (min-width: 900px) {
+      .earnings-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .earnings-grid:has(> .earnings-item:nth-child(5)) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
 
-    @media (max-width: 540px) {
-      .earnings-grid { grid-template-columns: 1fr; }
+    .earnings-item {
+      border-top: 1px solid var(--line);
+      padding-top: var(--space-body);
     }
+
+    /* The label takes a fixed two-line box, so every figure in a row starts at
+       the same height and sits on one baseline whether its label is one line or
+       two. On a phone the figures stack, so the box is released. */
+    .earnings-label {
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: calc(2 * 1.5em);
+      color: var(--fg-3);
+      margin-bottom: var(--space-tight);
+      font-weight: 400;
+    }
+    @media (max-width: 640px) {
+      .earnings-label { min-height: 0; }
+    }
+
+    /* Money figures are set in the serif. */
+    .earnings-value,
+    #credit-balance-line {
+      font-family: var(--serif);
+      font-size: clamp(34px, 4vw, 52px);
+      font-weight: 300;
+      line-height: 1.1;
+      letter-spacing: -0.016em;
+      color: var(--fg-1);
+      font-synthesis-weight: none;
+    }
+
+    /* No figure on this page is gold. The script still marks a real amount with
+       the .aurum class; the class carries no colour here, so the figure stays ink
+       in the serif and the gold on a screen is the setup command's button. */
 
     /* ── Credits card (CREDITS-CONTROL PART 1) ─────────────────────────
        GOV-2 A6: this card and the Earnings card above share the dashboard
        but never share a string, layout, or visual grouping that would imply
        one wallet or link funding to withdrawal eligibility. */
-    #credit-balance-line {
-      font-size: 28px;
-      font-weight: 700;
-      color: var(--ivory);
-      margin-bottom: 4px;
-    }
-    #credit-balance-sub {
-      font-size: 13px;
-      color: var(--slate);
-      margin-bottom: 24px;
-    }
+    #credit-balance-sub { font-size: 14px; color: var(--fg-3); }
+    #credit-pack-rows { border-top: 1px solid var(--line); }
     .credit-pack-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 16px;
-      padding: 14px 0;
-      border-top: 1px solid rgba(229,229,227,0.08);
+      gap: var(--space-body);
+      padding: var(--space-body) 0;
+      border-bottom: 1px solid var(--line);
     }
-    .credit-pack-row:first-of-type { border-top: none; }
-    .credit-pack-row .cpr-name { font-size: 14px; color: var(--ivory); font-weight: 600; }
-    .credit-pack-row .cpr-detail { font-size: 13px; color: var(--slate); margin-top: 2px; }
-    .credit-pack-row .cpr-price { font-size: 14px; color: var(--ivory); white-space: nowrap; }
+    .credit-pack-row .cpr-name { font-size: 16px; color: var(--fg-1); font-weight: 500; }
+    .credit-pack-row .cpr-detail { font-size: 14px; color: var(--fg-3); margin-top: var(--space-micro); }
+    .credit-pack-row .cpr-price { font-family: var(--mono); font-size: 14px; color: var(--fg-1); white-space: nowrap; }
     .credit-buy-btn { white-space: nowrap; }
     .purchase-disclosures {
-      margin-top: 20px;
-      padding-top: 16px;
-      border-top: 1px solid rgba(229,229,227,0.08);
-      font-size: 13px;
-      color: var(--slate);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-tight);
+      padding-top: var(--space-body);
+      border-top: 1px solid var(--line);
+      font-size: 14px;
+      color: var(--fg-3);
       line-height: 1.6;
     }
-    .purchase-disclosures p { margin: 0 0 8px; }
-    .purchase-disclosures p:last-of-type { margin-bottom: 0; }
-    .purchase-disclosures a { color: var(--aurum); }
+    .purchase-disclosures p { margin: 0; }
+    .purchase-disclosures a { color: var(--fg-1); text-decoration-color: var(--link-line); }
     .purchase-legal {
-      margin: 0 0 8px;
-      padding: 10px 12px;
-      border-left: 2px solid rgba(229,229,227,0.25);
+      margin: 0;
+      padding: var(--space-body);
+      background: var(--tint);
+      border: 0;
+      border-radius: var(--r-panel);
       font-style: normal;
     }
-    #checkout-banner { margin-bottom: 16px; }
-
-    .earnings-item {
-      background: rgba(255,255,255,0.02);
-      border: 1px solid rgba(229,229,227,0.07);
-      border-radius: 8px;
-      padding: 16px 18px;
-    }
-
-    .earnings-label {
-      font-size: 12px;
-      color: var(--slate);
-      margin-bottom: 6px;
-      font-weight: 400;
-    }
-
-    .earnings-value {
-      font-size: 26px;
-      font-weight: 700;
-      color: var(--ivory);
-      font-family: var(--mono);
-      letter-spacing: -0.02em;
-    }
-
-    .earnings-value.aurum { color: var(--aurum); }
+    #checkout-banner { margin-bottom: 0; }
 
     /* ── Buttons ────────────────────────────────────────────────────── */
     .btn {
@@ -172,55 +368,77 @@
       align-items: center;
       justify-content: center;
       /* FIX-UNIT-2 V4: this page-scoped .btn shadows the shared site-wide
-         .btn-primary (~48px tall) with no min-height of its own, so "Send
-         magic link" / "Accept" / "Turn on auto-publish" all rendered at
-         35px -- under the 44px touch-target minimum. inline-flex +
-         centering keeps the label centered rather than top-aligned once
-         the box grows past its padded content height. */
+         .btn-primary, which has no min-height of its own here, so "Send magic
+         link" / "Accept" / "Turn on auto-publish" must keep the 44px touch
+         target. inline-flex plus centering keeps the label centred. */
       min-height: 44px;
-      padding: 10px 20px;
-      border-radius: 6px;
-      font-size: 14px;
+      padding: var(--space-tight) var(--space-copy);
+      border-radius: var(--r-control);
+      font-size: 15px;
       font-weight: 500;
+      line-height: 1.3;
+      letter-spacing: -0.01em;
       cursor: pointer;
-      border: none;
+      border: 1px solid transparent;
       font-family: var(--sans);
       transition: opacity 0.15s, background 0.15s;
       text-decoration: none;
     }
 
-    .btn:disabled { opacity: 0.45; cursor: default; }
+    /* A disabled button reads as disabled at a glance: a quiet tint fill, note
+       ink, no visible border, a not-allowed cursor, and full opacity so the label
+       stays at 4.5 to 1 or better (5.9 on the tint). On a dark ground the same
+       idea takes the raised dark fill and the dark-ground note ink (5.8). */
+    .btn:disabled,
+    .btn:disabled:hover {
+      background: var(--tint);
+      color: var(--fg-3);
+      border-color: transparent;
+      opacity: 1;
+      cursor: not-allowed;
+    }
+    .on-dark .btn:disabled,
+    .on-dark .btn:disabled:hover { background: var(--raise-dark); }
 
+    /* Primary: gold on the dark ground, ink on a light one (the tokens do it). */
     .btn-primary {
-      background: var(--aurum);
-      color: #0A0A0A;
+      background: var(--btn-fill);
+      color: var(--btn-ink);
+      font-weight: 500;
     }
 
     .btn-primary:hover:not(:disabled) { opacity: 0.88; }
 
     .btn-ghost {
       background: transparent;
-      color: var(--ivory);
-      border: 1px solid rgba(229,229,227,0.2);
+      color: var(--fg-1);
+      border: 1px solid var(--ctrl-line);
     }
 
     .btn-ghost:hover:not(:disabled) {
-      background: rgba(255,255,255,0.05);
+      background: var(--line);
     }
 
+    /* Destructive: an outline with the one red the site uses. */
     .btn-danger {
       background: transparent;
-      color: #f87171;
-      border: 1px solid rgba(248,113,113,0.3);
+      color: #8C2F1B;
+      border: 1px solid #8C2F1B;
     }
 
     .btn-danger:hover:not(:disabled) {
-      background: rgba(248,113,113,0.08);
+      background: rgba(140, 47, 27, 0.08);
     }
 
     .btn-sm {
-      padding: 6px 14px;
-      font-size: 13px;
+      padding: var(--space-tight) var(--space-body);
+      font-size: 14px;
+    }
+
+    /* Phone: the shared sheet stretches every .btn-primary; here only the
+       full-size sign-in and dialog buttons do, never the small ones. */
+    @media (max-width: 600px) {
+      .btn-primary.btn-sm { width: auto; }
     }
 
     /* FIX-UNIT A6+L8: 44px touch target on the Refresh control specifically
@@ -233,206 +451,150 @@
       min-height: 44px;
     }
 
-    /* ── Login form ─────────────────────────────────────────────────── */
-    #login-view {
-      max-width: 400px;
-      margin: 0 auto;
-      padding-top: 140px;
-      padding-bottom: 60px;
-      padding-left: 24px;
-      padding-right: 24px;
-    }
-
-    .login-logo {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-6): 40 ties 32/48 --
-         tie goes to the larger value. */
-      margin-bottom: 48px;
-    }
-
-    .login-heading {
-      font-size: 24px;
-      font-weight: 700;
-      color: var(--ivory);
-      /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-3): heading to the
-         first visible thing that follows it is 16px, named by the sheet
-         (was 8). */
-      margin-bottom: 16px;
-      letter-spacing: -0.02em;
-    }
-
-    .login-sub {
-      font-size: 14px;
-      color: var(--slate);
-      /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-6): 28 ties 24/32 --
-         tie goes to the larger value. */
-      margin-bottom: 32px;
-      line-height: 1.6;
-    }
-
-    .form-group {
-      margin-bottom: 16px;
-    }
-
-    .form-label {
-      display: block;
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--ash);
-      /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-6): a label above its
-         input is in scope and takes 8 (was 6). */
-      margin-bottom: 8px;
-    }
-
-    .form-input {
-      width: 100%;
-      padding: 11px 14px;
-      background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(229,229,227,0.15);
-      border-radius: 6px;
-      color: var(--ivory);
-      font-size: 14px;
-      font-family: var(--sans);
-      transition: border-color 0.15s;
-    }
-    /* FOCUS-VISIBLE (SITE-PERFECT-DEFECT-SHEET-2026-09-06.md V3): the
-       unconditional `outline: none;` this rule used to carry sat at the
-       same specificity as styles.css's shared `*:focus-visible` rule (both
-       0,1,0) and, coming later in the cascade (this page's own <style>
-       block loads after the linked stylesheet), always won outright --
-       keyboard-Tab focus on this field rendered no ring at all, regardless
-       of the shared rule. Removed rather than rescoped to
-       `:focus:not(:focus-visible)`: text inputs are the one control class
-       where showing the ring on a plain mouse click too (Chromium's
-       :focus-visible heuristic already does this for <input> by design) is
-       the expected, standard behaviour, not a suppression this page needs
-       to keep. */
-
-    .form-input:focus {
-      border-color: var(--aurum-border);
-    }
-
-    .form-input::placeholder {
-      color: var(--slate);
-    }
-
     /* ── Alert box ──────────────────────────────────────────────────── */
     .alert {
-      padding: 12px 16px;
-      border-radius: 6px;
-      font-size: 13px;
-      margin-bottom: 14px;
-      line-height: 1.5;
+      padding: var(--space-body);
+      border: 1px solid var(--line);
+      border-radius: var(--r-panel);
+      background: var(--tint);
+      color: var(--fg-1);
+      font-size: 14px;
+      line-height: 1.55;
+      margin-bottom: var(--space-body);
     }
+    .on-dark .alert { background: var(--surface); }
 
-    .alert-info {
-      background: rgba(201,168,76,0.1);
-      border: 1px solid rgba(201,168,76,0.25);
-      color: #E5C97A;
-    }
-
-    .alert-success {
-      background: rgba(52,211,153,0.08);
-      border: 1px solid rgba(52,211,153,0.2);
-      color: #6EE7B7;
-    }
-
-    .alert-error {
-      background: rgba(248,113,113,0.08);
-      border: 1px solid rgba(248,113,113,0.2);
-      color: #FCA5A5;
-    }
-
-    .alert-warn {
-      background: rgba(251,191,36,0.08);
-      border: 1px solid rgba(251,191,36,0.2);
-      color: #FCD34D;
-    }
+    .alert-success { border-color: var(--ctrl-line); }
+    .alert-warn { border-color: var(--fg-3); }
+    .alert-error { border-color: #8C2F1B; color: #8C2F1B; }
+    .on-dark .alert-error { border-color: #E74C3C; color: var(--fg-1); }
 
     /* ── Terms of Service dialog (T-20..T-45) ─────────────────────────
        The dialog itself never scrolls -- only #terms-scroll-region does,
        so the Accept/Close row stays in the fixed flex chrome below it and
        is always in view, including at 375 wide where the dialog fills the
-       screen (media query below). */
+       screen (media query below). The dialog is paper with ink text, set in
+       the same reading type as the legal pages. */
     #terms-dialog-overlay {
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.6);
+      background: rgba(10, 10, 10, 0.6);
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 24px;
+      padding: var(--space-copy);
       z-index: 1000;
     }
 
     #terms-dialog {
-      background: #14140F;
-      border: 1px solid rgba(229,229,227,0.14);
-      border-radius: 12px;
-      padding: 28px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: var(--r-stage);
+      box-shadow: var(--shadow-panel);
+      padding: var(--space-card);
       width: 100%;
-      max-width: 640px;
+      max-width: 720px;
       max-height: 85vh;
       max-height: 85dvh; /* R3-4: the dynamic viewport height, where supported */
       display: flex;
       flex-direction: column;
     }
 
+    #terms-dialog-title { margin-bottom: var(--space-copy); }
+
     #terms-scroll-region {
       overflow-y: auto;
       overflow-x: hidden;
-      border: 1px solid rgba(229,229,227,0.08);
-      border-radius: 8px;
-      padding: 16px 18px;
-      background: rgba(0,0,0,0.25);
-      color: var(--ash);
-      font-size: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--r-panel);
+      padding: var(--space-copy);
+      background: var(--card);
+      color: var(--fg-2);
+      font-size: 17px;
       line-height: 1.7;
       flex: 1 1 auto;
       min-height: 120px;
-      margin-bottom: 12px;
+      margin-bottom: var(--space-body);
     }
 
-    #terms-scroll-region h1, #terms-scroll-region h2, #terms-scroll-region h3 {
-      color: var(--ivory);
-      margin: 16px 0 8px;
+    #terms-scroll-region h1, #terms-scroll-region h2 {
+      font-family: var(--serif);
+      font-size: 30px;
+      font-weight: 300;
+      line-height: 1.15;
+      letter-spacing: -0.016em;
+      color: var(--fg-1);
+      margin: var(--space-block) 0 var(--space-copy);
+    }
+    #terms-scroll-region h3 {
+      font-family: var(--sans);
+      font-size: 19px;
+      font-weight: 500;
+      line-height: 1.3;
+      color: var(--fg-1);
+      margin: var(--space-card) 0 var(--space-body);
     }
     #terms-scroll-region h1:first-child, #terms-scroll-region h2:first-child { margin-top: 0; }
-    #terms-scroll-region p { margin-bottom: 12px; }
-    #terms-scroll-region a { color: var(--aurum); }
-    #terms-scroll-region ul, #terms-scroll-region ol { margin: 0 0 12px 20px; }
-    #terms-scroll-region code { font-family: var(--mono); font-size: inherit; background: none; padding: 0; color: inherit; }
+    #terms-scroll-region p { margin-bottom: var(--space-body); }
+    #terms-scroll-region a { color: var(--fg-1); text-decoration: underline; text-decoration-color: var(--link-line); text-underline-offset: 3px; }
+    #terms-scroll-region strong { color: var(--fg-1); font-weight: 500; }
+    #terms-scroll-region ul, #terms-scroll-region ol { margin: 0 0 var(--space-body) var(--space-copy); }
+    #terms-scroll-region code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: var(--tint);
+      padding: 2px var(--space-tight);
+      border-radius: var(--r-control);
+      color: var(--fg-1);
+    }
     /* R3-8: a fenced block keeps its box treatment by bare tag name, since
        the sanitizer strips its class="legal-pre" along with every other
-       attribute the fetched page carried. */
+       attribute the fetched page carried. It is a dark panel. */
     #terms-scroll-region pre {
-      background: #111;
-      border: 1px solid rgba(229,229,227,0.12);
-      border-radius: 6px;
-      padding: 16px;
-      margin-bottom: 16px;
+      --fg-1: #FAFAF8;
+      --fg-2: #A7ACB2;
+      --line: rgba(250, 250, 248, 0.12);
+      background: var(--raise-dark);
+      border: 1px solid var(--line);
+      border-radius: var(--r-panel);
+      padding: var(--space-body);
+      margin-bottom: var(--space-body);
       overflow-x: auto;
       white-space: pre-wrap;
       font-family: var(--mono);
       font-size: 13px;
       line-height: 1.6;
-      color: var(--ash);
+      color: var(--fg-2);
     }
-    #terms-scroll-region table { border-collapse: collapse; width: 100%; margin-bottom: 16px; }
-    #terms-scroll-region th, #terms-scroll-region td { border: 1px solid rgba(229,229,227,0.12); padding: 8px 10px; text-align: left; }
+    #terms-scroll-region pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+    #terms-scroll-region table { border-collapse: collapse; width: 100%; margin-bottom: var(--space-body); }
+    #terms-scroll-region th, #terms-scroll-region td {
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      padding: var(--space-body) var(--space-body) var(--space-body) 0;
+      text-align: left;
+      vertical-align: top;
+    }
+    #terms-scroll-region th { font-size: 12.5px; font-weight: 500; color: var(--fg-3); }
+
+    #terms-load-error { margin-bottom: var(--space-body); }
+    #terms-load-error p { margin: 0 0 var(--space-body) !important; }
 
     #terms-scroll-hint {
-      font-size: 13px;
-      color: var(--slate);
-      margin: 0 0 14px;
+      font-size: 14px;
+      color: var(--fg-3);
+      margin: 0 0 var(--space-body);
     }
 
     #terms-dialog-actions {
       display: flex;
-      gap: 12px;
+      gap: var(--space-body);
       flex-wrap: wrap;
+    }
+
+    @media (max-width: 600px) {
+      /* Phone: Accept and Close share the row, equal width. */
+      #terms-dialog-actions .btn { flex: 1 1 0; width: auto; }
     }
 
     @media (max-width: 540px) {
@@ -443,7 +605,9 @@
         height: 100%;
         max-height: 100%;
         border-radius: 0;
+        padding: var(--space-copy);
       }
+      #terms-scroll-region { padding: var(--space-body); }
     }
 
     /* R3-4: a compact layout for short viewports (280 high and up), keyed
@@ -453,95 +617,97 @@
        scrolling region (still >= 80 high), and the action row forced onto
        one line so it never costs an extra row of height. */
     @media (max-height: 480px) {
-      #terms-dialog-overlay { padding: 8px; }
+      #terms-dialog-overlay { padding: var(--space-tight); }
       #terms-dialog {
         max-height: 100%;
         max-height: 100dvh;
-        padding: 12px;
+        padding: var(--space-body);
       }
-      #terms-dialog-title { margin-bottom: 8px; }
-      #terms-scroll-region { min-height: 80px; margin-bottom: 8px; padding: 10px 12px; }
-      #terms-scroll-hint { margin-bottom: 8px; }
-      #terms-dialog-actions { flex-wrap: nowrap; gap: 8px; }
+      #terms-dialog-title { margin-bottom: var(--space-tight); }
+      #terms-scroll-region { min-height: 80px; margin-bottom: var(--space-tight); padding: var(--space-tight) var(--space-body); }
+      #terms-scroll-hint { margin-bottom: var(--space-tight); }
+      #terms-dialog-actions { flex-wrap: nowrap; gap: var(--space-tight); }
     }
 
     @media (prefers-reduced-motion: reduce) {
       #terms-scroll-region { scroll-behavior: auto; }
     }
 
-    /* ── Pending queue ──────────────────────────────────────────────── */
-    .pending-item {
-      border: 1px solid rgba(229,229,227,0.1);
-      border-radius: 8px;
-      padding: 18px;
-      margin-bottom: 14px;
-      background: rgba(255,255,255,0.015);
-    }
-
-    .pending-item-header {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 10px;
-      flex-wrap: wrap;
-    }
-
-    .pending-item-title {
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--ivory);
-      flex: 1;
-    }
-
-    .pending-item-meta {
-      display: flex;
-      gap: 8px;
+    /* ── The Terms card: one line and one button ──────────────────────── */
+    #terms-gate {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: var(--space-body) var(--space-card);
       align-items: center;
-      flex-wrap: wrap;
-      margin-bottom: 12px;
+      border: 1px solid var(--line) !important;
+    }
+    #terms-gate .dash-card-title { grid-column: 1 / -1; }
+    #terms-gate > * { margin: 0 !important; }
+    @media (max-width: 640px) {
+      #terms-gate { grid-template-columns: minmax(0, 1fr); }
     }
 
-    .tag {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      font-weight: 500;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
+    /* ── The ask on the dashboard: the setup command in the welcome card ──
+       The same framed command as the homepage: a gold line, a gold button with ink
+       text, the command in gold mono with a dim "$ " drawn here so the copied
+       text stays the bare command. */
+    #dash-setup-block { border-color: rgba(201, 168, 76, 0.45); }
+    #dash-setup-block .copy-btn {
+      font-family: var(--sans);
+      font-weight: 600;
+      font-size: 15px;
+      letter-spacing: 0;
+      color: var(--btn-ink);
+      background: var(--btn-fill);
+      border: 0;
+      padding: 0 var(--space-body);
+    }
+    #dash-setup-block .copy-btn:hover { background: var(--aurum-hi); color: var(--btn-ink); }
+    #dash-setup-block .copy-btn.copied { color: var(--btn-ink); }
+    #dash-setup-block pre { font-size: 19px; color: var(--accent-text); }
+    #dash-setup-block pre::before { content: '$ '; color: var(--fg-3); }
+    @media (max-width: 480px) {
+      #dash-setup-block .copy-btn { width: 100%; }
+      #dash-setup-block pre { font-size: 17px; padding: var(--space-body); }
     }
 
-    .tag-category {
-      background: rgba(201,168,76,0.12);
-      color: var(--aurum);
-      border: 1px solid rgba(201,168,76,0.2);
+    /* ── Notes inside the cards: the small size is 14, set once ─────────
+       The markup and the scripts size their notes inline at 11 to 13. */
+    .dash-card [style*="font-size:11px"], .dash-card [style*="font-size: 11px"],
+    .dash-card [style*="font-size:12px"], .dash-card [style*="font-size: 12px"],
+    .dash-card [style*="font-size:13px"], .dash-card [style*="font-size: 13px"] {
+      font-size: 14px !important;
     }
-
-    .tag-warn {
-      background: rgba(251,191,36,0.1);
-      color: #FCD34D;
-      border: 1px solid rgba(251,191,36,0.2);
+    /* A gold link painted inline on a light card is ink with a gold-ink underline. */
+    .dash-card a[style*="var(--aurum)"] {
+      color: var(--fg-1) !important;
+      text-decoration: underline;
+      text-decoration-color: var(--link-line);
+      text-underline-offset: 3px;
     }
+    .dash-card p[style*="var(--aurum)"] { color: var(--accent-text) !important; }
+    .dash-card input[type="checkbox"] { accent-color: var(--btn-fill); }
+    .dash-card .hero-cta-link { margin-top: 0; }
 
-    .tag-danger {
-      background: rgba(248,113,113,0.1);
-      color: #FCA5A5;
-      border: 1px solid rgba(248,113,113,0.2);
-    }
-
+    /* ── Pending queue ──────────────────────────────────────────────── */
+    /* The review body is code: a dark panel, read in mono. */
     .pending-body-wrap {
-      background: rgba(0,0,0,0.3);
-      border: 1px solid rgba(229,229,227,0.08);
-      border-radius: 6px;
-      padding: 12px;
-      margin-bottom: 14px;
+      --fg-1: #FAFAF8;
+      --fg-2: #A7ACB2;
+      --fg-3: #8B929A;
+      --line: rgba(250, 250, 248, 0.12);
+      background: var(--raise-dark);
+      border: 1px solid var(--line);
+      border-radius: var(--r-panel);
+      padding: var(--space-body);
+      margin-bottom: var(--space-body);
     }
 
     .pending-body {
-      font-size: 12px;
+      font-size: 13px;
       font-family: var(--mono);
-      color: var(--ash);
+      line-height: 1.6;
+      color: var(--fg-2);
       white-space: pre-wrap;
       word-break: break-word;
       max-height: 180px;
@@ -551,31 +717,92 @@
 
     .pending-actions {
       display: flex;
-      gap: 8px;
+      flex-wrap: wrap;
+      gap: var(--space-tight);
+    }
+    /* Where the three actions no longer fit one row (a phone) they form an even
+       grid, three equal cells, each button the full width of its cell and each
+       row the height of its tallest label, so Reject never wraps alone. */
+    @media (max-width: 480px) {
+      .pending-actions {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        align-items: stretch;
+      }
+      .pending-actions > .btn.btn-sm {
+        width: 100%;
+        min-width: 0;
+        padding-left: var(--space-tight);
+        padding-right: var(--space-tight);
+        text-align: center;
+      }
+    }
+
+    /* One chip style for the category, the lane and every signal: a tint fill
+       and ink text, no outline. The words say which it is. The script still puts
+       .tag-category, .tag-clean, .tag-warn and .tag-danger on a chip; none of
+       them draws anything of its own. A chip never breaks across lines. */
+    .tag {
+      display: inline-block;
+      padding: 3px var(--space-tight);
+      border-radius: var(--r-control);
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 400;
+      line-height: 1.5;
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--fg-1);
+      background: var(--tint);
+      border: 0;
+      white-space: nowrap;
     }
 
     /* ── Auto-review triage additions ───────────────────────────── */
     .count-badge {
       display: inline-block;
-      min-width: 22px;
-      padding: 1px 8px;
-      margin-left: 8px;
+      min-width: 24px;
+      padding: 2px var(--space-tight);
+      margin-left: var(--space-tight);
       border-radius: 999px;
-      background: rgba(201,168,76,0.15);
-      border: 1px solid rgba(201,168,76,0.3);
-      color: var(--aurum);
-      font-size: 12px;
-      font-weight: 600;
+      background: var(--tint);
+      border: 0;
+      color: var(--fg-1);
+      font-family: var(--sans);
+      font-size: 14px;
+      font-weight: 500;
+      line-height: 1.3;
       text-align: center;
       vertical-align: middle;
     }
 
     .bulk-bar {
       display: flex;
-      gap: 8px;
+      gap: var(--space-tight);
       align-items: center;
       flex-wrap: wrap;
-      margin-bottom: 12px;
+    }
+    /* Where the six actions no longer fit one row (below 1024) they form an even
+       grid, three across on a tablet and two across on a phone, each button the
+       full width of its cell and each row the height of its tallest label. */
+    @media (max-width: 1023px) {
+      .bulk-bar {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        align-items: stretch;
+      }
+      .bulk-bar > .btn.btn-sm {
+        width: 100%;
+        min-width: 0;
+        text-align: center;
+      }
+    }
+    @media (max-width: 640px) {
+      .bulk-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .bulk-bar > .btn.btn-sm {
+        padding-left: var(--space-tight);
+        padding-right: var(--space-tight);
+      }
     }
 
     .triage-table-wrap { overflow-x: auto; }
@@ -583,27 +810,53 @@
     .triage-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 13px;
+      font-size: 14px;
     }
 
     .triage-table th {
       text-align: left;
-      padding: 8px 10px;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--slate);
-      border-bottom: 1px solid rgba(229,229,227,0.12);
+      padding: 0 var(--space-tight) var(--space-body);
+      font-size: 12.5px;
+      font-weight: 500;
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--fg-3);
+      border-bottom: 1px solid var(--line);
       white-space: nowrap;
     }
 
 
     .triage-table td {
-      padding: 8px 10px;
-      border-bottom: 1px solid rgba(229,229,227,0.06);
+      padding: var(--space-body) var(--space-tight);
+      border-bottom: 1px solid var(--line);
       vertical-align: middle;
     }
+
+    .triage-table th:first-child, .triage-table td:first-child { padding-left: 0; }
+    .triage-table th:last-child, .triage-table td:last-child { padding-right: 0; }
+
+    /* The category column never wraps a chip: the cell holds its chip on one
+       line and keeps a floor wide enough for the longest category name
+       (payment-financial) with the cell's own padding. The lane and signal chips
+       sit in a wrapping row with one gap; whole chips move, never their words. */
+    .triage-table td.triage-cell-category {
+      white-space: nowrap;
+      min-width: 10.5rem;
+    }
+    .triage-cell-lane > span {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-tight);
+    }
+    .triage-cell-lane .tag { margin-right: 0 !important; }
+
+    .triage-cell-quality, .triage-cell-submitted, .triage-meta-badge {
+      font-family: var(--mono);
+      color: var(--fg-3);
+    }
+    .triage-cell-quality { font-size: 13px; }
+    .dash-card .triage-cell-submitted,
+    .dash-card .triage-meta-badge { font-size: 13px !important; }
 
     /* V-1: at phone width the checkbox's own tap target grows to 44x44 --
        the checkbox itself keeps its normal small, native visual size, only
@@ -632,13 +885,16 @@
       background: none;
       border: none;
       padding: 0;
-      color: var(--ivory);
-      font-size: 13px;
+      color: var(--fg-1);
+      font-family: var(--sans);
+      font-size: 15px;
       font-weight: 500;
+      line-height: 1.4;
       cursor: pointer;
       text-align: left;
       text-decoration: underline;
-      text-decoration-color: rgba(229,229,227,0.25);
+      text-decoration-color: var(--link-line);
+      text-underline-offset: 3px;
       /* P-2 (phone-width review-table fix): a title with no whitespace must
          break inside its own control instead of stretching the column --
          and so the table -- wider than the viewport. Applies at every
@@ -659,12 +915,12 @@
       max-width: 100%;
     }
 
-    .triage-title-btn:hover { text-decoration-color: var(--aurum); }
+    .triage-title-btn:hover { text-decoration-color: var(--fg-1); }
 
     .triage-why {
-      margin-top: 4px;
-      color: var(--slate);
-      font-size: 11px;
+      margin-top: var(--space-micro);
+      color: var(--fg-3);
+      font-size: 14px;
       line-height: 1.45;
     }
 
@@ -683,23 +939,16 @@
     .triage-cell-meta-mobile { display: none; }
     .triage-meta-badge { white-space: nowrap; }
 
-    .triage-group-row td {
-      padding-top: 14px;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--aurum);
+    /* A group heading is a sub-heading in the list: Archivo 500, as written. */
+    .triage-table .triage-group-row td {
+      padding: var(--space-copy) 0 var(--space-tight);
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--fg-1);
       border-bottom: none;
     }
 
-    .triage-detail-cell { padding: 0 10px 14px; }
-
-    .tag-clean {
-      background: rgba(52,211,153,0.1);
-      color: #6EE7B7;
-      border: 1px solid rgba(52,211,153,0.2);
-    }
+    .triage-detail-cell { padding: var(--space-body) 0; }
 
     .triage-row-done td { opacity: 0.45; }
 
@@ -718,55 +967,43 @@
        ordinary title, the longest real category enum value
        "payment-financial", the longest real no-space signal "injection"
        -- not the pathological 120-char-title/70-char-tag torture seed
-       that exists to stress the STACKED layout elsewhere, since that seed
-       never fits any width under this card's own 860px max-width cap
-       (.dash-wrap) and so can't be what "production's own table fits"
-       means). Swept the production table (no column floor) downward from
-       900: every real no-space badge <=20 chars stayed one line and the
-       wrap never scrolled sideways down to viewport 860; at 855 and below
+       that exists to stress the STACKED layout elsewhere). Swept the
+       production table (no column floor) downward from 900: every real
+       no-space badge <=20 chars stayed one line and the wrap never
+       scrolled sideways down to viewport 860; at 855 and below
        "payment-financial" wrapped to two lines. 900 is the narrowest
        EXISTING breakpoint (styles.css already has "@media (max-width:
        900px)") at or above that measured 860px threshold.
 
        Row 1 is the checkbox (44px) plus the title (spans the rest of the
-       grid). Row 2 (R2-1/R2-4) is NOT three CSS Grid columns any more --
-       a fixed-width column forces its content to fit that column's share
-       of the row regardless of the content's own natural width, which is
-       exactly what broke "CODE-EXECUTION": it was squeezed into 1/3 of a
-       291px row and had nowhere to go but break internally. Grid also
-       cannot merge three separate sibling <td>s (quality/category/lane)
-       into one shared wrapping flex line -- items given the same
-       grid-area overlap instead of flowing side by side. So row 2 is
-       instead a SEPARATE, single cell (.triage-cell-meta-mobile, built in
-       the script below) holding independent copies of the score, the
-       category tag, the lane/signal tags AND the submitted date as
-       natural-width flex items in one flex-wrap row: each keeps its own
-       content width, equal 8px gaps apply across and down (R2-1/R3-3),
-       and an item that doesn't fit moves to a new line as a whole unit --
-       including the date (R2-4), which is just the last item in that
-       same row. The four originals (.triage-cell-quality/category/lane/
-       submitted) stay in the DOM at the breakpoint and above (R2-3/R3-1:
-       unchanged there) and are hidden here.
-       Row 3 is the reason line a needs-your-eyes row carries (P-1's "any
-       reason line the row carries today"), via the same desktop-cell-
+       grid). Row 2 (R2-1/R2-4) is a SEPARATE, single cell
+       (.triage-cell-meta-mobile, built in the script below) holding
+       independent copies of the score, the category tag, the lane/signal
+       tags AND the submitted date as natural-width flex items in one
+       flex-wrap row: each keeps its own content width, equal 8px gaps
+       apply across and down (R2-1/R3-3), and an item that doesn't fit
+       moves to a new line as a whole unit -- including the date (R2-4),
+       which is just the last item in that same row. The four originals
+       (.triage-cell-quality/category/lane/submitted) stay in the DOM at the
+       breakpoint and above (R2-3/R3-1: unchanged there) and are hidden
+       here. Row 3 is the reason line a needs-your-eyes row carries (P-1's
+       "any reason line the row carries today"), via the same desktop-cell-
        hidden/mobile-cell-shown duplication as the meta line.
 
        R3-3 (spacing): row-gap 8px separates title -> meta line -> reason
        line (one uniform grid row-gap, so both hops are 8px). Blocks
        (including a group heading before its first block) are separated
        by one uniform value, 16px -- see tbody below, which owns ALL
-       inter-row spacing now; a block no longer carries its own top/bottom
-       padding (that would add a second, different gap on top of the
-       tbody gap), and the group heading's own top padding is zeroed
-       below for the same reason. */
+       inter-row spacing now. Each block closes on its own 1px line, with
+       16px of its own padding above the line, so a line has 16 above and
+       16 below. */
     @media (max-width: 899px) {
       .triage-table-wrap { overflow-x: visible; }
       .triage-table thead { display: none; }
       .triage-table { display: block; width: 100%; }
       /* R3-3: the ONE value that separates every pair of blocks, group
          headings included -- flex-column + gap puts it in exactly one
-         place, so "blocks" and "a group heading before its first block"
-         can't drift apart the way two independently-tuned paddings did. */
+         place. */
       .triage-table tbody {
         display: flex;
         flex-direction: column;
@@ -774,7 +1011,7 @@
         width: 100%;
       }
       .triage-table tr { display: block; }
-      .triage-table tr.triage-group-row td { display: block; padding-top: 0; }
+      .triage-table tr.triage-group-row td { display: block; padding: 0; }
 
       .triage-table tr.triage-data-row {
         display: grid;
@@ -783,9 +1020,10 @@
           "check title"
           ".     meta"
           ".     why";
-        column-gap: 10px;
+        column-gap: 8px;
         row-gap: 8px;
-        border-bottom: 1px solid rgba(229,229,227,0.06);
+        padding-bottom: 16px;
+        border-bottom: 1px solid var(--line);
       }
       .triage-table tr.triage-data-row td {
         display: block;
@@ -826,16 +1064,16 @@
          U+002D HYPHEN-MINUS is a standard break-after point); it breaks
          inside a word only as a last resort, when one unbroken run is
          itself wider than the ROW it's in (overflow-wrap: break-word, NOT
-         :anywhere, which also breaks a run that would have fit). Here
-         "the row" is this flex-wrap line, much narrower than the 140px
-         desktop column floor (R2-3, above) -- so an ordinary short badge
-         never needs this at all; only the long-tag seed does. */
+         :anywhere, which also breaks a run that would have fit). */
       .triage-cell-meta-mobile .tag,
       .triage-cell-meta-mobile .triage-meta-badge {
         overflow-wrap: break-word;
         flex: 0 0 auto;
         max-width: 100%;
       }
+      /* A chip is one line at every real width; only a run wider than the whole
+         row (no real category or signal is) may break, as a last resort. */
+      .triage-cell-meta-mobile .tag { white-space: normal; }
 
       /* The desktop copies (nested under the title; the four cells above)
          are hidden below the breakpoint -- the separate mobile cells take over so
@@ -857,13 +1095,27 @@
       }
     }
 
+    /* A phone: the meta line (score, category, lane, date) and the reason line run
+       the row's whole width, under the checkbox as well as under the title. The
+       score, the category and the lane chip then share the first line (a ready
+       row's three take 235 of the row's 277), and only the date, which comes last,
+       drops to the second. Beside the title column they had 225, and the lane chip
+       fell to the second line. */
+    @media (max-width: 600px) {
+      .triage-table tr.triage-data-row {
+        grid-template-areas:
+          "check title"
+          "meta  meta"
+          "why   why";
+      }
+    }
+
     /* ── API key input area ─────────────────────────────────────────── */
     .apikey-row {
       display: flex;
-      gap: 10px;
+      gap: var(--space-tight);
       align-items: flex-end;
       flex-wrap: wrap;
-      margin-bottom: 12px;
     }
 
     .apikey-row .form-group {
@@ -874,32 +1126,50 @@
     /* ── Payout row ─────────────────────────────────────────────────── */
     .payout-row {
       display: flex;
-      gap: 12px;
+      gap: var(--space-body);
       align-items: flex-end;
       flex-wrap: wrap;
     }
 
     .payout-row .form-group {
-      flex: 1;
+      flex: 0 1 320px;
       margin-bottom: 0;
       min-width: 120px;
     }
 
+    /* The Withdraw button stands as tall as the 48px field beside it. */
+    .payout-row .btn { min-height: 48px; margin-bottom: 0 !important; }
+
+    /* The rows the scripts build inline (API keys, auto-published list): their
+       rules take the page line and a row's own 16 above and below. */
+    #apikeys-content > div[style*="border-bottom"],
+    #clean-lane-published > div[style*="border-bottom"] {
+      padding: var(--space-body) 0 !important;
+      gap: var(--space-body) !important;
+      border-bottom: 1px solid var(--line) !important;
+    }
+    #clean-lane-published > div[style*="border-bottom"] span {
+      font-family: var(--mono);
+      color: var(--fg-3) !important;
+      font-size: 13px !important;
+    }
+    #apikeys-content [style*="var(--mono)"] { font-size: 13px !important; }
+
     /* ── Wallet status ──────────────────────────────────────────────── */
     .wallet-note {
-      font-size: 13px;
-      color: var(--slate);
+      font-size: 14px;
+      color: var(--fg-2);
       line-height: 1.6;
-      padding: 14px;
-      background: rgba(255,255,255,0.02);
-      border: 1px solid rgba(229,229,227,0.08);
-      border-radius: 6px;
+      padding: var(--space-copy);
+      background: var(--tint);
+      border: 1px solid var(--line);
+      border-radius: var(--r-panel);
     }
 
     .wallet-address {
       font-family: var(--mono);
-      font-size: 12px;
-      color: var(--aurum);
+      font-size: 13px;
+      color: var(--fg-1);
       word-break: break-all;
     }
 
@@ -909,76 +1179,107 @@
       align-items: center;
       justify-content: space-between;
       flex-wrap: wrap;
-      gap: 10px;
+      gap: var(--space-body);
     }
 
     /* ── Loading state ──────────────────────────────────────────────── */
     .loading-text {
       font-size: 14px;
-      color: var(--slate);
-      padding: 20px 0;
+      color: var(--fg-3);
+      padding: 0;
     }
 
     /* ── Empty state ────────────────────────────────────────────────── */
     .empty-state {
-      text-align: center;
-      padding: 28px;
-      color: var(--slate);
+      text-align: left;
+      padding: 0;
+      color: var(--fg-3);
       font-size: 14px;
     }
 
-    /* ── Spinner ────────────────────────────────────────────────────── */
+    /* ── Spinner: a still ring beside "Loading". Motion belongs to the
+       drawings only, so this does not turn. ─────────────────────────── */
     .spinner {
       display: inline-block;
       width: 14px;
       height: 14px;
-      border: 2px solid rgba(229,229,227,0.2);
-      border-top-color: var(--aurum);
+      border: 2px solid var(--line);
+      border-top-color: var(--fg-2);
       border-radius: 50%;
-      animation: spin 0.6s linear infinite;
       vertical-align: middle;
-      margin-right: 6px;
+      margin-right: var(--space-tight);
     }
 
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* ── Divider ────────────────────────────────────────────────────── */
+    /* ── Divider between the two payout methods ─────────────────────── */
     .section-sep {
       height: 1px;
-      background: rgba(229,229,227,0.08);
-      margin: 20px 0;
+      background: var(--line);
+      margin: 0;
     }
+
+    /* ── Standing consent card ──────────────────────────────────────── */
+    #clean-lane-terms {
+      padding: var(--space-body) var(--space-body);
+      border: 1px solid var(--line);
+      border-radius: var(--r-panel);
+    }
+    #clean-lane-terms summary { font-weight: 500; }
+    #clean-lane-unread {
+      gap: var(--space-body) !important;
+      padding: var(--space-body) !important;
+      border: 1px solid var(--line) !important;
+      border-radius: var(--r-panel) !important;
+      background: var(--tint) !important;
+    }
+    #clean-lane-min-quality {
+      min-height: 48px;
+      padding: 0 var(--space-body) !important;
+      background: var(--surface) !important;
+      border: 1px solid var(--ctrl-line) !important;
+      border-radius: var(--r-control) !important;
+      color: var(--fg-1) !important;
+      font-size: 16px !important;
+    }
+
+    /* The Pending Review Queue card: the script rules a 3px gold line on its left
+       edge while the queue has items. The page keeps the one line. */
+    #pending-review-card { border-left: 1px solid var(--line) !important; }
 
     /* ── Purchases table ────────────────────────────────────────────── */
     .purchases-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 13px;
+      font-size: 14px;
     }
 
     .purchases-table th {
       text-align: left;
-      color: var(--slate);
+      color: var(--fg-3);
       font-weight: 500;
-      font-size: 11px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      padding: 0 8px 10px;
-      border-bottom: 1px solid rgba(229,229,227,0.08);
+      font-size: 12.5px;
+      letter-spacing: 0;
+      text-transform: none;
+      padding: 0 var(--space-tight) var(--space-body) 0;
+      border-bottom: 1px solid var(--line);
     }
 
     .purchases-table td {
-      padding: 10px 8px;
-      border-bottom: 1px solid rgba(229,229,227,0.05);
-      color: var(--ash);
+      padding: var(--space-body) var(--space-tight) var(--space-body) 0;
+      border-bottom: 1px solid var(--line);
+      color: var(--fg-2);
       font-family: var(--mono);
+      font-size: 13px;
       vertical-align: top;
     }
 
-    /* ── Mobile nav override ────────────────────────────────────────── */
+    /* ── Phone ──────────────────────────────────────────────────────── */
     @media (max-width: 640px) {
-      .dash-card { padding: 20px 16px; }
-      .earnings-value { font-size: 22px; }
+      .dash-header { align-items: flex-start; flex-direction: column; }
+      #clean-lane-unread { flex-direction: column; align-items: flex-start !important; }
+    }
+    @media (max-width: 480px) {
+      .credit-pack-row { flex-wrap: wrap; }
+      .credit-pack-row > div:first-child { flex: 1 1 100%; }
     }
   </style>
 </head>
@@ -1001,7 +1302,7 @@
       </svg>
       <span class="wordmark">auxilo</span>
     </a>
-    <ul class="nav-links" role="list">
+    <ul class="nav-links" id="nav-menu" role="list">
       <li><a href="/for-builders" id="nav-builders">For Builders</a></li>
       <li><a href="/for-agents" id="nav-agents">For Agents</a></li>
       <li><a href="/how-it-works" id="nav-how">How It Works</a></li>
@@ -1009,12 +1310,12 @@
       <li><a href="/pricing" id="nav-pricing">Pricing</a></li>
       <li><a href="/connect" id="nav-cta-access" class="nav-cta">Connect Your Agent</a></li>
     </ul>
-    <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
+    <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-menu" onclick="toggleNav()">
       <span></span><span></span><span></span>
     </button>
   </div>
   <div class="nav-strip">
-    <a href="/dashboard" id="nav-dashboard" class="active">Dashboard</a>
+    <a href="/dashboard" id="nav-dashboard" class="active" aria-current="page">Dashboard</a>
   </div>
 </nav>
 
@@ -1024,7 +1325,8 @@
      new skip link above targets. -->
 <main id="main">
 <!-- ── Login view (shown when no session) ──────────────────────────── -->
-<div id="login-view" style="display:none">
+<div id="login-view" class="on-dark" style="display:none">
+  <div class="login-col">
   <div class="login-logo">
     <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <polygon points="16,2 30,28 2,28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
@@ -1053,6 +1355,10 @@
     <button class="btn btn-primary" id="login-btn" onclick="submitMagicLink()" style="width:100%">Send magic link</button>
   </div>
 
+  <!-- The status container is always rendered (never display:none) so the
+       confirmation inside it, which appears when #login-sent is shown, is
+       announced by a screen reader. -->
+  <div role="status">
   <div id="login-sent" style="display:none">
     <div class="alert alert-success" id="login-sent-msg"></div>
     <p style="font-size:13px;color:var(--slate);line-height:1.6">
@@ -1061,12 +1367,16 @@
       <button onclick="showLoginForm()" style="background:none;border:none;color:var(--aurum);cursor:pointer;font-size:13px;padding:0;font-family:var(--sans)">try again</button>.
     </p>
   </div>
+  </div>
+  </div>
 </div>
 
 <!-- ── Dashboard view (shown when session exists) ──────────────────── -->
 <div id="dash-view" style="display:none">
   <div class="dash-wrap">
 
+    <div class="dash-band on-dark">
+    <div class="dash-inner">
     <div class="dash-header">
       <div>
         <h1 class="dash-title">Account Dashboard</h1>
@@ -1085,6 +1395,11 @@
     <div id="dash-summary-bar" style="font-size:13px;margin-bottom:24px">
       <span id="summary-published" style="display:none"><span style="color:var(--slate)">Published</span> <span id="summary-published-figure" style="color:var(--ivory)"></span></span><span id="summary-pending-sep" style="display:none"> · </span><span id="summary-pending" style="display:none"><span style="color:var(--slate)">Pending review</span> <span id="summary-pending-figure" style="color:var(--ivory)"></span></span><span id="summary-earnings-sep" style="display:none"> · </span><span id="summary-earnings" style="display:none"><span style="color:var(--slate)">Earnings accrued</span> <span id="summary-earnings-figure" style="color:var(--ivory)"></span></span>
     </div>
+    </div>
+    </div>
+
+    <div class="dash-body on-tint">
+    <div class="dash-inner">
 
     <!-- Global alert -->
     <div id="dash-alert" class="alert" role="alert" style="display:none;margin-bottom:20px"></div>
@@ -1118,7 +1433,7 @@
         <div class="code-block" id="dash-setup-block" style="margin-bottom:16px">
           <div class="code-block-header">
             <span class="code-block-lang">One command. Any terminal.</span>
-            <button class="copy-btn" id="copy-dash-setup" onclick="copyDashSetupCode()" aria-label="Copy command">Copy the Setup Command</button>
+            <button class="copy-btn" id="copy-dash-setup" onclick="copyDashSetupCode()" aria-label="Copy the Setup Command">Copy the Setup Command</button>
           </div>
           <pre id="dash-setup-code">npx auxilo setup</pre>
         </div>
@@ -1284,6 +1599,8 @@
       <div id="purchases-content" style="display:none"></div>
     </div>
 
+    </div>
+    </div>
   </div>
 </div>
 </main>
@@ -1299,7 +1616,7 @@
   <div id="terms-dialog" role="dialog" aria-modal="true" aria-labelledby="terms-dialog-title">
     <h2 id="terms-dialog-title" class="dash-card-title">Terms of Service</h2>
     <div id="terms-gate-alert" class="alert" role="alert" style="display:none;margin-bottom:12px"></div>
-    <div id="terms-scroll-region" tabindex="0" aria-label="Terms of Service, scrollable"></div>
+    <div id="terms-scroll-region" role="region" tabindex="0" aria-label="Terms of Service, scrollable"></div>
     <div id="terms-load-error" style="display:none">
       <p style="font-size:14px;color:var(--slate);margin:12px 0 10px;line-height:1.6">The Terms did not load. Try again.</p>
       <button class="btn btn-ghost btn-sm" id="terms-retry-btn" onclick="loadTermsDialogContent()">Try Again</button>
@@ -1327,15 +1644,15 @@
       <span class="wordmark">auxilo</span>
     </a>
     <p class="footer-meta">
-      <a href="/api">API</a> ·
-      <a href="/about">About</a> ·
-      <a href="/writing">Writing</a> ·
-      <a href="/status">Status</a> ·
-      <a href="/.well-known/security.txt">Security</a> ·
-      <a href="/.well-known/agent.json">Agent card</a> ·
-      <a href="/terms">Terms</a> ·
-      <a href="/privacy">Privacy</a> ·
-      <a href="https://github.com/silent-architects/auxilo">GitHub</a>
+      <span class="fm-item"><a href="/api">API</a> ·</span>
+      <span class="fm-item"><a href="/about">About</a> ·</span>
+      <span class="fm-item"><a href="/writing">Writing</a> ·</span>
+      <span class="fm-item"><a href="/status">Status</a> ·</span>
+      <span class="fm-item"><a href="/.well-known/security.txt">Security</a> ·</span>
+      <span class="fm-item"><a href="/.well-known/agent.json">Agent card</a> ·</span>
+      <span class="fm-item"><a href="/terms">Terms</a> ·</span>
+      <span class="fm-item"><a href="/privacy">Privacy</a> ·</span>
+      <span class="fm-item"><a href="https://github.com/silent-architects/auxilo">GitHub</a></span>
     </p>
   </div>
 </footer>
@@ -1522,6 +1839,21 @@
     hide('login-sent');
     hideAlert('login-alert');
   };
+
+  // Enter in the email field does what a click on "Send magic link" does: it
+  // calls the same function, and does nothing while the button is disabled (a
+  // request is in flight), exactly as a click on a disabled button does nothing.
+  (function () {
+    var emailField = document.getElementById('login-email');
+    if (!emailField) return;
+    emailField.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' || e.isComposing) return;
+      var sendBtn = document.getElementById('login-btn');
+      if (sendBtn && sendBtn.disabled) return;
+      e.preventDefault();
+      window.submitMagicLink();
+    });
+  }());
 
   // ── Sign out ────────────────────────────────────────────────────────
   window.signOut = function () {
@@ -3266,6 +3598,7 @@
     var box = document.createElement('input');
     box.type = 'checkbox';
     box.id = 'triage-check-' + row.id;
+    box.setAttribute('aria-labelledby', 'triage-title-' + row.id);
     box.onchange = function () { setRowChecked(row.id, box.checked); };
     checkLabel.appendChild(box);
     tdCheck.appendChild(checkLabel);
@@ -3316,6 +3649,9 @@
     tdTitle.setAttribute('role', 'cell');
     var titleBtn = document.createElement('button');
     titleBtn.className = 'triage-title-btn';
+    titleBtn.id = 'triage-title-' + row.id;
+    titleBtn.setAttribute('aria-expanded', 'false');
+    titleBtn.setAttribute('aria-controls', 'triage-detail-' + row.id);
     titleBtn.textContent = row.title || '(no title)'; // textContent -- safe
     titleBtn.onclick = function () { toggleTriageDetail(row, tr); };
     tdTitle.appendChild(titleBtn);
@@ -3427,8 +3763,13 @@
   }
 
   function toggleTriageDetail(row, tr) {
+    var toggleBtn = tr.querySelector('.triage-title-btn');
     var existing = document.getElementById('triage-detail-' + row.id);
-    if (existing) { existing.remove(); return; }
+    if (existing) {
+      existing.remove();
+      if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'false');
+      return;
+    }
 
     var detailTr = document.createElement('tr');
     detailTr.id = 'triage-detail-' + row.id;
@@ -3473,6 +3814,7 @@
 
     detailTr.appendChild(td);
     tr.parentNode.insertBefore(detailTr, tr.nextSibling);
+    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
 
     ensurePendingBodies()
       .then(function (map) {
@@ -4063,14 +4405,6 @@
     el.appendChild(table);
   }
 
-  // ── Navigation toggle (mobile) ───────────────────────────────────────
-  window.toggleNav = function () {
-    var nav = document.querySelector('.nav-links');
-    var btn = document.getElementById('hamburger');
-    if (!nav) return;
-    var isOpen = nav.classList.toggle('nav-open');
-    if (btn) btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-  };
 
   // ── Boot ─────────────────────────────────────────────────────────────
   function boot() {
@@ -4172,5 +4506,81 @@
 })();
 </script>
 
+<script>
+// ── Mobile navigation (the same block on every page) ──
+// Open: the page behind the menu goes inert and focus moves to the first link. Tab and Shift+Tab
+// stay inside the menu. Escape, the button, a chosen link, or a window wide enough to show the
+// links in a row closes it and hands the page back; Escape and the button return focus to the button.
+(function () {
+  var bar = document.getElementById('main-nav');
+  var nav = document.querySelector('.nav-links');
+  var btn = document.getElementById('hamburger');
+  if (!bar || !nav || !btn) return;
+  var wide = window.matchMedia('(min-width: 901px)');
+  var held = [];
+
+  function isOpen() { return nav.classList.contains('nav-open'); }
+
+  function open() {
+    nav.classList.add('nav-open');
+    btn.setAttribute('aria-expanded', 'true');
+    // Behind the menu: everything outside the navigation, and the logo and the sign-in strip, which the open menu covers.
+    var behind = Array.prototype.filter.call(document.body.children, function (el) {
+      return el !== bar && !/^(SCRIPT|STYLE|LINK|TEMPLATE|NOSCRIPT)$/.test(el.tagName);
+    });
+    Array.prototype.push.apply(behind, bar.querySelectorAll('.nav-logo, .nav-strip'));
+    behind.forEach(function (el) {
+      if (!el.hasAttribute('inert')) { el.setAttribute('inert', ''); held.push(el); }
+    });
+    var first = nav.querySelector('a');
+    if (first) first.focus();
+  }
+
+  function close(refocus) {
+    nav.classList.remove('nav-open');
+    btn.setAttribute('aria-expanded', 'false');
+    held.forEach(function (el) { el.removeAttribute('inert'); });
+    held = [];
+    if (refocus) btn.focus();
+  }
+
+  window.toggleNav = function toggleNav() {
+    if (isOpen()) close(true); else open();
+  };
+
+  Array.prototype.forEach.call(nav.querySelectorAll('a'), function (a) {
+    a.addEventListener('click', function () { if (isOpen()) close(false); });
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (!isOpen()) return;
+    if (e.key === 'Escape' || e.key === 'Esc') {
+      e.preventDefault();
+      close(true);
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    // The controls the open menu shows, in reading order: its links, then the button.
+    var ring = Array.prototype.slice.call(nav.querySelectorAll('a')).concat(btn);
+    var first = ring[0];
+    var last = ring[ring.length - 1];
+    var at = document.activeElement;
+    if (ring.indexOf(at) === -1) {
+      e.preventDefault();
+      (e.shiftKey ? last : first).focus();
+    } else if (e.shiftKey && at === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && at === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  });
+
+  if (wide.addEventListener) {
+    wide.addEventListener('change', function (e) { if (e.matches && isOpen()) close(false); });
+  }
+})();
+</script>
 </body>
 </html>

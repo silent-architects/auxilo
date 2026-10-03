@@ -93,11 +93,13 @@ function faqJsonLdEntries(html) {
   return faqNode.mainEntity;
 }
 
+// Design rebuild: a step card is a drawing (.step-art) over a body (.step-body) and carries no
+// numeral, so a step is found by its position among the three .step-body blocks, in order.
+// `num` keeps the old '01'/'02'/'03' labels the callers already pass.
 function step(html, num) {
-  const re = new RegExp(
-    `<div class="step">\\s*<div class="step-header">\\s*<span class="step-number">${num}</span>\\s*</div>\\s*<h3>([^<]*)</h3>\\s*<p>([\\s\\S]*?)</p>\\s*</div>`
-  );
-  const m = html.match(re);
+  const bodies = [...html.matchAll(/<div class="step-body">\s*<h3>([^<]*)<\/h3>\s*<p>([\s\S]*?)<\/p>\s*<\/div>/g)];
+  assert.equal(bodies.length, 3, 'exactly three step bodies on the page');
+  const m = bodies[Number(num) - 1];
   assert.ok(m, `step ${num} located`);
   return { heading: m[1], body: m[2] };
 }
@@ -210,7 +212,9 @@ describe('LAUNCH-WAVE /for-builders: new tests (write-first, per BUILDER-RULES)'
   });
 
   describe('4. The drafting boundary pair (R3: back in the note, exactly once; step 02 carries none; FIX-UNIT-2B Part A adds a second served location, in both its visible and JSON-LD forms; VISION PASS row V-12 prepends a new first sentence to the note)', () => {
-    const V12_SENTENCE = 'To turn captured sessions into learnings, sign in to Claude Code or set your own model API key with <code style="font-family:var(--mono);font-size:12px;color:var(--aurum);">npx auxilo provider set</code>.';
+    // Design rebuild: the command is a bare <code>; its mono face and colour come from the
+    // stylesheet now (an inline gold colour is unreadable on the light ground).
+    const V12_SENTENCE = 'To turn captured sessions into learnings, sign in to Claude Code or set your own model API key with <code>npx auxilo provider set</code>.';
 
     it('the boundary pair appears exactly three times in the raw served file: the JSON-LD mirror of the new FAQ answer (head), the note under the steps (body), and the new FAQ answer\'s visible text (body) — FIX-UNIT-2B Part A, Q-01 REV 2 requires it verbatim in both the visible answer and its JSON-LD twin', () => {
       assert.equal(countOccurrences(STATIC_HTML, DRAFTING_BOUNDARY), 3, 'boundary pair appears exactly three times: new-FAQ JSON-LD + the note + new-FAQ visible answer');
@@ -285,9 +289,11 @@ describe('LAUNCH-WAVE /for-builders: new tests (write-first, per BUILDER-RULES)'
 
     it('B-09 heading ("Live Numbers") and the B-10 callout are present, verbatim', () => {
       assert.equal(countOccurrences(STATIC_HTML, `<h2 id="earnings-heading" >${B09_HEADING}</h2>`), 1);
-      const calloutMatch = STATIC_HTML.match(/<div class="value-callout">([\s\S]*?)<\/div>/);
-      assert.ok(calloutMatch, '.value-callout present');
+      // Design rebuild: the callout is the lede paragraph beside the drawing, with no box of its own.
+      const calloutMatch = STATIC_HTML.match(/<section id="earnings-projection"[\s\S]*?<p class="lede">([\s\S]*?)<\/p>/);
+      assert.ok(calloutMatch, 'the callout lede paragraph is present in #earnings-projection');
       assert.equal(normalize(calloutMatch[1]), B10_TEXT);
+      assert.doesNotMatch(STATIC_HTML, /class="value-callout"/, 'the boxed callout is gone (positive control above: the text itself is still served)');
     });
   });
 

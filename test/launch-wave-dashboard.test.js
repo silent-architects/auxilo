@@ -473,7 +473,8 @@ describe('FIX-UNIT A5b: dashboard card titles are headings', () => {
     assert.match(titleRule, /margin:\s*0;/, '.dash-title must reset the default h1 margin');
     const cardTitleRule = sliceBetween(DASHBOARD_HTML, '.dash-card-title {', '/* ── Earnings grid');
     assert.match(cardTitleRule, /margin-top:\s*0;/, '.dash-card-title must reset the default h2 top margin');
-    assert.match(cardTitleRule, /margin-bottom:\s*20px;/, '.dash-card-title keeps its existing bottom margin');
+    // Design pass: card title to content is 24 -- this 8 plus the card's own 16 stack gap.
+    assert.match(cardTitleRule, /margin-bottom:\s*8px;/, '.dash-card-title carries the 8px that, with the 16px card stack gap, makes title to content 24');
   });
 
   it('heading order, signed-out view (#login-view): exactly one <h1>, no <h2>-<h6>', () => {
@@ -724,5 +725,47 @@ describe('BUILD-SPEC test case 31: GOV-2 A6 — the reorder never bridges Credit
       assert.ok(!/\/account\/credits/.test(region), `${name} region never calls /account/credits`);
       assert.ok(!/\/account\/purchases/.test(region), `${name} region never calls /account/purchases`);
     }
+  });
+});
+
+// ─── Design pass: grounds, head and the look hooks ──────────────────────────
+//
+// The dashboard was rebuilt to the new look without a script change: a dark
+// sign-in screen, a dark header band over a tint body of white cards. These
+// pin the static facts the look hangs on (the head, the grounds, the order of
+// the wrappers). Behaviour and strings are pinned by the tests above.
+
+describe('Design pass: dashboard head, grounds and style hooks', () => {
+  const styleBlock = DASHBOARD_HTML.slice(DASHBOARD_HTML.indexOf('<style>'), DASHBOARD_HTML.indexOf('</style>'));
+
+  it('preloads the Newsreader display face once and never the retired Plex Mono 500 (positive control: the 400 face is still preloaded)', () => {
+    const link = '<link rel="preload" href="/fonts/NewsreaderDisplay300.a07d3c5c.woff2" as="font" type="font/woff2" crossorigin />';
+    assert.equal(DASHBOARD_HTML.split(link).length - 1, 1, 'one Newsreader preload');
+    assert.ok(!DASHBOARD_HTML.includes('PlexMono500'), 'the retired weight 500 face is not named');
+    assert.ok(DASHBOARD_HTML.includes('PlexMono400.0698749e.woff2'), 'positive control: the 400 face is still preloaded');
+  });
+
+  it('the sign-in screen is a dark ground with the form in a 400 column wrapper', () => {
+    assert.match(DASHBOARD_HTML, /<div id="login-view" class="on-dark" style="display:none">\s*<div class="login-col">/);
+    assert.match(styleBlock, /\.login-col\s*\{[^}]*max-width:\s*400px;/, 'the column is 400 wide');
+  });
+
+  it('the signed-in view is a dark header band, then the tint body, with the title in the band and every card in the body', () => {
+    const view = sliceBetween(DASHBOARD_HTML, '<div id="dash-view"', '<!-- AD sheet 9 / packet 3 rev 2: site footer link row');
+    const band = view.indexOf('class="dash-band on-dark"');
+    const body = view.indexOf('class="dash-body on-tint"');
+    const title = view.indexOf('<h1 class="dash-title">');
+    const firstCard = view.indexOf('class="dash-card"');
+    const gate = view.indexOf('id="terms-gate"');
+    assert.ok(band > -1 && body > band, 'the band comes first, the body after it');
+    assert.ok(title > band && title < body, 'the page title sits in the band');
+    assert.ok(gate > body && firstCard > body, 'every card sits in the tint body');
+  });
+
+  it('the page block carries no uppercase label, no animation and no gold left border (positive control: it does carry the card rule)', () => {
+    assert.match(styleBlock, /\.dash-card\s*\{/, 'positive control: the card rule is in the page block');
+    assert.ok(!/text-transform:\s*uppercase/.test(styleBlock), 'no uppercase label');
+    assert.ok(!/@keyframes|animation:/.test(styleBlock), 'the spinner is a still ring: motion belongs to the drawings');
+    assert.ok(!/border-left:\s*[23]px/.test(styleBlock), 'no coloured left border');
   });
 });

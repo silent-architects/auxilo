@@ -15,6 +15,30 @@
  * The verbatim original is reference-only and does not live in the
  * repository (per the coordinator's Round 3 resume note).
  *
+ * Design rebuild, sheet v2 (the Art Director's re-rule for the new type scale):
+ *   rule 5: an h1 or h2 to the first visible thing under it is 24 when that
+ *     thing is text and 48 when it is a box (a card, a grid, a table, a list of
+ *     rows, a drawing, a code block); an h3 is 16. A heading with its content
+ *     BESIDE it (the heading-left layout: the following unit does not overlap
+ *     the heading horizontally) is not measured, and is listed in
+ *     `besideExempt` (and counted per width in `besideExemptCount`) so the
+ *     report can name every one and a test can pin how many there are. A
+ *     following unit that overlaps the heading horizontally and starts above
+ *     the heading's bottom edge is a real overlap, and FAILS.
+ *   rule 6: a card (the elements rule 9 identifies: a repeated, boxed element in
+ *     a grid or flex parent, outside any drawing; a panel inside a drawing, a chip
+ *     and a button are not cards) has the same padding on all four sides, and it
+ *     is 32. Every card is logged, pass or fail.
+ *   rule 7: cards in a grid are 24 apart; rows joined by a 1px line have equal
+ *     top and bottom padding of 16 or 24.
+ *   rule 9: a card is the surface colour, a 1px line and a 14px radius, on
+ *     whichever ground it sits.
+ *
+ * Round 5 (reading document): a route named in READING_RHYTHM is one ground in one column, so rule 3
+ * holds each section after the hero to half of the reading gap on each side and rule 4 holds the gap
+ * between two such sections to the reading gap (64 at 1280, 48 at 768, 32 at 375). Nothing else changes:
+ * every other route is measured exactly as it was, and no rule is loosened.
+ *
  * V-7 (band rhythm): "A band is a section with no heading that holds a
  * single row. A band's top and bottom padding is the band rhythm: 64 at
  * 1280, 48 at 768, 32 at 375." Rule 10 (the Art Director's own bands/
@@ -28,9 +52,17 @@
  * automatically once the band's own padding is band-rhythm.
  */
 
-const READING_PAGES = new Set(['/about', '/connect', '/terms', '/privacy', '/legal/subprocessors', '/legal/supported-clients']);
+const READING_PAGES = new Set(['/terms', '/privacy', '/legal/subprocessors', '/legal/supported-clients']);
 const RHYTHM = { '1280': 120, '768': 80, '375': 64 };
 const BAND_RHYTHM = { '1280': 64, '768': 48, '375': 32 };
+// A reading document: one ground, one column, read top to bottom. The gap between two of its sections is
+// 64 at 1280, 48 at 768 and 32 at 375 (box to box, rule 4), so each section carries half of it above and half
+// below (rule 3). The first section, the dark hero, keeps the full rhythm. The map names the routes that are
+// measured this way; every other route is measured exactly as before. (The page stays on the page gutter and
+// keeps its hero heading rule, so it is not in READING_PAGES, which is the legal pages' wider gutter.)
+const READING_RHYTHM = {
+  '/how-submissions-work': { '1280': 64, '768': 48, '375': 32 },
+};
 const PAGE_GUTTER = { '1280': 90, '768': 20, '375': 16 };
 const READING_GUTTER = { '1280': 304, '768': 44, '375': 16 };
 const SCALE = [2, 4, 8, 16, 24, 32, 48, 64, 80, 90, 120, 304, 44]; // content + layout tokens
@@ -42,22 +74,35 @@ const SEAM_TOL = 1;
 
 function near(a, b, tol = TOL) { return Math.abs(a - b) <= tol; }
 
-// Pages that are a single reading column, not a stack of <section>s.
-const NOT_SECTIONED_PAGES = new Set(['/about', '/connect']);
+// Rule 6. Card families that do not take 32 on all four sides, each by a layout the Art Director ruled.
+// They are logged as passing with the reason attached, listed in the report, and pinned: a new family fails,
+// and an entry no card matches any more is reported as unused, so this list cannot go stale in silence.
+//  - a step card is a white card with a full-bleed dark drawing on top and a padded body under it (the
+//    homepage comp's own .step and .step-body): the card itself carries no padding, the body 24.
+//  - a client card on a phone (480 and down) is the compact card (padding 16), ruled in round 3.
+const CARD_PADDING_EXCEPTIONS = [
+  { id: 'step', match: /^div\.steps > step$/, reason: 'a step card: a full-bleed dark drawing over a body padded 24 (the comp\'s .step and .step-body)' },
+  { id: 'flow-step', match: /^div\.flow-track > flow-step$/, reason: 'a flow step is the shared step card: a full-bleed dark drawing over a padded body' },
+  { id: 'ww-cell-phone', match: /^ul\.ww-list > ww-cell\b/, widths: [375], reason: 'a client card on a phone is the compact card (padding 16), ruled in round 3' },
+];
+
+// Every page is a stack of sections now: /about and /connect carry the
+// standard gutter, and the legal pages (the only reading pages left) are
+// measured through the .legal-wrap block like any other.
 // Wrappers explicitly off the rhythm-padding rule (login-view: B-9/B12,
-// the sign-in card's own layout, untouched by this build; ww-wrap: B6).
-const RHYTHM_EXEMPT_SELECTORS = /ww-wrap|login-view/;
+// the sign-in card's own layout, untouched by this build).
+const RHYTHM_EXEMPT_SELECTORS = /login-view/;
 
 const RULE_NAMES = {
   1: 'A3-1 section gutter-left = gutter-right (centering)',
   2: 'A3-2 section gutter = nav gutter = footer gutter',
   3: 'A3-3 section padding-top = padding-bottom = rhythm, hero included',
   4: 'A3-4 seam = sum of adjacent section paddings',
-  5: 'A3-5 heading -> first visible thing = 16',
-  6: 'A3-6 card padding equal 4 sides = 32',
-  7: 'A3-7 list/step/FAQ item gap = 16, joined row = 2 (narrative check)',
+  5: 'A3-5 h1/h2 -> first thing = 24 (text) or 48 (box); h3 -> first thing = 16; beside is exempt and counted, an overlap fails',
+  6: 'A3-6 card padding equal 4 sides = 32 (every card logged)',
+  7: 'A3-7 cards in a grid 24 apart; rows joined by a 1px line pad 16 or 24, top = bottom',
   8: 'A3-8 every margin/padding/gap is a scale value',
-  9: 'A3-9 joined rows: gap=2, tint bg, card bg obsidian',
+  9: 'A3-9 a card is the surface colour, a 1px line and a 14px radius, on its own ground',
   10: 'A3-10 bands/strips are sections (padding = rhythm)',
 };
 
@@ -76,6 +121,10 @@ function evaluateRules(d, fold, opts) {
   const failures = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: [] };
   const passCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
   const totalChecks = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
+  const besideExempt = [];
+  const besideExemptCount = { 1280: 0, 768: 0, 375: 0 };
+  const documentedExceptions = [];
+  const usedCardExceptions = new Set();
 
   function log(rule, page, width, msg, pass) {
     totalChecks[rule]++;
@@ -88,22 +137,12 @@ function evaluateRules(d, fold, opts) {
       const rec = d[page] && d[page][width];
       if (!rec || rec.error) continue;
       const chromeTags = new Set(['nav#main-nav', 'footer']);
+      // The gap between two sections of a reading document at this width (null on every other route).
+      const readingGap = READING_RHYTHM[page] ? READING_RHYTHM[page][width] : null;
 
       // Rule 1: box-gutter-left = box-gutter-right.
       for (const s of rec.sections) {
         if (s.boxGutterLeft == null || chromeTags.has(s.selector)) continue;
-        // Investigated, documented exception (matches the Art Director's
-        // own SPACING-VERIFY.md #1 finding verbatim): /connect's
-        // p.page-foot reads asymmetric because the measurement's own
-        // wrapper-descent (contentWrapper(), single-visible-child descent)
-        // walks into a bare inline <a> inside the paragraph that does not
-        // itself fill the paragraph's own centred column -- the <p> is
-        // genuinely centred; the wrapper-descent picks the wrong box to
-        // measure. Not a page defect.
-        if (page === '/connect' && s.selector === 'p.page-foot') {
-          log(1, page, width, `${s.selector} gutterL=${s.boxGutterLeft} gutterR=${s.boxGutterRight} -- measurement artifact (wrapper-descent into a non-filling inline <a>), not a page defect`, true);
-          continue;
-        }
         const ok = near(s.boxGutterLeft, s.boxGutterRight);
         log(1, page, width, `${s.selector} gutterL=${s.boxGutterLeft} gutterR=${s.boxGutterRight}`, ok);
       }
@@ -134,25 +173,23 @@ function evaluateRules(d, fold, opts) {
       }
 
       // Rule 3: section padding-top = padding-bottom = rhythm, hero included.
-      if (!NOT_SECTIONED_PAGES.has(page)) {
-        for (const s of rec.sections) {
-          if (chromeTags.has(s.selector)) continue;
-          if (RHYTHM_EXEMPT_SELECTORS.test(s.selector)) continue;
-          const isStatedFlush = (/section-raised/.test(s.selector) && s.padding.top === 0 && s.padding.bottom === 0 && page === '/for-agents')
-            || isFlushExceptionExtra(s, page);
-          if (isStatedFlush) { log(3, page, width, `${s.selector} flush strip 0/0 -- stated exception`, true); continue; }
-          // V-7: a band (checked again, positively, under rule 10 too)
-          // uses the band rhythm here, not the full section rhythm -- but
-          // top must still equal bottom, at that value.
-          const isBand = bandSelectors.some((sel) => s.selector.includes(sel));
-          const rhythmForThis = isBand ? BAND_RHYTHM[width] : RHYTHM[width];
-          const topOk = near(s.padding.top, rhythmForThis);
-          const botOk = near(s.padding.bottom, rhythmForThis);
-          const eqOk = near(s.padding.top, s.padding.bottom);
-          log(3, page, width, `${s.selector} padding-top=${s.padding.top} padding-bottom=${s.padding.bottom}, ruled=${rhythmForThis}/${rhythmForThis}${isBand ? ' (band rhythm)' : ''}`, topOk && botOk && eqOk);
-        }
-      } else {
-        log(3, page, width, `main padding checked via A1b box-gutter proof`, true);
+      for (const s of rec.sections) {
+        if (chromeTags.has(s.selector)) continue;
+        if (RHYTHM_EXEMPT_SELECTORS.test(s.selector)) continue;
+        const isStatedFlush = (/section-raised/.test(s.selector) && s.padding.top === 0 && s.padding.bottom === 0 && page === '/for-agents')
+          || isFlushExceptionExtra(s, page);
+        if (isStatedFlush) { log(3, page, width, `${s.selector} flush strip 0/0 -- stated exception`, true); continue; }
+        // V-7: a band (checked again, positively, under rule 10 too)
+        // uses the band rhythm here, not the full section rhythm -- but
+        // top must still equal bottom, at that value.
+        const isBand = bandSelectors.some((sel) => s.selector.includes(sel));
+        // A section after the hero on a reading document carries half of the reading gap on each side.
+        const isReadingSection = readingGap != null && s.index > 0;
+        const rhythmForThis = isReadingSection ? readingGap / 2 : (isBand ? BAND_RHYTHM[width] : RHYTHM[width]);
+        const topOk = near(s.padding.top, rhythmForThis);
+        const botOk = near(s.padding.bottom, rhythmForThis);
+        const eqOk = near(s.padding.top, s.padding.bottom);
+        log(3, page, width, `${s.selector} padding-top=${s.padding.top} padding-bottom=${s.padding.bottom}, ruled=${rhythmForThis}/${rhythmForThis}${isReadingSection ? ' (reading rhythm, half of the gap between sections)' : (isBand ? ' (band rhythm)' : '')}`, topOk && botOk && eqOk);
       }
 
       // Rule 4 / the seam test (RULING-SEAMS-2026-09-28.md, verbatim):
@@ -169,57 +206,123 @@ function evaluateRules(d, fold, opts) {
       // exactly this: a leaf's own box or, when a bordered/backgrounded
       // ancestor draws its own edge first, that ancestor's box instead
       // (M-3's box-edge extension, applied to sections in Round 3).
-      if (!NOT_SECTIONED_PAGES.has(page)) {
-        for (const seam of rec.seams) {
-          const fromSec = rec.sections.find((s) => s.selector === seam.from);
-          const toSec = rec.sections.find((s) => s.selector === seam.to);
-          if (!fromSec || !toSec) continue;
-          if (chromeTags.has(fromSec.selector) || chromeTags.has(toSec.selector)) continue;
-          // Each side's own hairline border (if it has one) sits outside
-          // what contentBox measures (a section's own border is
-          // deliberately never a box-edge candidate against itself -- see
-          // borderOf's own comment) but is still real, visible pixels
-          // between the two sections' content -- added here so a section
-          // pair that each draw a 1px divider (the .section-raised/
-          // .section-ground alternation) isn't read as a spacing defect.
-          const borderSum = (fromSec.border ? fromSec.border.bottom : 0) + (toSec.border ? toSec.border.top : 0);
-          const expected = fromSec.padding.bottom + toSec.padding.top + borderSum;
-          // R4-1 (RULING-SEAMS-2026-09-28.md): the /api alt-bg->api-section
-          // 9px exception is rejected and removed. Root cause found and
-          // fixed at the cause (public/api.html: .annotation-list
-          // li:last-child kept its border-removed sibling's 8px bottom
-          // padding with no border left to justify it -- see that file's
-          // own R4-1 comment). Tolerance tightened to the ruling's 1px
-          // (was 6, to absorb this exact unexplained residual).
-          const ok = near(seam.contentGap, expected, SEAM_TOL);
-          log(4, page, width, `seam ${seam.from}->${seam.to} = ${seam.contentGap}, expected ${expected} (${fromSec.padding.bottom}+${toSec.padding.top}${borderSum ? `+${borderSum}border` : ''})`, ok);
+      for (const seam of rec.seams) {
+        const fromSec = rec.sections.find((s) => s.selector === seam.from);
+        const toSec = rec.sections.find((s) => s.selector === seam.to);
+        if (!fromSec || !toSec) continue;
+        if (chromeTags.has(fromSec.selector) || chromeTags.has(toSec.selector)) continue;
+        // Each side's own hairline border (if it has one) sits outside
+        // what contentBox measures (a section's own border is
+        // deliberately never a box-edge candidate against itself -- see
+        // borderOf's own comment) but is still real, visible pixels
+        // between the two sections' content -- added here so a section
+        // pair that each draw a 1px divider (the .section-raised/
+        // .section-ground alternation) isn't read as a spacing defect.
+        const borderSum = (fromSec.border ? fromSec.border.bottom : 0) + (toSec.border ? toSec.border.top : 0);
+        const expected = fromSec.padding.bottom + toSec.padding.top + borderSum;
+        // R4-1 (RULING-SEAMS-2026-09-28.md): the /api alt-bg->api-section
+        // 9px exception is rejected and removed. Root cause found and
+        // fixed at the cause (public/api.html: .annotation-list
+        // li:last-child kept its border-removed sibling's 8px bottom
+        // padding with no border left to justify it -- see that file's
+        // own R4-1 comment). Tolerance tightened to the ruling's 1px
+        // (was 6, to absorb this exact unexplained residual).
+        const ok = near(seam.contentGap, expected, SEAM_TOL);
+        log(4, page, width, `seam ${seam.from}->${seam.to} = ${seam.contentGap}, expected ${expected} (${fromSec.padding.bottom}+${toSec.padding.top}${borderSum ? `+${borderSum}border` : ''})`, ok);
+        // A reading document: the gap between two of its sections is the reading rhythm itself, not only
+        // the sum of whatever the two paddings happen to be (the hero's seam is the full rhythm and is
+        // judged by the sum above).
+        if (readingGap != null && fromSec.index > 0 && toSec.index > 0) {
+          log(4, page, width, `reading seam ${seam.from}->${seam.to} = ${seam.contentGap}, ruled ${readingGap} between two sections of a reading document`, near(seam.contentGap, readingGap, SEAM_TOL));
         }
       }
 
-      // Rule 5: heading -> first visible thing = 16.
+      // Rule 5 (sheet v2): a heading to the first visible thing under it.
+      // h1 and h2: 24 when that thing is text, 48 when it is a box (a card,
+      // a grid, a table, a list of rows, a drawing, a code block). h3: 16.
+      // A heading whose content sits BESIDE it is not measured: the unit that
+      // follows it does not overlap the heading horizontally (the
+      // heading-left layout). Each such heading is listed and counted, so a
+      // new silent exemption changes a number a test pins. A following unit
+      // that DOES overlap the heading horizontally yet starts above the
+      // heading's bottom edge is a real overlap: it fails, it is not exempt.
       for (const hg of rec.headingGaps || []) {
         if (hg.gap == null) continue;
-        const ok = near(hg.gap, 16);
-        log(5, page, width, `${hg.heading} "${hg.headingText}" -> [${hg.firstThingKind}] "${hg.firstThingText}" gap=${hg.gap}, ruled=16`, ok);
+        // Judged on the unit that follows the heading (the child of the
+        // closest common ancestor that holds the first thing), because a
+        // table's first cell sits at the table's own left edge.
+        const overlapX = Math.min(hg.headingRight, hg.followingUnitRight) - Math.max(hg.headingLeft, hg.followingUnitLeft);
+        const startsAbove = hg.followingUnitTop < hg.headingBottom - 2;
+        if (overlapX <= 1) {
+          besideExempt.push(`${page} @ ${width}: ${hg.heading} "${hg.headingText}" -> [${hg.firstThingKind}] "${hg.firstThingText}" (beside)`);
+          besideExemptCount[width]++;
+          continue;
+        }
+        if (startsAbove) {
+          log(5, page, width, `${hg.heading} "${hg.headingText}" -> [${hg.firstThingKind}] "${hg.firstThingText}" starts at ${hg.followingUnitTop}, above the heading's bottom edge ${hg.headingBottom}, and overlaps it horizontally by ${Math.round(overlapX)}px: a real overlap, not a beside layout`, false);
+          continue;
+        }
+        // The legal pages draw their h1 as a full-bleed dark band (the
+        // template's own pseudo-element). What follows the band is the next
+        // section, so the gap under that h1 is the section rhythm, the seam
+        // below a hero: measured here against the rhythm, not skipped.
+        const bandH1 = READING_PAGES.has(page) && hg.headingTag === 'h1';
+        const want = bandH1 ? RHYTHM[width] : (hg.headingTag === 'h3' ? 16 : (hg.firstThingKind === 'box' ? 48 : 24));
+        const ok = near(hg.gap, want);
+        log(5, page, width, `${hg.heading} "${hg.headingText}" -> [${hg.firstThingKind}] "${hg.firstThingText}" gap=${hg.gap}, ruled=${want}`, ok);
       }
 
-      // Rule 6: card padding equal 4 sides = 32.
-      for (const g of rec.repeatedGroups) {
-        if (g.count < 2) continue;
-        const looksLikeCard = g.padding.top > 0 && (g.parentDisplay === 'grid' || g.parentDisplay === 'flex');
-        if (!looksLikeCard) continue;
-        const padEq = near(g.padding.top, g.padding.right) && near(g.padding.top, g.padding.bottom) && near(g.padding.top, g.padding.left);
-        if (padEq && g.paddingUniform) {
-          log(6, page, width, `${g.className} padding all sides ${g.padding.top}/${g.padding.right}/${g.padding.bottom}/${g.padding.left}`, true);
+      // Rule 6: a card has the same padding on all four sides, and it is 32.
+      // Cards are the elements rule 9 identifies (rec.cards). Every card is
+      // logged: a card whose four paddings differ, or are not 32, fails.
+      for (const c of rec.cards || []) {
+        const p = c.padding;
+        const equal = near(p.top, p.right) && near(p.top, p.bottom) && near(p.top, p.left);
+        const is32 = near(p.top, 32) && near(p.right, 32) && near(p.bottom, 32) && near(p.left, 32);
+        const ok = equal && is32 && c.paddingUniform !== false;
+        const msg = `${c.parentSelector} > ${c.className} card padding ${p.top}/${p.right}/${p.bottom}/${p.left}${c.paddingUniform ? '' : ' (not the same on every card of the group)'}, ruled 32 on all four sides`;
+        const exception = ok ? null : CARD_PADDING_EXCEPTIONS.find((e) => e.match.test(`${c.parentSelector} > ${c.className}`) && (!e.widths || e.widths.includes(Number(width))));
+        if (exception) {
+          usedCardExceptions.add(exception.id);
+          documentedExceptions.push(`rule 6, ${page} @ ${width}: ${msg} -- ${exception.reason}`);
+          log(6, page, width, msg, true);
+        } else {
+          log(6, page, width, msg, ok);
         }
       }
 
-      // Rule 9: joined rows gap=2, tint bg.
-      for (const g of rec.repeatedGroups) {
-        if (g.computedColGap === 2 || g.computedRowGap === 2) {
-          const tintOk = /0\.06|rgba\(229/.test(g.parentBg);
-          log(9, page, width, `${g.className} joined-row gap=${g.computedColGap}/${g.computedRowGap} parentBg=${g.parentBg} cardBg=${g.cardBg}`, tintOk);
+      // Rule 7 (sheet v2), cards: cards in a grid are 24 apart, across a
+      // row and down a column.
+      for (const c of rec.cards || []) {
+        if (!c.inGrid) continue;
+        for (const gp of c.gaps) {
+          log(7, page, width, `${c.parentSelector} > ${c.className} cards ${gp.dir} gap=${gp.gap}, ruled=24`, near(gp.gap, 24));
         }
+      }
+      // Rule 7 (sheet v2), rows: rows joined by a 1px line have equal top and
+      // bottom padding of 16 or 24. An edge is judged where a line meets it:
+      // the first row of a list has no line above it and the last none below
+      // (that edge sits against the section's own padding), so only the edge
+      // beside a line is held to 16 or 24, and where both edges meet a line
+      // they must be equal.
+      for (const r of rec.joinedRows || []) {
+        const edges = [];
+        if (r.lineAbove) edges.push(r.padTop);
+        if (r.lineBelow) edges.push(r.padBottom);
+        if (!edges.length) continue;
+        const onScale = edges.every((v) => near(v, 16) || near(v, 24));
+        const equal = edges.length < 2 || near(r.padTop, r.padBottom);
+        log(7, page, width, `${r.selector} "${r.text}" joined row padding top/bottom=${r.padTop}/${r.padBottom} (line above ${r.lineAbove}, below ${r.lineBelow}), ruled=16 or 24, equal where both edges meet a line`, onScale && equal);
+      }
+
+      // Rule 9 (sheet v2): a card has the surface colour, a 1px line and a
+      // 14px radius, on whichever ground it sits (the page measures the
+      // surface and line tokens at the card itself).
+      for (const c of rec.cards || []) {
+        const surfaceOk = c.bg === c.surface;
+        const lineOk = c.borderColor === c.line && c.borderWidths.every((w) => near(w, 1));
+        const radiusOk = c.radii.every((r) => near(r, 14));
+        log(9, page, width, `${c.parentSelector} > ${c.className} card bg=${c.bg} (surface ${c.surface}) border=${c.borderWidths.join('/')} ${c.borderColor} (line ${c.line}) radius=${c.radii.join('/')}, ruled surface + 1px line + 14px`, surfaceOk && lineOk && radiusOk);
       }
 
       // Rule 10: bands/strips as sections -- band rhythm (V-7), not the
@@ -269,7 +372,6 @@ function evaluateRules(d, fold, opts) {
     ['td.tier-name->td', 'a table cell\'s own row -- the named table-cell exclusion'],
     ['span->span', 'inside <button class="hamburger"> -- the mobile nav toggle\'s own three icon bars (.hamburger{gap:5px}), the named "inside a button" exclusion'],
   ]);
-  const documentedExceptions = [];
   const repeatedOffScale = [...offScale.entries()].filter(([, n]) => n >= 3).sort((a, b) => b[1] - a[1]);
   for (const [key, n] of repeatedOffScale) {
     totalChecks[8]++;
@@ -284,11 +386,15 @@ function evaluateRules(d, fold, opts) {
   }
   if (totalChecks[8] === 0) { totalChecks[8] = 1; passCounts[8] = 1; }
 
-  return { totalChecks, passCounts, failures, RULE_NAMES, SCALE, RHYTHM, PAGE_GUTTER, READING_GUTTER, documentedExceptions };
+  return { totalChecks, passCounts, failures, RULE_NAMES, SCALE, RHYTHM, PAGE_GUTTER, READING_GUTTER, documentedExceptions, besideExempt, besideExemptCount, unusedCardExceptions: CARD_PADDING_EXCEPTIONS.filter((e) => !usedCardExceptions.has(e.id)).map((e) => e.id) };
 }
 
 function printReport(evalResult, fold) {
   const { totalChecks, passCounts, failures, RULE_NAMES } = evalResult;
+  if (evalResult.besideExempt) {
+    console.log(`\n=== HEADINGS EXEMPT AS BESIDE (rule 5): ${JSON.stringify(evalResult.besideExemptCount)} ===`);
+    for (const b of evalResult.besideExempt) console.log('  ' + b.replace(/\s+/g, ' '));
+  }
   for (const rule of Object.keys(RULE_NAMES)) {
     const total = totalChecks[rule];
     const pass = passCounts[rule];
@@ -315,4 +421,4 @@ function printReport(evalResult, fold) {
   }
 }
 
-module.exports = { evaluateRules, printReport, RULE_NAMES, RHYTHM, PAGE_GUTTER, READING_GUTTER, SCALE, READING_PAGES, NOT_SECTIONED_PAGES, RHYTHM_EXEMPT_SELECTORS };
+module.exports = { evaluateRules, printReport, RULE_NAMES, RHYTHM, READING_RHYTHM, PAGE_GUTTER, READING_GUTTER, SCALE, READING_PAGES, RHYTHM_EXEMPT_SELECTORS };

@@ -1,20 +1,28 @@
 /* ─── Auxilo Landing Page ──────────────────────────────────────────────────── */
 /* Brand: Obsidian #0A0A0A | Ivory #FAFAF8 | Aurum #C9A84C | Slate #8B929A | Ash #E5E5E3 */
-/* Typography: Archivo (body/headings) | IBM Plex Mono (code) */
+/* Typography: Newsreader (h1, h2) | Archivo (body, h3) | IBM Plex Mono (code, weight 400 only) */
+/* Grounds: paper by default, dark where a scope class says so (see Ground scopes under the tokens). */
+/* Short labels only: the reasoning behind each rule lives in the git history of this file. */
 
-/* AD type pairing 2026-09-06: Archivo (sans) + IBM Plex Mono (mono),
-   self-hosted, subset latin + latin-ext. Both SIL OFL 1.1. */
 @font-face {
-  font-family: 'Archivo'; font-style: normal; font-weight: 100 900; font-display: swap;
-  src: url('/fonts/ArchivoVariable.1b4d984f.woff2') format('woff2');
+  font-family: 'Archivo'; font-style: normal; font-weight: 400 600; font-display: swap;
+  src: url('/fonts/ArchivoVariable.cfd841fc.woff2') format('woff2');
+  unicode-range: U+0020-007E, U+00A0-017F, U+2010-2011, U+2013-2015, U+2017-201A, U+201C-201E, U+2020-2022, U+2026, U+2030, U+2032-2033, U+2039-203A, U+20A1, U+20A3-20A4, U+20A6-20A7, U+20A9, U+20AB-20AD, U+20B1-20B2, U+20B5, U+20B9-20BA, U+20BC-20BD, U+2122, U+2191, U+2193, U+2212, U+FEFF;
+}
+
+@font-face {
+  font-family: 'Archivo'; font-style: normal; font-weight: 400 600; font-display: swap;
+  src: url('/fonts/ArchivoVariableExt.ff8ec503.woff2') format('woff2');
+  unicode-range: U+018F, U+0192, U+019D, U+01A0-01A1, U+01AF-01B0, U+01C4-01DC, U+01E6-01E7, U+01EA-01EB, U+01FA-021B, U+022A-022D, U+0230-0233, U+0237, U+0259, U+0272, U+02B9-02BA, U+02BC, U+02C6-02C7, U+02C9, U+02DA, U+02DC-02DD, U+0304, U+0308, U+1E24-1E25, U+1E62-1E63, U+1E6C-1E6D, U+1E80-1E85, U+1E9E, U+1EA0-1EF9, U+2009, U+203E, U+2044, U+2052, U+2074, U+2113, U+2215;
 }
 @font-face {
   font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap;
   src: url('/fonts/PlexMono400.0698749e.woff2') format('woff2');
 }
+
 @font-face {
-  font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: swap;
-  src: url('/fonts/PlexMono500.0ecb6352.woff2') format('woff2');
+  font-family: 'Newsreader'; font-style: normal; font-weight: 300; font-display: swap;
+  src: url('/fonts/NewsreaderDisplay300.a07d3c5c.woff2') format('woff2');
 }
 
 /* ── Reset & Base ──────────────────────────────────────────────────────────── */
@@ -26,48 +34,19 @@
   --aurum: #C9A84C;
   --aurum-dim: rgba(201, 168, 76, 0.15);
   --aurum-border: rgba(201, 168, 76, 0.35);
-  /* AD nav re-rule sheet 2026-09-06 §2: the nav CTA's hover ground —
-     "an ash-filled button on obsidian is a louder event than a gold-filled
-     one. P2.10 was correct for an outlined ghost button and wrong for a
-     filled one." Used only by .nav-cta:hover. */
+
   --aurum-hi: #D8B95F;
   --slate: #8B929A;
   --slate-text: #8B929A;
   --ash: #E5E5E3;
-  /* Wave E2 item 10 sent the nav's active-link gold and .nav-cta's gold
-     border/text to ash. The AD nav re-rule sheet (2026-09-06 §2/§4)
-     supersedes the .nav-cta half of that call (back to a filled gold
-     button, --aurum-hi above); the active-link half is untouched by this
-     pass — see .nav-links a.active below. This token mirrors
-     --aurum-border's alpha (0.35) on ash and is still used there. The
-     wordmark triangle stroke (inline SVG in each page) is no longer a
-     fixed gold — the NAV-WAVE amendment moved it to currentColor, so
-     .nav-logo's ivory carries it and the CTA is the band's one gold
-     element. */
+
   --ash-border: rgba(229, 229, 227, 0.35);
   --code-bg: #111111;
   --section-pad: 120px 24px;
-  /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-7): "A band is a section
-     with no heading that holds a single row. A band's top and bottom
-     padding is the band rhythm: 64 at 1280, 48 at 768, 32 at 375." Half
-     the section rhythm at each width, same horizontal gutter as
-     --section-pad. */
+
   --band-pad: 64px 24px;
   --max-w: 1100px;
-  /* SPACING-0927 (BUILD-BRIEF-SPACING.md, Art Director's SPACING-SHEET.md):
-     the ruled uniform-spacing system. --gutter-base mirrors --section-pad's
-     own horizontal component at the same two breakpoints below (24/20/16)
-     -- it exists as its own token because the nav and footer need just the
-     horizontal number, not the vertical+horizontal shorthand.
-     --nav-clear is the fixed header's exact rendered height in this
-     project's own Playwright test harness (nav-row's 72px content + the
-     nav-strip's 26px + the 1px border = 99px, live-measured identical at
-     1280/768/375 -- confirmed via getBoundingClientRect, not the declared-
-     box estimate). Unlike --header-h (deliberately padded for cross-browser
-     safety margin, per its own comment below), this one is used only where
-     a test demands the exact rendered clearance, so it carries no buffer.
-     The content scale (A2): every non-zero spacing value below the layout
-     tier is one of these seven multiples of 4. */
+
   --gutter-base: 24px;
   --nav-clear: 99px;
   --space-micro: 4px;
@@ -78,86 +57,140 @@
   --space-block: 48px;
   --space-wide: 64px;
   --space-hairline: 2px;
-  /* Wave E2 item 11: the size-adjust'd fallback faces (defined near the
-     end of this sheet, next to the @font-face rules they support) sit
-     right after the primary font, ahead of the original raw fallback
-     names — a system with neither Menlo/Helvetica Neue installed just
-     falls through local()'s failure to the original chain. */
+
   --mono: 'IBM Plex Mono', 'IBM Plex Mono Fallback', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --sans: 'Archivo', 'Archivo Fallback', 'Helvetica Neue', Arial, system-ui, sans-serif;
+  --serif: 'Newsreader', 'Newsreader Fallback', Georgia, serif;
 
-  /* ── AD sheet 9: site-wide tokens ─────────────────────────────────────
-     One section-h2 size, one closing-CTA h2 size, and one hero mobile
-     padding pair, replacing the per-page values audited in
-     AD-STEP4-RESPONSIVE-QC-2026-09-06.md §1.3 and §1.9. */
-  --h2-section: clamp(28px, 3.5vw, 42px);
-  /* Wave E2 item 9: one large headline per page — the closing-CTA h2 drops
-     to the section size (42) so the h1 (56, 72 on /) is the single
-     dominant type event; amends the earlier 60-closing/42-section pair.
-     Set equal to --h2-section (rather than repointing the #footer-cta h2
-     etc. selector at var(--h2-section) directly) so --h2-cta stays a valid,
-     independently-settable token for any future page that still wants to
-     reference "the closing-CTA size" by name. /earnings' #earnings-cta h2
-     has its own hardcoded clamp(30px,4vw,52px) in earnings.html, a file
-     outside this builder's ownership — not reachable from here. */
-  --h2-cta: clamp(28px, 3.5vw, 42px);
-  /* MOBILE-HEADER-OFFSET (PUNCH-LIST, SITE-PM v102 find): #main-nav is
-     `position: fixed` at every width (see the Navigation section below), so
-     the first section on every page must reserve at least the header's
-     rendered height or its content renders underneath it. --header-h is the
-     single source of truth for that clearance, derived from THIS sheet's own
-     declared box values for #main-nav's children rather than a bare guess:
-     .nav-row's 14px+14px vertical padding + its tallest child's 44px
-     min-height (.nav-logo / .nav-cta) = 72px, + .nav-strip's explicit 26px
-     height = 98px, + #main-nav's 1px border-bottom = 99px declared-box sum.
-     Live Chrome at 375px (the SITE-PM MOBILE-HEADER-OFFSET measurement)
-     rendered the same header at 113.8px -- 14.8px taller than that sum, from
-     real font/line-height metrics the min-height floor doesn't capture. The
-     +31px on top of the 99px sum covers that 14.8px gap, the 8px minimum
-     clearance every consumer below must hold (h1.top >= header.bottom + 8),
-     and headroom for other engines/OSes, so --header-h clears the header on
-     any browser, not just the one that produced the 99px estimate. */
+  --h2-section: clamp(30px, 3.6vw, 46px);
+
+  --h2-cta: clamp(30px, 3.6vw, 46px);
+
   --header-h: calc(44px + 28px + 26px + 1px + 31px);
-  /* --hero-pad-mobile (was: var(--header-h) 16px 60px) is retired by
-     SPACING-0927: every hero now takes plain var(--section-pad) at every
-     width, and nav clearance moved to `main`'s own margin-top (see the
-     Layout Primitives section below) -- no hero needs a bespoke mobile
-     padding shorthand any more. */
 
-  /* Wave C.3b: one label-size token for the three inline drawings' SVG text
-     (index hero exchange, how-it-works approval fork, for-agents demand
-     exchange). Re-measured live at a 375px viewport (getBoundingClientRect
-     vs viewBox, per drawing): index scale 0.8605, fork scale 0.8156, demand
-     scale 0.9026. At 14px the fork's effective size was 14 * 0.8156 = 11.42,
-     under the 12px floor. 15px is the smallest whole value that clears the
-     floor on all three (fork: 15 * 0.8156 = 12.23, the tightest of the
-     three; index: 15 * 0.8605 = 12.91; demand: 15 * 0.9026 = 13.54 as the
-     token, but demand overrides back to 14 locally — see for-agents.html's
-     demand exchange <g> — because its widest label (345.8 of 364 viewBox
-     units at 14) would overflow its rect at 15 (370.7 of 364). */
   --svg-label: 15px;
+
+  --paper: #FAFAF8;
+  --tint: #F1EFE9;
+  --tint-deep: #E6E3DA;
+  --card: #FFFFFF;
+  --raise-dark: #151514;
+  --gold-ink: #7A5D10;
+  --r-control: 6px;
+  --r-panel: 10px;
+  --r-stage: 14px;
+  --shadow-panel: 0 1px 2px rgba(10, 10, 10, 0.06), 0 12px 32px -8px rgba(10, 10, 10, 0.16);
+  --shadow-panel-dark: 0 1px 0 rgba(250, 250, 248, 0.04) inset, 0 24px 48px -16px rgba(0, 0, 0, 0.7);
+
+  --h1: clamp(48px, 5vw, 64px);
+
+  /* ground-aware tokens: light values here, dark values in the dark scope below */
+  --bg: var(--paper);
+  --surface: var(--card);
+  --fg-1: #0A0A0A;
+  --fg-2: #45453F;
+  --fg-3: #5E5E57;
+  --line: #E2E0DA;
+  --accent-text: var(--gold-ink);
+  --focus-ring: #0A0A0A;
+
+  --link-line: var(--gold-ink);
+  --ctrl-line: #0A0A0A;
+  --btn-fill: #0A0A0A;
+  --btn-ink: #FAFAF8;
+  --chip-bg: var(--tint);
 }
 
-html { scroll-behavior: smooth; }
+@media (max-width: 1024px) {
+  :root { --h1: clamp(40px, 6.2vw, 56px); }
+}
 
-/* Global horizontal-overflow backstop. clip (not hidden) avoids breaking
-   position:sticky and iOS momentum-scroll. Per-element fixes below are the
-   real fix; this is the safety net. */
+.on-dark,
+#main-nav,
+body > footer,
+.code-block,
+.dw-dark,
+.step-art,
+.dw-stage-dark,
+.unsub-wrap,
+:is(body:has(> .unsub-wrap)) {
+  --bg: #0A0A0A;
+  --surface: var(--raise-dark);
+  --fg-1: #FAFAF8;
+  --fg-2: #A7ACB2;
+  --fg-3: #8B929A;
+  --line: rgba(250, 250, 248, 0.12);
+  --accent-text: var(--aurum);
+  --focus-ring: var(--aurum);
+  --link-line: rgba(250, 250, 248, 0.4);
+  --ctrl-line: rgba(250, 250, 248, 0.5);
+  --btn-fill: var(--aurum);
+  --btn-ink: var(--obsidian);
+  --chip-bg: rgba(250, 250, 248, 0.1);
+  color: var(--fg-2);
+}
+.on-dark { background: var(--bg); }
+
+body:has(> .unsub-wrap) { background: var(--bg); }
+.unsub-wrap { background: var(--bg); }
+
+body .unsub-wrap .unsub-logo .wordmark { font-weight: 500; }
+body .unsub-wrap h1.unsub-heading { font-weight: 300; }
+
+.on-tint {
+  --bg: var(--tint);
+  background: var(--bg);
+}
+
+/* a light panel inside a dark section: the light values again */
+.dw-light,
+.on-dark .dw-light {
+  --bg: var(--paper);
+  --surface: var(--card);
+  --fg-1: #0A0A0A;
+  --fg-2: #45453F;
+  --fg-3: #5E5E57;
+  --line: #E2E0DA;
+  --accent-text: var(--gold-ink);
+  --focus-ring: #0A0A0A;
+  --link-line: var(--gold-ink);
+  --ctrl-line: #0A0A0A;
+  --btn-fill: #0A0A0A;
+  --btn-ink: #FAFAF8;
+  --chip-bg: var(--tint);
+  color: var(--fg-2);
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: var(--nav-clear);
+}
+
 html, body { overflow-x: clip; }
 
 body {
-  background: var(--obsidian);
-  color: var(--ivory);
+  background: var(--paper);
+  color: var(--fg-2);
   font-family: var(--sans);
   font-size: 16px;
-  line-height: 1.6;
+  line-height: 1.65;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Base link — bare <a> in prose. Low specificity so styled nav/button/footer
-   links (which carry their own classes) win and render unchanged. Browser-default
-   blue fails WCAG on the dark bg (~2.1:1); aurum on obsidian is 8.66:1. */
-a { color: var(--aurum); text-decoration: underline; }
+strong, b { font-weight: 600; }
+/* Mono ships at weight 400 only, so mono inside bold text never asks for another weight. */
+strong code, b code { font-weight: 400; }
+
+a { color: var(--fg-1); text-decoration: underline; text-decoration-color: var(--link-line); }
+
+main p a,
+main li a {
+  color: var(--fg-1);
+  text-decoration: underline;
+  text-decoration-color: var(--link-line);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
 
 /* ── Layout Primitives ─────────────────────────────────────────────────────── */
 .container {
@@ -166,70 +199,17 @@ a { color: var(--aurum); text-decoration: underline; }
   padding: 0 var(--gutter-base);
 }
 
-/* SPACING-0927 B0-a: a section already supplies the page gutter via its own
-   --section-pad horizontal component. A bare .container nested directly in
-   a section stacked ITS OWN padding on top of that below 1200px (44px/40px
-   instead of the ruled 20px/16px). Fix the cause at every width: a
-   .container that is a section's direct child never carries its own
-   horizontal padding -- the section's padding plus centering math supplies
-   the ruled 90/20/16 gutter alone, the same way the existing >=1200px rule
-   below already does above that width. This scopes narrowly to
-   `section > .container` so the OTHER, non-doubled uses of .container
-   (status.html's .status-hero/.status-body, api.html's #api-hero -- plain
-   divs, not sections, whose own horizontal padding is zero by design and
-   which rely on .container's padding as their ONLY gutter) are untouched
-   and still get the responsive --gutter-base value above. */
 section > .container {
   padding-left: 0;
   padding-right: 0;
 }
 
-/* AD sheet 9: a section already carries --section-pad's own 24px horizontal
-   inset (below); .container's OWN 24px padding then stacks on top of it once
-   the viewport is wide enough for .container's max-width + auto-margin
-   centering to be doing the centering work, pushing content to 194px instead
-   of the intended 170px (measured live: pricing and api hero AND every
-   .container-wrapped body section on every page). Dropping the inner
-   padding at that breakpoint collapses hero and body to the same 170px edge.
-   (AD-STEP4-RESPONSIVE-QC-2026-09-06.md §1.3, §2 P2.13)
-
-   N4: the drop was originally pinned to >= 1150px, which is inside
-   .container's own max-width + auto-margin runway (--max-w: 1100px) — a
-   1150-1199px viewport centers the (padding-less) container with 25-49.5px
-   of auto-margin on each side, but a stray few px of that margin can still
-   read thinner than 24px depending on exact content width, so the gutter
-   was not guaranteed to hold. Pinning the drop to >= 1200px instead keeps
-   .container's own 24px padding the active gutter through 1150-1199px and
-   only hands off to the auto-margin once it's provably >= 24px on both
-   sides at every content width up to --max-w's 1100px. Below 1200px the
-   gutter never drops under 24px. */
 @media (min-width: 1200px) {
   .container { padding-left: 0; padding-right: 0; }
 }
 
 section { padding: var(--section-pad); }
 
-/* SPACING-0927 R2-1 (round 2, coordinator ruling): a section's space above
-   and below its content comes from the section's own padding and nothing
-   else. Below a section (or the legal template's .legal-wrap, or a
-   reading-column <main>), the leading edge of content is whichever element
-   is first in the unbroken chain of first-children from that root, at
-   whatever depth; the trailing edge is the same chain of last-children. A
-   component's own margin-top/bottom on that specific instance is the
-   overage rule 4 (the seam = twice the rhythm) was failing on. `:first-
-   child`/`:last-child` inside a descendant selector matches every element
-   in BOTH chains at once, at any depth -- not just the section's own direct
-   child -- which is what "at every depth" requires; a single pair of rules
-   covers every page without walking each component by hand. !important
-   because this is a sitewide invariant that must win over every existing
-   component rule that (correctly, for a non-edge instance) sets its own
-   margin-top/bottom -- never mind specificity per component.
-   Scope: section, .legal-wrap and reading-column main are the three content
-   roots the sheet's page-gutter system already recognizes (A1/A1b).
-   dashboard.html has no <section> and its own <main> is excluded (via
-   :not(:has(#dash-view)), matched only on that one page) because its
-   signed-in cards, the Terms dialog and the review table are out of scope
-   (R2-3). */
 :is(section, .legal-wrap, main:not(:has(#dash-view))) :first-child {
   margin-top: 0 !important;
 }
@@ -237,85 +217,85 @@ section { padding: var(--section-pad); }
   margin-bottom: 0 !important;
 }
 
-/* SPACING-0927 (A1 hero clearance / A1b reading pages): #main-nav is fixed
-   at every width, so whatever sits first in the document renders under it
-   unless something clears it. One rule, applied once, sitewide: every
-   page's <main> (and the legal template's .legal-wrap, which has no <main>
-   of its own -- see below) is pushed down by exactly the fixed nav's
-   rendered height. This is a MARGIN, deliberately separate from any
-   section's own padding-top, so a hero (or the reading column) still
-   carries a clean, literal padding-top of 120/80/64 (rule 3) while the
-   ACTUAL measured clearance from the nav's bottom edge is that same
-   120/80/64 too: margin-top (99) + the first section's own padding-top
-   (120/80/64) - the nav's real rendered bottom (99) = 120/80/64 exactly. */
 main {
   margin-top: var(--nav-clear);
 }
 
-/* A1b: the four legal routes (server.js's serveLegalPage) render
-   .legal-wrap directly under <nav>, with no <main> wrapper -- server.js
-   itself is out of this build's scope, so the fix lives entirely here.
-   .legal-wrap's own margin carries no rule from server.js's inline style
-   (only padding is set there), so no specificity fight is needed for this
-   part. */
 .legal-wrap {
   margin-top: var(--nav-clear);
 }
 
-/* server.js's inline <style> sets `.legal-wrap { padding: 120px 24px 80px }`
-   (flat, never scales, top != bottom) and loads AFTER this sheet, so an
-   equal-specificity `.legal-wrap` rule here would lose the cascade. `body
-   .legal-wrap` is more specific (0,2,0 vs 0,1,0) and wins on its own,
-   without !important. var(--section-pad) gives 120/120, 80/80, 64/64 and,
-   combined with .legal-wrap's own max-width:720px + margin:0 auto (already
-   correct, untouched), reproduces the ruled 304/44/16 reading-column gutter
-   through the exact same centering math every body section already uses
-   (A1b) -- not a bespoke value. */
 body .legal-wrap {
-  padding: var(--section-pad);
+  padding-left: var(--gutter-base);
+  padding-right: var(--gutter-base);
 }
 
-/* AD sheet 9: one section-h2 size site-wide. This is a low-specificity
-   fallback — any section heading without its own per-page rule (e.g.
-   index #own-learnings-free, .explore-section, for-agents #agent-catalog,
-   for-builders #connect) now gets the shared token instead of the browser
-   default; sections that already carry a more specific selector (an id or
-   class) still win the cascade and are unified to the same value below. */
+body .legal-wrap a,
+body .legal-back {
+  text-decoration-color: var(--link-line);
+}
+body .legal-wrap strong {
+  color: var(--fg-1);
+}
+
 section h2 {
   font-size: var(--h2-section);
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  color: var(--ivory);
+  font-weight: 300;
+  letter-spacing: -0.016em;
+  color: var(--fg-1);
+  font-family: var(--serif);
+  line-height: 1.1;
+  text-wrap: balance;
+  font-synthesis-weight: none;
 }
 
-/* SPACING-0927 R2-2a: heading to the element beneath it is 16px, named by
-   the sheet, as a low-specificity DEFAULT for every heading inside a
-   section that does not already carry a more specific rule of its own
-   (many section headings -- e.g. #setup-detail-heading, #explore-heading,
-   #operator-callout-heading and its siblings on how-submissions-work --
-   had NO margin-bottom declared anywhere and rendered flush against the
-   next element, 0px, not just "off scale"). R2-1's :last-child rule still
-   wins (!important) for a heading that happens to be a section's own last
-   visible child, per rule 4. */
+h1,
+h2 {
+  font-family: var(--serif);
+  font-weight: 300;
+  color: var(--fg-1);
+  text-wrap: balance;
+  font-synthesis-weight: none;
+}
+h1 {
+  font-size: var(--h1);
+  line-height: 1.04;
+  letter-spacing: -0.022em;
+}
+h2 {
+  font-size: var(--h2-section);
+  line-height: 1.1;
+  letter-spacing: -0.016em;
+}
+h3 {
+  font-family: var(--sans);
+  font-weight: 500;
+  font-size: 19px;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--fg-1);
+}
+
 section :is(h1, h2, h3, h4, h5, h6) {
   margin-bottom: var(--space-body);
 }
+section :is(h1, h2) {
+  margin-bottom: var(--space-copy);
+}
+section :is(h1, h2):has(+ :is(.steps, .faq-list, .dive-index, .discovery-band, .code-block, .dw-stage, .dw-panel, .trust-table-wrap, .value-tiers-table-wrap, table, pre)) {
+  margin-bottom: var(--space-block);
+}
 
-/* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-3, root cause): a
-   heading's own margin-bottom (16px, the rule above, or a more specific
-   per-component rule already at 16) only sets the gap to what follows it
-   when nothing collapses against it. Adjacent-sibling margins collapse to
-   whichever is LARGER, not their sum -- so an element that still carries
-   its OWN margin-top (a paragraph at 20/24/32px, a subsection h3/h4 at
-   24px, a numbered-step header, an FAQ h2, etc.) silently overrides the
-   heading's ruled 16px with its own larger value. This is the recurring
-   cause the Art Director's independent measurement found on 8+ pages
-   (numbered-step headings, "Common Questions", legal-page subsection
-   headings all read 20-49px instead of 16) -- fixed once, at the cause,
-   instead of hunting down and patching every individual element's
-   margin-top. Excludes the dashboard's own sign-in screen (#login-view)
-   and post-login cards (.dash-card), both explicitly out of this build's
-   scope. */
+body .legal-wrap h3 {
+  margin-bottom: var(--space-body);
+}
+
+@media (min-width: 1025px) {
+  section .aside-list > :is(h1, h2) {
+    margin-bottom: 0;
+  }
+}
+
 :is(h1, h2, h3, h4, h5, h6) + * {
   margin-top: 0 !important;
 }
@@ -324,28 +304,17 @@ section :is(h1, h2, h3, h4, h5, h6) {
   margin-top: initial !important;
 }
 
-/* AD sheet 9: one closing-CTA h2 size site-wide, replacing 60/56/52/44px
-   across index, for-builders, how-it-works, for-agents, pricing, api. */
 #footer-cta h2,
 .hiw-cta-section h2,
 .agent-cta-section h2,
 .pricing-cta-section h2,
 .api-cta-section h2 {
   font-size: var(--h2-cta);
-  font-weight: 700;
+  font-weight: 300;
 }
 
 /* ── Navigation ────────────────────────────────────────────────────────────── */
-/* AD nav re-rule sheet 2026-09-06 §1: #main-nav is now the fixed HEADER
-   BLOCK holding two stacked children — .nav-strip (the sign-in utility
-   line) and .nav-row (the existing logo/links/hamburger row). One glass
-   ground (::before below) and one bottom rule for the whole block; neither
-   child gets its own. flex-direction:column stacks them in DOM order, but
-   .nav-strip carries order:-1 so it always renders above .nav-row
-   regardless of source order (kept second in source so the byte-order the
-   existing nav tests read — the 5 labels, then the CTA — is unaffected by
-   this restructuring; the auth-slot link simply moved out of .nav-links
-   into .nav-strip, which itself sits after .nav-row in the HTML). */
+
 #main-nav {
   position: fixed;
   top: 0;
@@ -354,73 +323,36 @@ section :is(h1, h2, h3, h4, h5, h6) {
   z-index: 100;
   display: flex;
   flex-direction: column;
-  border-bottom: 1px solid rgba(229, 229, 227, 0.08);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
 }
 
-/* DR-1 fix: the glass background lives on a pseudo-element, not on #main-nav
-   itself. backdrop-filter on #main-nav would establish a containing block for
-   position:fixed descendants -- including .nav-links, the mobile menu overlay
-   -- collapsing its "fixed to viewport" box down to #main-nav's own ~84px bar.
-   A pseudo-element has no descendants, so it carries the same visual blur
-   without ever becoming a containing-block trap for .nav-links. */
-#main-nav::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: rgba(10, 10, 10, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  pointer-events: none;
-}
-
-/* AD nav re-rule sheet §1: the sign-in utility strip. Height 26px, right
-   aligned on the nav's own 24px gutter (same horizontal padding as
-   .nav-row, so the strip word and the CTA share one right margin), 12px
-   IBM Plex Mono / weight 400 / letter-spacing 0.06em, sentence case,
-   vertically centered. Colour at rest var(--slate), hover var(--ash) —
-   never ivory, never gold. Holds "Sign in" or "Dashboard" only, same href
-   (/dashboard) both states — the label swaps per served page, not the
-   link. Part of the fixed band (inside #main-nav), so it never scrolls
-   away, and it does not collapse at any width — unlike .nav-row's links,
-   it never merges into the hamburger menu. order:-1 (see #main-nav above)
-   renders it above .nav-row. */
 .nav-strip {
   order: -1;
   height: 26px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  /* SPACING-0927 B0-b: the nav has no centered max-width wrapper of its own
-     (it is the fixed full-width bar), so it cannot reuse the section+
-     container centering trick directly. This formula reproduces the exact
-     same resolved number: below the point where a 1100px column would
-     center inside the viewport, max() falls back to the flat gutter-base
-     (24/20/16, responsive at the same breakpoints --section-pad uses);
-     above it, the calc() term (identical to a centered --max-w column's own
-     margin) takes over and matches the section gutter exactly (verified
-     90px at 1280). */
+
   padding: 0 max(var(--gutter-base), calc((100vw - var(--max-w)) / 2));
-  font-family: var(--mono);
-  font-size: 12px;
+  font-family: var(--sans);
+  font-size: 14px;
   font-weight: 400;
-  letter-spacing: 0.06em;
+  letter-spacing: 0;
 }
 
+/* the owner, 2026-10-02: the strip's label looked awkward as 12px mono; it is set like a navigation link now */
 .nav-strip a {
-  color: var(--slate);
+  color: var(--fg-2);
   text-decoration: none;
+  line-height: 26px;
   transition: color 0.2s;
 }
 
 .nav-strip a:hover {
-  color: var(--ash);
+  color: var(--fg-1);
 }
 
-/* AD nav re-rule sheet §1: height is paid for out of the nav row, not the
-   page. Vertical padding drops from 20px to 14px so the header block lands
-   at the sheet's target height net of the 26px strip added above (net
-   cost 14px over the pre-strip 20px×2 nav alone). */
 .nav-row {
   display: flex;
   align-items: center;
@@ -434,7 +366,7 @@ section :is(h1, h2, h3, h4, h5, h6) {
   align-items: center;
   gap: 10px;
   text-decoration: none;
-  color: var(--ivory);
+  color: var(--fg-1);
   min-height: 44px;
 }
 
@@ -447,7 +379,7 @@ section :is(h1, h2, h3, h4, h5, h6) {
   font-size: 18px;
   font-weight: 500;
   letter-spacing: -0.01em;
-  color: var(--ivory);
+  color: var(--fg-1);
 }
 
 .nav-links {
@@ -458,39 +390,34 @@ section :is(h1, h2, h3, h4, h5, h6) {
 }
 
 .nav-links a {
-  color: var(--slate);
+  color: var(--fg-2);
   text-decoration: none;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 400;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
   transition: color 0.2s;
 }
 
-.nav-links a:hover { color: var(--ivory); }
+.nav-links a:hover { color: var(--fg-1); }
 /* Wave E2 item 10: active-link gold -> ash. */
-.nav-links a.active { color: var(--ash); }
+.nav-links a.active { color: var(--fg-1); }
 
-/* AD sheet 9: nav CTA >= 36px tall (measured 35px live).
-   Wave E2 item 12: raised to 44px (measured 40.4px live, AD-STEP4-FINAL
-   P3.18). Wave E2 item 10 sent this to an ash ghost button ("one accent
-   event per screen"); the AD nav re-rule sheet (2026-09-06 §2/§6)
-   superseded that call for a FILLED button, and ASK-WAVE (2026-09-07,
-   THE-ASK-PACKET §3) supersedes THAT: the homepage command block is now
-   the property's single gold event, so the nav pill demotes sitewide to
-   an outlined ivory ghost button — same box (44px min-height, 8px 18px
-   pad), same position, persistence and label. Ground transparent, text
-   var(--ivory), border rgba(229,229,227,0.35) — mirrors .btn-secondary's
-   outline pattern. Hover tints to rgba(255,255,255,0.04), text stays
-   ivory. --aurum-hi is no longer referenced by this rule (left defined,
-   unused). */
+.nav-links a.active,
+#main-nav a[aria-current="page"] {
+  text-decoration: underline;
+  text-decoration-color: currentColor;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 6px;
+}
+
 .nav-cta {
-  font-size: 14px !important;
+  font-size: 15px !important;
   font-weight: 500 !important;
-  color: var(--ivory) !important;
+  color: var(--fg-1) !important;
   background: transparent;
-  border: 1px solid rgba(229,229,227,0.35);
+  border: 1px solid rgba(250, 250, 248, 0.5);
   padding: 8px 18px;
-  border-radius: 4px;
+  border-radius: var(--r-control);
   min-height: 44px;
   display: inline-flex;
   align-items: center;
@@ -499,70 +426,37 @@ section :is(h1, h2, h3, h4, h5, h6) {
 }
 
 .nav-cta:hover {
-  background: rgba(255,255,255,0.04) !important;
-  color: var(--ivory) !important;
+  background: rgba(250, 250, 248, 0.08) !important;
+  color: var(--fg-1) !important;
 }
 
 /* AD sheet §2: "Focus ring 2px var(--ivory) at 2px offset, because a gold
    ring dies on a gold ground." */
 .nav-cta:focus-visible {
-  outline: 2px solid var(--ivory);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
 /* ── Hero ──────────────────────────────────────────────────────────────────── */
-/* SPACING-0927 B-4/A1: the hero loses its full-height centering trick
-   (min-height:100vh + flex align-items:center made its measured nav-to-
-   headline clearance swing wildly by viewport HEIGHT -- 76/202/42px at
-   1280/768/375 -- instead of a stable number). It now takes plain padding
-   like any other section: var(--section-pad) gives it the same rhythm
-   (120/80/64) top and bottom as every section, hero included, no
-   exception (SPACING-SHEET.md A3-3). The fixed nav's own clearance is
-   handled once, sitewide, by `main`'s own margin-top below -- not by the
-   hero's padding -- so the hero's OWN padding-top reads exactly 120/80/64,
-   not 120/80/64-plus-header-height. */
-#hero {
-  position: relative;
-  overflow: hidden;
-  padding: var(--section-pad);
-}
-
-.hero-content {
-  position: relative;
-  z-index: 1;
-  max-width: var(--max-w);
-  margin: 0 auto;
-  width: 100%;
-}
 
 #hero h1 {
-  font-size: clamp(40px, 6vw, 72px);
-  font-weight: 700;
-  line-height: 1.08;
-  letter-spacing: -0.02em;
-  color: var(--ivory);
-  /* FIX-UNIT-2B H2: was 820px, which wrapped this 10-word h1 to 3 lines at
-     1280px with "before." orphaned alone on the last line. 950px is the
-     smallest width (of 820/850/880/900/920/950px, measured live) that
-     reaches 2 lines with no single-word line at 1280, with no font-size
-     change. Narrower viewports never reach this max-width in the first
-     place (the section's own padding/container constrain them well below
-     it), so 375/768 are unaffected -- verified unchanged. */
+  font-size: var(--h1);
+  font-weight: 300;
+  line-height: 1.04;
+  letter-spacing: -0.022em;
+  color: var(--fg-1);
+
   max-width: 950px;
-  /* SPACING-0927 R2-2a: heading to the element beneath it is 16px,
-     sitewide, named by the sheet (was 28). */
-  margin-bottom: var(--space-body);
+  font-family: var(--serif);
+  text-wrap: balance;
 }
 
 .hero-sub {
-  font-size: clamp(16px, 2vw, 19px);
+  font-size: 19px;
   font-weight: 400;
-  color: var(--slate-text);
+  color: var(--fg-2);
   max-width: 600px;
-  line-height: 1.65;
-  /* SPACING-0927 rule 5: text-to-its-action is 24px sitewide (was 48) --
-     the lede leads directly into the command block, the hero's action. */
-  margin-bottom: var(--space-copy);
+  line-height: 1.55;
 }
 
 .hero-ctas {
@@ -571,225 +465,119 @@ section :is(h1, h2, h3, h4, h5, h6) {
   flex-wrap: wrap;
 }
 
-/* ASK-WAVE (2026-09-07, THE-ASK-PACKET §1 item 4, AD ruling): the hero's
-   lone secondary text link sits beside the #install block itself, not
-   beneath the whole copy column — spec correction: the tree's real hero
-   grid breakpoint is 981px (index.html §"@media (min-width: 981px)"), not
-   the packet draft's 900px. Below 981px this stacks (link under the
-   block); at 981px+ it sits to the right, baseline-aligned with the
-   command block's bottom edge. */
-.hero-install-row {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  /* SPACING-0927 rule 7/A3-8: on the content scale now (was 20). */
-  gap: var(--space-body);
-}
-
-@media (min-width: 981px) {
-  .hero-install-row {
-    flex-direction: row;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-}
-
 .hero-cta-link {
   display: inline-flex;
   align-items: center;
-  /* FIX-UNIT A6+L8: 44px touch target. Already inline-flex/align-items:center,
-     so the text stays centered in place and simply gets more box around it. */
+
   min-height: 44px;
-  color: var(--ivory);
+  color: var(--fg-1);
   font-family: var(--sans);
   font-size: 15px;
   font-weight: 500;
   letter-spacing: -0.01em;
-  text-decoration: none;
+  text-decoration: underline;
+  text-decoration-color: var(--link-line);
+  text-underline-offset: 4px;
 }
 
 .hero-cta-link:hover {
   text-decoration: underline;
+  text-decoration-color: var(--fg-1);
 }
 
-/* Wave E2 item 12: pinned to 54px (was 52px — .btn-secondary's 1px border
-   adds the 2px .btn-primary lacked, AD-STEP4-FINAL-2026-09-06.md §4: 52px
-   at 375 on how-it-works/for-agents/pricing/api, 52px at both widths on
-   earnings, vs .btn-secondary's 54px). A transparent 1px border matches
-   btn-secondary's box-model exactly without changing the visible fill. */
 .btn-primary {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: var(--aurum);
-  color: var(--obsidian);
+  background: var(--btn-fill);
+  color: var(--btn-ink);
   font-family: var(--sans);
   font-size: 15px;
   font-weight: 600;
   padding: 14px 28px;
-  border-radius: 4px;
+  border-radius: var(--r-control);
   text-decoration: none;
   border: 1px solid transparent;
   cursor: pointer;
-  transition: opacity 0.2s, transform 0.15s;
+  transition: opacity 0.2s;
   letter-spacing: -0.01em;
 }
 
-.btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+.btn-primary:hover { opacity: 0.9; }
 
 .btn-secondary {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   background: transparent;
-  color: var(--ivory);
+  color: var(--fg-1);
   font-family: var(--sans);
   font-size: 15px;
   font-weight: 500;
   padding: 14px 28px;
-  border-radius: 4px;
+  border-radius: var(--r-control);
   text-decoration: none;
-  border: 1px solid rgba(229,229,227,0.2);
+  border: 1px solid var(--ctrl-line);
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s, transform 0.15s;
+  transition: border-color 0.2s, background 0.2s;
   letter-spacing: -0.01em;
 }
 
 .btn-secondary:hover {
-  border-color: rgba(229,229,227,0.45);
-  background: rgba(255,255,255,0.04);
-  transform: translateY(-1px);
+  border-color: var(--fg-1);
+  background: var(--line);
 }
 
-/* ── Email Capture ───────────────────────────────────────────────── */
-.hero-email-capture,
-.footer-email-capture {
-  display: flex;
-  gap: 0;
-  max-width: 440px;
-}
-.email-input {
-  flex: 1;
-  padding: 14px 18px;
-  font-family: var(--sans);
-  font-size: 15px;
-  color: var(--ivory);
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-right: none;
-  border-radius: 6px 0 0 6px;
-  outline: none;
-  transition: border-color 0.2s, background 0.2s;
-}
-.email-input::placeholder {
-  color: var(--slate);
-}
-.email-input:focus {
-  border-color: var(--aurum);
-  background: rgba(255,255,255,0.08);
-}
-.email-input.input-error {
-  border-color: #e74c3c;
-  background: rgba(231,76,60,0.08);
-}
-.hero-email-capture .btn-primary,
-.footer-email-capture .btn-primary {
-  border-radius: 0 6px 6px 0;
-  white-space: nowrap;
-  padding: 14px 24px;
-}
 .footer-cta-note {
-  font-size: 13px;
-  color: var(--slate);
+  font-size: 14px;
+  color: var(--fg-3);
   /* SPACING-0927 R2-2b: 12 ties 8/16 -- tie goes to the larger value. */
   margin-top: var(--space-body);
-}
-.footer-email-capture {
-  margin: 0 auto;
-  justify-content: center;
+  /* the note never leaves a single word alone on its last line */
+  text-wrap: balance;
 }
 
 @media (max-width: 600px) {
-  .hero-email-capture,
-  .footer-email-capture {
-    flex-direction: column;
-    gap: 8px;
+  .footer-cta-note a {
+    display: inline-block;
+    padding: 11px 0;
+    margin: -11px 0;
   }
-  .email-input {
-    border-right: 1px solid rgba(255,255,255,0.12);
-    border-radius: 6px;
-  }
-  .hero-email-capture .btn-primary,
-  .footer-email-capture .btn-primary {
-    border-radius: 6px;
-    width: 100%;
-  }
-  .email-input { font-size: 16px; }
 }
 
-/* AD design-tells sweep: the #learning-example section and its whole card
-   family (.learning-card, .learning-category, .learning-score, .learning-title,
-   .learning-body, .learning-price, .learning-meta, .learning-explain) are
-   unreferenced by any page's markup — dead CSS, removed. .learning-vs-llm is
-   the one survivor (still used on for-builders.html). */
 .learning-vs-llm {
   max-width: 640px;
   margin: 0 auto;
   font-size: 15px;
   font-weight: 500;
-  color: var(--ivory);
+  color: var(--fg-1);
 }
 
 /* ── How It Works ──────────────────────────────────────────────────────────── */
-#how-it-works { background: var(--obsidian); }
-
-#how-it-works h2 {
-  /* font-size/weight/letter-spacing/color now come from the shared section h2 rule.
-     SPACING-0927 rule 5: heading-to-next-element is 16px sitewide (was 20). */
-  margin-bottom: var(--space-body);
-}
 
 .steps {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 2px;
-  background: rgba(229,229,227,0.06);
-  border-radius: 0;
-  overflow: hidden;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-copy);
   /* SPACING-0927 R2-2b: 72 rounds down to 64. */
   margin-bottom: var(--space-wide);
 }
 
 .step {
-  background: var(--obsidian);
-  /* SPACING-0927 rule 6: card padding is 32px on all four sides (was 40/32). */
-  padding: var(--space-card);
-  position: relative;
-}
+  background: var(--surface);
 
-.step-number {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--aurum);
-  letter-spacing: 0.1em;
-  display: block;
-}
-
-.step-header {
-  /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-6): 20 ties 16/24 -- tie
-     goes to the larger value. */
-  margin-bottom: var(--space-copy);
-}
-
-.step-header .step-number {
-  margin-bottom: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-stage);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .step h3 {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--ivory);
-  /* SPACING-0927 rule 5: heading-to-next-element is 16px sitewide (was 14). */
+  font-size: 19px;
+  font-weight: 500;
+  color: var(--fg-1);
+  /* h3 to the first thing under it is 16 (sheet v2). */
   margin-bottom: var(--space-body);
   line-height: 1.3;
   letter-spacing: -0.01em;
@@ -797,168 +585,13 @@ section :is(h1, h2, h3, h4, h5, h6) {
 
 .step p {
   font-size: 15px;
-  color: var(--slate-text);
-  line-height: 1.7;
-}
-
-/* Earnings Table */
-.earnings-table-wrap {
-  max-width: 900px;
-  margin: 0 auto 56px;
-  overflow-x: auto;
-  border: 1px solid rgba(229,229,227,0.08);
-  border-radius: 0;
-}
-
-.earnings-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.earnings-table thead th {
-  text-align: center;
-  padding: 20px 16px 16px;
-  background: rgba(255,255,255,0.025);
-  border-bottom: 1px solid rgba(229,229,227,0.08);
-  vertical-align: top;
-}
-
-.earnings-table thead th:first-child {
-  width: 80px;
-  text-align: left;
-}
-
-.tier-label {
-  display: block;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ivory);
-  letter-spacing: -0.01em;
-  margin-bottom: 6px;
-}
-
-.tier-desc {
-  display: block;
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--slate);
-  letter-spacing: 0;
-  text-transform: none;
-  line-height: 1.4;
-}
-
-.earnings-table tbody td {
-  padding: 16px;
-  text-align: center;
-  font-family: var(--mono);
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--ivory);
-  border-bottom: 1px solid rgba(229,229,227,0.05);
-}
-
-.earnings-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.earnings-table tbody tr:hover {
-  background: rgba(255,255,255,0.018);
-}
-
-.year-label {
-  text-align: left !important;
-  font-family: var(--mono) !important;
-  font-size: 12px !important;
-  font-weight: 400 !important;
-  color: var(--slate) !important;
-  letter-spacing: 0.04em;
-}
-
-.per-unit {
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--slate);
-}
-
-.tier-highlight {
-  background: rgba(201,168,76,0.04);
-}
-
-.row-highlight td {
-  color: var(--aurum) !important;
-  font-size: 18px;
-}
-
-.row-highlight .year-label {
-  color: var(--aurum) !important;
-}
-
-/* AD design-tells sweep: the CSS Bar Chart component (.bar-chart,
-   .bar-chart-label, .bar-chart-grid, .bar-group, .bar-container, .bar,
-   .bar-novice, .bar-active, .bar-power, .bar-value, .bar-label) is
-   unreferenced by any page's markup — dead CSS, removed (this includes the
-   .bar-power gradient tell-3 flagged as dead). */
-.compound-pitch {
-  max-width: 640px;
-  margin-bottom: 16px;
-  font-size: 17px;
-  line-height: 1.7;
-  color: var(--ash);
-  font-weight: 500;
-}
-
-.chart-disclaimer {
-  max-width: 640px;
-  margin-bottom: 32px;
-  font-size: 12px;
-  color: var(--slate);
-  font-style: italic;
+  color: var(--fg-2);
   line-height: 1.6;
-}
-
-/* AD sheet 9 / B1: "How It Holds Up" (#why-auxilo) is gone from index.html
-   (RF-6), but .moat-grid/.moat-card are still used by /for-builders.
-   AD design-tells sweep tell 6: .moat-icon markup deleted (icon-as-marker
-   tell); tell 5: .moat-card flattened to a ruled list below. */
-
-.moat-grid {
-  max-width: 700px;
-}
-
-/* AD design-tells sweep tell 5: flattened from a bordered/rounded card wall
-   to a ruled list — border-top + top padding per row, no fill/border/radius. */
-.moat-card {
-  border-top: 1px solid rgba(229,229,227,0.13);
-  padding-top: 32px;
-  margin-top: 32px;
-}
-
-.moat-card:first-child {
-  border-top: none;
-  padding-top: 0;
-  margin-top: 0;
-}
-
-.moat-card h3 {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--ivory);
-  /* SPACING-0927 rule 5: heading-to-next-element is 16px sitewide (was 10). */
-  margin-bottom: var(--space-body);
-  letter-spacing: -0.01em;
-}
-
-.moat-card p {
-  font-size: 15px;
-  line-height: 1.65;
-  color: var(--slate-text);
 }
 
 /* ── For Builders ──────────────────────────────────────────────────────────── */
 #for-builders {
-  background: rgba(255,255,255,0.018);
-  border-top: 1px solid rgba(229,229,227,0.06);
-  border-bottom: 1px solid rgba(229,229,227,0.06);
+  background: var(--tint);
 }
 
 /* AD sheet 9: #for-builders (no such id on for-builders.html) is dead; its h2
@@ -972,7 +605,7 @@ section :is(h1, h2, h3, h4, h5, h6) {
 }
 
 .builders-left .body-copy {
-  color: var(--slate-text);
+  color: var(--fg-2);
   font-size: 16px;
   line-height: 1.75;
   margin-bottom: 20px;
@@ -980,20 +613,12 @@ section :is(h1, h2, h3, h4, h5, h6) {
 }
 
 /* ── For Agents ────────────────────────────────────────────────────────────── */
-#for-agents { background: var(--obsidian); }
 
 /* AD sheet 9: #for-agents h2 (no such id on for-agents.html) is dead; removed
    with the h2 consolidation. */
 
-.agents-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 64px;
-  align-items: start;
-}
-
 .agents-copy p {
-  color: var(--slate-text);
+  color: var(--fg-2);
   font-size: 16px;
   line-height: 1.75;
   /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-6): paragraph to
@@ -1011,81 +636,61 @@ section :is(h1, h2, h3, h4, h5, h6) {
 }
 
 .pricing-pill {
-  background: var(--aurum-dim);
-  border: 1px solid var(--aurum-border);
-  border-radius: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
   padding: 10px 16px;
 }
 
 .pricing-pill .pill-price {
   font-family: var(--mono);
   font-size: 18px;
-  font-weight: 500;
-  color: var(--aurum);
+  font-weight: 400;
+  color: var(--fg-1);
   display: block;
 }
 
 .pricing-pill .pill-label {
   font-size: 12px;
-  color: var(--slate);
+  color: var(--fg-3);
   letter-spacing: 0.05em;
-  /* R4-3 (RULING-SEAMS-2026-09-28.md): a price and its label is the
-     named label-to-value pairing (8px). Was an inline <span> (the
-     default), measuring 7px purely from its own inline line-box leading
-     against .pill-price's line-height, not an authored margin (both were
-     0). display:block removes the inline-leading artifact; the explicit
-     margin-top makes the named 8px value real rather than accidental. */
+
   display: block;
   margin-top: var(--space-tight);
 }
 
 .catalog-stats {
-  border: 1px solid rgba(229,229,227,0.08);
-  border-radius: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-stage);
   /* SPACING-0927 rule 6: card padding is 32px on all four sides (was 28). */
   padding: var(--space-card);
   margin: var(--space-card) 0;
+  background: var(--surface);
 }
-
-.catalog-stats .stat-row {
-  display: flex;
-  gap: 12px;
-  align-items: baseline;
-  padding: 8px 0;
-  border-bottom: 1px solid rgba(229,229,227,0.06);
-}
-
-.catalog-stats .stat-row:last-child { border-bottom: none; }
 
 .catalog-stats .stat-num {
   font-family: var(--mono);
   font-size: 20px;
-  font-weight: 500;
-  color: var(--aurum);
+  font-weight: 400;
+  color: var(--fg-1);
   min-width: 48px;
 }
 
 .catalog-stats .stat-label {
   font-size: 14px;
-  color: var(--slate);
+  color: var(--fg-3);
 }
 
 /* ── Code Blocks ───────────────────────────────────────────────────────────── */
 .code-block {
-  background: var(--code-bg);
-  border: 1px solid rgba(229,229,227,0.08);
-  border-radius: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
   overflow: hidden;
   position: relative;
   max-width: 100%;
 }
 
-/* Grid/flex columns hold a min-content of 'auto' by default, which lets a
-   wide <pre> or long string push the page wide. min-width:0 lets them shrink
-   so the inner overflow-x:auto takes over. Safe at all widths. */
-.api-grid > *,
-.api-col,
-.agents-grid > *,
 .agents-copy,
 .builders-grid > * {
   min-width: 0;
@@ -1095,31 +700,30 @@ section :is(h1, h2, h3, h4, h5, h6) {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-body);
   padding: 10px 16px;
-  background: rgba(255,255,255,0.03);
-  border-bottom: 1px solid rgba(229,229,227,0.08);
+  border-bottom: 1px solid var(--line);
 }
 
 .code-block-lang {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--slate);
+  color: var(--fg-3);
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  line-height: 1.3;
+  min-width: 0;
 }
 
-/* AD sheet 9: 44px minimum tap target (was 36px), 13px type (was 11px), on
-   every .copy-btn instance site-wide (22 plain instances plus the gold
-   #install variant below, which inherits font-size from here). */
 .copy-btn {
   font-family: var(--mono);
   font-size: 13px;
-  color: var(--slate);
+  color: var(--fg-1);
   background: none;
-  border: none;
+  border: 1px solid var(--line);
   cursor: pointer;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--r-control);
   transition: color 0.2s, background 0.2s;
   letter-spacing: 0.05em;
   min-height: 44px;
@@ -1127,52 +731,67 @@ section :is(h1, h2, h3, h4, h5, h6) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: none;
+  white-space: nowrap;
 }
 
-.copy-btn:hover { color: var(--aurum); background: var(--aurum-dim); }
-.copy-btn.copied { color: var(--aurum); }
+.copy-btn:hover { color: var(--fg-1); background: var(--line); }
+.copy-btn.copied { color: var(--accent-text); }
 
 .code-block pre {
   padding: 20px 20px;
   font-family: var(--mono);
   font-size: 13px;
   line-height: 1.7;
-  color: var(--ivory);
+  color: var(--fg-1);
   overflow-x: auto;
   tab-size: 2;
 }
 
-/* Monochrome-plus-gold syntax (visual pass P7): comments slate, code ivory,
-   only the load-bearing token (key/command) in aurum. No blue, no green;
-   green stays reserved for the /status "operational" semantic only. */
+.code-block pre,
+.dw-dark pre,
+.dw-stage-dark pre,
+.step-art pre,
+.on-dark pre {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(250, 250, 248, 0.35) transparent;
+}
+.code-block pre::-webkit-scrollbar,
+.dw-dark pre::-webkit-scrollbar,
+.dw-stage-dark pre::-webkit-scrollbar,
+.step-art pre::-webkit-scrollbar,
+.on-dark pre::-webkit-scrollbar {
+  height: 6px;
+}
+.code-block pre::-webkit-scrollbar-track,
+.dw-dark pre::-webkit-scrollbar-track,
+.dw-stage-dark pre::-webkit-scrollbar-track,
+.step-art pre::-webkit-scrollbar-track,
+.on-dark pre::-webkit-scrollbar-track {
+  background: transparent;
+}
+.code-block pre::-webkit-scrollbar-thumb,
+.dw-dark pre::-webkit-scrollbar-thumb,
+.dw-stage-dark pre::-webkit-scrollbar-thumb,
+.step-art pre::-webkit-scrollbar-thumb,
+.on-dark pre::-webkit-scrollbar-thumb {
+  background: rgba(250, 250, 248, 0.35);
+  border-radius: 4px;
+}
+
 .code-block pre .c { color: #7C8A9A; } /* comment — #7C8A9A on #111 = 5.36:1 (WCAG AA) */
 .code-block pre .k { color: #C9A84C; } /* keyword / key — the one gold token */
-.code-block pre .s { color: var(--ivory); } /* string */
-.code-block pre .n { color: var(--ivory); } /* number */
-.code-block pre .p { color: var(--slate); } /* punctuation */
+.code-block pre .s { color: var(--fg-1); } /* string */
+.code-block pre .n { color: var(--fg-1); } /* number */
+.code-block pre .p { color: var(--fg-3); } /* punctuation */
 
 /* ── Pricing ───────────────────────────────────────────────────────────────── */
 #pricing {
-  background: rgba(255,255,255,0.018);
-  border-top: 1px solid rgba(229,229,227,0.06);
-  border-bottom: 1px solid rgba(229,229,227,0.06);
+  background: var(--tint);
 }
 
 /* AD sheet 9: #pricing h2 (no such id on pricing.html) is dead; removed with
    the h2 consolidation. */
-
-.pricing-sub {
-  font-size: 16px;
-  color: var(--slate-text);
-  margin-bottom: 56px;
-}
-
-.pricing-table-wrap {
-  overflow-x: auto;
-  border: 1px solid rgba(229,229,227,0.08);
-  border-radius: 0;
-  margin-bottom: 56px;
-}
 
 table {
   width: 100%;
@@ -1187,36 +806,20 @@ thead th {
   font-weight: 400;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--slate);
-  background: rgba(255,255,255,0.025);
-  border-bottom: 1px solid rgba(229,229,227,0.08);
+  color: var(--fg-3);
+  border-bottom: 1px solid var(--line);
 }
 
 tbody td {
   padding: 14px 20px;
-  color: var(--ivory);
-  border-bottom: 1px solid rgba(229,229,227,0.05);
+  color: var(--fg-1);
+  border-bottom: 1px solid var(--line);
   vertical-align: top;
 }
 
 tbody tr:last-child td { border-bottom: none; }
 
-tbody tr:hover { background: rgba(255,255,255,0.018); }
-
-.td-action {
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--aurum);
-}
-
-.td-cost {
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--ivory);
-  white-space: nowrap;
-}
-
-.td-notes { color: var(--slate); font-size: 13px; }
+tbody tr:hover { background: var(--bg); }
 
 .pricing-packs {
   display: grid;
@@ -1228,16 +831,16 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
 }
 
 .pack-card {
-  border: 1px solid rgba(229,229,227,0.1);
-  border-radius: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-stage);
   /* SPACING-0927 rule 6: card padding is 32px on all four sides (was 28/24). */
   padding: var(--space-card);
-  transition: border-color 0.2s, background 0.2s;
+  transition: border-color 0.2s;
+  background: var(--surface);
 }
 
 .pack-card:hover {
-  border-color: var(--aurum-border);
-  background: var(--aurum-dim);
+  border-color: var(--accent-text);
 }
 
 .pack-name {
@@ -1245,80 +848,52 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
   font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--slate);
+  color: var(--fg-3);
   /* SPACING-0927 R2-2a: label to its value is 8px, named by the sheet (was 12). */
   margin-bottom: var(--space-tight);
 }
 
 .pack-price {
   font-size: 36px;
-  font-weight: 700;
-  color: var(--ivory);
+  font-weight: 500;
+  color: var(--fg-1);
   letter-spacing: -0.02em;
   margin-bottom: 16px;
   line-height: 1;
 }
 
-.pack-price span { font-size: 18px; font-weight: 400; color: var(--slate); }
+.pack-price span { font-size: 18px; font-weight: 400; color: var(--fg-3); }
 
 .pack-detail {
   font-size: 13px;
-  color: var(--slate);
+  color: var(--fg-3);
   line-height: 1.8;
 }
 
-.pack-detail strong { color: var(--ivory); }
+.pack-detail strong { color: var(--fg-1); }
 
 .free-tier {
-  border: 1px solid rgba(201,168,76,0.25);
-  border-radius: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-stage);
   /* SPACING-0927 rule 6: card padding is 32px on all four sides (was 20/24). */
   padding: var(--space-card);
   display: flex;
   align-items: center;
   gap: 16px;
-  background: var(--aurum-dim);
+  background: var(--surface);
 }
 
 .free-tier .ft-text {
   font-size: 15px;
-  color: var(--ivory);
+  color: var(--fg-1);
 }
 
-.free-tier .ft-text span { color: var(--slate); font-size: 14px; }
+.free-tier .ft-text span { color: var(--fg-3); font-size: 14px; }
 
 /* ── API & Integration ──────────────────────────────────────────────────────── */
-#api-integration { background: var(--obsidian); }
 
 /* AD sheet 9: #api-integration h2 (no such id on api.html) is dead; removed
    with the h2 consolidation. */
-
-.api-grid {
-  display: grid;
-  grid-template-columns: 1fr 1.1fr;
-  gap: 64px;
-  align-items: start;
-}
-
-.api-col h3 {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--ivory);
-  /* SPACING-0927 rule 5: heading-to-next-element is 16px sitewide (was 20). */
-  margin-bottom: var(--space-body);
-  letter-spacing: -0.01em;
-}
-
-.api-col h4 {
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--slate);
-  /* SPACING-0927 rule 7/A3-8: both values now on the content scale
-     (was 28px 0 14px). */
-  margin: var(--space-card) 0 var(--space-body);
-}
 
 /* SPACING-0927 R2-2b: 28 rounds up to 32. */
 .endpoint-list {
@@ -1332,7 +907,7 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
   /* SPACING-0927 R2-2b: gap 12 ties 8/16 -- tie goes to the larger value. */
   gap: var(--space-body);
   padding: 8px 0;
-  border-bottom: 1px solid rgba(229,229,227,0.05);
+  border-bottom: 1px solid var(--line);
   font-size: 14px;
 }
 
@@ -1341,24 +916,24 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
 .ep-method {
   font-family: var(--mono);
   font-size: 10px;
-  font-weight: 500;
+  font-weight: 400;
   padding: 2px 7px;
   border-radius: 4px;
   flex-shrink: 0;
   letter-spacing: 0.05em;
 }
 
-.ep-method.post { background: rgba(201,168,76,0.18); color: var(--aurum); }
-.ep-method.get  { background: rgba(229,229,227,0.12); color: var(--ash); }
+.ep-method.post { background: rgba(201,168,76,0.18); color: var(--accent-text); }
+.ep-method.get  { background: var(--line); color: var(--fg-1); }
 
 .ep-path {
   font-family: var(--mono);
   font-size: 13px;
-  color: var(--ivory);
+  color: var(--fg-1);
   flex: 1;
 }
 
-.ep-desc { font-size: 12px; color: var(--slate); }
+.ep-desc { font-size: 12px; color: var(--fg-3); }
 
 .auth-options {
   display: grid;
@@ -1366,27 +941,6 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
   /* SPACING-0927 rule 6: gap between cards in a row/grid is 48px (was 14). */
   gap: var(--space-block);
   margin-bottom: 28px;
-}
-
-.auth-card {
-  border: 1px solid rgba(229,229,227,0.08);
-  border-radius: 0;
-  /* SPACING-0927 rule 6: card padding is 32px on all four sides (was 18/16). */
-  padding: var(--space-card);
-}
-
-.auth-card .auth-title {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--aurum);
-  margin-bottom: 8px;
-  display: block;
-}
-
-.auth-card p {
-  font-size: 13px;
-  color: var(--slate);
-  line-height: 1.6;
 }
 
 /* MCP tool tags */
@@ -1400,9 +954,9 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
 .tool-tag {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--ivory);
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(229,229,227,0.1);
+  color: var(--fg-1);
+  background: var(--surface);
+  border: 1px solid var(--line);
   padding: 4px 10px;
   border-radius: 4px;
   letter-spacing: 0.03em;
@@ -1410,24 +964,23 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
 
 /* ── Footer CTA ────────────────────────────────────────────────────────────── */
 #footer-cta {
-  background: var(--obsidian);
-  border-top: 1px solid rgba(229,229,227,0.06);
+  border-top: 1px solid var(--line);
   text-align: center;
 }
 
 #footer-cta h2 {
   /* font-size/font-weight now come from the shared closing-CTA rule above */
-  letter-spacing: -0.02em;
-  color: var(--ivory);
+  letter-spacing: -0.016em;
+  color: var(--fg-1);
   max-width: 760px;
-  /* SPACING-0927 R2-2a: heading to the element beneath it is 16px, named by the sheet (was 20). */
-  margin: 0 auto var(--space-body);
+  margin-left: auto;
+  margin-right: auto;
   line-height: 1.1;
 }
 
 .footer-cta-sub {
   font-size: 17px;
-  color: var(--slate-text);
+  color: var(--fg-2);
   max-width: 480px;
   margin: 0 auto 48px;
   line-height: 1.65;
@@ -1445,15 +998,16 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
 
 .footer-links {
   display: flex;
-  gap: 28px;
+  gap: var(--space-tight) var(--space-card);
   justify-content: center;
   flex-wrap: wrap;
+  margin-top: var(--space-wide);
   margin-bottom: 48px;
 }
 
 .footer-links a {
   font-size: 14px;
-  color: var(--slate);
+  color: var(--fg-2);
   text-decoration: none;
   transition: color 0.2s;
   padding: 8px 4px;
@@ -1462,19 +1016,15 @@ tbody tr:hover { background: rgba(255,255,255,0.018); }
   align-items: center;
 }
 
-.footer-links a:hover { color: var(--aurum); }
+.footer-links a:hover { color: var(--fg-1); }
 
 footer {
-  border-top: 1px solid rgba(229,229,227,0.06);
-  /* SPACING-0927 B-3: nav and footer both take the page gutter, so the
-     logo's left edge and the content's left edge are the same number at
-     every width. Vertical 32px is unchanged (not part of the section
-     rhythm scale -- footer is not a "section" for rule 3). .footer-inner
-     (below) already has zero own padding + max-width/auto-margin
-     centering, so this footer padding + that centering reproduces
-     90/20/16 exactly, the same math a section+.container pair uses. */
+  border-top: 1px solid var(--line);
+
   padding: 32px var(--gutter-base);
   text-align: center;
+  background: var(--bg);
+  color: var(--fg-3);
 }
 
 .footer-inner {
@@ -1496,35 +1046,29 @@ footer {
   min-height: 44px;
 }
 
-.footer-logo .wordmark { font-size: 15px; font-weight: 500; color: var(--slate); }
+.footer-logo .wordmark { font-size: 15px; font-weight: 500; color: var(--fg-3); }
 
 .footer-meta {
-  font-size: 13px;
-  color: var(--slate);
+  font-size: 14px;
+  color: var(--fg-3);
+  /* the footer centres its own text; the meta line starts under the logo at every width */
+  text-align: left;
 }
 
 .footer-meta a {
-  color: var(--slate);
+  color: var(--fg-3);
   text-decoration: none;
   transition: color 0.2s;
 }
 
-.footer-meta a:hover { color: var(--aurum); }
+.footer-meta a:hover { color: var(--fg-1); }
+/* Each link travels with the separator that follows it, so the line breaks between items
+   and a line never starts with a middot. */
+.footer-meta .fm-item { white-space: nowrap; }
 
-/* ── AD sheet 9: one FAQ accordion component, site-wide ──────────────────────
-   Matches how-it-works' pattern (the only page with a working accordion
-   before this pass); index, for-agents, for-builders, pricing and api
-   previously rendered a static <p class="faq-q">/<p class="faq-a"> pair with
-   no interaction. Markup for every FAQ item is now
-   <div class="faq-item"><button class="faq-question" onclick="toggleFaq(this)">
-   <span>question</span><svg class="faq-icon">...</svg></button>
-   <div class="faq-answer"><div class="faq-answer-inner">answer</div></div></div>,
-   toggled by the shared toggleFaq() function each page defines locally. The
-   open max-height is set generously above how-it-works' own 400px so longer
-   answers on other pages are never clipped. */
 .faq-list { max-width: 700px; margin: 0 auto; }
-.faq-item { border-bottom: 1px solid rgba(229,229,227,0.08); }
-.faq-item:first-child { border-top: 1px solid rgba(229,229,227,0.08); }
+.faq-item { border-bottom: 1px solid var(--line); }
+.faq-item:first-child { border-top: 1px solid var(--line); }
 .faq-question {
   width: 100%;
   display: flex;
@@ -1537,26 +1081,23 @@ footer {
   padding: 24px 0;
   text-align: left;
   font-family: var(--sans);
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--ivory);
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--fg-1);
   line-height: 1.4;
   transition: color 0.2s;
+  min-height: 44px;
 }
-.faq-question:hover { color: var(--aurum); }
+.faq-question:hover { color: var(--accent-text); }
 .faq-icon {
   width: 20px;
   height: 20px;
   flex-shrink: 0;
-  color: var(--slate);
+  color: var(--fg-3);
   transition: transform 0.3s, color 0.3s;
 }
-.faq-item.open .faq-icon { transform: rotate(45deg); color: var(--aurum); }
-/* N1: visibility:hidden on the closed state pulls any link inside the
-   (still-in-DOM) answer text out of tab order; visibility flips back the
-   instant the item opens (0s delay) but only flips to hidden after the
-   max-height collapse finishes (0.35s delay) so closing doesn't cut the
-   text off mid-animation. */
+.faq-item.open .faq-icon { transform: rotate(45deg); color: var(--accent-text); }
+
 .faq-answer {
   max-height: 0;
   overflow: hidden;
@@ -1568,58 +1109,9 @@ footer {
   visibility: visible;
   transition: max-height 0.35s ease, visibility 0s linear 0s;
 }
-.faq-answer-inner { padding: 0 0 24px; font-size: 15px; line-height: 1.7; color: var(--ash); }
-.faq-answer-inner a { color: var(--aurum); text-decoration: underline; }
+.faq-answer-inner { padding: 0 0 24px; font-size: 15px; line-height: 1.7; color: var(--fg-2); }
+.faq-answer-inner a { color: var(--fg-1); text-decoration: underline; text-decoration-color: var(--link-line); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
 
-/* ── How It Works Page ───────────────────────────────────────────── */
-.hiw-page-header {
-  text-align: center;
-  padding: 120px 0 60px;
-}
-.hiw-page-header h1 {
-  font-size: 42px;
-  font-weight: 700;
-  color: var(--ivory);
-  letter-spacing: -0.025em;
-  margin-bottom: 16px;
-}
-.hiw-page-header p {
-  font-size: 18px;
-  color: var(--ash);
-  max-width: 560px;
-  margin: 0 auto;
-  line-height: 1.6;
-}
-.hiw-section {
-  padding: 60px 0;
-}
-/* AD sheet 9: .hiw-section h2 (no element carries class="hiw-section"; the
-   actual heading class is .hiw-section-heading, defined page-locally in
-   how-it-works.html) is dead; removed with the h2 consolidation. */
-.hiw-section-intro {
-  font-size: 16px;
-  color: var(--ash);
-  margin-bottom: 40px;
-  max-width: 560px;
-  line-height: 1.7;
-}
-/* AD design-tells sweep: .hiw-steps/.hiw-step/.hiw-step-icon/.hiw-step-number
-   are unreferenced by how-it-works.html's markup (superseded by
-   .hiw-step-card/.step-circle below) — dead CSS, removed. */
-.hiw-options {
-  margin-top: 12px;
-  padding-left: 0;
-  list-style: none;
-}
-.hiw-options li {
-  padding: 8px 0;
-  font-size: 14px;
-  color: var(--ash);
-  line-height: 1.6;
-}
-.hiw-options li strong {
-  color: var(--ivory);
-}
 /* ── Hamburger Menu ──────────────────────────────────────────────── */
 .hamburger {
   display: none;
@@ -1637,7 +1129,7 @@ footer {
   display: block;
   width: 22px;
   height: 2px;
-  background: var(--ivory);
+  background: var(--fg-1);
   transition: transform 0.3s, opacity 0.3s;
 }
 .hamburger[aria-expanded="true"] span:nth-child(1) {
@@ -1650,26 +1142,6 @@ footer {
   transform: rotate(-45deg) translate(5px, -5px);
 }
 
-/* ── Responsive: nav (Wave E2 item 1, reverted by AD nav re-rule sheet
-   2026-09-06 correction 1) ────────────────────────────────────────────────
-   Wave E2 moved this to 1057px for a wordmark/first-link collision that
-   depended on a seven-label reorder including "Search" and "How submissions
-   work" (158.4px, the widest label the nav would ever have carried). Both
-   labels are gone from the ruled set and 1057 was computed for them, so the
-   AD nav re-rule sheet (correction 1) voids that number: "Live and main
-   still collapse the nav at max-width: 900px. 1057 is wave E P1.1, built
-   but not live... Wave E P1.1 should be dropped, not merged, once the
-   six-label set lands." This NAV-WAVE amendment reverts the breakpoint to
-   900, matching the AD sheet's own arithmetic for the current 5-label
-   interim set (minimum one-line width well under 900). This is the ONLY
-   media query gating the desktop-nav-vs-hamburger switch (confirmed: no
-   other .hamburger/.nav-links rule exists in this sheet, and every other
-   900px query elsewhere in the codebase gates unrelated grids, not this
-   switch) — kept split out from the general-layout 900px block below (that
-   block's unrelated grids/section-pad rules are untouched) rather than
-   merged into it, so the two remain independently editable. Wave E2 item
-   12: the open-menu background stays full opacity (var(--obsidian)) so the
-   hero/gold copy button don't read through it. */
 @media (max-width: 900px) {
   .hamburger {
     display: flex;
@@ -1713,54 +1185,27 @@ footer {
   /* SPACING-0927 R2-2b: 40 is equidistant from 32 and 48 -- tie goes to
      the larger value. */
   .builders-grid { grid-template-columns: 1fr; gap: var(--space-block); }
-  .agents-grid { grid-template-columns: 1fr; gap: var(--space-block); }
-  .api-grid { grid-template-columns: 1fr; gap: 48px; }
-  .pricing-packs { grid-template-columns: repeat(2, 1fr); }
+      .pricing-packs { grid-template-columns: repeat(2, 1fr); }
   .auth-options { grid-template-columns: 1fr; }
 
-  /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-5): align-items:center
-     shrinks each stacked child (.footer-logo, .footer-meta) to its own
-     content width and centres that box within the column -- so the
-     box's OWN left edge (what the gutter is measured from) no longer
-     touches the page gutter, and how far off depends on how much text the
-     footer holds. /pricing's footer, with its tagline, happens to render
-     wide enough that the centred box still reads close to the gutter;
-     /dashboard's shorter link-only footer does not (measured 162.97px at
-     768px, ruled 20px). flex-start makes every page's footer content hug
-     the real left edge deterministically, not by content-length
-     coincidence. text-align:center is dropped with it -- once each child
-     is its own natural width (not centred as a shrunk box), it no longer
-     does anything (the text already fills its own box). */
   .footer-inner { flex-direction: column; align-items: flex-start; }
 
-  /* Anchor jumps (in-page # links) must land below the fixed header too --
-     same token, same breakpoint the header itself uses for the
-     hamburger/nav-links switch (see the Navigation section above). */
   html { scroll-padding-top: var(--header-h); }
 }
 
 @media (max-width: 600px) {
   :root { --section-pad: 64px 16px; --gutter-base: 16px; --band-pad: 32px 16px; }
 
-  /* ── DR-3: mobile type ramp — the one-large-headline law holds at 375px ──────
-     Every phone width (<=430px) sits inside this query. Display heads (page/hero
-     h1) stay ~40px; every section H2 steps down to ~25px, so the headline
-     dominates at ~1.6x on the narrowest phone (was ~1.1-1.3x). Desktop scale is
-     APPROVED and untouched — nothing here leaks above 600px. !important is
-     required to defeat the per-page inline hero/section-head sizes (none of which
-     carry a mobile override of their own). */
   #hero h1,
-  .earnings-hero-inner h1,
   .pricing-page-header h1,
   .hiw-hero h1,
   .page-hero h1,
-  #builders-hero h1,
-  .api-page-header h1 {
-    font-size: 40px !important;
-    line-height: 1.1 !important;
+  #builders-hero h1 {
+    font-size: var(--h1) !important;
+    line-height: 1.04 !important;
   }
   section h2 {
-    font-size: 25px !important;
+    font-size: var(--h2-section) !important;
   }
 
   .hero-ctas { flex-direction: column; }
@@ -1768,39 +1213,18 @@ footer {
 
   .pricing-packs { grid-template-columns: 1fr; }
 
-  .pricing-table-wrap { font-size: 13px; }
   thead th, tbody td { padding: 10px 14px; }
 
   .footer-ctas { flex-direction: column; align-items: center; }
   .footer-ctas .btn-primary, .footer-ctas .btn-secondary { width: 100%; max-width: 320px; justify-content: center; }
-
-  .earnings-table tbody td {
-    font-size: 13px;
-    padding: 12px 10px;
-  }
-  .earnings-table thead th {
-    padding: 14px 10px;
-  }
-  .tier-desc {
-    font-size: 10px;
-  }
 }
 
 /* ── Utilities ─────────────────────────────────────────────────────────────── */
-.text-aurum { color: var(--aurum); }
-.text-slate { color: var(--slate); }
 
-/* AD design-tells sweep P2a: every .reveal block now paints on load (the
-   html.js-reveal opt-in line is gone from every page head, so nothing ever
-   gates this element on a hidden state). The .reveal class attribute stays
-   on markup sitewide — inert — this transition rule is harmless to keep. */
 .reveal { transition: opacity 0.55s ease, transform 0.55s ease; }
 
 /* ── Accessibility ───────────────────────────────────────────────── */
-/* FIX-UNIT A1: shared utility for an off-screen polite live region (the
-   copy-button "copied!" announcement). Standard clip-based hiding -- stays
-   in the accessibility tree and audible to a screen reader, invisible and
-   with no layout footprint for sighted users. */
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -1820,7 +1244,7 @@ footer {
   background: var(--aurum);
   color: var(--obsidian);
   font-weight: 600;
-  border-radius: 0 0 6px 6px;
+  border-radius: 0 0 var(--r-control) var(--r-control);
   z-index: 9999;
   transition: top 0.2s;
 }
@@ -1828,22 +1252,13 @@ footer {
   top: 0;
 }
 
-/* FOCUS-VISIBLE (SITE-PERFECT-DEFECT-SHEET-2026-09-06.md V3): one universal
-   keyboard-focus ring for every focusable element site-wide (nav links,
-   buttons, footer links, form controls, the hamburger toggle). Ivory
-   (var(--ivory) = #FAFAF8 = rgb(250,250,248)), not aurum -- aurum dies
-   against the aurum-filled .nav-cta and other gold grounds the same way
-   the AD sheet's nav-cta override already avoids; making the universal
-   ring ivory means every element gets a ring that survives its own
-   background without a per-component override. The two prior identical
-   `*:focus-visible` / `button,a,input:focus-visible` blocks (both aurum
-   2px, redundant with each other) are consolidated into this one rule.
-   `:focus-visible` (not bare `:focus`) is what already scopes this to
-   keyboard/programmatic focus and skips mouse-click focus -- no separate
-   `:focus:not(:focus-visible)` suppression rule existed or is needed. */
 *:focus-visible {
-  outline: 1.5px solid var(--ivory);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
+}
+
+pre:focus-visible {
+  outline-offset: -4px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1851,323 +1266,34 @@ footer {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+  html { scroll-behavior: auto; }
 }
 
 abbr[title] {
   text-decoration: none;
-  border-bottom: 1px dotted var(--slate);
+  border-bottom: 1px dotted var(--fg-3);
   cursor: help;
 }
 
-/* ── Section Rhythm: two-step raised / ground system (visual pass, Move 2) ──
-   "Raised" sections carry a legible tint + hairlines; "ground" sections stay
-   plain obsidian (the decorative triangle texture was removed sitewide by
-   the AD design-tells sweep, tell 8). Strict A/B/A/B per page. */
-.section-raised,
-.explore-section,
-#for-builders,
-#pricing {
-  /* DR-7b: modest tint + hairline bump so the raised/ground alternation reads;
-     the hairlines (not the tone) still carry the rhythm. */
-  background: rgba(255,255,255,0.065);
-  border-top: 1px solid rgba(229,229,227,0.13);
-  border-bottom: 1px solid rgba(229,229,227,0.13);
+.explore-section {
+  background: var(--paper);
 }
 
-.section-ground,
-#how-it-works,
-#footer-cta {
-  background-color: var(--obsidian);
-}
-
-/* ── Line Chart (Earnings Projection) ──────────────────────────────────────── */
-.line-chart-wrap {
-  max-width: 900px;
-  margin: 0 auto 48px;
-}
-
-.line-chart-wrap svg {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-
-.line-chart-legend {
-  display: flex;
-  justify-content: center;
-  gap: 32px;
-  margin-top: 20px;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--slate);
-}
-
-.legend-swatch {
-  width: 24px;
-  height: 3px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-
-/* ── Value Callout ─────────────────────────────────────────────────────────── */
-.value-callout {
-  max-width: 720px;
-  /* SPACING-0927 rule 6: card padding is 32px on all four sides (was 28/32). */
-  padding: var(--space-card);
-  background: var(--aurum-dim);
-  border: 1px solid var(--aurum-border);
-  border-radius: 0;
-  font-size: 16px;
-  line-height: 1.7;
-  color: var(--ash);
-}
-
-/* ── Snapshot Table ────────────────────────────────────────────────────────── */
-.snapshot-table-wrap {
-  max-width: 720px;
-  margin: 0 auto 48px;
-  overflow-x: auto;
-  border: 1px solid rgba(229,229,227,0.08);
-  border-radius: 0;
-}
-
-.snapshot-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.snapshot-table thead th {
-  text-align: center;
-  padding: 16px;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--slate);
-  background: rgba(255,255,255,0.025);
-  border-bottom: 1px solid rgba(229,229,227,0.08);
-}
-
-.snapshot-table thead th:first-child {
-  text-align: left;
-}
-
-.snapshot-table tbody td {
-  padding: 14px 16px;
-  text-align: center;
-  font-family: var(--mono);
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--ivory);
-  border-bottom: 1px solid rgba(229,229,227,0.05);
-}
-
-.snapshot-table tbody td:first-child {
-  text-align: left;
-  font-family: var(--sans);
-  font-size: 14px;
-  font-weight: 400;
-  color: var(--ash);
-}
-
-.snapshot-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.snapshot-table tbody tr:hover {
-  background: rgba(255,255,255,0.018);
-}
-
-/* ── Tier Cards (Compounding Earnings) ─────────────────────────────────────── */
-.tier-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  /* SPACING-0927 rule 6: gap between cards in a row/grid is 48px (was 20). */
-  gap: var(--space-block);
-  max-width: 960px;
-  margin: 0 auto 56px;
-}
-
-.tier-card {
-  background: rgba(255,255,255,0.025);
-  border: 1px solid rgba(229,229,227,0.08);
-  border-radius: 0;
-  /* SPACING-0927 rule 6: card padding is 32px on all four sides (was 28/24). */
-  padding: var(--space-card);
-  display: flex;
-  flex-direction: column;
-}
-
-.tier-card--active {
-  border-color: rgba(201,168,76,0.25);
-}
-
-.tier-card--power {
-  border-color: var(--aurum);
-  box-shadow: 0 0 24px rgba(201,168,76,0.08);
-}
-
-.tier-card-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.tier-icon {
-  font-size: 22px;
-  line-height: 1;
-}
-
+/* The tier column of the pricing table. */
 .tier-name {
   font-size: 17px;
-  font-weight: 600;
-  color: var(--ivory);
-  letter-spacing: -0.01em;
-}
-
-.tier-desc {
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--slate);
-  margin-bottom: 20px;
-}
-
-.tier-numbers {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 20px;
-}
-
-.tier-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px 0;
-  border-bottom: 1px solid rgba(229,229,227,0.04);
-}
-
-.tier-row:last-child {
-  border-bottom: none;
-}
-
-.tier-row-highlight {
-  border-bottom: none;
-  padding: 8px 0;
-}
-
-.tier-row-highlight .tier-amount {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--ivory);
-}
-
-.tier-year {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--slate);
-  letter-spacing: 0.04em;
-}
-
-.tier-amount {
-  font-family: var(--mono);
-  font-size: 15px;
   font-weight: 500;
-  color: var(--ash);
-}
-
-.tier-card--power .tier-row-highlight .tier-amount {
-  color: var(--aurum);
-}
-
-.tier-annual {
-  margin-top: auto;
-  padding-top: 16px;
-  border-top: 1px solid rgba(229,229,227,0.08);
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-}
-
-.tier-annual-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--slate);
-}
-
-.tier-annual-amount {
-  font-family: var(--mono);
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--ivory);
-}
-
-.tier-card--power .tier-annual-amount {
-  color: var(--aurum);
-}
-
-/* ── Compound Factors (Why It Compounds) ──────────────────────────────────── */
-.compound-factors {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
-  max-width: 860px;
-  margin: 0 auto 48px;
-}
-
-.compound-factor {
-  padding: 20px 12px;
-}
-
-.compound-factor strong {
-  display: block;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ivory);
-  margin-bottom: 4px;
-}
-
-.compound-factor p {
-  font-size: 13px;
-  color: var(--slate);
-  line-height: 1.4;
-  margin: 0;
-}
-
-/* ── Tier Cards & Compound Factors — Responsive ──────────────────────────── */
-@media (max-width: 768px) {
-  .tier-cards-grid {
-    grid-template-columns: 1fr;
-    max-width: 420px;
-  }
-  .compound-factors {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 480px) {
-  .compound-factors {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-  }
-  .compound-factor {
-    padding: 14px 8px;
-  }
+  color: var(--fg-1);
+  letter-spacing: -0.01em;
 }
 
 /* ── Pricing Value Tiers Table ─────────────────────────────────────────────── */
 .value-tiers-table-wrap {
   overflow-x: auto;
-  border: 1px solid rgba(229,229,227,0.08);
-  border-radius: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-stage);
   margin-bottom: 32px;
+  background: var(--surface);
 }
 
 .value-tiers-table {
@@ -2182,15 +1308,14 @@ abbr[title] {
   font-weight: 400;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--slate);
-  background: rgba(255,255,255,0.025);
-  border-bottom: 1px solid rgba(229,229,227,0.08);
+  color: var(--fg-3);
+  border-bottom: 1px solid var(--line);
 }
 
 .value-tiers-table tbody td {
   padding: 14px 20px;
-  color: var(--ivory);
-  border-bottom: 1px solid rgba(229,229,227,0.05);
+  color: var(--fg-1);
+  border-bottom: 1px solid var(--line);
   vertical-align: top;
   font-size: 14px;
 }
@@ -2200,12 +1325,12 @@ abbr[title] {
 }
 
 .value-tiers-table tbody tr:hover {
-  background: rgba(255,255,255,0.018);
+  background: var(--bg);
 }
 
 .value-tiers-table .tier-name {
-  font-weight: 600;
-  color: var(--aurum);
+  font-weight: 500;
+  color: var(--fg-1);
   white-space: nowrap;
 }
 
@@ -2215,26 +1340,22 @@ abbr[title] {
   white-space: nowrap;
 }
 
-/* AD sheet 9: .value-tiers-table .example-text is dead — the fabricated
-   EXAMPLE column was removed from pricing.html in an earlier wave (the
-   table is 3 columns now); removed here with the mobile ::before rule
-   below. */
-
 /* ── Earnings Scenario (For Builders) ──────────────────────────────────────── */
 .earnings-scenario {
   margin-top: 32px;
   /* SPACING-0927 R2-2b: 28 rounds up to 32. */
   padding: 24px var(--space-card);
-  background: rgba(255,255,255,0.02);
-  border: 1px solid rgba(229,229,227,0.08);
-  border-radius: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-stage);
 }
 
 .earnings-scenario h3 {
+  /* a label heading inside a data box: stays 14px, weight 500 (the h3 scale is for card and section heads) */
   font-size: 14px;
-  font-weight: 600;
-  color: var(--ivory);
-  /* SPACING-0927 rule 5: heading-to-next-element is 16px sitewide (was 12). */
+  font-weight: 500;
+  color: var(--fg-1);
+  /* h3 to the first thing under it is 16 (sheet v2). */
   margin-bottom: var(--space-body);
   letter-spacing: -0.01em;
 }
@@ -2243,60 +1364,31 @@ abbr[title] {
   font-family: var(--mono);
   font-size: 13px;
   line-height: 1.8;
-  color: var(--ash);
+  color: var(--fg-2);
 }
 
 .earnings-scenario .earnings-highlight {
-  font-weight: 600;
-  color: var(--aurum);
-}
-
-@media (max-width: 600px) {
-  .line-chart-legend {
-    gap: 16px;
-  }
-  .legend-item {
-    font-size: 12px;
-  }
-  .value-callout {
-    padding: 20px 20px;
-    font-size: 15px;
-  }
-}
-
-/* ── Chart scales to fit on small screens ────────────────────────── */
-/* viewBox SVG stays crisp when scaled down; no fixed min-width so the
-   page never overflows and the chart fits inside its own box. */
-.line-chart-wrap svg {
-  width: 100%;
-  height: auto;
-  max-width: 100%;
+  font-weight: 400;
+  color: var(--accent-text);
 }
 
 /* ── Table scroll hints on mobile ────────────────────────────────── */
 @media (max-width: 600px) {
-  .value-tiers-table-wrap,
-  .snapshot-table-wrap,
-  .pricing-table-wrap {
+  .value-tiers-table-wrap {
     position: relative;
   }
-  .value-tiers-table-wrap::after,
-  .snapshot-table-wrap::after,
-  .pricing-table-wrap::after {
+  .value-tiers-table-wrap::after {
     content: '';
     position: absolute;
     top: 0;
     right: 0;
     bottom: 0;
-    width: 24px;
-    background: linear-gradient(to left, var(--obsidian), transparent);
+    width: 4px;
+    background: var(--line);
     pointer-events: none;
     border-radius: 0;
   }
-  .snapshot-table {
-    min-width: 400px;
-  }
-  .value-tiers-table {
+    .value-tiers-table {
     min-width: 480px;
   }
 }
@@ -2309,110 +1401,57 @@ abbr[title] {
   }
 }
 
-/* ── Hero install block (E1: the primary conversion is the command).
-   ASK-WAVE (2026-09-07, THE-ASK-PACKET §1 item 1 + AD ruling): "the ask
-   IS the command block, not a button" — framed, isolated and scaled to
-   read as the fold's single decisive move rather than a code sample near
-   the headline, while `npx auxilo setup` itself stays fully inside the
-   hero fold at both 1440x900 and 375x812 (verified: #hero-setup-snippet's
-   own box, not the whole #install column below it, is the packet's "ask"
-   and the thing required to stay in-fold). Border upgraded from the base
-   .code-block's 0.08-alpha ivory hairline to an aurum-tinted frame with a
-   soft lift shadow; pre text raised from 16px to 18px (16px on mobile, up
-   from the prior 14px base); box widened from 560px to 600px. Kept
-   deliberately modest rather than maximal so the trust-bullet list below
-   it doesn't lose materially more fold real estate than the microcopy
-   line already costs it. The copy button's gold fill (index.html §"#install
-   .copy-btn") is unchanged and is part of this same event, not a second
-   one. */
-.hero-install {
-  max-width: 600px;
-  margin-bottom: 32px;
-}
-
 .hero-install .hero-setup-block {
   text-align: left;
-  border-color: var(--aurum-border);
-  box-shadow: 0 24px 48px -28px rgba(0,0,0,0.65);
+  border-color: rgba(201, 168, 76, 0.45);
 }
 
 .hero-install .hero-setup-block pre {
-  font-size: 18px;
+  font-size: 19px;
   /* SPACING-0927: vertical on the content scale now (was 20). */
   padding: var(--space-body) 22px;
-  color: var(--aurum);
+  color: var(--accent-text);
 }
 
 .hero-setup-note {
   /* SPACING-0927 rule 7/A3-8: on the content scale now (was 10). */
   margin: var(--space-tight) 0 0;
-  font-size: 14px;
+  /* the notes a careful reader most needs: body colour, 15px (the homepage drops to 14px at 480 and down) */
+  font-size: 15px;
   line-height: 1.5;
-  color: var(--slate-text);
+  color: var(--fg-2);
 }
 
 @media (max-width: 600px) {
-  .hero-install { max-width: 100%; }
   .hero-install .hero-setup-block pre { font-size: 17px; padding: 18px 18px; }
 }
 
 /* ── Pull-stats: ledger tier — exactly one gold figure per strip (Move 1) ── */
 span.pull-stat-num.pull-stat-num, .pull-stat-num.pull-stat-num.pull-stat-num {
   font-size: clamp(48px, 7vw, 88px);
-  font-weight: 500;
+  font-weight: 400;
   font-family: var(--mono);
-  color: var(--aurum);
+  color: var(--accent-text);
   line-height: 1;
   letter-spacing: -0.02em;
 }
 
 span.pull-stat-secondary.pull-stat-secondary, .pull-stat-secondary.pull-stat-secondary.pull-stat-secondary {
   font-size: clamp(28px, 4vw, 40px);
-  font-weight: 500;
+  font-weight: 400;
   font-family: var(--mono);
-  color: var(--ivory);
+  color: var(--fg-1);
   line-height: 1.1;
   letter-spacing: -0.02em;
 }
 
-/* LAYOUT-SHEET 2026-09-26 item 8: uppercase transform dropped -- the
-   markup is already authored in sentence case underneath it, and
-   multi-word labels ("direct share (60% via discovery)") were measurably
-   harder to scan uppercased at phone width. Letter-spacing tuned down to
-   match: 0.08em was set for tracked uppercase and reads unnaturally
-   spaced-out on sentence case at 13px. Do not touch .code-block-lang --
-   that is the ruled eyebrow signature, a different component. */
 span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.pull-stat-caption {
   font-size: 13px;
   letter-spacing: 0.02em;
-  color: var(--slate);
+  color: var(--fg-3);
   margin-top: 8px;
 }
 
-.ledger-strip.ledger-strip {
-  padding: 64px 0;
-  border-top: 1px solid var(--aurum-border);
-  border-bottom: 1px solid rgba(229,229,227,0.08);
-}
-
-/* ── DR-7d LEDGER CONTAINER FORM RULE ───────────────────────────────────────
-   Ledger stats use the STRIP form: a row of hairline-separated cells with no
-   per-cell card boxes (bg/border/radius). This matches the site's hairline-
-   divider discipline; boxed stat-cards are the drift. Reference: .ledger-strip
-   above and .builders-hero-stats. (earnings .math-stat was flattened from cards
-   to strip cells to conform — see earnings.html.) */
-
-/* ── DR-7f: single gold "ledger stat" for the thin chapter heroes (earnings,
-   pricing, how-it-works). Hidden until a real number arrives from /knowledge/stats
-   — never renders a fabricated or placeholder figure. One gold event per hero. */
-/* Wave E2 item 11: display:none while hidden removed the box from layout
-   entirely, so a min-height on it (see below) was inert — nothing was ever
-   reserved until .is-live flipped display, which is exactly the CLS
-   PageSpeed-FINAL-2026-09-06.md P2.3 measured. Switched to visibility, so
-   the box (and its reserved min-height) stays in flow at all times,
-   painting nothing until live. Still satisfies DR-7f ("never renders a
-   fabricated or placeholder figure"): visibility:hidden paints nothing and
-   is excluded from the accessibility tree, same as display:none was. */
 /* SPACING-0927 R2-2b: margin-top 20 ties 16/24 (tie->larger); gap 10
    rounds down to 8. */
 .hero-ledger {
@@ -2421,34 +1460,30 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   min-height: 26px;
   margin: var(--space-copy) auto 0;
   align-items: baseline;
-  /* LAYOUT-SHEET 2026-09-26 item 5: was justify-content: center. The sole
-     live consumer today (how-it-works.html) is now left-aligned by
-     ruling; flex-start holds that. */
+
   justify-content: flex-start;
   gap: var(--space-tight);
 }
-.hero-ledger.is-live { visibility: visible; } /* FIX-UNIT L10: comment corrected -- justify-content above is flex-start (not center) as of LAYOUT-SHEET 2026-09-26 item 5, so this positions the ledger left, regardless of parent text-align; its sole current consumer (how-it-works.html) is left-aligned by design. A future page reaching for .hero-ledger should not assume the old centered default. */
+.hero-ledger.is-live { visibility: visible; }
 .hero-ledger .hero-ledger-num {
   font-family: var(--mono);
   font-size: 22px;
-  font-weight: 600;
-  color: var(--aurum);
+  font-weight: 400;
+  color: var(--accent-text);
   letter-spacing: -0.01em;
   line-height: 1;
 }
-/* LAYOUT-SHEET 2026-09-26 item 8: same two edits as .pull-stat-caption
-   above (same visual role, different component) -- uppercase dropped,
-   letter-spacing tuned down for sentence case. */
+
 .hero-ledger .hero-ledger-label {
   font-size: 12px;
   letter-spacing: 0.02em;
-  color: var(--slate);
+  color: var(--fg-3);
 }
 
 /* ── Recent discoveries band (E3: real learnings, server-rendered) ────────── */
 .discovery-band {
-  border-top: 1px solid rgba(229,229,227,0.08);
-  border-bottom: 1px solid rgba(229,229,227,0.08);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
 }
 
 .discovery-row {
@@ -2456,12 +1491,9 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   grid-template-columns: 150px 1fr auto auto;
   align-items: baseline;
   gap: 16px;
-  /* SPACING-0927 R2-2a: this is a list item; gap between list items is
-     16px, named by the sheet. Each row's own padding-top and padding-
-     bottom supply half the gap to the row above/below (was 14, giving 28
-     between rows; 8+8=16). */
+
   padding: var(--space-tight) 4px;
-  border-bottom: 1px solid rgba(229,229,227,0.06);
+  border-bottom: 1px solid var(--line);
 }
 
 .discovery-row:last-child { border-bottom: none; }
@@ -2471,17 +1503,17 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
 .discovery-cat {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--slate);
+  color: var(--fg-3);
   letter-spacing: 0.04em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* a category name wraps rather than clip, so widened text spacing never cuts it off */
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .discovery-title {
   font-size: 15px;
   font-weight: 500;
-  color: var(--ivory);
+  color: var(--fg-1);
   line-height: 1.45;
   min-width: 0;
 }
@@ -2489,22 +1521,22 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
 .discovery-score {
   font-family: var(--mono);
   font-size: 12px;
-  color: var(--slate);
+  color: var(--fg-3);
   white-space: nowrap;
 }
 
 .discovery-price {
   font-family: var(--mono);
   font-size: 13px;
-  font-weight: 600;
-  color: var(--aurum);
+  font-weight: 400;
+  color: var(--accent-text);
   white-space: nowrap;
   justify-self: end;
 }
 
 .discovery-band-note {
   font-size: 13px;
-  color: var(--slate);
+  color: var(--fg-3);
   /* SPACING-0927 R2-2b: 14 rounds up to 16 (was 14). */
   margin-top: var(--space-body);
   line-height: 1.6;
@@ -2518,6 +1550,8 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
       "title title"
       "score price";
     row-gap: 4px;
+    /* top-aligned (not baseline) so the 12px score and 13px price do not push each other down a pixel */
+    align-items: start;
   }
   .discovery-cat { grid-area: cat; }
   .discovery-title { grid-area: title; }
@@ -2525,14 +1559,11 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   .discovery-price { grid-area: price; }
 }
 
-/* ── Value-tiers table: stacked cards under 600px (visual pass P8) ─────────
-   The PRICE RANGE and EXAMPLE columns are the proof; never push the proof
-   off-screen on the device developers actually browse. */
 @media (max-width: 600px) {
   .value-tiers-table-wrap {
     overflow-x: visible;
     border: none;
-    border-radius: 0;
+    border-radius: var(--r-stage);
   }
   .value-tiers-table-wrap::after { display: none; }
   .value-tiers-table { min-width: 0; }
@@ -2546,11 +1577,11 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   }
   /* SPACING-0927 R2-2b: 12 ties 8/16 -- tie goes to the larger value. */
   .value-tiers-table tr {
-    border: 1px solid rgba(229,229,227,0.1);
-    border-radius: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--r-stage);
     margin-bottom: var(--space-body);
     padding: 16px 16px 8px;
-    background: rgba(255,255,255,0.02);
+    background: var(--surface);
   }
   .value-tiers-table td {
     border-bottom: none;
@@ -2559,7 +1590,7 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
   .value-tiers-table td.tier-name {
     font-size: 15px;
     padding-bottom: 10px;
-    border-bottom: 1px solid rgba(229,229,227,0.08);
+    border-bottom: 1px solid var(--line);
     margin-bottom: 6px;
   }
   .value-tiers-table td:not(.tier-name)::before {
@@ -2567,7 +1598,7 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
     font-size: 10px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: var(--slate);
+    color: var(--fg-3);
     margin-bottom: 2px;
   }
   .value-tiers-table td:nth-child(2)::before { content: 'What it covers'; }
@@ -2575,54 +1606,17 @@ span.pull-stat-caption.pull-stat-caption, .pull-stat-caption.pull-stat-caption.p
 }
 
 /* Range strings in a ledger strip: compact mono so the range holds one line */
-span.pull-stat-range.pull-stat-range, .pull-stat-range.pull-stat-range.pull-stat-range {
-  font-size: clamp(16px, 1.5vw, 19px);
-  letter-spacing: 0;
-  line-height: 1.3;
-  display: block;
-  padding: 6px 0;
-}
 
-/* ══════════════════════════════════════════════════════════════════════════
-   Wave E2 (SITE-PM final wave sheet, 2026-09-06) — items 5, 8, 11-13
-   This builder owns styles.css only, plus the <style> block CONTENTS of
-   about.html and writing/index.html (item 14). Every rule below that
-   targets a class/id living in another page's own markup or own <style>
-   block reaches it purely through this sheet's cascade — none of those
-   other HTML files were edited. Where a rule needs !important, it is
-   because that page's own <style> block declares the same property on the
-   same selector and loads AFTER this sheet in <head>, so equal specificity
-   would otherwise resolve to source order, not to this fix.
-   ══════════════════════════════════════════════════════════════════════════ */
-
-/* ── Item 5: /for-builders hero stat row ─────────────────────────────────
-   Markup ships 70% and "under 1 minute" as `.stat-num.pull-stat-caption`
-   (one tier below `.pull-stat-secondary` — AD-STEP4-FINAL-2026-09-06.md §5
-   residual 7: number+label render at the same 13px slate as their own
-   caption, 226 alone at 88px gold). for-builders.html is out of this
-   builder's file ownership so the class can't be renamed in markup; this
-   promotes just those two spans to the pull-stat-secondary treatment.
-   Wave E fix (F2): the original `:not(.reveal)` scope relied on the second,
-   lower "Supply is ahead of demand" stats strip carrying a `.reveal`
-   class to stay excluded. Wave E3 (item 7) stripped every `.reveal` class
-   from this page, so `:not(.reveal)` started matching both strips and the
-   min-height rule below forced dead space above the second strip's
-   `.pull-stat-secondary` numbers. Scoped to `#builders-hero` (the top hero
-   section — the second strip lives in `#earnings-projection`) instead,
-   which doesn't depend on a class either wave might remove next. */
 #builders-hero .builders-hero-stats .builders-hero-stat .stat-num.pull-stat-caption {
   font-size: clamp(28px, 4vw, 40px);
-  font-weight: 500;
+  font-weight: 400;
   font-family: var(--mono);
-  color: var(--ivory);
+  color: var(--fg-1);
   letter-spacing: -0.02em;
   text-transform: none;
   margin-top: 0;
 }
-/* One label baseline across the three cells: reserve the SAME box height
-   (the 226 cell's own clamp) under every stat-num regardless of its own
-   font-size, bottom-aligning the number so the caption beneath always
-   starts at the same y. Fixes the 59.2px label-top break AD measured. */
+
 #builders-hero .builders-hero-stats .builders-hero-stat .stat-num {
   min-height: clamp(48px, 7vw, 88px);
   display: flex;
@@ -2630,81 +1624,6 @@ span.pull-stat-range.pull-stat-range, .pull-stat-range.pull-stat-range.pull-stat
   line-height: 1;
 }
 
-/* ── Item 8: /status badges onto the brand palette ───────────────────────
-   status.html defines its own --green/--yellow/--red tokens at :root in a
-   <style> block that loads after this sheet (AD-STEP4-FINAL §1.4: rgb
-   (34,197,94) green + rgb(234,179,8) yellow next to the nav's brand
-   rgb(201,168,76) — "two different yellows plus a green" on one screen).
-   Redefining the SAME custom-property names here with !important cascades
-   through every var(--green)/var(--yellow) consumer on that page: the
-   static .badge/.overall-status/.status-dot CSS, the inline
-   style="color:var(--yellow)" markup, and the JS-set
-   .style.color/.style.background on the degraded-health path — all of
-   them resolve the variable at compute time, so redefining the token once
-   is enough; no per-selector override needed for anything routed through
-   var(). The brand has no green, so "Operational" reads as neutral ash;
-   anything needing attention (Migrating, Degraded) converges on the SAME
-   aurum the nav already carries, so the page stops running a second,
-   off-brand accent colour alongside it. A few border-colors on that page
-   are literal rgba(34,197,94,…) / rgba(234,179,8,…) values, not routed
-   through a var(), so those are overridden directly below (also
-   !important, same later-source-wins reason). Outage/red is untouched:
-   not part of what's live on screen today, and the brand has no red
-   either — a genuine design call left for whoever owns status.html. */
-:root {
-  --green: var(--ash) !important;
-  --green-bg: rgba(229, 229, 227, 0.08) !important;
-  --yellow: var(--aurum) !important;
-  --yellow-bg: var(--aurum-dim) !important;
-}
-.overall-status,
-.badge.degraded {
-  border-color: var(--aurum-border) !important;
-}
-.badge.operational {
-  border-color: rgba(229, 229, 227, 0.25) !important;
-}
-
-/* ── Item 11: .hero-ledger reserved min-height ────────────────────────────
-   Implemented in place on the original .hero-ledger rule above (near the
-   pull-stat section), not here — kept together with the display/visibility
-   fix it depends on. Live-measured (this builder, headless Chrome via the
-   browser tool, same getBoundingClientRect method AD-STEP4 uses) on the
-   running production DOM once .is-live has rendered a real number: 24.70px
-   on /how-it-works at 1280 and 375, 25.30px on /pricing at 1280 (identical
-   num+label markup on both pages; the two are 24.7-25.3 apart only by
-   subpixel/font-hinting noise, not a real per-page difference) — 26px
-   covers both with a small margin. PageSpeed-FINAL-2026-09-06.md P2.3
-   asked for this on /how-it-works and /pricing specifically; the class is
-   shared with /earnings too and this fix is strictly beneficial there as
-   well (same CLS bug, same fix), so it's left in scope rather than
-   excluded. */
-
-/* ── Item 11: size-adjust fallback-metric overrides ───────────────────────
-   PageSpeed-FINAL-2026-09-06.md P2.4 names no target numbers ("no such
-   property exists anywhere in styles.css") — the ratios below come from
-   AD-STEP4-FINAL-2026-09-06.md §2's own live advance-width measurements
-   (Range.getClientRects on the real DOM, woff2 blocked to force the
-   fallback), the best available already-measured data; this builder could
-   not reproduce that block-the-font measurement live against the prod
-   site without editing it. Archivo: 16px regular vs Helvetica Neue,
-   294.9/305.8 = 96.43% (the body-copy weight — the dominant contributor to
-   the swap's ~30px page-height reflow AD measured, not the 72px-bold
-   figure, which is a different, less-representative weight comparison).
-   Plex Mono: 13px vs Menlo, 124.8/125.2 = 99.68% (the exact weight/size
-   Plex Mono ships at everywhere it's used, .code-block pre).
-   Deliberate deviation from a literal reading of "add to both @font-face
-   rules": size-adjust is added to NEW synthetic fallback @font-face
-   declarations, not to Archivo's/Plex Mono's own existing @font-face
-   rules. Putting it on the real webfonts' own faces would scale their
-   PERMANENT rendered size (not just the swap window), shrinking every
-   approved h1/h2/body size on the site by the same ~3.6% this is supposed
-   to only apply to the fallback during the brief pre-load flash — that
-   would be a real, if small, visual regression against every measurement
-   in this whole wave. The fallback face is inserted into --sans/--mono
-   right after the primary font as a local()-only face (an unmatched
-   local() fails closed to the next fallback, so a system with neither
-   Helvetica Neue nor Menlo just falls through to the original chain). */
 @font-face {
   font-family: 'Archivo Fallback';
   src: local('Helvetica Neue'), local('Arial');
@@ -2716,40 +1635,23 @@ span.pull-stat-range.pull-stat-range, .pull-stat-range.pull-stat-range.pull-stat
   size-adjust: 99.68%;
 }
 
+@font-face {
+  font-family: 'Newsreader Fallback';
+  src: local('Georgia');
+  size-adjust: 96.9%;
+  ascent-override: 75.8%;
+  descent-override: 27.3%;
+  line-gap-override: 0%;
+}
+
 /* ── Item 12 (remainder): 44px targets not reachable via a shared class ── */
-/* for-agents.html's own <style> block defines .agent-cta-links a (the six
-   footer links, AD-STEP4-FINAL P3.19: 38.4px) with no display/min-height
-   declared for that selector at all, so these two new properties apply
-   uncontested — no !important needed, nothing else sets them. */
+
 .agent-cta-links a {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
 }
-/* index.html's own <style> block sets `.dive-arrow { opacity: 0; }`
-   unconditionally (hover-only reveal) — AD-STEP4-FINAL §3: "Dive Deeper on
-   touch. Not fixed. .dive-arrow is opacity 0 and reveals on hover only,"
-   meaning a touch user (no hover state) never sees it. Coarse-pointer
-   devices get it shown permanently instead. !important needed: the local
-   rule declares the same property, unconditionally, and loads after this
-   sheet. */
-@media (pointer: coarse) {
-  .dive-arrow {
-    opacity: 1 !important;
-    transform: translateX(0) !important;
-  }
-}
 
-/* ── Item 13: hero `br` conditional above 768px ──────────────────────────
-   index (#hero h1), for-agents (.page-hero h1) and pricing
-   (.pricing-page-header h1) each hard-code exactly one <br> inside their
-   h1 (verified: one match each), forcing the same two-line break at every
-   width and stranding words at 375 (AD-STEP4-FINAL §2: index "this." at
-   24%, for-agents "what" alone at 26%, pricing "$0.05." orphaned at 38%).
-   Hiding just these three <br>s below 768px lets the h1 wrap naturally on
-   phones without touching any other <br> on the site (for-builders' own
-   "Build Once.<br>Keep Earning." break is deliberately NOT in this
-   selector list and is unaffected). */
 @media (max-width: 768px) {
   #hero h1 br,
   .page-hero h1 br,
@@ -2758,87 +1660,10 @@ span.pull-stat-range.pull-stat-range, .pull-stat-range.pull-stat-range.pull-stat
   }
 }
 
-/* ── Item 13 (SUPERSEDED by SPACING-0927): pricing measure widening ──────
-   The old fix zeroed .pricing-page-header .container's own padding below
-   600px to cancel a stacked --hero-pad-mobile + .container double inset.
-   SPACING-0927 removes --hero-pad-mobile from every hero (B-4/A1: a hero
-   takes plain padding like any section, nav clearance moves to `main`'s
-   own margin) and gives #pricing-hero zero horizontal padding of its own
-   at every width, delegating the gutter entirely to .container's now-
-   responsive padding (var(--gutter-base)) -- see the Hero section above
-   and #pricing-hero's own rule in pricing.html. Re-zeroing .container here
-   would collapse that gutter back to 0, so this rule is removed rather
-   than kept as a no-op. */
-
-/* ── Item 13 (SUPERSEDED by SPACING-0927): for-builders hero top padding cut
-   The old fix pinned .builders-hero-content's mobile padding-top to 40px
-   to land a combined (hero + content) offset near a "140px" target. Hero
-   nav-clearance is no longer part of any hero's own padding (it is `main`'s
-   margin-top, sitewide, see above), and .builders-hero-content itself now
-   carries no padding of its own at any width (matching every sibling
-   *-content wrapper) -- this !important override would reintroduce an
-   unwanted 40px on top of #builders-hero's own clean rhythm padding, so it
-   is removed rather than kept as a no-op. */
-
-/* ── Item 13: for-agents strip caption widened at 375 ─────────────────────
-   for-agents.html's own <style> block switches `.stats-strip` to a 2-col
-   grid at <=768px (163.5px cells at 375), which wraps the longer captions
-   ("LEARNINGS IN CATALOG", "COST TO SEARCH") to two lines while shorter
-   neighbours ("CATEGORIES") hold one — a 17.2px label-baseline break
-   (AD-STEP4-FINAL §1.3 residual). Single-columning the strip at <=600px
-   (phone widths) gives every cell the full ~343px row width instead of
-   half, which comfortably fits the longest caption on one line;
-   768-600px (tablet) keeps the existing 2-col layout, which AD didn't
-   flag as broken. !important: same-specificity rule, loads after this
-   sheet, and the local rule isn't itself inside a narrower media query
-   whose specificity CSS would otherwise prioritize on its own. */
-@media (max-width: 600px) {
-  .stats-strip {
-    grid-template-columns: 1fr !important;
-  }
-  .stats-strip-item {
-    border-right: none !important;
-  }
-  .stats-strip-item:last-child {
-    grid-column: span 1 !important;
-  }
-}
-
-/* ── Item 13: /api method column mono to 13px ─────────────────────────────
-   `.ep-method` (10px) is shared with the compact `.endpoint-list` badges
-   used elsewhere on api.html and on for-agents.html's own MCP quick
-   reference — the wave sheet names only "the /api method column" (the
-   Method column of the two full endpoint-reference TABLES,
-   AD-STEP4-FINAL §2 "Spec table mono": 10px method spans under the 12px
-   floor next to 13px endpoint spans in the same row). `.endpoint-table
-   .ep-method` scopes to just those two tables (api.html has no
-   .endpoint-list at all), leaving the compact-list badges on both pages
-   at their current size. */
 .endpoint-table .ep-method {
   font-size: 13px;
 }
 
-/* ── Item 13: five older how-it-works diagram labels up to the 12px floor ─
-   The three newer drawings (index hero-figure, for-agents hero-exchange,
-   the how-it-works approval fork) already clear the floor via the shared
-   --svg-label token. The five older mini-diagrams on how-it-works
-   (magic-link auth, MCP connection, discovery pricing flow, learning-
-   example card, before/after resolution) instead carry raw
-   font-size="7|8|9|10" presentation attributes directly on their <text>
-   nodes, no class (AD-STEP4-FINAL §2: svg#13 7/8, svg#16 7/8/9, svg#2 9,
-   svg#4 8/10, svg#10 8/9/16). `.hiw-step-card` is the shared wrapper class
-   these five diagrams sit inside — defined only in this sheet, used only
-   by how-it-works.html — so it scopes this cleanly to just those five
-   without touching the approval fork's own text (which has no font-size
-   attribute at all, set once at the parent <svg> via --svg-label, so it
-   can't match these attribute selectors) or any other page's SVGs. CSS
-   `font-size` overrides an SVG presentation attribute at any specificity,
-   so no !important is needed. FLAGGED, not verified live: these five
-   diagrams have small fixed viewBoxes sized around their original 7-10px
-   text; a ~30-70% size jump to 12px risks overflow/collision inside a few
-   of them (e.g. "FREE PREVIEW" at font-size 7) that this builder could not
-   visually confirm without the page live in this wave — recommend a
-   render QA pass before merge. */
 .hiw-step-card svg text[font-size="7"],
 .hiw-step-card svg text[font-size="8"],
 .hiw-step-card svg text[font-size="9"],
@@ -2846,54 +1671,550 @@ span.pull-stat-range.pull-stat-range, .pull-stat-range.pull-stat-range.pull-stat
   font-size: 12px;
 }
 
-/* ── Item 13: terms/privacy onto the display type scale ──────────────────
-   /terms and /privacy are server-rendered by serveLegalPage() in
-   server.js (out of this builder's ownership — no static terms.html or
-   privacy.html exists), whose inline <style> block defines `.legal-wrap
-   h1`/`h2` with font-size/color/margin only — no line-height or
-   letter-spacing declared for either selector, so these new declarations
-   apply uncontested (no !important needed). AD-STEP4-FINAL §2: h1 32px at
-   51.2px leading (32*1.6, the plain body inheritance) and h2 22px at
-   35.2px (22*1.6), both "normal" tracking, against every main h1's
-   -1.12 to -1.68px. */
-.legal-wrap h1,
+.legal-wrap h1 {
+  line-height: 1.04;
+  letter-spacing: -0.022em;
+}
 .legal-wrap h2 {
   line-height: 1.1;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.016em;
 }
 
-/* ── Item 13: the essay onto the display type scale ───────────────────────
-   writing-agents-message-board.html's own <style> block already sets
-   `.writing-wrap h1 { line-height: 1.25; }` explicitly (not inherited) —
-   AD-STEP4-FINAL §2: "writing-amb runs 32 at 40" (32*1.25). !important
-   needed: same property, same selector, declared later. No letter-spacing
-   was set at all there, so that half needs no !important. */
-.writing-wrap h1 {
-  line-height: 1.1 !important;
-  letter-spacing: -0.02em;
-}
-
-/* ── LOGOS-INVISIBLE: Works With client marks rendered via CSS mask ───────
-   works-with.html's own <style> block defines the ww-logo-box tier sizing
-   (.ww-size-large/medium/small .ww-logo-box), but this one shared rule
-   lives here instead: every logo SVG under public/logos/ is authored
-   fill="currentColor", and an SVG loaded via <img> is an isolated document
-   -- currentColor never sees this page's `color`, so it resolved to
-   black-on-black against the page's rgb(10,10,10) ground. Nine <img
-   src="/logos/...svg"> tags are replaced with <span class="ww-logo"
-   role="img" aria-label="<client name>" style="--logo:url(/logos/<name>
-   .svg)"> so a real element (background-color: var(--ivory), #FAFAF8 =
-   rgb(250,250,248), this file line 25) paints through the SVG's shape via
-   mask instead of asking the SVG to inherit a color -- always ivory
-   regardless of what the SVG's own fill says. The span fills whatever box
-   its ww-logo-box parent gives it (that box now carries a real `height`,
-   not just `max-height`, precisely so this mask has a real box to paint
-   into); mask-size:contain scales the mark to fit without distortion. */
 .ww-logo {
   display: block;
   width: 100%;
   height: 100%;
-  background-color: var(--ivory);
+  background-color: var(--fg-1);
   -webkit-mask: var(--logo) center / contain no-repeat;
   mask: var(--logo) center / contain no-repeat;
+}
+
+.lede {
+  font-size: 19px;
+  line-height: 1.55;
+}
+/* A single sentence is not a card. A one-sentence callout is a lede line in heading ink,
+   not a boxed panel. */
+.lede-line {
+  font-size: 19px;
+  line-height: 1.55;
+  color: var(--fg-1);
+}
+
+/* a command, a tool name or any data in running copy is mono at weight 400 */
+code,
+.mono {
+  font-family: var(--mono);
+  font-size: 0.875em;
+}
+pre code {
+  font-size: 1em;
+}
+
+.cmd-chip {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 13px;
+  background: var(--obsidian);
+  color: var(--ivory);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-wide);
+  align-items: center;
+}
+.pair p {
+  max-width: 60ch;
+}
+.pair p + p {
+  margin-top: var(--space-body);
+}
+@media (min-width: 1025px) {
+  .pair.art-left > .pair-art {
+    order: -1;
+  }
+}
+
+.aside-list {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: var(--space-wide);
+  align-items: start;
+}
+
+/* a questions list in the right-hand column fills it (the page-wide list centres at 700) */
+.aside-list .faq-list {
+  max-width: none;
+  margin: 0;
+}
+
+/* ── The stage a drawing sits in ── */
+.dw-stage,
+.dw-stage-dark {
+  border-radius: var(--r-stage);
+  padding: var(--space-card);
+  position: relative;
+}
+.dw-stage {
+  background: var(--tint);
+}
+.on-tint .dw-stage {
+  background: var(--tint-deep);
+}
+.dw-stage-dark,
+.on-tint .dw-stage.dw-stage-dark {
+  background: var(--bg);
+}
+
+/* ── Product panels ── */
+.dw-panel {
+  border-radius: var(--r-panel);
+  padding: var(--space-body);
+}
+.dw-dark {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-panel-dark);
+  color: var(--fg-2);
+}
+.dw-light {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-panel);
+  color: var(--fg-2);
+}
+.on-dark .dw-light {
+  border-color: transparent;
+}
+.dw-cap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-tight);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--fg-1);
+}
+.dw-node {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  overflow: visible;
+}
+.dw-node path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+}
+
+/* skeleton bars stand in for any text the drawing may not carry */
+.dw-sk {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: currentColor;
+  opacity: 0.22;
+}
+.dw-light .dw-sk {
+  opacity: 0.16;
+}
+.dw-sk + .dw-sk {
+  margin-top: var(--space-tight);
+}
+.dw-sk.w30 { width: 30%; }
+.dw-sk.w40 { width: 40%; }
+.dw-sk.w55 { width: 55%; }
+.dw-sk.w70 { width: 70%; }
+.dw-sk.w85 { width: 85%; }
+.dw-sk.w100 { width: 100%; }
+.dw-sk.lit {
+  opacity: 0.7;
+}
+
+.dw-term {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.dw-term .dw-tool {
+  color: var(--fg-1);
+}
+.dw-term .dw-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-tight);
+}
+.dw-term .dw-row .dw-sk {
+  flex: 1;
+  margin: 0;
+}
+
+.dw-title {
+  display: block;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--fg-1);
+  margin-top: var(--space-tight);
+}
+.dw-chip {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1;
+  padding: 5px 8px;
+  border-radius: 4px;
+  background: var(--chip-bg);
+  color: var(--fg-2);
+  white-space: nowrap;
+}
+.dw-btns {
+  display: flex;
+  gap: var(--space-tight);
+  margin-top: var(--space-body);
+}
+.dw-btn {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 9px 14px;
+  border-radius: 5px;
+  border: 1px solid var(--fg-1);
+}
+.dw-btn.primary {
+  background: var(--fg-1);
+  color: var(--bg);
+}
+.dw-btn.ghost {
+  border-color: var(--line);
+  color: var(--fg-2);
+}
+
+/* the earnings ledger drawing: a gold tick, a skeleton bar, a gold amount bar */
+.dw-ledger {
+  margin-top: var(--space-body);
+  display: grid;
+  gap: var(--space-tight);
+}
+.dw-ledger .dw-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-tight);
+}
+.dw-ledger .dw-tick {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--aurum);
+}
+.dw-ledger .dw-sk {
+  flex: 1;
+  margin: 0;
+  opacity: 0.3;
+}
+.dw-ledger .dw-amt {
+  width: 44px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--aurum);
+  opacity: 0.85;
+}
+/* a row label inside a drawing: a real dashboard label, set like a caption */
+.dw-rowlabel {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--fg-1);
+}
+/* a card that stands for a result already given: a 1px outline, never a dimmed fill */
+.dw-outline {
+  background: transparent;
+  border: 1px solid rgba(250, 250, 248, 0.32);
+  box-shadow: none;
+}
+
+/* the review queue drawing */
+.dw-queue-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg-1);
+  display: flex;
+  align-items: center;
+  gap: var(--space-tight);
+}
+.dw-queue-row {
+  padding: var(--space-body) 0;
+  border-top: 1px solid var(--line);
+}
+.dw-queue-row:first-of-type {
+  margin-top: var(--space-body);
+}
+.dw-queue-row .dw-sk {
+  margin-top: var(--space-tight);
+}
+
+/* the recall drawing: the long way beside the short way */
+.dw-twoup {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-body);
+  align-items: end;
+}
+.dw-twoup .dw-panel {
+  padding: 16px;
+}
+/* the long way is a short run of lines with a category chip between each, a column on the 16 step; the
+   card at its foot sits 24 under the last chip (the 16 step plus 8) */
+.dw-twoup .dw-long {
+  display: grid;
+  gap: var(--space-body);
+  align-content: start;
+}
+.dw-twoup .dw-long .dw-found {
+  margin-top: var(--space-tight);
+}
+
+.dw-twoup .dw-found {
+  margin-top: var(--space-copy);
+}
+.dw-twoup .dw-panel:not(.dw-long) .dw-found {
+  padding: var(--space-copy);
+}
+.dw-twoup .dw-panel:not(.dw-long) .dw-found .dw-title {
+  font-size: 16px;
+}
+
+:root {
+  --device: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1250' height='1150' viewBox='0 0 1250 1150' fill='none' stroke='%23FAFAF8' stroke-opacity='.12' stroke-width='1.5' stroke-linejoin='round'%3E%3Cpath d='M-98 1150L520 2L1138 1150'/%3E%3Cline x1='520' y1='202' x2='1250' y2='202'/%3E%3C/svg%3E");
+}
+/* The device, 1025 and up only: its apex hangs 48px outside the hero container's right edge, level with
+   the container's top, so the crossbar runs in the margin and clears every card in the hero. */
+@media (min-width: 1025px) {
+  main > .on-dark:first-child,
+  body .legal-wrap > h1::before {
+    background-image: var(--device);
+    background-repeat: no-repeat;
+    background-size: 1250px 1150px;
+    background-position: min(calc(50% + 703px), calc(100% + 754px)) 120px;
+  }
+}
+/* The dashboard's sign-in screen is an application surface: no device. */
+main > #login-view {
+  background-image: none;
+}
+/* The device belongs to a hero with no drawing. Its left leg runs down under a hero's panels, so the
+   five heroes that hold a drawing (home, for-builders, for-agents, pricing, how-it-works) carry none.
+   An id outranks the shared rule above, so this wins at every width without touching the media block. */
+main > :is(#hero, #builders-hero, #page-hero, #pricing-hero, .hiw-hero) {
+  background-image: none;
+}
+
+.step-art {
+  background: var(--bg);
+  padding: var(--space-copy);
+  height: 168px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.step-body {
+  padding: var(--space-copy);
+}
+.step-body p {
+  font-size: 15px;
+  line-height: 1.6;
+}
+.step:not(:has(> .step-body)) {
+  padding: var(--space-card);
+}
+
+/* ── Index of pages: heading left (.aside-list), rows right. No numerals, no arrows. ── */
+.dive-row {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: var(--space-copy);
+  align-items: baseline;
+  /* a link row: 24 above and below its line (sheet v2) */
+  padding: var(--space-copy) 0;
+  border-top: 1px solid var(--line);
+  text-decoration: none;
+}
+.dive-row:last-child {
+  border-bottom: 1px solid var(--line);
+}
+.dive-title {
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--fg-1);
+}
+.dive-desc {
+  font-size: 15px;
+  color: var(--fg-3);
+}
+.dive-row:hover .dive-title {
+  text-decoration: underline;
+  text-decoration-color: var(--accent-text);
+  text-underline-offset: 4px;
+}
+
+.hero-setup-block,
+#footer-setup-snippet {
+  border-color: rgba(201, 168, 76, 0.45);
+}
+.hero-setup-block .copy-btn,
+#footer-setup-snippet .copy-btn {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0;
+  color: var(--obsidian);
+  background: var(--aurum);
+  border: 0;
+  padding: 0 18px;
+}
+.hero-setup-block .copy-btn:hover,
+#footer-setup-snippet .copy-btn:hover,
+.hero-setup-block .copy-btn.copied,
+#footer-setup-snippet .copy-btn.copied {
+  color: var(--obsidian);
+}
+.hero-setup-block .copy-btn:hover,
+#footer-setup-snippet .copy-btn:hover {
+  background: var(--aurum-hi);
+}
+.hero-setup-block pre,
+#footer-setup-snippet pre {
+  font-size: 19px;
+  color: var(--accent-text);
+}
+.hero-setup-block pre::before,
+#footer-setup-snippet pre::before {
+  content: '$ ';
+  color: var(--fg-3);
+}
+
+/* the closing ask: a 480px frame, centred in its section, the command left-aligned inside it */
+#footer-cta .code-block {
+  margin: var(--space-card) auto 0;
+  text-align: left;
+  max-width: 480px;
+}
+
+/* ── Responsive: 1024 and down ── */
+@media (max-width: 1024px) {
+  .pair,
+  .aside-list {
+    grid-template-columns: 1fr;
+    gap: var(--space-block);
+  }
+  /* stacked, the heading sits 16px above its list (the heading rule), not 16 plus the grid gap */
+  .aside-list {
+    row-gap: 0;
+  }
+  .steps {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Responsive: 480 and down ── */
+@media (max-width: 480px) {
+  .lede,
+  .lede-line,
+  .hero-sub {
+    font-size: 17px;
+  }
+  /* One inset for every code block at phone width, on every page: the header's label and the code
+     both start 16 from the frame's outer edge (the frame's 1px border plus 15 of padding). */
+  .code-block-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-tight);
+    padding: var(--space-body) calc(var(--space-body) - 1px);
+  }
+  .code-block-header .copy-btn {
+    width: 100%;
+  }
+  .hero-setup-block pre,
+  #footer-setup-snippet pre {
+    font-size: 17px;
+    padding: 16px;
+  }
+  .code-block pre,
+  .hero-install .hero-setup-block pre,
+  #footer-setup-snippet pre {
+    padding-inline: calc(var(--space-body) - 1px);
+  }
+  .dive-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .dw-twoup {
+    grid-template-columns: 1fr;
+  }
+  /* stacked, the long way is full width: its lines stay short, with the chips between, so it never reads as a slab */
+  .dw-long .dw-sk {
+    max-width: 40%;
+  }
+  /* the footer's meta line breaks only between its items, never inside one */
+  .footer-meta {
+    line-height: 1.8;
+  }
+  .footer-meta a {
+    white-space: nowrap;
+    /* a box of its own, as tall as the 1.8 line (25px), so the link is at least a 24px target */
+    display: inline-block;
+  }
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-block);
+  align-items: center;
+}
+@media (min-width: 901px) {
+  .hero-grid {
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+    gap: var(--space-wide);
+  }
+}
+.hero-one > * {
+  max-width: 720px;
+}
+.hero-one.hero-centred {
+  text-align: center;
+}
+.hero-one.hero-centred > * {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+:is(#about-hero, #connect-hero, #writing-hero, #essay-hero) .hero-one > *,
+#about-body .read > *,
+#connect-steps-section .container > *,
+#writing-entries .container > *,
+#essay-body .essay-body > * {
+  --read-w: calc(720px - 2 * var(--gutter-base));
+  max-width: var(--read-w);
+  margin-left: max(0px, calc((100% - var(--read-w)) / 2));
+  margin-right: 0;
+}
+
+main .component-label,
+main .ww-key-lead {
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 300;
+  line-height: 1.1;
+  letter-spacing: -0.016em;
+  color: var(--fg-1);
+  text-wrap: balance;
+  font-synthesis-weight: none;
 }

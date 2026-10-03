@@ -97,18 +97,26 @@ function ruleBody(css, selectorPattern) {
 // Tier 1: static CSS + HTML assertions
 // ═══════════════════════════════════════════════════════════════════════
 
-describe('FOCUS-VISIBLE (static): one universal ivory 1.5px focus-visible rule, no aurum/duplicate leftovers', () => {
+describe('FOCUS-VISIBLE (static): one universal ground-aware 2px focus-visible rule, no aurum/duplicate leftovers', () => {
   it('--ivory resolves to rgb(250,250,248) (#FAFAF8), the exact colour the sheet\'s V3 row specifies', () => {
     const root = ruleBody(STYLES, ':root\\s*\\{');
     assert.ok(root, ':root rule exists');
     assert.match(root, /--ivory:\s*#FAFAF8/i);
   });
 
-  it('the universal *:focus-visible rule is outline: 1.5px solid var(--ivory); outline-offset: 2px', () => {
+  it('the universal *:focus-visible rule is outline: 2px solid var(--focus-ring); outline-offset: 2px (ink on light, gold in a dark scope)', () => {
+    // Design system pass: was `1.5px solid var(--ivory)`. --focus-ring is ground-aware, so the
+    // one rule is visible on both grounds.
     const rule = ruleBody(STYLES, '\\*:focus-visible\\s*\\{');
     assert.ok(rule, '*:focus-visible rule exists');
-    assert.match(rule, /outline:\s*1\.5px solid var\(--ivory\)/);
+    assert.match(rule, /outline:\s*2px solid var\(--focus-ring\)/);
     assert.match(rule, /outline-offset:\s*2px/);
+
+    const root = ruleBody(STYLES, ':root\\s*\\{');
+    assert.match(root, /--focus-ring:\s*#0A0A0A/i, 'on a light ground the ring is ink');
+    const darkScope = ruleBody(STYLES, '\\.on-dark,\\s*\\n#main-nav,');
+    assert.ok(darkScope, 'the dark scope rule exists');
+    assert.match(darkScope, /--focus-ring:\s*var\(--aurum\)/, 'in a dark scope the ring is gold');
   });
 
   it('the old duplicate button:focus-visible,a:focus-visible,input:focus-visible aurum block is gone (consolidated into *:focus-visible)', () => {
@@ -141,8 +149,10 @@ describe('CSS-MECHANICAL (static): the four no-judgment-required token dispositi
     assert.doesNotMatch(rule, /font-size:\s*clamp\(/, 'the literal clamp() value should be gone, replaced by the token');
 
     const token = ruleBody(STYLES, ':root\\s*\\{');
-    assert.match(token, /--h2-section:\s*clamp\(28px,\s*3\.5vw,\s*42px\)/,
-      '--h2-section is still clamp(28px,3.5vw,42px), the exact value .hiw-section-heading used to hardcode');
+    // Design system pass: the h2 scale moved from clamp(28px,3.5vw,42px) to clamp(30px,3.6vw,46px);
+    // the heading still reads the token, which is what this row protects.
+    assert.match(token, /--h2-section:\s*clamp\(30px,\s*3\.6vw,\s*46px\)/,
+      '--h2-section is clamp(30px,3.6vw,46px), the design system h2 scale');
   });
 
   it('.page-hero-content (for-agents) and .hiw-hero h1 (how-it-works) max-width is var(--max-w), matching the token\'s own 1100px value', () => {
@@ -160,25 +170,26 @@ describe('CSS-MECHANICAL (static): the four no-judgment-required token dispositi
     assert.match(token, /--max-w:\s*1100px/, '--max-w is still 1100px, the exact value both selectors used to hardcode');
   });
 
-  it('how-submissions-work.html\'s .page-hero-content (max-width: 820px, a genuinely different value, out of the sheet\'s scope for this row) is untouched', () => {
+  it('how-submissions-work.html no longer carries its own .page-hero-content width (design system pass: its hero takes the shared one-column hero, whose copy width is 720px)', () => {
     const html = readPublic('how-submissions-work.html');
-    const rule = ruleBody(html, '\\.page-hero-content\\s*\\{');
-    assert.ok(rule, '.page-hero-content rule exists in how-submissions-work.html');
-    assert.match(rule, /max-width:\s*820px/, 'not var(--max-w) -- 820px is a real, different value, correctly out of scope');
+    assert.equal(ruleBody(html, '\\.page-hero-content\\s*\\{'), null, 'the page-scoped .page-hero-content rule (max-width: 820px) is gone');
+    // Positive control: the hero is the shared hero-one layout, and the shared sheet sets its copy width.
+    assert.match(html, /<div class="container hero-one">\s*<h1 id="page-hero-heading">/, 'the trust page hero uses the shared hero-one layout');
+    assert.match(ruleBody(STYLES, '\\.hero-one > \\*\\s*\\{') || '', /max-width:\s*720px/, 'the shared hero-one copy width is 720px');
   });
 
-  it('for-builders.html .earnings-scenario h3/p font-size are un-swapped: h3 14px, p 13px, matching the shared styles.css rule', () => {
+  // Design rebuild: the math block is a card whose heading takes the site h3 (19px, weight 500) and
+  // whose body is 16px running text, so the page rules now set 19px and 16px. The heading stays
+  // larger than the body (the un-swap this test guards). The shared sheet's own rule still reads
+  // the old 14px/13px data-box label, so the pin to "matching the shared rule" is gone.
+  it('for-builders.html .earnings-scenario h3/p font-size are un-swapped: h3 19px, p 16px, the heading larger than the body', () => {
     const html = readPublic('for-builders.html');
     const h3 = ruleBody(html, '\\.earnings-scenario h3\\s*\\{');
     const p = ruleBody(html, '\\.earnings-scenario p\\s*\\{');
     assert.ok(h3 && p, 'for-builders.html .earnings-scenario h3/p rules exist');
-    assert.match(h3, /font-size:\s*14px/);
-    assert.match(p, /font-size:\s*13px/);
-
-    const sharedH3 = ruleBody(STYLES, '\\.earnings-scenario h3\\s*\\{');
-    const sharedP = ruleBody(STYLES, '\\.earnings-scenario p\\s*\\{');
-    assert.match(sharedH3, /font-size:\s*14px/, 'shared styles.css .earnings-scenario h3 is 14px');
-    assert.match(sharedP, /font-size:\s*13px/, 'shared styles.css .earnings-scenario p is 13px');
+    assert.match(h3, /font-size:\s*19px/);
+    assert.match(p, /font-size:\s*16px/);
+    assert.ok(parseInt(h3.match(/font-size:\s*(\d+)px/)[1], 10) > parseInt(p.match(/font-size:\s*(\d+)px/)[1], 10), 'the heading is larger than the body');
   });
 
   it('for-builders.html no longer carries its own .tier-card / .tier-cards-grid fork (falls through to shared styles.css)', () => {
@@ -189,9 +200,12 @@ describe('CSS-MECHANICAL (static): the four no-judgment-required token dispositi
     assert.doesNotMatch(html, /\.tier-card--power\s*\{/);
     assert.doesNotMatch(html, /@media \(max-width: 900px\)\s*\{\s*\.tier-cards-grid/, 'the dead 900px .tier-cards-grid override is also gone');
 
-    // The shared rule this page now falls through to is untouched.
-    const sharedTierCard = ruleBody(STYLES, '\\.tier-card\\s*\\{');
-    assert.ok(sharedTierCard, 'shared styles.css .tier-card rule still exists, unchanged');
+    // Design rebuild: the page falls through to nothing now. The shared .tier-* card family was
+    // unused by every page and is retired from styles.css (.tier-name stays: the pricing table's
+    // tier column uses it, which is the positive control that ruleBody still finds a live rule).
+    assert.equal(ruleBody(STYLES, '\\.tier-card\\s*\\{'), null, 'shared styles.css .tier-card rule is retired');
+    assert.equal(ruleBody(STYLES, '\\.tier-cards-grid\\s*\\{'), null, 'shared styles.css .tier-cards-grid rule is retired');
+    assert.ok(ruleBody(STYLES, '\\.tier-name\\s*\\{'), 'positive control: the live shared .tier-name rule is found');
   });
 });
 
@@ -250,7 +264,7 @@ describe('Tier 2 (dynamic, playwright)', () => {
     if (server) server.close();
   });
 
-  it('FOCUS-VISIBLE: keyboard-Tab to the first nav link renders a solid ivory outline, not outline-style: none', async (t) => {
+  it('FOCUS-VISIBLE: keyboard-Tab to the first nav link renders a solid gold outline (the nav is a dark scope), not outline-style: none', async (t) => {
     if (!tier2ok) { t.skip('playwright not resolvable'); return; }
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const p = await ctx.newPage();
@@ -274,16 +288,10 @@ describe('Tier 2 (dynamic, playwright)', () => {
       assert.equal(info.tag, 'A', `expected the third Tab stop to land on an <a>, got ${info.tag}`);
       assert.notEqual(info.outlineStyle, 'none', 'outline-style should not be none on a keyboard-focused link');
       assert.equal(info.outlineStyle, 'solid');
-      // Chromium's used-value for outline-width rounds a declared 1.5px down
-      // to the nearest whole device pixel (1px at devicePixelRatio 1) --
-      // verified directly (a probe with the same declared width renders
-      // identically) and confirmed against the pre-existing 2px .nav-cta
-      // ivory ring, which is unaffected because 2 is already a whole
-      // pixel. The authored declaration (1.5px, in source) is asserted
-      // separately in the static Tier 1 block above; this only asserts the
-      // real rendered/used value.
-      assert.equal(info.outlineWidth, '1px');
-      assert.equal(info.outlineColor, 'rgb(250, 250, 248)', 'outline colour should be the ivory token, not aurum');
+      // Design system pass: the ring is 2px (a whole pixel, so used value equals declared) and
+      // ground-aware: the nav is a dark scope, so --focus-ring resolves to --aurum there.
+      assert.equal(info.outlineWidth, '2px');
+      assert.equal(info.outlineColor, 'rgb(201, 168, 76)', 'outline colour should be the gold ring of a dark scope');
     } finally {
       await ctx.close();
     }
@@ -296,7 +304,9 @@ describe('Tier 2 (dynamic, playwright)', () => {
     try {
       await p.goto(`${base}/index.html`, { waitUntil: 'networkidle' });
       const footerInfo = await p.evaluate(() => {
-        const el = document.querySelector('.footer-links a, .footer-meta a');
+        // Design system pass: the page footer is always a dark scope (body > footer); the closing
+        // ask's own link row takes its ground from the section, so the footer's own link is the stable target.
+        const el = document.querySelector('footer .footer-meta a, footer a');
         if (!el) return null;
         el.focus();
         const cs = getComputedStyle(el);
@@ -305,7 +315,8 @@ describe('Tier 2 (dynamic, playwright)', () => {
       assert.ok(footerInfo, 'a footer link exists on the homepage');
       assert.ok(footerInfo.matchesFocusVisible, 'programmatic .focus() on a footer link matches :focus-visible');
       assert.notEqual(footerInfo.outlineStyle, 'none');
-      assert.equal(footerInfo.outlineColor, 'rgb(250, 250, 248)');
+      // Design system pass: the footer is a dark scope, so its ring is gold.
+      assert.equal(footerInfo.outlineColor, 'rgb(201, 168, 76)');
 
       await p.goto(`${base}/dashboard.html`, { waitUntil: 'networkidle' });
       const formInfo = await p.evaluate(() => {
@@ -325,7 +336,8 @@ describe('Tier 2 (dynamic, playwright)', () => {
       // this asserts it stays gone.
       assert.notEqual(formInfo.outlineStyle, 'none',
         '.form-input should render a visible focus outline (its old unconditional `outline: none` must not have returned)');
-      assert.equal(formInfo.outlineColor, 'rgb(250, 250, 248)');
+      // Design system pass: the sign-in screen is a dark ground, so its field's ring is gold.
+      assert.equal(formInfo.outlineColor, 'rgb(201, 168, 76)');
     } finally {
       await ctx.close();
     }
@@ -355,7 +367,8 @@ describe('Tier 2 (dynamic, playwright)', () => {
         `expected to Tab onto .hamburger within 20 presses at 375px, last stop was ${info && info.tag}.${info && info.cls}`);
       assert.equal(info.tag, 'BUTTON');
       assert.notEqual(info.outlineStyle, 'none');
-      assert.equal(info.outlineColor, 'rgb(250, 250, 248)');
+      // Design system pass: the hamburger lives in the dark nav, so its ring is gold.
+      assert.equal(info.outlineColor, 'rgb(201, 168, 76)');
     } finally {
       await ctx.close();
     }
@@ -449,7 +462,7 @@ describe('Tier 2 (dynamic, playwright)', () => {
     }
   });
 
-  it('CSS-MECHANICAL: /for-builders .earnings-scenario h3/p resolve to 14px/13px live', async (t) => {
+  it('CSS-MECHANICAL: /for-builders .earnings-scenario h3/p resolve to 19px/16px live', async (t) => {
     if (!tier2ok) { t.skip('playwright not resolvable'); return; }
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const p = await ctx.newPage();
@@ -463,8 +476,8 @@ describe('Tier 2 (dynamic, playwright)', () => {
           p: para ? getComputedStyle(para).fontSize : null,
         };
       });
-      assert.equal(sizes.h3, '14px');
-      assert.equal(sizes.p, '13px');
+      assert.equal(sizes.h3, '19px');
+      assert.equal(sizes.p, '16px');
     } finally {
       await ctx.close();
     }

@@ -54,36 +54,27 @@
   }
   </script>
   <meta name="theme-color" content="#0A0A0A" />
-  <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/ArchivoVariable.cfd841fc.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/NewsreaderDisplay300.a07d3c5c.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=eba132a8" />
+  <link rel="stylesheet" href="/styles.css?v=f11e9131" />
   <style>
-    /* AD sheet 9: /status now links the shared stylesheet (styles.css) like
-       every other page. This block keeps ONLY the rules that are unique to
-       this page: the status-only colour signals (green/yellow/red), the
-       component table, badges, quick-links cards, health-check block, and
-       contact block. Nav, footer, hero grid, fonts, and the base
-       obsidian/ivory/aurum palette now come from styles.css, matching every
-       sibling page. */
+    /* Only what is particular to /status. Grounds, type, the dark hero and the
+       navigation come from the shared sheet. State colours appear in two places
+       only, a small dot and a chip that keeps ink text. */
     :root {
-      --obsidian-2: #131316;
-      --obsidian-3: #1A1A1F;
-      --ivory-dim:  #B0ADA8;
-      --green:      #22C55E;
-      --green-bg:   rgba(34,197,94,0.08);
-      --yellow:     #EAB308;
-      --yellow-bg:  rgba(234,179,8,0.08);
-      --red:        #EF4444;
-      --red-bg:     rgba(239,68,68,0.08);
-      --border:     rgba(229,229,227,0.08);
+      --st-ok: #2E7D4F;
+      --st-warn: #B7791F;
+      --st-down: #B3402A;
+      /* The script's failure path writes var(--yellow) and var(--yellow-bg) inline.
+         Both resolve to the amber state token. The rules below keep the dot as the
+         only coloured thing, so they decide what is painted. */
+      --yellow: var(--st-warn);
+      --yellow-bg: var(--st-warn);
     }
 
-    /* N5: styles.css's shared body rule sets colours/font only, not layout —
-       on short content (few incidents, all-operational) this page's own
-       content was shorter than the viewport and the footer sat wherever
-       the content ended instead of at the bottom. page-local, since no
-       other page needs it: stretch body to the viewport and let #main
-       absorb the extra space so footer stays pinned to the bottom. */
+    /* Short content: stretch body to the viewport and let #main absorb the
+       extra space, so the footer stays pinned to the bottom. */
     body {
       min-height: 100vh;
       display: flex;
@@ -91,299 +82,247 @@
     }
     main#main { flex: 1; }
 
-    /* ── Page hero (compact, no decorative art — a status page) ────────
-       SPACING-0927 (BUILD-BRIEF-SPACING.md B-4/A1): a hero takes plain
-       padding like any section -- var(--section-pad) gives the ruled
-       120/80/64 rhythm at every width, so no per-breakpoint override is
-       needed any more. Nav clearance is `main`'s own margin-top
-       (styles.css), sitewide, not part of this element's padding.
-       Horizontal stays 0: .status-hero's own .container (inside) already
-       supplies the gutter (S1). */
+    /* ── Hero: dark, short. The container inside supplies the gutter. ── */
     .status-hero {
       padding: var(--section-pad);
       padding-left: 0;
       padding-right: 0;
     }
-
-    .page-title {
-      /* AD sheet 7: page-hero spec size (the clamp(38px, 5vw, 56px) rule
-         shared by .page-hero h1 / #builders-hero h1 / .pricing-page-header h1
-         / .api-page-header h1 / .hiw-hero h1). */
-      font-size: clamp(38px, 5vw, 56px);
-      font-weight: 700;
-      letter-spacing: -0.03em;
-      line-height: 1.1;
-      /* SPACING-0927 R2-2a: heading to the element beneath it is 16px,
-         named by the sheet (was 0.5rem/8px). */
-      margin-bottom: var(--space-body);
-    }
-
+    /* The hero is a plain block, not a section, so the heading carries its own gap. */
+    .page-title { margin-bottom: var(--space-copy); }
     .page-subtitle {
-      color: var(--ivory-dim);
-      font-size: 0.9rem;
-      margin-bottom: 2.5rem;
+      font-size: 19px;
+      line-height: 1.55;
+      color: var(--fg-2);
     }
 
-    /* S1: no horizontal padding here — .container (inside) carries the
-       same inset the hero uses, so hero h1 and this section's first block
-       share one left edge at every width.
-       SPACING-0927 (rule 3): padding-top now equals padding-bottom, the
-       same rhythm every section uses, hero included, no exception --
-       was 0/96 (top=0, since the hero directly above already ended with
-       its own bottom padding). */
+    /* ── Light bodies: the section rhythm, the container inside supplies the gutter ── */
     .status-body { padding: var(--section-pad); padding-left: 0; padding-right: 0; }
 
-    /* ── Overall Status Banner ─────────────────────────────────── */
-    /* SPACING-0927 R2-2a: card padding is 32px on all four sides, named by
-       the sheet (was 1.25rem/1.5rem=20/24). R2-2b: margin-bottom 2.5rem=40
-       rounds up to 48. */
+    /* A label above a block: set as written, Archivo 500 */
+    .component-label {
+      font-size: 19px;
+      font-weight: 500;
+      line-height: 1.3;
+      letter-spacing: -0.01em;
+      color: var(--fg-1);
+      margin-bottom: var(--space-copy);
+    }
+
+    /* ── Overall banner: a card, a dot and ink text ──
+       The script writes inline colours on the failure path (label, dot, glow,
+       ground, border). The page keeps colour off the text and off the ground,
+       so those declarations win over the inline ones. */
     .overall-status {
-      background: var(--green-bg);
-      border: 1px solid rgba(34,197,94,0.2);
-      border-radius: 12px;
-      padding: 2rem;
       display: flex;
       align-items: center;
-      gap: 1rem;
-      margin-bottom: 3rem;
+      gap: var(--space-body);
+      background: var(--surface) !important;
+      border: 1px solid var(--line) !important;
+      border-radius: var(--r-stage);
+      padding: var(--space-card);
+      margin-bottom: var(--space-block);
     }
-
     .status-dot {
-      width: 12px;
-      height: 12px;
+      width: 10px;
+      height: 10px;
       border-radius: 50%;
-      background: var(--green);
-      box-shadow: 0 0 8px var(--green);
+      background: var(--st-warn) !important;
+      box-shadow: none !important;
       flex-shrink: 0;
-      animation: pulse 2.5s ease-in-out infinite;
     }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-
-    /* Respect a reduced-motion preference: stop the infinite status-dot pulse. */
-    @media (prefers-reduced-motion: reduce) {
-      .status-dot { animation: none; }
-    }
-
     .overall-status .status-label {
-      font-weight: 600;
-      font-size: 1rem;
-      color: var(--green);
+      font-size: 19px;
+      font-weight: 500;
+      line-height: 1.3;
+      color: var(--fg-1) !important;
     }
-
     .overall-status .status-sub {
-      color: var(--ivory-dim);
-      font-size: 0.82rem;
       margin-left: auto;
+      font-size: 14px;
+      color: var(--fg-3);
     }
 
-    /* ── Section labels ────────────────────────────────────────── */
-    /* AD sheet 7: these four were <h2> (a heading level with no page
-       structure behind it); they are component labels, not headings. Same
-       words, same look as the site's .section-label (styles.css: 11px /
-       0.16em / uppercase / 400), rendered with this page's own dim-ivory
-       token in place of --slate. */
-    /* SPACING-0927 R2-2a: heading to the element beneath it is 16px, named
-       by the sheet (was 0.75rem=12) -- .component-label plays a section-
-       heading role here (AD sheet 7 comment above). */
-    .component-label {
-      font-size: 11px;
-      font-weight: 400;
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-      color: var(--ivory-dim);
-      margin-bottom: 1rem;
-    }
-
-    /* ── Component Table ───────────────────────────────────────── */
-    /* SPACING-0927 R2-2b: margin-bottom 2.5rem=40 rounds up to 3rem=48. */
+    /* ── Components: a card of rows ── */
     .components {
-      background: var(--obsidian-2);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      overflow: hidden;
-      margin-bottom: 3rem;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r-stage);
+      padding: var(--space-card);
+      margin-bottom: var(--space-block);
     }
-
-    /* SPACING-0927 R2-2a: gap between list items is 16px, named by the
-       sheet -- each row's own top/bottom padding supplies half the gap to
-       the row above/below (was 0.9rem=14.4px each, giving ~28.8 between
-       rows; 0.5rem=8px each gives 16). */
     .component-row {
       display: flex;
       align-items: center;
-      padding: 0.5rem 1.25rem;
-      border-bottom: 1px solid var(--border);
-      gap: 1rem;
+      gap: var(--space-body);
+      padding: var(--space-body) 0;
+      border-top: 1px solid var(--line);
     }
-
-    .component-row:last-child { border-bottom: none; }
-
+    .component-row:first-child { border-top: 0; padding-top: 0; }
+    .component-row:last-child { padding-bottom: 0; }
     .component-name {
-      font-size: 0.9rem;
-      font-weight: 500;
       flex: 1;
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--fg-1);
     }
-
     .component-desc {
-      font-size: 0.8rem;
-      color: var(--ivory-dim);
       flex: 2;
+      font-size: 15px;
+      line-height: 1.6;
+      color: var(--fg-2);
     }
 
+    /* ── Status chip: 12.5px, ink text, the state as a dot and a tinted edge ── */
     .badge {
-      font-size: 0.75rem;
-      font-weight: 600;
-      padding: 0.25rem 0.65rem;
-      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-tight);
       flex-shrink: 0;
+      min-width: 124px;
+      font-size: 12.5px;
+      font-weight: 500;
+      line-height: 1;
+      padding: 6px 12px;
+      border-radius: var(--r-control);
+      color: var(--fg-1);
+      background: var(--tint);
+      border: 1px solid var(--line);
     }
-
+    .badge::before {
+      content: '';
+      flex: none;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--st-ok);
+    }
+    .badge:empty { display: none; }
     .badge.operational {
-      background: var(--green-bg);
-      color: var(--green);
-      border: 1px solid rgba(34,197,94,0.25);
+      background: rgba(46, 125, 79, 0.1);
+      border-color: rgba(46, 125, 79, 0.4) !important;
     }
-
     .badge.degraded {
-      background: var(--yellow-bg);
-      color: var(--yellow);
-      border: 1px solid rgba(234,179,8,0.25);
+      background: rgba(183, 121, 31, 0.12);
+      border-color: rgba(183, 121, 31, 0.45) !important;
     }
-
+    .badge.degraded::before { background: var(--st-warn); }
     .badge.outage {
-      background: var(--red-bg);
-      color: var(--red);
-      border: 1px solid rgba(239,68,68,0.25);
+      background: rgba(179, 64, 42, 0.1);
+      border-color: rgba(179, 64, 42, 0.4) !important;
     }
+    .badge.outage::before { background: var(--st-down); }
 
-    /* ── Quick Links ────────────────────────────────────────────── */
-    /* SPACING-0927 R2-2a: gap between cards is 48px, named by the sheet
-       (was 0.75rem=12). R2-2b: margin-bottom 2.5rem=40 rounds up to 48. */
+    /* ── Quick links: four cards ── */
     .links-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 3rem;
-      margin-bottom: 3rem;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: var(--space-copy);
+      margin-bottom: var(--space-block);
     }
-
-    /* SPACING-0927 R2-2a: card padding is 32px on all four sides, named by the sheet (was 1rem/1.25rem=16/20). */
     .link-card {
-      background: var(--obsidian-2);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 2rem;
-      text-decoration: none;
-      color: var(--ivory);
-      transition: border-color 0.2s, background 0.2s;
       display: flex;
       flex-direction: column;
-      gap: 0.25rem;
-    }
-
-    .link-card:hover {
-      border-color: var(--aurum);
-      background: var(--aurum-dim);
-    }
-
-    .link-card-label {
-      font-size: 0.8rem;
-      font-weight: 600;
-      color: var(--aurum);
-    }
-
-    .link-card-desc {
-      font-size: 0.8rem;
-      color: var(--ivory-dim);
-    }
-
-    /* ── Health Monitor ─────────────────────────────────────────── */
-    /* SPACING-0927 R2-2a: card padding is 32px on all four sides, named by
-       the sheet (was 1.25rem=20). R2-2b: margin-bottom 2.5rem=40 rounds up
-       to 48. */
-    .health-block {
-      background: var(--obsidian-2);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 2rem;
-      margin-bottom: 3rem;
-    }
-
-    /* SPACING-0927 R2-2a: heading to the element beneath it is 16px, named
-       by the sheet (was 0.75rem=12). */
-    .health-endpoint {
-      font-family: var(--mono);
-      font-size: 0.82rem;
-      color: var(--aurum);
-      margin-bottom: 1rem;
-    }
-
-    /* SPACING-0927 R2-2b: 0.75rem=12 ties 8/16 (tie->larger); 1rem=16 already on scale. */
-    .health-response {
-      font-family: var(--mono);
-      font-size: 0.78rem;
-      color: var(--ivory-dim);
-      background: var(--obsidian-3);
-      border-radius: 8px;
-      padding: 1rem;
-      line-height: 1.6;
-      overflow-x: auto;
-    }
-
-    /* SPACING-0927 R2-2b: 0.75rem=12 ties 8/16 -- tie goes to the larger value. */
-    #live-health {
-      margin-top: 1rem;
-      font-size: 0.78rem;
-      color: var(--ivory-dim);
-    }
-
-    #live-health.ok { color: var(--green); }
-    #live-health.err { color: var(--red); }
-
-    /* ── Contact ────────────────────────────────────────────────── */
-    /* SPACING-0927 R2-2a: card padding is 32px on all four sides, named by the sheet (was 1.25rem=20). */
-    .contact-block {
-      background: var(--obsidian-2);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 2rem;
-    }
-
-    .contact-block p {
-      font-size: 0.875rem;
-      color: var(--ivory-dim);
-      line-height: 1.6;
-    }
-
-    .contact-block a {
-      color: var(--aurum);
+      gap: var(--space-tight);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r-stage);
+      padding: var(--space-card);
       text-decoration: none;
     }
-    .contact-block a:hover { text-decoration: underline; }
+    .link-card-label {
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--fg-1);
+    }
+    .link-card-desc {
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--fg-2);
+      overflow-wrap: anywhere;
+    }
+    .link-card:hover .link-card-label {
+      text-decoration: underline;
+      text-decoration-color: var(--accent-text);
+      text-underline-offset: 4px;
+    }
 
-    /* ── Mobile ─────────────────────────────────────────────────── */
+    /* ── Health: a dark panel (the shared code-block ground) ── */
+    .health-block {
+      --st-ok: #5BB381;
+      --st-down: #E5806B;
+      padding: var(--space-card);
+      margin-bottom: var(--space-block);
+    }
+    .health-endpoint {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--accent-text);
+      margin-bottom: var(--space-body);
+    }
+    .health-response {
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--fg-2);
+      background: var(--bg);
+      border-radius: var(--r-control);
+      padding: var(--space-body);
+      overflow-x: auto;
+    }
+    #live-health {
+      display: flex;
+      align-items: center;
+      gap: var(--space-tight);
+      margin-top: var(--space-body);
+      font-size: 13px;
+      color: var(--fg-1);
+    }
+    #live-health:empty { display: none; }
+    #live-health::before {
+      content: '';
+      flex: none;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--fg-3);
+    }
+    #live-health.ok::before { background: var(--st-ok); }
+    #live-health.err::before { background: var(--st-down); }
+
+    /* ── Contact: plain text ── */
+    .contact-block p {
+      font-size: 16px;
+      line-height: 1.65;
+      color: var(--fg-2);
+    }
+
+    /* ── 1024 and down: two cards across ── */
+    @media (max-width: 1024px) {
+      .links-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    /* ── 640 and down ── */
     @media (max-width: 640px) {
-      /* SPACING-0927: .status-body's own padding is var(--section-pad) at
-         every width (base rule above, scales at the shared 600px
-         breakpoint); no ad hoc 640px override needed. */
-
-      /* Component rows stack so name + desc + badge don't push wide. */
-      /* SPACING-0927 R2-2b: column-gap 0.75rem=12 ties 8/16 -- tie goes to the larger value. */
+      /* A row stacks: name and chip on the first line, the description under them. */
       .component-row {
         flex-wrap: wrap;
-        gap: 0.5rem 1rem;
+        gap: var(--space-tight) var(--space-body);
       }
       .component-name { flex: 1 1 auto; min-width: 0; }
-      .component-desc { flex: 1 1 100%; }
+      .badge { order: 1; min-width: 0; }
+      .component-desc { order: 2; flex: 1 1 100%; }
 
-      /* Overall-status banner stacks; sub no longer pinned right. */
-      .overall-status { flex-wrap: wrap; gap: 0.5rem 1rem; }
-      .overall-status .status-sub { margin-left: 0; flex: 1 1 100%; }
+      /* The banner stacks: the dot beside the label, the time under the label. */
+      .overall-status {
+        display: grid;
+        grid-template-columns: 10px minmax(0, 1fr);
+        gap: var(--space-tight) var(--space-body);
+        align-items: start;
+      }
+      .status-dot { position: relative; top: 7px; }
+      .overall-status .status-sub { grid-column: 2; margin-left: 0; }
 
-      /* Single-column link grid. */
       .links-grid { grid-template-columns: 1fr; }
 
       /* Long JSON wraps instead of widening the page. */
@@ -392,6 +331,10 @@
         word-break: break-word;
         overflow-wrap: anywhere;
       }
+    }
+
+    @media (max-width: 480px) {
+      .page-subtitle { font-size: 17px; }
     }
   </style>
 </head>
@@ -409,7 +352,7 @@
       </svg>
       <span class="wordmark">auxilo</span>
     </a>
-    <ul class="nav-links" role="list">
+    <ul class="nav-links" id="nav-menu" role="list">
       <li><a href="/for-builders" id="nav-builders">For Builders</a></li>
       <li><a href="/for-agents" id="nav-agents">For Agents</a></li>
       <li><a href="/how-it-works" id="nav-how">How It Works</a></li>
@@ -417,7 +360,7 @@
       <li><a href="/pricing" id="nav-pricing">Pricing</a></li>
       <li><a href="/connect" id="nav-cta-access" class="nav-cta">Connect Your Agent</a></li>
     </ul>
-    <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
+    <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-menu" onclick="toggleNav()">
       <span></span><span></span><span></span>
     </button>
   </div>
@@ -428,7 +371,7 @@
 
 <main id="main">
 
-<div class="status-hero">
+<div class="status-hero on-dark">
   <div class="container">
     <h1 class="page-title">System Status</h1>
     <p class="page-subtitle">Current operational health of Auxilo services.</p>
@@ -438,9 +381,9 @@
 <div class="status-body">
   <div class="container">
 
-    <div class="overall-status" id="overall-status" style="background:var(--yellow-bg);border-color:rgba(234,179,8,0.2)">
-      <div class="status-dot" id="status-dot" style="background:var(--yellow);box-shadow:0 0 8px var(--yellow)"></div>
-      <span class="status-label" id="status-label" style="color:var(--yellow)">Operational: USDC withdrawals migrating</span>
+    <div class="overall-status" id="overall-status">
+      <div class="status-dot" id="status-dot"></div>
+      <span class="status-label" id="status-label">Operational: USDC withdrawals migrating</span>
       <span class="status-sub" id="status-time">Checking…</span>
     </div>
 
@@ -478,6 +421,12 @@
       </div>
     </div>
 
+  </div>
+</div>
+
+<div class="status-body on-tint">
+  <div class="container">
+
     <p class="component-label">Quick Links</p>
     <div class="links-grid">
       <a class="link-card" href="/health">
@@ -503,7 +452,7 @@
     </div>
 
     <p class="component-label">Live Health Check</p>
-    <div class="health-block">
+    <div class="health-block code-block">
       <div class="health-endpoint">GET /health</div>
       <div class="health-response" id="health-json">Loading…</div>
       <div id="live-health"></div>
@@ -533,17 +482,17 @@
       <span class="wordmark">auxilo</span>
     </a>
     <p class="footer-meta">
-      Your agent already solved this. Auxilo remembers. ·
-      <a href="/api">API</a> ·
-      <a href="/about">About</a> ·
-      <a href="/writing">Writing</a> ·
-      <a href="/status">Status</a> ·
-      <a href="/.well-known/security.txt">Security</a> ·
-      <a href="/.well-known/agent.json">Agent card</a> ·
-      <a href="/terms">Terms</a> ·
-      <a href="/privacy">Privacy</a> ·
-      <a href="https://github.com/silent-architects/auxilo">GitHub</a> ·
-      v<span id="app-version"></span>
+      Your agent already solved this. Auxilo remembers.<span class="fm-item"> ·</span>
+      <span class="fm-item"><a href="/api">API</a> ·</span>
+      <span class="fm-item"><a href="/about">About</a> ·</span>
+      <span class="fm-item"><a href="/writing">Writing</a> ·</span>
+      <span class="fm-item"><a href="/status">Status</a> ·</span>
+      <span class="fm-item"><a href="/.well-known/security.txt">Security</a> ·</span>
+      <span class="fm-item"><a href="/.well-known/agent.json">Agent card</a> ·</span>
+      <span class="fm-item"><a href="/terms">Terms</a> ·</span>
+      <span class="fm-item"><a href="/privacy">Privacy</a> ·</span>
+      <span class="fm-item"><a href="https://github.com/silent-architects/auxilo">GitHub</a> ·</span>
+      <span class="fm-item">v<span id="app-version"></span></span>
     </p>
   </div>
 </footer>
@@ -608,38 +557,80 @@
 </script>
 
 <script>
-// ── Hamburger nav toggle (shared pattern, matches every sibling page) ──
-function toggleNav() {
-  const nav = document.querySelector('.nav-links');
-  const btn = document.getElementById('hamburger');
-  const expanded = btn.getAttribute('aria-expanded') === 'true';
-  btn.setAttribute('aria-expanded', !expanded);
-  nav.classList.toggle('nav-open');
-}
+// ── Mobile navigation (the same block on every page) ──
+// Open: the page behind the menu goes inert and focus moves to the first link. Tab and Shift+Tab
+// stay inside the menu. Escape, the button, a chosen link, or a window wide enough to show the
+// links in a row closes it and hands the page back; Escape and the button return focus to the button.
+(function () {
+  var bar = document.getElementById('main-nav');
+  var nav = document.querySelector('.nav-links');
+  var btn = document.getElementById('hamburger');
+  if (!bar || !nav || !btn) return;
+  var wide = window.matchMedia('(min-width: 901px)');
+  var held = [];
 
-// Close mobile nav on link click
-document.querySelectorAll('.nav-links a').forEach(a => {
-  a.addEventListener('click', () => {
-    const nav = document.querySelector('.nav-links');
-    const btn = document.getElementById('hamburger');
-    if (nav.classList.contains('nav-open')) {
-      nav.classList.remove('nav-open');
-      btn.setAttribute('aria-expanded', 'false');
+  function isOpen() { return nav.classList.contains('nav-open'); }
+
+  function open() {
+    nav.classList.add('nav-open');
+    btn.setAttribute('aria-expanded', 'true');
+    // Behind the menu: everything outside the navigation, and the logo and the sign-in strip, which the open menu covers.
+    var behind = Array.prototype.filter.call(document.body.children, function (el) {
+      return el !== bar && !/^(SCRIPT|STYLE|LINK|TEMPLATE|NOSCRIPT)$/.test(el.tagName);
+    });
+    Array.prototype.push.apply(behind, bar.querySelectorAll('.nav-logo, .nav-strip'));
+    behind.forEach(function (el) {
+      if (!el.hasAttribute('inert')) { el.setAttribute('inert', ''); held.push(el); }
+    });
+    var first = nav.querySelector('a');
+    if (first) first.focus();
+  }
+
+  function close(refocus) {
+    nav.classList.remove('nav-open');
+    btn.setAttribute('aria-expanded', 'false');
+    held.forEach(function (el) { el.removeAttribute('inert'); });
+    held = [];
+    if (refocus) btn.focus();
+  }
+
+  window.toggleNav = function toggleNav() {
+    if (isOpen()) close(true); else open();
+  };
+
+  Array.prototype.forEach.call(nav.querySelectorAll('a'), function (a) {
+    a.addEventListener('click', function () { if (isOpen()) close(false); });
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (!isOpen()) return;
+    if (e.key === 'Escape' || e.key === 'Esc') {
+      e.preventDefault();
+      close(true);
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    // The controls the open menu shows, in reading order: its links, then the button.
+    var ring = Array.prototype.slice.call(nav.querySelectorAll('a')).concat(btn);
+    var first = ring[0];
+    var last = ring[ring.length - 1];
+    var at = document.activeElement;
+    if (ring.indexOf(at) === -1) {
+      e.preventDefault();
+      (e.shiftKey ? last : first).focus();
+    } else if (e.shiftKey && at === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && at === last) {
+      e.preventDefault();
+      first.focus();
     }
   });
-});
 
-// Close mobile nav on Escape key
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    const nav = document.querySelector('.nav-links');
-    const btn = document.getElementById('hamburger');
-    if (nav && nav.classList.contains('nav-open')) {
-      nav.classList.remove('nav-open');
-      btn.setAttribute('aria-expanded', 'false');
-    }
+  if (wide.addEventListener) {
+    wide.addEventListener('change', function (e) { if (e.matches && isOpen()) close(false); });
   }
-});
+})();
 </script>
 </body>
 </html>

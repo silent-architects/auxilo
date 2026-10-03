@@ -176,12 +176,13 @@ describe('FIX-UNIT-2: dashboard + email-prefs (staged server)', { timeout: 180_0
       assert.equal(info.text, '$0.00');
       assert.equal(info.hasAurum, false, 'zero balance must NOT carry .aurum');
       assert.notEqual(info.color, 'rgb(201, 168, 76)', 'computed color must not be the gold token');
+      assert.notEqual(info.color, 'rgb(122, 93, 16)', 'computed color must not be the gold-ink token either (plain ink, like the other figures)');
     } finally {
       await ctx.close();
     }
   });
 
-  it('V2: a real nonzero pending balance still renders WITH the .aurum gold class (positive control — the highlight is not simply removed)', async (t) => {
+  it('V2: a real nonzero pending balance still carries the .aurum class (positive control for the zero check), and no dashboard figure is gold: it paints ink', async (t) => {
     if (bootSkipReason) { t.skip(bootSkipReason); return; }
     if (!tier2ok) { t.skip('playwright not resolvable'); return; }
     const { ctx, page } = await loadDashboardAs(tokenPaid);
@@ -195,7 +196,11 @@ describe('FIX-UNIT-2: dashboard + email-prefs (staged server)', { timeout: 180_0
       assert.ok(info, 'earnings row "Your earnings (accrued)" found');
       assert.equal(info.text, '$12.34');
       assert.equal(info.hasAurum, true, 'nonzero balance must still carry .aurum');
-      assert.equal(info.color, 'rgb(201, 168, 76)', 'computed color must be the gold token');
+      // No figure on the dashboard is gold: a money figure is ink in the serif. The class is still
+      // set by the script, so this is the same selector that painted the gold-ink token before.
+      assert.equal(info.color, 'rgb(10, 10, 10)', 'computed color must be the ink token');
+      assert.notEqual(info.color, 'rgb(122, 93, 16)', 'computed color must not be the gold-ink token');
+      assert.notEqual(info.color, 'rgb(201, 168, 76)', 'computed color must not be the gold token');
     } finally {
       await ctx.close();
     }
@@ -411,20 +416,22 @@ describe('FIX-UNIT-2 V3: trust page live-count secondary style', () => {
 describe('FIX-UNIT-2 V6: .auth-badge.apikey contrast >= 4.5:1', { timeout: 60_000 }, () => {
   const HTML = read('public/for-agents.html');
 
-  it('the rule now sets color: var(--ash), not var(--slate)', () => {
+  // Design rebuild: the chip sits on a light card, so its text is the ground-aware body token
+  // (--fg-2), not the dark-era --ash. The measured contrast below is the pin that matters.
+  it('the rule now sets color: var(--fg-2), not var(--slate) or the dark-era var(--ash)', () => {
     const m = HTML.match(/\.auth-badge\.apikey\s*\{([^}]*)\}/);
     assert.ok(m, '.auth-badge.apikey rule found');
-    assert.match(m[1], /color:\s*var\(--ash\)/);
+    assert.match(m[1], /color:\s*var\(--fg-2\)/);
     assert.doesNotMatch(m[1], /color:\s*var\(--slate\)/);
+    assert.doesNotMatch(m[1], /color:\s*var\(--ash\)/);
   });
 
   // Real DOM measurement, not a hand-assumed background: `.auth-badge.apikey`
-  // sits inside `.auth-compare-card.featured` (background: var(--aurum-dim),
-  // rgba(201,168,76,0.15)), NOT a plain obsidian card as a first guess would
-  // assume -- the full alpha-blended ancestor chain (body -> section-ground
-  // -> .featured card -> the badge's own 7%-alpha ash fill) is what the
-  // review's own contrast pass used, and what this measures.
-  it('computed contrast ratio, full ancestor background stack: --ash >= 4.5:1, and would have been ~4.24:1 (under 4.5) with the old --slate', async (t) => {
+  // sits inside `.auth-compare-card.featured` (a white card on a tint section),
+  // so the full ancestor chain (body -> section -> card -> the badge's own
+  // tint fill) is what this measures, the same way the review's own contrast
+  // pass did.
+  it('computed contrast ratio, full ancestor background stack: --fg-2 >= 4.5:1, and the old --slate would have been under 4.5:1', async (t) => {
     if (!isPlaywrightAvailable()) { t.skip('playwright not resolvable'); return; }
     const http = require('node:http');
     const MIME = { '.html': 'text/html', '.css': 'text/css' };
@@ -482,8 +489,8 @@ describe('FIX-UNIT-2 V6: .auth-badge.apikey contrast >= 4.5:1', { timeout: 60_00
         const before = contrastRatio([139, 146, 154], bg);
         return { bg, afterColor, after, before };
       });
-      assert.ok(result.before < 4.5, `sanity check: the OLD --slate ratio (${result.before.toFixed(2)}) should be under 4.5 (matches the review's measured 4.24:1)`);
-      assert.ok(result.after >= 4.5, `the NEW --ash ratio (${result.after.toFixed(2)}) must be >= 4.5:1 (background stack: ${JSON.stringify(result.bg)})`);
+      assert.ok(result.before < 4.5, `sanity check: the OLD --slate ratio (${result.before.toFixed(2)}) should be under 4.5`);
+      assert.ok(result.after >= 4.5, `the NEW --fg-2 ratio (${result.after.toFixed(2)}) must be >= 4.5:1 (background stack: ${JSON.stringify(result.bg)})`);
     } finally {
       await browser.close();
       server.close();
@@ -499,7 +506,8 @@ describe('FIX-UNIT-2 V8: skip link + #main on about/connect/works-with', () => {
   const CASES = [
     ['public/about.html', '<main id="main">'],
     ['public/connect.html', '<main id="main">'],
-    ['public/works-with.html', '<main class="ww-main" id="main">'],
+    // Design rebuild: /works-with is a stack of sections like the homepage, so <main> is plain.
+    ['public/works-with.html', '<main id="main">'],
   ];
 
   for (const [file, mainTag] of CASES) {
@@ -522,7 +530,9 @@ describe('FIX-UNIT-2 V9: heading hierarchy', () => {
     const html = read('public/pricing.html');
     assert.doesNotMatch(html, /<h4[^>]*>Revenue Split<\/h4>/);
     assert.match(html, /<h3[^>]*>Revenue Split<\/h3>/);
-    assert.match(html, /\.revenue-split-visual h3\s*\{/);
+    // Design rebuild: the page's own .revenue-split-visual h3 rule is gone; the heading takes the
+    // shared h3 style, so no page-level rule is pinned (the doesNotMatch above is the guard).
+    assert.doesNotMatch(html, /\.revenue-split-visual h3\s*\{/);
   });
 
   function gitTrackedPublicHtmlFiles() {
@@ -568,19 +578,27 @@ describe('FIX-UNIT-2 M1: heading <br> sweep (static markup)', () => {
     const html = read('public/for-builders.html');
     assert.match(html, /<h2 id="connect-heading" >Built for builders who'd rather ship than bill\.<\/h2>/);
     assert.doesNotMatch(html, /id="connect-heading"[^>]*>[^<]*<br>/);
-    assert.match(html, /#connect-heading\s*\{\s*text-wrap:\s*balance;\s*\}/);
+    // Design rebuild: the page's per-heading balance rule is gone, the shared h1, h2 rule carries it.
+    assert.doesNotMatch(html, /#connect-heading\s*\{/, 'positive control for the shared rule: the page itself carries no per-heading rule');
+    assert.match(read('public/styles.css'), /(?:^|\n)h1,\s*h2\s*\{[^}]*text-wrap:\s*balance/, 'the shared h1, h2 rule carries text-wrap: balance');
   });
 
   const FIXED = [
     ['public/for-agents.html', 'id="page-hero-heading"', 'Never rediscover what another agent already learned.', '#page-hero-heading'],
     ['public/for-agents.html', 'id="mcp-heading"', 'Native tools for Claude Code, Cursor, and any MCP-compatible client.', '#mcp-heading'],
-    ['public/pricing.html', null, 'Search free. Pay only when you unlock, from $0.05.', '.pricing-page-header h1'],
+    // Design rebuild: the h1's balance comes from the one shared h1, h2 rule (null selector below).
+    ['public/pricing.html', null, 'Search free. Pay only when you unlock, from $0.05.', null],
   ];
 
   for (const [file, idAttr, text, balanceSelector] of FIXED) {
     it(`${file} ${idAttr || '(h1)'}: <br> removed, text unchanged, text-wrap: balance added`, () => {
       const html = read(file);
       assert.ok(html.includes(text), `${file}: expected text "${text}" not found verbatim`);
+      if (balanceSelector === null) {
+        assert.doesNotMatch(html, /\.pricing-page-header h1\s*\{\s*text-wrap/, 'positive control for the shared rule: the page itself carries no per-heading balance rule');
+        assert.match(read('public/styles.css'), /(?:^|\n)h1,\s*h2\s*\{[^}]*text-wrap:\s*balance/, 'the shared h1, h2 rule carries text-wrap: balance');
+        return;
+      }
       const escaped = balanceSelector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       assert.match(html, new RegExp(`${escaped}\\s*\\{\\s*text-wrap:\\s*balance;\\s*\\}`));
     });
@@ -594,14 +612,24 @@ describe('FIX-UNIT-2 M1: heading <br> sweep (static markup)', () => {
   // balance stays, so each sentence still wraps evenly on its own when it
   // doesn't fit one line.
   const TWO_SENTENCE_BR_RESTORED = [
-    ['public/for-builders.html', 'id="footer-cta-heading"', '#footer-cta-heading'],
-    ['public/pricing.html', 'id="pricing-cta-heading"', '#pricing-cta-heading'],
-    ['public/index.html', 'id="footer-cta-heading"', '#footer-cta-heading'],
+    // Design rebuild: the page's per-heading balance rule is gone, the shared h1, h2 rule carries it.
+    ['public/for-builders.html', 'id="footer-cta-heading"', null],
+    // Design rebuild: the page's per-heading balance rule is gone, the shared h1, h2 rule carries it.
+    ['public/pricing.html', 'id="pricing-cta-heading"', null],
+    // Design rebuild: the homepage's page-level balance rules are gone; every h1 and h2 gets
+    // text-wrap: balance from one shared rule (null selector below), so the pin moved there.
+    ['public/index.html', 'id="footer-cta-heading"', null],
   ];
   for (const [file, idAttr, balanceSelector] of TWO_SENTENCE_BR_RESTORED) {
     it(`${file} ${idAttr}: <br> restored between the two sentences, text-wrap: balance kept`, () => {
       const html = read(file);
       assert.match(html, new RegExp(`<h2 ${idAttr.replace(/"/g, '\\"')} >Your agents are already learning\\. <br>Your earnings start now\\.<\\/h2>`));
+      if (balanceSelector === null) {
+        const headingId = idAttr.match(/id="([^"]+)"/)[1];
+        assert.doesNotMatch(html, new RegExp(`#${headingId}\\s*\\{`), 'positive control for the shared rule: the page itself carries no per-heading rule');
+        assert.match(read('public/styles.css'), /(?:^|\n)h1,\s*h2\s*\{[^}]*text-wrap:\s*balance/, 'the shared h1, h2 rule carries text-wrap: balance');
+        return;
+      }
       const escaped = balanceSelector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       assert.match(html, new RegExp(`${escaped}\\s*\\{\\s*text-wrap:\\s*balance;\\s*\\}`));
     });
@@ -820,6 +848,11 @@ describe('FIX-UNIT-2B H2/H3: homepage hero h1 width + CTA link placement', { tim
   // (also covers 1440px) and its R2-3 test for the text-wrap assertion.
   it('H2 rendered: homepage h1 has no single-word line at 375, 768 or 1280 (2 lines at 1280, was 3)', async (t) => {
     if (!ok) { t.skip('playwright not resolvable'); return; }
+    // Design rebuild: the display face is a lighter, narrower serif and the hero grid's copy
+    // column is wider, so the headline now sets on ONE line at 768 (was 2). 375 and 1280 are
+    // unchanged. A single line is never a single-word line, so the orphan check below holds.
+    // Round 3: the h1 scale is clamp(40px, 6.2vw, 56px) at 1024 and down, so a tablet gets a larger headline
+    // than a phone (47.6px at 768, was 40px), and it sets on two balanced lines there, never one word alone.
     const expected = { 375: 3, 768: 2, 1280: 2 };
     for (const width of [375, 768, 1280]) {
       const height = width === 375 ? 812 : (width === 768 ? 1024 : 800);
@@ -857,9 +890,14 @@ describe('FIX-UNIT-2B H2/H3: homepage hero h1 width + CTA link placement', { tim
     }
   });
 
-  it('H3: .hero-install-row stays a column at every width (id override beats the shared 981px row switch)', () => {
+  // Design rebuild: the link's row wrapper is retired with the old hero layout. The link is a
+  // plain child of the copy column, after the install block, so it can never sit beside the
+  // command block at any width (the rendered H3 test below measures the placement).
+  it('H3: the link sits in the copy column after the install block, never in a row beside it at any width (no .hero-install-row wrapper)', () => {
     const html = read('public/index.html');
-    assert.match(html, /#hero \.hero-install-row\s*\{\s*flex-direction:\s*column;\s*align-items:\s*flex-start;\s*\}/);
+    assert.ok(html.includes('id="hero-cta-secondary"'), 'positive control: the link is on the page');
+    assert.ok(!html.includes('hero-install-row'), 'the row wrapper and its rules are gone');
+    assert.match(html, /<\/div>\s*<a href="\/how-it-works" id="hero-cta-secondary" class="hero-cta-link">/, 'the link follows the closed #install block directly');
   });
 
   it('H3 rendered: "See How It Works" sits under the two setup notes, left-aligned with them, and its bottom edge is inside the first screen at 1280x800 and 375x812', async (t) => {
@@ -895,28 +933,44 @@ describe('FIX-UNIT-2B H2/H3: homepage hero h1 width + CTA link placement', { tim
 // ─────────────────────────────────────────────────────────────────────────
 // FIX-UNIT-2B H4: /works-with h1 no longer orphans "Run".
 // ─────────────────────────────────────────────────────────────────────────
+// Design rebuild: the page's own .ww-h1 rule is gone. The h1 takes the shared sheet's h1 rule, which
+// carries text-wrap: balance for every page, and the page block does not override it.
 describe('FIX-UNIT-2B H4: /works-with h1 text-wrap: balance', () => {
-  it('.ww-h1 carries text-wrap: balance', () => {
+  it('the /works-with h1 is covered by the shared h1 rule with text-wrap: balance, and the page block does not turn it off', () => {
     const html = read('public/works-with.html');
-    const m = html.match(/\.ww-h1\s*\{([^}]*)\}/);
-    assert.ok(m, '.ww-h1 rule found');
+    const css = read('public/styles.css');
+    assert.match(html, /<h1 id="ww-hero-heading">Works With the Client You Already Run<\/h1>/, 'positive control: the h1 is on the page');
+    assert.doesNotMatch(html, /\.ww-h1/, 'no page-scoped .ww-h1 rule or class remains');
+    const m = css.match(/\nh1,\s*\nh2\s*\{([^}]*)\}/);
+    assert.ok(m, 'shared h1, h2 rule found');
     assert.match(m[1], /text-wrap:\s*balance/);
+    const styleBlock = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
+    // The block may set balance (the key lead is set like a heading); it may set nothing else. The check is
+    // `text-wrap:` then optional space then a value that is not balance, so `text-wrap: balance` passes.
+    const OTHER_WRAP = /text-wrap:\s*(?!balance\b)\S/;
+    assert.match('text-wrap: pretty', OTHER_WRAP, 'positive control: another value is caught');
+    assert.match('text-wrap:wrap', OTHER_WRAP, 'positive control: another value with no space is caught');
+    assert.doesNotMatch('text-wrap: balance', OTHER_WRAP, 'positive control: balance is allowed');
+    assert.doesNotMatch(styleBlock, OTHER_WRAP, 'the page block sets no other text-wrap');
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-// FIX-UNIT-2B H5: /for-agents #page-hero-heading, below 400px only, steps
-// down from the shared DR-3 mobile ramp's 40px !important to 39px.
+// FIX-UNIT-2B H5: /for-agents #page-hero-heading. Design rebuild: the page-local
+// 39px step below 400px is gone with the sans h1 it was written for. The h1 is the
+// shared display serif at the shared --h1 size, and the page block sets no size of its own.
 // ─────────────────────────────────────────────────────────────────────────
-describe('FIX-UNIT-2B H5: /for-agents #page-hero-heading font-size step below 400px', { timeout: 60_000 }, () => {
-  it('a max-width:399px, !important, id-scoped rule sets 39px (one step below the shared 40px !important ramp)', () => {
+describe('FIX-UNIT-2B H5: /for-agents #page-hero-heading takes the shared h1 size', { timeout: 60_000 }, () => {
+  it('the page block carries no font-size rule for #page-hero-heading (positive control: the h1 and its balance rule are on the page)', () => {
     const html = read('public/for-agents.html');
-    const m = html.match(/@media \(max-width: 399px\) \{\s*#page-hero-heading \{ font-size:\s*([0-9.]+)px !important; \}\s*\}/);
-    assert.ok(m, 'the max-width:399px #page-hero-heading font-size override was not found');
-    assert.equal(m[1], '39');
+    assert.match(html, /<h1 id="page-hero-heading">Never rediscover what another agent already learned\.<\/h1>/, 'positive control: the h1 is on the page');
+    assert.match(html, /#page-hero-heading\s*\{\s*text-wrap:\s*balance;\s*\}/, 'positive control: the page block still names the heading');
+    const styleBlock = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
+    assert.doesNotMatch(styleBlock, /#page-hero-heading\s*\{[^}]*font-size/, 'no page-scoped font-size on the h1');
+    assert.doesNotMatch(styleBlock, /max-width:\s*399px/, 'the 399px step is gone');
   });
 
-  it('rendered: 39px at 375 (orphan gone), untouched (40px, from the shared ramp) at 400-600, untouched clamp at 768/1280', async (t) => {
+  it('rendered: at 375, 500, 768 and 1280 the h1 computes the same font-size as the shared --h1 token resolved in the same run', async (t) => {
     if (!isPlaywrightAvailable()) { t.skip('playwright not resolvable'); return; }
     const http = require('node:http');
     const MIME = { '.html': 'text/html', '.css': 'text/css' };
@@ -933,13 +987,21 @@ describe('FIX-UNIT-2B H5: /for-agents #page-hero-heading font-size step below 40
     const { chromium } = require('playwright');
     const browser = await chromium.launch();
     try {
-      for (const [width, expectedSize] of [[375, '39px'], [500, '40px'], [768, '38.4px'], [1280, '56px']]) {
+      for (const width of [375, 500, 768, 1280]) {
         const ctx = await browser.newContext({ viewport: { width, height: 900 } });
         const page = await ctx.newPage();
         try {
           await page.goto(`${base}/for-agents.html`, { waitUntil: 'networkidle' });
-          const fontSize = await page.evaluate(() => getComputedStyle(document.getElementById('page-hero-heading')).fontSize);
-          assert.equal(fontSize, expectedSize, `at ${width}px, #page-hero-heading font-size should be ${expectedSize}, got ${fontSize}`);
+          const sizes = await page.evaluate(() => {
+            const probe = document.createElement('div');
+            probe.style.fontSize = 'var(--h1)';
+            document.body.appendChild(probe);
+            const token = getComputedStyle(probe).fontSize;
+            probe.remove();
+            return { h1: getComputedStyle(document.getElementById('page-hero-heading')).fontSize, token };
+          });
+          assert.ok(parseFloat(sizes.token) >= 40, `sanity: the token resolves to a real size at ${width}px (got ${sizes.token})`);
+          assert.equal(sizes.h1, sizes.token, `at ${width}px, #page-hero-heading font-size should equal the shared --h1 (${sizes.token}), got ${sizes.h1}`);
         } finally {
           await ctx.close();
         }

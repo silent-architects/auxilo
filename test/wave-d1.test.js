@@ -117,39 +117,86 @@ describe('WAVE-D1 type pairing: tokens + @font-face', () => {
 
   // Wave D1 fix pass (F3, 2026-09-06): the three font files now ship
   // content-hashed (an 8-hex-char sha256 short-sum inserted before the
-  // extension, e.g. ArchivoVariable.1b4d984f.woff2) so server.js can cache
+  // extension, e.g. ArchivoVariable.cfd841fc.woff2) so server.js can cache
   // them immutably for a year — a byte change forces a new URL. Matchers
   // below are hash-agnostic ([0-9a-f]{8}) so a legitimate future re-hash
   // (the font bytes changing) doesn't require touching this test.
   const HASH = '[0-9a-f]{8}';
 
-  it('three real-font @font-face rules exist (Archivo variable 100-900, IBM Plex Mono 400 and 500 statics), each on a content-hashed woff2 URL, plus two size-adjust fallback faces (Wave E2 item 11)', () => {
+  it('four real-font @font-face rules exist (Archivo core and Archivo Ext, both variable 400-600, IBM Plex Mono 400, Newsreader 300), each on a content-hashed woff2 URL, plus three size-adjust fallback faces; the Plex Mono 500 face is retired', () => {
     const faceBlocks = [...STYLES.matchAll(/@font-face\s*\{([^}]*)\}/g)].map((m) => m[1]);
     // Wave E2 item 11: two synthetic local()-only fallback faces
     // ('Archivo Fallback', 'IBM Plex Mono Fallback') were added alongside
     // the original three, each carrying a size-adjust metric override —
     // 5 total, not 3. The three real-font assertions below are unchanged.
-    assert.equal(faceBlocks.length, 5, `expected 5 @font-face rules (3 real fonts + 2 size-adjust fallbacks), found ${faceBlocks.length}`);
+    // Design system pass: Newsreader (display, weight 300) and its fallback join; the Plex Mono 500
+    // face leaves. 3 real fonts + 3 size-adjust fallbacks (Archivo, Plex Mono, Newsreader) = 6.
+    // Sweep: Archivo ships as two files (core Latin, and a second file for the rarer characters of the
+    // original, split by unicode-range), so 4 real faces + 3 fallbacks = 7.
+    assert.equal(faceBlocks.length, 7, `expected 7 @font-face rules (4 real fonts + 3 size-adjust fallbacks), found ${faceBlocks.length}`);
 
-    const archivo = faceBlocks.find((b) => /font-family:\s*'Archivo'/.test(b));
-    assert.ok(archivo, 'an Archivo @font-face rule exists');
-    assert.match(archivo, /font-weight:\s*100 900/);
+    const archivoFaces = faceBlocks.filter((b) => /font-family:\s*'Archivo'/.test(b));
+    assert.equal(archivoFaces.length, 2, 'Archivo has exactly two faces, core and Ext');
+    const archivo = archivoFaces.find((b) => /ArchivoVariable\.[0-9a-f]{8}\.woff2/.test(b));
+    assert.ok(archivo, 'an Archivo core @font-face rule exists');
+    // The shipped file is the variable font instanced to weights 400 to 600 and subset to Latin plus
+    // Latin Extended-A, so the face declares exactly that range (a request outside it is a defect).
+    assert.match(archivo, /font-weight:\s*400 600\s*;/);
+    assert.doesNotMatch(archivo, /font-weight:\s*100 900/);
     assert.match(archivo, new RegExp(`url\\('\\/fonts\\/ArchivoVariable\\.${HASH}\\.woff2'\\)\\s*format\\('woff2'\\)`));
+    assert.match(archivo, /font-display:\s*swap/);
+    assert.match(archivo, /unicode-range:\s*U\+0020-007E, U\+00A0-017F,/, 'the core face covers basic Latin and Latin Extended-A');
+
+    const archivoExt = archivoFaces.find((b) => /ArchivoVariableExt\.[0-9a-f]{8}\.woff2/.test(b));
+    assert.ok(archivoExt, 'an Archivo Ext @font-face rule exists');
+    assert.match(archivoExt, /font-weight:\s*400 600\s*;/);
+    assert.match(archivoExt, /font-display:\s*swap/);
+    assert.match(archivoExt, new RegExp(`url\\('\\/fonts\\/ArchivoVariableExt\\.${HASH}\\.woff2'\\)\\s*format\\('woff2'\\)`));
+    const extRange = archivoExt.match(/unicode-range:\s*([^;]+);/);
+    assert.ok(extRange, 'the Ext face carries a unicode-range');
+    assert.match(extRange[1], /U\+1EA0-1EF9/, 'the Ext face covers the Vietnamese block');
+    assert.match(extRange[1], /U\+0218|U\+01FA-021B/, 'the Ext face covers the Romanian comma-below letters');
+    // The two ranges never overlap, so a character has exactly one source.
+    const expand = (list) => list.split(',').map((t) => t.trim().replace(/^U\+/, '')).flatMap((t) => {
+      const [a, b] = t.split('-').map((h) => parseInt(h, 16));
+      return b === undefined ? [a] : Array.from({ length: b - a + 1 }, (_, i) => a + i);
+    });
+    const coreSet = new Set(expand(archivo.match(/unicode-range:\s*([^;]+);/)[1]));
+    const overlap = expand(extRange[1]).filter((cp) => coreSet.has(cp));
+    assert.deepEqual(overlap, [], 'the core and Ext unicode-ranges do not overlap');
+    // Positive control for the overlap check: the expander sees a shared code point.
+    assert.deepEqual(expand('U+0041-0043').filter((cp) => new Set(expand('U+0042')).has(cp)), [0x42]);
 
     const plex400 = faceBlocks.find((b) => /font-family:\s*'IBM Plex Mono'/.test(b) && /font-weight:\s*400\b/.test(b));
     assert.ok(plex400, 'an IBM Plex Mono 400 @font-face rule exists');
     assert.match(plex400, new RegExp(`url\\('\\/fonts\\/PlexMono400\\.${HASH}\\.woff2'\\)\\s*format\\('woff2'\\)`));
 
+    // Design system pass: weight 500 is retired (every mono use is 400). The 400 face asserted
+    // above is the positive control that the mono family still ships.
     const plex500 = faceBlocks.find((b) => /font-family:\s*'IBM Plex Mono'/.test(b) && /font-weight:\s*500\b/.test(b));
-    assert.ok(plex500, 'an IBM Plex Mono 500 @font-face rule exists');
-    assert.match(plex500, new RegExp(`url\\('\\/fonts\\/PlexMono500\\.${HASH}\\.woff2'\\)\\s*format\\('woff2'\\)`));
+    assert.equal(plex500, undefined, 'the IBM Plex Mono 500 @font-face rule is retired');
+    assert.doesNotMatch(STYLES, /url\('\/fonts\/PlexMono500/, 'styles.css no longer references the PlexMono500 file');
+
+    const newsreader = faceBlocks.find((b) => /font-family:\s*'Newsreader'/.test(b));
+    assert.ok(newsreader, 'a Newsreader @font-face rule exists');
+    assert.match(newsreader, /font-weight:\s*300/);
+    assert.match(newsreader, /font-display:\s*swap/);
+    assert.match(newsreader, new RegExp(`url\\('\\/fonts\\/NewsreaderDisplay300\\.${HASH}\\.woff2'\\)\\s*format\\('woff2'\\)`));
+
+    const newsFallback = faceBlocks.find((b) => /font-family:\s*'Newsreader Fallback'/.test(b));
+    assert.ok(newsFallback, 'a Newsreader Fallback @font-face rule exists');
+    assert.match(newsFallback, /src:\s*local\('Georgia'\)/);
+    assert.match(newsFallback, /size-adjust:\s*\d+(\.\d+)?%/);
+    assert.match(newsFallback, /ascent-override:\s*\d+(\.\d+)?%/);
+    assert.match(newsFallback, /descent-override:\s*\d+(\.\d+)?%/);
   });
 
-  it('the three self-hosted font files exist on disk (content-hashed names) within the byte ceilings', () => {
+  it('the four self-hosted font files exist on disk (content-hashed names) within the byte ceilings, and the retired Plex Mono 500 file is gone', () => {
     const prefixes = [
-      ['ArchivoVariable', 70 * 1024],
+      ['ArchivoVariable', 40 * 1024],
+      ['ArchivoVariableExt', 20 * 1024],
       ['PlexMono400', 28 * 1024],
-      ['PlexMono500', 28 * 1024],
+      ['NewsreaderDisplay300', 30 * 1024],
     ];
     const fontsDir = path.join(PUBLIC_DIR, 'fonts');
     const onDisk = fs.readdirSync(fontsDir);
@@ -161,6 +208,8 @@ describe('WAVE-D1 type pairing: tokens + @font-face', () => {
       assert.ok(size <= ceiling, `${match} is ${size} bytes, over its ${ceiling}-byte ceiling`);
       assert.ok(size > 1000, `${match} is suspiciously small (${size} bytes) — likely not a real font`);
     }
+    // The Plex Mono 500 face is retired, and its file with it.
+    assert.equal(onDisk.filter((f) => /^PlexMono500\./.test(f)).length, 0, 'no PlexMono500 file remains in the fonts folder');
   });
 
   for (const page of [...PAIRING_SHEET_PAGES, ...GAP_FILL_FONT_PAGES]) {
@@ -185,21 +234,68 @@ describe('WAVE-D1 type pairing: tokens + @font-face', () => {
       'styles.css should carry no hardcoded legacy font-family reference');
   });
 
-  it('how-it-works.html: all 20 inline SVG label texts use the IBM Plex Mono stack, not bare "monospace"', () => {
+  // Design rebuild round 3: the step diagrams are panels in the homepage kit, not inline SVG
+  // wireframes, so their mono labels take the shared --mono token (IBM Plex Mono first) from
+  // the page's own classes. Before: 20 SVG labels pinned on the "'IBM Plex Mono', monospace"
+  // attribute. Now: no SVG label text and no bare "monospace" attribute remain, and the mono
+  // label classes read var(--mono) (positive control: the classes exist and are used).
+  it('how-it-works.html: the diagram labels are HTML set in the shared --mono token, not bare "monospace" SVG text', () => {
     const html = readPage('how-it-works.html');
     const bare = [...html.matchAll(/font-family="monospace"/g)];
     assert.equal(bare.length, 0, 'no inline SVG text should carry bare font-family="monospace"');
-    const plex = [...html.matchAll(/font-family="'IBM Plex Mono', monospace"/g)];
-    assert.equal(plex.length, 20, `expected 20 inline SVG labels on the IBM Plex Mono stack, found ${plex.length}`);
+    assert.equal([...html.matchAll(/<text[ >]/g)].length, 0, 'the diagrams carry no SVG text nodes');
+    for (const cls of ['hiw-mono', 'hiw-chip']) {
+      const rule = html.match(new RegExp(`\\.${cls}\\s*\\{([^}]*)\\}`));
+      assert.ok(rule, `.${cls} rule exists`);
+      assert.match(rule[1], /font-family:\s*var\(--mono\)/, `.${cls} sets the shared --mono token`);
+      assert.ok(html.includes(`class="${cls}`) || html.includes(` ${cls}`), `positive control: ${cls} is used in the markup`);
+    }
   });
 
-  it('og-image.svg names Archivo (not Inter), keeping the Helvetica/Arial fallback', () => {
+  it('og-image.svg headline names Newsreader (Georgia, serif fallback) and the wordmark stays on Archivo with the Helvetica/Arial fallback', () => {
     const svg = fs.readFileSync(path.join(PUBLIC_DIR, 'og-image.svg'), 'utf8');
     const matches = [...svg.matchAll(/font-family="([^"]*)"/g)].map((m) => m[1]);
     assert.ok(matches.length > 0, 'og-image.svg should carry font-family attributes');
-    for (const m of matches) {
-      assert.match(m, /^Archivo, Helvetica, Arial, sans-serif$/, `og-image.svg font-family should read Archivo first, got: ${m}`);
+    const headline = matches.filter((m) => m === 'Newsreader, Georgia, serif');
+    const wordmark = matches.filter((m) => m === 'Archivo, Helvetica, Arial, sans-serif');
+    assert.equal(headline.length, 2, 'both headline lines name Newsreader first');
+    assert.equal(wordmark.length, 1, 'the wordmark names Archivo first');
+    assert.equal(headline.length + wordmark.length, matches.length, 'no other font-family appears (no Inter, no bare generic)');
+    for (const line of ['A marketplace for', 'what agents learn']) {
+      assert.match(svg, new RegExp(`font-family="Newsreader, Georgia, serif"[^>]*>${line}</text>`), `"${line}" is set in Newsreader`);
     }
+    assert.match(svg, /font-family="Archivo, Helvetica, Arial, sans-serif" font-weight="500"[^>]*>auxilo<\/text>/, 'the wordmark is Archivo weight 500');
+  });
+
+  it('og-image.svg look: near-black ground, two light-serif headline lines at x=72, the mark as a faint device running off the right edge, no tile pattern or glow', () => {
+    const svg = fs.readFileSync(path.join(PUBLIC_DIR, 'og-image.svg'), 'utf8');
+    // positive controls: the new look is present
+    assert.ok(svg.includes('<rect width="1200" height="630" fill="#0A0A0A"/>'), 'ground is #0A0A0A, full frame');
+    const headlines = [...svg.matchAll(/<text x="72" y="(\d+)" font-family="Newsreader, Georgia, serif" font-weight="300" font-size="84" fill="#FAFAF8" letter-spacing="-1\.68">([^<]*)<\/text>/g)];
+    assert.deepEqual(headlines.map((m) => m[2]), ['A marketplace for', 'what agents learn'], 'two headline lines, left aligned at x=72, weight 300 at 84px, tracking -0.02em');
+    assert.ok(Number(headlines[1][1]) > Number(headlines[0][1]), 'the second line sits below the first');
+    // the device: the mark's own geometry, scaled up, faint, crossbar in gold leaving the frame
+    const device = svg.match(/<g transform="translate\(([-\d.]+),([-\d.]+)\) scale\(([\d.]+)\)">\s*<polygon points="256,88 434,404 78,404" fill="none" stroke="#FAFAF8" stroke-opacity="0\.08"[^>]*\/>\s*<line x1="256" y1="272" x2="([\d.]+)" y2="272" stroke="#C9A84C" stroke-opacity="0\.4"[^>]*\/>\s*<\/g>/);
+    assert.ok(device, 'the device group carries the mark geometry, ivory outline at 0.08 and gold crossbar at 0.4');
+    const [, tx, , k, barEnd] = device;
+    assert.ok(Number(k) >= 2, 'the device is drawn large (at least twice the mark geometry)');
+    assert.ok(Number(tx) + Number(barEnd) * Number(k) > 1200, 'the crossbar runs off the right edge of the 1200 frame');
+    // the corner wordmark is exactly as it was drawn
+    assert.ok(svg.includes(`<g transform="translate(72,534) scale(1.600)">
+  <polygon points="22,4 40,36 4,36" fill="none" stroke="#C9A84C" stroke-width="3" stroke-linejoin="round"/>
+  <line x1="22" y1="22.5" x2="40" y2="22.5" stroke="#C9A84C" stroke-width="2.4"/>
+  <text x="54" y="31" font-family="Archivo, Helvetica, Arial, sans-serif" font-weight="500" font-size="24" fill="#FAFAF8" letter-spacing="-0.01">auxilo</text>
+</g>`), 'mark and wordmark unchanged in geometry, gold stroke and Archivo 500');
+    // retired: the tile pattern and the radial glow (and any gradient)
+    assert.doesNotMatch(svg, /<pattern|<radialGradient|<linearGradient|url\(#/, 'no tile pattern, glow or gradient');
+  });
+
+  it('og-image.png is a 1200 by 630 PNG under 120KB', () => {
+    const png = fs.readFileSync(path.join(PUBLIC_DIR, 'og-image.png'));
+    assert.equal(png.subarray(1, 4).toString('latin1'), 'PNG', 'PNG signature');
+    assert.equal(png.readUInt32BE(16), 1200, 'width');
+    assert.equal(png.readUInt32BE(20), 630, 'height');
+    assert.ok(png.length < 120 * 1024, `the share image stays under 120KB, got ${png.length} bytes`);
   });
 
   it('every numeral/figure-bearing class sitewide renders on var(--mono) (inherently tabular — no sans element carries a figure)', () => {
@@ -243,11 +339,18 @@ describe('WAVE-D1 design-tells sweep: removed markup + CSS carry no residue', ()
     }
   });
 
-  it('tell 8 — .section-ground carries no decorative background-image (background-color only)', () => {
-    const body = STYLES.match(/\.section-ground,\s*\n#how-it-works,\s*\n#footer-cta\s*\{([^}]*)\}/);
-    assert.ok(body, '.section-ground shared rule exists');
-    assert.doesNotMatch(body[1], /background-image/, '.section-ground should carry no background-image');
-    assert.match(body[1], /background-color:\s*var\(--obsidian\)/, '.section-ground should keep background-color');
+  it('tell 8 — the ground scopes carry no decorative background-image (background colour only), and .section-ground is retired', () => {
+    // Design system pass: a section declares its ground with .on-dark / .on-tint, or sits on paper.
+    // .section-ground (the old paper ground) is retired: no page carries it.
+    assert.doesNotMatch(STYLES, /\.section-ground\b/, '.section-ground is retired from styles.css');
+    const dark = STYLES.match(/^\.on-dark\s*\{([^}]*)\}/m);
+    assert.ok(dark, '.on-dark ground rule exists');
+    assert.match(dark[1], /background:\s*var\(--bg\)/, '.on-dark keeps its background colour');
+    assert.doesNotMatch(dark[1], /background-image/, '.on-dark should carry no background-image');
+    const tint = STYLES.match(/^\.on-tint\s*\{([^}]*)\}/m);
+    assert.ok(tint, '.on-tint ground rule exists');
+    assert.match(tint[1], /background:\s*var\(--bg\)/, '.on-tint keeps its background colour');
+    assert.doesNotMatch(tint[1], /background-image/, '.on-tint should carry no background-image');
   });
 
   // Tell 4: hairline section-divider ornament.
@@ -308,37 +411,48 @@ describe('WAVE-D1 design-tells sweep: removed markup + CSS carry no residue', ()
     }
   });
 
-  it('the five .dive-arrow row-affordance spans on index.html survive untouched (explicit keep; was 6 before the Earnings dive-row was removed when /earnings folded into /pricing, packet 15 rev 3a, v97 assembly)', () => {
+  // Design rebuild: the index of pages on the homepage drops its numerals (01 to 05) and its
+  // row arrows (owner ruling: no arrows, no numerals as decoration). The five rows stay, with
+  // their titles and descriptions; only the two decorative spans go.
+  it('the five homepage dive rows carry no .dive-arrow span and no .dive-num numeral (the rows themselves, with title and description, stay)', () => {
     const html = readPage('index.html');
-    const matches = [...html.matchAll(/<span class="dive-arrow">→<\/span>/g)];
-    assert.equal(matches.length, 5, `expected 5 .dive-arrow spans on index.html, found ${matches.length}`);
+    const rows = [...html.matchAll(/<a href="[^"]+" class="dive-row">([\s\S]*?)<\/a>/g)];
+    assert.equal(rows.length, 5, `positive control: expected 5 .dive-row anchors on index.html, found ${rows.length}`);
+    for (const [, inner] of rows) {
+      assert.match(inner, /<span class="dive-title">[^<]+<\/span>/, 'each row keeps its title span');
+      assert.match(inner, /<span class="dive-desc">[^<]+<\/span>/, 'each row keeps its description span');
+    }
+    assert.equal([...html.matchAll(/class="dive-arrow"/g)].length, 0, 'no .dive-arrow span on index.html');
+    assert.equal([...html.matchAll(/class="dive-num"/g)].length, 0, 'no .dive-num span on index.html');
+    assert.ok(!/<span class="dive-[a-z]+">(?:→|0[1-9])<\/span>/.test(html), 'no arrow glyph or 01..09 numeral inside a dive span');
   });
 
   // Tell 5: card wall + border-radius normalization.
-  it('tell 5 — .moat-card is flattened (border-top ruled row, no background/border-radius/hover)', () => {
-    const body = STYLES.match(/\.moat-card\s*\{([^}]*)\}/);
-    assert.ok(body, '.moat-card rule exists');
-    assert.match(body[1], /border-top:/);
-    assert.doesNotMatch(body[1], /background:/);
-    assert.doesNotMatch(body[1], /border-radius:/);
-    assert.doesNotMatch(STYLES, /^\.moat-card:hover\s*\{/m, '.moat-card:hover should be gone');
+  it('tell 5 — the card wall stays flat: .moat-card is retired (no page uses it), and the ruled-row component that remains has no radius or hover lift', () => {
+    assert.doesNotMatch(STYLES, /\.moat-(?:card|grid)\b/, '.moat-card and .moat-grid are retired from styles.css');
+    // Positive control: a ruled row (border-top, no background, no radius) is what the shared sheet draws now.
+    const row = STYLES.match(/^\.dive-row\s*\{([^}]*)\}/m);
+    assert.ok(row, '.dive-row rule exists');
+    assert.match(row[1], /border-top:/);
+    assert.doesNotMatch(row[1], /background:/);
+    assert.doesNotMatch(row[1], /border-radius:/);
+    assert.doesNotMatch(STYLES, /^\.dive-row:hover\s*\{/m, '.dive-row:hover should lift nothing');
   });
 
-  it('tell 5 (P3a) — border-radius sitewide in styles.css collapses to 4px controls / 0 surfaces (plus the named exceptions)', () => {
+  it('tell 5 (P3a) — border-radius sitewide in styles.css follows the shape scale: controls 6px, panels 10px, stages and cards 14px (tokens), plus 4px chips, 0, and the named exceptions', () => {
+    // Design system pass: this used to collapse every radius to 4px controls / 0 surfaces.
     const radii = [...STYLES.matchAll(/border-radius:\s*([^;]+);/g)].map((m) => m[1].trim());
-    const allowed = new Set(['4px', '0']);
-    // Named, counted exceptions never swept: the email-capture split-corner
-    // pair (desktop L/R-only rounding + its mobile all-corner variant),
-    // the skip-to-content a11y control's bottom-only rounding, and
-    // .legend-swatch's 2px micro-decoration. (The 50% avatar-circle idiom
+    const allowed = new Set(['var(--r-control)', 'var(--r-panel)', 'var(--r-stage)', '4px', '0']);
+    // Named, counted exceptions never swept: the skip-to-content a11y control's
+    // bottom-only rounding, the drawing kit's 5px button and the ledger drawing's
+    // 50% dot. (The email-capture split-corner pair, .legend-swatch's 2px and the
+    // 999px queue count pill left with their components.) The 50% avatar-circle idiom
     // lives in each page's own <style> block, not styles.css — untouched,
-    // out of this sitewide-sheet's scope, not checked here.)
+    // out of this sitewide-sheet's scope, not checked here.
     const exceptions = {
-      '6px 0 0 6px': 1, // .email-input, desktop
-      '0 6px 6px 0': 1, // .footer-email-capture .btn-primary, desktop
-      '0 0 6px 6px': 1, // .skip-to-content
-      '6px': 2,         // .email-input + .btn-primary, mobile (<=600px), all corners
-      '2px': 1,         // .legend-swatch
+      '0 0 var(--r-control) var(--r-control)': 1, // .skip-to-content
+      '5px': 1,         // .dw-btn, the drawing kit's button
+      '50%': 1,         // .dw-tick, the ledger drawing's dot
     };
     const seen = Object.fromEntries(Object.keys(exceptions).map((k) => [k, 0]));
     for (const r of radii) {
@@ -350,6 +464,13 @@ describe('WAVE-D1 design-tells sweep: removed markup + CSS carry no residue', ()
     for (const [value, count] of Object.entries(exceptions)) {
       assert.equal(seen[value], count,
         `expected exactly ${count} border-radius: ${value} declaration(s), found ${seen[value]}`);
+    }
+    // Positive control: the three scale tokens are defined at 6 / 10 / 14 and each one is used.
+    assert.match(STYLES, /--r-control:\s*6px/);
+    assert.match(STYLES, /--r-panel:\s*10px/);
+    assert.match(STYLES, /--r-stage:\s*14px/);
+    for (const token of ['var(--r-control)', 'var(--r-panel)', 'var(--r-stage)']) {
+      assert.ok(radii.includes(token), `${token} is used by at least one rule`);
     }
   });
 
@@ -420,7 +541,7 @@ describe('WAVE-D1 fix pass: font cache immutability, CSP tightened, for-agents r
   it('every shipped font filename under public/fonts/ matches the immutable route\'s hash pattern', () => {
     const fontsDir = path.join(PUBLIC_DIR, 'fonts');
     const woff2Files = fs.readdirSync(fontsDir).filter((f) => f.endsWith('.woff2'));
-    assert.equal(woff2Files.length, 3, `expected 3 woff2 files in ${fontsDir}, found ${woff2Files.length}`);
+    assert.equal(woff2Files.length, 4, `expected 4 woff2 files in ${fontsDir}, found ${woff2Files.length}`);
     for (const f of woff2Files) {
       assert.match(f, /^[A-Za-z0-9]+\.[0-9a-f]{8}\.woff2$/,
         `${f} should be named <name>.<8-hex-hash>.woff2 to match the immutable /fonts/ cache route`);
@@ -462,5 +583,68 @@ describe('WAVE-D1 fix pass: font cache immutability, CSP tightened, for-agents r
     assert.ok(sharedRevealRule, 'styles.css should still define the shared .reveal transition rule');
     assert.doesNotMatch(sharedRevealRule[1], /opacity\s*:\s*0/,
       'the shared .reveal rule should not set opacity: 0');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// Integration pass: the drawing kit's own face, and the helpers every page shares
+// ═══════════════════════════════════════════════════════════════════════
+
+describe('integration: .dw-title sets its own face, and the shared drawing helpers live once in the sheet', () => {
+  // A learning title inside a dark terminal stage inherits the mono face from .dw-term. A title is
+  // Archivo 500 wherever it sits, so the rule names its own family instead of inheriting one.
+  it('.dw-title is Archivo 500 by its own rule (it holds inside a mono .dw-term)', () => {
+    const rule = STYLES.match(/^\.dw-title\s*\{([^}]*)\}/m);
+    assert.ok(rule, '.dw-title rule exists');
+    assert.match(rule[1], /font-family:\s*var\(--sans\)/, '.dw-title names the sans face itself');
+    assert.match(rule[1], /font-weight:\s*500\b/, '.dw-title is weight 500');
+    // Positive control: the container it must beat really does set the mono face.
+    const term = STYLES.match(/^\.dw-term\s*\{([^}]*)\}/m);
+    assert.ok(term, '.dw-term rule exists');
+    assert.match(term[1], /font-family:\s*var\(--mono\)/, '.dw-term sets the mono face that .dw-title must not inherit');
+  });
+
+  // The homepage and /for-builders each carried a copy of the device's clipping wrapper and the
+  // review-queue drawing's kill-switch helpers. The kill-switch helpers live in the shared sheet now, once.
+  // The device itself is no longer markup: the shared sheet paints it as a background image on the first
+  // dark section, so no page carries a device svg or the old clipping wrapper, and the sheet has no rule
+  // left for that wrapper.
+  // Round 4: the kill-switch chip is retired. A drawing never repeats a command the copy beside it already
+  // shows, so the sheet has no .dw-kill rule and no page carries the chip.
+  it('.dw-hang and .dw-kill are retired from the sheet and from every page; no page or sheet carries the old .dw-device-clip', () => {
+    // Round 4 integration: the hang wrapper only existed to hold the chip; both are gone.
+    assert.ok(!/dw-kill/.test(STYLES), 'styles.css carries no rule for the retired kill-switch chip');
+    assert.ok(!/^\.dw-hang\s*\{/m.test(STYLES), 'styles.css carries no rule for the retired hang wrapper');
+    assert.match(STYLES, /^\.dw-twoup\s*\{/m, 'positive control: the recall drawing rule is still in the sheet');
+    for (const page of ALL_PAGES) {
+      assert.ok(!/dw-kill/.test(readPage(page)), `${page} carries no kill-switch chip`);
+    }
+    for (const page of ['index.html', 'for-builders.html']) {
+      const html = readPage(page);
+      const style = html.match(/<style>([\s\S]*?)<\/style>/)[1];
+      for (const selector of ['.dw-device-clip', '.dw-hang', '.dw-kill']) {
+        assert.ok(!style.includes(`${selector} {`) && !style.includes(`${selector}{`), `${page} carries no copy of ${selector}`);
+      }
+      // Positive control: each page still draws the review window the chip hung from. Round 4: /for-builders'
+      // stage holds the review window alone (the chip hung off its corner and is gone), so the page no longer
+      // carries the chip or the hang wrapper; the homepage's window carries no chip either.
+      if (page === 'for-builders.html') {
+        assert.doesNotMatch(html, /dw-kill|dw-hang/, `${page} carries no kill-switch chip and no hang wrapper`);
+      }
+      assert.match(html, /<div class="dw-queue-title">Pending Review Queue<\/div>/, `${page} still draws the review window`);
+    }
+    // No page carries the device as markup, and the sheet has no rule for the old wrapper.
+    for (const page of ALL_PAGES) {
+      assert.ok(!/dw-device/.test(readPage(page)), `${page} carries no device markup`);
+    }
+    assert.ok(!/dw-device-clip/.test(STYLES), 'styles.css carries no rule for the old inline device wrapper');
+    // Positive control: the shared sheet does paint the device, so the absence above is about the markup.
+    assert.match(STYLES, /--device:\s*url\(/, 'the sheet defines the device image');
+  });
+
+  it('the homepage style block carries no second .hero-grid (the shared sheet has it)', () => {
+    const style = readPage('index.html').match(/<style>([\s\S]*?)<\/style>/)[1];
+    assert.ok(!/^\s*\.hero-grid\s*\{/m.test(style), 'index.html defines no .hero-grid of its own');
+    assert.match(STYLES, /^\.hero-grid\s*\{/m, 'positive control: styles.css defines .hero-grid');
   });
 });

@@ -85,9 +85,10 @@ function startStaticServer(root) {
 // This file's section list and count were updated to match (9 -> 8).
 //
 // LAUNCH-WAVE-0926 (advertising-copywriter/AD layout sheet, 2026-09-26):
-// #setup-detail is new, inserted directly after #hero and before
-// #learning-explainer (the hero's trust bullets + exchange figure moved
-// there). Count updated to match (8 -> 9).
+// #setup-detail is new, inserted before #learning-explainer (the hero's trust
+// bullets + exchange figure moved there). Count updated to match (8 -> 9).
+// Design rebuild: the order is now hero, works-with band, setup-detail, ... (the
+// band moved up under the hero; the count of nine is unchanged).
 //
 // #hero is deliberately excluded from the "everything computes 120px" invariant:
 // public/styles.css's `#hero { padding: 0 24px; ... min-height: 100vh; }` is a
@@ -101,15 +102,15 @@ const HOMEPAGE_SECTIONS = [
   // like any section, var(--section-pad), so its padding-top/bottom is
   // 120px here too, hero included, no exception (rule 3).
   { id: 'hero', label: 'hero (Hero heading)', expectPad: true },
+  // Design rebuild: the client band moved up to sit directly under the dark first
+  // screen (hero then band, the one pair of neighbours that share a ground). It keeps
+  // the band rhythm. SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-7): "A band is a
+  // section with no heading that holds a single row. A band's top and bottom
+  // padding is the band rhythm: 64 at 1280..." -- not the full section rhythm every
+  // headed section uses (var(--band-pad), 64px here).
+  { id: 'works-with-band', label: '(unheaded) works-with logo band', expectPadValue: '64px' },
   { id: 'setup-detail', label: 'You Control What Publishes', expectPad: true },
   { id: 'learning-explainer', label: 'What a Learning Is, and Why Another Agent Would Use It', expectPad: true },
-  // SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-7): "A band is a section
-  // with no heading that holds a single row. A band's top and bottom
-  // padding is the band rhythm: 64 at 1280..." -- not the full section
-  // rhythm every headed section uses. Pin moved (was 120px, the same
-  // var(--section-pad) every other section carries) to 64px, the new
-  // var(--band-pad) token this section-with-no-heading now uses.
-  { id: 'works-with-band', label: '(unheaded) works-with logo band', expectPadValue: '64px' },
   { id: 'own-learnings-free', label: 'Never watch your agent solve the same problem twice.', expectPad: true },
   { id: 'how-it-works', label: 'Your Agents Learn. You Earn.', expectPad: true },
   { id: 'explore-section', label: 'explore-section (class-selected, no id)', expectPad: true },
@@ -155,27 +156,32 @@ describe('SITE-PERFECT-W1 item 3: /works-with h1 matches /pricing h1 at 1440px',
 
   // SPACING-0927 R2-2a: heading to the element beneath it is 16px, named
   // by the sheet (was 20). Pin moved, not weakened -- font-size untouched.
-  it('/works-with .ww-h1 computes font-size: 56px, margin-bottom: 16px', async (t) => {
+  // Design rebuild: the page's own .ww-h1 rule is gone. The /works-with h1 (#ww-hero-heading) takes the
+  // shared h1 size, clamp(40px, 5vw, 64px), which is its 64px ceiling at 1440. Its gap to the lede is
+  // the shared heading gap: 16px today, 24px once sheet v2 re-rules a heading over text.
+  it('/works-with h1 computes the shared h1 size: font-size 64px at 1440, margin-bottom on the heading gap (16px or sheet v2 24px)', async (t) => {
     if (!ok) { t.skip('playwright not resolvable'); return; }
-    const m = await measureH1('works-with.html', '.ww-h1');
-    assert.ok(m, '.ww-h1 not found on /works-with');
-    assert.equal(m.fontSize, '56px', `.ww-h1 font-size: got ${m.fontSize}`);
-    assert.equal(m.marginBottom, '16px', `.ww-h1 margin-bottom: got ${m.marginBottom}`);
+    const m = await measureH1('works-with.html', '#ww-hero-heading');
+    assert.ok(m, '#ww-hero-heading not found on /works-with');
+    assert.equal(m.fontSize, '64px', `/works-with h1 font-size: got ${m.fontSize}`);
+    assert.ok(['16px', '24px'].includes(m.marginBottom), `/works-with h1 margin-bottom: got ${m.marginBottom}`);
   });
 
   // SPACING-0927 R2-2a: heading to the element beneath it is 16px, named
   // by the sheet (was 20). Pin moved, not weakened -- font-size untouched.
-  it('/pricing .pricing-page-header h1 computes font-size: 56px, margin-bottom: 16px', async (t) => {
+  // Design rebuild: the /pricing h1 takes the shared h1 size, clamp(40px, 5vw, 64px), the 64px ceiling
+  // at 1440. Its gap to the lede is the shared heading gap: 16px today, 24px once sheet v2 re-rules it.
+  it('/pricing .pricing-page-header h1 computes the shared h1 size: font-size 64px at 1440, margin-bottom on the heading gap (16px or sheet v2 24px)', async (t) => {
     if (!ok) { t.skip('playwright not resolvable'); return; }
     const m = await measureH1('pricing.html', '.pricing-page-header h1');
     assert.ok(m, '.pricing-page-header h1 not found on /pricing');
-    assert.equal(m.fontSize, '56px', `pricing h1 font-size: got ${m.fontSize}`);
-    assert.equal(m.marginBottom, '16px', `pricing h1 margin-bottom: got ${m.marginBottom}`);
+    assert.equal(m.fontSize, '64px', `pricing h1 font-size: got ${m.fontSize}`);
+    assert.ok(['16px', '24px'].includes(m.marginBottom), `pricing h1 margin-bottom: got ${m.marginBottom}`);
   });
 
   it('/works-with and /pricing h1 computed values are equal (the required proof)', async (t) => {
     if (!ok) { t.skip('playwright not resolvable'); return; }
-    const ww = await measureH1('works-with.html', '.ww-h1');
+    const ww = await measureH1('works-with.html', '#ww-hero-heading');
     const pricing = await measureH1('pricing.html', '.pricing-page-header h1');
     assert.equal(ww.fontSize, pricing.fontSize, `font-size mismatch: works-with=${ww.fontSize} pricing=${pricing.fontSize}`);
     assert.equal(ww.marginBottom, pricing.marginBottom, `margin-bottom mismatch: works-with=${ww.marginBottom} pricing=${pricing.marginBottom}`);

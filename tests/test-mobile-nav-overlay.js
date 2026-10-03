@@ -41,12 +41,18 @@
  *      nav link on the page is hit-testable via elementFromPoint. Also
  *      confirms at 1280x800 that the hamburger stays hidden, .nav-links
  *      keeps its normal desktop layout (display:flex, position:static),
- *      and the nav still resolves a real backdrop-filter (via #main-nav or
- *      its ::before).
+ *      and the nav paints a solid opaque ground with no backdrop-filter
+ *      (design system pass: the glass is retired, so the trap cannot return).
  *
  *      CI installs playwright + Chromium and sets CI_REQUIRE_TIER2=1 so a
  *      broken install fails the build loudly instead of silently falling
  *      back to Tier-1-only coverage (see .github/workflows/ci.yml).
+ *
+ *   3. KEYBOARD (same Tier 2, accessibility sweep): opening the menu from the keyboard moves focus to its first
+ *      link and makes everything outside the navigation inert; Tab and Shift+Tab never leave the menu; Escape
+ *      closes it from a link or from the button and returns focus to the button; the button and a chosen link
+ *      close it and hand the page back; a window widened past the breakpoint closes it; at desktop width
+ *      nothing is inert and the hamburger is not shown. Every shared-nav page, the same script on each.
  *
  * Run: node tests/test-mobile-nav-overlay.js (invoked automatically by
  * `npm test`, alongside the test/*.test.js suite -- not via a tests/*.js
@@ -249,12 +255,15 @@ function runStaticTests() {
         }
     });
 
-    runTest('T-DR1-STATIC-003: the glass blur still exists, scoped to #main-nav::before', () => {
-        const rules = parseCssRules(css).filter((r) => r.selector.split(',').map((s) => s.trim()).includes('#main-nav::before'));
-        assert.ok(rules.length > 0, '#main-nav::before rule should exist and carry the glass background');
-        const body = rules.map((r) => r.body).join('\n');
-        assert.ok(/backdrop-filter\s*:\s*blur\(/i.test(body), '#main-nav::before should apply backdrop-filter: blur(...)');
-        assert.ok(/background\s*:/i.test(body), '#main-nav::before should carry the glass background color');
+    runTest('T-DR1-STATIC-003: the nav ground is solid, with no glass: a #main-nav background, no #main-nav::before layer, no blur anywhere on the nav', () => {
+        // Design system pass: the glass (a ::before layer carrying backdrop-filter: blur) is retired.
+        // Positive control: #main-nav itself paints a background. Negative: no ::before rule, no blur.
+        const navRules = parseCssRules(css).filter((r) => r.selector.split(',').map((s) => s.trim()).includes('#main-nav'));
+        assert.ok(navRules.some((r) => /(^|[\s;])background\s*:/i.test(r.body)), '#main-nav should paint its own solid background');
+        const before = parseCssRules(css).filter((r) => r.selector.split(',').map((s) => s.trim()).includes('#main-nav::before'));
+        assert.strictEqual(before.length, 0, '#main-nav::before (the old glass layer) should be gone');
+        const blurAnywhere = parseCssRules(css).filter((r) => /#main-nav/.test(r.selector) && /backdrop-filter\s*:\s*blur\(/i.test(r.body));
+        assert.strictEqual(blurAnywhere.length, 0, 'no rule that targets #main-nav may apply a backdrop blur');
     });
 
     runTest('T-DR1-STATIC-004: .nav-links mobile overlay still spans the full viewport', () => {
@@ -265,6 +274,25 @@ function runStaticTests() {
             const re = new RegExp(`(^|[^-\\w])${edge}\\s*:\\s*0`, 'i');
             assert.ok(re.test(body), `.nav-links should pin ${edge}:0 so it fills the viewport`);
         }
+    });
+
+    // Accessibility sweep: the hamburger controls the menu by id, and the one script is the same text on every page.
+    const navScripts = new Set();
+    for (const page of NAV_PAGES) {
+        runTest(`T-A11Y-STATIC-${page}: the hamburger's aria-controls names the menu's id; the navigation script is the shared block`, () => {
+            const html = fs.readFileSync(path.join(PUBLIC_DIR, page), 'utf8');
+            const menu = html.match(/<ul class="nav-links" id="([^"]+)" role="list">/);
+            assert.ok(menu, `${page}: the menu list carries an id`);
+            const controls = html.match(/<button class="hamburger" id="hamburger"[^>]*aria-controls="([^"]+)"/);
+            assert.ok(controls, `${page}: the hamburger carries aria-controls`);
+            assert.strictEqual(controls[1], menu[1], `${page}: aria-controls names the menu id`);
+            const blocks = html.match(/<script>\n\/\/ ── Mobile navigation \(the same block on every page\) ──[\s\S]*?<\/script>/g) || [];
+            assert.strictEqual(blocks.length, 1, `${page}: exactly one navigation script block`);
+            navScripts.add(blocks[0]);
+        });
+    }
+    runTest('T-A11Y-STATIC-SAME: the navigation script is one text on every page', () => {
+        assert.strictEqual(navScripts.size, 1, `expected one navigation script, found ${navScripts.size}`);
     });
 
     for (const page of NAV_PAGES) {
@@ -362,8 +390,152 @@ async function runDynamicTests() {
             });
         }
 
+        // The state the keyboard tests read after each step.
+        const readState = (p) => p.evaluate(() => {
+            const nav = document.querySelector('.nav-links');
+            const bar = document.getElementById('main-nav');
+            const at = document.activeElement;
+            return {
+                open: nav.classList.contains('nav-open'),
+                expanded: document.getElementById('hamburger').getAttribute('aria-expanded'),
+                focusId: at && (at.id || at.tagName.toLowerCase()),
+                focusInNav: !!(at && at.closest('#main-nav')),
+                focusInMenu: !!(at && (at.closest('.nav-links') || at.id === 'hamburger')),
+                firstLink: nav.querySelector('a') === at,
+                inert: Array.from(document.querySelectorAll('[inert]')).map((el) => el.tagName.toLowerCase() + (el.id ? '#' + el.id : '')),
+                bodyKids: Array.from(document.body.children).filter((el) => el !== bar && !/^(SCRIPT|STYLE|LINK|TEMPLATE|NOSCRIPT)$/.test(el.tagName)).map((el) => ({ tag: el.tagName.toLowerCase(), inert: el.hasAttribute('inert') })),
+                barInert: bar.hasAttribute('inert'),
+            };
+        });
+
         for (const page of DYNAMIC_PAGES) {
-            await runAsyncTest(`T-DR1-DYNAMIC-DESKTOP-${page}: nav layout + backdrop-filter unchanged at 1280x800`, async () => {
+            await runAsyncTest(`T-A11Y-KEYBOARD-${page}: open by keyboard, focus lands in the menu, Tab stays in it, Escape closes and returns focus, the page behind is inert while open`, async () => {
+                const ctx = await browser.newContext({ viewport: { width: 375, height: 812 } });
+                const p = await ctx.newPage();
+                try {
+                    await p.goto(`${base}/${page}`, { waitUntil: 'networkidle' });
+                    // closed: nothing inert, the button collapsed
+                    let st = await readState(p);
+                    assert.strictEqual(st.open, false);
+                    assert.deepStrictEqual(st.inert, [], 'nothing is inert while the menu is closed');
+
+                    // open from the keyboard
+                    await p.focus('#hamburger');
+                    await p.keyboard.press('Enter');
+                    st = await readState(p);
+                    assert.strictEqual(st.open, true, 'the menu opened');
+                    assert.strictEqual(st.expanded, 'true');
+                    assert.ok(st.firstLink, `focus is on the first link in the menu, not on ${st.focusId}`);
+                    assert.ok(st.bodyKids.length >= 2, `positive control: the page has content outside the navigation (${st.bodyKids.length} elements)`);
+                    assert.ok(st.bodyKids.every((k) => k.inert), `everything outside the navigation is inert: ${JSON.stringify(st.bodyKids)}`);
+                    assert.ok(st.inert.some((i) => i.startsWith('main')), 'main is inert');
+                    assert.ok(st.inert.includes('footer'), 'the page footer is inert');
+                    assert.ok(st.bodyKids.some((k) => k.tag === 'a' && k.inert), 'the skip link is among them');
+                    assert.strictEqual(st.barInert, false, 'the navigation itself is live');
+                    // the controls the open menu shows stay live: the six links and the button
+                    const live = await p.evaluate(() => Array.from(document.querySelectorAll('.nav-links a, #hamburger')).every((el) => !el.closest('[inert]')));
+                    assert.ok(live, 'the menu links and the button are not inert');
+
+                    // Tab forward and Shift+Tab back many more times than there are stops: focus never leaves the menu
+                    for (let i = 0; i < 20; i++) {
+                        await p.keyboard.press('Tab');
+                        st = await readState(p);
+                        assert.ok(st.focusInMenu, `Tab ${i + 1}: focus left the menu for ${st.focusId}`);
+                    }
+                    for (let i = 0; i < 20; i++) {
+                        await p.keyboard.press('Shift+Tab');
+                        st = await readState(p);
+                        assert.ok(st.focusInMenu, `Shift+Tab ${i + 1}: focus left the menu for ${st.focusId}`);
+                    }
+                    // Shift+Tab from the first link wraps to the button; Tab from the button wraps to the first link
+                    await p.evaluate(() => document.querySelector('.nav-links a').focus());
+                    await p.keyboard.press('Shift+Tab');
+                    assert.strictEqual((await readState(p)).focusId, 'hamburger', 'Shift+Tab from the first link wraps to the button');
+                    await p.keyboard.press('Tab');
+                    assert.ok((await readState(p)).firstLink, 'Tab from the button wraps to the first link');
+
+                    // Escape with focus on a link: closes, returns focus to the button, hands the page back
+                    await p.keyboard.press('Tab');
+                    await p.keyboard.press('Escape');
+                    st = await readState(p);
+                    assert.strictEqual(st.open, false, 'Escape closed the menu');
+                    assert.strictEqual(st.expanded, 'false');
+                    assert.strictEqual(st.focusId, 'hamburger', `focus returned to the button, not ${st.focusId}`);
+                    assert.deepStrictEqual(st.inert, [], 'nothing is inert after Escape');
+
+                    // Escape with focus on the button closes it too
+                    await p.keyboard.press('Enter');
+                    assert.strictEqual((await readState(p)).open, true, 'reopened');
+                    await p.focus('#hamburger');
+                    await p.keyboard.press('Escape');
+                    st = await readState(p);
+                    assert.strictEqual(st.open, false, 'Escape from the button closed it');
+                    assert.strictEqual(st.focusId, 'hamburger');
+                    assert.deepStrictEqual(st.inert, []);
+
+                    // the button closes it: inert gone, focus stays on the button
+                    await p.keyboard.press('Enter');
+                    assert.strictEqual((await readState(p)).open, true);
+                    await p.click('#hamburger');
+                    st = await readState(p);
+                    assert.strictEqual(st.open, false, 'the button closed the menu');
+                    assert.deepStrictEqual(st.inert, [], 'closing by the button removes inert');
+                    assert.strictEqual(st.focusId, 'hamburger');
+
+                    // choosing a link closes it and removes inert (navigation is held back so the page stays)
+                    await p.evaluate(() => document.addEventListener('click', (e) => { if (e.target.closest('.nav-links a')) e.preventDefault(); }, true));
+                    await p.keyboard.press('Enter');
+                    assert.strictEqual((await readState(p)).open, true);
+                    await p.click('.nav-links a >> nth=1');
+                    st = await readState(p);
+                    assert.strictEqual(st.open, false, 'choosing a link closed the menu');
+                    assert.deepStrictEqual(st.inert, [], 'choosing a link removes inert');
+
+                    // an inert element that was inert before the menu opened is left as it was
+                    await p.evaluate(() => { document.querySelector('footer').setAttribute('inert', ''); });
+                    await p.focus('#hamburger');
+                    await p.keyboard.press('Enter');
+                    await p.keyboard.press('Escape');
+                    assert.ok(await p.evaluate(() => document.querySelector('footer').hasAttribute('inert')), 'an element inert beforehand stays inert');
+
+                    // widening the window past the breakpoint with the menu open closes it and gives the page back
+                    await p.evaluate(() => document.querySelector('footer').removeAttribute('inert'));
+                    await p.keyboard.press('Enter');
+                    assert.strictEqual((await readState(p)).open, true);
+                    await p.setViewportSize({ width: 1280, height: 800 });
+                    await p.waitForFunction(() => !document.querySelector('.nav-links').classList.contains('nav-open'));
+                    st = await readState(p);
+                    assert.deepStrictEqual(st.inert, [], 'widening the window removed inert');
+                } finally {
+                    await ctx.close();
+                }
+            });
+        }
+
+        for (const page of DYNAMIC_PAGES) {
+            await runAsyncTest(`T-A11Y-KEYBOARD-DESKTOP-${page}: at 1280 nothing is inert, the hamburger is not shown, and Tab goes through the navigation as before`, async () => {
+                const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+                const p = await ctx.newPage();
+                try {
+                    await p.goto(`${base}/${page}`, { waitUntil: 'networkidle' });
+                    const st = await readState(p);
+                    assert.strictEqual(st.open, false);
+                    assert.deepStrictEqual(st.inert, [], 'nothing is inert at desktop width');
+                    assert.strictEqual(await p.evaluate(() => getComputedStyle(document.getElementById('hamburger')).display), 'none');
+                    // Escape and Tab do nothing special while the menu is closed
+                    await p.keyboard.press('Escape');
+                    assert.deepStrictEqual((await readState(p)).inert, []);
+                    const stops = [];
+                    for (let i = 0; i < 6; i++) { await p.keyboard.press('Tab'); stops.push((await readState(p)).focusId); }
+                    assert.ok(stops.some((id) => /^nav-/.test(id)), `Tab reaches the desktop navigation links: ${stops.join(', ')}`);
+                } finally {
+                    await ctx.close();
+                }
+            });
+        }
+
+        for (const page of DYNAMIC_PAGES) {
+            await runAsyncTest(`T-DR1-DYNAMIC-DESKTOP-${page}: nav layout + solid ground (no backdrop-filter) at 1280x800`, async () => {
                 const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
                 const p = await ctx.newPage();
                 try {
@@ -373,17 +545,19 @@ async function runDynamicTests() {
                         const links = document.querySelector('.nav-links');
                         const hamburger = document.getElementById('hamburger');
                         const navBefore = getComputedStyle(nav, '::before');
+                        const navStyle = getComputedStyle(nav);
                         return {
-                            beforeBackdrop: navBefore.backdropFilter || navBefore.webkitBackdropFilter,
+                            navBackground: navStyle.backgroundColor,
+                            navBackdrop: navStyle.backdropFilter || navStyle.webkitBackdropFilter || 'none',
+                            beforeBackdrop: navBefore.backdropFilter || navBefore.webkitBackdropFilter || 'none',
                             linksDisplay: getComputedStyle(links).display,
                             linksPosition: getComputedStyle(links).position,
                             hamburgerDisplay: getComputedStyle(hamburger).display,
                         };
                     });
-                    assert.ok(
-                        computed.beforeBackdrop && computed.beforeBackdrop !== 'none',
-                        'nav should still resolve a real backdrop-filter via ::before at desktop width'
-                    );
+                    assert.strictEqual(computed.navBackground, 'rgb(10, 10, 10)', 'nav paints a solid opaque #0A0A0A ground at desktop width');
+                    assert.strictEqual(computed.navBackdrop, 'none', 'nav has no backdrop-filter');
+                    assert.strictEqual(computed.beforeBackdrop, 'none', 'nav ::before has no backdrop-filter either'); 
                     assert.strictEqual(computed.linksDisplay, 'flex', '.nav-links should keep its normal desktop flex layout');
                     assert.strictEqual(computed.linksPosition, 'static', '.nav-links should not be position:fixed at desktop width');
                     assert.strictEqual(computed.hamburgerDisplay, 'none', 'hamburger should stay hidden at desktop width');

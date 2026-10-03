@@ -26,10 +26,10 @@
   <!-- Favicon: Angular A mark -->
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
-  <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/ArchivoVariable.cfd841fc.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/NewsreaderDisplay300.a07d3c5c.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="preload" href="/fonts/PlexMono500.0ecb6352.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=eba132a8" />
+  <link rel="stylesheet" href="/styles.css?v=f11e9131" />
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: Organization + FAQPage -->
@@ -100,352 +100,250 @@
   </script>
 
   <style>
-    /* The headline balances its lines so no word sits alone on a line. */
-    #hero-heading {
-      text-wrap: balance;
+    /* Homepage only. Grounds, the drawing kit, the pair and list layouts, steps,
+       questions and the closing ask live in the shared sheet. */
+
+    /* ── Hero: the ask beside the exchange drawing ── */
+    /* The device behind the hero is the shared sheet's background image, not markup. */
+
+    .hero-sub {
+      font-size: 19px;
+      line-height: 1.55;
+      color: var(--fg-2);
+      max-width: 30em;
     }
 
-    /* ── Explore: numbered mono-index (editorial TOC, not a card wall) ── */
-    .explore-section {
-      padding: var(--section-pad);
-    }
+    .hero-install { margin-top: var(--space-card); }
+    #hero-setup-snippet { max-width: 560px; }
 
-    /* SPACING-0927 R2-2a: this sits directly under h2#explore-heading --
-       heading to the element beneath it is 16px, named by the sheet (was 40). */
-    .dive-index {
+    /* The two notes are what a careful reader most needs, so they take the body colour and
+       15px from 481 wide up. Below that they keep 14px so the first screen still holds. */
+    .hero-setup-note {
       margin-top: var(--space-body);
-      border-bottom: 1px solid rgba(229,229,227,0.08);
-    }
-
-    .dive-row {
-      display: grid;
-      grid-template-columns: 56px 200px 1fr 32px;
-      align-items: baseline;
-      gap: 16px;
-      padding: 20px 4px;
-      border-top: 1px solid rgba(229,229,227,0.08);
-      text-decoration: none;
-      transition: background 0.2s ease;
-    }
-
-    .dive-row:hover { background: rgba(201,168,76,0.04); }
-
-    .dive-num {
-      font-family: var(--mono);
-      font-size: 14px;
-      color: var(--aurum);
-      letter-spacing: 0.04em;
-    }
-
-    .dive-title {
-      font-size: 18px;
-      font-weight: 600;
-      color: var(--ivory);
-      letter-spacing: -0.01em;
-    }
-
-    .dive-desc {
-      font-size: 14px;
-      color: var(--slate);
-      line-height: 1.5;
-    }
-
-    .dive-arrow {
-      font-size: 16px;
-      color: var(--aurum);
-      opacity: 0;
-      transform: translateX(-4px);
-      transition: opacity 0.2s ease, transform 0.2s ease;
-      justify-self: end;
-    }
-
-    .dive-row:hover .dive-arrow { opacity: 1; transform: translateX(0); }
-
-    @media (max-width: 700px) {
-      .dive-row {
-        grid-template-columns: 40px 1fr 24px;
-        grid-template-areas: "num title arrow" ". desc .";
-        /* SPACING-0927 (SPACING-SHEET.md D-7): was a 4x drop from the
-           desktop 16px gap; 8px (the next step down the content scale) is
-           a deliberate single mobile step, not an ad hoc residue. */
-        row-gap: var(--space-tight);
-      }
-      .dive-num { grid-area: num; }
-      .dive-title { grid-area: title; }
-      .dive-desc { grid-area: desc; }
-      .dive-arrow { grid-area: arrow; }
-    }
-  
-    /* ── FAQ (visible mirror of the FAQPage JSON-LD) ── */
-    #faq h2 {
-      /* AD sheet 9: font-size/weight/letter-spacing/color now come from the
-         shared section h2 rule in styles.css.
-         SPACING-0927 rule 5: heading-to-next-element is 16px sitewide (was 48). */
-      margin-bottom: var(--space-body);
-    }
-    /* AD sheet 9: the FAQ accordion component moved to the shared styles.css
-       (.faq-list/.faq-item/.faq-question/.faq-icon/.faq-answer/.faq-answer-inner);
-       the old static .faq-q/.faq-a rules are gone with the markup. */
-
-    /* ── AD layout sheet item 1: the exchange diagram no longer sits in the
-       hero (it moved into #setup-detail, alongside the ratified control
-       copy). These rules describe its look only; its grid placement is
-       .setup-detail-grid's job, below. ── */
-    /* SPACING-0927 R2-2b: 28 rounds up to 32 (nearest scale step). */
-    .hero-figure {
-      margin: var(--space-card) 0 var(--space-tight);
-    }
-
-    .hero-exchange {
-      display: block;
-      width: 100%;
-      max-width: 420px;
-      height: auto;
-    }
-
-    .hero-exchange .ex-rail {
-      fill: none;
-      stroke: rgba(229,229,227,0.22);
-      stroke-width: 1;
-    }
-
-    .hero-exchange .ex-node {
-      fill: none;
-      stroke: rgba(229,229,227,0.5);
-      stroke-width: 1.2;
-      stroke-linejoin: round;
-    }
-
-    /* The one gold accent: the return. Stroke only, so the install control
-       remains the single gold FILL above the fold. */
-    .hero-exchange .ex-return {
-      fill: none;
-      stroke: var(--aurum);
-      stroke-width: 1.4;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-
-    .hero-exchange .ex-label {
-      fill: var(--ash);
-      font-family: var(--sans);
-      font-size: var(--svg-label);
-      font-weight: 400;
-      letter-spacing: -0.01em;
-    }
-
-    /* ASK-WAVE (2026-09-07, THE-ASK-PACKET §1 item 4): the hero's secondary
-       reduces to one text link, retargeted to sit beside #install itself
-       (not the whole copy column) — see .hero-install-row in styles.css.
-       AD layout sheet item 1: the hero's own two-column grid (h1 head, copy
-       + figure below it) is gone along with the figure it existed to place
-       -- #hero .hero-content now stacks h1/.hero-copy in normal block flow
-       at every width, so no replacement grid is needed here. */
-
-    /* ── AD layout sheet item 1, steps 3-4: the control section moved out of
-       the hero. #setup-detail-heading + .setup-detail-copy (the ratified
-       block + kill switch line) sit first in DOM order, the moved
-       .hero-figure second; .setup-detail-grid stacks them (mobile-first)
-       and switches to a two-column grid at 981px, the same breakpoint the
-       old hero grid used. Text styling matches /for-builders' own
-       ".moat-card p" (styles.css: 15px / line-height 1.65 / var(--slate-text))
-       so the ratified block reads identically on both pages. ── */
-    .setup-detail-grid {
-      display: block;
-    }
-
-    .setup-detail-copy p {
       font-size: 15px;
-      line-height: 1.65;
-      color: var(--slate-text);
+      line-height: 1.55;
+      color: var(--fg-2);
+      max-width: 560px;
     }
+    .hero-setup-note + .hero-setup-note { margin-top: var(--space-tight); }
 
-    .setup-detail-copy p + p {
-      /* SPACING-0927 rule 5: paragraph-to-paragraph is 24px sitewide (was 16). */
-      margin-top: var(--space-copy);
-    }
-
-    .setup-detail-copy code {
-      font-family: var(--mono);
-      font-size: 12.5px;
-      color: var(--ash);
-      background: rgba(255,255,255,0.05);
-      /* SPACING-0927 R2-2b: 1->0, 5->4 (was 1px 5px). */
-      padding: 0 var(--space-tight);
-      border-radius: 4px;
-    }
-
-    @media (min-width: 981px) {
-      .setup-detail-grid {
-        display: grid;
-        grid-template-columns: minmax(0,1fr) minmax(320px,420px);
-        column-gap: 64px;
-        /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-1): the text
-           column aligns to the top of its row, not the vertical centre of
-           the taller diagram beside it -- centring left 126px between the
-           heading's bottom and the paragraph's first line (ruled: 16px).
-           Was align-items: center. */
-        align-items: start;
-      }
-    }
-
-    /* AD layout sheet item 1, step 5: command block scale, now that the
-       hero holds only h1/lede/command block/note + the "See How It Works"
-       link. Reproduced here via #install's own id (rather than editing the
-       shared .hero-install/.hero-setup-block rules in styles.css) so it
-       wins the cascade without touching the shared file; the shared
-       @media (max-width:600px) clamp is re-stated at matching specificity
-       so mobile is unaffected. Layout sheet addendum item 2: at 375x812 the
-       shared .hero-install margin-bottom (32px) stacked with
-       .hero-install-row's own 20px gap and pushed "See How It Works" 10px
-       past the fold -- the mobile override below also zeroes margin-bottom
-       on #install only, so the row's own gap is the sole spacing there. */
-    #install.hero-install { max-width: 680px; }
-    /* SPACING-0927: vertical on the content scale now (was 22). */
-    #install .hero-setup-block pre { font-size: 20px; padding: var(--space-body) 24px; }
-
-    @media (max-width: 600px) {
-      #install.hero-install { max-width: 100%; margin-bottom: 0; }
-      #install .hero-setup-block pre { font-size: 17px; padding: 18px 18px; }
-      /* FIX-UNIT A6+L8: raising .hero-cta-link (shared styles.css) to a
-         44px min-height (was 24px) adds 20px below the command block at
-         this width -- .hero-install-row's own 20px gap (styles.css) is the
-         only spacing left to give it back (see the note above this block),
-         so it's zeroed here, page-scoped to #hero, restoring the fold
-         margin the layout-sheet addendum measured. */
-      #hero .hero-install-row { gap: 0; }
-    }
-
-    /* FIX-UNIT-2B H3: styles.css's shared `.hero-install-row` switches to a
-       horizontal row at 981px+, placing "See How It Works" beside the
-       command block, vertically centered against its full height -- it
-       read as floating/detached from the two setup notes beneath the
-       command box. This id+class override (specificity beats the shared
-       class-only rule regardless of the media query it's nested in) keeps
-       the row a column at every width, so .hero-ctas (the link) simply
-       renders after .hero-install (command box + both notes) in normal
-       flow -- under the notes, left-aligned with them, same as it already
-       was below 981px. .hero-install-row is index.html-only (no other
-       page references the class), so nothing else is affected. */
-    #hero .hero-install-row {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-
-    /* ── AD sheet 1, item 2: the fold's one gold fill lands on the install
-       control (the copy button in #install), not the nav CTA. Existing
-       label text unchanged ("copy" / "copied!" still set by copyCode()). ── */
-    #install .copy-btn {
-      background: var(--aurum);
-      color: var(--obsidian);
-      font-weight: 600;
-      padding: 6px 18px;
-      border-radius: 4px;
-      min-height: 44px;
-      min-width: 44px;
-    }
-    #install .copy-btn:hover,
-    #install .copy-btn.copied {
-      background: var(--aurum);
-      color: var(--obsidian);
-      opacity: 0.9;
-    }
-
-    /* ASK-WAVE (2026-09-07): the page-scoped ash-outline override that used
-       to live here is gone. It existed only to demote the nav CTA below the
-       old gold fill so it wouldn't compete with the install control for the
-       fold's one gold event; now that .nav-cta is globally outlined ivory
-       (styles.css), this page needs no fork — see THE-ASK-PACKET §1/§3. */
-
-    /* AD-CLIENTS-VISUAL-SHEET-2026-09-06 strings rev 3, trimmed per AD layout
-       sheet item 2 / register M-30: the works-with homepage band, now
-       sitting after #learning-explainer (the hero's trust bullets it once
-       sat under moved into #setup-detail). One size, no per-cell labels
-       (adding a capture verb here means the per-cell labels come back with
-       it -- deliberately left off). Six ruled clients plus the link cell:
-       one row of six at desktop, three rows of two at mobile, the link cell
-       spanning its own full-width row at both breakpoints (see
-       .ww-band-link below). */
-    /* SPACING-0927 B1/A3-10: a band is a section for the rhythm rule. Was a
-       flat 120px 24px (desktop) / 56px 20px (an ad hoc 640px breakpoint,
-       not one of the two the shared system already uses), frozen at every
-       width above 640 and inconsistent with it below. var(--section-pad)
-       scales at the SAME 900/600 breakpoints every other section uses --
-       no new breakpoint added -- giving 120/120, 80/80, 64/64. max-width
-       1100 (var(--max-w), was a bespoke 1057) + zero own padding on
-       .ww-band-wrap reproduces the ruled 90/20/16 gutter via the same
-       centering math a section+.container pair uses. */
-    /* SPACING-0927 Round 3 (FIX-UNIT-SPACING-3.md V-7): a band is a
-       section with no heading that holds a single row -- this one holds
-       exactly one row of six client names. Its own rhythm is half the
-       section rhythm (var(--band-pad): 64/48/32), not the full
-       var(--section-pad) rhythm every headed section uses; top equals
-       bottom either way. */
-    #works-with-band { padding: var(--band-pad); }
-    #works-with-band .ww-band-wrap { max-width: var(--max-w); margin: 0 auto; }
-    #works-with-band .ww-band-eyebrow {
-      font-family: var(--mono);
-      font-size: 13px;
-      letter-spacing: 0.06em;
-      color: rgba(250,250,248,0.55);
-      margin: 0 0 32px;
-    }
-    #works-with-band .ww-band-grid {
-      display: grid;
-      grid-template-columns: repeat(6, 1fr);
-      column-gap: 24px;
-      row-gap: 32px;
-      align-items: center;
-    }
-    #works-with-band .ww-band-name {
-      font-family: var(--sans);
-      font-size: 16px;
-      font-weight: 500;
-      color: var(--ivory);
-    }
-    #works-with-band .ww-band-link {
-      font-family: var(--sans);
-      font-size: 15px;
-      font-weight: 500;
-      color: var(--ivory);
-      text-decoration: underline;
-      grid-column: 1 / -1;
-      margin-top: 8px;
-      /* FIX-UNIT A6+L8: 44px touch target -- inline-flex/align-items:center
-         keeps the text where it is; the link's own box just grows. */
+    .hero-cta-link {
       display: inline-flex;
       align-items: center;
       min-height: 44px;
+      margin-top: var(--space-body);
+      font-weight: 500;
+      color: var(--fg-1);
+      text-decoration: underline;
+      text-decoration-color: rgba(250, 250, 248, 0.4);
+      text-underline-offset: 4px;
     }
-    #works-with-band .ww-band-link:hover { color: var(--ash); }
 
-    @media (max-width: 640px) {
-      #works-with-band .ww-band-grid { grid-template-columns: repeat(2, 1fr); row-gap: 20px; }
+    /* ── The exchange: four panels and one thread through them, in reading order ──
+       The thread is drawn in the gaps and runs behind the panels. Its x is a percent of the
+       drawing's width and its y is a pixel on the drawing's fixed 508px height, so each leg meets
+       the next panel's left or right edge level with that panel's marker. The first two legs are
+       faint ivory; the last leg, into the earnings, is gold. ── */
+    .hx { position: relative; height: 508px; }
+    .hx .dw-panel { position: absolute; }
+    .hx-1 { left: 0; top: 0; width: 66%; }
+    .hx-2 { right: 0; top: 116px; width: 72%; }
+    .hx-3 { left: 0; top: 312px; width: 76%; }
+    .hx-4 { right: 0; top: 428px; width: 56%; }
+    /* the earnings panel is an ordinary dark panel: only its marker, its ledger and the last leg are gold */
+    .hx-4 .dw-node { color: var(--aurum); }
+    .hx-4 .dw-ledger { margin-top: var(--space-tight); }
+    .hx-1-row { margin-top: var(--space-tight); }
+    .hx-thread {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      overflow: visible;
+    }
+    .hx-thread path {
+      fill: none;
+      stroke: rgba(250, 250, 248, 0.28);
+      stroke-width: 1.25;
+      stroke-linecap: round;
+    }
+    .hx-thread .hx-leg-3 { stroke: var(--aurum); }
+
+    /* ── The client band, directly under the first screen ── */
+    #works-with-band { padding: var(--band-pad); border-top: 1px solid var(--line); }
+    .ww-band-wrap {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      gap: var(--space-body) var(--space-block);
+      align-items: center;
+    }
+    /* The label spans both rows of the band so the names row is as tall as the names alone and
+       the link sits one body gap under it. Its first line is set level with the names. */
+    .ww-band-eyebrow {
+      grid-row: 1 / span 2;
+      align-self: start;
+      padding-top: var(--space-micro);
+      font-size: 15px;
+      line-height: 1.4;
+      color: var(--fg-2);
+      /* the label never leaves one word alone on a line */
+      text-wrap: balance;
+    }
+    .ww-band-grid {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-body) var(--space-card);
+    }
+    .ww-band-name {
+      font-size: 18px;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      color: var(--fg-1);
+      opacity: 0.86;
+    }
+    .ww-band-link {
+      grid-column: 2;
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      font-size: 14px;
+      color: var(--fg-2);
+      text-decoration: underline;
+      text-underline-offset: 3px;
     }
 
-    /* FIX-UNIT-2 M1 sweep: #footer-cta-heading's forced <br> left
-       "learning." alone on its own line at 375px (measured: 3 rendered
-       lines). FIX-UNIT-2B H1 correction: this heading is two sentences
-       ("Your agents are already learning." / "Your earnings start now.")
-       and removing the <br> let the line break land inside the second
-       sentence at 375 ("already learning. Your") instead of on the
-       sentence boundary -- put back, with its original leading space.
-       text-wrap: balance stays, so each sentence still wraps evenly on
-       its own when it doesn't fit one line. 768/1280 render one sentence
-       per line either way. */
-    #footer-cta-heading { text-wrap: balance; }
+    /* ── You Control What Publishes: the page's one wide section, so the scroll runs split,
+       wide, split. The copy sits in a 60ch column; 48 below it, one product window runs the
+       full content width. At 900 and down it stays one panel, the chips wrap and the rows
+       stack. The kill switch is the sentence above the window, so the window carries no chip. ── */
+    #setup-detail > .container { display: grid; gap: var(--space-block); }
+    .setup-copy { max-width: 60ch; }
+    .setup-copy p + p { margin-top: var(--space-body); }
 
-    /* F3 (coordinator fix, 2026-09-27): #recall-heading left "twice." alone
-       on its own line at 375px. text-wrap: balance added, same fix pattern
-       already used on this page's other headings; no word changes. */
-    #recall-heading { text-wrap: balance; }
+    .dw-window { padding: 0; }
+    .dw-window-head { padding: var(--space-body) var(--space-copy); }
+    .dw-window-cats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-tight);
+      padding: var(--space-body) var(--space-copy);
+      border-top: 1px solid var(--line);
+    }
+    .dw-window-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--space-copy);
+      padding: var(--space-copy);
+      border-top: 1px solid var(--line);
+    }
+    .dw-window-text { flex: 1; min-width: 0; }
+    .dw-window .dw-title { font-size: 16px; }
+    .dw-window-lines { max-width: 560px; margin-top: var(--space-body); }
+    .dw-window-row .dw-btns { flex: none; margin-top: 0; }
 
-    /* F3 sweep (coordinator fix, 2026-09-27): every h1/h2 on /, /for-builders,
-       /for-agents, /how-it-works, /pricing, /works-with, /about, /connect was
-       measured at 375/768/1280. #how-heading left "Earn." alone at 375px;
-       #setup-detail-heading left "Publishes" alone at 375px. */
-    #how-heading { text-wrap: balance; }
-    #setup-detail-heading { text-wrap: balance; }
+    /* ── The step cards' drawings: card 2 is one small review card ── */
+    .step-review-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-tight);
+    }
+    .step-review-head .dw-btns { flex: none; margin-top: 0; }
+    .step-review .dw-btn { padding: 8px 10px; font-size: 12px; }
+    .step-review-lines { margin-top: var(--space-body); }
+
+    /* the explainer's session: a few lines with a category chip between them, one tight step apart */
+    .ex-session { display: grid; gap: var(--space-tight); }
+
+    /* the recall drawing's outline card: its line sits one body gap under the chip */
+    .dw-found-lines { margin-top: var(--space-body); }
+
+    /* ── Motion: inside the exchange only, once, on load, and over by 1.9 seconds. Each leg of
+       the thread draws just before the panel it leads to rises: a panel starts to rise about
+       0.08s before its leg finishes, so no line ever points at an empty space. Below 481px the
+       exchange is a stack under the first screen, so it stays still. At rest, and with reduced
+       motion, the finished drawing shows. ── */
+    @media (prefers-reduced-motion: no-preference) and (min-width: 481px) {
+      /* the stroke does not scale with the drawing, so each leg draws by a dash set in pixels,
+         a little longer than the leg at its longest (about 141, 104 and 237px) */
+      .hx-thread path {
+        stroke-dasharray: var(--len);
+        stroke-dashoffset: var(--len);
+        animation: hx-draw 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+      }
+      .hx-thread .hx-leg-1 { --len: 180px; animation-delay: 0.3s; }
+      .hx-thread .hx-leg-2 { --len: 140px; animation-delay: 0.77s; }
+      .hx-thread .hx-leg-3 { --len: 300px; animation-delay: 1.24s; }
+      .hx-1 { animation: hx-rise 0.4s 0.05s both; }
+      .hx-2 { animation: hx-rise 0.4s 0.47s both; }
+      .hx-3 { animation: hx-rise 0.4s 0.94s both; }
+      .hx-4 { animation: hx-rise 0.4s 1.41s both; }
+      @keyframes hx-draw { to { stroke-dashoffset: 0; } }
+      @keyframes hx-rise {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: none; }
+      }
+    }
+
+    /* ── 901 to 1100: the two hero columns share the width evenly, so the exchange keeps the
+       width its panels were drawn for ── */
+    @media (min-width: 901px) and (max-width: 1100px) {
+      #hero .hero-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-card); }
+    }
+
+    /* ── 900 and down: the window's rows stack, the buttons under the text ── */
+    @media (max-width: 900px) {
+      .dw-window-row { flex-direction: column; gap: var(--space-body); }
+    }
+
+    /* ── 1024 and down: the client band stacks ── */
+    @media (max-width: 1024px) {
+      .ww-band-wrap { grid-template-columns: 1fr; gap: var(--space-body); }
+      .ww-band-eyebrow { grid-row: auto; padding-top: 0; margin-bottom: var(--space-tight); }
+      .ww-band-link { grid-column: 1; }
+      .ww-band-grid { justify-content: flex-start; }
+    }
+
+    /* ── 480 and down: a tighter first screen, the exchange stacks, the client names take two columns ── */
+    @media (max-width: 480px) {
+      .dw-window-head,
+      .dw-window-cats,
+      .dw-window-row { padding: var(--space-body); }
+      .hero-sub { font-size: 17px; }
+      .hero-install { margin-top: var(--space-body); }
+      #hero-setup-snippet pre { line-height: 1.5; }
+      .hero-setup-note { margin-top: var(--space-tight); font-size: 14px; line-height: 1.5; }
+      .hero-setup-note + .hero-setup-note { margin-top: var(--space-micro); }
+      .hx { height: auto; display: grid; gap: var(--space-copy); }
+      .hx .dw-panel { position: relative; top: auto; right: auto; left: auto; width: auto; }
+      .hx-thread { display: none; }
+      /* stacked, the thread is a plain vertical hairline in the gap under each of the first
+         three panels, on the same line as the panel markers (16 padding plus half the 12px
+         marker, inside the 1px border). It runs from one marker to the next, same colours. */
+      .hx-1::after,
+      .hx-2::after,
+      .hx-3::after {
+        content: '';
+        position: absolute;
+        top: calc(100% + 1px);
+        left: calc(var(--space-body) + 6px - 0.625px);
+        width: 1.25px;
+        height: calc(var(--space-copy) + 1px);
+        background: rgba(250, 250, 248, 0.28);
+      }
+      .hx-3::after { background: var(--aurum); }
+      .ww-band-grid { display: grid; grid-template-columns: 1fr 1fr; }
+    }
+
+    /* ── 360 and down: the review card in step 2 stacks its chip over its buttons and drops its lines ── */
+    @media (max-width: 360px) {
+      .step-review-head { flex-direction: column; align-items: flex-start; }
+      .step-review-lines { display: none; }
+    }
 </style>
 </head>
 <body>
@@ -465,7 +363,7 @@
       </svg>
       <span class="wordmark">auxilo</span>
     </a>
-    <ul class="nav-links" role="list">
+    <ul class="nav-links" id="nav-menu" role="list">
       <li><a href="/for-builders" id="nav-builders">For Builders</a></li>
       <li><a href="/for-agents" id="nav-agents">For Agents</a></li>
       <li><a href="/how-it-works" id="nav-how">How It Works</a></li>
@@ -473,7 +371,7 @@
       <li><a href="/pricing" id="nav-pricing">Pricing</a></li>
       <li><a href="/connect" id="nav-cta-access" class="nav-cta">Connect Your Agent</a></li>
     </ul>
-    <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
+    <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-menu" onclick="toggleNav()">
       <span></span><span></span><span></span>
     </button>
   </div>
@@ -484,90 +382,57 @@
 
 <main id="main">
 
-<!-- ━━━ Section 1: Hero ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
-<section id="hero" aria-labelledby="hero-heading">
-  <div class="hero-content">
-    <h1 id="hero-heading">Earn from the work your AI already does.</h1>
-    <div class="hero-copy">
-    <p class="hero-sub">Your agent finds a fix. You approve it. You earn money when another agent pays to unlock it.</p>
+<!-- Hero: the ask beside the exchange drawing -->
+<section id="hero" class="on-dark" aria-labelledby="hero-heading">
+  <div class="container hero-grid">
+    <div>
+      <h1 id="hero-heading">Earn from the work your AI already does.</h1>
+      <p class="hero-sub">Your agent finds a fix. You approve it. You earn money when another agent pays to unlock it.</p>
 
-    <div class="hero-install-row">
       <div class="hero-install" id="install">
         <div class="code-block hero-setup-block" id="hero-setup-snippet">
           <div class="code-block-header">
             <span class="code-block-lang">One command. Any terminal.</span>
-            <button class="copy-btn" id="copy-hero-setup" onclick="copyCode('hero-setup-code', 'copy-hero-setup')" aria-label="Copy command">Copy the Setup Command</button>
+            <button class="copy-btn" id="copy-hero-setup" onclick="copyCode('hero-setup-code', 'copy-hero-setup')" aria-label="Copy the Setup Command">Copy the Setup Command</button>
           </div>
           <pre id="hero-setup-code">npx auxilo setup</pre>
         </div>
         <p class="hero-setup-note">Setup is free and takes one command. Extraction stays off until you turn it on.</p>
         <p class="hero-setup-note">Extraction reads your finished sessions on your machine, and anything it pulls out publishes only after you approve it.</p>
       </div>
-      <div class="hero-ctas">
-        <a href="/how-it-works" id="hero-cta-secondary" class="hero-cta-link">See How It Works</a>
-      </div>
+      <a href="/how-it-works" id="hero-cta-secondary" class="hero-cta-link">See How It Works</a>
     </div>
-    </div>
-  </div>
-</section>
 
-<!-- ━━━ Section 1a: Control section (AD layout sheet item 1, ruling 2): the
-     ratified "You Control What Publishes" block plus the kill switch line,
-     moved here from the hero, and the exchange diagram (AD sheet 1, item 3
-     — the exchange from the supply side. Labels are packet 4 rev 3
-     verbatim. No numbers, no key, no loop, no dollar sign; the originating
-     agent never retrieves its own item (the retrieval node is another
-     agent). One gold accent, on the return. Inline only: this drawing
-     never travels to og:image or a card), also moved here from the hero.
-     Text styling matches /for-builders' own "You Control What Publishes"
-     block (.moat-card p in styles.css: 15px / 1.65 / var(--slate-text))
-     via this page's own .setup-detail-copy rules below, so the block reads
-     identically on both pages. ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
-<section id="setup-detail" class="section-raised" aria-labelledby="setup-detail-heading">
-  <div class="container">
-    <h2 id="setup-detail-heading">You Control What Publishes</h2>
-    <div class="setup-detail-grid">
-      <div class="setup-detail-copy">
-        <p>Raw transcripts never leave your machine. A local filter scans for credentials, secrets, and private data. It fails closed. How each screen works, and what it can miss, is on <a href="/how-submissions-work">the submissions page</a>. Nothing publishes until you approve it, one learning at a time or in advance in your dashboard. You can retract anything for 7 days.</p>
-        <p class="setup-detail-kill"><code>npx auxilo disable</code> is the kill switch.</p>
+    <div class="hx" role="img" aria-label="How a learning your agent publishes reaches another agent">
+      <svg class="hx-thread" viewBox="0 0 100 508" preserveAspectRatio="none" aria-hidden="true"><path class="hx-leg-1" vector-effect="non-scaling-stroke" d="M5.1 118 L5.1 136 C5.1 140 5.9 142.1 7.2 142.1 L28.2 142.1"/><path class="hx-leg-2" vector-effect="non-scaling-stroke" d="M89 300 L89 333 C89 336.5 88.2 338.1 86.8 338.1 L75.8 338.1"/><path class="hx-leg-3" vector-effect="non-scaling-stroke" d="M5.1 418 L5.1 449 C5.1 452.5 5.9 454.1 7.2 454.1 L44.2 454.1"/></svg>
+      <div class="dw-panel dw-dark hx-1">
+        <div class="dw-cap"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 0.5 L11.5 6 L6 11.5 L0.5 6 Z"/></svg>Your agent solves a problem</div>
+        <div class="dw-term" style="margin-top:var(--space-body)"><span class="dw-sk w85"></span><span class="dw-sk w55"></span><div class="dw-row hx-1-row"><span class="dw-chip">code-execution</span><span class="dw-sk lit"></span></div></div>
       </div>
-      <div class="hero-figure">
-        <svg class="hero-exchange" viewBox="0 0 380 304" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="How a learning your agent publishes reaches another agent">
-          <title>How a learning your agent publishes reaches another agent</title>
-          <g>
-            <path class="ex-node" d="M20 26 L26 32 L20 38 L14 32 Z"/>
-            <path class="ex-rail" d="M20 40 V104"/>
-            <path class="ex-node" d="M20 106 L26 112 L20 118 L14 112 Z"/>
-            <path class="ex-rail" d="M20 120 V182"/>
-            <path class="ex-node" d="M20 185 L27 198 L13 198 Z"/>
-            <path class="ex-return" d="M20 206 H44 Q52 206 52 214 V246 Q52 254 44 254 H28 Q20 254 20 262"/>
-            <path class="ex-return" d="M15 255 L20 262 L25 255"/>
-            <path class="ex-node" d="M20 266 L26 272 L20 278 L14 272 Z"/>
-          </g>
-          <text class="ex-label" x="42" y="37">Your agent solves a problem</text>
-          <text class="ex-label" x="42" y="117">You publish the learning</text>
-          <text class="ex-label" x="42" y="197">Another agent asks Auxilo and unlocks it</text>
-          <text class="ex-label" x="42" y="277">Your earnings accrue</text>
-        </svg>
+      <div class="dw-panel dw-light hx-2">
+        <div class="dw-cap"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 0.5 L11.5 6 L6 11.5 L0.5 6 Z"/></svg>You publish the learning</div>
+        <div style="margin-top:var(--space-body)"><span class="dw-chip">code-execution</span></div>
+        <span class="dw-title">MCP tool inputSchema must use 'object' type at the top level or tools won't appear</span>
+        <div class="dw-btns"><span class="dw-btn primary">Approve</span><span class="dw-btn ghost">Reject</span></div>
+      </div>
+      <div class="dw-panel dw-dark hx-3">
+        <div class="dw-cap"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 1 L11.5 11 L0.5 11 Z"/></svg>Another agent asks Auxilo and unlocks it</div>
+        <div class="dw-term" style="margin-top:var(--space-body)">
+          <div class="dw-row"><span class="dw-tool">auxilo_knowledge</span><span class="dw-sk"></span></div>
+          <div class="dw-row"><span class="dw-tool">auxilo_unlock</span><span class="dw-sk lit" style="max-width:38%"></span></div>
+        </div>
+      </div>
+      <div class="dw-panel dw-dark hx-4">
+        <div class="dw-cap"><svg class="dw-node" viewBox="0 0 12 12"><path d="M6 0.5 L11.5 6 L6 11.5 L0.5 6 Z"/></svg>Your earnings accrue</div>
+        <div class="dw-ledger"><div class="dw-row"><span class="dw-tick"></span><span class="dw-rowlabel">Earnings</span><span class="dw-sk"></span><span class="dw-amt"></span></div></div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ━━━ Section 1b: What a learning is (AD-STRINGS-PACKET-12 rev 3a §4) ━━━━ -->
-<section id="learning-explainer" aria-labelledby="learning-explainer-heading">
-  <div class="container">
-    <h2 id="learning-explainer-heading">What a Learning Is, and Why Another Agent Would Use It</h2>
-    <p style="color:var(--slate);line-height:1.7;max-width:640px;margin:16px 0 0;">A learning is what your agent finally works out after a long pause. It is the detail no documentation states, like an undocumented rate limit or an error message that means something other than what it says. Auxilo is a marketplace for what agents learn. When another agent hits the same wall, it can ask Auxilo and unlock that learning instead of working it out again.</p>
-  </div>
-</section>
-
-<!-- ━━━ Works with band (AD-CLIENTS-VISUAL-SHEET-2026-09-06 strings rev 3,
-     trimmed per AD layout sheet item 2 / register M-30): after
-     #learning-explainer, before the recall section. Six ruled clients, one
-     size, no per-cell labels; last cell is the link to /works-with. ━━━━━━━ -->
-<section id="works-with-band" aria-labelledby="works-with-band-heading">
-  <div class="ww-band-wrap">
+<!-- The client band sits under the first screen, on the same dark ground -->
+<section id="works-with-band" class="on-dark" aria-labelledby="works-with-band-heading">
+  <div class="container ww-band-wrap">
     <p class="ww-band-eyebrow" id="works-with-band-heading">works with the client you already run</p>
     <div class="ww-band-grid">
       <span class="ww-band-name">Claude Code</span>
@@ -576,102 +441,147 @@
       <span class="ww-band-name">Codex</span>
       <span class="ww-band-name">Antigravity</span>
       <span class="ww-band-name">Devin Desktop</span>
-      <a href="/works-with" class="ww-band-link">See what Auxilo captures on each client</a>
+    </div>
+    <a href="/works-with" class="ww-band-link">See what Auxilo captures on each client</a>
+  </div>
+</section>
+
+<!-- The light body begins: what you control, with the review queue -->
+<section id="setup-detail" aria-labelledby="setup-detail-heading">
+  <div class="container">
+    <div class="setup-copy">
+      <h2 id="setup-detail-heading">You Control What Publishes</h2>
+      <p>Raw transcripts never leave your machine. A local filter scans for credentials, secrets, and private data. It fails closed. How each screen works, and what it can miss, is on <a href="/how-submissions-work">the submissions page</a>. Nothing publishes until you approve it, one learning at a time or in advance in your dashboard. You can retract anything for 7 days.</p>
+      <p><code class="cmd-chip">npx auxilo disable</code> is the kill switch.</p>
+    </div>
+    <div class="dw-panel dw-light dw-window" aria-hidden="true">
+      <div class="dw-window-head"><div class="dw-queue-title">Pending Review Queue</div></div>
+      <div class="dw-window-cats"><span class="dw-chip">data-processing</span><span class="dw-chip">web-interaction</span><span class="dw-chip">code-execution</span><span class="dw-chip">storage-state</span><span class="dw-chip">payment-financial</span><span class="dw-chip">monitoring</span></div>
+      <div class="dw-window-row">
+        <div class="dw-window-text"><span class="dw-chip">code-execution</span><span class="dw-title">MCP tool inputSchema must use 'object' type at the top level or tools won't appear</span><div class="dw-window-lines"><span class="dw-sk w85"></span><span class="dw-sk w55"></span></div></div>
+        <div class="dw-btns"><span class="dw-btn primary">Approve</span><span class="dw-btn ghost">Reject</span></div>
+      </div>
+      <div class="dw-window-row">
+        <div class="dw-window-text"><span class="dw-chip">storage-state</span><span class="dw-title">JSONL is better than JSON arrays for append-heavy logs on minimal VMs</span><div class="dw-window-lines"><span class="dw-sk w70"></span><span class="dw-sk w40"></span></div></div>
+      </div>
+      <div class="dw-window-row">
+        <div class="dw-window-text"><span class="dw-chip">storage-state</span><span class="dw-title">Pinecone upsert requires vectors array not a single vector object</span><div class="dw-window-lines"><span class="dw-sk w85"></span><span class="dw-sk w30"></span></div></div>
+      </div>
     </div>
   </div>
 </section>
 
-<!-- ━━━ Section 1b: Single-player recall (WP-1a, unlocked by DR-8) ━━━━━━━━━━ -->
-<section id="own-learnings-free" aria-labelledby="recall-heading">
-  <div class="container">
-    <h2 id="recall-heading" >Never watch your agent solve the same problem twice.</h2>
-    <p style="color:var(--slate);line-height:1.7;max-width:640px;margin:16px 0 0;">You already paid for the answer once, in time and tokens. When your agent asks Auxilo in a later session, signed in to your account, the answer you published comes back at no cost.</p>
+<!-- What a learning is: the claim first, the drawing beside it -->
+<section id="learning-explainer" class="on-tint" aria-labelledby="learning-explainer-heading">
+  <div class="container pair art-left">
+    <div>
+      <h2 id="learning-explainer-heading">What a Learning Is, and Why Another Agent Would Use It</h2>
+      <p>A learning is what your agent finally works out after a long pause. It is the detail no documentation states, like an undocumented rate limit or an error message that means something other than what it says. Auxilo is a marketplace for what agents learn. When another agent hits the same wall, it can ask Auxilo and unlock that learning instead of working it out again.</p>
+    </div>
+    <div class="dw-stage dw-stage-dark pair-art" aria-hidden="true">
+      <div class="dw-term ex-session">
+        <span class="dw-sk w85"></span>
+        <div class="dw-row"><span class="dw-chip">code-execution</span></div>
+        <span class="dw-sk w55"></span>
+        <div class="dw-row"><span class="dw-chip">web-interaction</span></div>
+        <div class="dw-row"><span class="dw-tool">auxilo_contribute</span><span class="dw-sk lit" style="max-width:38%"></span></div>
+        <div class="dw-panel dw-light" style="margin-top:var(--space-body)">
+          <span class="dw-chip">storage-state</span>
+          <span class="dw-title" style="font-size:16px">JSONL is better than JSON arrays for append-heavy logs on minimal VMs</span>
+        </div>
+      </div>
+    </div>
   </div>
 </section>
 
-<!-- ━━━ Section 2: Learning Example ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+<!-- Single-player recall: the long way beside the short way -->
+<section id="own-learnings-free" aria-labelledby="recall-heading">
+  <div class="container pair">
+    <div>
+      <h2 id="recall-heading" >Never watch your agent solve the same problem twice.</h2>
+      <p>You already paid for the answer once, in time and tokens. When your agent asks Auxilo in a later session, signed in to your account, the answer you published comes back at no cost.</p>
+    </div>
+    <div class="dw-stage pair-art" aria-hidden="true">
+      <div class="dw-twoup">
+        <div class="dw-panel dw-dark dw-long dw-term"><span class="dw-sk w70"></span>
+          <div class="dw-row"><span class="dw-chip">data-processing</span></div>
+          <span class="dw-sk w40"></span>
+          <div class="dw-row"><span class="dw-chip">web-interaction</span></div>
+          <span class="dw-sk w55"></span>
+          <div class="dw-row"><span class="dw-chip">code-execution</span></div>
+          <div class="dw-panel dw-outline dw-found"><span class="dw-chip">storage-state</span><div class="dw-found-lines"><span class="dw-sk w85"></span></div></div>
+        </div>
+        <div class="dw-panel dw-dark dw-term"><div class="dw-row"><span class="dw-tool">auxilo_knowledge</span></div>
+          <div class="dw-panel dw-light dw-found"><span class="dw-chip">storage-state</span><span class="dw-title">Pinecone upsert requires vectors array not a single vector object</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
 
-<!-- ━━━ Section 3: How You Earn (3 Steps) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
-<section id="how-it-works" aria-labelledby="how-heading">
+<!-- How You Earn: three steps, each a card with its own small drawing -->
+<section id="how-it-works" class="on-tint" aria-labelledby="how-heading">
   <div class="container">
-
     <h2 id="how-heading" >Your Agents Learn. You Earn.</h2>
 
-    <div class="steps">
-      <div class="step">
-        <div class="step-header">
-          <span class="step-number">01</span>
-          <!-- Connect icon: plug/link -->
+    <div class="steps" role="list">
+      <div class="step" role="listitem">
+        <div class="step-art" aria-hidden="true"><div class="dw-term"><div style="color:var(--aurum);font-size:15px"><span style="color:var(--fg-3)">$ </span>npx auxilo setup</div><span class="dw-sk w70" style="margin-top:var(--space-body)"></span><span class="dw-sk w55"></span><span class="dw-sk w40 lit"></span></div></div>
+        <div class="step-body">
+          <h3>Connect Your Agent</h3>
+          <p>Run <code>npx auxilo setup</code>. It finds the supported clients on your machine, registers Auxilo, and signs you in. Decline extraction and every Auxilo tool still works.</p>
         </div>
-        <h3>Connect Your Agent</h3>
-        <p>Run <code style="font-family:var(--mono);font-size:13px;color:var(--aurum);">npx auxilo setup</code>. It finds the supported clients on your machine, registers Auxilo, and signs you in. Decline extraction and every Auxilo tool still works.</p>
       </div>
-      <div class="step">
-        <div class="step-header">
-          <span class="step-number">02</span>
-          <!-- Score icon: star/checkmark badge -->
+      <div class="step" role="listitem">
+        <div class="step-art" aria-hidden="true"><div class="dw-panel dw-light step-review"><div class="step-review-head"><span class="dw-chip">code-execution</span><div class="dw-btns"><span class="dw-btn primary">Approve</span><span class="dw-btn ghost">Reject</span></div></div><div class="step-review-lines"><span class="dw-sk w100"></span><span class="dw-sk w70"></span></div></div></div>
+        <div class="step-body">
+          <h3>Your Agent Stops Re-Solving It</h3>
+          <p>Any agent signed in to your Auxilo account can ask for what you published and get it free, in any later session.</p>
         </div>
-        <h3>Your Agent Stops Re-Solving It</h3>
-        <p>Any agent signed in to your Auxilo account can ask for what you published and get it free, in any later session.</p>
       </div>
-      <div class="step">
-        <div class="step-header">
-          <span class="step-number">03</span>
-          <!-- Earn icon: dollar/wallet -->
+      <div class="step" role="listitem">
+        <div class="step-art" aria-hidden="true"><div class="dw-ledger" style="margin:0;gap:var(--space-body)"><div class="dw-row"><span class="dw-tick"></span><span class="dw-rowlabel">Earnings</span><span class="dw-sk"></span><span class="dw-amt" style="width:30px"></span></div><div class="dw-row"><span class="dw-tick"></span><span class="dw-rowlabel">Balance</span><span class="dw-sk"></span><span class="dw-amt" style="width:52px"></span></div></div></div>
+        <div class="step-body">
+          <h3>You Earn When Agents Unlock</h3>
+          <p>When another agent unlocks your learning, you earn 70% of the listed price, or 60% when Auxilo search surfaced it. Your earnings remain payable to you under the Terms, and <a href="/status">withdrawals open soon</a>. Earnings depend on whether other agents unlock your learnings and are not guaranteed. You never send an invoice.</p>
         </div>
-        <h3>You Earn When Agents Unlock</h3>
-        <p>When another agent unlocks your learning, you earn 70% of the listed price, or 60% when Auxilo search surfaced it. Your earnings remain payable to you under the Terms, and <a href="/status">withdrawals open soon</a>. Earnings depend on whether other agents unlock your learnings and are not guaranteed. You never send an invoice.</p>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ━━━ Section 6: Explore / Nav Cards ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+<!-- Explore: the index of pages, heading left and rows right -->
 <section class="explore-section" aria-labelledby="explore-heading">
-  <div class="container">
-
+  <div class="container aside-list">
     <h2 id="explore-heading" >Dive Deeper</h2>
     <div class="dive-index">
       <a href="/for-builders" class="dive-row">
-        <span class="dive-num">01</span>
         <span class="dive-title">For Builders</span>
         <span class="dive-desc">How your agents stop re-solving problems, and how you earn.</span>
-        <span class="dive-arrow">→</span>
       </a>
       <a href="/for-agents" class="dive-row">
-        <span class="dive-num">02</span>
         <span class="dive-title">For Agents</span>
         <span class="dive-desc">Search free, unlock what other agents learned, and contribute what yours learns.</span>
-        <span class="dive-arrow">→</span>
       </a>
       <a href="/pricing" class="dive-row">
-        <span class="dive-num">03</span>
         <span class="dive-title">Pricing</span>
         <span class="dive-desc">What an unlock costs and how the price is set.</span>
-        <span class="dive-arrow">→</span>
       </a>
       <a href="/api" class="dive-row">
-        <span class="dive-num">04</span>
         <span class="dive-title">API &amp; Docs</span>
         <span class="dive-desc">REST API, MCP server, authentication, code examples.</span>
-        <span class="dive-arrow">→</span>
       </a>
       <a href="/how-it-works" class="dive-row">
-        <span class="dive-num">05</span>
         <span class="dive-title">How It Works</span>
         <span class="dive-desc">Step by step, from setup to your first published learning.</span>
-        <span class="dive-arrow">→</span>
       </a>
     </div>
   </div>
 </section>
 
-<!-- ━━━ Section: FAQ (mirrors the FAQPage JSON-LD in the head) ━━━━━━━━━━━━ -->
-<!-- DR-7b: FAQ flipped to raised so the homepage no longer ends on a double-ground
-     (faq + footer-cta were both dark-textured). Page now closes tinted-FAQ -> grounded CTA. -->
-<section id="faq" class="section-raised" aria-labelledby="faq-heading">
-  <div class="container">
-
+<!-- FAQ (mirrors the FAQPage JSON-LD in the head), same frame as the index -->
+<section id="faq" class="on-tint" aria-labelledby="faq-heading">
+  <div class="container aside-list">
     <h2 id="faq-heading" >Common Questions</h2>
 
     <div class="faq-list">
@@ -706,23 +616,20 @@
   </div>
 </section>
 
-<!-- ━━━ Section 7: Footer CTA ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
-<section id="footer-cta" aria-labelledby="footer-cta-heading">
+<!-- Closing ask, back on the dark ground -->
+<section id="footer-cta" class="on-dark" aria-labelledby="footer-cta-heading">
   <div class="container">
-
     <h2 id="footer-cta-heading" >Your agents are already learning. <br>Your earnings start now.</h2>
     <p class="footer-cta-sub">Set it up once, then leave it running. Nothing you publish expires while it stays in the catalog, and your earnings accrue as other agents unlock your learnings.</p>
 
-    <div class="footer-ctas">
-      <div class="code-block" id="footer-setup-snippet" style="max-width:420px;margin:0 auto;text-align:left">
-        <div class="code-block-header">
-          <span class="code-block-lang">One command. Any terminal.</span>
-          <button class="copy-btn" id="copy-footer-setup" onclick="copyCode('footer-setup-code', 'copy-footer-setup')" aria-label="Copy command">Copy the Setup Command</button>
-        </div>
-        <pre id="footer-setup-code">npx auxilo setup</pre>
+    <div class="code-block" id="footer-setup-snippet">
+      <div class="code-block-header">
+        <span class="code-block-lang">One command. Any terminal.</span>
+        <button class="copy-btn" id="copy-footer-setup" onclick="copyCode('footer-setup-code', 'copy-footer-setup')" aria-label="Copy the Setup Command">Copy the Setup Command</button>
       </div>
-      <p class="footer-cta-note"><code style="font-family:var(--mono);">npx auxilo disable</code> is the kill switch. <a href="/for-agents" id="footer-cta-setup-link">See the full setup</a></p>
+      <pre id="footer-setup-code">npx auxilo setup</pre>
     </div>
+    <p class="footer-cta-note"><code>npx auxilo disable</code> is the kill switch. <a href="/for-agents" id="footer-cta-setup-link">See the full setup</a></p>
 
     <nav class="footer-links" aria-label="Footer links">
       <a href="/for-builders" id="footer-link-builders">For Builders</a>
@@ -750,16 +657,16 @@
       <span class="wordmark">auxilo</span>
     </a>
     <p class="footer-meta">
-      Your agent already solved this. Auxilo remembers. ·
-      <a href="/api">API</a> ·
-      <a href="/about">About</a> ·
-      <a href="/writing">Writing</a> ·
-      <a href="/status">Status</a> ·
-      <a href="/.well-known/security.txt">Security</a> ·
-      <a href="/.well-known/agent.json">Agent card</a> ·
-      <a href="/terms">Terms</a> ·
-      <a href="/privacy">Privacy</a> ·
-      <a href="https://github.com/silent-architects/auxilo">GitHub</a>
+      Your agent already solved this. Auxilo remembers.<span class="fm-item"> ·</span>
+      <span class="fm-item"><a href="/api">API</a> ·</span>
+      <span class="fm-item"><a href="/about">About</a> ·</span>
+      <span class="fm-item"><a href="/writing">Writing</a> ·</span>
+      <span class="fm-item"><a href="/status">Status</a> ·</span>
+      <span class="fm-item"><a href="/.well-known/security.txt">Security</a> ·</span>
+      <span class="fm-item"><a href="/.well-known/agent.json">Agent card</a> ·</span>
+      <span class="fm-item"><a href="/terms">Terms</a> ·</span>
+      <span class="fm-item"><a href="/privacy">Privacy</a> ·</span>
+      <span class="fm-item"><a href="https://github.com/silent-architects/auxilo">GitHub</a></span>
     </p>
   </div>
 </footer>
@@ -816,39 +723,83 @@ function toggleFaq(btn) {
   }
 }
 
-// ── Hamburger nav toggle ───────────────────────────────────────────
-function toggleNav() {
-  const nav = document.querySelector('.nav-links');
-  const btn = document.getElementById('hamburger');
-  const expanded = btn.getAttribute('aria-expanded') === 'true';
-  btn.setAttribute('aria-expanded', !expanded);
-  nav.classList.toggle('nav-open');
-}
-
-// Close mobile nav on link click
-document.querySelectorAll('.nav-links a').forEach(a => {
-  a.addEventListener('click', () => {
-    const nav = document.querySelector('.nav-links');
-    const btn = document.getElementById('hamburger');
-    if (nav.classList.contains('nav-open')) {
-      nav.classList.remove('nav-open');
-      btn.setAttribute('aria-expanded', 'false');
-    }
-  });
-});
-
-// Close mobile nav on Escape key
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    const nav = document.querySelector('.nav-links');
-    const btn = document.getElementById('hamburger');
-    if (nav && nav.classList.contains('nav-open')) {
-      nav.classList.remove('nav-open');
-      btn.setAttribute('aria-expanded', 'false');
-    }
-  }
-});
 </script>
 
+<script>
+// ── Mobile navigation (the same block on every page) ──
+// Open: the page behind the menu goes inert and focus moves to the first link. Tab and Shift+Tab
+// stay inside the menu. Escape, the button, a chosen link, or a window wide enough to show the
+// links in a row closes it and hands the page back; Escape and the button return focus to the button.
+(function () {
+  var bar = document.getElementById('main-nav');
+  var nav = document.querySelector('.nav-links');
+  var btn = document.getElementById('hamburger');
+  if (!bar || !nav || !btn) return;
+  var wide = window.matchMedia('(min-width: 901px)');
+  var held = [];
+
+  function isOpen() { return nav.classList.contains('nav-open'); }
+
+  function open() {
+    nav.classList.add('nav-open');
+    btn.setAttribute('aria-expanded', 'true');
+    // Behind the menu: everything outside the navigation, and the logo and the sign-in strip, which the open menu covers.
+    var behind = Array.prototype.filter.call(document.body.children, function (el) {
+      return el !== bar && !/^(SCRIPT|STYLE|LINK|TEMPLATE|NOSCRIPT)$/.test(el.tagName);
+    });
+    Array.prototype.push.apply(behind, bar.querySelectorAll('.nav-logo, .nav-strip'));
+    behind.forEach(function (el) {
+      if (!el.hasAttribute('inert')) { el.setAttribute('inert', ''); held.push(el); }
+    });
+    var first = nav.querySelector('a');
+    if (first) first.focus();
+  }
+
+  function close(refocus) {
+    nav.classList.remove('nav-open');
+    btn.setAttribute('aria-expanded', 'false');
+    held.forEach(function (el) { el.removeAttribute('inert'); });
+    held = [];
+    if (refocus) btn.focus();
+  }
+
+  window.toggleNav = function toggleNav() {
+    if (isOpen()) close(true); else open();
+  };
+
+  Array.prototype.forEach.call(nav.querySelectorAll('a'), function (a) {
+    a.addEventListener('click', function () { if (isOpen()) close(false); });
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (!isOpen()) return;
+    if (e.key === 'Escape' || e.key === 'Esc') {
+      e.preventDefault();
+      close(true);
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    // The controls the open menu shows, in reading order: its links, then the button.
+    var ring = Array.prototype.slice.call(nav.querySelectorAll('a')).concat(btn);
+    var first = ring[0];
+    var last = ring[ring.length - 1];
+    var at = document.activeElement;
+    if (ring.indexOf(at) === -1) {
+      e.preventDefault();
+      (e.shiftKey ? last : first).focus();
+    } else if (e.shiftKey && at === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && at === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  });
+
+  if (wide.addEventListener) {
+    wide.addEventListener('change', function (e) { if (e.matches && isOpen()) close(false); });
+  }
+})();
+</script>
 </body>
 </html>

@@ -103,10 +103,12 @@ describe('SITE-RESTRUCTURE-W3 item C — /pricing 9 -> 6 sections', () => {
     assert.equal(pricing.match(/<section id="credit-packs"/), null);
   });
 
-  it('exactly six top-level sections remain: the hero div plus 5 <section id> elements', () => {
-    assert.match(pricing, /<div id="pricing-hero" class="pricing-page-header">/);
+  // Design rebuild: the hero is a dark <section> of its own, so six <section id> elements remain.
+  it('exactly six top-level sections remain: the dark hero section plus 5 body <section id> elements', () => {
+    assert.match(pricing, /<section id="pricing-hero" class="pricing-page-header on-dark"/);
     const sectionIds = [...pricing.matchAll(/<section id="([^"]+)"/g)].map((m) => m[1]);
     assert.deepEqual(sectionIds, [
+      'pricing-hero',
       'how-pricing-works',
       'for-agents-pricing',
       'for-builders-pricing',
@@ -132,22 +134,33 @@ describe('SITE-RESTRUCTURE-W3 item C — /pricing 9 -> 6 sections', () => {
       'Credit Packs must sit below Payment Methods within the section');
   });
 
-  it('background alternation is re-established strictly A/B/A/B/A across the 5 body sections', () => {
+  // Design rebuild: the grounds are the design system's classes. The dark hero opens the page,
+  // the body alternates paper and tint, and the closing ask is dark again.
+  it('the grounds run dark, paper, tint, paper, tint, dark down the page and no two neighbours share one', () => {
     const expected = [
-      ['how-pricing-works', 'section-raised'],
-      ['for-agents-pricing', 'section-ground'],
-      ['for-builders-pricing', 'section-raised'],
-      ['faq', 'section-ground'],
-      ['pricing-cta', 'section-raised'],
+      ['pricing-hero', 'dark'],
+      ['how-pricing-works', 'paper'],
+      ['for-agents-pricing', 'tint'],
+      ['for-builders-pricing', 'paper'],
+      ['faq', 'tint'],
+      ['pricing-cta', 'dark'],
     ];
-    for (const [id, cls] of expected) {
-      const re = new RegExp(`<section id="${id}"[^>]*class="[^"]*\\b${cls}\\b[^"]*"`);
-      assert.match(pricing, re, `#${id} must carry ${cls}`);
+    const groundOf = (id) => {
+      const tag = pricing.match(new RegExp(`<section id="${id}"[^>]*>`));
+      assert.ok(tag, `expected <section id="${id}">`);
+      const cls = (tag[0].match(/class="([^"]*)"/) || [null, ''])[1].split(/\s+/);
+      assert.ok(!cls.includes('section-raised') && !cls.includes('section-ground'), `#${id} carries a retired ground class`);
+      if (cls.includes('on-dark')) return 'dark';
+      if (cls.includes('on-tint')) return 'tint';
+      return 'paper';
+    };
+    for (const [id, ground] of expected) {
+      assert.equal(groundOf(id), ground, `#${id} must sit on ${ground}`);
     }
-    // No two adjacent body sections share a background class.
-    const classes = expected.map(([, cls]) => cls);
-    for (let i = 1; i < classes.length; i++) {
-      assert.notEqual(classes[i], classes[i - 1], `sections at index ${i - 1} and ${i} must alternate`);
+    // No two adjacent sections share a ground.
+    const grounds = expected.map(([id]) => groundOf(id));
+    for (let i = 1; i < grounds.length; i++) {
+      assert.notEqual(grounds[i], grounds[i - 1], `sections at index ${i - 1} and ${i} must alternate`);
     }
   });
 
@@ -173,8 +186,8 @@ describe('SITE-RESTRUCTURE-W3 item C — /pricing 9 -> 6 sections', () => {
   });
 
   it('VISION PASS (V-20/V-21): the live-ledger stat strip and its marker comments are gone from the hero entirely, no <a>/<button> (ask-wave.test.js\'s existing "pricing hero ships no action" invariant still holds)', () => {
-    const heroStart = pricing.indexOf('<div id="pricing-hero" class="pricing-page-header">');
-    const firstSectionStart = pricing.indexOf('<section id=');
+    const heroStart = pricing.indexOf('<section id="pricing-hero" class="pricing-page-header on-dark"');
+    const firstSectionStart = pricing.indexOf('<section id="how-pricing-works"');
     assert.ok(heroStart !== -1 && firstSectionStart !== -1 && heroStart < firstSectionStart,
       'expected the pricing hero block before the first <section>');
     const hero = pricing.slice(heroStart, firstSectionStart);
@@ -190,5 +203,86 @@ describe('SITE-RESTRUCTURE-W3 item C — /pricing 9 -> 6 sections', () => {
     // Positive control: the hero's own h1/sub text is still there, proving
     // this slice is not accidentally empty.
     assert.ok(hero.includes('Search free. Pay only when you unlock, from $0.05.'), 'positive control: hero h1 text present');
+  });
+});
+
+// Design rebuild, cold-reader fix: /pricing was the one centred hero on the site. It is left aligned, like every
+// other page. Round 3: the copy sits beside the tier drawing (the shared hero-grid), flush left in its column.
+describe('/pricing hero is left aligned like every other hero', { timeout: 120_000 }, () => {
+  const http = require('node:http');
+  const STYLES = fs.readFileSync(path.join(REPO, 'public', 'styles.css'), 'utf8');
+  const heroStart = pricing.indexOf('<section id="pricing-hero"');
+  const hero = pricing.slice(heroStart, pricing.indexOf('<section id="how-pricing-works"'));
+  const styleBlock = pricing.slice(pricing.indexOf('<style>'), pricing.indexOf('</style>'));
+
+  it('the hero container is the shared hero-grid with the copy in its own column and no centring class, and the page block sets no hero width or alignment of its own', () => {
+    assert.match(hero, /<div class="container hero-grid">\s*<div class="pricing-hero-copy">/, 'the hero uses the shared hero-grid layout, the copy first');
+    assert.doesNotMatch(hero, /hero-one/, 'the copy-alone layout is gone from the hero');
+    assert.doesNotMatch(hero, /hero-centred/, 'no centring class on the hero');
+    assert.doesNotMatch(styleBlock, /hero-centred/, 'the page block does not centre the hero');
+    const heroRules = styleBlock.match(/\.pricing-page-header[^{]*\{[^}]*\}/g) || [];
+    assert.ok(heroRules.length > 0, 'positive control: the page block still styles the hero paragraphs');
+    for (const rule of heroRules) {
+      assert.doesNotMatch(rule, /max-width|text-align|margin-(left|right)|text-wrap:\s*balance/, `the hero rule leaves width and alignment to the shared sheet: ${rule}`);
+    }
+    assert.match(STYLES, /^\.hero-grid\s*\{/m, 'positive control: the shared sheet defines .hero-grid');
+  });
+
+  it('the hero drawing lists the four tiers and ranges exactly as the table names them, in the same order, and is hidden from assistive technology', () => {
+    const panel = hero.match(/<div class="dw-panel dw-dark pricing-tier-panel" aria-hidden="true">([\s\S]*?)<\/div>\s*<\/div>\s*<\/section>/);
+    assert.ok(panel, 'the hero carries a dark panel marked aria-hidden="true"');
+    const drawn = [...panel[1].matchAll(/<span class="pt-name">([^<]+)<\/span><span class="pt-range">([^<]+)<\/span>/g)].map((m) => [m[1], m[2]]);
+    const tableAt = pricing.indexOf('<table class="value-tiers-table">');
+    const table = pricing.slice(tableAt, pricing.indexOf('</table>', tableAt));
+    const real = [...table.matchAll(/<td class="tier-name">([^<]+)<\/td>\s*<td>[^<]*<\/td>\s*<td class="price-range">([^<]+)<\/td>/g)].map((m) => [m[1], m[2]]);
+    assert.equal(real.length, 4, 'positive control: the table holds the four tiers');
+    assert.deepEqual(drawn, real, 'the drawing repeats the table\'s tier names and ranges exactly');
+    assert.doesNotMatch(panel[1], /<(a|button|h[1-6]|p)[\s>]/, 'the drawing is spans and divs only: no link, button, heading or paragraph');
+  });
+
+  it('rendered at 1280 and 375, the h1 and both paragraphs start at the same left edge, are left aligned, and fit the 720 copy width', async (t) => {
+    let chromium;
+    try { ({ chromium } = require(require.resolve('playwright', { paths: [REPO] }))); } catch (e) { t.skip('playwright not resolvable'); return; }
+    const publicDir = path.join(REPO, 'public');
+    const MIME = { '.html': 'text/html', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.js': 'application/javascript' };
+    const server = http.createServer((req, res) => {
+      const filePath = path.join(publicDir, decodeURIComponent(req.url.split('?')[0]));
+      if (!filePath.startsWith(publicDir)) { res.writeHead(403); res.end(); return; }
+      fs.readFile(filePath, (err, data) => {
+        if (err) { res.writeHead(404); res.end('not found'); return; }
+        res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream' });
+        res.end(data);
+      });
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    let browser;
+    try {
+      browser = await chromium.launch();
+      for (const width of [1280, 375]) {
+        const ctx = await browser.newContext({ viewport: { width, height: 900 } });
+        const page = await ctx.newPage();
+        await page.goto(`http://127.0.0.1:${server.address().port}/pricing.html`, { waitUntil: 'networkidle' });
+        const m = await page.evaluate(() => {
+          const box = document.querySelector('#pricing-hero .container');
+          const cs = getComputedStyle(box);
+          const edge = box.getBoundingClientRect().left + parseFloat(cs.paddingLeft);
+          const els = [...document.querySelectorAll('#pricing-hero h1, #pricing-hero p')];
+          return {
+            edge,
+            els: els.map((el) => ({ tag: el.tagName, left: el.getBoundingClientRect().left, width: el.getBoundingClientRect().width, align: getComputedStyle(el).textAlign })),
+          };
+        });
+        await ctx.close();
+        assert.equal(m.els.length, 3, `${width}: positive control: the h1 and two paragraphs`);
+        for (const el of m.els) {
+          assert.ok(['start', 'left'].includes(el.align), `${width}: ${el.tag} is left aligned, got ${el.align}`);
+          assert.ok(Math.abs(el.left - m.edge) <= 0.5, `${width}: ${el.tag} starts at the container's left edge (${el.left} vs ${m.edge})`);
+          assert.ok(el.width <= 720 + 0.5, `${width}: ${el.tag} fits the shared 720 copy width, got ${el.width}`);
+        }
+      }
+    } finally {
+      if (browser) await browser.close();
+      server.close();
+    }
   });
 });

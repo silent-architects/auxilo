@@ -160,6 +160,66 @@ describe('renderEmail', () => {
     });
 });
 
+describe('renderEmail look (design refresh)', () => {
+    // Look pins only: colours, the heading line, the button, the mono command
+    // line and the wordmark row. No test here reads a rendered pixel.
+    const SAMPLE_BUTTON = { text: 'Go', url: 'https://auxilo.io/x' };
+
+    it('uses the paper-and-ink colour tokens, and none of the retired values', () => {
+        const welcome = email.buildWelcomeEmailBodies('https://auxilo.io/connect').html;
+        // positive controls: the new values are present in the same render
+        assert.ok(welcome.includes('background:#FAFAF8'), 'page ground #FAFAF8');
+        assert.ok(welcome.includes('color:#45453F'), 'body text #45453F');
+        assert.ok(welcome.includes('color:#5E5E57'), 'muted text #5E5E57');
+        assert.ok(welcome.includes('border-top:1px solid #E2E0DA'), 'hairline #E2E0DA');
+        assert.equal((welcome.match(/background:#F1EFE9/g) || []).length, 2, 'the tinted box (#F1EFE9) is the command line and the fallback link box');
+        assert.ok(welcome.includes('color:#0A0A0A'), 'ink #0A0A0A');
+        assert.ok(welcome.includes('#C9A84C'), 'gold button fill #C9A84C');
+        for (const retired of ['#33343A', '#55575E', '#E5E5E3', '#F0EFEA']) {
+            assert.ok(!welcome.includes(retired), `retired colour ${retired} must be gone`);
+        }
+    });
+
+    it('the button is a gold, ink-text, weight-600, 6px-radius bulletproof table button at least 44px tall', () => {
+        const html = email.renderEmail({ heading: 'H', bodyHtml: '<p>b</p>', button: SAMPLE_BUTTON });
+        const m = html.match(/<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0;"><tr><td bgcolor="(#[0-9A-Fa-f]{6})" style="background:(#[0-9A-Fa-f]{6});border-radius:(\d+)px;"><a href="[^"]*" style="([^"]*)">Go<\/a><\/td><\/tr><\/table>/);
+        assert.ok(m, 'the button is still a table with one bgcolor cell holding one link');
+        const [, bgAttr, bgStyle, radius, linkStyle] = m;
+        assert.equal(bgAttr, '#C9A84C');
+        assert.equal(bgStyle, '#C9A84C');
+        assert.equal(radius, '6');
+        assert.match(linkStyle, /(^|;)color:#0A0A0A(;|$)/, 'ink text on gold');
+        assert.match(linkStyle, /(^|;)font-weight:600(;|$)/);
+        const pad = linkStyle.match(/(^|;)padding:(\d+)px (\d+)px(;|$)/);
+        const lineHeight = linkStyle.match(/(^|;)line-height:(\d+)px(;|$)/);
+        assert.ok(pad && lineHeight, 'the link carries an explicit vertical padding and a pixel line-height');
+        const height = Number(pad[2]) * 2 + Number(lineHeight[2]);
+        assert.ok(height >= 44, `the button is at least 44px tall by its own padding and line-height, got ${height}`);
+
+        // the danger tone keeps its colours and takes the same shape
+        const danger = email.renderEmail({ heading: 'H', bodyHtml: '<p>b</p>', button: SAMPLE_BUTTON, tone: 'danger' });
+        assert.ok(danger.includes('style="background:#B91C1C;border-radius:6px;"'), 'danger button is red with a 6px radius');
+        assert.match(danger, /font-weight:600;color:#FFFFFF;/, 'danger button text is white');
+    });
+
+    it('the heading is the email-safe serif at 28px, the wordmark row and the mono command line keep their own faces', () => {
+        const html = email.renderEmail({ heading: 'H', bodyHtml: '<p>b</p>' });
+        assert.ok(html.includes(
+            `<p style="font-family:Georgia,'Times New Roman',Times,serif;font-size:28px;font-weight:400;color:#0A0A0A;line-height:1.15;letter-spacing:-0.01em;margin:0 0 16px;">H</p>`
+        ), 'heading line: serif stack, 28px, weight 400, ink, line-height 1.15, tracking -0.01em');
+        // the wordmark row is exactly as it was: sans stack, 20px, weight 700
+        assert.ok(html.includes(
+            `<td style="font-family:${email.FONT_STACK};font-size:20px;font-weight:700;color:#0A0A0A;letter-spacing:-0.01em;">auxilo</td>`
+        ), 'wordmark: sans stack, 20px, weight 700');
+        assert.ok(html.includes('<img src="https://auxilo.io/logo-square.png" width="28" height="28" alt="Auxilo" style="display:block;border:0;">'));
+        // the welcome email's command line: mono, ink on the tinted box, 6px radius
+        const welcome = email.buildWelcomeEmailBodies('https://auxilo.io/connect').html;
+        assert.ok(welcome.includes(
+            `font-family:ui-monospace,'JetBrains Mono',monospace;color:#0A0A0A;background:#F1EFE9;padding:10px 14px;border-radius:6px;margin:0 0 24px;">npx auxilo setup</p>`
+        ), 'command line: mono stack, ink on #F1EFE9, 6px radius');
+    });
+});
+
 describe('sign-in (magic-link) email', () => {
     it('contains the wordmark image, text wordmark, gold button, fallback link, and the unchanged wording', async () => {
         const { result, captured } = await captureSend(() => email.sendMagicLink('user@example.com', SAMPLE_URL));

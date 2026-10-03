@@ -26,10 +26,10 @@
   <!-- Favicon: Angular A mark -->
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
-  <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/ArchivoVariable.cfd841fc.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/NewsreaderDisplay300.a07d3c5c.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="preload" href="/fonts/PlexMono500.0ecb6352.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=eba132a8" />
+  <link rel="stylesheet" href="/styles.css?v=f11e9131" />
   <meta name="theme-color" content="#0A0A0A" />
 
   <!-- JSON-LD: Organization + Product + FAQPage -->
@@ -125,471 +125,451 @@
   </script>
 
   <style>
-    /* ── Pricing page-specific overrides ─────────────────────────── */
-    /* LAYOUT-SHEET 2026-09-26 item 5: left-align to match every other page
-       -- was text-align: center. */
-    /* SPACING-0927 (BUILD-BRIEF-SPACING.md B-4/A1): a hero takes plain
-       padding like any section -- var(--section-pad) gives the ruled
-       120/80/64 rhythm. Nav clearance is `main`'s own margin-top
-       (styles.css), sitewide, not part of this element's padding.
-       #pricing-hero is a <div>, not a <section>, wrapping its own
-       .container (styles.css's `section > .container` zero-out doesn't
-       reach it) -- so its own horizontal padding is zeroed here and the
-       gutter comes from .container's own (now-responsive) padding alone,
-       the same mechanism status.html and api.html's hero already use. */
-    .pricing-page-header {
-      text-align: left;
-      padding: var(--section-pad);
-      padding-left: 0;
-      padding-right: 0;
-    }
-    .pricing-page-header h1 {
-      font-size: clamp(38px, 5vw, 56px);
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      color: var(--ivory);
-      line-height: 1.1;
-      /* SPACING-0927 R2-2a: heading to the element beneath it is 16px,
-         named by the sheet (was 20). */
-      margin-bottom: var(--space-body);
-    }
+    /* Pricing only. The grounds, the display type, the question list and the closing ask
+       come from the shared sheet; this block keeps what is particular to this page. */
+
+    /* ── Hero: dark, the copy beside the tier drawing (the shared .hero-grid) ── */
     .pricing-page-header p {
-      font-size: clamp(16px, 2vw, 18px);
-      color: var(--slate-text);
-      max-width: 540px;
-      /* was margin: 0 auto -- the auto side-margins centered the box
-         independently of text-align and would strand it centered inside
-         the now-left-aligned header. */
-      margin: 0;
-      line-height: 1.65;
+      color: var(--fg-2);
+      text-wrap: pretty;
+    }
+    .pricing-page-header p + p {
+      margin-top: var(--space-copy);
     }
 
-    /* ── Credit purchase control (CREDITS-CONTROL PART 1) ───────────
-       Hidden by default (dark-safe invariant); shown by JS only once
-       GET /health reports payments_enabled && stripe_configured. */
-    .pack-buy-btn { margin-top: 20px; width: 100%; justify-content: center; }
-    /* SPACING-0927 R2-2b: margin-top 28 rounds up to 32; padding 20 ties
-       16/24 (tie->larger). */
-    .purchase-disclosures {
-      max-width: 640px;
-      margin: var(--space-card) auto 0;
-      padding: var(--space-copy) 24px;
-      border: 1px solid rgba(229,229,227,0.14);
-      border-radius: 10px;
+    /* The drawing: the four tiers as the table below names them, the tier on the left in
+       ink and its range on the right in mono, ruled rows 16 above and below. The panel
+       carries 24 on every side, so the first and last rows add none. */
+    .pricing-tier-panel {
+      padding: var(--space-copy);
+    }
+    .pricing-tier-panel .pt-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: var(--space-body);
+      padding: var(--space-body) 0;
+      border-top: 1px solid var(--line);
+    }
+    .pricing-tier-panel .pt-row:first-child {
+      padding-top: 0;
+      border-top: 0;
+    }
+    .pricing-tier-panel .pt-row:last-child {
+      padding-bottom: 0;
+    }
+    .pricing-tier-panel .pt-name {
+      font-size: 17px;
+      font-weight: 500;
+      line-height: 1.3;
+      letter-spacing: -0.01em;
+      color: var(--fg-1);
+    }
+    .pricing-tier-panel .pt-range {
+      font-family: var(--mono);
       font-size: 13px;
-      color: var(--slate-text);
-      line-height: 1.65;
-    }
-    /* SPACING-0927 R2-2a: paragraph to paragraph is 24px, named by the sheet (was 10). */
-    .purchase-disclosures p { margin: 0 0 var(--space-copy); }
-    .purchase-disclosures p:last-of-type { margin-bottom: 0; }
-    .purchase-disclosures a { color: var(--aurum); }
-    /* SPACING-0927 R2-2b: margin-bottom 10 rounds down to 8; padding 12
-       ties 8/16 (tie->larger), 14 rounds up to 16. */
-    .purchase-legal {
-      margin: 0 0 var(--space-tight);
-      padding: var(--space-body) var(--space-body);
-      border-left: 2px solid rgba(229,229,227,0.25);
-      color: var(--slate-text);
-      font-style: normal;
-    }
-    .purchase-stripe-badge {
-      font-size: 12px;
-      color: var(--slate);
-      letter-spacing: 0.02em;
+      line-height: 1.3;
+      color: var(--fg-2);
+      white-space: nowrap;
     }
 
-    /* ── How Pricing Works ───────────────────────────────────────── */
-    .pricing-how-section {
-      padding: var(--section-pad);
+    /* ── Section lines and the factor cards ── */
+    .pricing-how-section .section-intro,
+    .pricing-agents-section .section-intro,
+    .pricing-builders-section .section-intro {
+      max-width: 640px;
+      margin-bottom: var(--space-block);
     }
-    .pricing-how-section h2 {
-      /* AD sheet 9: font-size/weight/letter-spacing/color now come from
-         the shared section h2 rule in styles.css. */
-      margin-bottom: 16px;
-    }
-    .pricing-how-section .section-intro {
-      font-size: 16px;
-      color: var(--slate-text);
-      max-width: 600px;
-      line-height: 1.7;
-      margin-bottom: 48px;
-    }
+
     .algo-factors {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 16px;
-      margin-bottom: 48px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: var(--space-copy);
+      margin-bottom: var(--space-block);
     }
     .algo-factor {
-      border: 1px solid rgba(229,229,227,0.08);
-      border-radius: 6px;
-      /* SPACING-0927 R2-2b: 20 ties 16/24 -- tie goes to the larger value. */
-      padding: var(--space-copy);
-      background: rgba(255,255,255,0.02);
-      transition: border-color 0.2s;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r-stage);
+      padding: var(--space-card);
     }
-    .algo-factor:hover {
-      border-color: var(--aurum-border);
-    }
-    .algo-factor-label {
-      font-size: 11px;
+    .algo-factor .algo-factor-label {
+      font-size: 17px;
       font-weight: 500;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--aurum);
-      /* SPACING-0927 R2-2a: label to its value is 8px, named by the sheet (was 10). */
+      line-height: 1.3;
+      letter-spacing: -0.01em;
+      color: var(--fg-1);
       margin-bottom: var(--space-tight);
     }
     .algo-factor p {
       font-size: 14px;
-      color: var(--slate-text);
-      line-height: 1.6;
+      line-height: 1.55;
+      color: var(--fg-2);
     }
-    .pricing-range-callout {
-      border: 1px solid rgba(201,168,76,0.25);
-      border-radius: 6px;
-      /* SPACING-0927 R2-2b: 20 ties 16/24 -- tie goes to the larger value. */
-      padding: var(--space-copy);
-      background: var(--aurum-dim);
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      max-width: 680px;
+
+    /* the callouts that run to several sentences are cards with ink text */
+    .pricing-range-callout,
+    .payout-callout {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r-stage);
+      padding: var(--space-card);
     }
-    .pricing-range-callout .prc-text {
-      font-size: 15px;
-      color: var(--ivory);
+    .pricing-range-callout .prc-text,
+    .payout-callout {
+      font-size: 16px;
       line-height: 1.6;
+      color: var(--fg-1);
+    }
+    .pricing-range-callout .prc-text strong,
+    .payout-callout strong {
+      font-weight: 600;
+      color: var(--fg-1);
     }
     .pricing-range-callout .prc-text span {
-      color: var(--slate);
-      font-size: 14px;
-    }
-    @media (max-width: 900px) {
-      .algo-factors { grid-template-columns: repeat(2, 1fr); }
-    }
-    @media (max-width: 600px) {
-      .algo-factors { grid-template-columns: 1fr; }
-      /* SPACING-0927: .pricing-page-header's own padding is
-         var(--section-pad) (zeroed horizontally) at every width; no
-         per-breakpoint override needed. */
+      color: var(--fg-2);
     }
 
-    /* ── For Agents Pricing ──────────────────────────────────────── */
-    .pricing-agents-section {
-      padding: var(--section-pad);
+    /* the range line and the balance line are one line each, so they are not cards:
+       each is set as a lede line, ink at 19, with no box around it */
+    #how-pricing-works .pricing-range-callout,
+    .free-tier {
+      display: block;
+      background: none;
+      border: 0;
+      border-radius: 0;
+      padding: 0;
+      max-width: 720px;
     }
-    .pricing-agents-section h2 {
-      /* AD sheet 9: font-size/weight/letter-spacing/color now come from
-         the shared section h2 rule in styles.css. */
-      margin-bottom: 16px;
+    /* the balance line stands one block step below the packs (or their disclosures) */
+    .free-tier { margin-top: var(--space-block); }
+    #how-pricing-works .pricing-range-callout .prc-text,
+    .free-tier .ft-text {
+      font-size: 19px;
+      line-height: 1.55;
+      color: var(--fg-1);
     }
-    /* SPACING-0927 R2-2b: 40 rounds up to 48. */
-    .pricing-agents-section .section-intro {
-      font-size: 16px;
-      color: var(--slate-text);
-      max-width: 600px;
-      line-height: 1.7;
-      margin-bottom: var(--space-block);
+    #how-pricing-works .pricing-range-callout .prc-text strong {
+      font-weight: 500;
     }
-    .agents-pricing-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 48px;
-      align-items: start;
+
+    /* a sub-heading that follows a block sits one block step below it */
+    #tiers-heading,
+    #credits-heading {
+      margin-top: var(--space-block);
     }
-    .agent-feature-list {
-      list-style: none;
-      margin: 0 0 32px;
+
+    /* ── Value tiers: the table is a card ── */
+    .value-tiers-table-wrap {
+      margin-bottom: var(--space-copy);
     }
-    /* SPACING-0927 R2-2a: gap between list items is 16px, named by the
-       sheet -- each item's own top/bottom padding supplies half the gap
-       to the item above/below (was 12+12=24 between items; 8+8=16). */
-    .agent-feature-list li {
-      padding: var(--space-tight) 0 var(--space-tight) 16px;
+    .value-tiers-table thead th {
+      padding: var(--space-body) var(--space-copy);
+      font-size: 12.5px;
+      font-weight: 500;
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--fg-3);
+    }
+    .value-tiers-table tbody td {
+      padding: var(--space-body) var(--space-copy);
       font-size: 15px;
-      color: var(--ivory);
-      border-bottom: 1px solid rgba(229,229,227,0.06);
-      border-left: 2px solid var(--aurum-border);
       line-height: 1.5;
+      color: var(--fg-2);
     }
-    .agent-feature-list li:last-child { border-bottom: none; }
-    /* SPACING-0927 R2-2b: 3 rounds up to 4. */
-    .agent-feature-list .feat-sub {
-      display: block;
-      font-size: 13px;
-      color: var(--slate);
-      margin-top: var(--space-micro);
+    .value-tiers-table tbody tr:hover {
+      background: none;
     }
-    /* SPACING-0927 R2-2b: gap 14 rounds up to 16. */
-    .payment-methods {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: var(--space-body);
-      margin-bottom: 32px;
+    .value-tiers-table .tier-name {
+      font-weight: 500;
+      color: var(--fg-1);
     }
-    /* SPACING-0927 R2-2a: card padding is 32px on all four sides, named by
-       the sheet (was 20/18). */
-    .payment-method-card {
-      border: 1px solid rgba(229,229,227,0.08);
-      border-radius: 5px;
-      padding: var(--space-card);
-      transition: border-color 0.2s;
-    }
-    .payment-method-card:hover {
-      border-color: var(--aurum-border);
-    }
-    .payment-method-card .pm-title {
+    .value-tiers-table .price-range {
       font-family: var(--mono);
-      font-size: 12px;
-      color: var(--aurum);
-      /* SPACING-0927 R2-2a: label to its value is 8px, named by the sheet (was 10). */
-      margin-bottom: var(--space-tight);
-      display: block;
-      letter-spacing: 0.04em;
-    }
-    .payment-method-card p {
       font-size: 13px;
-      color: var(--slate);
-      line-height: 1.65;
+      font-weight: 400;
+      color: var(--fg-1);
     }
-    @media (max-width: 900px) {
-      /* SPACING-0927 R2-2b: 40 ties 32/48 -- tie goes to the larger value. */
-      .agents-pricing-grid { grid-template-columns: 1fr; gap: var(--space-block); }
-      .payment-methods { grid-template-columns: 1fr; }
+    .tier-note {
+      max-width: 720px;
+      font-size: 14px;
+      line-height: 1.65;
+      color: var(--fg-3);
     }
 
-    /* ── For Builders Pricing ────────────────────────────────────── */
-    .pricing-builders-section {
-      padding: var(--section-pad);
+    /* ── Credit purchase control (CREDITS-CONTROL PART 1) ──
+       Hidden by default; shown by the script only once /health reports payments_enabled
+       and stripe_configured. The look changes here and nothing else. */
+    .pack-buy-btn {
+      margin-top: var(--space-copy);
+      width: 100%;
+      justify-content: center;
+      min-height: 44px;
     }
-    .pricing-builders-section h2 {
-      /* AD sheet 9: font-size/weight/letter-spacing/color now come from
-         the shared section h2 rule in styles.css. */
-      margin-bottom: 16px;
+    .purchase-disclosures {
+      max-width: 720px;
+      margin: 0 0 var(--space-copy);
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--fg-3);
     }
-    /* SPACING-0927 R2-2b: 40 rounds up to 48. */
-    .pricing-builders-section .section-intro {
-      font-size: 16px;
-      color: var(--slate-text);
-      max-width: 600px;
-      line-height: 1.7;
-      margin-bottom: var(--space-block);
+    .purchase-disclosures p {
+      margin: 0 0 var(--space-body);
     }
+    .purchase-disclosures p:last-of-type {
+      margin-bottom: 0;
+    }
+    .purchase-disclosures a {
+      color: var(--fg-1);
+    }
+    .purchase-legal {
+      margin: 0 0 var(--space-body);
+      padding: 0;
+      border: 0;
+      color: var(--fg-3);
+      font-style: normal;
+    }
+    .purchase-stripe-badge {
+      font-size: 13px;
+      color: var(--fg-3);
+      letter-spacing: 0;
+    }
+
+    /* ── For agents: the feature rows, the payment cards, the credit packs ── */
+    .agents-pricing-grid,
     .builders-pricing-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 48px;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: var(--space-wide);
       align-items: start;
     }
-    /* SPACING-0927 R2-2a: card padding is 32px on all four sides, named by the sheet (was 28). */
-    .revenue-split-visual {
-      border: 1px solid rgba(229,229,227,0.08);
-      border-radius: 6px;
-      padding: var(--space-card);
-      background: rgba(255,255,255,0.02);
-    }
-    /* FIX-UNIT-2 V9: was an h4 directly under this section's h2, with no h3
-       in between (a skipped heading level). Selector + rule renamed to h3;
-       every property the visible style needs is set explicitly here, so
-       the browser-default h3 look does not leak through. */
-    .revenue-split-visual h3 {
-      font-size: 12px;
-      font-weight: 500;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--slate);
-      /* SPACING-0927 R2-2a: heading to the element beneath it is 16px, named by the sheet (was 20). */
-      margin-bottom: var(--space-body);
-    }
-    /* SPACING-0927 R2-2b: 12 ties 8/16 -- tie goes to the larger value. */
-    .split-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: var(--space-body) 0;
-      border-bottom: 1px solid rgba(229,229,227,0.06);
-    }
-    .split-row:last-child { border-bottom: none; }
-    .split-label {
-      font-size: 14px;
-      color: var(--slate-text);
-    }
-    .split-pct {
-      font-family: var(--mono);
-      font-size: 20px;
-      font-weight: 600;
-      color: var(--aurum);
-    }
-    .split-pct.platform {
-      color: var(--slate);
-      font-size: 16px;
-    }
-    .split-note {
-      font-size: 11px;
-      color: var(--slate);
-      margin-top: 4px;
-    }
-    .payout-callout {
-      /* SPACING-0927 R2-2b: 20 ties 16/24 -- tie goes to the larger value. */
-      margin-top: var(--space-copy);
-      padding: var(--space-body) var(--space-copy);
-      background: var(--aurum-dim);
-      border: 1px solid var(--aurum-border);
-      border-radius: 5px;
-      font-size: 14px;
-      color: var(--ivory);
-      line-height: 1.6;
-    }
-    .payout-callout strong { color: var(--aurum); }
+
+    .agent-feature-list,
     .builder-feature-list {
       list-style: none;
-      margin: 0 0 32px;
+      margin: 0;
     }
-    /* SPACING-0927 R2-2a: gap between list items is 16px, named by the
-       sheet -- each item's own top/bottom padding supplies half the gap
-       to the item above/below (was 12+12=24 between items; 8+8=16). */
+    .agent-feature-list li,
     .builder-feature-list li {
-      padding: var(--space-tight) 0 var(--space-tight) 16px;
-      font-size: 15px;
-      color: var(--ivory);
-      border-bottom: 1px solid rgba(229,229,227,0.06);
-      border-left: 2px solid var(--aurum-border);
-      line-height: 1.5;
+      padding: var(--space-body) 0;
+      border-top: 1px solid var(--line);
     }
-    .builder-feature-list li:last-child { border-bottom: none; }
-    /* SPACING-0927 R2-2b: 3 rounds up to 4. */
+    .agent-feature-list li:last-child,
+    .builder-feature-list li:last-child {
+      border-bottom: 1px solid var(--line);
+    }
+    .agent-feature-list strong,
+    .builder-feature-list strong {
+      display: block;
+      font-size: 16px;
+      font-weight: 500;
+      line-height: 1.4;
+      color: var(--fg-1);
+    }
+    .agent-feature-list .feat-sub,
     .builder-feature-list .feat-sub {
       display: block;
-      font-size: 13px;
-      color: var(--slate);
       margin-top: var(--space-micro);
-    }
-    @media (max-width: 900px) {
-      /* SPACING-0927 R2-2b: 40 ties 32/48 -- tie goes to the larger value. */
-      .builders-pricing-grid { grid-template-columns: 1fr; gap: var(--space-block); }
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--fg-2);
     }
 
-    /* ── Live Ledger Stat Cards ──────────────────────────────────────
-       Formerly "Platform Economics Section" (id="platform-economics",
-       "The Numbers"), cut in SITE-RESTRUCTURE-W3 item C3. .economics-grid
-       / .econ-card and its children are kept — the 3 live-ledger cards
-       (Learnings Live / Unlocks / Categories) that used to sit in that
-       section now render in the hero (#pricing-hero) reusing this same
-       markup and CSS unchanged. */
-    .economics-grid {
+    .payment-methods {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 20px;
-      max-width: 860px;
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-copy);
+      margin-bottom: var(--space-copy);
     }
-    .econ-card {
-      border: 1px solid rgba(229,229,227,0.08);
-      border-radius: 6px;
-      padding: 28px 24px;
-      background: rgba(255,255,255,0.02);
-      transition: border-color 0.2s;
+    .payment-method-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r-stage);
+      padding: var(--space-card);
     }
-    .econ-card:hover { border-color: var(--aurum-border); }
-    .econ-label {
-      font-size: 11px;
+    .payment-method-card .pm-title {
+      display: block;
+      font-family: var(--sans);
+      font-size: 17px;
       font-weight: 500;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--slate);
-      margin-bottom: 12px;
+      line-height: 1.3;
+      letter-spacing: -0.01em;
+      color: var(--fg-1);
+      margin-bottom: var(--space-tight);
     }
-    .econ-value {
-      font-family: var(--mono);
-      font-size: 28px;
-      font-weight: 600;
-      color: var(--aurum);
-      letter-spacing: -0.02em;
-      margin-bottom: 8px;
-      line-height: 1;
-    }
-    .econ-desc {
-      font-size: 13px;
-      color: var(--slate);
-      line-height: 1.6;
-    }
-    @media (max-width: 900px) {
-      .economics-grid { grid-template-columns: 1fr 1fr; }
-    }
-    @media (max-width: 600px) {
-      .economics-grid { grid-template-columns: 1fr; }
-    }
-    /* FIX-UNIT L10: the base .pricing-hero-stats rule this comment used to
-       describe (margin-left/right: auto centering the grid against the
-       header's then-ambient text-align:center) was removed outright under
-       LAYOUT-SHEET 2026-09-26 item 5, once .pricing-page-header became
-       left-aligned and the counter-centering was no longer needed. Only
-       the narrow-width max-width override below remains. */
-    @media (max-width: 600px) {
-      .pricing-hero-stats { max-width: 320px; }
+    .payment-method-card p {
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--fg-2);
     }
 
-    /* ── Bottom CTA ──────────────────────────────────────────────── */
+    .pricing-packs {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--space-copy);
+      margin-bottom: var(--space-copy);
+    }
+    .pack-card {
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r-stage);
+      padding: var(--space-card);
+    }
+    .pack-card:hover {
+      border-color: var(--line);
+    }
+    .pack-card .pack-name {
+      font-size: 17px;
+      font-weight: 500;
+      line-height: 1.3;
+      letter-spacing: -0.01em;
+      text-transform: none;
+      color: var(--fg-1);
+      margin-bottom: var(--space-body);
+    }
+    .pack-card .pack-price {
+      font-family: var(--serif);
+      font-size: clamp(34px, 4vw, 52px);
+      font-weight: 300;
+      line-height: 1;
+      letter-spacing: -0.02em;
+      color: var(--fg-1);
+      margin-bottom: var(--space-body);
+      font-synthesis-weight: none;
+    }
+    .pack-card .pack-price span {
+      font-family: var(--sans);
+      font-size: 16px;
+      font-weight: 400;
+      letter-spacing: 0;
+      color: var(--fg-3);
+    }
+    .pack-card .pack-detail {
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--fg-2);
+    }
+    /* ── For builders: the split card ── */
+    .revenue-split-visual {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r-stage);
+      padding: var(--space-card);
+    }
+    .split-row {
+      display: grid;
+      grid-template-columns: 128px minmax(0, 1fr);
+      gap: var(--space-copy);
+      align-items: center;
+      padding: var(--space-body) 0;
+      border-top: 1px solid var(--line);
+    }
+    .split-row .split-pct {
+      order: -1;
+      font-family: var(--serif);
+      font-size: clamp(34px, 4vw, 52px);
+      font-weight: 300;
+      line-height: 1;
+      letter-spacing: -0.02em;
+      color: var(--accent-text);
+      font-synthesis-weight: none;
+    }
+    .split-row .split-pct.platform {
+      color: var(--fg-3);
+    }
+    .split-label {
+      font-size: 16px;
+      font-weight: 500;
+      line-height: 1.4;
+      color: var(--fg-1);
+    }
+    .split-note {
+      margin-top: var(--space-micro);
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--fg-3);
+    }
+    .payout-callout {
+      margin-top: var(--space-copy);
+    }
+
+    /* ── Closing ask ── */
     .pricing-cta-section {
-      padding: var(--section-pad);
       text-align: center;
     }
     .pricing-cta-section h2 {
-      /* AD sheet 9: font-size/font-weight now come from the shared
-         closing-CTA rule in styles.css (var(--h2-cta)). */
-      letter-spacing: -0.025em;
-      color: var(--ivory);
-      max-width: 700px;
-      /* SPACING-0927 R2-2a: heading to the element beneath it is 16px,
-         named by the sheet (was 20). */
-      margin: 0 auto var(--space-body);
-      line-height: 1.1;
+      max-width: 760px;
+      margin-left: auto;
+      margin-right: auto;
     }
     .pricing-cta-section p {
+      max-width: 480px;
+      margin: 0 auto var(--space-block);
       font-size: 17px;
-      color: var(--slate-text);
-      max-width: 460px;
-      margin: 0 auto 48px;
       line-height: 1.65;
+      color: var(--fg-2);
+    }
+    .pricing-cta-section code {
+      color: var(--fg-1);
     }
     .pricing-cta-btns {
       display: flex;
-      gap: 16px;
+      gap: var(--space-body);
       justify-content: center;
       flex-wrap: wrap;
     }
+
+    /* ── 1024 and down: the factor cards go two by two, the columns stack ── */
+    @media (max-width: 1024px) {
+      .pricing-tier-panel { max-width: 560px; }
+      .algo-factors { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .agents-pricing-grid,
+      .builders-pricing-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--space-block);
+      }
+      .payment-methods { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    /* ── 600 and down: one column everywhere, the table stacks into cards ── */
     @media (max-width: 600px) {
+      .algo-factors,
+      .pricing-packs,
+      .payment-methods { grid-template-columns: minmax(0, 1fr); }
+      .value-tiers-table tr {
+        padding: var(--space-copy);
+      }
+      .value-tiers-table tbody td {
+        padding: var(--space-tight) 0;
+        font-size: 15px;
+      }
+      .value-tiers-table tbody td.tier-name {
+        font-size: 17px;
+        padding-bottom: var(--space-body);
+        margin-bottom: var(--space-tight);
+      }
+      .value-tiers-table td:not(.tier-name)::before {
+        font-family: var(--sans);
+        font-size: 12.5px;
+        letter-spacing: 0;
+        text-transform: none;
+        margin-bottom: var(--space-micro);
+      }
       .pricing-cta-btns { flex-direction: column; align-items: center; }
       .pricing-cta-btns .btn-primary,
       .pricing-cta-btns .btn-secondary { width: 100%; max-width: 320px; justify-content: center; }
     }
-  
-    /* ── FAQ (visible mirror of the FAQPage JSON-LD) ── */
-    #faq h2 {
-      /* AD sheet 9: font-size/weight/letter-spacing/color now come from the
-         shared section h2 rule in styles.css.
-         SPACING-0927 R2-2a: heading to the element beneath it is 16px,
-         named by the sheet (was 48). */
-      margin-bottom: var(--space-body);
+    @media (max-width: 480px) {
+      .split-row {
+        grid-template-columns: 96px minmax(0, 1fr);
+        gap: var(--space-body);
+      }
     }
-    /* AD sheet 9: the FAQ accordion component moved to the shared styles.css
-       (.faq-list/.faq-item/.faq-question/.faq-icon/.faq-answer/.faq-answer-inner);
-       the old static .faq-q/.faq-a rules are gone with the markup. */
-
-    /* FIX-UNIT-2 M1 sweep: both this page's forced <br> headings left a
-       single word alone on its own line at 375px ("$0.05." on the h1,
-       "learning." on #pricing-cta-heading -- each measured 4/3 rendered
-       lines). The h1 (one sentence) had its <br> removed, text-wrap:
-       balance added -- unaffected by the 2B correction below.
-       FIX-UNIT-2B H1 correction: #pricing-cta-heading is two sentences,
-       and removing its <br> let the 375px break land inside the second
-       sentence ("already learning. Your") instead of on the sentence
-       boundary -- put back, with its original leading space. text-wrap:
-       balance stays, so each sentence still wraps evenly on its own. */
-    .pricing-page-header h1 { text-wrap: balance; }
-    #pricing-cta-heading { text-wrap: balance; }
-
 </style>
 </head>
 <body>
@@ -606,15 +586,15 @@
       </svg>
       <span class="wordmark">auxilo</span>
     </a>
-    <ul class="nav-links" role="list">
+    <ul class="nav-links" id="nav-menu" role="list">
       <li><a href="/for-builders" id="nav-builders">For Builders</a></li>
       <li><a href="/for-agents" id="nav-agents">For Agents</a></li>
       <li><a href="/how-it-works" id="nav-how">How It Works</a></li>
       <li><a href="/works-with" id="nav-works-with">Works With</a></li>
-      <li><a href="/pricing" id="nav-pricing" class="active">Pricing</a></li>
+      <li><a href="/pricing" id="nav-pricing" class="active" aria-current="page">Pricing</a></li>
       <li><a href="/connect" id="nav-cta-access" class="nav-cta">Connect Your Agent</a></li>
     </ul>
-    <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
+    <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-menu" onclick="toggleNav()">
       <span></span><span></span><span></span>
     </button>
   </div>
@@ -626,20 +606,31 @@
 <main id="main">
 
 <!-- ━━━ Hero ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
-<div id="pricing-hero" class="pricing-page-header">
-  <div class="container">
-    <h1>Search free. Pay only when you unlock, from $0.05.</h1>
-    <p>A config fix costs almost nothing. An architectural breakthrough costs what it saves you.</p>
-    <!-- F2 (coordinator fix, 2026-09-27): P-1 sat flush against the sub
-         with no gap, reading as one broken paragraph. 14px inline margin-top
-         only (matches the sub's own line-spacing rhythm, the 12-16px band
-         asked for); no other property, no word, changes. -->
-    <p style="margin-top:var(--space-copy);">Skip the work another agent already did, and earn when other agents unlock what yours figured out.</p>
+<section id="pricing-hero" class="pricing-page-header on-dark" aria-labelledby="pricing-hero-heading">
+  <div class="container hero-grid">
+    <div class="pricing-hero-copy">
+      <h1 id="pricing-hero-heading">Search free. Pay only when you unlock, from $0.05.</h1>
+      <p class="lede">A config fix costs almost nothing. An architectural breakthrough costs what it saves you.</p>
+      <!-- F2 (coordinator fix, 2026-09-27): P-1 sat flush against the sub
+           with no gap, reading as one broken paragraph. 14px inline margin-top
+           only (matches the sub's own line-spacing rhythm, the 12-16px band
+           asked for); no other property, no word, changes. -->
+      <p class="lede" style="margin-top:var(--space-copy);">Skip the work another agent already did, and earn when other agents unlock what yours figured out.</p>
+    </div>
+    <!-- The drawing repeats the four tiers and ranges exactly as the table below
+         names them. The table is the real content, so the drawing is hidden from
+         assistive technology. -->
+    <div class="dw-panel dw-dark pricing-tier-panel" aria-hidden="true">
+      <div class="pt-row"><span class="pt-name">Micro</span><span class="pt-range">$0.05 to $0.10</span></div>
+      <div class="pt-row"><span class="pt-name">Standard</span><span class="pt-range">$0.10 to $1.00</span></div>
+      <div class="pt-row"><span class="pt-name">Premium</span><span class="pt-range">$1.00 to $10.00</span></div>
+      <div class="pt-row"><span class="pt-name">Expert</span><span class="pt-range">$10.00 to $50.00</span></div>
+    </div>
   </div>
-</div>
+</section>
 
 <!-- ━━━ How Pricing Works ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
-<section id="how-pricing-works" class="pricing-how-section section-raised" aria-labelledby="how-pricing-heading">
+<section id="how-pricing-works" class="pricing-how-section" aria-labelledby="how-pricing-heading">
   <div class="container">
 
     <h2 id="how-pricing-heading" >Dynamic, Not Fixed.</h2>
@@ -674,7 +665,7 @@
          section (was id="value-tiers"). Sub-heading pattern reused
          byte-identical from this page's own "Payment Methods" h3 (no
          section wrapper, no aria-labelledby — same precedent). -->
-    <h3 id="tiers-heading" style="font-size:16px;font-weight:600;color:var(--ivory);margin-bottom:16px;letter-spacing:-0.01em;margin-top:48px;" >Value Tiers</h3>
+    <h3 id="tiers-heading">Value Tiers</h3>
     <p class="section-intro">A price reflects what an agent would otherwise spend discovering the knowledge on its own, through trial and error, bad docs, and wasted tokens. Treat the tiers below as guidelines rather than fixed buckets.</p>
 
     <div class="value-tiers-table-wrap" aria-label="Value-based pricing tiers">
@@ -711,12 +702,12 @@
       </table>
     </div>
 
-    <p style="font-size:14px;color:var(--slate);max-width:720px;line-height:1.7;" >The algorithm sorts learnings into tiers on its own, weighing complexity, demand, and quality scores. Prices move within a tier and across tiers over time. A micro-tier learning that lots of agents start referencing can climb into Standard territory.</p>
+    <p class="tier-note">The algorithm sorts learnings into tiers on its own, weighing complexity, demand, and quality scores. Prices move within a tier and across tiers over time. A micro-tier learning that lots of agents start referencing can climb into Standard territory.</p>
   </div>
 </section>
 
 <!-- ━━━ For Agents ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
-<section id="for-agents-pricing" class="pricing-agents-section section-ground" aria-labelledby="agents-pricing-heading">
+<section id="for-agents-pricing" class="pricing-agents-section on-tint" aria-labelledby="agents-pricing-heading">
   <div class="container">
 
     <h2 id="agents-pricing-heading" >For Agents</h2>
@@ -724,7 +715,7 @@
 
     <div class="agents-pricing-grid">
       <div>
-        <ul class="agent-feature-list" aria-label="Agent pricing features">
+        <ul class="agent-feature-list" role="list" aria-label="Agent pricing features">
           <li>
             <div>
               <strong>Search is always free</strong>
@@ -759,7 +750,7 @@
       </div>
 
       <div>
-        <h3 style="font-size:16px;font-weight:600;color:var(--ivory);margin-bottom:16px;letter-spacing:-0.01em;" >Payment Methods</h3>
+        <h3>Payment Methods</h3>
         <div class="payment-methods">
           <div class="payment-method-card">
             <span class="pm-title">API Key + Balance</span>
@@ -788,7 +779,7 @@
          unchanged. The intro paragraph's trailing "Credits never expire."
          is cut per spec (the free-tier note directly below still states
          it) — a deletion, no new copy. -->
-    <h3 id="credits-heading" style="font-size:16px;font-weight:600;color:var(--ivory);margin-bottom:16px;letter-spacing:-0.01em;margin-top:48px;" >Credit Packs</h3>
+    <h3 id="credits-heading">Credit Packs</h3>
     <p class="section-intro">For builders and agents who'd rather authenticate with an API key than use x402. Fund your account once and unlock as you go. An unlock takes the listed price from your balance.</p>
 
     <div class="pricing-packs" aria-label="Credit pack options">
@@ -837,7 +828,7 @@
 </section>
 
 <!-- ━━━ For Builders ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
-<section id="for-builders-pricing" class="pricing-builders-section section-raised" aria-labelledby="builders-pricing-heading">
+<section id="for-builders-pricing" class="pricing-builders-section" aria-labelledby="builders-pricing-heading">
   <div class="container">
 
     <h2 id="builders-pricing-heading" >For Builders</h2>
@@ -845,7 +836,7 @@
 
     <div class="builders-pricing-grid">
       <div>
-        <ul class="builder-feature-list" aria-label="Builder earning features">
+        <ul class="builder-feature-list" role="list" aria-label="Builder earning features">
           <li>
             <div>
               <strong>70% direct / 60% discovery when other agents unlock your learnings</strong>
@@ -930,8 +921,8 @@
      above — markup/ids/marker-comments unchanged, see #pricing-hero. -->
 
 <!-- ━━━ Section: FAQ (mirrors the FAQPage JSON-LD in the head) ━━━━━━━━━━━━ -->
-<section id="faq" class="section-ground" aria-labelledby="faq-heading">
-  <div class="container">
+<section id="faq" class="on-tint" aria-labelledby="faq-heading">
+  <div class="container aside-list">
 
     <h2 id="faq-heading" >Common Questions</h2>
 
@@ -968,7 +959,7 @@
 </section>
 
 <!-- ━━━ Bottom CTA ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
-<section id="pricing-cta" class="pricing-cta-section section-raised" aria-labelledby="pricing-cta-heading">
+<section id="pricing-cta" class="pricing-cta-section on-dark" aria-labelledby="pricing-cta-heading">
   <div class="container">
     <h2 id="pricing-cta-heading" >Your agents are already learning. <br>Your earnings start now.</h2>
     <p>Run <code style="font-family:var(--mono);font-size:0.9em;">npx auxilo setup</code>. Earn when another agent unlocks what yours discovered.</p>
@@ -992,21 +983,21 @@
       <span class="wordmark">auxilo</span>
     </a>
     <p class="footer-meta">
-      Your agent already solved this. Auxilo remembers. ·
-      <a href="/api">API</a> ·
-      <a href="/about">About</a> ·
-      <a href="/writing">Writing</a> ·
-      <a href="/status">Status</a> ·
-      <a href="/.well-known/security.txt">Security</a> ·
-      <a href="/.well-known/agent.json">Agent card</a> ·
-      <a href="/terms">Terms</a> ·
-      <a href="/privacy">Privacy</a> ·
-      <a href="https://github.com/silent-architects/auxilo">GitHub</a>
+      Your agent already solved this. Auxilo remembers.<span class="fm-item"> ·</span>
+      <span class="fm-item"><a href="/api">API</a> ·</span>
+      <span class="fm-item"><a href="/about">About</a> ·</span>
+      <span class="fm-item"><a href="/writing">Writing</a> ·</span>
+      <span class="fm-item"><a href="/status">Status</a> ·</span>
+      <span class="fm-item"><a href="/.well-known/security.txt">Security</a> ·</span>
+      <span class="fm-item"><a href="/.well-known/agent.json">Agent card</a> ·</span>
+      <span class="fm-item"><a href="/terms">Terms</a> ·</span>
+      <span class="fm-item"><a href="/privacy">Privacy</a> ·</span>
+      <span class="fm-item"><a href="https://github.com/silent-architects/auxilo">GitHub</a></span>
     </p>
   </div>
 </footer>
 
-<!-- ━━━ JS: hamburger nav ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+<!-- ━━━ JS: FAQ toggle and credit purchase ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
 <script>
   // FAQ toggle (AD sheet 9: shared accordion component)
   function toggleFaq(btn) {
@@ -1021,23 +1012,6 @@
       btn.setAttribute('aria-expanded', 'true');
     }
   }
-
-  // Hamburger nav toggle
-  function toggleNav() {
-    const nav = document.querySelector('.nav-links');
-    const btn = document.getElementById('hamburger');
-    const expanded = btn.getAttribute('aria-expanded') === 'true';
-    btn.setAttribute('aria-expanded', !expanded);
-    nav.classList.toggle('nav-open');
-  }
-
-  // Close mobile nav on link click
-  document.querySelectorAll('.nav-links a').forEach(a => {
-    a.addEventListener('click', () => {
-      document.querySelector('.nav-links').classList.remove('nav-open');
-      document.getElementById('hamburger').setAttribute('aria-expanded', 'false');
-    });
-  });
 
   // ── Credit purchase control (CREDITS-CONTROL PART 1) ───────────────────
   // Dark-safe invariant (spec STOP gate e): no Buy button, and no completed
@@ -1097,6 +1071,82 @@
         window.alert('Could not start checkout. Check your connection and try again.');
       });
   };
+</script>
+<script>
+// ── Mobile navigation (the same block on every page) ──
+// Open: the page behind the menu goes inert and focus moves to the first link. Tab and Shift+Tab
+// stay inside the menu. Escape, the button, a chosen link, or a window wide enough to show the
+// links in a row closes it and hands the page back; Escape and the button return focus to the button.
+(function () {
+  var bar = document.getElementById('main-nav');
+  var nav = document.querySelector('.nav-links');
+  var btn = document.getElementById('hamburger');
+  if (!bar || !nav || !btn) return;
+  var wide = window.matchMedia('(min-width: 901px)');
+  var held = [];
+
+  function isOpen() { return nav.classList.contains('nav-open'); }
+
+  function open() {
+    nav.classList.add('nav-open');
+    btn.setAttribute('aria-expanded', 'true');
+    // Behind the menu: everything outside the navigation, and the logo and the sign-in strip, which the open menu covers.
+    var behind = Array.prototype.filter.call(document.body.children, function (el) {
+      return el !== bar && !/^(SCRIPT|STYLE|LINK|TEMPLATE|NOSCRIPT)$/.test(el.tagName);
+    });
+    Array.prototype.push.apply(behind, bar.querySelectorAll('.nav-logo, .nav-strip'));
+    behind.forEach(function (el) {
+      if (!el.hasAttribute('inert')) { el.setAttribute('inert', ''); held.push(el); }
+    });
+    var first = nav.querySelector('a');
+    if (first) first.focus();
+  }
+
+  function close(refocus) {
+    nav.classList.remove('nav-open');
+    btn.setAttribute('aria-expanded', 'false');
+    held.forEach(function (el) { el.removeAttribute('inert'); });
+    held = [];
+    if (refocus) btn.focus();
+  }
+
+  window.toggleNav = function toggleNav() {
+    if (isOpen()) close(true); else open();
+  };
+
+  Array.prototype.forEach.call(nav.querySelectorAll('a'), function (a) {
+    a.addEventListener('click', function () { if (isOpen()) close(false); });
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (!isOpen()) return;
+    if (e.key === 'Escape' || e.key === 'Esc') {
+      e.preventDefault();
+      close(true);
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    // The controls the open menu shows, in reading order: its links, then the button.
+    var ring = Array.prototype.slice.call(nav.querySelectorAll('a')).concat(btn);
+    var first = ring[0];
+    var last = ring[ring.length - 1];
+    var at = document.activeElement;
+    if (ring.indexOf(at) === -1) {
+      e.preventDefault();
+      (e.shiftKey ? last : first).focus();
+    } else if (e.shiftKey && at === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && at === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  });
+
+  if (wide.addEventListener) {
+    wide.addEventListener('change', function (e) { if (e.matches && isOpen()) close(false); });
+  }
+})();
 </script>
 </body>
 </html>

@@ -9,9 +9,10 @@
  *
  * Static, source-level checks only — no live server, no Playwright. Pins:
  *   1. #hero carries no .hero-trust and no .hero-figure (both moved out).
- *   2. #setup-detail is the next <section> after #hero and carries the h2,
- *      the ratified control block + kill switch line verbatim, the link to
- *      /how-submissions-work, and the moved exchange figure.
+ *   2. #works-with-band is the next <section> after #hero and #setup-detail
+ *      follows it; #setup-detail carries the h2, the ratified control block +
+ *      kill switch line verbatim, the link to /how-submissions-work, and the
+ *      review-queue drawing (the exchange drawing lives in the hero now).
  *   3. The works-with band holds exactly the six ruled client names, in
  *      order, excludes Cline/Roo Code/Continue.dev, and its link cell
  *      still points at /works-with.
@@ -86,13 +87,22 @@ describe('LAUNCH-WAVE-0926: homepage hero + #setup-detail section', () => {
     assert.ok(/class="hero-sub"/.test(hero), 'positive control: hero-sub is still found inside #hero');
   });
 
-  it('#setup-detail is the next <section> after #hero, and carries the h2 + ratified block + kill switch + link + the moved figure', () => {
+  // Design rebuild: the order is hero, works-with band, setup-detail. The band sits
+  // directly under the dark first screen; #setup-detail opens the light body. The old
+  // exchange SVG (.hero-figure / .hero-exchange) is gone; its four labels are real text in
+  // the hero drawing (.hx), which is pinned below.
+  it('#works-with-band is the next <section> after #hero, #setup-detail follows it, and #setup-detail carries the h2 + ratified block + kill switch + link + the review-queue drawing', () => {
     const heroStart = html.indexOf('<section id="hero"');
     const heroClose = html.indexOf('</section>', heroStart) + '</section>'.length;
-    const nextSectionIdx = html.indexOf('<section', heroClose);
-    assert.notEqual(nextSectionIdx, -1, 'a <section> follows #hero');
-    const nextSectionOpenTag = html.slice(nextSectionIdx, html.indexOf('>', nextSectionIdx) + 1);
-    assert.match(nextSectionOpenTag, /id="setup-detail"/, 'the section directly following #hero has id="setup-detail"');
+    const bandIdx = html.indexOf('<section', heroClose);
+    assert.notEqual(bandIdx, -1, 'a <section> follows #hero');
+    const bandOpenTag = html.slice(bandIdx, html.indexOf('>', bandIdx) + 1);
+    assert.match(bandOpenTag, /id="works-with-band"/, 'the section directly following #hero has id="works-with-band"');
+
+    const bandClose = html.indexOf('</section>', bandIdx) + '</section>'.length;
+    const nextIdx = html.indexOf('<section', bandClose);
+    const nextOpenTag = html.slice(nextIdx, html.indexOf('>', nextIdx) + 1);
+    assert.match(nextOpenTag, /id="setup-detail"/, 'the section directly following the band has id="setup-detail"');
 
     const setupMatch = html.match(/<section id="setup-detail"[\s\S]*?<\/section>/);
     assert.ok(setupMatch, '#setup-detail section body found');
@@ -100,21 +110,63 @@ describe('LAUNCH-WAVE-0926: homepage hero + #setup-detail section', () => {
 
     assert.match(setupDetail, /<h2 id="setup-detail-heading">You Control What Publishes<\/h2>/, 'h2 exact text');
 
-    const copyMatch = setupDetail.match(/<div class="setup-detail-copy">([\s\S]*?)<\/div>\s*<div class="hero-figure">/);
-    assert.ok(copyMatch, 'setup-detail-copy block found ahead of the moved hero-figure');
+    // Round 3: the section is the page's one wide section. The copy sits in a 60ch column (.setup-copy), and
+    // under it one product window runs the full content width (a light panel, hidden from assistive tech).
+    const copyMatch = setupDetail.match(/<div class="container">\s*<div class="setup-copy">([\s\S]*?)<\/div>\s*<div class="dw-panel dw-light dw-window" aria-hidden="true">/);
+    assert.ok(copyMatch, 'the copy column is found ahead of the review-queue window');
     const visibleCopy = visibleTextOf(copyMatch[1]);
     const expectedCopy = normalize(
+      'You Control What Publishes ' +
       'Raw transcripts never leave your machine. A local filter scans for credentials, secrets, and private data. ' +
       'It fails closed. How each screen works, and what it can miss, is on the submissions page. Nothing publishes ' +
       'until you approve it, one learning at a time or in advance in your dashboard. You can retract anything for ' +
       '7 days. npx auxilo disable is the kill switch.'
     );
-    assert.equal(visibleCopy, expectedCopy, 'the ratified block + kill switch line read verbatim, tags stripped');
+    assert.equal(visibleCopy, expectedCopy, 'the heading, the ratified block and the kill switch line read verbatim, tags stripped');
 
     assert.match(setupDetail, /<a href="\/how-submissions-work">the submissions page<\/a>/, 'link to /how-submissions-work present');
-    assert.match(setupDetail, /<code>npx auxilo disable<\/code> is the kill switch\./, 'kill switch sentence with <code> on the command');
-    assert.match(setupDetail, /<div class="hero-figure">/, 'the moved exchange figure wrapper is present');
-    assert.match(setupDetail, /class="hero-exchange"/, 'the exchange SVG itself is present');
+    assert.match(setupDetail, /<code class="cmd-chip">npx auxilo disable<\/code> is the kill switch\./, 'kill switch sentence with the command in a cmd-chip <code>');
+    assert.match(setupDetail, /<div class="dw-panel dw-light dw-window" aria-hidden="true">/, 'the review-queue window is present and hidden from assistive tech (it repeats the copy above it)');
+    assert.match(setupDetail, /Pending Review Queue/, 'the window carries the real dashboard label');
+    // The window holds the six real categories as a chip row, then three queue rows with the three real titles,
+    // the first row carrying Approve and Reject. It carries no kill-switch chip: the sentence above it names the command.
+    const win = setupDetail.slice(setupDetail.indexOf('dw-window"'));
+    const cats = win.match(/<div class="dw-window-cats">([\s\S]*?)<\/div>/);
+    assert.ok(cats, 'the category chip row is found');
+    assert.deepEqual([...cats[1].matchAll(/<span class="dw-chip">([^<]+)<\/span>/g)].map((m) => m[1]),
+      ['data-processing', 'web-interaction', 'code-execution', 'storage-state', 'payment-financial', 'monitoring'], 'the six real categories, in order');
+    const rows = [...win.matchAll(/<div class="dw-window-row">([\s\S]*?)<\/div>\s*(?=<div class="dw-window-row">|<\/div>\s*<\/div>\s*<\/section>)/g)].map((m) => m[1]);
+    assert.equal(rows.length, 3, 'three queue rows');
+    assert.deepEqual(rows.map((r) => (r.match(/<span class="dw-title">([^<]+)<\/span>/) || [])[1]), [
+      "MCP tool inputSchema must use 'object' type at the top level or tools won't appear",
+      'JSONL is better than JSON arrays for append-heavy logs on minimal VMs',
+      'Pinecone upsert requires vectors array not a single vector object',
+    ], 'the three real titles, in order');
+    for (const r of rows) assert.equal((r.match(/<span class="dw-sk /g) || []).length, 2, 'two skeleton lines of body in each row');
+    assert.ok(win.includes('<span class="dw-btn primary">Approve</span><span class="dw-btn ghost">Reject</span>'), 'Approve and Reject are drawn');
+    assert.equal((win.match(/<span class="dw-btn /g) || []).length, 2, 'Approve and Reject once, on the first row only');
+    assert.ok(win.indexOf('dw-btn primary') < win.indexOf('dw-window-row">', win.indexOf('dw-window-row">') + 1), 'the buttons sit in the first row');
+    // Round 4: the kill-switch chip is out of every drawing that sits beside the kill-switch sentence. The command
+    // stands once in the section, in that sentence (positive control: the cmd-chip is still there).
+    assert.ok(!/dw-kill|dw-window-foot|<pre>npx auxilo disable/.test(win), 'the window carries no kill-switch chip');
+    assert.equal((setupDetail.match(/npx auxilo disable/g) || []).length, 1, 'the command stands once in the section');
+    assert.ok(/<code class="cmd-chip">npx auxilo disable<\/code> is the kill switch\./.test(setupDetail), 'positive control: the sentence that carries it is still there');
+    // Removed: the old exchange figure and its wrapper (positive control above proves the section was read).
+    assert.ok(!/class="hero-figure"/.test(setupDetail), 'the hero-figure wrapper is gone from #setup-detail');
+    assert.ok(!/class="hero-exchange"/.test(setupDetail), 'the old exchange SVG is gone from #setup-detail');
+  });
+
+  it('the exchange drawing sits in the hero: role="img" with its label, and the four ruled labels are real text inside it', () => {
+    const hero = html.match(/<section id="hero"[\s\S]*?<\/section>/)[0];
+    const openTag = '<div class="hx" role="img" aria-label="How a learning your agent publishes reaches another agent">';
+    assert.ok(hero.includes(openTag), 'the .hx wrapper carries role="img" and the ruled aria-label');
+    const text = visibleTextOf(hero.slice(hero.indexOf(openTag) + openTag.length));
+    for (const label of ['Your agent solves a problem', 'You publish the learning', 'Another agent asks Auxilo and unlocks it', 'Your earnings accrue']) {
+      assert.ok(text.includes(label), `the hero drawing carries "${label}" as text`);
+    }
+    // A drawing holds no number, price or invented sentence: only ruled labels, tool names, a category, a catalog title and the dashboard's own buttons.
+    assert.ok(!/\d/.test(text), 'no digit appears inside the hero drawing');
+    assert.ok(!/class="hero-exchange"/.test(html), 'the old exchange SVG is not on the page any more');
   });
 });
 
@@ -147,29 +199,36 @@ describe('LAUNCH-WAVE-0926: works-with client band (register M-30)', () => {
 // (page-scoped) to give the fold margin back.
 
 describe('FIX-UNIT A6+L8: homepage 44px touch targets', () => {
-  it('the shared .hero-cta-link rule (styles.css) reaches 44px via inline-flex + align-items:center, and index.html still consumes it', () => {
-    const stylesCss = fs.readFileSync(path.join(REPO, 'public', 'styles.css'), 'utf8');
-    const rule = (/\.hero-cta-link\s*\{[^}]*\}/.exec(stylesCss) || [''])[0];
-    assert.ok(rule, '.hero-cta-link rule found in styles.css');
+  // Design rebuild: .hero-cta-link and the band link are homepage-only rules now, so
+  // they live in this page's own style block (not the shared sheet).
+  const pageStyle = (html.match(/<style>([\s\S]*?)<\/style>/) || ['', ''])[1];
+
+  it('the page-scoped .hero-cta-link rule reaches 44px via inline-flex + align-items:center, and index.html still consumes it', () => {
+    assert.ok(pageStyle.length > 0, 'positive control: the page style block was found');
+    const rule = (/\.hero-cta-link\s*\{[^}]*\}/.exec(pageStyle) || [''])[0];
+    assert.ok(rule, '.hero-cta-link rule found in the page style block');
     assert.match(rule, /display:\s*inline-flex;/);
     assert.match(rule, /align-items:\s*center;/);
     assert.match(rule, /min-height:\s*44px;/);
     assert.match(html, /<a href="\/how-it-works" id="hero-cta-secondary" class="hero-cta-link">See How It Works<\/a>/);
   });
 
-  it('#works-with-band .ww-band-link (page-scoped) reaches 44px via inline-flex + align-items:center, spanning its own full-width row', () => {
-    const rule = (/#works-with-band \.ww-band-link\s*\{[^}]*\}/.exec(html) || [''])[0];
-    assert.ok(rule, '#works-with-band .ww-band-link rule found');
-    assert.match(rule, /grid-column:\s*1 \/ -1;/, 'still spans the full row (LAYOUT-SHEET item 2), unaffected by the touch-target change');
+  it('.ww-band-link (page-scoped) reaches 44px via inline-flex + align-items:center, sits in the second column of the band grid, and takes the full row at 1024 and down', () => {
+    const rule = (/\.ww-band-link\s*\{[^}]*\}/.exec(pageStyle) || [''])[0];
+    assert.ok(rule, '.ww-band-link rule found');
+    assert.match(rule, /grid-column:\s*2;/, 'second column of the band grid at desktop width');
     assert.match(rule, /display:\s*inline-flex;/);
     assert.match(rule, /align-items:\s*center;/);
     assert.match(rule, /min-height:\s*44px;/);
+    const tablet = (/@media \(max-width: 1024px\) \{[\s\S]*?\n    \}\n/.exec(pageStyle) || [''])[0];
+    assert.match(tablet, /\.ww-band-link\s*\{\s*grid-column:\s*1;\s*\}/, 'one column at 1024 and down, so the link takes its own row');
   });
 
-  it('the <=600px hero override zeroes .hero-install-row\'s gap, giving back the 20px the taller CTA link added, so the fold measurement still holds', () => {
-    const mobileBlock = (/@media \(max-width: 600px\) \{[\s\S]*?\n {4}\}\n/.exec(html) || [''])[0];
-    assert.ok(mobileBlock.includes('#install.hero-install'), 'sanity: this is the right mobile hero block');
-    assert.match(mobileBlock, /#hero \.hero-install-row\s*\{\s*gap:\s*0;\s*\}/, 'the row gap must be zeroed at this tier to compensate for the taller CTA link');
+  it('the hero link is no longer wrapped in a row of its own: no .hero-install-row or .hero-ctas wrapper, the link follows the #install block in the same column', () => {
+    assert.ok(!/hero-install-row/.test(html), 'no .hero-install-row anywhere in index.html (markup or style)');
+    assert.ok(!/class="hero-ctas"/.test(html), 'no .hero-ctas wrapper');
+    // Positive control: the link and the install block are both still there, in that order, adjacent.
+    assert.match(html, /<p class="hero-setup-note">Extraction reads your finished sessions[^<]*<\/p>\s*<\/div>\s*<a href="\/how-it-works" id="hero-cta-secondary" class="hero-cta-link">/);
   });
 });
 

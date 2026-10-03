@@ -211,7 +211,10 @@ describe('server.js analytics wiring', () => {
     // element margin-bottom for the legal pages' subsection headers, which
     // had no rule at all before) ahead of that same call, pushing it to
     // ~16693 chars in -- widened again.
-    const h = sliceAt('function serveLegalPage(', 17000);
+    // Design rebuild: the legal template's own <style> block now carries the
+    // dark hero band, the reading column and the table, list and code rules,
+    // pushing the call to ~19000 chars in -- widened again.
+    const h = sliceAt('function serveLegalPage(', 22000);
     assert.ok(h.includes('injectAnalytics(html, ANALYTICS_DOMAIN)'));
   });
 });

@@ -135,7 +135,9 @@ describe('STATUS-VERSION: GET /status carries the live package version, never th
     const body = stripComments(await res.text());
     assert.ok(!/<h2\b/.test(body), 'no <h2> elements remain on /status');
     assert.equal((body.match(/class="component-label"/g) || []).length, 4, 'four component labels present');
-    assert.match(body, /\.page-title\s*\{[^}]*font-size:\s*clamp\(38px,\s*5vw,\s*56px\)/, 'h1 uses the page-hero spec size');
+    // Design system pass: the h1 takes the shared display size (var(--h1)); the page no longer sets its own fixed clamp.
+    assert.match(body, /<h1 class="page-title">System Status<\/h1>/, 'positive control: the page h1 is present');
+    assert.doesNotMatch(body, /\.page-title\s*\{[^}]*font-size:\s*clamp\(38px,\s*5vw,\s*56px\)/, 'h1 no longer carries the old page-local clamp');
   });
 });
 

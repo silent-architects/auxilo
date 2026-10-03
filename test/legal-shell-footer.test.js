@@ -174,22 +174,22 @@ describe('LEGAL-SHELL-FOOTER: serveLegalPage routes carry /pricing\'s footer byt
         `${route}'s footer diverges from /pricing's after whitespace normalization`);
     });
 
-    it(`GET ${route} keeps its "← Back to Auxilo" link above the footer`, async (t) => {
+    it(`GET ${route} keeps its "Back to Auxilo" link above the footer`, async (t) => {
       if (bootSkipReason) { t.skip(bootSkipReason); return; }
       const res = await fetch(`${baseUrl}${route}`);
       assert.equal(res.status, 200);
       const body = await res.text();
-      assert.ok(body.includes('class="legal-back">← Back to Auxilo</a>'),
-        `${route} must keep the existing "← Back to Auxilo" link`);
+      assert.ok(body.includes('class="legal-back">Back to Auxilo</a>'),
+        `${route} must keep the existing "Back to Auxilo" link (the arrow glyph came off by the owner's ruling of 2026-10-02)`);
       const backIndex = body.indexOf('legal-back');
       const footerIndex = body.indexOf('<footer>');
       assert.ok(backIndex !== -1 && footerIndex !== -1 && backIndex < footerIndex,
-        `${route}'s "← Back to Auxilo" link must appear before the footer`);
+        `${route}'s "Back to Auxilo" link must appear before the footer`);
     });
   }
 });
 
-describe('LEGAL-SHELL-FOOTER: --svg-label / demand-exchange override structural pin', () => {
+describe('LEGAL-SHELL-FOOTER: --svg-label token / demand-exchange drawing structural pin', () => {
   it('public/styles.css sets --svg-label to 15px', () => {
     const m = STYLES_CSS.match(/--svg-label:\s*([0-9.]+px);/);
     assert.ok(m, '--svg-label must be declared in public/styles.css :root');
@@ -197,21 +197,20 @@ describe('LEGAL-SHELL-FOOTER: --svg-label / demand-exchange override structural 
       `--svg-label is ${m[1]}, expected 15px (Wave C.3b: 15 is the smallest whole value clearing the 12px floor on all three drawings at 375px, tightest being the fork at 15 * 0.8156 = 12.23)`);
   });
 
-  it('for-agents.html\'s demand exchange <g> overrides font-size to 14, with a comment naming the measurement', () => {
-    const gIndex = FOR_AGENTS_HTML.indexOf('font-size="14"');
-    assert.notEqual(gIndex, -1,
-      'for-agents.html must carry an explicit font-size="14" override on the demand exchange <g> (its widest label overflows its rect at the sitewide 15px token)');
-    // The override must sit on the demand exchange's own <g>, not some
-    // unrelated element that happens to share the literal.
-    const gTagStart = FOR_AGENTS_HTML.lastIndexOf('<g ', gIndex);
-    const gTag = FOR_AGENTS_HTML.slice(gTagStart, gIndex + 'font-size="14"'.length);
-    assert.match(gTag, /text-anchor="middle"/, 'the font-size="14" override must be on the demand exchange label <g>');
-
-    // A comment naming the measurement must precede the override (not a
-    // bare magic-number override with no rationale on record).
-    const precedingSlice = FOR_AGENTS_HTML.slice(Math.max(0, gTagStart - 600), gTagStart);
-    assert.match(precedingSlice, /<!--[\s\S]*measured[\s\S]*?-->/i,
-      'the font-size="14" override must be preceded by a comment naming the measurement behind it');
-    assert.match(precedingSlice, /364/, 'the preceding comment should name the rect width the measurement was taken against');
+  // Design rebuild: the /for-agents exchange is no longer an inline SVG with a text <g> that needed a
+  // font-size override. It is built from the shared drawing panels, and its three labels are real text
+  // inside a role="img" wrapper that carries the same accessible name the SVG's <title> carried.
+  it('for-agents.html\'s exchange drawing carries its accessible name and its three labels as real text, with no SVG text override left', () => {
+    const open = '<div class="hx" role="img" aria-label="How your agent gets a learning another agent published">';
+    const at = FOR_AGENTS_HTML.indexOf(open);
+    assert.notEqual(at, -1, 'the exchange wrapper carries role="img" and the ruled accessible name');
+    const drawing = FOR_AGENTS_HTML.slice(at, FOR_AGENTS_HTML.indexOf('</section>', at));
+    for (const label of ['Another agent already solved it', 'Your agent asks Auxilo', 'Your agent sees a preview free and pays to unlock it']) {
+      assert.ok(drawing.includes(`</svg>${label}</div>`), `the drawing carries "${label}" as text beside its node`);
+    }
+    assert.ok(!/<text\b/.test(FOR_AGENTS_HTML), 'no SVG <text> label remains on the page');
+    assert.ok(!FOR_AGENTS_HTML.includes('font-size="14"'), 'the old font-size="14" SVG override is gone with the SVG');
+    // Positive control: a node glyph and a real tool name are in the same drawing, so the slice above is the drawing.
+    assert.ok(drawing.includes('auxilo_knowledge') && drawing.includes('auxilo_unlock'), 'positive control: the drawing holds the real tool names');
   });
 });

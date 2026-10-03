@@ -18,15 +18,22 @@
  * `npx auxilo setup` line in the welcome email) keeps its monospace family,
  * untouched.
  *
+ * Design refresh: the heading line (and only that one element per email)
+ * now names the email-safe serif stack, the stand-in for the site's display
+ * serif, because mail clients cannot load web fonts. Every other element
+ * stays on the sans stack, and the setup-command line stays monospace.
+ *
  * Two tiers:
  *   1. Static (string-level): every font-family declaration in each of the
- *      five rendered HTML bodies is exactly the sans stack or exactly the
- *      monospace stack -- nothing else, i.e. no serif name (or bare generic
- *      "serif") can appear.
+ *      five rendered HTML bodies is exactly the sans stack, exactly the
+ *      monospace stack, or exactly the heading serif stack, and the serif
+ *      stack appears exactly once per body (on the heading) -- no other serif
+ *      name (or bare generic "serif") can appear.
  *   2. Rendered (Playwright, network fully blocked via page.route abort on
  *      every request): for every element carrying its own visible text, the
  *      computed font-family starts with the sans stack's first token,
- *      except the one monospace command line. A positive control (family
+ *      except the one monospace command line and the one heading, which
+ *      starts with the serif stack's first token. A positive control (family
  *      stripped from a copy of the content cell) proves the rendered check
  *      can actually fail.
  *
@@ -44,7 +51,11 @@ const email = require('../lib/email.js');
 
 const FONT_STACK = email.FONT_STACK;
 const MONO_STACK = "ui-monospace,'JetBrains Mono',monospace";
+// The heading's email-safe serif stack, pinned literally (not read from the
+// module) so a change to the look has to change this line on purpose.
+const HEADING_STACK = "Georgia,'Times New Roman',Times,serif";
 const SANS_FIRST_TOKEN = '-apple-system';
+const HEADING_FIRST_TOKEN = 'Georgia';
 const SAMPLE_URL = 'https://auxilo.io/auth/verify?token=SAMPLE';
 const PREFS_URL = 'https://auxilo.io/account/email-prefs/unsubscribe?token=abc123';
 
@@ -116,29 +127,32 @@ describe('FIX-EMAIL-FONT: static -- every font-family declaration is the sans st
     for (const [name, html] of Object.entries(bodies)) {
       assert.match(html, new RegExp(`<body style="[^"]*font-family:${escapeRe(FONT_STACK)}[^"]*">`), `${name}: <body> carries the sans stack`);
       assert.match(html, new RegExp(`<td style="padding:40px 32px;font-family:${escapeRe(FONT_STACK)};">`), `${name}: content cell carries the sans stack`);
-      assert.match(html, new RegExp(`<p style="font-family:${escapeRe(FONT_STACK)};font-size:24px[^"]*">`), `${name}: heading <p> carries the sans stack`);
+      assert.match(html, new RegExp(`<p style="font-family:${escapeRe(HEADING_STACK)};font-size:28px;font-weight:400;color:#0A0A0A;line-height:1\\.15;letter-spacing:-0\\.01em;[^"]*">`), `${name}: heading <p> carries the serif stack, 28px, weight 400, line-height 1.15`);
       assert.match(html, new RegExp(`<td style="font-family:${escapeRe(FONT_STACK)};font-size:12px;color:[^;]+;line-height:1\\.6;">`), `${name}: footer cell carries the sans stack`);
     }
   });
 
-  it('no font-family declaration anywhere in any of the five bodies names a serif face (every declared value is exactly the sans stack or exactly the mono stack)', async () => {
+  it('no font-family declaration in any of the five bodies names a serif face other than the one heading (every declared value is exactly the sans stack, the mono stack, or the heading serif stack, and the serif stack appears once)', async () => {
     const bodies = await getAllFiveBodies();
     for (const [name, html] of Object.entries(bodies)) {
       const declarations = [...html.matchAll(/font-family:([^;"]+)[;"]/g)].map((m) => m[1]);
       assert.ok(declarations.length > 0, `${name}: sanity -- at least one font-family declaration exists to check`);
       for (const value of declarations) {
         assert.ok(
-          value === FONT_STACK || value === MONO_STACK,
-          `${name}: unexpected font-family value "${value}" -- must be exactly the sans stack or exactly the mono stack, never a serif name or a bare generic like "serif"`
+          value === FONT_STACK || value === MONO_STACK || value === HEADING_STACK,
+          `${name}: unexpected font-family value "${value}" -- must be exactly the sans stack, the mono stack, or the heading serif stack, never another serif name or a bare generic like "serif"`
         );
       }
+      // Positive control: the serif stack is present, on exactly one element
+      // (the heading), so the allowance above cannot spread to body text.
+      assert.equal(declarations.filter((v) => v === HEADING_STACK).length, 1, `${name}: the heading serif stack is declared exactly once`);
     }
   });
 });
 
 // ─── Tier 2: rendered, Playwright, network fully blocked ──────────────────
 
-describe('FIX-EMAIL-FONT: rendered -- computed font-family is the sans stack for every visible text element, except the one mono command line', { timeout: 120_000 }, () => {
+describe('FIX-EMAIL-FONT: rendered -- computed font-family is the sans stack for every visible text element, except the one mono command line and the one serif heading', { timeout: 120_000 }, () => {
   async function computedFontReport(html) {
     const { chromium } = require('playwright');
     const browser = await chromium.launch();
@@ -157,7 +171,8 @@ describe('FIX-EMAIL-FONT: rendered -- computed font-family is the sans stack for
           if (!text) return;
           const cs = getComputedStyle(el);
           if (cs.display === 'none' || cs.visibility === 'hidden') return; // not visible text
-          out.push({ tag: el.tagName, text: text.slice(0, 40), fontFamily: cs.fontFamily });
+          // The heading line is the first <p> in every email.
+          out.push({ tag: el.tagName, text: text.slice(0, 40), fontFamily: cs.fontFamily, isHeading: el === document.querySelector('body p') });
         });
         return out;
       });
@@ -168,15 +183,21 @@ describe('FIX-EMAIL-FONT: rendered -- computed font-family is the sans stack for
     }
   }
 
-  it('every rendered email: all visible-text elements compute the sans stack, except the monospace setup-command line', async (t) => {
+  it('every rendered email: all visible-text elements compute the sans stack, except the monospace setup-command line and the serif heading', async (t) => {
     if (!isPlaywrightAvailable()) { t.skip('playwright not resolvable'); return; }
     const bodies = await getAllFiveBodies();
     for (const [name, html] of Object.entries(bodies)) {
       const report = await computedFontReport(html);
       assert.ok(report.length > 0, `${name}: sanity -- at least one visible-text element found`);
+      assert.equal(report.filter((el) => el.isHeading).length, 1, `${name}: sanity -- exactly one heading element found`);
       for (const el of report) {
         const isMonoException = el.text === 'npx auxilo setup';
-        if (isMonoException) {
+        if (el.isHeading) {
+          assert.ok(
+            el.fontFamily.startsWith(HEADING_FIRST_TOKEN),
+            `${name}: the heading "${el.text}" computed font-family "${el.fontFamily}" must start with "${HEADING_FIRST_TOKEN}" (the heading serif stack)`
+          );
+        } else if (isMonoException) {
           assert.ok(el.fontFamily.toLowerCase().includes('monospace'), `${name}: the setup-command line must compute a monospace family, got "${el.fontFamily}"`);
         } else {
           assert.ok(
@@ -215,7 +236,7 @@ describe('FIX-EMAIL-FONT: rendered -- computed font-family is the sans stack for
     assert.doesNotMatch(stripped, /<body[^>]*font-family/, 'sanity: <body> no longer declares a font-family');
 
     const report = await computedFontReport(stripped);
-    const failures = report.filter((el) => el.text !== 'npx auxilo setup' && !el.fontFamily.startsWith(SANS_FIRST_TOKEN));
+    const failures = report.filter((el) => !el.isHeading && el.text !== 'npx auxilo setup' && !el.fontFamily.startsWith(SANS_FIRST_TOKEN));
     assert.ok(failures.length > 0, 'positive control: stripping the content cell\'s font-family must produce at least one element whose computed font-family is no longer the sans stack');
   });
 });

@@ -122,7 +122,9 @@ function measureNavClearance() {
 
   const root = document.querySelector('main') || document.body;
   const skipTags = new Set(['SCRIPT', 'STYLE', 'TEMPLATE', 'NOSCRIPT', 'NAV', 'FOOTER']);
-  const topBlocks = Array.from(root.children).filter((el) => isVisible(el) && !skipTags.has(el.tagName));
+  // The skip link is the first element in body on every page. On the legal template (no <main>; its wrapper
+  // carries role="main") the blocks are body's children, and a skip link is not content under the navigation.
+  const topBlocks = Array.from(root.children).filter((el) => isVisible(el) && !skipTags.has(el.tagName) && !el.classList.contains('skip-to-content'));
 
   const perBlock = topBlocks.map((el) => ({ selector: shortSel(el), ...topOfLeafContent(el) }));
   const minTop = perBlock.length

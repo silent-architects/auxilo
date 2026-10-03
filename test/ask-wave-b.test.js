@@ -196,7 +196,7 @@ describe('ASK wave B — /for-builders mid-page gold demotion', () => {
 
   it('the copy button targeting footer-setup-code reads "Copy the Setup Command" (SITE-PM label-follows-target ruling; micro-1)', () => {
     const relabelled =
-      '<button class="copy-btn" id="copy-footer-setup" onclick="copyCode(\'footer-setup-code\', \'copy-footer-setup\')" aria-label="Copy command">Copy the Setup Command</button>';
+      '<button class="copy-btn" id="copy-footer-setup" onclick="copyCode(\'footer-setup-code\', \'copy-footer-setup\')" aria-label="Copy the Setup Command">Copy the Setup Command</button>';
     assert.equal(countOccurrences(forBuildersSrc, relabelled), 1);
   });
 

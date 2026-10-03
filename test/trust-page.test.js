@@ -337,12 +337,12 @@ describe('Trust page: route, redirects, head tags, h1, forbidden strings', { tim
     // test/launch-wave-for-builders.test.js for the positive control on the
     // /works-with link and the page's Codex-free state.
     const captures = [
-      [AGENTS_HTML, 'Background extraction runs on <strong style="color:var(--slate-text)">Claude Code</strong>, <strong style="color:var(--slate-text)">Codex</strong>, and the other clients with a supported extraction hook. Best-effort capture covers several more, and the <a href="/legal/supported-clients">supported clients page</a> maps every tier.', 1],
-      [HOW_IT_WORKS_HTML, '<strong style="color:var(--ivory)">Claude Code</strong>, <strong style="color:var(--ivory)">Codex</strong>, and the other hook-capable clients run it reliably, best-effort capture reaches several more clients, and the <a href="/legal/supported-clients">supported clients page</a> maps every tier.', 1],
+      [AGENTS_HTML, 'Background extraction runs on <strong>Claude Code</strong>, <strong>Codex</strong>, and the other clients with a supported extraction hook. Best-effort capture covers several more, and the <a href="/legal/supported-clients">supported clients page</a> maps every tier.', 1],
+      [HOW_IT_WORKS_HTML, '<strong>Claude Code</strong>, <strong>Codex</strong>, and the other hook-capable clients run it reliably, best-effort capture reaches several more clients, and the <a href="/legal/supported-clients">supported clients page</a> maps every tier.', 1],
       [HOW_IT_WORKS_HTML, 'Auxilo captures them. On Claude Code, Codex, and the other supported-tier clients, a local runner reads each finished session in the background and identifies specific, actionable operational knowledge. This happens automatically, with no work from you.', 1],
       [AGENTS_HTML, 'Background extraction, which turns finished sessions into learnings, runs on Claude Code, Codex, and the other clients with a supported extraction hook.', 2],
       [AGENTS_HTML, 'Background extraction, the hands-free contribution engine, runs on Claude Code, Codex, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue.', 1],
-      [AGENTS_HTML, 'Background extraction, the hands-free contribution engine, runs on <strong style="color:var(--ivory)">Claude Code</strong>, <strong style="color:var(--ivory)">Codex</strong>, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue.', 1],
+      [AGENTS_HTML, 'Background extraction, the hands-free contribution engine, runs on <strong>Claude Code</strong>, <strong>Codex</strong>, and the other clients with a supported extraction hook, where a local runner reads finished sessions and submits learnings to your private review queue.', 1],
     ];
     for (const [html, literal, expected] of captures) {
       assert.equal(countLiteral(html, literal), expected, `capture claim preserved exactly ${expected} time(s): ${stripHtml(literal).slice(0, 72)}...`);
@@ -471,7 +471,7 @@ describe('Trust page: route, redirects, head tags, h1, forbidden strings', { tim
   });
 
   it('§1b immediately follows §1 in DOM order (ship-rev header rider)', () => {
-    const sectionIds = [...TRUST_HTML.matchAll(/<section aria-labelledby="([^"]+)">/g)].map((m) => m[1]);
+    const sectionIds = [...TRUST_HTML.matchAll(/<section aria-labelledby="([^"]+)"(?: class="[^"]*")?>/g)].map((m) => m[1]);
     const s1Index = sectionIds.indexOf('what-auxilo-is-heading');
     assert.ok(s1Index >= 0, '§1 section present');
     assert.equal(sectionIds[s1Index + 1], 'earnings-heading', '§1b is the very next <section> after §1');
@@ -485,6 +485,39 @@ describe('Trust page: route, redirects, head tags, h1, forbidden strings', { tim
     // below for the live-rendered assertion.
     assert.ok(!TRUST_HTML.includes("Of the catalog's"), 'the State B magnitude sentence template never appears in the static file (it is server-injected only)');
     assert.ok(!TRUST_HTML.includes('adversarial submissions are expected'), 'the cut adversarial sentence (§9 item 3) stays cut');
+  });
+
+  it('the page is a reading document: every section sits in the shared reading frame (.trust-read), none is heading-left, and the table is rows in the same frame', () => {
+    const body = TRUST_HTML.slice(TRUST_HTML.indexOf('<main id="main">'), TRUST_HTML.indexOf('</main>'));
+    assert.equal((body.match(/<div class="container trust-read">/g) || []).length, 11, 'eleven sections after the hero are in the frame');
+    assert.ok(!/aside-list/.test(body), 'no section is laid heading-left');
+    // positive control: the hero still carries the shared one-column hero and the frame rule reaches it
+    assert.ok(body.includes('<div class="container hero-one">'));
+    assert.match(TRUST_HTML, /section\[aria-labelledby="page-hero-heading"\] \.hero-one > \*,\s*\.trust-read > \*\s*\{[^}]*--read-w:\s*calc\(720px - 2 \* var\(--gutter-base\)\)/, 'the page applies the shared reading-frame formula to its hero and its sections');
+    // the table of what leaves the machine keeps its eleven rows and is not drawn as a card
+    assert.equal((body.match(/<tr>\s*<td>/g) || []).length, 11, 'eleven rows');
+    assert.doesNotMatch(TRUST_HTML, /\.trust-table-wrap\s*\{[^}]*(background|border-radius|padding)/, 'the table wrapper is not a card');
+  });
+
+  // Round 5: a reading document takes one ground. The hero is dark and every section after it is paper, so no
+  // section carries a ground class, and the page block holds them to the reading rhythm (half of 64, 48 and 32
+  // above and below, the hero keeping the shared section rhythm). The measured gap is pinned in
+  // test/spacing-frame.test.js; this pins the source of it.
+  it('the sections after the hero are one paper ground at the reading rhythm, and the hero keeps its dark ground and the full rhythm', () => {
+    const main = TRUST_HTML.slice(TRUST_HTML.indexOf('<main id="main">'), TRUST_HTML.indexOf('</main>'));
+    const sections = [...main.matchAll(/<section aria-labelledby="([^"]+)"(?: class="([^"]*)")?>/g)].map((m) => ({ id: m[1], cls: m[2] || '' }));
+    assert.equal(sections.length, 12, 'positive control: the hero and eleven sections');
+    assert.equal(sections[0].id, 'page-hero-heading');
+    assert.equal(sections[0].cls, 'on-dark', 'positive control: the hero is the dark ground, so a ground class is visible to this test');
+    for (const s of sections.slice(1)) assert.equal(s.cls, '', `${s.id}: paper, with no ground class`);
+    assert.ok(!/on-tint/.test(main), 'no tint ground remains in the body');
+    const css = TRUST_HTML.slice(TRUST_HTML.indexOf('<style>'), TRUST_HTML.indexOf('</style>'));
+    const reading = 'main > section:not\\(\\[aria-labelledby="page-hero-heading"\\]\\)';
+    const pads = (token) => new RegExp(`${reading}\\s*\\{\\s*padding-top:\\s*var\\(--${token}\\);\\s*padding-bottom:\\s*var\\(--${token}\\);\\s*\\}`);
+    assert.match(css, pads('space-card'), 'half of 64 above and below at 1280');
+    assert.match(css, new RegExp(`@media \\(max-width: 900px\\)\\s*\\{\\s*${reading}\\s*\\{\\s*padding-top:\\s*var\\(--space-copy\\);\\s*padding-bottom:\\s*var\\(--space-copy\\);`), 'half of 48 at 768');
+    assert.match(css, new RegExp(`@media \\(max-width: 600px\\)\\s*\\{\\s*${reading}\\s*\\{\\s*padding-top:\\s*var\\(--space-body\\);\\s*padding-bottom:\\s*var\\(--space-body\\);`), 'half of 32 at 375');
+    assert.doesNotMatch(css, /section\[aria-labelledby="page-hero-heading"\]\s*\{[^}]*padding/, 'the hero keeps the shared section rhythm');
   });
 });
 

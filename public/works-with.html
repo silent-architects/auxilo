@@ -18,219 +18,190 @@
   <link rel="canonical" href="https://auxilo.io/works-with" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <meta name="theme-color" content="#0A0A0A" />
-  <link rel="preload" href="/fonts/ArchivoVariable.1b4d984f.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/ArchivoVariable.cfd841fc.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/NewsreaderDisplay300.a07d3c5c.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PlexMono400.0698749e.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/styles.css?v=eba132a8" />
+  <link rel="stylesheet" href="/styles.css?v=f11e9131" />
   <style>
-    /* Page-scoped: the works-with grid system. Sized to the AD build sheet
-       (AD-CLIENTS-VISUAL-SHEET-2026-09-06.md §2), strings rev 3 (BUILD FROM
-       THIS BLOCK). Container 1057 with 40px side gutters (content 977) on
-       desktop; 375 with 20px gutters (content 335) on mobile. Row heights
-       are min-heights, not fixed -- a cell whose matrix Notes text is long
-       (OpenClaw, the three sweep clients) grows the row rather than
-       clipping, which is a deliberate adaptation of the sheet's fixed
-       dimensions (a note line was not sized in the sheet's own cell boxes).
+    /* Works with: a dark first screen, then the client cards on paper, then the key on tint.
+       Grounds, type, the hero layout and the heading-left list live in the shared sheet.
+       This block holds only the client grid and its cards. */
 
-       SITE-PM ruling (2026-09-06): the sheet's three tiers are ONE flat
-       UL of clients now, not three ARIA lists under visually-hidden H2
-       tier headings -- a screen reader hears a single list of clients, not
-       three interrupted ones. The visual size-tiering survives as a class
-       per LI (ww-size-large/medium/small) driving a single flex-wrap
-       layout: item widths + the shared gap are sized so each same-size run
-       (large first, then medium, then small, matching DOM order) wraps at
-       the sheet's original per-row counts (4 / 5 / 6 desktop, 2 / 2 / 3
-       mobile) without a grid boundary per tier. The extra vertical
-       breathing room the sheet gave between tiers (48px desktop / 36px
-       mobile, vs. the 32px / 24px row gap within a tier) is restored with a
-       margin-top bump on the first item of each new tier (nth-child(5),
-       nth-child(11) -- 4 large then 6 medium then 9 small). */
-    /* SPACING-0927 (BUILD-BRIEF-SPACING.md B-6): no distinct hero wrapper on
-       this page -- .ww-main plays a section's role (var(--section-pad)
-       gives the ruled 120/80/64 rhythm, top and bottom, and nav clearance
-       is `main`'s own margin-top in styles.css, sitewide -- .ww-main IS
-       that <main>). Its own horizontal padding stays the section-pad value
-       (24/20/16) -- the same section+container centering math every other
-       page uses: at >=1148px .ww-wrap's own auto-margin dominates (90px
-       total); below it, .ww-main's own padding alone is the gutter (20/16).
-       .ww-wrap's max-width was a bespoke 1057 (151.5px gutter at 1280
-       against the ruled 90); var(--max-w) (1100, the same token every body
-       section uses) reproduces 90/20/16, with .ww-wrap itself carrying no
-       padding of its own (like any section's .container). */
-    .ww-main { padding: var(--section-pad); }
-    .ww-wrap { max-width: var(--max-w); margin: 0 auto; }
-
-    .ww-h1 {
-      font-family: var(--sans);
-      font-size: 56px;
-      font-weight: 600;
-      letter-spacing: -0.02em;
-      line-height: 1.08;
-      color: var(--ivory);
-      max-width: 900px;
-      /* SPACING-0927 R2-2a: heading to the element beneath it is 16px,
-         named by the sheet (was 20). */
-      margin-bottom: var(--space-body);
-      /* FIX-UNIT-2B H4: "Run" rendered alone on its own line at 375 and
-         1280 (measured). text-wrap: balance distributes the wrap evenly
-         instead. */
-      text-wrap: balance;
-    }
-
-    /* SPACING-0927 R2-2b: 72 rounds down to 64. */
-    .ww-honest {
-      font-family: var(--sans);
-      font-weight: 400;
-      font-size: 20px;
-      line-height: 1.6;
-      color: var(--slate);
-      max-width: 62ch;
-      margin: 32px 0 var(--space-wide);
-    }
-
+    /* ── The client cards: one list, cards by size class, large first ──
+       Twelve columns: large spans three (four across), medium and small span four
+       (three across). Cards in one row stretch to the same height. Every card takes
+       the same 32 padding. The size classes differ only in their columns, the size of
+       the mark and the size of the name. */
     .ww-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 32px 24px;
-      margin: 0 0 48px;
-      padding: 0;
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: var(--space-copy);
       list-style: none;
     }
+    .ww-size-large { grid-column: span 3; --ww-mark: 40px; }
+    .ww-size-medium { grid-column: span 4; --ww-mark: 32px; }
+    .ww-size-small { grid-column: span 4; --ww-mark: 28px; }
 
-    /* Tier boundaries within the one flat list: 4 large (index 1-4), then
-       6 medium (5-10), then 9 small (11-19) -- see the ww-size-* widths
-       below. The sheet's extra between-tier breathing room is restored
-       here rather than via a second container. */
-    .ww-list li:nth-child(5),
-    .ww-list li:nth-child(11) { margin-top: 16px; }
-
+    /* The name starts every card at the top left. The mark, where a client has one, sits in
+       the card's top right corner on the same first row. That row is as tall as the mark in
+       every card, so a card without a mark keeps its label on the same line as a card with one. */
     .ww-cell {
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-start;
-      gap: 8px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-rows: minmax(var(--ww-mark), auto);
+      align-content: start;
+      row-gap: var(--space-tight);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r-stage);
+      padding: var(--space-card);
     }
-    .ww-size-large  { flex: 0 0 226px; min-height: 120px; }
-    .ww-size-medium { flex: 0 0 176px; min-height: 96px; }
-    .ww-size-small  { flex: 0 0 142px; min-height: 76px; }
-
-    .ww-logo-box {
-      display: flex;
-      align-items: flex-end;
-      color: var(--ivory);
+    .ww-cell > * { grid-column: 1 / -1; }
+    .ww-cell > .ww-client-name {
+      grid-column: 1;
+      grid-row: 1;
+      align-self: start;
     }
-    /* LOGOS-INVISIBLE: max-height became height. A CSS mask needs its box
-       to carry a real height (mask-size:contain scales the mask image to
-       fit whatever box it's given); the old img relied on the replaced-
-       element auto-intrinsic-size behavior a max-height cap can lean on,
-       which a masked span has no equivalent of. max-width is left as-is:
-       .ww-logo-box already stretches (flex default align-items) to fill
-       its .ww-cell, so max-width alone already resolves to a real used
-       width -- no width->max-width swap needed. */
-    .ww-size-large .ww-logo-box  { height: 48px; max-width: 135.6px; }
-    .ww-size-medium .ww-logo-box { height: 34.56px; max-width: 105.6px; }
-    .ww-size-small .ww-logo-box  { height: 24.32px; max-width: 90.88px; }
-    /* LOGOS-INVISIBLE (public/styles.css): .ww-logo carries the shared CSS
-       mask that renders these marks in ivory -- see the "Works With client
-       marks" block at the end of styles.css for the rule + why it lives
-       there instead of this page-scoped block. */
+    .ww-cell > .ww-logo-box {
+      grid-column: 2;
+      grid-row: 1;
+      width: var(--ww-mark);
+      height: var(--ww-mark);
+      margin-left: var(--space-body);
+    }
+    /* .ww-logo (shared sheet) paints each mark through its SVG mask in the ink of the ground.
+       Only its position changes here: the mark sits against the card's right edge. */
+    .ww-logo-box .ww-logo {
+      -webkit-mask-position: right center;
+      mask-position: right center;
+    }
 
     .ww-client-name {
       font-family: var(--sans);
       font-weight: 500;
-      font-size: 17px;
-      color: var(--ivory);
+      font-size: 19px;
+      line-height: 1.3;
+      letter-spacing: -0.01em;
+      color: var(--fg-1);
     }
-
     .ww-client-label {
       font-family: var(--mono);
       font-weight: 400;
-      font-size: 12px;
-      letter-spacing: 0.08em;
-      color: rgba(250, 250, 248, 0.6); /* --ivory at 60% (navy-equivalent muted tone on this dark theme) */
-    }
-
-    .ww-client-note {
-      font-family: var(--mono);
-      font-weight: 400;
-      font-size: 11px;
+      font-size: 13px;
       line-height: 1.5;
-      color: var(--slate);
+      color: var(--fg-2);
+    }
+    .ww-client-note {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--fg-3);
+    }
+    .ww-client-note:empty { display: none; }
+
+    .ww-size-small .ww-client-name { font-size: 16px; }
+    .ww-size-small .ww-client-label,
+    .ww-size-small .ww-client-note { font-size: 12px; }
+
+    /* ── The key: the lead sentence in the left third, the definitions as rows on the right ── */
+    /* The lead acts as the section heading, so it is set like an h2 at the small end of the
+       scale: the serif at 30, whatever its tag. */
+    .ww-key-lead {
+      font-family: var(--serif);
+      font-size: 30px;
+      font-weight: 300;
+      line-height: 1.2;
+      letter-spacing: -0.016em;
+      color: var(--fg-1);
+      text-wrap: balance;
+      font-synthesis-weight: none;
     }
 
-    .ww-key {
-      font-family: var(--sans);
-      font-size: 15px;
-      line-height: 1.7;
-      color: var(--slate);
-      max-width: 70ch;
-      margin: 8px 0 32px;
+    .ww-key { max-width: 62ch; }
+    .ww-key .ww-key-row {
+      padding: var(--space-body) 0;
+      border-top: 1px solid var(--line);
     }
-    .ww-key dt { font-weight: 600; color: var(--ivory); display: inline; }
-    .ww-key dd { display: inline; margin: 0; }
-    .ww-key .ww-key-lead { display: block; margin-bottom: 12px; color: var(--ivory); }
-    /* SPACING-0927 R2-2a: gap between list items is 16px, named by the sheet (was 6). */
-    .ww-key .ww-key-row { display: block; margin: 0 0 var(--space-body); }
+    .ww-key .ww-key-row:last-child { border-bottom: 1px solid var(--line); }
+    .ww-key dt {
+      display: inline;
+      font-weight: 500;
+      color: var(--fg-1);
+    }
+    .ww-key dd {
+      display: inline;
+      margin: 0;
+    }
 
+    /* The basis line, the matrix link and the trademark notice, small, under the key */
+    .ww-foot {
+      display: grid;
+      gap: var(--space-body);
+      margin-top: var(--space-card);
+    }
     .ww-basis {
-      font-family: var(--mono);
-      font-size: 12px;
-      letter-spacing: 0.04em;
-      color: var(--slate);
-      margin: 0 0 24px;
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--fg-3);
     }
-
     .ww-matrix-link {
-      color: var(--aurum);
-      text-decoration: none;
-      font-family: var(--sans);
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
       font-size: 15px;
       font-weight: 500;
     }
-    .ww-matrix-link:hover { text-decoration: underline; }
-
     .ww-trademark {
-      font-family: var(--sans);
-      font-size: 12px;
+      font-size: 13px;
       line-height: 1.6;
-      color: var(--slate);
+      color: var(--fg-3);
       max-width: 70ch;
-      /* SPACING-0927 R2-2b: 56 ties 48/64 -- tie goes to the larger value. */
-      margin-top: var(--space-wide);
-      padding-top: 24px;
-      border-top: 1px solid var(--border, rgba(229,229,227,0.08));
-    }
-    .ww-trademark a { color: var(--slate); }
-
-    @media (max-width: 640px) {
-      /* SPACING-0927: .ww-main's own padding is var(--section-pad) at every
-         width (base rule above, scales at the shared 600px breakpoint, not
-         this component's own 640px grid breakpoint); .ww-wrap carries no
-         padding of its own at any width (matching every section+container
-         pair) -- neither needs an override here. */
-      .ww-h1 { font-size: 40px; }
-      .ww-honest { font-size: 17px; margin: 24px 0 48px; } /* already on-scale */
-
-      /* Single shared column-gap (12px) rather than the sheet's per-tier
-         16px/12px split -- a single flex container has one gap, and 12px
-         is the value both the 2-column (159px) and 3-column (103px) runs
-         need to keep their sheet-specified per-row counts at 335px content
-         width. Row gap 24px matches the sheet for every tier. */
-      /* SPACING-0927 R2-2b: column-gap 12 ties 8/16 (tie->larger); margin-bottom 36 rounds down to 32. */
-      .ww-list { gap: 24px var(--space-body); margin-bottom: var(--space-card); }
-      /* SPACING-0927 R2-2b: 12 ties 8/16 -- tie goes to the larger value. */
-      .ww-list li:nth-child(5),
-      .ww-list li:nth-child(11) { margin-top: var(--space-body); }
-
-      .ww-size-large  { flex-basis: 159px; min-height: 104px; }
-      .ww-size-medium { flex-basis: 159px; min-height: 88px; }
-      .ww-size-small  { flex-basis: 103px; min-height: 68px; }
     }
 
-    /* MOBILE-HEADER-OFFSET (SUPERSEDED by SPACING-0927): nav clearance is
-       now `main`'s own margin-top (styles.css, sitewide) -- .ww-main is
-       this page's main landmark, so it already carries that margin. Its
-       own padding-top is the clean rhythm value (var(--section-pad),
-       above), not the nav's height. */
+    /* ── 1024 and down: two across, the key stacks under its lead ── */
+    @media (max-width: 1024px) {
+      .ww-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .ww-size-large,
+      .ww-size-medium,
+      .ww-size-small { grid-column: auto; }
+      .ww-key-lead { margin-bottom: var(--space-block); }
+    }
+
+    /* ── 600 and down: one across ── */
+    @media (max-width: 600px) {
+      .ww-list { grid-template-columns: minmax(0, 1fr); }
+    }
+
+    /* ── 480 and down: every card compact ──
+       The name, the label and the note stack on the left; the mark, where there is one, sits
+       in the top right corner in a fixed 28 box, level with the name. A client without a mark
+       has no box at all. The three size classes look the same here. */
+    @media (max-width: 480px) {
+      .ww-cell,
+      .ww-size-large,
+      .ww-size-medium,
+      .ww-size-small {
+        --ww-mark: 28px;
+        row-gap: var(--space-micro);
+        padding: var(--space-body);
+      }
+      /* The name sits in a row as tall as the mark box, so the two share one centre line. */
+      .ww-cell > .ww-client-name,
+      .ww-size-large .ww-client-name,
+      .ww-size-medium .ww-client-name,
+      .ww-size-small .ww-client-name {
+        display: flex;
+        align-items: center;
+        align-self: stretch;
+        min-height: 28px;
+        font-size: 16px;
+      }
+      .ww-size-large .ww-client-label,
+      .ww-size-medium .ww-client-label,
+      .ww-size-small .ww-client-label,
+      .ww-size-large .ww-client-note,
+      .ww-size-medium .ww-client-note,
+      .ww-size-small .ww-client-note { font-size: 13px; }
+    }
   </style>
 </head>
 <body>
@@ -245,15 +216,15 @@
         </svg>
         <span class="wordmark">auxilo</span>
       </a>
-      <ul class="nav-links" role="list">
+      <ul class="nav-links" id="nav-menu" role="list">
         <li><a href="/for-builders" id="nav-builders">For Builders</a></li>
         <li><a href="/for-agents" id="nav-agents">For Agents</a></li>
         <li><a href="/how-it-works" id="nav-how">How It Works</a></li>
-        <li><a href="/works-with" id="nav-works-with" class="active">Works With</a></li>
+        <li><a href="/works-with" id="nav-works-with" class="active" aria-current="page">Works With</a></li>
         <li><a href="/pricing" id="nav-pricing">Pricing</a></li>
         <li><a href="/connect" id="nav-cta-access" class="nav-cta">Connect Your Agent</a></li>
       </ul>
-      <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" onclick="toggleNav()">
+      <button class="hamburger" id="hamburger" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-menu" onclick="toggleNav()">
         <span></span><span></span><span></span>
       </button>
     </div>
@@ -262,143 +233,152 @@
     </div>
   </nav>
 
-  <main class="ww-main" id="main">
-    <div class="ww-wrap">
-      <h1 class="ww-h1">Works With the Client You Already Run</h1>
-      <p class="ww-honest">Auxilo works with every client below. Once you turn extraction on, it captures sessions on the clients marked for capture, and the label on each cell says which. Drafting still runs through a single model path on your machine, not through the client a session came from. Per-client extraction is being built.</p>
+  <main id="main">
 
-      <ul class="ww-list">
-        <li class="ww-cell ww-size-large">
-          <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Claude Code" style="--logo:url(/logos/claude-code.svg)"></span></div>
-          <div class="ww-client-name">Claude Code</div>
-          <div class="ww-client-label">supported, hook capture</div>
-          <div class="ww-client-note"></div>
-        </li>
-        <li class="ww-cell ww-size-large">
-          <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Cursor" style="--logo:url(/logos/cursor.svg)"></span></div>
-          <div class="ww-client-name">Cursor</div>
-          <div class="ww-client-label">supported, hook capture</div>
-          <div class="ww-client-note"></div>
-        </li>
-        <li class="ww-cell ww-size-large">
-          <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="GitHub Copilot" style="--logo:url(/logos/github-copilot.svg)"></span></div>
-          <div class="ww-client-name">GitHub Copilot</div>
-          <div class="ww-client-label">supported, hook capture</div>
-          <div class="ww-client-note">hooks are a VS Code Preview feature</div>
-        </li>
-        <li class="ww-cell ww-size-large">
-          <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Gemini CLI" style="--logo:url(/logos/gemini-cli.svg)"></span></div>
-          <div class="ww-client-name">Gemini CLI</div>
-          <div class="ww-client-label">unverified</div>
-          <div class="ww-client-note">Capture wired; not yet confirmed on a live session.</div>
-        </li>
-        <li class="ww-cell ww-size-medium">
-          <div class="ww-logo-box"></div>
-          <div class="ww-client-name">Codex</div>
-          <div class="ww-client-label">supported, hook capture (CLI) &middot; best-effort, sweep capture (Desktop)</div>
-          <div class="ww-client-note">Desktop app currently does not execute hooks (upstream openai/codex#21639); sweep covers it.</div>
-        </li>
-        <li class="ww-cell ww-size-medium">
-          <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Devin Desktop" style="--logo:url(/logos/devin.svg)"></span></div>
-          <div class="ww-client-name">Devin Desktop</div>
-          <div class="ww-client-label">best-effort, sweep capture</div>
-          <div class="ww-client-note">Formerly Windsurf. Verified against a live install.</div>
-        </li>
-        <li class="ww-cell ww-size-medium">
-          <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Claude Desktop" style="--logo:url(/logos/claude-desktop.svg)"></span></div>
-          <div class="ww-client-name">Claude Desktop</div>
-          <div class="ww-client-label">probabilistic, no capture, MCP only</div>
-          <div class="ww-client-note">no extraction surface exists</div>
-        </li>
-        <li class="ww-cell ww-size-medium">
-          <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Cline" style="--logo:url(/logos/cline.svg)"></span></div>
-          <div class="ww-client-name">Cline</div>
-          <div class="ww-client-label">best-effort, sweep capture</div>
-          <div class="ww-client-note">NOT locally verified; strict format probe fails silent on storage-shape drift</div>
-        </li>
-        <li class="ww-cell ww-size-medium">
-          <div class="ww-logo-box"></div>
-          <div class="ww-client-name">Continue.dev</div>
-          <div class="ww-client-label">best-effort, sweep capture</div>
-          <div class="ww-client-note">NOT locally verified; strict format probe fails silent on storage-shape drift</div>
-        </li>
-        <li class="ww-cell ww-size-medium">
-          <div class="ww-logo-box"></div>
-          <div class="ww-client-name">Roo Code</div>
-          <div class="ww-client-label">best-effort, sweep capture</div>
-          <div class="ww-client-note">NOT locally verified; strict format probe fails silent on storage-shape drift</div>
-        </li>
-        <li class="ww-cell ww-size-small">
-          <div class="ww-logo-box"></div>
-          <div class="ww-client-name">Antigravity</div>
-          <div class="ww-client-label">supported early, hook capture</div>
-          <div class="ww-client-note">hook schema young; verified against live install</div>
-        </li>
-        <li class="ww-cell ww-size-small">
-          <div class="ww-logo-box"></div>
-          <div class="ww-client-name">Amp</div>
-          <div class="ww-client-label">probabilistic, no capture, MCP only</div>
-          <div class="ww-client-note">threads are server-side</div>
-        </li>
-        <li class="ww-cell ww-size-small">
-          <div class="ww-logo-box"></div>
-          <div class="ww-client-name">Factory droid</div>
-          <div class="ww-client-label">unverified</div>
-          <div class="ww-client-note">Capture wired; not yet confirmed on a live session.</div>
-        </li>
-        <li class="ww-cell ww-size-small">
-          <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="JetBrains Junie" style="--logo:url(/logos/jetbrains-junie.svg)"></span></div>
-          <div class="ww-client-name">JetBrains Junie</div>
-          <div class="ww-client-label">probabilistic, no capture, MCP only</div>
-          <div class="ww-client-note"></div>
-        </li>
-        <li class="ww-cell ww-size-small">
-          <div class="ww-logo-box"></div>
-          <div class="ww-client-name">Kiro</div>
-          <div class="ww-client-label">probabilistic, no capture, MCP only</div>
-          <div class="ww-client-note"></div>
-        </li>
-        <li class="ww-cell ww-size-small">
-          <div class="ww-logo-box"></div>
-          <div class="ww-client-name">OpenHands</div>
-          <div class="ww-client-label">probabilistic, no capture, MCP only</div>
-          <div class="ww-client-note">(best-effort adapter planned)</div>
-        </li>
-        <li class="ww-cell ww-size-small">
-          <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="opencode" style="--logo:url(/logos/opencode.svg)"></span></div>
-          <div class="ww-client-name">opencode</div>
-          <div class="ww-client-label">probabilistic, no capture, MCP only</div>
-          <div class="ww-client-note">(plugin planned)</div>
-        </li>
-        <li class="ww-cell ww-size-small">
-          <div class="ww-logo-box"></div>
-          <div class="ww-client-name">OpenClaw</div>
-          <div class="ww-client-label">best-effort, sweep paused</div>
-          <div class="ww-client-note">NOT locally verified; reads the legacy sessions/*.jsonl layout. Current OpenClaw builds keep transcripts in a per-agent SQLite store, so capture is paused until the adapter is re-pointed; dedicated plugin + clawhub listing planned</div>
-        </li>
-        <li class="ww-cell ww-size-small">
-          <div class="ww-logo-box"></div>
-          <div class="ww-client-name">Other MCP clients</div>
-          <div class="ww-client-label">probabilistic, no capture, MCP only</div>
-          <div class="ww-client-note"></div>
-        </li>
-      </ul>
+    <!-- Hero: dark, one column -->
+    <section id="ww-hero" class="on-dark" aria-labelledby="ww-hero-heading">
+      <div class="container hero-one">
+        <h1 id="ww-hero-heading">Works With the Client You Already Run</h1>
+        <p class="ww-honest lede">Auxilo works with every client below. Once you turn extraction on, it captures sessions on the clients marked for capture, and the label on each cell says which. Drafting still runs through a single model path on your machine, not through the client a session came from. Per-client extraction is being built.</p>
+      </div>
+    </section>
 
-      <p class="ww-key ww-key-lead">Supported, best-effort and probabilistic are the client matrix's own words.</p>
-      <dl class="ww-key">
-        <div class="ww-key-row"><dt>Supported</dt><dd>: the client fires a session-end-class hook that hands the local runner the transcript. Reliable.</dd></div>
-        <div class="ww-key-row"><dt>Best-effort</dt><dd>: Auxilo reads the client's local session files. These locations are not contractual on the client's side; a client update can pause capture until we ship an adapter update (capture degrades silently, never mis-reads).</dd></div>
-        <div class="ww-key-row"><dt>Probabilistic</dt><dd>: no local capture path exists; an optional rules-file note asks the agent itself to contribute learnings via the MCP <code>auxilo_contribute</code> tool. Catches what the agent volunteers, not everything.</dd></div>
-        <div class="ww-key-row"><dt>Antigravity</dt><dd>: hook schema young; verified against live install</dd></div>
-        <div class="ww-key-row"><dt>OpenClaw</dt><dd>: NOT locally verified; reads the legacy sessions/*.jsonl layout. Current OpenClaw builds keep transcripts in a per-agent SQLite store, so capture is paused until the adapter is re-pointed; dedicated plugin + clawhub listing planned</dd></div>
-      </dl>
+    <!-- The clients: one list of cards, large first -->
+    <section id="ww-list-section">
+      <div class="container">
+        <ul class="ww-list" role="list">
+          <li class="ww-cell ww-size-large">
+            <div class="ww-client-name">Claude Code</div>
+            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Claude Code" style="--logo:url(/logos/claude-code.svg)"></span></div>
+            <div class="ww-client-label">supported, hook capture</div>
+            <div class="ww-client-note"></div>
+          </li>
+          <li class="ww-cell ww-size-large">
+            <div class="ww-client-name">Cursor</div>
+            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Cursor" style="--logo:url(/logos/cursor.svg)"></span></div>
+            <div class="ww-client-label">supported, hook capture</div>
+            <div class="ww-client-note"></div>
+          </li>
+          <li class="ww-cell ww-size-large">
+            <div class="ww-client-name">GitHub Copilot</div>
+            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="GitHub Copilot" style="--logo:url(/logos/github-copilot.svg)"></span></div>
+            <div class="ww-client-label">supported, hook capture</div>
+            <div class="ww-client-note">hooks are a VS Code Preview feature</div>
+          </li>
+          <li class="ww-cell ww-size-large">
+            <div class="ww-client-name">Gemini CLI</div>
+            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Gemini CLI" style="--logo:url(/logos/gemini-cli.svg)"></span></div>
+            <div class="ww-client-label">unverified</div>
+            <div class="ww-client-note">Capture wired; not yet confirmed on a live session.</div>
+          </li>
+          <li class="ww-cell ww-size-medium">
+            <div class="ww-client-name">Codex</div>
+            <div class="ww-client-label">supported, hook capture (CLI) &middot; best-effort, sweep capture (Desktop)</div>
+            <div class="ww-client-note">Desktop app currently does not execute hooks (upstream openai/codex#21639); sweep covers it.</div>
+          </li>
+          <li class="ww-cell ww-size-medium">
+            <div class="ww-client-name">Devin Desktop</div>
+            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Devin Desktop" style="--logo:url(/logos/devin.svg)"></span></div>
+            <div class="ww-client-label">best-effort, sweep capture</div>
+            <div class="ww-client-note">Formerly Windsurf. Verified against a live install.</div>
+          </li>
+          <li class="ww-cell ww-size-medium">
+            <div class="ww-client-name">Claude Desktop</div>
+            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Claude Desktop" style="--logo:url(/logos/claude-desktop.svg)"></span></div>
+            <div class="ww-client-label">probabilistic, no capture, MCP only</div>
+            <div class="ww-client-note">no extraction surface exists</div>
+          </li>
+          <li class="ww-cell ww-size-medium">
+            <div class="ww-client-name">Cline</div>
+            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="Cline" style="--logo:url(/logos/cline.svg)"></span></div>
+            <div class="ww-client-label">best-effort, sweep capture</div>
+            <div class="ww-client-note">NOT locally verified; strict format probe fails silent on storage-shape drift</div>
+          </li>
+          <li class="ww-cell ww-size-medium">
+            <div class="ww-client-name">Continue.dev</div>
+            <div class="ww-client-label">best-effort, sweep capture</div>
+            <div class="ww-client-note">NOT locally verified; strict format probe fails silent on storage-shape drift</div>
+          </li>
+          <li class="ww-cell ww-size-medium">
+            <div class="ww-client-name">Roo Code</div>
+            <div class="ww-client-label">best-effort, sweep capture</div>
+            <div class="ww-client-note">NOT locally verified; strict format probe fails silent on storage-shape drift</div>
+          </li>
+          <li class="ww-cell ww-size-small">
+            <div class="ww-client-name">Antigravity</div>
+            <div class="ww-client-label">supported early, hook capture</div>
+            <div class="ww-client-note">hook schema young; verified against live install</div>
+          </li>
+          <li class="ww-cell ww-size-small">
+            <div class="ww-client-name">Amp</div>
+            <div class="ww-client-label">probabilistic, no capture, MCP only</div>
+            <div class="ww-client-note">threads are server-side</div>
+          </li>
+          <li class="ww-cell ww-size-small">
+            <div class="ww-client-name">Factory droid</div>
+            <div class="ww-client-label">unverified</div>
+            <div class="ww-client-note">Capture wired; not yet confirmed on a live session.</div>
+          </li>
+          <li class="ww-cell ww-size-small">
+            <div class="ww-client-name">JetBrains Junie</div>
+            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="JetBrains Junie" style="--logo:url(/logos/jetbrains-junie.svg)"></span></div>
+            <div class="ww-client-label">probabilistic, no capture, MCP only</div>
+            <div class="ww-client-note"></div>
+          </li>
+          <li class="ww-cell ww-size-small">
+            <div class="ww-client-name">Kiro</div>
+            <div class="ww-client-label">probabilistic, no capture, MCP only</div>
+            <div class="ww-client-note"></div>
+          </li>
+          <li class="ww-cell ww-size-small">
+            <div class="ww-client-name">OpenHands</div>
+            <div class="ww-client-label">probabilistic, no capture, MCP only</div>
+            <div class="ww-client-note">(best-effort adapter planned)</div>
+          </li>
+          <li class="ww-cell ww-size-small">
+            <div class="ww-client-name">opencode</div>
+            <div class="ww-logo-box"><span class="ww-logo" role="img" aria-label="opencode" style="--logo:url(/logos/opencode.svg)"></span></div>
+            <div class="ww-client-label">probabilistic, no capture, MCP only</div>
+            <div class="ww-client-note">(plugin planned)</div>
+          </li>
+          <li class="ww-cell ww-size-small">
+            <div class="ww-client-name">OpenClaw</div>
+            <div class="ww-client-label">best-effort, sweep paused</div>
+            <div class="ww-client-note">NOT locally verified; reads the legacy sessions/*.jsonl layout. Current OpenClaw builds keep transcripts in a per-agent SQLite store, so capture is paused until the adapter is re-pointed; dedicated plugin + clawhub listing planned</div>
+          </li>
+          <li class="ww-cell ww-size-small">
+            <div class="ww-client-name">Other MCP clients</div>
+            <div class="ww-client-label">probabilistic, no capture, MCP only</div>
+            <div class="ww-client-note"></div>
+          </li>
+        </ul>
+      </div>
+    </section>
 
-      <p class="ww-basis">Ordered and sized by how widely each client is used, not by anything we measure.</p>
+    <!-- The key: the lead in the left third, the definitions as rows -->
+    <section id="ww-key-section" class="on-tint">
+      <div class="container">
+        <div class="aside-list">
+          <p class="ww-key-lead lede" role="heading" aria-level="2">Supported, best-effort and probabilistic are the client matrix's own words.</p>
+          <div>
+            <dl class="ww-key">
+              <div class="ww-key-row"><dt>Supported</dt><dd>: the client fires a session-end-class hook that hands the local runner the transcript. Reliable.</dd></div>
+              <div class="ww-key-row"><dt>Best-effort</dt><dd>: Auxilo reads the client's local session files. These locations are not contractual on the client's side; a client update can pause capture until we ship an adapter update (capture degrades silently, never mis-reads).</dd></div>
+              <div class="ww-key-row"><dt>Probabilistic</dt><dd>: no local capture path exists; an optional rules-file note asks the agent itself to contribute learnings via the MCP <code>auxilo_contribute</code> tool. Catches what the agent volunteers, not everything.</dd></div>
+              <div class="ww-key-row"><dt>Antigravity</dt><dd>: hook schema young; verified against live install</dd></div>
+              <div class="ww-key-row"><dt>OpenClaw</dt><dd>: NOT locally verified; reads the legacy sessions/*.jsonl layout. Current OpenClaw builds keep transcripts in a per-agent SQLite store, so capture is paused until the adapter is re-pointed; dedicated plugin + clawhub listing planned</dd></div>
+            </dl>
 
-      <p><a href="/legal/supported-clients" class="ww-matrix-link">Read the full client matrix</a></p>
+            <div class="ww-foot">
+              <p class="ww-basis">Ordered and sized by how widely each client is used, not by anything we measure.</p>
+              <p><a href="/legal/supported-clients" class="ww-matrix-link">Read the full client matrix</a></p>
+              <p class="ww-trademark">Product names and logos shown here are the trademarks of their respective owners and are used to identify those products. Auxilo is not affiliated with, endorsed by, or sponsored by any provider listed. Listing here indicates technical compatibility, not a business relationship. Any provider may ask us to remove its mark by writing to <a href="mailto:hello@auxilo.io">hello@auxilo.io</a>.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
 
-      <p class="ww-trademark">Product names and logos shown here are the trademarks of their respective owners and are used to identify those products. Auxilo is not affiliated with, endorsed by, or sponsored by any provider listed. Listing here indicates technical compatibility, not a business relationship. Any provider may ask us to remove its mark by writing to <a href="mailto:hello@auxilo.io">hello@auxilo.io</a>.</p>
-    </div>
   </main>
 
   <footer>
@@ -411,51 +391,95 @@
         <span class="wordmark">auxilo</span>
       </a>
       <p class="footer-meta">
-        Your agent already solved this. Auxilo remembers. &middot;
-        <a href="/api">API</a> &middot;
-        <a href="/about">About</a> &middot;
-        <a href="/writing">Writing</a> &middot;
-        <a href="/status">Status</a> &middot;
-        <a href="/.well-known/security.txt">Security</a> &middot;
-        <a href="/.well-known/agent.json">Agent card</a> &middot;
-        <a href="/terms">Terms</a> &middot;
-        <a href="/privacy">Privacy</a> &middot;
-        <a href="https://github.com/silent-architects/auxilo">GitHub</a>
+        Your agent already solved this. Auxilo remembers.<span class="fm-item"> &middot;</span>
+        <span class="fm-item"><a href="/api">API</a> &middot;</span>
+        <span class="fm-item"><a href="/about">About</a> &middot;</span>
+        <span class="fm-item"><a href="/writing">Writing</a> &middot;</span>
+        <span class="fm-item"><a href="/status">Status</a> &middot;</span>
+        <span class="fm-item"><a href="/.well-known/security.txt">Security</a> &middot;</span>
+        <span class="fm-item"><a href="/.well-known/agent.json">Agent card</a> &middot;</span>
+        <span class="fm-item"><a href="/terms">Terms</a> &middot;</span>
+        <span class="fm-item"><a href="/privacy">Privacy</a> &middot;</span>
+        <span class="fm-item"><a href="https://github.com/silent-architects/auxilo">GitHub</a></span>
       </p>
     </div>
   </footer>
 
-  <script>
-    // ── Hamburger nav toggle ───────────────────────────────────────────
-    function toggleNav() {
-      const nav = document.querySelector('.nav-links');
-      const btn = document.getElementById('hamburger');
-      const expanded = btn.getAttribute('aria-expanded') === 'true';
-      btn.setAttribute('aria-expanded', !expanded);
-      nav.classList.toggle('nav-open');
+<script>
+// ── Mobile navigation (the same block on every page) ──
+// Open: the page behind the menu goes inert and focus moves to the first link. Tab and Shift+Tab
+// stay inside the menu. Escape, the button, a chosen link, or a window wide enough to show the
+// links in a row closes it and hands the page back; Escape and the button return focus to the button.
+(function () {
+  var bar = document.getElementById('main-nav');
+  var nav = document.querySelector('.nav-links');
+  var btn = document.getElementById('hamburger');
+  if (!bar || !nav || !btn) return;
+  var wide = window.matchMedia('(min-width: 901px)');
+  var held = [];
+
+  function isOpen() { return nav.classList.contains('nav-open'); }
+
+  function open() {
+    nav.classList.add('nav-open');
+    btn.setAttribute('aria-expanded', 'true');
+    // Behind the menu: everything outside the navigation, and the logo and the sign-in strip, which the open menu covers.
+    var behind = Array.prototype.filter.call(document.body.children, function (el) {
+      return el !== bar && !/^(SCRIPT|STYLE|LINK|TEMPLATE|NOSCRIPT)$/.test(el.tagName);
+    });
+    Array.prototype.push.apply(behind, bar.querySelectorAll('.nav-logo, .nav-strip'));
+    behind.forEach(function (el) {
+      if (!el.hasAttribute('inert')) { el.setAttribute('inert', ''); held.push(el); }
+    });
+    var first = nav.querySelector('a');
+    if (first) first.focus();
+  }
+
+  function close(refocus) {
+    nav.classList.remove('nav-open');
+    btn.setAttribute('aria-expanded', 'false');
+    held.forEach(function (el) { el.removeAttribute('inert'); });
+    held = [];
+    if (refocus) btn.focus();
+  }
+
+  window.toggleNav = function toggleNav() {
+    if (isOpen()) close(true); else open();
+  };
+
+  Array.prototype.forEach.call(nav.querySelectorAll('a'), function (a) {
+    a.addEventListener('click', function () { if (isOpen()) close(false); });
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (!isOpen()) return;
+    if (e.key === 'Escape' || e.key === 'Esc') {
+      e.preventDefault();
+      close(true);
+      return;
     }
+    if (e.key !== 'Tab') return;
+    // The controls the open menu shows, in reading order: its links, then the button.
+    var ring = Array.prototype.slice.call(nav.querySelectorAll('a')).concat(btn);
+    var first = ring[0];
+    var last = ring[ring.length - 1];
+    var at = document.activeElement;
+    if (ring.indexOf(at) === -1) {
+      e.preventDefault();
+      (e.shiftKey ? last : first).focus();
+    } else if (e.shiftKey && at === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && at === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  });
 
-    document.querySelectorAll('.nav-links a').forEach(a => {
-      a.addEventListener('click', () => {
-        const nav = document.querySelector('.nav-links');
-        const btn = document.getElementById('hamburger');
-        if (nav.classList.contains('nav-open')) {
-          nav.classList.remove('nav-open');
-          btn.setAttribute('aria-expanded', 'false');
-        }
-      });
-    });
-
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        const nav = document.querySelector('.nav-links');
-        const btn = document.getElementById('hamburger');
-        if (nav && nav.classList.contains('nav-open')) {
-          nav.classList.remove('nav-open');
-          btn.setAttribute('aria-expanded', 'false');
-        }
-      }
-    });
-  </script>
+  if (wide.addEventListener) {
+    wide.addEventListener('change', function (e) { if (e.matches && isOpen()) close(false); });
+  }
+})();
+</script>
 </body>
 </html>
