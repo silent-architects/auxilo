@@ -4406,11 +4406,74 @@
   }
 
 
+  // SETUP-SIGNIN: no device code is ever read from the URL or pre-filled.
+  function showTerminalConnect() {
+    if (document.getElementById('terminal-connect')) return;
+    if (history.replaceState) history.replaceState({}, '', window.location.pathname);
+    var card = document.createElement('section');
+    card.id = 'terminal-connect';
+    card.className = 'dash-card';
+    function text(tag, value) {
+      var node = document.createElement(tag);
+      node.textContent = value;
+      card.appendChild(node);
+      return node;
+    }
+    text('h2', 'Connect Your Terminal');
+    text('p', 'Enter the code your terminal shows. Connect only if you started this yourself.');
+    var label = text('label', 'Code');
+    label.htmlFor = 'terminal-connect-code';
+    var input = document.createElement('input');
+    input.id = 'terminal-connect-code';
+    input.className = 'form-input';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.value = '';
+    card.appendChild(input);
+    var connect = text('button', 'Connect Terminal');
+    connect.className = 'btn btn-primary';
+    var dismiss = text('a', 'This Was Not Me');
+    dismiss.href = '#';
+    var status = text('p', '');
+    status.setAttribute('role', 'status');
+    function finish(message) {
+      label.hidden = input.hidden = connect.hidden = dismiss.hidden = true;
+      status.textContent = message;
+    }
+    dismiss.onclick = function (event) {
+      event.preventDefault();
+      finish('Nothing was connected. You can close this page.');
+    };
+    connect.onclick = function () {
+      var code = input.value.trim().toUpperCase();
+      if (!/^[0-9A-F]{8}$/.test(code)) {
+        status.textContent = 'Enter the eight characters your terminal shows.';
+        return;
+      }
+      input.value = code;
+      connect.disabled = true;
+      apiFetch('/auth/device/authorize', {
+        method: 'POST', body: JSON.stringify({ code: code, session_token: getToken() })
+      }).then(function (r) {
+        return r.json().then(function (data) {
+          connect.disabled = false;
+          if (r.ok) finish('Your terminal is connected. Return to it, and it finishes on its own.');
+          else if (r.status === 404 || r.status === 410 || data.status === 'authorized') {
+            status.textContent = 'That code did not match a waiting terminal. Check it, or run the command again for a new code.';
+          } else status.textContent = data.error;
+        });
+      }).catch(function (err) { connect.disabled = false; status.textContent = err.message; });
+    };
+    var dashboard = document.getElementById('dash-view');
+    dashboard.insertBefore(card, dashboard.firstChild);
+  }
+
   // ── Boot ─────────────────────────────────────────────────────────────
   function boot() {
     // 1. Check for ?token= in URL (magic link landing)
     var params = new URLSearchParams(window.location.search);
     var magicToken = params.get('token');
+    var connectTerminal = params.get('connect') === '1';
 
     // CREDITS-CONTROL PART 1: ?checkout=success|cancel landing state (the
     // /checkout/success and /checkout/cancel routes 302 here with no
@@ -4444,6 +4507,7 @@
             // Decode email from JWT payload for display (decode only, no verify needed client-side)
             var email = decodeJwtEmail(res.data.token);
             showDashboard(email);
+            if (connectTerminal) showTerminalConnect();
             if (checkoutState) showCheckoutBanner(checkoutState);
           } else {
             showLoginScreen();
@@ -4462,6 +4526,7 @@
     if (token && isTokenUsable(token)) {
       var email = decodeJwtEmail(token);
       showDashboard(email);
+      if (connectTerminal) showTerminalConnect();
       if (checkoutState) showCheckoutBanner(checkoutState);
     } else if (token) {
       // S-1: a stored token whose exp has passed, or that cannot be read at

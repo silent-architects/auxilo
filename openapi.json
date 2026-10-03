@@ -3482,6 +3482,10 @@
                     "type": "string",
                     "format": "email",
                     "example": "builder@example.com"
+                  },
+                  "connect": {
+                    "type": "boolean",
+                    "description": "When true, the emailed dashboard link opens an empty terminal-connect card. No device code is carried in the link."
                   }
                 }
               }

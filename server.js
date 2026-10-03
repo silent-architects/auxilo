@@ -814,6 +814,8 @@ const deviceSecretIndex = new Map();
 // 5s timer aren't rejected on clock jitter, while still throttling rapid abuse.
 const DEVICE_POLL_MIN_INTERVAL_MS = 4_000;
 const DEVICE_POLL_MAX = 200; // 10-min TTL / 5s interval ≈ 120; generous ceiling
+const deviceAuthorizeAttempts = new Map(); // transient, keyed by session digest; never persisted
+const DEVICE_AUTHORIZE_WINDOW_MS = 15 * 60_000;
 const devicePollStore = new Map(); // key: `${device_code}:${ip}` → { count, last }
 setInterval(() => {
     const now = Date.now();
@@ -822,6 +824,9 @@ setInterval(() => {
             if (entry.device_code) deviceSecretIndex.delete(entry.device_code);
             deviceCodeStore.delete(code);
         }
+    }
+    for (const [key, entry] of deviceAuthorizeAttempts) {
+        if (now - entry.start >= DEVICE_AUTHORIZE_WINDOW_MS) deviceAuthorizeAttempts.delete(key);
     }
     // Evict stale poll-throttle entries (older than one TTL window).
     for (const [k, v] of devicePollStore) {
@@ -4627,7 +4632,6 @@ app.get('/auth/device/verify', (c) => {
   .success { background: #dcfce7; color: #166534; }
   .error { background: #fef2f2; color: #991b1b; }
   .info { background: #dbeafe; color: #1e40af; }
-  #step2 { display: none; }
 </style>
 </head><body>
 <h1>Authorize Device</h1>
@@ -4639,12 +4643,7 @@ app.get('/auth/device/verify', (c) => {
   <button onclick="sendMagicLink()">Send Magic Link</button>
   <div id="status1"></div>
 </div>
-<div id="step2">
-  <p>Check your email and click the magic link. Then paste the JWT token here:</p>
-  <input type="text" id="jwt" placeholder="Paste JWT token from magic link" />
-  <button onclick="authorize()">Authorize Device</button>
-  <div id="status2"></div>
-</div>
+<p>Already signed in? <a href="/dashboard?connect=1">Open Your Dashboard to Connect</a></p>
 <script>
 async function sendMagicLink() {
   const email = document.getElementById('email').value.trim();
@@ -4652,28 +4651,12 @@ async function sendMagicLink() {
   try {
     const resp = await fetch('${baseUrl}/auth/magic-link', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email })
+      body: JSON.stringify({ email, connect: true })
     });
     const data = await resp.json();
-    show('status1', data.message || 'Check your email for the magic link.', 'success');
-    document.getElementById('step2').style.display = 'block';
+    if (!resp.ok) { show('status1', data.error, 'error'); return; }
+    show('status1', 'Auxilo sent a sign-in link to ' + email + '. Click it, then enter the code from your terminal on the dashboard that opens.', 'success');
   } catch (err) { show('status1', 'Failed to send: ' + err.message, 'error'); }
-}
-async function authorize() {
-  const jwt = document.getElementById('jwt').value.trim();
-  if (!jwt) { show('status2', 'Please paste your JWT token', 'error'); return; }
-  try {
-    const resp = await fetch('${baseUrl}/auth/device/authorize', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: '${code}', session_token: jwt })
-    });
-    const data = await resp.json();
-    if (resp.ok) {
-      show('status2', 'Device authorized! You can close this window.', 'success');
-    } else {
-      show('status2', data.error || 'Authorization failed', 'error');
-    }
-  } catch (err) { show('status2', 'Failed: ' + err.message, 'error'); }
 }
 function show(id, msg, cls) {
   const el = document.getElementById(id);
@@ -4693,15 +4676,6 @@ app.post('/auth/device/authorize', async (c) => {
   if (!code || !session_token) {
     return c.json({ error: 'code and session_token are required' }, 400);
   }
-  const entry = deviceCodeStore.get(code);
-  if (!entry) return c.json({ error: 'Unknown device code' }, 404);
-  if (Date.now() - entry.created_at > DEVICE_CODE_TTL) {
-    deviceCodeStore.delete(code);
-    return c.json({ error: 'Device code expired' }, 410);
-  }
-  if (entry.status === 'authorized') {
-    return c.json({ status: 'authorized', message: 'Already authorized' }, 409);
-  }
   // Verify JWT
   const { jwtVerify } = require('jose');
   const { SESSION_SECRET } = process.env;
@@ -4719,6 +4693,28 @@ app.post('/auth/device/authorize', async (c) => {
   }
   if (PLATFORM_ACCOUNT_IDS.has(payload.accountId)) {
     return c.json({ error: 'Invalid or expired session token' }, 401);
+  }
+  // Count every authenticated attempt, including unknown codes. The digest is
+  // only an in-memory limiter key; no session credential is written or logged.
+  const attemptKey = crypto.createHash('sha256').update(session_token).digest('hex');
+  const attemptNow = Date.now();
+  let attempts = deviceAuthorizeAttempts.get(attemptKey);
+  if (!attempts || attemptNow - attempts.start >= DEVICE_AUTHORIZE_WINDOW_MS) {
+    attempts = { start: attemptNow, count: 0 };
+    deviceAuthorizeAttempts.set(attemptKey, attempts);
+  }
+  if (attempts.count >= 10) {
+    return c.json({ error: 'Rate limit exceeded', retry_after: Math.ceil((DEVICE_AUTHORIZE_WINDOW_MS - (attemptNow - attempts.start)) / 1000) }, 429);
+  }
+  attempts.count++;
+  const entry = deviceCodeStore.get(code);
+  if (!entry) return c.json({ error: 'Unknown device code' }, 404);
+  if (Date.now() - entry.created_at > DEVICE_CODE_TTL) {
+    deviceCodeStore.delete(code);
+    return c.json({ error: 'Device code expired' }, 410);
+  }
+  if (entry.status === 'authorized') {
+    return c.json({ status: 'authorized', message: 'Already authorized' }, 409);
   }
   // A-2: use the canonical exported account helpers — migrate legacy single-key
   // accounts, set active:true, register the new key in the in-memory index so it
