@@ -667,7 +667,7 @@ describe('B4-2: retraction window runs from approval time for queue-approved ite
   it('approval stamps exist where the basis expects them (self-review + admin routes)', () => {
     assert.ok(SERVER_SRC.includes("action: 'approved',"), 'admin approve stamps moderation_action.at');
     const selfReviewSrc = fs.readFileSync(path.join(__dirname, '..', 'lib', 'self-review.js'), 'utf-8');
-    assert.ok(selfReviewSrc.includes("learning.self_review_action = { action: 'self_approve', by: accountId, at: now }"),
+    assert.ok(selfReviewSrc.includes("learning.self_review_action = { action: 'self_approve', by: accountId, at: now, ...(opts.reviewContext || {}) }"),
       'self-approve stamps self_review_action.at');
   });
 });

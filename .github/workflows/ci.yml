@@ -91,3 +91,35 @@ jobs:
 
       - name: Audit for high/critical vulnerabilities
         run: npm audit --omit=dev --audit-level=high
+
+  windows-client:
+    name: Windows client regression
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Isolated Windows client tests
+        shell: pwsh
+        run: |
+          $testHome = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid().ToString())
+          New-Item -ItemType Directory -Path $testHome | Out-Null
+          $env:HOME = $testHome
+          $env:AUXILO_HOME = $testHome
+          $env:USERPROFILE = $testHome
+          $env:APPDATA = Join-Path $testHome 'AppData/Roaming'
+          $env:LOCALAPPDATA = Join-Path $testHome 'AppData/Local'
+          $env:AUXILO_RUNNER_AUTOUPDATE = '0'
+          $env:AUXILO_NO_NOTIFY = '1'
+          try {
+            node --test test/client-connect-registration.test.js test/client-connect-win32.test.js test/cli-capture-mode-parity.test.js test/cli-binary-resolution.test.js test/spec3-a3-client-port.test.js test/runner-packaging-closure.test.js
+            $testExit = $LASTEXITCODE
+            if (Test-Path (Join-Path $testHome '.auxilo')) { throw 'Tests left default Auxilo state under the suite home' }
+            if ($testExit -ne 0) { exit $testExit }
+          } finally {
+            Remove-Item -Recurse -Force $testHome
+          }

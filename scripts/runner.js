@@ -764,17 +764,21 @@ function renderExtractionResult(detailed, opts = {}) {
  * swallowed; a broken notifier must never fail the run. AUXILO_NO_NOTIFY=1
  * disables (tests, headless CI).
  */
-function notifyHeld(count) {
+function notifyHeld(count, opts = {}) {
   try {
-    if (!count || count <= 0) return;
-    if (process.platform !== 'darwin') return;
-    if (process.env.AUXILO_NO_NOTIFY === '1') return;
-    const msg = `${count} learning(s) held for your review — run npx auxilo review`;
-    const child = spawn('/usr/bin/osascript', [
-      '-e', `display notification ${JSON.stringify(msg)} with title "Auxilo"`,
-    ], { stdio: 'ignore', detached: true });
-    child.unref();
+    if (!Number.isSafeInteger(count) || count <= 0) return;
+    const platform = opts.platform || process.platform;
+    if (!['darwin', 'win32'].includes(platform)) return;
+    if ((opts.env || process.env).AUXILO_NO_NOTIFY === '1') return;
+    const msg = `${count} ${count === 1 ? 'learning is' : 'learnings are'} waiting for your review. Run npx auxilo review`;
+    const spawnImpl = opts.spawnImpl || spawn;
+    const child = platform === 'win32'
+      ? spawnImpl('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+        `Add-Type -AssemblyName System.Windows.Forms; $n = New-Object System.Windows.Forms.NotifyIcon; $n.Icon = [System.Drawing.SystemIcons]::Information; $n.Visible = $true; $n.ShowBalloonTip(10000, 'Auxilo', '${msg}', [System.Windows.Forms.ToolTipIcon]::Info); Start-Sleep -Seconds 10; $n.Dispose()`],
+      { stdio: 'ignore', detached: true, windowsHide: true })
+      : spawnImpl('/usr/bin/osascript', ['-e', `display notification ${JSON.stringify(msg)} with title "Auxilo"`], { stdio: 'ignore', detached: true });
     child.on('error', () => { /* fail-silent */ });
+    child.unref();
   } catch { /* fail-silent */ }
 }
 

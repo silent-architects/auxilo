@@ -314,11 +314,33 @@ function baseUrlFor(vendor, configured) {
  * than silently trusting a permission state it could not verify. Never
  * throws.
  */
+function providersFileInsideProfile(target, opts = {}) {
+  const profile = opts.homeDir || (opts.env || process.env).USERPROFILE || os.homedir();
+  const realpath = opts.realpathSyncImpl || fs.realpathSync.native;
+  try {
+    let current = target;
+    const suffix = [];
+    let realTarget;
+    for (;;) {
+      try { realTarget = path.join(realpath(current), ...suffix); break; }
+      catch (error) {
+        if (error.code !== 'ENOENT' || path.dirname(current) === current) return false;
+        suffix.unshift(path.basename(current));
+        current = path.dirname(current);
+      }
+    }
+    const root = realpath(profile).replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
+    const file = realTarget.replace(/\\/g, '/').toLowerCase();
+    return file.startsWith(root + '/');
+  } catch { return false; }
+}
+
 function isProvidersFileModeUnsafe(opts = {}) {
   // EXTRACTION-LOW-FOLLOWUPS item 2 (TOCTOU, accepted on the record): a
   // window exists between this check and readByoConfig()'s read below; only the same uid could win that race, and that uid already owns the key on disk, so it is accepted rather than replaced with an fd-based check-then-read.
   const target = statePath(opts);
   if (isHomeUnresolved(target)) return true; // can't even name the file — fail closed
+  if ((opts.platform || process.platform) === 'win32') return !providersFileInsideProfile(target, opts);
   const statSyncImpl = typeof opts.statSyncImpl === 'function' ? opts.statSyncImpl : fs.statSync;
   let stat;
   try {
@@ -551,7 +573,7 @@ async function runModel(opts = {}) {
       ok: false,
       text: '',
       usage: null,
-      reason: '~/.auxilo/providers.json is not owner-read-only; refusing to use the stored key until its permissions are fixed (chmod 600 ~/.auxilo/providers.json) or the file is removed (`auxilo provider clear`)',
+      reason: (opts.platform || process.platform) === 'win32' ? 'The provider key file must be inside your Windows user profile folder.' : '~/.auxilo/providers.json is not owner-read-only; refusing to use the stored key until its permissions are fixed (chmod 600 ~/.auxilo/providers.json) or the file is removed (`auxilo provider clear`)',
       reasonCode: 'providers-file-mode-unsafe',
       refusal: 'pre-invocation',
       authStatus: 'unknown',
@@ -712,6 +734,7 @@ module.exports = {
   // isProvidersFileModeUnsafe before trusting a persisted `selected` value
   // it reads (GOV-3 item 2, "read too, not just write").
   isProvidersFileModeUnsafe,
+  providersFileInsideProfile,
   isHomeUnresolved,
   isBaseUrlInsecure,
   writeProvidersStateAtomic,

@@ -99,12 +99,17 @@ function transcriptRoots(homeDir) {
 /** True iff realPath sits under a known transcript root AND has a text extension.
  *  Roots are symlink-resolved too, so the comparison is realpath-vs-realpath
  *  (macOS /var → /private/var would otherwise defeat a correct path). */
-function transcriptPathAllowed(realPath, homeDir) {
+function transcriptPathAllowed(realPath, homeDir, opts = {}) {
+  const windows = (opts.platform || process.platform) === 'win32';
+  const normalize = value => windows ? value.replace(/\\/g, '/').toLowerCase() : value;
+  const realpath = opts.realpathSync || (windows ? fs.realpathSync.native : fs.realpathSync);
+  const candidate = normalize(realPath);
   if (!TRANSCRIPT_EXTS.includes(path.extname(realPath).toLowerCase())) return false;
   return transcriptRoots(homeDir).some((root) => {
     let realRoot = root;
-    try { realRoot = fs.realpathSync(root); } catch { /* root may not exist yet */ }
-    return realPath === realRoot || realPath.startsWith(realRoot + path.sep);
+    try { realRoot = realpath(root); } catch { /* root may not exist yet */ }
+    realRoot = normalize(realRoot);
+    return candidate === realRoot || candidate.startsWith(realRoot + (windows ? '/' : path.sep));
   });
 }
 
@@ -146,9 +151,13 @@ function readStdin() {
   });
 }
 
+function captureHome(platform = process.platform, env = process.env, homedir = os.homedir) {
+  return platform === 'win32' ? homedir() : env.HOME || homedir();
+}
+
 async function main() {
   const args = parseArgs(process.argv);
-  const homeDir = args.home || process.env.HOME || os.homedir();
+  const homeDir = args.home || captureHome();
   const auxiloDir = path.join(homeDir, '.auxilo');
 
   // 1. Consent sentinel — kill-switch shared by every capture class (UC §6).
@@ -167,7 +176,7 @@ async function main() {
   // GOV-3 M4: resolve symlinks BEFORE validating, and use the resolved path
   // from here on — a symlink under an allowed root must not reach outside it.
   let transcriptPath;
-  try { transcriptPath = fs.realpathSync(namedPath); } catch { return; }
+  try { transcriptPath = (process.platform === 'win32' ? fs.realpathSync.native : fs.realpathSync)(namedPath); } catch { return; }
   if (!transcriptPathAllowed(transcriptPath, homeDir)) return;
 
   let stat;
@@ -193,7 +202,7 @@ async function main() {
 
   const child = spawn(process.execPath,
     [runnerPath, '--transcript', transcriptPath, '--source', args.source],
-    { detached: true, stdio: ['ignore', 'ignore', stderrFd], env });
+    { detached: true, stdio: ['ignore', 'ignore', stderrFd], env, ...(process.platform === 'win32' ? { windowsHide: true } : {}) });
   child.on('error', () => { /* fail-silent */ });
   child.unref();
 
@@ -204,6 +213,7 @@ async function main() {
 
 module.exports = {
   parseArgs,
+  captureHome,
   extractTranscriptPath,
   transcriptPathAllowed,
   transcriptRoots,

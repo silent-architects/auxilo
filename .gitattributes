@@ -1,0 +1,2 @@
+# Prompt goldens are byte-exact runtime strings; checkout must preserve LF.
+/test/fixtures/epc2-1-prompts/*.txt text eol=lf

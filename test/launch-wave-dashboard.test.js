@@ -297,7 +297,7 @@ describe('LW3: welcome card', () => {
     assert.ok(bMatch, 'variant B ships display:none in the static file');
     assert.ok(block.includes('Your Learnings Are Waiting'), 'D-11');
     assert.ok(block.includes('Review them in the queue below.'), 'D-12');
-    assert.ok(block.includes('Approving an item keeps it in your queue for operator review until Auxilo has cleared your account to publish.'), 'D-13');
+    assert.ok(block.includes('Approve the learnings you want public and your approval is saved. Auxilo checks a new account before it is cleared to publish.'), 'D-13');
     assert.ok(block.includes('Anything you keep private comes back free to your agent when it asks Auxilo, signed in to your account. It is never published.'), 'D-14');
     assert.strictEqual((block.match(/See How It Works/g) || []).length, 2, 'D-10 and D-15 each carry their own link');
   });

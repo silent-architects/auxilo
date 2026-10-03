@@ -366,8 +366,8 @@ describe('MCP-PIN-LEGACY-OWNED: rewriteMcpPins end-to-end (multi-client, multi-f
     const home = tmpHome('legacy-e2e-');
 
     // Claude Code — json-mcpServers, legacy bare shape.
-    fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
-    const claudeConfigPath = path.join(home, '.claude', 'settings.json');
+    fs.mkdirSync(path.join(home, '.cursor'), { recursive: true });
+    const claudeConfigPath = path.join(home, '.cursor', 'mcp.json');
     writeJson(claudeConfigPath, {
       mcpServers: { auxilo: { command: 'npx', args: ['auxilo-mcp'] } },
     });
@@ -380,7 +380,7 @@ describe('MCP-PIN-LEGACY-OWNED: rewriteMcpPins end-to-end (multi-client, multi-f
 
     const results = installer.rewriteMcpPins(home, TARGET_VERSION);
 
-    const cc = results.find((r) => r.id === 'claude-code');
+    const cc = results.find((r) => r.id === 'cursor');
     const codex = results.find((r) => r.id === 'codex');
     assert.ok(cc, 'claude-code must appear in results');
     assert.ok(codex, 'codex must appear in results');
@@ -398,7 +398,7 @@ describe('MCP-PIN-LEGACY-OWNED: rewriteMcpPins end-to-end (multi-client, multi-f
     const claudeBefore = fs.readFileSync(claudeConfigPath, 'utf-8');
     const codexBefore = fs.readFileSync(codexConfigPath, 'utf-8');
     const results2 = installer.rewriteMcpPins(home, TARGET_VERSION);
-    assert.equal(results2.find((r) => r.id === 'claude-code').changed, false);
+    assert.equal(results2.find((r) => r.id === 'cursor').changed, false);
     assert.equal(results2.find((r) => r.id === 'codex').changed, false);
     assert.equal(fs.readFileSync(claudeConfigPath, 'utf-8'), claudeBefore);
     assert.equal(fs.readFileSync(codexConfigPath, 'utf-8'), codexBefore);

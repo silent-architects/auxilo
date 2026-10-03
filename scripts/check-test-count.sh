@@ -511,7 +511,13 @@ cd "${REPO_ROOT}"
 # EPC2-2 A+B: 63 binding protocol + 29 routing + 32 adapter tests,
 # plus 3 tracked-file path guards for the new source, test and fixture helper.
 # Merged onto main at 4921 (design wave) + the 127 above = 5048.
-EXPECTED_TEST_COUNT=5058
+# SETUP-SIGNIN: 12 integration tests + 1 tracked-file path guard = +13.
+# SLW-6: 33 tests + 1 tracked-file guard + 1 SETUP-SIGNIN review regression = +35.
+# CLIENT-CONNECT Part A: 9 registration/header tests + 1 tracked-file guard.
+# CLIENT-CONNECT Part B: 14 Windows tests + 1 rollback test + 1 tracked-file guard.
+# CLIENT-CONNECT review: +2 foreign node-hook ownership regression cases.
+# Integrated baseline 5058 + server 48 + client 28 = 5134.
+EXPECTED_TEST_COUNT=5134
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
