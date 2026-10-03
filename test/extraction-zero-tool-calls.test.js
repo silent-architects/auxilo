@@ -82,7 +82,7 @@ describe('extraction-zero-tool-calls — STATIC: byte-pinned spawn argv (scripts
   it("finder (extract mode) argv is exactly ['-p','--no-session-persistence','--tools','','--setting-sources','','--strict-mcp-config']", () => {
     assert.deepEqual(
       claudeCode.EXTRACT_MODE_ARGV,
-      ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config'],
+      ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config'],
     );
   });
 

@@ -537,6 +537,7 @@ async function runModel(opts = {}) {
       usage: null,
       reason: 'cannot resolve ~/.auxilo/providers.json — the home directory did not resolve to an absolute path',
       reasonCode: 'provider-home-unresolved',
+      refusal: 'pre-invocation',
       authStatus: 'unknown',
     };
   }
@@ -552,6 +553,7 @@ async function runModel(opts = {}) {
       usage: null,
       reason: '~/.auxilo/providers.json is not owner-read-only; refusing to use the stored key until its permissions are fixed (chmod 600 ~/.auxilo/providers.json) or the file is removed (`auxilo provider clear`)',
       reasonCode: 'providers-file-mode-unsafe',
+      refusal: 'pre-invocation',
       authStatus: 'unknown',
     };
   }
@@ -563,6 +565,7 @@ async function runModel(opts = {}) {
       usage: null,
       reason: 'no BYO provider key configured — run `auxilo provider set`',
       reasonCode: 'provider-not-configured',
+      refusal: 'pre-invocation',
       authStatus: 'unknown',
     };
   }
@@ -575,8 +578,9 @@ async function runModel(opts = {}) {
       ok: false,
       text: '',
       usage: null,
-      reason: `configured base_url "${config.base_url}" is not https:// — refusing to send the transcript or the key over an insecure connection`,
+      reason: 'configured base URL is not https; refusing the request',
       reasonCode: 'provider-base-url-insecure',
+      refusal: 'pre-invocation',
       authStatus: 'unknown',
     };
   }
@@ -587,7 +591,7 @@ async function runModel(opts = {}) {
   const fetchImpl = typeof opts.fetchImpl === 'function' ? opts.fetchImpl : fetch;
   const timeoutMs = opts.timeoutMs || 120000;
 
-  const identity = { provider: 'byo-key', model: config.model, version: null, vendor };
+  const identity = { provider: 'byo-key', model: null, requested_model: config.model, observed_model: null, identity_unresolved: 'missing', version: null, vendor };
 
   const controller = typeof AbortController === 'function' ? new AbortController() : null;
   const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
@@ -595,6 +599,8 @@ async function runModel(opts = {}) {
 
   try {
     let res;
+    const gate = require('./route-binding.js').invocationGate(opts);
+    if (gate) return gate;
     try {
       res = await fetchImpl(request.url, {
         method: 'POST',
@@ -611,7 +617,7 @@ async function runModel(opts = {}) {
         ok: false,
         text: '',
         usage: null,
-        reason: `BYO provider request failed: ${error.message}`,
+        reason: 'BYO provider request failed',
         reasonCode: 'provider-error',
         authStatus: 'unknown',
         identity,
@@ -634,7 +640,7 @@ async function runModel(opts = {}) {
         ok: false,
         text: '',
         usage: null,
-        reason: `BYO provider returned HTTP ${res.status}`,
+        reason: Number.isInteger(res.status) ? `BYO provider returned HTTP ${res.status}` : 'BYO provider request failed',
         reasonCode: 'provider-error',
         authStatus: 'unknown',
         identity,
@@ -660,13 +666,19 @@ async function runModel(opts = {}) {
         ok: false,
         text: '',
         usage: null,
-        reason: `BYO provider returned a non-JSON body: ${error.message}`,
+        reason: 'BYO provider returned a non-JSON body',
         reasonCode: 'provider-error',
         authStatus: 'unknown',
         identity,
       };
     }
 
+    const observed = data && (vendor === 'gemini' ? data.modelVersion : data.model);
+    if (typeof observed === 'string' && observed.trim()) {
+      identity.observed_model = observed;
+      identity.model = observed;
+      delete identity.identity_unresolved;
+    }
     return {
       ok: true,
       text: extractText(vendor, data),
@@ -675,6 +687,8 @@ async function runModel(opts = {}) {
       authStatus: 'unknown',
       identity,
     };
+  } catch {
+    return { ok: false, text: '', usage: null, reason: 'BYO provider request failed', reasonCode: 'provider-error', authStatus: 'unknown' };
   } finally {
     clearTimer();
   }
@@ -689,6 +703,7 @@ module.exports = {
   writeByoConfig,
   clearProvidersFile,
   resolveVendor,
+  baseUrlFor,
   DEFAULT_PROVIDERS_STATE_PATH,
   // Exported for direct unit coverage (test/byo-key-provider.test.js,
   // test/extract-w1-fix2.test.js) AND for scripts/providers/index.js, which

@@ -1,4 +1,5 @@
 'use strict';
+const { supportedClaude } = require('./helpers/epc2-fixtures.js');
 /*
  * test/extraction-model-provenance.test.js — EXTRACTION-MODEL-PROVENANCE
  * (PUNCH-LIST P1).
@@ -92,7 +93,7 @@ function authJson(loggedIn) {
   return { status: 0, stdout: JSON.stringify({ loggedIn }), stderr: '' };
 }
 function extractionStdout(learnings) {
-  return { status: 0, stdout: JSON.stringify({ learnings }), stderr: '' };
+  return { status: 0, stdout: JSON.stringify({ type: 'result', result: JSON.stringify({ learnings }), is_error: false }), stderr: '' };
 }
 function spawnQueue(responses) {
   const calls = [];
@@ -109,11 +110,12 @@ function spawnQueue(responses) {
 describe('providers/index.js runModel(): fall-through SUCCESS names the provider that actually ran', () => {
   it('claude-code fails non-retryable, BYO runs and self-stamps its own identity — the result names byo-key, never claude-code or codex-cli', async () => {
     const statePath = path.join(tempDir('auxilo-provenance-a-'), 'providers.json');
+    byoKey.writeByoConfig({ provider: 'openai', model: 'fixture-model', api_key: 'fixture-key' }, { providersStatePath: statePath });
     await withPatched(claudeCode, {
       detect: async () => true,
       runModel: async () => ({
         ok: false, text: '', usage: null,
-        reasonCode: 'cli-unauthenticated', reason: 'not authenticated', authStatus: 'logged-out',
+        reasonCode: 'cli-unauthenticated', reason: 'not authenticated', authStatus: 'logged-out', refusal: 'pre-invocation',
       }),
     }, () => withPatched(byoKey, {
       runModel: async () => ({
@@ -138,11 +140,12 @@ describe('providers/index.js runModel(): fall-through SUCCESS names the provider
 describe('providers/index.js runModel(): fall-through SUCCESS with no self-stamped identity stamps unknown, never a guess', () => {
   it('claude-code fails non-retryable; BYO runs and succeeds but its result omits `identity` (contract violation) — stamped unknown, not a provider guess', async () => {
     const statePath = path.join(tempDir('auxilo-provenance-b-'), 'providers.json');
+    byoKey.writeByoConfig({ provider: 'openai', model: 'fixture-model', api_key: 'fixture-key' }, { providersStatePath: statePath });
     await withPatched(claudeCode, {
       detect: async () => true,
       runModel: async () => ({
         ok: false, text: '', usage: null,
-        reasonCode: 'cli-unauthenticated', reason: 'not authenticated', authStatus: 'logged-out',
+        reasonCode: 'cli-unauthenticated', reason: 'not authenticated', authStatus: 'logged-out', refusal: 'pre-invocation',
       }),
     }, () => withPatched(byoKey, {
       // Deliberately no `identity` field — simulates the contract violation
@@ -155,21 +158,21 @@ describe('providers/index.js runModel(): fall-through SUCCESS with no self-stamp
         providersStatePath: statePath,
       });
       assert.equal(result.ok, true);
-      assert.deepEqual(result.identity, { provider: 'unknown', model: null, version: null, vendor: null });
+      assert.deepEqual(result.identity, { provider: 'unknown', model: null, requested_model: null, observed_model: null, identity_unresolved: 'missing', version: null, vendor: null });
     }));
   });
 
   it('resolveExtractionModelIdentity() (extract-local.js): given a result with no identity at all, returns the honest unknown triple — never re-derives, never guesses', () => {
     assert.deepEqual(
       extractLocal.resolveExtractionModelIdentity({ ok: true, text: '{}', usage: null }),
-      { provider: 'unknown', model: null, version: null, vendor: null }
+      { provider: 'unknown', model: null, requested_model: null, observed_model: null, identity_unresolved: 'missing', version: null, vendor: null }
     );
     assert.deepEqual(
       extractLocal.resolveExtractionModelIdentity({ ok: false, reasonCode: 'no-usable-provider', reason: 'x' }),
-      { provider: 'unknown', model: null, version: null, vendor: null }
+      { provider: 'unknown', model: null, requested_model: null, observed_model: null, identity_unresolved: 'missing', version: null, vendor: null }
     );
     // A well-formed identity is passed through verbatim, never touched.
-    const real = { provider: 'byo-key', model: 'gpt-4o-mini', version: null, vendor: 'openai-compatible' };
+    const real = { provider: 'byo-key', model: 'gpt-4o-mini', requested_model: 'gpt-4o-mini', observed_model: 'gpt-4o-mini', version: null, vendor: 'openai-compatible' };
     assert.deepEqual(extractLocal.resolveExtractionModelIdentity({ ok: true, identity: real }), real);
   });
 });
@@ -181,10 +184,10 @@ describe('providers/index.js runModel(): every automatic provider exhausted (no-
     const statePath = path.join(tempDir('auxilo-provenance-c-'), 'providers.json');
     await withPatched(claudeCode, {
       detect: async () => false,
-      runModel: async () => ({ ok: false, text: '', usage: null, reasonCode: 'cli-unauthenticated', reason: 'claude not authed', authStatus: 'logged-out' }),
+      runModel: async () => ({ ok: false, text: '', usage: null, reasonCode: 'cli-unauthenticated', reason: 'claude not authed', authStatus: 'logged-out', refusal: 'pre-invocation' }),
     }, () => withPatched(byoKey, {
       detect: async () => false,
-      runModel: async () => ({ ok: false, text: '', usage: null, reasonCode: 'provider-not-configured', reason: 'no key configured', authStatus: 'unknown' }),
+      runModel: async () => ({ ok: false, text: '', usage: null, reasonCode: 'provider-not-configured', reason: 'no key configured', authStatus: 'unknown', refusal: 'pre-invocation' }),
     }, async () => {
       const result = await providers.runModel({
         env: {}, providerCache: {}, mode: 'extract', prompt: 'P', input: 'T',
@@ -203,10 +206,10 @@ describe('providers/index.js runModel(): every automatic provider exhausted (no-
     const statePath = path.join(dir, 'providers.json');
     await withPatched(claudeCode, {
       detect: async () => false,
-      runModel: async () => ({ ok: false, text: '', usage: null, reasonCode: 'cli-unauthenticated', reason: 'claude not authed', authStatus: 'logged-out' }),
+      runModel: async () => ({ ok: false, text: '', usage: null, reasonCode: 'cli-unauthenticated', reason: 'claude not authed', authStatus: 'logged-out', refusal: 'pre-invocation' }),
     }, () => withPatched(byoKey, {
       detect: async () => false,
-      runModel: async () => ({ ok: false, text: '', usage: null, reasonCode: 'provider-not-configured', reason: 'no key configured', authStatus: 'unknown' }),
+      runModel: async () => ({ ok: false, text: '', usage: null, reasonCode: 'provider-not-configured', reason: 'no key configured', authStatus: 'unknown', refusal: 'pre-invocation' }),
     }, async () => {
       const result = await extractLocal.extractLocally('a synthetic transcript, long enough for the extractor', 'claude-code', {
         indexPath, log: () => {}, providersStatePath: statePath, providerCache: {},
@@ -297,7 +300,7 @@ describe('EXTRACTION-MODEL-PROVENANCE side-effect removal: identity resolution n
     // spawn itself. The fast path never calls persistSelected; neither does
     // the (now-deleted) identity re-resolve.
     const { spawnSyncImpl } = spawnQueue([authJson(true), authJson(true), extractionStdout([])]);
-    const result = await extractLocal.extractLocally('a synthetic transcript, long enough for the extractor', 'claude-code', {
+    const result = await extractLocal.extractLocally('a synthetic transcript, long enough for the extractor', 'claude-code', { ...supportedClaude,
       indexPath, log: () => {}, spawnSyncImpl, claudeBin: 'claude', homeDir: dir, cwd: dir,
       providersStatePath: statePath, providerCache: {},
     });
@@ -327,12 +330,13 @@ describe('EXTRACTION-MODEL-PROVENANCE side-effect removal: identity resolution n
 describe('providers/index.js runModel() + extract-local.js extractLocally(): the automatic fall-through FAILURE identity', () => {
   it('providers.runModel(): names byo-key on the returned failure, never claude-code or codex-cli', async () => {
     const statePath = path.join(tempDir('auxilo-provenance-g-'), 'providers.json');
+    byoKey.writeByoConfig({ provider: 'openai', model: 'fixture-model', api_key: 'fixture-key' }, { providersStatePath: statePath });
     let codexCalled = false;
     await withPatched(claudeCode, {
       detect: async () => true,
       runModel: async () => ({
         ok: false, text: '', usage: null,
-        reasonCode: 'cli-unauthenticated', reason: 'not authenticated', authStatus: 'logged-out',
+        reasonCode: 'cli-unauthenticated', reason: 'not authenticated', authStatus: 'logged-out', refusal: 'pre-invocation',
       }),
     }, () => withPatched(codexCli, {
       runModel: async () => {
@@ -361,13 +365,14 @@ describe('providers/index.js runModel() + extract-local.js extractLocally(): the
     const indexPath = path.join(dir, 'extracted-index.jsonl');
     fs.writeFileSync(indexPath, '');
     const statePath = path.join(dir, 'providers.json');
+    byoKey.writeByoConfig({ provider: 'openai', model: 'fixture-model', api_key: 'fixture-key' }, { providersStatePath: statePath });
     const logLines = [];
     let codexCalled = false;
     await withPatched(claudeCode, {
       detect: async () => true,
       runModel: async () => ({
         ok: false, text: '', usage: null,
-        reasonCode: 'cli-unauthenticated', reason: 'not authenticated', authStatus: 'logged-out',
+        reasonCode: 'cli-unauthenticated', reason: 'not authenticated', authStatus: 'logged-out', refusal: 'pre-invocation',
       }),
     }, () => withPatched(codexCli, {
       runModel: async () => {

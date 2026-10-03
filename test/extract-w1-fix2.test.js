@@ -1,4 +1,5 @@
 'use strict';
+const { supportedClaude } = require('./helpers/epc2-fixtures.js');
 /*
  * test/extract-w1-fix2.test.js — EXTRACT-PER-CLIENT W1 pre-publish fix pass
  * (0.9.13), agent/extract-w1-fix2 branched from pm/integ-h @ 0507ef5.
@@ -74,7 +75,7 @@ describe('GOV-3 item 1: index.js persistSelected routes through byo-key.js\'s wr
       fs.writeFileSync(`${statePath}.tmp`, JSON.stringify({ stale: true }), { mode: 0o644 });
 
       const cache = {};
-      const resolved = await providersIndex.resolveProvider({
+      const resolved = await providersIndex.resolveProvider({ ...supportedClaude,
         env: {}, providerCache: cache, providersStatePath: statePath,
         homeDir: dir, cwd: dir,
         existsSync: () => false,
@@ -304,7 +305,7 @@ describe('GOV-3 item 3: base_url must be https://', () => {
       byoKey.writeByoConfig({ provider: 'anthropic', base_url: 'http://127.0.0.1:9999', model: 'x', api_key: 'sekret' }, { providersStatePath: statePath });
       let fetchCalled = false;
       const fetchImpl = async () => { fetchCalled = true; return { ok: true, status: 200, json: async () => ({}) }; };
-      const result = await byoKey.runModel({ providersStatePath: statePath, prompt: 'p', fetchImpl });
+      const result = await byoKey.runModel({ beforeModelInvocation: () => true, providersStatePath: statePath, prompt: 'p', fetchImpl });
       assert.equal(result.ok, false);
       assert.equal(result.reasonCode, 'provider-base-url-insecure');
       assert.equal(fetchCalled, false, 'must refuse before ever sending the transcript or key');
@@ -333,7 +334,7 @@ describe('GOV-3 item 4: fetch redirect handling', () => {
         capturedInit = init;
         return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) };
       };
-      await byoKey.runModel({ providersStatePath: statePath, prompt: 'p', fetchImpl });
+      await byoKey.runModel({ beforeModelInvocation: () => true, providersStatePath: statePath, prompt: 'p', fetchImpl });
       assert.equal(capturedInit.redirect, 'error');
     } finally {
       cleanupTempDirs();
@@ -346,7 +347,7 @@ describe('GOV-3 item 4: fetch redirect handling', () => {
       const statePath = statePathIn(dir);
       byoKey.writeByoConfig({ provider: 'openai', model: 'x', api_key: 'k' }, { providersStatePath: statePath });
       const fetchImpl = async () => { throw new TypeError('fetch failed'); };
-      const result = await byoKey.runModel({ providersStatePath: statePath, prompt: 'p', fetchImpl });
+      const result = await byoKey.runModel({ beforeModelInvocation: () => true, providersStatePath: statePath, prompt: 'p', fetchImpl });
       assert.equal(result.ok, false);
       assert.equal(result.reasonCode, 'provider-error');
     } finally {
@@ -388,7 +389,7 @@ describe('GOV-3 should-fix item 8: response body size cap (2MB)', () => {
         json: async () => { bodyTouched = true; return {}; },
         body: { getReader: () => ({ read: async () => { bodyTouched = true; return { done: true, value: undefined }; } }) },
       });
-      const result = await byoKey.runModel({ providersStatePath: statePath, prompt: 'p', fetchImpl });
+      const result = await byoKey.runModel({ beforeModelInvocation: () => true, providersStatePath: statePath, prompt: 'p', fetchImpl });
       assert.equal(result.ok, false);
       assert.equal(result.reasonCode, 'provider-response-too-large');
       assert.equal(bodyTouched, false, 'a declared over-cap length must refuse before touching the body at all');
@@ -409,7 +410,7 @@ describe('GOV-3 should-fix item 8: response body size cap (2MB)', () => {
         headers: { get: () => null },
         body: streamOf([bigChunk, bigChunk, bigChunk]),
       });
-      const result = await byoKey.runModel({ providersStatePath: statePath, prompt: 'p', fetchImpl });
+      const result = await byoKey.runModel({ beforeModelInvocation: () => true, providersStatePath: statePath, prompt: 'p', fetchImpl });
       assert.equal(result.ok, false);
       assert.equal(result.reasonCode, 'provider-response-too-large');
     } finally {
@@ -429,7 +430,7 @@ describe('GOV-3 should-fix item 8: response body size cap (2MB)', () => {
         headers: { get: (h) => (h.toLowerCase() === 'content-length' ? String(payload.byteLength) : null) },
         body: streamOf([new Uint8Array(payload)]),
       });
-      const result = await byoKey.runModel({ providersStatePath: statePath, prompt: 'p', fetchImpl });
+      const result = await byoKey.runModel({ beforeModelInvocation: () => true, providersStatePath: statePath, prompt: 'p', fetchImpl });
       assert.equal(result.ok, true);
       assert.equal(result.text, 'hello');
     } finally {
@@ -443,7 +444,7 @@ describe('GOV-3 should-fix item 8: response body size cap (2MB)', () => {
       const statePath = statePathIn(dir);
       byoKey.writeByoConfig({ provider: 'openai', model: 'x', api_key: 'k' }, { providersStatePath: statePath });
       const fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'fixture-ok' } }] }) });
-      const result = await byoKey.runModel({ providersStatePath: statePath, prompt: 'p', fetchImpl });
+      const result = await byoKey.runModel({ beforeModelInvocation: () => true, providersStatePath: statePath, prompt: 'p', fetchImpl });
       assert.equal(result.ok, true);
       assert.equal(result.text, 'fixture-ok');
     } finally {
@@ -673,11 +674,11 @@ describe('GATE-A item (a): codex-cli identity field (resolveExtractionModelIdent
         if (args[0] === '--version') return { status: 0, stdout: 'codex-cli 0.144.5', stderr: '', error: null };
         return { status: 0, stdout: lifecycleJsonl(), stderr: '', error: null };
       };
-      const result = await codexCli.runModel({
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true,
         prompt: 'P', input: 'T', mode: 'extract', homeDir: home, codexBin: 'codex', outputPath, spawnSyncImpl,
       });
       assert.equal(result.ok, true);
-      assert.deepEqual(result.identity, { provider: 'codex-cli', model: null, version: 'codex-cli 0.144.5', vendor: null });
+      assert.deepEqual(result.identity, { provider: 'codex-cli', model: null, requested_model: null, observed_model: null, identity_unresolved: 'missing', version: 'codex-cli 0.144.5', vendor: null });
       assert.deepEqual(result.extraction_model, result.identity, 'deprecated alias must be byte-identical to identity for one release');
     } finally {
       codexCli._resetVersionCacheForTests();
@@ -711,7 +712,7 @@ describe('GATE-A item (a): codex-cli identity field (resolveExtractionModelIdent
       });
       assert.equal(result.learnings.length, 1);
       assert.deepEqual(result.learnings[0].extraction_model, {
-        provider: 'codex-cli', model: null, version: 'codex-cli 0.144.5', vendor: null,
+        provider: 'codex-cli', model: null, requested_model: null, observed_model: null, identity_unresolved: 'missing', version: 'codex-cli 0.144.5', vendor: null,
       }, 'the real codex version must now reach the stamp, not the generic null-version fallback');
     } finally {
       codexCli._resetVersionCacheForTests();
@@ -766,7 +767,7 @@ describe('GOV-3 should-fix item 11: codex -o file lands in a private 0700 dir, 0
       return { status: 0, stdout: lifecycleJsonl(), stderr: '', error: null };
     };
     try {
-      const result = await codexCli.runModel({ prompt: 'P', input: 'T', mode: 'extract', homeDir: home, codexBin: 'codex', spawnSyncImpl });
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true, prompt: 'P', input: 'T', mode: 'extract', homeDir: home, codexBin: 'codex', spawnSyncImpl });
       assert.equal(result.ok, true);
       assert.ok(capturedOutputPath, 'a -o path must have been generated');
       assert.ok(!fs.existsSync(capturedOutputPath), 'the output file must be gone after the call');
@@ -789,7 +790,7 @@ describe('GOV-3 should-fix item 11: codex -o file lands in a private 0700 dir, 0
       return { status: 1, stdout: 'boom', stderr: '', error: null, signal: null };
     };
     try {
-      const result = await codexCli.runModel({ prompt: 'P', input: 'T', mode: 'extract', homeDir: home, codexBin: 'codex', spawnSyncImpl });
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true, prompt: 'P', input: 'T', mode: 'extract', homeDir: home, codexBin: 'codex', spawnSyncImpl });
       assert.equal(result.ok, false);
       assert.equal(result.reasonCode, 'model-error');
       assert.ok(capturedOutputPath);
@@ -815,7 +816,7 @@ describe('GOV-3 should-fix item 11: codex -o file lands in a private 0700 dir, 0
       return { status: 0, stdout: lifecycleJsonl(), stderr: '', error: null };
     };
     try {
-      const result = await codexCli.runModel({ prompt: 'P', input: 'T', mode: 'extract', homeDir: home, codexBin: 'codex', spawnSyncImpl, chmodSyncImpl });
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true, prompt: 'P', input: 'T', mode: 'extract', homeDir: home, codexBin: 'codex', spawnSyncImpl, chmodSyncImpl });
       assert.equal(result.ok, true);
       assert.ok(chmodCalls.some((c) => c.mode === 0o600), 'must chmod the output file to 0600 before reading');
     } finally {
@@ -898,7 +899,7 @@ describe('GOV-3 note item 13: os.homedir() must resolve to an absolute path', ()
     const relativePath = '.auxilo-w1fix2-relative-providers.json'; // never actually created/read
     try {
       assert.equal(byoKey.detect({ providersStatePath: relativePath }), false);
-      const result = await byoKey.runModel({ providersStatePath: relativePath, prompt: 'p' });
+      const result = await byoKey.runModel({ beforeModelInvocation: () => true, providersStatePath: relativePath, prompt: 'p' });
       assert.equal(result.ok, false);
       assert.equal(result.reasonCode, 'provider-home-unresolved');
     } finally {
