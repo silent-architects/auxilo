@@ -19,7 +19,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const readline = require('readline');
-const { exec } = require('child_process');
+const { exec, spawnSync } = require('child_process');
 const installer = require('../lib/installer.js');
 const review = require('../lib/review.js');
 const runnerAutoupdate = require('../lib/runner-autoupdate.js');
@@ -244,7 +244,15 @@ async function cmdSetup(flags) {
   console.log('');
   for (const client of chosen.filter((c) => c.mcp)) {
     try {
-      const result = installer.registerMcp(client);
+      const result = installer.registerMcp(client, undefined, { commandRunner: spawnSync });
+      if (client.id === 'claude-code') {
+        if (result.failed) {
+          console.log('Setup could not add Auxilo to Claude Code, so run this command to add it yourself.');
+          console.log(installer.claudeMcpCommand());
+        }
+        console.log(installer.claudeMcpStatusLine(result));
+        continue;
+      }
       console.log(result.changed
         ? `  ✓ ${client.name}: registered Auxilo MCP server (${result.configPath})`
         : `  ✓ ${client.name}: already registered (no changes)`);
@@ -553,7 +561,7 @@ async function cmdInit(flags) {
 // ─── auxilo status ──────────────────────────────────────────────────────────
 
 async function cmdStatus() {
-  const s = await installer.getStatus(HOME);
+  const s = await installer.getStatus(HOME, { commandRunner: spawnSync });
 
   console.log('\nAuxilo status');
   console.log('=============');
@@ -561,6 +569,10 @@ async function cmdStatus() {
   console.log('Clients:');
   if (s.clients.length === 0) console.log('  (none detected)');
   for (const c of s.clients) {
+    if (c.id === 'claude-code') {
+      console.log(`  ${installer.claudeMcpStatusLine(c)}`);
+      continue;
+    }
     const reg = c.mcp
       ? (c.registered ? 'MCP registered' : 'detected, MCP NOT registered')
       : 'poll-based source (no MCP config)';

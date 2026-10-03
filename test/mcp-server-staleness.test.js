@@ -292,15 +292,15 @@ describe('0.9.17 fix pass F1: re-pin patches command/args in place, other keys s
 
   it('json-mcpServers: same survives via rewriteMcpPins (the self-update path)', () => {
     const home = tmpHome('f1-json-rewrite-');
-    fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
-    const settingsPath = path.join(home, '.claude', 'settings.json');
+    fs.mkdirSync(path.join(home, '.cursor'), { recursive: true });
+    const settingsPath = path.join(home, '.cursor', 'mcp.json');
     writeJson(settingsPath, {
       mcpServers: {
         auxilo: { command: 'npx', args: ['auxilo-mcp@0.9.16'], env: { FOO: 'bar' }, timeout: 30, alwaysAllow: ['search'] },
       },
     });
     const results = installer.rewriteMcpPins(home, '0.9.17');
-    assert.equal(results.find((r) => r.id === 'claude-code').changed, true);
+    assert.equal(results.find((r) => r.id === 'cursor').changed, true);
     const config = readJson(settingsPath);
     assert.deepEqual(config.mcpServers.auxilo, {
       command: 'npx', args: ['auxilo-mcp@0.9.17'], env: { FOO: 'bar' }, timeout: 30, alwaysAllow: ['search'],
@@ -480,8 +480,8 @@ describe('MCP-SERVER-STALENESS: rewriteMcpPins', () => {
 
   it('re-pins an already-registered Claude Code (json-mcpServers) client, other servers untouched', () => {
     const home = setupHome();
-    fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
-    const settingsPath = path.join(home, '.claude', 'settings.json');
+    fs.mkdirSync(path.join(home, '.cursor'), { recursive: true });
+    const settingsPath = path.join(home, '.cursor', 'mcp.json');
     writeJson(settingsPath, {
       mcpServers: {
         auxilo: { command: 'npx', args: ['auxilo-mcp@0.9.16'] },
@@ -490,7 +490,7 @@ describe('MCP-SERVER-STALENESS: rewriteMcpPins', () => {
     });
 
     const results = installer.rewriteMcpPins(home, '0.9.17');
-    const cc = results.find((r) => r.id === 'claude-code');
+    const cc = results.find((r) => r.id === 'cursor');
     assert.ok(cc, 'claude-code result present');
     assert.equal(cc.changed, true);
 
@@ -534,8 +534,8 @@ describe('MCP-SERVER-STALENESS: rewriteMcpPins', () => {
 
   it('is idempotent: a second rewrite to the same version changes nothing (byte-identical)', () => {
     const home = setupHome();
-    fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
-    const settingsPath = path.join(home, '.claude', 'settings.json');
+    fs.mkdirSync(path.join(home, '.cursor'), { recursive: true });
+    const settingsPath = path.join(home, '.cursor', 'mcp.json');
     writeJson(settingsPath, { mcpServers: { auxilo: { command: 'npx', args: ['auxilo-mcp@0.9.16'] } } });
 
     installer.rewriteMcpPins(home, '0.9.17');
@@ -543,13 +543,13 @@ describe('MCP-SERVER-STALENESS: rewriteMcpPins', () => {
     const results2 = installer.rewriteMcpPins(home, '0.9.17');
     const after2 = fs.readFileSync(settingsPath, 'utf-8');
     assert.equal(after2, after1);
-    assert.equal(results2.find((r) => r.id === 'claude-code').changed, false);
+    assert.equal(results2.find((r) => r.id === 'cursor').changed, false);
   });
 
   it('leaves a foreign/hand-edited entry completely untouched, byte-for-byte', () => {
     const home = setupHome();
-    fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
-    const settingsPath = path.join(home, '.claude', 'settings.json');
+    fs.mkdirSync(path.join(home, '.cursor'), { recursive: true });
+    const settingsPath = path.join(home, '.cursor', 'mcp.json');
     const raw = JSON.stringify({
       mcpServers: { auxilo: { command: 'node', args: ['/Users/me/dev/fork/mcp-server.js'] } },
     }, null, 2) + '\n';
@@ -700,8 +700,8 @@ describe('MCP-SERVER-STALENESS: stageAndSwap invokes the extracted tree\'s rewri
 describe('MCP-SERVER-STALENESS: getStatus pin/staleness fields', () => {
   it('reports mcpPin and mcpPinStale=false when the pin matches the installed runner', async () => {
     const home = tmpHome('mcp-status-match-');
-    fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
-    writeJson(path.join(home, '.claude', 'settings.json'), {
+    fs.mkdirSync(path.join(home, '.cursor'), { recursive: true });
+    writeJson(path.join(home, '.cursor', 'mcp.json'), {
       mcpServers: { auxilo: { command: 'npx', args: ['auxilo-mcp@0.9.17'] } },
     });
     const binRoot = path.join(home, '.auxilo', 'bin', 'scripts');
@@ -710,7 +710,7 @@ describe('MCP-SERVER-STALENESS: getStatus pin/staleness fields', () => {
     fs.writeFileSync(path.join(home, '.auxilo', 'bin', 'VERSION'), '0.9.17\n');
 
     const status = await installer.getStatus(home);
-    const cc = status.clients.find((c) => c.id === 'claude-code');
+    const cc = status.clients.find((c) => c.id === 'cursor');
     assert.equal(cc.mcpPin, '0.9.17');
     assert.equal(cc.mcpPinStale, false);
     assert.equal(status.runnerVersion, '0.9.17');
@@ -718,8 +718,8 @@ describe('MCP-SERVER-STALENESS: getStatus pin/staleness fields', () => {
 
   it('reports mcpPinStale=true when the pin is behind the installed runner', async () => {
     const home = tmpHome('mcp-status-stale-');
-    fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
-    writeJson(path.join(home, '.claude', 'settings.json'), {
+    fs.mkdirSync(path.join(home, '.cursor'), { recursive: true });
+    writeJson(path.join(home, '.cursor', 'mcp.json'), {
       mcpServers: { auxilo: { command: 'npx', args: ['auxilo-mcp@0.9.16'] } },
     });
     const binRoot = path.join(home, '.auxilo', 'bin', 'scripts');
@@ -728,15 +728,15 @@ describe('MCP-SERVER-STALENESS: getStatus pin/staleness fields', () => {
     fs.writeFileSync(path.join(home, '.auxilo', 'bin', 'VERSION'), '0.9.17\n');
 
     const status = await installer.getStatus(home);
-    const cc = status.clients.find((c) => c.id === 'claude-code');
+    const cc = status.clients.find((c) => c.id === 'cursor');
     assert.equal(cc.mcpPin, '0.9.16');
     assert.equal(cc.mcpPinStale, true);
   });
 
   it("reports mcpPin='unpinned' for a legacy entry and never marks it stale", async () => {
     const home = tmpHome('mcp-status-unpinned-');
-    fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
-    writeJson(path.join(home, '.claude', 'settings.json'), {
+    fs.mkdirSync(path.join(home, '.cursor'), { recursive: true });
+    writeJson(path.join(home, '.cursor', 'mcp.json'), {
       mcpServers: { auxilo: { command: 'npx', args: ['auxilo-mcp'] } },
     });
     const binRoot = path.join(home, '.auxilo', 'bin', 'scripts');
@@ -745,7 +745,7 @@ describe('MCP-SERVER-STALENESS: getStatus pin/staleness fields', () => {
     fs.writeFileSync(path.join(home, '.auxilo', 'bin', 'VERSION'), '0.9.17\n');
 
     const status = await installer.getStatus(home);
-    const cc = status.clients.find((c) => c.id === 'claude-code');
+    const cc = status.clients.find((c) => c.id === 'cursor');
     assert.equal(cc.mcpPin, 'unpinned');
     assert.equal(cc.mcpPinStale, false);
   });
@@ -758,7 +758,7 @@ describe('MCP-SERVER-STALENESS: auxilo status CLI output', () => {
 
   function runStatus(home) {
     return new Promise((resolve, reject) => {
-      const env = { ...process.env, HOME: home, AUXILO_NO_NOTIFY: '1' };
+      const env = { ...process.env, HOME: home, AUXILO_HOME: home, USERPROFILE: home, PATH: '', AUXILO_NO_NOTIFY: '1' };
       delete env.AUXILO_BASE_URL;
       const child = spawn(process.execPath, [CLI_PATH, 'status'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
       let stdout = '';
@@ -773,8 +773,8 @@ describe('MCP-SERVER-STALENESS: auxilo status CLI output', () => {
 
   it('shows the STALE pin note when the client pin trails the installed runner', async () => {
     const home = tmpHome('mcp-cli-status-stale-');
-    fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
-    writeJson(path.join(home, '.claude', 'settings.json'), {
+    fs.mkdirSync(path.join(home, '.cursor'), { recursive: true });
+    writeJson(path.join(home, '.cursor', 'mcp.json'), {
       mcpServers: { auxilo: { command: 'npx', args: ['auxilo-mcp@0.9.16'] } },
     });
     const binRoot = path.join(home, '.auxilo', 'bin', 'scripts');
@@ -783,13 +783,13 @@ describe('MCP-SERVER-STALENESS: auxilo status CLI output', () => {
     fs.writeFileSync(path.join(home, '.auxilo', 'bin', 'VERSION'), '0.9.17\n');
 
     const { stdout } = await runStatus(home);
-    assert.match(stdout, /Claude Code: MCP registered \(pin: v0\.9\.16, runner: v0\.9\.17 — STALE, run `npx auxilo setup`\)/);
+    assert.match(stdout, /Cursor: MCP registered \(pin: v0\.9\.16, runner: v0\.9\.17 — STALE, run `npx auxilo setup`\)/);
   });
 
   it('shows a plain pin note (no STALE) when the pin matches', async () => {
     const home = tmpHome('mcp-cli-status-match-');
-    fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
-    writeJson(path.join(home, '.claude', 'settings.json'), {
+    fs.mkdirSync(path.join(home, '.cursor'), { recursive: true });
+    writeJson(path.join(home, '.cursor', 'mcp.json'), {
       mcpServers: { auxilo: { command: 'npx', args: ['auxilo-mcp@0.9.17'] } },
     });
     const binRoot = path.join(home, '.auxilo', 'bin', 'scripts');
@@ -798,7 +798,7 @@ describe('MCP-SERVER-STALENESS: auxilo status CLI output', () => {
     fs.writeFileSync(path.join(home, '.auxilo', 'bin', 'VERSION'), '0.9.17\n');
 
     const { stdout } = await runStatus(home);
-    assert.match(stdout, /Claude Code: MCP registered \(pin: v0\.9\.17\)/);
+    assert.match(stdout, /Cursor: MCP registered \(pin: v0\.9\.17\)/);
     assert.doesNotMatch(stdout, /STALE/);
   });
 });

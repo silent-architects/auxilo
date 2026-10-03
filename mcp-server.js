@@ -687,6 +687,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const headers = baseHeaders(
           args.session_token ? { 'Authorization': `Bearer ${args.session_token}` } : {}
         );
+        headers['X-Auxilo-Client'] = `mcp/${require('./package.json').version}`;
 
         if (args.action === 'list') {
           const resp = await fetch(`${AUXILO_BASE}/account/pending/summary`, { headers });

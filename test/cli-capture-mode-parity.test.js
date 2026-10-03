@@ -159,7 +159,7 @@ describe('CLI-CAPTURE-MODE-DISAGREE: `auxilo setup` and `auxilo status` print th
    */
   function runSetupDetectionBlock(home) {
     return new Promise((resolve, reject) => {
-      const env = { ...process.env, HOME: home, AUXILO_NO_NOTIFY: '1' };
+      const env = { ...process.env, HOME: home, AUXILO_HOME: home, USERPROFILE: home, PATH: '', AUXILO_NO_NOTIFY: '1' };
       delete env.AUXILO_BASE_URL;
       const child = spawn(process.execPath, [CLI_PATH, 'setup', '--base-url', 'http://127.0.0.1:1'], {
         env, stdio: ['pipe', 'pipe', 'pipe'],
@@ -185,7 +185,7 @@ describe('CLI-CAPTURE-MODE-DISAGREE: `auxilo setup` and `auxilo status` print th
 
   function runStatus(home) {
     return new Promise((resolve, reject) => {
-      const env = { ...process.env, HOME: home, AUXILO_NO_NOTIFY: '1' };
+      const env = { ...process.env, HOME: home, AUXILO_HOME: home, USERPROFILE: home, PATH: '', AUXILO_NO_NOTIFY: '1' };
       delete env.AUXILO_BASE_URL;
       const child = spawn(process.execPath, [CLI_PATH, 'status'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
       let stdout = '';
