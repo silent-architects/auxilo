@@ -5295,13 +5295,13 @@
       },
       {
         "key": "s0.a[7]",
-        "fontSize": "12px",
+        "fontSize": "14px",
         "fontWeight": "400",
-        "lineHeight": "19.8px",
-        "fontFamily": "\"IBM Plex Mono\", \"IBM Plex Mono Fallback\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-        "letterSpacing": "0.72px",
+        "lineHeight": "26px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
         "textTransform": "none",
-        "color": "rgb(139, 146, 154)"
+        "color": "rgb(167, 172, 178)"
       },
       {
         "key": "s0.a[8]",
@@ -9658,13 +9658,13 @@
       },
       {
         "key": "s0.a[7]",
-        "fontSize": "12px",
+        "fontSize": "14px",
         "fontWeight": "400",
-        "lineHeight": "19.8px",
-        "fontFamily": "\"IBM Plex Mono\", \"IBM Plex Mono Fallback\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-        "letterSpacing": "0.72px",
+        "lineHeight": "26px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
         "textTransform": "none",
-        "color": "rgb(139, 146, 154)"
+        "color": "rgb(167, 172, 178)"
       },
       {
         "key": "s0.a[8]",
@@ -12071,13 +12071,13 @@
       },
       {
         "key": "s0.a[7]",
-        "fontSize": "12px",
+        "fontSize": "14px",
         "fontWeight": "400",
-        "lineHeight": "19.8px",
-        "fontFamily": "\"IBM Plex Mono\", \"IBM Plex Mono Fallback\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-        "letterSpacing": "0.72px",
+        "lineHeight": "26px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
         "textTransform": "none",
-        "color": "rgb(139, 146, 154)"
+        "color": "rgb(167, 172, 178)"
       },
       {
         "key": "s0.a[8]",
@@ -12434,13 +12434,13 @@
       },
       {
         "key": "s0.a[7]",
-        "fontSize": "12px",
+        "fontSize": "14px",
         "fontWeight": "400",
-        "lineHeight": "19.8px",
-        "fontFamily": "\"IBM Plex Mono\", \"IBM Plex Mono Fallback\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-        "letterSpacing": "0.72px",
+        "lineHeight": "26px",
+        "fontFamily": "Archivo, \"Archivo Fallback\", \"Helvetica Neue\", Arial, system-ui, sans-serif",
+        "letterSpacing": "normal",
         "textTransform": "none",
-        "color": "rgb(139, 146, 154)"
+        "color": "rgb(167, 172, 178)"
       },
       {
         "key": "s0.a[8]",
