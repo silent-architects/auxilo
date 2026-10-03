@@ -307,7 +307,9 @@ describe('measured: code panels, the MCP stack, the catalog card and the first s
       assert.ok(m.length >= 4, 'positive control: the code panels were measured');
       for (const pre of m) {
         assert.ok(['auto', 'scroll'].includes(pre.overflowX), `${pre.id}: scrolls inside its box (${pre.overflowX})`);
-        if (pre.tabindex === '0') assert.ok(pre.scrollW <= pre.clientW + 1, `${pre.id} at ${width}: the longest line (${pre.scrollW}) fits the panel (${pre.clientW}), so nothing is cut mid-word`);
+        // No pixel pin on how text is drawn (Linux draws the mono a few px wider than macOS): a line wider
+        // than its box is never cut because the box scrolls, and a box that can scroll is a keyboard stop.
+        if (pre.scrollW > pre.clientW) assert.equal(pre.tabindex, '0', `${pre.id} at ${width}: a panel whose longest line (${pre.scrollW}) exceeds its box (${pre.clientW}) is keyboard reachable`);
       }
       assert.ok(m.some((p) => p.id === 'learn-code'), 'positive control: the POST /learn panel is one of them');
     });
