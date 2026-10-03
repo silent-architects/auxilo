@@ -84,6 +84,7 @@ describe('extract-local.js: extractLocally attaches extraction_model per learnin
     try {
       const result = await extractLocal.extractLocally('a synthetic transcript', 'claude-code', { ...supportedClaude,
         indexPath, log: () => {}, spawnSyncImpl, claudeBin: 'claude', homeDir: '/fixture/home', cwd: '/fixture/home',
+        routeBindingsDir: path.join(dir, 'bindings'),
       });
       assert.equal(result.learnings.length, 1);
       assert.deepEqual(result.learnings[0].extraction_model, {
@@ -112,6 +113,7 @@ describe('extract-local.js: extractLocally attaches extraction_model per learnin
     try {
       const result = await extractLocal.extractLocally('a synthetic transcript', 'claude-code', {
         indexPath, log: () => {}, fetchImpl, providersStatePath,
+        routeBindingsDir: path.join(dir, 'bindings'),
       });
       assert.equal(result.learnings.length, 1);
       assert.deepEqual(result.learnings[0].extraction_model, {

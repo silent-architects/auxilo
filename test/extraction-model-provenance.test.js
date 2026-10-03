@@ -126,6 +126,7 @@ describe('providers/index.js runModel(): fall-through SUCCESS names the provider
       const result = await providers.runModel({
         env: {}, providerCache: {}, mode: 'extract', prompt: 'P', input: 'T',
         providersStatePath: statePath,
+        routeBindingsDir: path.join(path.dirname(statePath), 'bindings'),
       });
       assert.equal(result.ok, true);
       assert.equal(result.identity.provider, 'byo-key');
@@ -156,6 +157,7 @@ describe('providers/index.js runModel(): fall-through SUCCESS with no self-stamp
       const result = await providers.runModel({
         env: {}, providerCache: {}, mode: 'extract', prompt: 'P', input: 'T',
         providersStatePath: statePath,
+        routeBindingsDir: path.join(path.dirname(statePath), 'bindings'),
       });
       assert.equal(result.ok, true);
       assert.deepEqual(result.identity, { provider: 'unknown', model: null, requested_model: null, observed_model: null, identity_unresolved: 'missing', version: null, vendor: null });
@@ -192,6 +194,7 @@ describe('providers/index.js runModel(): every automatic provider exhausted (no-
       const result = await providers.runModel({
         env: {}, providerCache: {}, mode: 'extract', prompt: 'P', input: 'T',
         providersStatePath: statePath,
+        routeBindingsDir: path.join(path.dirname(statePath), 'bindings'),
       });
       assert.equal(result.ok, false);
       assert.equal(result.reasonCode, 'cli-unauthenticated');
@@ -213,6 +216,7 @@ describe('providers/index.js runModel(): every automatic provider exhausted (no-
     }, async () => {
       const result = await extractLocal.extractLocally('a synthetic transcript, long enough for the extractor', 'claude-code', {
         indexPath, log: () => {}, providersStatePath: statePath, providerCache: {},
+        routeBindingsDir: path.join(path.dirname(statePath), 'bindings'),
       });
       assert.deepEqual(result.learnings, [], 'no candidates were ever produced — nothing to stamp or publish');
       assert.equal(result.reasonCode, 'cli-unauthenticated');
@@ -303,6 +307,7 @@ describe('EXTRACTION-MODEL-PROVENANCE side-effect removal: identity resolution n
     const result = await extractLocal.extractLocally('a synthetic transcript, long enough for the extractor', 'claude-code', { ...supportedClaude,
       indexPath, log: () => {}, spawnSyncImpl, claudeBin: 'claude', homeDir: dir, cwd: dir,
       providersStatePath: statePath, providerCache: {},
+      routeBindingsDir: path.join(path.dirname(statePath), 'bindings'),
     });
     assert.equal(result.learnings.length, 0);
 
@@ -352,6 +357,7 @@ describe('providers/index.js runModel() + extract-local.js extractLocally(): the
       const result = await providers.runModel({
         env: {}, providerCache: {}, mode: 'extract', prompt: 'P', input: 'T',
         providersStatePath: statePath,
+        routeBindingsDir: path.join(path.dirname(statePath), 'bindings'),
       });
       assert.equal(result.ok, false);
       assert.equal(result.reasonCode, 'provider-rate-limited', 'a RETRYABLE failure must be returned as-is, never aggregated into no-usable-provider');
@@ -390,7 +396,8 @@ describe('providers/index.js runModel() + extract-local.js extractLocally(): the
       const result = await extractLocal.extractLocally(
         'a synthetic transcript, long enough for the extractor',
         'claude-code',
-        { indexPath, log: (msg) => logLines.push(msg), providersStatePath: statePath, providerCache: {} }
+        { indexPath, log: (msg) => logLines.push(msg), providersStatePath: statePath, providerCache: {},
+          routeBindingsDir: path.join(path.dirname(statePath), 'bindings') }
       );
       assert.deepEqual(result.learnings, [], 'the candidate path (extract-local.js ~:823-834) must return before the stamp spread (~:848) — nothing published from a failed run');
       assert.equal(result.reasonCode, 'provider-rate-limited');

@@ -709,6 +709,7 @@ describe('GATE-A item (a): codex-cli identity field (resolveExtractionModelIdent
       };
       const result = await extractLocal.extractLocally('a synthetic transcript', 'claude-code', {
         indexPath, log: () => {}, spawnSyncImpl, homeDir: home, cwd: home, codexBin: 'codex', outputPath,
+        routeBindingsDir: path.join(home, 'bindings'),
       });
       assert.equal(result.learnings.length, 1);
       assert.deepEqual(result.learnings[0].extraction_model, {

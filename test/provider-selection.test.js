@@ -403,6 +403,7 @@ describe('EXTRACT-PER-CLIENT W1 P1 fixture (a): claude installed+logged-out, cod
 
     try {
       const result = await providers.runModel({ ...supportedClaude,
+        routeBindingsDir: path.join(home, 'bindings'),
         env: {},
         providerCache: {},
         mode: 'extract',
@@ -452,6 +453,7 @@ describe('EXTRACT-PER-CLIENT W1 P1 fixture (b): claude logged-out + no codex + n
     };
     try {
       const result = await providers.runModel({ ...supportedClaude,
+        routeBindingsDir: path.join(home, 'bindings'),
         env: {},
         providerCache: {},
         mode: 'extract',
@@ -492,6 +494,7 @@ describe('EXTRACT-PER-CLIENT W1 P1 fixture (b): claude logged-out + no codex + n
         { clean: true },
         {
           ...supportedClaude,
+          routeBindingsDir: path.join(home, 'bindings'),
           indexPath,
           log: () => {},
           homeDir: home,
@@ -564,6 +567,7 @@ describe("EXTRACT-PER-CLIENT W1 P1 fixture (c): claude auth status 'unknown' at 
       assert.equal(resolved.id, 'claude-code', "detect() must read 'unknown' as usable — the W1 P1 fix");
 
       const result = await providers.runModel({ ...supportedClaude,
+        routeBindingsDir: path.join(home, 'bindings'),
         env: {},
         providerCache: {},
         mode: 'extract',
@@ -607,6 +611,7 @@ describe('EXTRACT-PER-CLIENT W1 P1 fixture (d): AUXILO_EXTRACTION_PROVIDER overr
     };
     try {
       const result = await providers.runModel({ ...supportedClaude,
+        routeBindingsDir: path.join(home, 'bindings'),
         env: { AUXILO_EXTRACTION_PROVIDER: 'claude-code' },
         providerCache: {},
         mode: 'extract',
@@ -658,6 +663,7 @@ describe('EXTRACT-PER-CLIENT W1 P1 fixture (e): a foreign-billing CLI helper is 
 
     try {
       const result = await providers.runModel({ ...supportedClaude,
+        routeBindingsDir: path.join(home, 'bindings'),
         env: {},
         providerCache: {},
         mode: 'extract',
@@ -776,6 +782,7 @@ describe('EXTRACT-PER-CLIENT W1 P1: a working provider that merely failed once d
     };
     try {
       const result = await providers.runModel({ ...supportedClaude,
+        routeBindingsDir: path.join(home, 'bindings'),
         env: {},
         providerCache: {},
         mode: 'extract',
@@ -809,7 +816,7 @@ describe('CLAUDE-CHILD-MCP-CONTEXT — provider selection', () => {
         let claudeModelCalls = 0;
         const result = await providers.runModel({
           env: {}, providerCache: {}, mode, prompt: 'fixture', homeDir: home, cwd: home,
-          claudeBin: 'claude', providersStatePath: path.join(home, 'providers.json'),
+          claudeBin: 'claude', providersStatePath: path.join(home, 'providers.json'), routeBindingsDir: path.join(home, 'bindings'),
           existsSync: p => p === codexBin,
           spawnSyncImpl: (bin, args) => {
             if (path.basename(bin) === 'codex') {
@@ -889,6 +896,7 @@ describe('EPC2-2 E0: provider registry and automatic walk', () => {
             const result = await providers.runModel({
               env: {}, providerCache: {}, mode, testReasonCode: reasonCode,
               providersStatePath: path.join(home, `${reasonCode}-${mode}.json`),
+              routeBindingsDir: path.join(home, 'bindings'),
               log: () => {},
             });
             assert.equal(result.ok, false, `${mode}/${reasonCode} must fail without a BYO key`);
@@ -934,6 +942,7 @@ describe('EPC2-2 E0: provider registry and automatic walk', () => {
             const result = await providers.runModel({
               env: {}, providerCache: {}, mode, testReasonCode: reasonCode,
               providersStatePath: statePath,
+              routeBindingsDir: path.join(path.dirname(statePath), 'bindings'),
               fetchImpl: async () => successfulByoResponse(`${mode}-${reasonCode}`),
               log: () => {},
             });
@@ -998,6 +1007,7 @@ describe('EPC2-2 E0: provider registry and automatic walk', () => {
         for (let i = 0; i < 2; i += 1) {
           const result = await providers.runModel({
             env: {}, providerCache: {}, providersStatePath: statePath,
+        routeBindingsDir: path.join(path.dirname(statePath), 'bindings'),
             lstatSyncImpl: () => ({ isFile: () => false, uid: typeof process.getuid === 'function' ? process.getuid() : 0 }),
             log: (line) => lines.push(line),
           });
@@ -1035,6 +1045,7 @@ describe('EPC2-2 E0: provider registry and automatic walk', () => {
         }],
       ], () => providers.runModel({
         env: {}, providerCache: {}, providersStatePath: statePath,
+        routeBindingsDir: path.join(path.dirname(statePath), 'bindings'),
         fetchImpl: async () => successfulByoResponse('byo-first'),
       }));
       assert.equal(result.ok, true);
@@ -1047,7 +1058,9 @@ describe('EPC2-2 E0: provider registry and automatic walk', () => {
     }
   });
 
-  it('T7: explicit codex-cli override invokes Codex once per mode and never falls through on failure', async () => {
+  it('T7: explicit codex-cli override invokes Codex once per mode and never falls through on failure', async (t) => {
+    t.after(cleanupTempDirs);
+    const routeBindingsDir = path.join(tempDir('auxilo-e0-t7-'), 'bindings');
     let codexRuns = 0;
     let otherRuns = 0;
     await withProviderMethodStubs([
@@ -1062,7 +1075,7 @@ describe('EPC2-2 E0: provider registry and automatic walk', () => {
     ], async () => {
       for (const mode of ['extract', 'judge']) {
         const before = codexRuns;
-        const result = await providers.runModel({ env: { AUXILO_EXTRACTION_PROVIDER: 'codex-cli' }, mode });
+        const result = await providers.runModel({ env: { AUXILO_EXTRACTION_PROVIDER: 'codex-cli' }, mode, routeBindingsDir });
         assert.equal(result.ok, false);
         assert.equal(result.reasonCode, 'model-error');
         assert.equal(codexRuns, before + 1);
@@ -1096,6 +1109,7 @@ describe('EPC2-2 E0: provider registry and automatic walk', () => {
   it('T9: a transient Claude failure reaches neither BYO nor Codex in extract and judge modes', async () => {
     let codexRuns = 0;
     let byoRuns = 0;
+    const routeBindingsDir = path.join(tempDir('auxilo-e0-t9-bindings-'), 'bindings');
     try {
       await withProviderMethodStubs([
         [claudeCode, {
@@ -1106,7 +1120,7 @@ describe('EPC2-2 E0: provider registry and automatic walk', () => {
         [byoKey, { runModel: async () => { byoRuns += 1; return { ok: true, text: 'wrong' }; } }],
       ], async () => {
         for (const mode of ['extract', 'judge']) {
-          const result = await providers.runModel({ env: {}, providerCache: {}, mode, providersStatePath: path.join(tempDir('auxilo-e0-t9-'), 'providers.json') });
+          const result = await providers.runModel({ env: {}, providerCache: {}, mode, routeBindingsDir, providersStatePath: path.join(tempDir('auxilo-e0-t9-'), 'providers.json') });
           assert.equal(result.reasonCode, 'model-error');
         }
       });
@@ -1119,6 +1133,7 @@ describe('EPC2-2 E0: provider registry and automatic walk', () => {
 
   it('T10: a codex-cli override does not leak into the next automatic resolution in the same process', async () => {
     const providerCache = {};
+    const routeBindingsDir = path.join(tempDir('auxilo-e0-t10-bindings-'), 'bindings');
     let codexRuns = 0;
     try {
       await withProviderMethodStubs([
@@ -1137,12 +1152,12 @@ describe('EPC2-2 E0: provider registry and automatic walk', () => {
           runModel: async () => ({ ok: false, text: '', usage: null, reasonCode: 'provider-not-configured', reason: 'no key', authStatus: 'unknown' }),
         }],
       ], async () => {
-        const overrideResult = await providers.runModel({ env: { AUXILO_EXTRACTION_PROVIDER: 'codex-cli' }, providerCache });
+        const overrideResult = await providers.runModel({ env: { AUXILO_EXTRACTION_PROVIDER: 'codex-cli' }, providerCache, routeBindingsDir });
         assert.equal(overrideResult.ok, false);
         assert.equal(codexRuns, 1);
 
         const automaticResult = await providers.runModel({
-          env: {}, providerCache,
+          env: {}, providerCache, routeBindingsDir,
           providersStatePath: path.join(tempDir('auxilo-e0-t10-'), 'providers.json'),
           log: () => {},
         });
