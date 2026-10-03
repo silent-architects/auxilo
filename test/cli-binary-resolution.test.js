@@ -6,7 +6,12 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const provider = require('../scripts/providers/claude-code.js');
-const installer = require('../lib/installer.js');
+const installerCore = require('../lib/installer.js');
+// These cases preserve the POSIX contract on every CI host; Windows has its own suite.
+const installer = { ...installerCore,
+  findExecutableOnPath: (name, envPath, fsImpl) => installerCore.findExecutableOnPath(name, envPath, fsImpl, { platform: 'darwin' }),
+  recordClaudeBin: (home, envPath, fsImpl) => installerCore.recordClaudeBin(home, envPath, fsImpl, { platform: 'darwin' }),
+};
 
 const HOME = '/fixture/cli-resolution-home';
 const CONFIG = path.join(HOME, '.auxilo', 'runner-config.json');
@@ -15,7 +20,7 @@ const SYSTEM = '/usr/local/bin/claude';
 const NPM = path.join(HOME, '.npm-global', 'bin', 'claude');
 const RECORDED = '/fixture/custom/bin/claude';
 const NATIVE = '/fixture/npm/@anthropic-ai/claude-code/bin/claude.exe';
-const NATIVE_PACKAGE = '/fixture/npm/@anthropic-ai/claude-code/package.json';
+const NATIVE_PACKAGE = path.join(path.dirname(path.dirname(NATIVE)), 'package.json');
 const temps = [];
 
 function tempDir() {
@@ -36,6 +41,7 @@ function fixture() {
   const reads = [];
   const spawns = [];
   const opts = {
+    platform: 'darwin',
     homeDir: HOME,
     cwd: HOME,
     existsSync: (file) => { checked.push(file); return binaries.has(file); },
@@ -256,8 +262,12 @@ it('T13: PATH scanning skips missing, non-regular and non-executable entries, an
   const working = path.join(root, 'working');
   const blocked = executable(nonexec);
   fs.chmodSync(blocked, 0o600);
+  const permissionFixture = { ...fs, accessSync(file, mode) {
+    if (file === blocked) throw Object.assign(new Error('fixture permission denied'), { code: 'EACCES' });
+    fs.accessSync(file, mode);
+  } };
   const bin = executable(working);
-  assert.equal(installer.findExecutableOnPath('claude', [missing, nonexec, working].join(path.delimiter)), bin);
+  assert.equal(installer.findExecutableOnPath('claude', [missing, nonexec, working].join(path.delimiter), permissionFixture), bin);
   const directory = path.join(root, 'directory');
   fs.mkdirSync(path.join(directory, 'claude'), { recursive: true });
   assert.equal(installer.findExecutableOnPath('claude', [directory, working].join(path.delimiter)), bin);
@@ -269,12 +279,13 @@ it('T13: PATH scanning skips missing, non-regular and non-executable entries, an
   fs.symlinkSync(bin, link);
   assert.equal(installer.findExecutableOnPath('claude', [linkDir, working].join(path.delimiter)), link);
   const accesses = [];
+  const expectedPath = path.resolve('/fixture/path', 'claude');
   const fsImpl = {
-    statSync: (file) => { assert.equal(file, '/fixture/path/claude'); return { isFile: () => true }; },
+    statSync: (file) => { assert.equal(file, expectedPath); return { isFile: () => true }; },
     accessSync: (file, mode) => accesses.push({ file, mode }),
   };
-  assert.equal(installer.findExecutableOnPath('claude', '/fixture/path', fsImpl), '/fixture/path/claude');
-  assert.deepEqual(accesses, [{ file: '/fixture/path/claude', mode: fs.constants.X_OK }]);
+  assert.equal(installer.findExecutableOnPath('claude', '/fixture/path', fsImpl), expectedPath);
+  assert.deepEqual(accesses, [{ file: expectedPath, mode: fs.constants.X_OK }]);
 });
 
 it('T14: setup recording returns the persisted symlink path, preserves other config and writes nothing on a miss', () => {

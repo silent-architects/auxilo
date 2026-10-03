@@ -20,7 +20,7 @@ function fixture(t, platform = 'darwin') {
       return { status: 0 };
     }
     if (args[1] === 'remove') { fs.unlinkSync(client.configPath); return { status: 0 }; }
-    return { status: 0, stdout: fs.existsSync(client.configPath) ? 'Status: Connected\nCommand: npx\nArgs: auxilo-mcp@0.9.28' : 'No MCP server named "auxilo"' };
+    return { status: 0, stdout: fs.existsSync(client.configPath) ? `Status: Connected\nCommand: npx\nArgs: auxilo-mcp@${installer.mcpPinnedVersion(client)}` : 'No MCP server named "auxilo"' };
   } };
   return { home, client, calls, opts };
 }
@@ -111,4 +111,17 @@ test('a8 every CLI review request carries its client version hint', async () => 
   for (const row of headers) assert.equal(row['X-Auxilo-Client'], 'cli/0.9.28');
   const source = fs.readFileSync(path.join(__dirname, '..', 'mcp-server.js'), 'utf8');
   assert.match(source.slice(source.indexOf("case 'auxilo_review':")), /headers\['X-Auxilo-Client'\] = `mcp\/\$\{require\('\.\/package.json'\).version\}`/);
+});
+
+test('a6 failed rollback is reported as failure, never unchanged', t => {
+  const { home, client, opts } = fixture(t);
+  installer.registerMcp(client, '0.9.19', opts);
+  const run = opts.commandRunner;
+  opts.commandRunner = (bin, args, options) => args[1] === 'add' ? { status: 1 } : run(bin, args, options);
+  const result = installer.rewriteMcpPins(home, '0.9.28', opts)[0];
+  assert.equal(result.status, 'error');
+  assert.equal(result.restored, false);
+  assert.equal(result.registered, false);
+  assert.equal(result.mcpPin, null);
+  assert.equal(fs.existsSync(client.configPath), false);
 });

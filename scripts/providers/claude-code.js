@@ -41,7 +41,13 @@ function resolveClaudeBin(opts = {}) {
   const homeDir = typeof opts.homeDir === 'string' ? opts.homeDir : os.homedir();
   const existsSync = typeof opts.existsSync === 'function' ? opts.existsSync : fs.existsSync;
   const readFileSyncImpl = typeof opts.readFileSyncImpl === 'function' ? opts.readFileSyncImpl : fs.readFileSync;
-  const candidates = [
+  const windows = (opts.platform || process.platform) === 'win32';
+  const env = opts.env || process.env;
+  const candidates = windows ? [
+    path.join(homeDir, '.local', 'bin', 'claude.exe'),
+    path.join(env.APPDATA || path.join(homeDir, 'AppData', 'Roaming'), 'npm', 'claude.cmd'),
+    ...(env.PATH || '').split(';').filter(Boolean).flatMap(dir => (env.PATHEXT || '.EXE;.CMD').split(';').filter(Boolean).map(ext => path.join(dir, 'claude' + ext.toLowerCase()))),
+  ] : [
     path.join(homeDir, '.claude', 'local', 'claude'),
     '/usr/local/bin/claude',
     '/opt/homebrew/bin/claude',
@@ -52,7 +58,7 @@ function resolveClaudeBin(opts = {}) {
   try {
     const config = JSON.parse(readFileSyncImpl(path.join(homeDir, '.auxilo', 'runner-config.json'), 'utf8'));
     const recorded = config && config.claude_bin;
-    if (typeof recorded === 'string' && path.isAbsolute(recorded) && path.basename(recorded) === 'claude') {
+    if (typeof recorded === 'string' && path.isAbsolute(recorded) && (windows ? /^claude\.(exe|cmd)$/i.test(path.basename(recorded)) : path.basename(recorded) === 'claude')) {
       candidates.unshift(recorded);
     }
   } catch (_) { /* missing/malformed config means no recorded candidate */ }
@@ -73,6 +79,14 @@ function resolveClaudeBin(opts = {}) {
   }
   // Absolute launchd fallbacks are absent; let PATH resolve the final option.
   return newest || firstExisting || 'claude';
+}
+
+/** Resolve npm command shims without invoking a shell or the shim itself. */
+function claudeSpawnTarget(bin, opts = {}) {
+  if ((opts.platform || process.platform) !== 'win32' || !/\.cmd$/i.test(bin)) return { command: bin, prefix: [] };
+  const cli = path.join(path.dirname(bin), 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js');
+  const exists = opts.existsSync || fs.existsSync;
+  return exists(cli) ? { command: process.execPath, prefix: [cli] } : null;
 }
 
 // ─── Child settings/hooks isolation (EXTRACTION-CHILD-HOOKS, PUNCH-LIST P1,
@@ -154,7 +168,9 @@ function getClaudeCliVersion(bin, opts = {}) {
   const realpathSyncImpl = typeof opts.realpathSyncImpl === 'function' ? opts.realpathSyncImpl : fs.realpathSync;
   const readFileSyncImpl = typeof opts.readFileSyncImpl === 'function' ? opts.readFileSyncImpl : fs.readFileSync;
   try {
-    const real = realpathSyncImpl(bin);
+    const target = claudeSpawnTarget(bin, opts);
+    if (!target) return null;
+    const real = realpathSyncImpl(target.prefix[0] || target.command);
     const dir = path.dirname(real);
     for (const [pkgDir, requireName] of [[dir, false], [path.dirname(dir), true]]) {
       try {
@@ -402,12 +418,15 @@ function detectBillingHelperConfigured(opts = {}) {
 function checkAuthStatus(opts = {}) {
   const spawnSyncImpl = typeof opts.spawnSyncImpl === 'function' ? opts.spawnSyncImpl : spawnSync;
   const bin = typeof opts.claudeBin === 'string' ? opts.claudeBin : resolveClaudeBin(opts);
+  const target = claudeSpawnTarget(bin, opts);
+  if (!target) return 'unknown';
   const version = versionParts(getClaudeCliVersion(bin, opts));
   // Unknown and old versions can interpret this probe as a model prompt.
   if (!version || compareVersions(version, [2, 1, 41]) < 0) return 'unknown';
   let res;
   try {
-    res = spawnSyncImpl(bin, ['auth', 'status'], {
+    res = spawnSyncImpl(target.command, [...target.prefix, 'auth', 'status'], {
+      ...((opts.platform || process.platform) === 'win32' ? { windowsHide: true } : {}),
       encoding: 'utf-8',
       env: claudeChildEnv(),
       timeout: 5000,
@@ -446,6 +465,7 @@ function checkAuthStatus(opts = {}) {
 function detect(opts = {}) {
   if (detectBillingHelperConfigured(opts)) return false;
   const bin = resolveClaudeBin(opts);
+  if (!claudeSpawnTarget(bin, opts)) return false;
   const status = checkAuthStatus({ ...opts, claudeBin: bin });
   return status === 'logged-in' || status === 'unknown';
 }
@@ -523,6 +543,8 @@ const OAUTH_EXPIRED_PATTERN = /Failed to authenticate:\s*OAuth session expired a
 function runCliMode(opts, mode) {
   const spawn = typeof opts.spawnSyncImpl === 'function' ? opts.spawnSyncImpl : spawnSync;
   const bin = typeof opts.claudeBin === 'string' ? opts.claudeBin : resolveClaudeBin(opts);
+  const target = claudeSpawnTarget(bin, opts);
+  if (!target) return { ok: false, text: '', usage: null, reasonCode: 'cli-not-installed', reason: 'local model invocation failed', refusal: 'pre-invocation', authStatus: 'unknown' };
   if (cachedSettingSourcesUnsupported) return { ...settingSourcesIsolationUnsupportedResult('unknown'), refusal: 'pre-invocation' };
   const authStatus = mode === 'extract' ? checkAuthStatus({ ...opts, claudeBin: bin }) : 'unknown';
   const authReason = 'local model not authenticated in this context (run `claude auth login` once); skipping deterministic extraction';
@@ -536,7 +558,8 @@ function runCliMode(opts, mode) {
   if (gate) return { ...gate, ...meta };
   let res;
   try {
-    res = spawn(bin, argv, {
+    res = spawn(target.command, [...target.prefix, ...argv], {
+      ...((opts.platform || process.platform) === 'win32' ? { windowsHide: true } : {}),
       input: (typeof opts.prompt === 'string' ? opts.prompt : '') + (mode === 'extract' ? String(opts.input || '').slice(0, 200000) : ''),
       encoding: 'utf-8', env: claudeChildEnv(), timeout: opts.timeoutMs || 120000, maxBuffer: 20 * 1024 * 1024,
     });
@@ -666,6 +689,7 @@ module.exports = {
   extractWithClaudeCode,
   checkClaudeAuthStatus,
   resolveClaudeBin,
+  claudeSpawnTarget,
   // Exported for direct unit coverage (test/claude-code-provider.test.js) and for
   // bin/auxilo-cli.js's cmdStatus provider line.
   claudeChildEnv,

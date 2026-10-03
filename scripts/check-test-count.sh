@@ -512,7 +512,9 @@ cd "${REPO_ROOT}"
 # plus 3 tracked-file path guards for the new source, test and fixture helper.
 # Merged onto main at 4921 (design wave) + the 127 above = 5048.
 # CLIENT-CONNECT Part A: 9 registration/header tests + 1 tracked-file guard.
-EXPECTED_TEST_COUNT=5068
+# CLIENT-CONNECT Part B: 14 Windows tests + 1 rollback test + 1 tracked-file guard.
+# CLIENT-CONNECT review: +2 foreign node-hook ownership regression cases.
+EXPECTED_TEST_COUNT=5086
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

@@ -67,7 +67,7 @@ function fixtureSummary() {
 function runNode(script, args, env, input = '') {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [script, ...args], {
-      env: { ...process.env, ...env },
+      env: { ...process.env, ...env, AUXILO_HOME: env.HOME || process.env.AUXILO_HOME, USERPROFILE: env.HOME || process.env.USERPROFILE },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     let stdout = '';
@@ -277,7 +277,7 @@ describe('SPEC3-A3 shared hook checker', () => {
     const result = await runnerStatus(shape);
     assert.equal(result.code, 0, result.stderr);
     assert.match(result.stdout, /Hook installed: yes/);
-    assert.match(result.stdout, new RegExp(`Settings inspected: ${home.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/\\.claude/settings\\.json`));
+    assert.match(result.stdout, new RegExp(`Settings inspected: ${path.join(home, '.claude', 'settings.json').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
   });
 
   it('legacy string SessionEnd fixture reports yes', async () => {

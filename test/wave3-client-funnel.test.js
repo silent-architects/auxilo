@@ -199,7 +199,7 @@ describe('LW-18(b) — notifyHeld plumbing', () => {
 
   it('runner source contains count-only notification text (no titles/content)', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'runner.js'), 'utf-8');
-    assert.ok(src.includes('held for your review'));
+    assert.ok(src.includes('waiting for your review. Run npx auxilo review'));
     // The osascript line must interpolate only the count — never learning fields.
     const notifyBlock = src.slice(src.indexOf('function notifyHeld'), src.indexOf('async function postExtract') > 0 ? undefined : undefined);
     assert.ok(!/notifyHeld[\s\S]{0,600}\.title/.test(src.slice(src.indexOf('function notifyHeld'), src.indexOf('function notifyHeld') + 900)));
@@ -312,7 +312,7 @@ describe('LW-18(a) — SessionStart held-count notice', () => {
 
   it('renderNotice is count-only with both command names', () => {
     const line = notice.renderNotice(7);
-    assert.ok(line.includes('7 learning(s) held for your review'));
+    assert.ok(line.includes('7 learnings are waiting for your review'));
     assert.ok(line.includes('auxilo_review'));
     assert.ok(line.includes('npx auxilo review'));
   });

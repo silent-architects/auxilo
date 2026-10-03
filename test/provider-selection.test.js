@@ -1236,13 +1236,16 @@ describe('EPC2-2 E0: approved CLI strings', () => {
   it('T13: provider-set confirmation equals the approved fixed-value literal, including its leading newline', () => {
     const match = /console\.log\(`(\\n✓ Saved to \$\{written\}[^`]+)`\);/u.exec(CLI_SOURCE);
     assert.ok(match, 'provider set confirmation template must exist');
-    const rendered = match[1]
-      .replace(/^\\n/u, '\n')
-      .replace('${written}', '/tmp/providers.json')
-      .replace('${vendor}', 'anthropic');
+    const render = platform => require('node:vm').runInNewContext('`' + match[1] + '`', {
+      written: '/tmp/providers.json', vendor: 'anthropic', process: { platform },
+    });
     assert.equal(
-      rendered,
+      render('darwin'),
       '\n✓ Saved to /tmp/providers.json (mode 0600). This machine drafts through Claude Code first when you are signed in to it; your anthropic key only takes over when Claude Code is not usable, and once it does, it keeps drafting even after Claude Code becomes usable again.'
+    );
+    assert.equal(
+      render('win32'),
+      '\n✓ Saved to /tmp/providers.json. This machine drafts through Claude Code first when you are signed in to it; your anthropic key only takes over when Claude Code is not usable, and once it does, it keeps drafting even after Claude Code becomes usable again.'
     );
   });
 });
