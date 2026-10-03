@@ -253,7 +253,7 @@ describe('byo-key.js: runModel refuses a widened-permissions providers.json (rea
       fs.chmodSync(statePath, 0o644);
       let fetchCalls = 0;
       const fetchImpl = async () => { fetchCalls += 1; throw new Error('must not fetch — providers.json is unsafe'); };
-      const result = await byoKey.runModel({ providersStatePath: statePath, prompt: 'p', fetchImpl });
+      const result = await byoKey.runModel({ beforeModelInvocation: () => true, providersStatePath: statePath, prompt: 'p', fetchImpl });
       assert.equal(result.ok, false);
       assert.equal(result.reasonCode, 'providers-file-mode-unsafe');
       assert.match(result.reason, /owner-read-only/);
@@ -269,7 +269,7 @@ describe('byo-key.js: runModel refuses a widened-permissions providers.json (rea
       const statePath = statePathIn(dir);
       byoKey.writeByoConfig({ provider: 'openai', model: 'gpt-4o-mini', api_key: 'sk-ok' }, { providersStatePath: statePath });
       const fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) });
-      const result = await byoKey.runModel({ providersStatePath: statePath, prompt: 'p', fetchImpl });
+      const result = await byoKey.runModel({ beforeModelInvocation: () => true, providersStatePath: statePath, prompt: 'p', fetchImpl });
       assert.equal(result.ok, true);
     } finally {
       cleanupTempDirs();
@@ -301,12 +301,12 @@ describe('byo-key.js: runModel — openai-compatible (default) variant', () => {
       const { fetchImpl, calls } = fetchCapturing(() => jsonResponse(200, {
         choices: [{ message: { content: '{"learnings":[]}' } }],
       }));
-      const result = await byoKey.runModel({
+      const result = await byoKey.runModel({ beforeModelInvocation: () => true,
         providersStatePath: statePath, prompt: 'extract: ', input: 'transcript text', fetchImpl,
       });
       assert.equal(result.ok, true);
       assert.equal(result.text, '{"learnings":[]}');
-      assert.deepEqual(result.identity, { provider: 'byo-key', model: 'gpt-4o-mini', version: null, vendor: 'openai-compatible' });
+      assert.deepEqual(result.identity, { provider: 'byo-key', model: null, requested_model: 'gpt-4o-mini', observed_model: null, identity_unresolved: 'missing', version: null, vendor: 'openai-compatible' });
       assert.equal(calls.length, 1);
       assert.equal(calls[0].url, 'https://api.openai.com/v1/chat/completions');
       assert.equal(calls[0].init.headers.Authorization, 'Bearer sk-openai-test');
@@ -324,7 +324,7 @@ describe('byo-key.js: runModel — openai-compatible (default) variant', () => {
       const statePath = statePathIn(dir);
       byoKey.writeByoConfig({ provider: 'my-local-vllm', base_url: 'https://llm.internal.example/v1', model: 'llama-70b', api_key: 'local-key' }, { providersStatePath: statePath });
       const { fetchImpl, calls } = fetchCapturing(() => jsonResponse(200, { choices: [{ message: { content: 'ok' } }] }));
-      const result = await byoKey.runModel({ providersStatePath: statePath, prompt: 'p', fetchImpl });
+      const result = await byoKey.runModel({ beforeModelInvocation: () => true, providersStatePath: statePath, prompt: 'p', fetchImpl });
       assert.equal(result.ok, true);
       assert.equal(calls[0].url, 'https://llm.internal.example/v1/chat/completions');
       assert.equal(result.identity.vendor, 'openai-compatible');
@@ -344,11 +344,11 @@ describe('byo-key.js: runModel — anthropic variant', () => {
         content: [{ type: 'text', text: '{"learnings":[]}' }],
         usage: { input_tokens: 100, output_tokens: 20 },
       }));
-      const result = await byoKey.runModel({ providersStatePath: statePath, prompt: 'extract: ', input: 't', fetchImpl });
+      const result = await byoKey.runModel({ beforeModelInvocation: () => true, providersStatePath: statePath, prompt: 'extract: ', input: 't', fetchImpl });
       assert.equal(result.ok, true);
       assert.equal(result.text, '{"learnings":[]}');
       assert.deepEqual(result.usage, { input_tokens: 100, output_tokens: 20 });
-      assert.deepEqual(result.identity, { provider: 'byo-key', model: 'claude-sonnet-4-5', version: null, vendor: 'anthropic' });
+      assert.deepEqual(result.identity, { provider: 'byo-key', model: null, requested_model: 'claude-sonnet-4-5', observed_model: null, identity_unresolved: 'missing', version: null, vendor: 'anthropic' });
       assert.equal(calls[0].url, 'https://api.anthropic.com/v1/messages');
       assert.equal(calls[0].init.headers['x-api-key'], 'sk-ant-test');
       assert.equal(calls[0].init.headers['anthropic-version'], '2023-06-01');
@@ -368,7 +368,7 @@ describe('byo-key.js: runModel — gemini variant', () => {
       const { fetchImpl, calls } = fetchCapturing(() => jsonResponse(200, {
         candidates: [{ content: { parts: [{ text: '{"learnings":' }, { text: '[]}' }] } }],
       }));
-      const result = await byoKey.runModel({ providersStatePath: statePath, prompt: 'extract: ', input: 't', fetchImpl });
+      const result = await byoKey.runModel({ beforeModelInvocation: () => true, providersStatePath: statePath, prompt: 'extract: ', input: 't', fetchImpl });
       assert.equal(result.ok, true);
       assert.equal(result.text, '{"learnings":[]}');
       assert.equal(result.identity.vendor, 'gemini');
@@ -393,7 +393,7 @@ describe('byo-key.js: runModel — error handling', () => {
       const statePath = statePathIn(dir);
       byoKey.writeByoConfig({ provider: 'openai', model: 'x', api_key: 'k' }, { providersStatePath: statePath });
       const { fetchImpl, calls } = fetchCapturing(() => jsonResponse(429, { error: 'rate limited' }));
-      const result = await byoKey.runModel({ providersStatePath: statePath, prompt: 'p', fetchImpl });
+      const result = await byoKey.runModel({ beforeModelInvocation: () => true, providersStatePath: statePath, prompt: 'p', fetchImpl });
       assert.equal(result.ok, false);
       assert.equal(result.reasonCode, 'provider-rate-limited');
       assert.equal(calls.length, 1, 'never retries a 429');
@@ -408,7 +408,7 @@ describe('byo-key.js: runModel — error handling', () => {
       const statePath = statePathIn(dir);
       byoKey.writeByoConfig({ provider: 'openai', model: 'x', api_key: 'k' }, { providersStatePath: statePath });
       const { fetchImpl, calls } = fetchCapturing(() => jsonResponse(500, { error: 'boom' }));
-      const result = await byoKey.runModel({ providersStatePath: statePath, prompt: 'p', fetchImpl });
+      const result = await byoKey.runModel({ beforeModelInvocation: () => true, providersStatePath: statePath, prompt: 'p', fetchImpl });
       assert.equal(result.ok, false);
       assert.equal(result.reasonCode, 'provider-error');
       assert.equal(calls.length, 1);
@@ -423,10 +423,10 @@ describe('byo-key.js: runModel — error handling', () => {
       const statePath = statePathIn(dir);
       byoKey.writeByoConfig({ provider: 'openai', model: 'x', api_key: 'k' }, { providersStatePath: statePath });
       const fetchImpl = async () => { throw new Error('ECONNREFUSED'); };
-      const result = await byoKey.runModel({ providersStatePath: statePath, prompt: 'p', fetchImpl });
+      const result = await byoKey.runModel({ beforeModelInvocation: () => true, providersStatePath: statePath, prompt: 'p', fetchImpl });
       assert.equal(result.ok, false);
       assert.equal(result.reasonCode, 'provider-error');
-      assert.match(result.reason, /ECONNREFUSED/);
+      assert.equal(result.reason, 'BYO provider request failed');
     } finally {
       cleanupTempDirs();
     }
@@ -437,7 +437,7 @@ describe('byo-key.js: runModel — error handling', () => {
     try {
       const statePath = statePathIn(dir);
       const { fetchImpl, calls } = fetchCapturing(() => jsonResponse(200, {}));
-      const result = await byoKey.runModel({ providersStatePath: statePath, prompt: 'p', fetchImpl });
+      const result = await byoKey.runModel({ beforeModelInvocation: () => true, providersStatePath: statePath, prompt: 'p', fetchImpl });
       assert.equal(result.ok, false);
       assert.equal(result.reasonCode, 'provider-not-configured');
       assert.equal(calls.length, 0);
@@ -462,7 +462,7 @@ describe('byo-key.js: the key is never logged', () => {
       const SECRET = 'sk-super-secret-do-not-leak-9f8e7d6c';
       byoKey.writeByoConfig({ provider: 'openai', model: 'x', api_key: SECRET }, { providersStatePath: statePath });
       const { fetchImpl } = fetchCapturing(() => jsonResponse(500, { error: 'boom' }));
-      const result = await byoKey.runModel({ providersStatePath: statePath, prompt: 'p', fetchImpl });
+      const result = await byoKey.runModel({ beforeModelInvocation: () => true, providersStatePath: statePath, prompt: 'p', fetchImpl });
       const serialized = JSON.stringify(result);
       assert.ok(!serialized.includes(SECRET), 'the key must not appear anywhere in the runModel result');
     } finally {

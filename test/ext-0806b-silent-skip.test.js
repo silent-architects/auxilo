@@ -1,4 +1,5 @@
 'use strict';
+const { supportedClaude } = require('./helpers/epc2-fixtures.js');
 
 const { describe, it, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
@@ -155,7 +156,7 @@ describe('EXT-0806b Claude auth and cause classification', () => {
 
     for (const [response, expected] of fixtures) {
       const stub = spawnQueue([response]);
-      assert.equal(check({ spawnSyncImpl: stub.spawnSyncImpl, claudeBin: 'claude' }), expected);
+      assert.equal(check({ ...supportedClaude, spawnSyncImpl: stub.spawnSyncImpl, claudeBin: 'claude' }), expected);
       assert.deepEqual(stub.calls[0].args, ['auth', 'status']);
       assert.equal(stub.calls[0].opts.timeout, 5000);
     }
@@ -166,7 +167,7 @@ describe('EXT-0806b Claude auth and cause classification', () => {
 
     const loggedOut = spawnQueue([authJson(false)]);
     const skipped = invoke('transcript', {
-      prompt: '', claudeBin: 'claude', spawnSyncImpl: loggedOut.spawnSyncImpl,
+      ...supportedClaude, beforeModelInvocation: () => true, prompt: '', claudeBin: 'claude', spawnSyncImpl: loggedOut.spawnSyncImpl,
     });
     assert.equal(skipped.reasonCode, 'cli-unauthenticated');
     assert.equal(skipped.authStatus, 'logged-out');
@@ -175,10 +176,10 @@ describe('EXT-0806b Claude auth and cause classification', () => {
 
     const unknown = spawnQueue([
       { status: 1, stdout: '', stderr: 'pre-check failed' },
-      { status: 0, stdout: '{"learnings":[]}', stderr: '' },
+      { status: 0, stdout: JSON.stringify({ type: "result", result: '{"learnings":[]}', is_error: false }), stderr: '' },
     ]);
     const completed = invoke('transcript', {
-      prompt: '', claudeBin: 'claude', spawnSyncImpl: unknown.spawnSyncImpl,
+      ...supportedClaude, beforeModelInvocation: () => true, prompt: '', claudeBin: 'claude', spawnSyncImpl: unknown.spawnSyncImpl,
     });
     assert.equal(completed.ok, true);
     assert.equal(completed.authStatus, 'unknown');
@@ -192,7 +193,7 @@ describe('EXT-0806b Claude auth and cause classification', () => {
     // personal SessionStart hooks never fire into this prompt.
     // CLAUDE-CHILD-MCP-CONTEXT: '--strict-mcp-config' also excludes MCP
     // servers when no explicit MCP config is supplied.
-    assert.deepEqual(unknown.calls.map((call) => call.args), [['auth', 'status'], ['-p', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config']]);
+    assert.deepEqual(unknown.calls.map((call) => call.args), [['auth', 'status'], ['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', '--setting-sources', '', '--strict-mcp-config']]);
   });
 
   it('maps auth regex, non-zero model exit, and spawn failure to the exact three reason codes', () => {
@@ -207,7 +208,7 @@ describe('EXT-0806b Claude auth and cause classification', () => {
     for (const [modelResponse, reasonCode] of cases) {
       const stub = spawnQueue([authJson(true), modelResponse]);
       const result = invoke('transcript', {
-        prompt: '', claudeBin: 'claude', spawnSyncImpl: stub.spawnSyncImpl,
+        ...supportedClaude, beforeModelInvocation: () => true, prompt: '', claudeBin: 'claude', spawnSyncImpl: stub.spawnSyncImpl,
       });
       assert.equal(result.ok, false);
       assert.equal(result.reasonCode, reasonCode);

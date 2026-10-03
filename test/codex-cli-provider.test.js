@@ -1,4 +1,5 @@
 'use strict';
+const { supportedClaude } = require('./helpers/epc2-fixtures.js');
 /*
  * test/codex-cli-provider.test.js — EXTRACT-PER-CLIENT W1 PART B.
  *
@@ -86,7 +87,7 @@ describe('codex-cli.js — runModel argv', () => {
     fs.writeFileSync(outputPath, '{"learnings":[]}');
     const stub = spawnQueue([okSpawnResult(lifecycleJsonl())]);
     try {
-      const result = await codexCli.runModel({
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true,
         prompt: 'PROMPT', input: 'TRANSCRIPT', mode: 'extract',
         homeDir: home, codexBin: 'codex', outputPath,
         spawnSyncImpl: stub.spawnSyncImpl,
@@ -120,7 +121,7 @@ describe('codex-cli.js — runModel argv', () => {
     fs.writeFileSync(outputPath, '{"decisions":[]}');
     const stub = spawnQueue([okSpawnResult(lifecycleJsonl())]);
     try {
-      const result = await codexCli.runModel({
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true,
         prompt: 'JUDGE_PROMPT', mode: 'judge',
         homeDir: home, codexBin: 'codex', outputPath,
         spawnSyncImpl: stub.spawnSyncImpl,
@@ -291,7 +292,7 @@ describe('CODEX-OUTPUT-SCHEMA-REJECTED — TB1–TB5', () => {
         for (const event of events) {
           for (const status of [1, 0]) {
             const stub = spawnQueue([{ status, stdout: JSON.stringify(event), stderr: 'PRIVATE-STDERR' }]);
-            const result = await codexCli.runModel({ mode, homeDir: home, codexBin: 'codex', spawnSyncImpl: stub.spawnSyncImpl });
+            const result = await codexCli.runModel({ beforeModelInvocation: () => true, mode, homeDir: home, codexBin: 'codex', spawnSyncImpl: stub.spawnSyncImpl });
             assert.equal(result.ok, false);
             assert.equal(result.text, '');
             assert.equal(result.reasonCode, 'output-schema-rejected');
@@ -308,7 +309,7 @@ describe('CODEX-OUTPUT-SCHEMA-REJECTED — TB1–TB5', () => {
           }
         }
         const stub = spawnQueue([{ status: 1, stdout: '{"type":"error","message":"unrelated failure"}', stderr: '' }]);
-        const result = await codexCli.runModel({ mode, homeDir: home, codexBin: 'codex', spawnSyncImpl: stub.spawnSyncImpl });
+        const result = await codexCli.runModel({ beforeModelInvocation: () => true, mode, homeDir: home, codexBin: 'codex', spawnSyncImpl: stub.spawnSyncImpl });
         assert.equal(result.reasonCode, 'model-error');
       }
     } finally { cleanupTempDirs(); }
@@ -324,7 +325,7 @@ describe('codex-cli.js — stdin composition', () => {
     fs.writeFileSync(outputPath, '{"learnings":[]}');
     const stub = spawnQueue([okSpawnResult(lifecycleJsonl())]);
     try {
-      await codexCli.runModel({
+      await codexCli.runModel({ beforeModelInvocation: () => true,
         prompt: 'PROMPT-', input: 'TRANSCRIPT-BODY', mode: 'extract',
         homeDir: home, codexBin: 'codex', outputPath,
         spawnSyncImpl: stub.spawnSyncImpl,
@@ -341,7 +342,7 @@ describe('codex-cli.js — stdin composition', () => {
     fs.writeFileSync(outputPath, '{"decisions":[]}');
     const stub = spawnQueue([okSpawnResult(lifecycleJsonl())]);
     try {
-      await codexCli.runModel({
+      await codexCli.runModel({ beforeModelInvocation: () => true,
         prompt: 'JUDGE-PROMPT-ONLY', mode: 'judge',
         homeDir: home, codexBin: 'codex', outputPath,
         spawnSyncImpl: stub.spawnSyncImpl,
@@ -362,7 +363,7 @@ describe('codex-cli.js — output source', () => {
     fs.writeFileSync(outputPath, '{"learnings":[{"title":"real answer from the file, not stdout","body":"body body body body body body body body body body body","category":"monitoring","outcome":"success"}]}');
     const stub = spawnQueue([okSpawnResult(`${lifecycleJsonl()}\nstray telemetry line`)]);
     try {
-      const result = await codexCli.runModel({
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true,
         prompt: 'P', input: 'T', mode: 'extract',
         homeDir: home, codexBin: 'codex', outputPath,
         spawnSyncImpl: stub.spawnSyncImpl,
@@ -380,7 +381,7 @@ describe('codex-cli.js — output source', () => {
     const outputPath = path.join(home, 'never-written.txt'); // never created
     const stub = spawnQueue([okSpawnResult(lifecycleJsonl('{"learnings":[]}'))]);
     try {
-      const result = await codexCli.runModel({
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true,
         prompt: 'P', input: 'T', mode: 'extract',
         homeDir: home, codexBin: 'codex', outputPath,
         spawnSyncImpl: stub.spawnSyncImpl,
@@ -398,7 +399,7 @@ describe('codex-cli.js — output source', () => {
     fs.writeFileSync(outputPath, '{"learnings":[]}');
     const stub = spawnQueue([okSpawnResult(lifecycleJsonl())]);
     try {
-      await codexCli.runModel({
+      await codexCli.runModel({ beforeModelInvocation: () => true,
         prompt: 'P', input: 'T', mode: 'extract',
         homeDir: home, codexBin: 'codex', outputPath,
         spawnSyncImpl: stub.spawnSyncImpl,
@@ -460,7 +461,7 @@ describe('codex-cli.js — codexChildEnv() scrub', () => {
     const originalEnv = process.env;
     process.env = { ...originalEnv, ANTHROPIC_API_KEY: 'leak', OPENAI_API_KEY: 'leak' };
     try {
-      await codexCli.runModel({
+      await codexCli.runModel({ beforeModelInvocation: () => true,
         prompt: 'P', input: 'T', mode: 'extract',
         homeDir: home, codexBin: 'codex', outputPath,
         spawnSyncImpl: stub.spawnSyncImpl,
@@ -593,7 +594,7 @@ describe('codex-cli.js — reason codes', () => {
     const home = tempDir('auxilo-codex-reason-unauth-');
     let spawnCalls = 0;
     try {
-      const result = await codexCli.runModel({
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true,
         prompt: 'P', input: 'T', mode: 'extract', homeDir: home,
         spawnSyncImpl: () => { spawnCalls += 1; throw new Error('must not spawn'); },
       });
@@ -614,7 +615,7 @@ describe('codex-cli.js — reason codes', () => {
       return { error: err, stdout: '', stderr: '', status: null };
     };
     try {
-      const result = await codexCli.runModel({
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true,
         prompt: 'P', input: 'T', mode: 'extract',
         homeDir: home, codexBin: 'codex', outputPath, spawnSyncImpl,
       });
@@ -634,7 +635,7 @@ describe('codex-cli.js — reason codes', () => {
       return { error: err, stdout: '', stderr: '', status: null };
     };
     try {
-      const result = await codexCli.runModel({
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true,
         prompt: 'P', input: 'T', mode: 'extract',
         homeDir: home, codexBin: 'codex', outputPath, spawnSyncImpl,
       });
@@ -650,7 +651,7 @@ describe('codex-cli.js — reason codes', () => {
     const outputPath = path.join(home, 'out.txt');
     const stub = spawnQueue([{ status: null, signal: 'SIGTERM', stdout: '', stderr: '', error: null }]);
     try {
-      const result = await codexCli.runModel({
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true,
         prompt: 'P', input: 'T', mode: 'extract',
         homeDir: home, codexBin: 'codex', outputPath, spawnSyncImpl: stub.spawnSyncImpl,
       });
@@ -666,7 +667,7 @@ describe('codex-cli.js — reason codes', () => {
     const outputPath = path.join(home, 'never-written.txt');
     const stub = spawnQueue([okSpawnResult(lifecycleJsonl())]);
     try {
-      const result = await codexCli.runModel({
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true,
         prompt: 'P', input: 'T', mode: 'extract',
         homeDir: home, codexBin: 'codex', outputPath, spawnSyncImpl: stub.spawnSyncImpl,
       });
@@ -682,7 +683,7 @@ describe('codex-cli.js — reason codes', () => {
     const outputPath = path.join(home, 'out.txt');
     const stub = spawnQueue([{ status: 1, stdout: 'boom', stderr: '', error: null, signal: null }]);
     try {
-      const result = await codexCli.runModel({
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true,
         prompt: 'P', input: 'T', mode: 'extract',
         homeDir: home, codexBin: 'codex', outputPath, spawnSyncImpl: stub.spawnSyncImpl,
       });
@@ -703,7 +704,7 @@ describe('codex-cli.js — usage', () => {
     fs.writeFileSync(outputPath, '{"learnings":[]}');
     const stub = spawnQueue([okSpawnResult(lifecycleJsonl())]);
     try {
-      const result = await codexCli.runModel({
+      const result = await codexCli.runModel({ beforeModelInvocation: () => true,
         prompt: 'P', input: 'T', mode: 'extract',
         homeDir: home, codexBin: 'codex', outputPath, spawnSyncImpl: stub.spawnSyncImpl,
       });
@@ -734,11 +735,11 @@ describe('codex-cli.js — getCodexVersion() caching', () => {
       return okSpawnResult(lifecycleJsonl());
     };
     try {
-      const r1 = await codexCli.runModel({
+      const r1 = await codexCli.runModel({ beforeModelInvocation: () => true,
         prompt: 'P', input: 'T', mode: 'extract',
         homeDir: home, codexBin: 'codex', outputPath: outputPath1, spawnSyncImpl,
       });
-      const r2 = await codexCli.runModel({
+      const r2 = await codexCli.runModel({ beforeModelInvocation: () => true,
         prompt: 'P', mode: 'judge',
         homeDir: home, codexBin: 'codex', outputPath: outputPath2, spawnSyncImpl,
       });
@@ -789,7 +790,7 @@ describe('providers/index.js — e2e: claude unavailable, codex-cli available �
     };
 
     try {
-      const resolved = await providers.resolveProvider({
+      const resolved = await providers.resolveProvider({ ...supportedClaude,
         env: {},
         providerCache: {},
         homeDir: home,

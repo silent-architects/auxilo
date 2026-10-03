@@ -21,6 +21,7 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { invocationGate } = require('./route-binding.js');
 
 /** Leading major.minor.patch only; unreadable versions retain fallback behavior. */
 function versionParts(version) {
@@ -219,7 +220,7 @@ const SCRUBBED_CLIENT_ENV_VARS = Object.freeze([
 // SETTING_SOURCES_ARGS to both — the child loads none of user/project/local
 // settings, so the operator's own SessionStart hooks never fire.
 // Strict mode with no --mcp-config also excludes account-connected MCP servers.
-const EXTRACT_MODE_ARGV = Object.freeze(['-p', '--no-session-persistence', '--tools', '', ...SETTING_SOURCES_ARGS, '--strict-mcp-config']);
+const EXTRACT_MODE_ARGV = Object.freeze(['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', ...SETTING_SOURCES_ARGS, '--strict-mcp-config']);
 const JUDGE_MODE_ARGV = Object.freeze(['-p', '--output-format', 'json', '--no-session-persistence', '--tools', '', ...SETTING_SOURCES_ARGS, '--strict-mcp-config']);
 
 /**
@@ -402,9 +403,8 @@ function checkAuthStatus(opts = {}) {
   const spawnSyncImpl = typeof opts.spawnSyncImpl === 'function' ? opts.spawnSyncImpl : spawnSync;
   const bin = typeof opts.claudeBin === 'string' ? opts.claudeBin : resolveClaudeBin(opts);
   const version = versionParts(getClaudeCliVersion(bin, opts));
-  // Older CLIs treat `auth status` as a model prompt. Unknown versions retain
-  // the existing probe; only a known-old build can safely skip it here.
-  if (version && compareVersions(version, [2, 1, 41]) < 0) return 'unknown';
+  // Unknown and old versions can interpret this probe as a model prompt.
+  if (!version || compareVersions(version, [2, 1, 41]) < 0) return 'unknown';
   let res;
   try {
     res = spawnSyncImpl(bin, ['auth', 'status'], {
@@ -455,84 +455,108 @@ function detect(opts = {}) {
  * needs to await beyond the spawn itself); `runModel` wraps it in a resolved
  * Promise, per the provider.interface.js contract.
  */
-function runExtractMode(opts) {
-  const spawnSyncImpl = typeof opts.spawnSyncImpl === 'function' ? opts.spawnSyncImpl : spawnSync;
-  const bin = typeof opts.claudeBin === 'string' ? opts.claudeBin : resolveClaudeBin(opts);
-  if (cachedSettingSourcesUnsupported) return settingSourcesIsolationUnsupportedResult('unknown');
-  const authStatus = checkAuthStatus({ spawnSyncImpl, claudeBin: bin, ...opts });
-  if (authStatus === 'logged-out') {
-    return {
-      ok: false,
-      text: '',
-      usage: null,
-      reason: 'local model not authenticated in this context (run `claude auth login` once); skipping deterministic extraction',
-      reasonCode: 'cli-unauthenticated',
-      authStatus,
-    };
+function runExtractMode(opts) { return runCliMode(opts, 'extract'); }
+
+function decodeWrapper(stdout) {
+  let wrapper;
+  try { wrapper = JSON.parse(stdout); }
+  catch {
+    const values = [];
+    const lines = stdout.split('\n');
+    for (let i = 0; i < lines.length; i += 1) {
+      let value = lines[i].trim();
+      if (value.startsWith('{') || value.startsWith('[')) {
+        // Consume the whole container, including pretty-printed extra values.
+        // A line-only JSON.parse scan could silently overlook that second value.
+        let depth = 0; let quoted = false; let escaped = false; let closed = false;
+        const parts = [];
+        for (; i < lines.length; i += 1) {
+          const line = lines[i]; parts.push(line);
+          for (let j = 0; j < line.length; j += 1) {
+            const char = line[j];
+            if (quoted) {
+              if (escaped) escaped = false;
+              else if (char === '\\') escaped = true;
+              else if (char === '"') quoted = false;
+            } else if (char === '"') quoted = true;
+            else if (char === '{' || char === '[') depth += 1;
+            else if (char === '}' || char === ']') {
+              depth -= 1;
+              if (depth === 0) {
+                if (line.slice(j + 1).trim()) return { malformed: true };
+                closed = true; break;
+              }
+            }
+          }
+          if (closed) break;
+        }
+        if (!closed) return { malformed: true };
+        value = parts.join('\n');
+        try { values.push(JSON.parse(value)); } catch { return { malformed: true }; }
+      } else {
+        try { values.push(JSON.parse(value)); } catch { /* non-JSON diagnostic */ }
+      }
+      if (values.length > 1) return { malformed: true };
+    }
+    if (values.length !== 1 || !values[0] || values[0].type !== 'result') return { malformed: true };
+    [wrapper] = values;
   }
-  const prompt = typeof opts.prompt === 'string' ? opts.prompt : '';
-  const stdin = prompt + String(opts.input || '').slice(0, 200000);
-  // --no-session-persistence (EXTRACT-PER-CLIENT W1 FIX GIVENS): matches the
-  // judge spawn below — an extraction run leaves no session file behind either.
-  // --setting-sources '' (EXTRACTION-CHILD-HOOKS, 0.9.15): the child loads none
-  // of user/project/local settings, so the operator's own SessionStart hooks
-  // never fire and their output never reaches this prompt.
-  const argv = EXTRACT_MODE_ARGV;
+  if (!wrapper || wrapper.type !== 'result' || typeof wrapper.result !== 'string' || wrapper.is_error === true) {
+    return { unsuccessful: true, wrapper };
+  }
+  return { wrapper };
+}
+
+function wrapperIdentity(wrapper, cliVersion) {
+  const models = [...new Set(Object.values(wrapper.modelUsage || {}).map(entry => entry && entry.canonicalModel)
+    .filter(value => typeof value === 'string' && value.trim()))];
+  const observed = models.length === 1 ? models[0] : null;
+  return { provider: 'claude-code', model: observed, requested_model: null, observed_model: observed,
+    version: cliVersion || null, vendor: 'anthropic',
+    ...(observed === null && { identity_unresolved: models.length ? 'ambiguous' : 'missing' }) };
+}
+
+function runCliMode(opts, mode) {
+  const spawn = typeof opts.spawnSyncImpl === 'function' ? opts.spawnSyncImpl : spawnSync;
+  const bin = typeof opts.claudeBin === 'string' ? opts.claudeBin : resolveClaudeBin(opts);
+  if (cachedSettingSourcesUnsupported) return { ...settingSourcesIsolationUnsupportedResult('unknown'), refusal: 'pre-invocation' };
+  const authStatus = mode === 'extract' ? checkAuthStatus({ ...opts, claudeBin: bin }) : 'unknown';
+  const authReason = 'local model not authenticated in this context (run `claude auth login` once); skipping deterministic extraction';
+  if (authStatus === 'logged-out') return { ok: false, text: '', usage: null, reason: authReason,
+    reasonCode: 'cli-unauthenticated', authStatus, refusal: 'pre-invocation' };
+  const argv = mode === 'judge' ? JUDGE_MODE_ARGV : EXTRACT_MODE_ARGV;
   const cliVersion = getClaudeCliVersion(bin, opts);
+  const meta = { authStatus, argv, cliVersion };
+  const fail = (reasonCode, reason) => ({ ok: false, text: '', usage: null, reasonCode, reason, ...meta });
+  const gate = invocationGate(opts);
+  if (gate) return { ...gate, ...meta };
   let res;
   try {
-    // --no-session-persistence (EXTRACT-PER-CLIENT W1 FIX GIVENS): matches the
-    // judge spawn below — an extraction run leaves no session file behind either.
-    res = spawnSyncImpl(bin, argv, {
-      input: stdin,
-      encoding: 'utf-8',
-      env: claudeChildEnv(),
-      timeout: opts.timeoutMs || 120000,
-      maxBuffer: 20 * 1024 * 1024,
+    res = spawn(bin, argv, {
+      input: (typeof opts.prompt === 'string' ? opts.prompt : '') + (mode === 'extract' ? String(opts.input || '').slice(0, 200000) : ''),
+      encoding: 'utf-8', env: claudeChildEnv(), timeout: opts.timeoutMs || 120000, maxBuffer: 20 * 1024 * 1024,
     });
-  } catch (error) {
-    return { ok: false, text: '', usage: null, reason: `spawn failed (${bin}): ${error.message}`, reasonCode: 'unknown', authStatus, argv, cliVersion };
-  }
-  if (!res) {
-    return { ok: false, text: '', usage: null, reason: `spawn failed (${bin}): no process result`, reasonCode: 'unknown', authStatus, argv, cliVersion };
-  }
+  } catch { return fail('unknown', 'local model spawn failed'); }
+  if (!res) return fail('unknown', 'local model returned no process result');
   if (looksLikeUnsupportedSettingSourcesFlag(res)) {
     cachedSettingSourcesUnsupported = true;
     return { ...settingSourcesIsolationUnsupportedResult(authStatus), argv, cliVersion };
   }
-  const out = String(res.stdout || '');
-  if (res.error) {
-    return { ok: false, text: '', usage: null, reason: `spawn failed (${bin}): ${res.error.message}`, reasonCode: 'unknown', authStatus, argv, cliVersion };
+  if (res.error || (res.signal && res.status === null)) return fail('unknown', 'local model invocation failed');
+  const mcp = enterpriseMcpRefusal(res, authStatus);
+  if (mcp) return { ...mcp, argv, cliVersion };
+  const stdout = String(res.stdout || '');
+  const decoded = decodeWrapper(stdout);
+  // A wrapper's result is content, never an authentication signal.
+  const authPattern = /Please run \/login|authentication_error/i;
+  if ((!decoded.wrapper && authPattern.test(stdout)) || authPattern.test(String(res.stderr || ''))) {
+    return { ...fail('cli-unauthenticated', authReason), ...(authStatus === 'logged-in' && { authDiscrepancy: true }) };
   }
-  const mcpRefusal = enterpriseMcpRefusal(res, authStatus);
-  if (mcpRefusal) return { ...mcpRefusal, argv, cliVersion };
-  // Claude prints auth failures ("API Error: 401 ... Please run /login") to stdout.
-  if (/Please run \/login|authentication_error|401/i.test(out) || /Please run \/login|authentication_error/i.test(String(res.stderr || ''))) {
-    return {
-      ok: false,
-      text: out,
-      usage: null,
-      reason: 'local model not authenticated in this context (run `claude auth login` once); skipping deterministic extraction',
-      reasonCode: 'cli-unauthenticated',
-      authStatus,
-      argv,
-      cliVersion,
-      ...(authStatus === 'logged-in' && { authDiscrepancy: true }),
-    };
-  }
-  if (res.status !== 0) {
-    return {
-      ok: false,
-      text: out,
-      usage: null,
-      reason: `local model exited ${res.status}: ${(out || String(res.stderr || '')).slice(0, 160)}`,
-      reasonCode: 'model-error',
-      authStatus,
-      argv,
-      cliVersion,
-    };
-  }
-  return { ok: true, text: out, usage: null, reason: null, authStatus, argv, cliVersion };
+  if (res.status !== 0) return fail('model-error', 'local model exited unsuccessfully');
+  if (decoded.malformed) return fail('model-error', mode === 'judge' ? 'local judge returned malformed JSON wrapper' : 'local model returned malformed JSON wrapper');
+  if (decoded.unsuccessful) return fail('model-error', 'local model returned no successful result');
+  return { ok: true, text: decoded.wrapper.result, usage: normalizeJudgeUsage(decoded.wrapper.usage), reason: null,
+    ...meta, identity: wrapperIdentity(decoded.wrapper, cliVersion) };
 }
 
 /**
@@ -557,75 +581,7 @@ function normalizeJudgeUsage(rawUsage) {
 
 /** mode:'judge' — binary anchored-dedup decision. Argv byte-identical to pre-move plus
  * the same --setting-sources '' isolation the extraction spawn above gains (0.9.15). */
-function runJudgeMode(opts) {
-  const spawnSyncImpl = typeof opts.spawnSyncImpl === 'function' ? opts.spawnSyncImpl : spawnSync;
-  const bin = typeof opts.claudeBin === 'string' ? opts.claudeBin : resolveClaudeBin(opts);
-  if (cachedSettingSourcesUnsupported) return settingSourcesIsolationUnsupportedResult('unknown');
-  const prompt = typeof opts.prompt === 'string' ? opts.prompt : '';
-  const argv = JUDGE_MODE_ARGV;
-  const cliVersion = getClaudeCliVersion(bin, opts);
-  let res;
-  try {
-    res = spawnSyncImpl(bin, argv, {
-      input: prompt,
-      encoding: 'utf8',
-      env: claudeChildEnv(),
-      timeout: opts.timeoutMs || 120000,
-      maxBuffer: 20 * 1024 * 1024,
-    });
-  } catch (error) {
-    return { ok: false, text: '', usage: null, reason: `judge spawn failed (${bin}): ${error.message}`, reasonCode: 'unknown', authStatus: 'unknown', argv, cliVersion };
-  }
-  if (!res) {
-    return { ok: false, text: '', usage: null, reason: `judge spawn failed (${bin}): no process result`, reasonCode: 'unknown', authStatus: 'unknown', argv, cliVersion };
-  }
-  if (looksLikeUnsupportedSettingSourcesFlag(res)) {
-    cachedSettingSourcesUnsupported = true;
-    return { ...settingSourcesIsolationUnsupportedResult('unknown'), argv, cliVersion };
-  }
-  const stdout = String(res.stdout || '');
-  if (res.error) {
-    return { ok: false, text: '', usage: null, reason: `judge spawn failed (${bin}): ${res.error.message}`, reasonCode: 'unknown', authStatus: 'unknown', argv, cliVersion };
-  }
-  const mcpRefusal = enterpriseMcpRefusal(res, 'unknown');
-  if (mcpRefusal) return { ...mcpRefusal, argv, cliVersion };
-  if (/Please run \/login|authentication_error|401/i.test(stdout) || /Please run \/login|authentication_error/i.test(String(res.stderr || ''))) {
-    return { ok: false, text: '', usage: null, reason: 'local judge model is not authenticated', reasonCode: 'cli-unauthenticated', authStatus: 'unknown', argv, cliVersion };
-  }
-  if (res.status !== 0) {
-    return {
-      ok: false,
-      text: '',
-      usage: null,
-      reason: `local judge exited ${res.status}: ${(stdout || String(res.stderr || '')).slice(0, 160)}`,
-      reasonCode: 'model-error',
-      authStatus: 'unknown',
-      argv,
-      cliVersion,
-    };
-  }
-  let wrapper;
-  try {
-    wrapper = JSON.parse(stdout);
-  } catch {
-    // Some CLI builds append a non-JSON MCP SDK diagnostic to stdout. Recover
-    // only a single result value; an extra JSON value of ANY type is ambiguous.
-    const values = [];
-    for (const rawLine of stdout.split('\n')) {
-      const line = rawLine.trim();
-      if (!line) continue;
-      try { values.push(JSON.parse(line)); } catch { /* discard non-JSON noise */ }
-    }
-    if (values.length !== 1 || !values[0] || typeof values[0] !== 'object' || values[0].type !== 'result') {
-      return { ok: false, text: '', usage: null, reason: 'local judge returned malformed JSON wrapper', reasonCode: 'model-error', authStatus: 'unknown', argv, cliVersion };
-    }
-    [wrapper] = values;
-  }
-  if (!wrapper || typeof wrapper.result !== 'string' || wrapper.is_error === true) {
-    return { ok: false, text: '', usage: null, reason: 'local judge returned no successful result', reasonCode: 'model-error', authStatus: 'unknown', argv, cliVersion };
-  }
-  return { ok: true, text: wrapper.result, usage: normalizeJudgeUsage(wrapper.usage), reason: null, authStatus: 'unknown', argv, cliVersion };
-}
+function runJudgeMode(opts) { return runCliMode(opts, 'judge'); }
 
 /**
  * runModel(opts) — the provider.interface.js contract. Checks the billing-helper
@@ -633,7 +589,7 @@ function runJudgeMode(opts) {
  * its existing pre-spawn auth short-circuit, mode:'judge' spawns directly as it
  * always has (auth failure there is only knowable post-hoc, from the output).
  */
-async function runModel(opts = {}) {
+function runModelImpl(opts) {
   if (detectBillingHelperConfigured(opts)) {
     return {
       ok: false,
@@ -641,11 +597,17 @@ async function runModel(opts = {}) {
       usage: null,
       reason: 'a foreign-billing CLI helper is configured — extraction declines to run under it',
       reasonCode: 'cli-billing-helper-configured',
+      refusal: 'pre-invocation',
       authStatus: 'unknown',
     };
   }
   const mode = opts.mode === 'judge' ? 'judge' : 'extract';
   return mode === 'judge' ? runJudgeMode(opts) : runExtractMode(opts);
+}
+
+async function runModel(opts = {}) {
+  try { return runModelImpl(opts); }
+  catch { return { ok: false, text: '', usage: null, reasonCode: 'unknown', reason: 'local model invocation failed', authStatus: 'unknown' }; }
 }
 
 /**
@@ -663,6 +625,7 @@ function extractWithClaudeCode(transcript, opts = {}) {
       out: '',
       reason: 'a foreign-billing CLI helper is configured — extraction declines to run under it',
       reasonCode: 'cli-billing-helper-configured',
+      refusal: 'pre-invocation',
       authStatus: 'unknown',
     };
   }

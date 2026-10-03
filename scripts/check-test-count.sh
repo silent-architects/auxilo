@@ -508,7 +508,10 @@ cd "${REPO_ROOT}"
 # The pin is the total npm test prints on the integrated tree.
 # FIX-UNIT-LEGAL-CLEARANCE (2026-09-28): the missing nav-clearance test, new
 # test/nav-clearance.test.js (93). Verified `npm test` discovered count: 4497.
-EXPECTED_TEST_COUNT=4921
+# EPC2-2 A+B: 63 binding protocol + 29 routing + 32 adapter tests,
+# plus 3 tracked-file path guards for the new source, test and fixture helper.
+# Merged onto main at 4921 (design wave) + the 127 above = 5048.
+EXPECTED_TEST_COUNT=5048
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

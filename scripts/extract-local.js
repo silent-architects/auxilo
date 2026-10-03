@@ -15,6 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const {
   loadIndexForExtraction,
   readExtractionIndex,
@@ -373,9 +374,10 @@ function resolveExtractionModelIdentity(runModelResult) {
     && typeof runModelResult.identity.provider === 'string'
     && runModelResult.identity.provider
   ) {
-    return runModelResult.identity;
+    const identity = runModelResult.identity;
+    return { ...identity, model: identity.observed_model || null };
   }
-  return { provider: 'unknown', model: null, version: null, vendor: null };
+  return { provider: 'unknown', model: null, requested_model: null, observed_model: null, identity_unresolved: 'missing', version: null, vendor: null };
 }
 
 /**
@@ -402,6 +404,8 @@ async function defaultInvokeModel(transcript, invokeOpts, opts) {
     reasonCode: result.reasonCode,
     authStatus: result.authStatus,
     extractionModel: resolveExtractionModelIdentity(result),
+    ...(result.hold && { hold: result.hold }),
+    ...(result.deferred && { deferred: result.deferred }),
     ...(result.authDiscrepancy !== undefined && { authDiscrepancy: result.authDiscrepancy }),
     // EXTRACTION-RUN-LOG (0.9.15): additive passthrough for the one-line-per-run
     // provider summary logged at the end of extractLocally() below. Only
@@ -432,6 +436,9 @@ function defaultInvokeJudge(opts) {
       out: result.text,
       usage: result.usage,
       reason: result.reason,
+      identity: result.identity,
+      ...(result.hold && { hold: result.hold }),
+      ...(result.deferred && { deferred: result.deferred }),
       // EXTRACTION-RUN-LOG (0.9.15): threaded through so runAnchoredJudge below
       // can report the judge call's status/argv/CLI version on the run summary
       // log line. Additive — every existing invokeJudge stub in this repo's
@@ -526,11 +533,16 @@ async function runAnchoredJudge(candidates, indexState, opts = {}) {
       judgeReasonCode: result && result.reasonCode,
       judgeArgv: result && result.argv,
       judgeCliVersion: result && result.cliVersion,
+      ...(result && result.hold && { hold: result.hold }),
+      ...(result && result.deferred && { deferred: result.deferred }),
     };
   }
   const parsed = parseJudgeDecisions(result.out, input, rankings);
   const usage = judgeUsage(result.usage, prompt, result.out);
   const judgeMeta = {
+    identity: result.identity,
+    ...(result.hold && { hold: result.hold }),
+    ...(result.deferred && { deferred: result.deferred }),
     judgeAttempted: true,
     judgeReasonCode: result.reasonCode,
     judgeArgv: result.argv,
@@ -736,6 +748,8 @@ function logProviderRunSummary(opts, runId, modelResult, judged) {
 }
 
 async function extractLocally(transcript, sourceType, opts = {}) {
+  opts = { ...opts, source: sourceType || '', sessionId: opts.sessionId || opts.runId || crypto.randomUUID(),
+    jobSha: opts.jobSha || crypto.createHash('sha256').update(transcript).digest('hex'), routeContext: opts.routeContext || {} };
   if (sourceType && !EXTRACTABLE_SOURCES.has(sourceType)) {
     return { learnings: [], skipped: `local extraction not implemented for "${sourceType}" — agent contributes via auxilo_contribute` };
   }
@@ -780,6 +794,8 @@ async function extractLocally(transcript, sourceType, opts = {}) {
     return {
       learnings: [],
       skipped: reason,
+      ...(modelResult.hold && { hold: modelResult.hold }),
+      ...(modelResult.deferred && { deferred: modelResult.deferred }),
       ...(modelResult.reasonCode !== undefined && { reasonCode: modelResult.reasonCode }),
       ...(modelResult.authStatus !== undefined && { authStatus: modelResult.authStatus }),
       ...(modelResult.authDiscrepancy !== undefined && {
@@ -792,7 +808,9 @@ async function extractLocally(transcript, sourceType, opts = {}) {
   // own opts.invokeModel that doesn't report one (every existing test does
   // this) — extraction_model then simply never appears, byte-identical to
   // pre-PART-C behavior.
-  const extractionModel = modelResult.extractionModel || null;
+  const extractionModel = modelResult.extractionModel
+    ? { ...modelResult.extractionModel, model: modelResult.extractionModel.observed_model || null }
+    : null;
   const parsed = parseExtractionOutput(out, opts);
   const promptDropResult = applyPromptMemoryDrops(
     parsed.prompt_drops,
@@ -830,7 +848,10 @@ async function extractLocally(transcript, sourceType, opts = {}) {
       lexicalKept.push(drop.candidate);
     }
   }
-  const judged = await runAnchoredJudge(lexicalKept, filterState, opts);
+  const judged = modelResult.hold || modelResult.deferred
+    ? { kept: lexicalKept, dropped: [], called: false, prompt_tokens: 0, completion_tokens: 0,
+      ...(modelResult.hold && { hold: modelResult.hold }), ...(modelResult.deferred && { deferred: modelResult.deferred }) }
+    : await runAnchoredJudge(lexicalKept, filterState, opts);
   const allDropped = [
     ...promptDropResult.dropped,
     ...lexicalDropped,
@@ -846,6 +867,9 @@ async function extractLocally(transcript, sourceType, opts = {}) {
   logProviderRunSummary(opts, opts.runId, modelResult, judged);
   return {
     learnings: judged.kept,
+    ...(judged.hold && { hold: judged.hold }),
+    ...(judged.deferred && { deferred: judged.deferred }),
+    ...providers.finishJob(opts.routeContext),
     dedup_dropped: allDropped.length,
     drop_audit: allDropped.map((drop) => drop.audit),
     prompt_memory_tokens: promptMemory.estimated_tokens,
