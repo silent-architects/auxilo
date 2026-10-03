@@ -511,7 +511,7 @@ cd "${REPO_ROOT}"
 # EPC2-2 A+B: 63 binding protocol + 29 routing + 32 adapter tests,
 # plus 3 tracked-file path guards for the new source, test and fixture helper.
 # Merged onto main at 4921 (design wave) + the 127 above = 5048.
-EXPECTED_TEST_COUNT=5048
+EXPECTED_TEST_COUNT=5058
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

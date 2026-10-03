@@ -1292,3 +1292,66 @@ describe('extract-local.js — logProviderRunSummary / formatArgvForLog', () => 
     assert.match(lines[0], /judge=skipped\(no-candidates\)/, 'no learnings means no judge candidates this run');
   });
 });
+
+// ─── EXT-0806c — expired-OAuth exit is classified cli-unauthenticated ──────────
+const OAUTH_EXPIRED = 'Failed to authenticate: OAuth session expired and could not be refreshed';
+function claudeRun(mode, responses) {
+  claudeCode._resetSettingSourcesCacheForTests();
+  const stub = spawnQueue(responses);
+  return claudeCode.runModel({ ...supportedClaude, beforeModelInvocation: () => true, mode, prompt: 'P', input: 'T',
+    claudeBin: 'claude', spawnSyncImpl: stub.spawnSyncImpl, log: () => {} });
+}
+
+describe('claude-code.js — expired-OAuth classification (EXT-0806c)', () => {
+
+  it('(a) extract: the exact string on STDERR with exit 1 is cli-unauthenticated, keeps the loggedIn:true discrepancy, and carries no refusal', async () => {
+    assert.equal(claudeCode.OAUTH_EXPIRED_PATTERN.test('Failed to authenticate: OAuth session expired and could not be refreshed'), true);
+    const result = await claudeRun('extract', [authJson(true), { status: 1, stdout: '', stderr: OAUTH_EXPIRED }]);
+    assert.equal(result.ok, false);
+    assert.equal(result.reasonCode, 'cli-unauthenticated');
+    assert.equal(result.authStatus, 'logged-in');
+    assert.equal(result.authDiscrepancy, true);
+    assert.equal('refusal' in result, false, 'a post-spawn outcome must never permit fallback');
+  });
+
+  it('(b) extract: the exact string on STDOUT with exit 1 is cli-unauthenticated with no refusal', async () => {
+    const result = await claudeRun('extract', [authJson(true), { status: 1, stdout: OAUTH_EXPIRED + '\n', stderr: '' }]);
+    assert.equal(result.ok, false);
+    assert.equal(result.reasonCode, 'cli-unauthenticated');
+    assert.equal('refusal' in result, false);
+  });
+
+  it('(c) judge: the exact string on either stream with exit 1 is cli-unauthenticated with no refusal', async () => {
+    for (const response of [{ status: 1, stdout: '', stderr: OAUTH_EXPIRED }, { status: 1, stdout: OAUTH_EXPIRED, stderr: '' }]) {
+      const result = await claudeRun('judge', [response]);
+      assert.equal(result.ok, false);
+      assert.equal(result.reasonCode, 'cli-unauthenticated');
+      assert.equal('refusal' in result, false);
+    }
+  });
+
+  it('(d) Overloaded, rate-limit and generic exit 1 stay model-error in both modes', async () => {
+    const failures = [
+      { status: 1, stdout: '', stderr: 'API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}' },
+      { status: 1, stdout: '', stderr: 'Error: rate limit exceeded, please retry later' },
+      { status: 1, stdout: 'unexpected internal error', stderr: '' },
+    ];
+    for (const failure of failures) {
+      const extract = await claudeRun('extract', [authJson(true), failure]);
+      assert.equal(extract.reasonCode, 'model-error', JSON.stringify(failure));
+      const judge = await claudeRun('judge', [failure]);
+      assert.equal(judge.reasonCode, 'model-error', JSON.stringify(failure));
+    }
+  });
+
+  it('(g) exit 0 whose result wrapper contains the OAuth phrase is a success in both modes, never cli-unauthenticated', async () => {
+    const wrapper = JSON.stringify({ type: 'result', is_error: false,
+      result: 'A learning ABOUT an auth bug: the CLI prints "' + OAUTH_EXPIRED + '" when the refresh token is dead.' });
+    const extract = await claudeRun('extract', [authJson(true), { status: 0, stdout: wrapper, stderr: '' }]);
+    assert.equal(extract.ok, true, JSON.stringify(extract));
+    assert.equal(extract.text.includes(OAUTH_EXPIRED), true);
+    const judge = await claudeRun('judge', [{ status: 0, stdout: wrapper, stderr: '' }]);
+    assert.equal(judge.ok, true, JSON.stringify(judge));
+    assert.notEqual(judge.reasonCode, 'cli-unauthenticated');
+  });
+});

@@ -516,6 +516,10 @@ function wrapperIdentity(wrapper, cliVersion) {
     ...(observed === null && { identity_unresolved: models.length ? 'ambiguous' : 'missing' }) };
 }
 
+// Exact production CLI wording (verified 2026-09-27..10-01). Add another alternative only for
+// another CONFIRMED real CLI message, never a guessed synonym.
+const OAUTH_EXPIRED_PATTERN = /Failed to authenticate:\s*OAuth session expired and could not be refreshed/i;
+
 function runCliMode(opts, mode) {
   const spawn = typeof opts.spawnSyncImpl === 'function' ? opts.spawnSyncImpl : spawnSync;
   const bin = typeof opts.claudeBin === 'string' ? opts.claudeBin : resolveClaudeBin(opts);
@@ -550,6 +554,14 @@ function runCliMode(opts, mode) {
   // A wrapper's result is content, never an authentication signal.
   const authPattern = /Please run \/login|authentication_error/i;
   if ((!decoded.wrapper && authPattern.test(stdout)) || authPattern.test(String(res.stderr || ''))) {
+    return { ...fail('cli-unauthenticated', authReason), ...(authStatus === 'logged-in' && { authDiscrepancy: true }) };
+  }
+  // EXT-0806c: an expired, unrefreshable OAuth session exits nonzero with this exact CLI
+  // message on either stream. Nonzero exit only, and stdout only when no result wrapper
+  // decoded, so a successful run whose own text discusses an auth bug never matches. Like
+  // the check above it is a post-spawn outcome: no `refusal`, so it never permits fallback.
+  if (Number.isInteger(res.status) && res.status !== 0
+    && ((!decoded.wrapper && OAUTH_EXPIRED_PATTERN.test(stdout)) || OAUTH_EXPIRED_PATTERN.test(String(res.stderr || '')))) {
     return { ...fail('cli-unauthenticated', authReason), ...(authStatus === 'logged-in' && { authDiscrepancy: true }) };
   }
   if (res.status !== 0) return fail('model-error', 'local model exited unsuccessfully');
@@ -676,4 +688,5 @@ module.exports = {
   getClaudeCliVersion,
   looksLikeUnsupportedSettingSourcesFlag,
   _resetSettingSourcesCacheForTests,
+  OAUTH_EXPIRED_PATTERN,
 };
