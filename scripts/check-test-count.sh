@@ -521,7 +521,8 @@ cd "${REPO_ROOT}"
 # state, reconciliation/boot barriers, queued reversal and route regressions.
 # STRIPE-PRODUCTION-OPERATOR: measured staged suite 5549; shared pure planner,
 # explicit maintenance admission and real SIGKILL forward-recovery coverage.
-EXPECTED_TEST_COUNT=5549
+# Persisted-plan correction: two additional canonical reload / CLI tests.
+EXPECTED_TEST_COUNT=5551
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

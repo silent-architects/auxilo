@@ -35,3 +35,19 @@ for(const invalid of ['wrong-plan','random','wrong-mode'])test('recovery refuses
 
 test('plan-bound stage ownership allows only final owner or transient effective-root owner',()=>{const expected={uid:1000,gid:1000},operator={uid:0,gid:0};assert.equal(op.validateStagingOwnership({mode:0o600,uid:1000,gid:1000},expected,operator),true);assert.equal(op.validateStagingOwnership({mode:0o600,uid:0,gid:0},expected,operator),true);assert.throws(()=>op.validateStagingOwnership({mode:0o600,uid:0,gid:99},expected,operator));assert.throws(()=>op.validateStagingOwnership({mode:0o600,uid:123,gid:123},expected,operator));assert.throws(()=>op.validateStagingOwnership({mode:0o4600,uid:0,gid:0},expected,operator));});
 test('initial journal stage cannot restart after source drift or without exact stage',t=>{for(const change of ['drift','absent']){const f=planned(t);killBeforeRename(f,'stripe-migration-journal.json');if(change==='drift')fs.writeFileSync(path.join(f.outputDir,'earnings.json'),'{}');else for(const n of fs.readdirSync(f.outputDir).filter(n=>n.endsWith('.tmp')))fs.unlinkSync(path.join(f.outputDir,n));assert.throws(()=>op.recoverRehearsal(f));assert.equal(fs.existsSync(path.join(f.outputDir,'stripe-migration-journal.json')),false);}});
+
+test('canonical persisted plan reload retains validated payload and full CLI roundtrip',t=>{
+ const f=fixture(t),{main}=require('../scripts/stripe-production-operator'),base=path.dirname(f.inputDir),manifestFile=path.join(base,'manifest.json'),planFile=path.join(base,'plan.json');
+ // Deliberately preserve noncanonical original insertion order at the input boundary.
+ fs.writeFileSync(manifestFile,JSON.stringify(f.manifest));
+ assert.equal(main(['--input',f.inputDir]).state,'inspected');
+ const planned=main(['--mode','plan','--input',f.inputDir,'--manifest',manifestFile,'--candidate-sha',f.candidateSha,'--output',planFile]);
+ const persisted=JSON.parse(fs.readFileSync(planFile,'utf8'));
+ assert.equal(op.validateOperatorPlan(persisted).checksum,planned.plan_checksum);
+ assert.equal(main(['--mode','rehearse','--input',f.inputDir,'--plan',planFile,'--output',f.outputDir]).state,'completed');
+ assert.equal(main(['--mode','recover-rehearsal','--input',f.inputDir,'--plan',planFile,'--output',f.outputDir]).state,'completed');
+});
+test('canonical JSON serialization of fresh plan preserves validation',t=>{
+ const f=fixture(t),plan=op.createOperatorPlan(f),{canonicalJSON}=require('../lib/stripe-transfer-persistence');
+ const reloaded=JSON.parse(canonicalJSON(plan));assert.equal(op.validateOperatorPlan(reloaded).checksum,plan.checksum);
+});
