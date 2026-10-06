@@ -786,6 +786,14 @@ function loadDataFile(filepath, emptyDefault, critical) {
   }
 }
 
+// A partial offline migration must never reach boot-time financial repair.
+try {
+  require('./lib/stripe-migration-journal').assertMigrationJournalComplete();
+  const bootMigrationControl = require('./lib/stripe-migration-controls').getMigrationControl();
+  // Absent journal/marker/control explicitly returns ready:true, armed:false.
+  // Only an existing inconsistent migration blocks these boot-time writers.
+  if (!bootMigrationControl.ready) throw new Error('Existing migration state is inconsistent');
+} catch (error) { fatalFinancialStorage(error); }
 // D0: authoritative primary only. No empty fallback and no backup restoration.
 let earnings;
 try { earnings = loadEarningsPrimary(EARNINGS_FILE); } catch (error) { fatalFinancialStorage(error); }
@@ -914,7 +922,7 @@ function completeStripeTransferAttempt(attemptId) {
     clone.processed_settlements = [...markers, marker];
     const nextEarnings = { ...earnings, [resolved.key]: clone };
     try { writeJSONAtomic(EARNINGS_FILE, nextEarnings); } catch (error) { fatalFinancialStorage(error); }
-    earnings = nextEarnings; // Publish only after the debit and its marker are durably one write.
+    earnings[resolved.key] = clone; // Publish after durability while preserving the map captured by queued financial callers.
   }
   if (attempt.state === 'confirmed') {
     const record = {
@@ -1738,6 +1746,12 @@ const {
     initStripeStatusProbing,
     notifyStripeCheckoutAttempt,
 } = require('./lib/stripe.js');
+const stripePlatforms = require('./lib/stripe-platforms.js');
+const { assertActionAllowed, getMigrationControl } = require('./lib/stripe-migration-controls.js');
+const { createCheckoutIntentStore } = require('./lib/stripe-checkout-intents.js');
+const { createCheckoutAdmission } = require('./lib/stripe-checkout-admission.js');
+const checkoutIntents = createCheckoutIntentStore();
+const { loadPayoutAssignment, validatePayoutAssignment, acquirePlatformAdmissionLock } = require('./lib/stripe-payout-assignments.js');
 const { loadCredits } = require('./lib/credits.js'); // AC-2: referee novelty check
 // The purchase caps, the account-hold store (webhook-race defense + dispute
 // shortfall hold), and the dollar-lot ledger operations + refund/dispute
@@ -4972,213 +4986,43 @@ app.post('/checkout/session', requireAuth, async (c) => {
         }, 400);
     }
 
-    // The $2,000 balance cap and the $2,000 daily purchase cap, checked
-    // BEFORE any Stripe call — a legal ceiling on prepaid stored value.
-    //
-    // M3 residual: both checks, and the reservation that makes a passing
-    // check STICK, run together under a per-account lock. Checking the caps
-    // and only afterward recording anything left a gap parallel requests
-    // could all run through: each one's check would pass before any of them
-    // had recorded a thing. The lock closes that gap -- a placeholder
-    // reservation (a local id, the amount, the time) is recorded here,
-    // BEFORE the Stripe call below, so a second request's check (waiting on
-    // the same lock) always sees it. It is replaced with the real session on
-    // success, or deleted on any failure, outside the lock (never held
-    // across the Stripe network round trip).
-    const packPrice = PACKS[pack].price_usd;
-    const releaseCheckoutLock = await acquireCheckoutLock(accountId);
-    let reservationId = null;
     try {
-        const balanceCheck = checkBalanceCap(accountId, packPrice);
-        if (!balanceCheck.ok) {
-            return c.json({
-                error: `This purchase would push your account's stored value to $${balanceCheck.projected.toFixed(2)}, above the $${balanceCheck.limit.toFixed(2)} balance cap. Current balance: $${balanceCheck.current.toFixed(2)}.`,
-                code: 'BALANCE_CAP_EXCEEDED',
-                current_usd: balanceCheck.current,
-                limit_usd: balanceCheck.limit,
-            }, 400);
-        }
-        const dailyCheck = checkDailyCap(accountId, packPrice);
-        if (!dailyCheck.ok) {
-            return c.json({
-                error: `This purchase would push your purchases in the last 24 hours to $${dailyCheck.projected.toFixed(2)}, above the $${dailyCheck.limit.toFixed(2)} daily purchase cap. Purchased in the last 24 hours: $${dailyCheck.current.toFixed(2)}.`,
-                code: 'DAILY_PURCHASE_CAP_EXCEEDED',
-                current_usd: dailyCheck.current,
-                limit_usd: dailyCheck.limit,
-            }, 400);
-        }
-        reservationId = reservePendingSession(accountId, packPrice);
-    } finally {
-        releaseCheckoutLock();
-    }
-
-    // CREDITS-CONFIG-USABLE: the dark-safe invariant is "usable", not
-    // "present" — a malformed/placeholder secret must fail closed here with
-    // the same reason code /health exposes. This also arms an immediate
-    // out-of-cycle reprobe if the cached status is currently a transient
-    // failure (or still pending), so a real fix on prod is picked up on the
-    // next attempt rather than waiting out the full 10-minute interval.
-    notifyStripeCheckoutAttempt();
-    const stripeStatus = getStripeStatus();
-    if (!stripeStatus.configured) {
-        clearPendingSession(reservationId); // M3: delete the reservation on this failure
-        return c.json({
-            error: 'Payment system unavailable',
-            code: 'stripe_unusable',
-            reason: stripeStatus.reason,
-        }, 503);
-    }
-
-    const baseUrl = process.env.BASE_URL || `https://${c.req.header('host')}`;
-
-    try {
-        const session = await createCheckoutSession(accountId, pack, baseUrl);
-        // M3/N2: replace the placeholder with the real session, counted from
-        // here on under the expiry Stripe itself confirmed for it (not the
-        // reservation's own short bound, and not a fixed local window).
-        promoteReservation(reservationId, session.session_id, accountId, packPrice, session.expires_at);
-        return c.json({ url: session.url, session_id: session.session_id });
-    } catch (err) {
-        clearPendingSession(reservationId); // M3: delete the reservation on this failure
-        console.error('[stripe] Checkout session error:', err.message);
-        if (err.message === 'Stripe not configured') {
-            return c.json({ error: 'Payment system unavailable', code: 'stripe_unusable', reason: 'not-configured' }, 503);
-        }
-        return c.json({ error: 'Failed to create checkout session' }, 500);
+        const admission = createCheckoutAdmission({
+            intents: checkoutIntents, lock: acquireCheckoutLock,
+            control: () => { if (!paymentsEnabled()) throw new Error('PAYMENTS_DISABLED'); return assertActionAllowed('checkout'); },
+            getContext: async alias => (await stripePlatforms.getVerifiedClient(alias)).context,
+            checkCaps: (id, price) => {
+                for (const [check, code] of [[checkBalanceCap, 'BALANCE_CAP_EXCEEDED'], [checkDailyCap, 'DAILY_PURCHASE_CAP_EXCEEDED']]) {
+                    const result = check(id, price);
+                    if (!result.ok) { const error = new Error(code); error.code = code; error.cap = result; throw error; }
+                }
+            }, reserve: reservePendingSession, promote: promoteReservation, createSession: createCheckoutSession,
+        });
+        const result = await admission({ accountId, packId: pack, amountUsd: PACKS[pack].price_usd,
+            baseUrl: process.env.BASE_URL || `https://${c.req.header('host')}` });
+        return c.json(result);
+    } catch (error) {
+        if (error.financialStorageFailure) fatalFinancialStorage(error);
+        if (error.attempt_id) return c.json({ code: 'CHECKOUT_RECONCILIATION_REQUIRED', error: 'Your earlier checkout could not be confirmed. New funding is paused while it is reconciled.', attempt_id: error.attempt_id }, 409);
+        if (error.cap) return c.json({ error: error.message, code: error.code, current_usd: error.cap.current, limit_usd: error.cap.limit }, 400);
+        return c.json({ error: 'Checkout requires verified payment and reconciliation state.', code: error.code || 'stripe_unusable' }, 503);
     }
 });
 
 // ── POST /webhook/stripe (Phase 0.4 — Stripe Webhook) ──────────────────────
 // IMPORTANT: This route must receive the raw body for signature verification.
 // Hono's default JSON parsing must be bypassed.
-app.post('/webhook/stripe', async (c) => {
-    // PAYMENTS_ENABLED (Wave 2b): refuse BEFORE any side effect. Deliberate
-    // 503 (not 200-and-drop): Stripe retries non-2xx deliveries with backoff
-    // for days, so packs paid during the pause credit themselves when the
-    // switch re-enables — no event lost, no manual replay.
-    if (!paymentsEnabled()) return c.json(paymentsDisabledBody(), 503);
-    const signature = c.req.header('stripe-signature');
-    if (!signature) {
-        return c.json({ error: 'Missing stripe-signature header' }, 400);
-    }
-
-    let rawBody;
-    try {
-        rawBody = await c.req.text();
-    } catch {
-        return c.json({ error: 'Could not read request body' }, 400);
-    }
-
-    let event;
-    try {
-        event = verifyWebhookSignature(rawBody, signature);
-    } catch (err) {
-        console.warn('[stripe] Webhook signature verification failed:', err.message);
-        return c.json({ error: 'Invalid signature' }, 400);
-    }
-
-    // Process event types
-    if (event.type === 'checkout.session.completed') {
-
-    const session = event.data.object;
-    const metadata = session.metadata || {};
-    const { account_id, pack_id } = metadata;
-
-    if (!account_id || !pack_id) {
-        console.warn('[stripe] Webhook missing metadata:', { account_id, pack_id });
-        return c.json({ received: true, processed: false, reason: 'missing_metadata' });
-    }
-
-    // Idempotency check
-    if (isSessionProcessed(session.id)) {
-        console.log('[stripe] Duplicate webhook for session:', session.id);
-        // M3: self-healing -- clear it here too, in case an earlier
-        // delivery credited the account but never reached the clear below.
-        // N17: bookkeeping AFTER a purchase already paid must never fail
-        // this webhook -- a corrupt checkout-sessions.json throwing here
-        // would return 500 forever on every Stripe retry for an account
-        // that is already correctly credited, with no way to recover
-        // short of fixing the file (which does not stop the retries that
-        // already happened). Wrap, alert once, still report processed.
-        try {
-            clearPendingSession(session.id);
-        } catch (clearErr) {
-            console.error('[stripe] clearPendingSession failed on an already-processed session (non-fatal):', clearErr && clearErr.message);
-            sendOpsAlert(
-                'checkout-sessions.json bookkeeping failed (already-processed webhook)',
-                `session=${session.id} account=${account_id || 'unknown'} error=${clearErr && clearErr.message}`,
-                { category: 'webhook-bookkeeping' }
-            ).catch(() => {});
+const stripeEventReceipts = require('./lib/stripe-event-receipts').createEventReceiptStore();
+const stripeOrigins = require('./lib/stripe-object-origins').createOriginStore();
+const stripeEventDispatcher = require('./lib/stripe-event-dispatch').createStripeEventDispatcher({
+    receipts: stripeEventReceipts, origins: stripeOrigins, checkoutIntents, packs: PACKS,
+    getAccounts: loadAccounts, addDollarLot, appendPurchase, isSessionProcessed, getPurchases: getPurchasesForAccount,
+    clearPending: (sessionId, context) => {
+        try { clearPendingSession(sessionId, context); } catch (error) {
+            void sendOpsAlert('Checkout post-credit bookkeeping failed', 'A credited Checkout requires cap-cache reconciliation.', { category: 'webhook-bookkeeping' }).catch(() => {});
         }
-        return c.json({ received: true, already_processed: true });
-    }
-
-    const purchaseId = generatePurchaseId();
-
-    // The ONE call site for the dollar-lot credit function — never x402,
-    // never the router, never a wallet. A pack purchase always adds dollars
-    // to the buyer's balance.
-    const creditResult = await addDollarLot(account_id, 'dollar_paid', PACKS[pack_id]?.price_usd || 0, {
-        purchase_id: purchaseId,
-        stripe_payment_intent: session.payment_intent || null,
-    });
-    if (!creditResult.success) {
-        console.error('[stripe] Failed to add credits for', account_id);
-        // Still return 200 to prevent Stripe retries — log for manual review
-        return c.json({ received: true, error: 'credit_add_failed' });
-    }
-
-    // Record the purchase
-    const purchase = {
-        id: purchaseId,
-        account_id,
-        pack_id,
-        amount_usd: PACKS[pack_id]?.price_usd || 0,
-        stripe_session_id: session.id,
-        stripe_payment_intent: session.payment_intent || null,
-        timestamp: new Date().toISOString(),
-    };
-    appendPurchase(purchase);
-
-    // M3: this session's money is now a real dollar lot and a real
-    // purchase record -- stop counting it as a pending, unpaid session.
-    // N17: never fails the webhook -- the credit above already landed;
-    // this is bookkeeping after the money, wrapped and alerted like the
-    // already-processed branch above.
-    try {
-        clearPendingSession(session.id);
-    } catch (clearErr) {
-        console.error('[stripe] clearPendingSession failed after crediting a purchase (non-fatal):', clearErr && clearErr.message);
-        sendOpsAlert(
-            'checkout-sessions.json bookkeeping failed (post-credit)',
-            `session=${session.id} account=${account_id} purchase=${purchaseId} error=${clearErr && clearErr.message}`,
-            { category: 'webhook-bookkeeping' }
-        ).catch(() => {});
-    }
-
-    // AUD-CAC (spec §2, ruling L6): defense in depth. Two sessions started
-    // within seconds of each other can each pass the pre-Checkout cap check
-    // yet land here moments apart and cross a cap together. The money was
-    // already collected by Stripe by the time this fires, so the purchase
-    // above is still credited in full — refusing to credit money already
-    // taken from someone's card is worse than a rare, logged overage.
-    // Instead: an ops alert fires, and the account is held from starting
-    // any FURTHER purchase until a human clears it (spec test 16).
-    //
-    // N17: the WHOLE cap-check-and-hold sequence is wrapped — checkBalanceCap
-    // /checkDailyCap themselves read checkout-sessions.json (pending, unpaid
-    // sessions count toward the cap too), so a corrupt file can throw before
-    // holdAccount is ever reached, not only inside it. Either failure must
-    // never fail a webhook whose credit has already landed: alert once,
-    // carry on to the referral grant below regardless.
-    //
-    // L-b: tolerateMissingPendingSessions — unlike the pre-Checkout check
-    // (N7, fail closed: no money moved yet), the money here is ALREADY
-    // collected. A corrupt checkout-sessions.json must not skip this check
-    // outright (the pre-fix behavior: the whole call threw straight into
-    // the catch below, and an account over the cap on its recorded balance
-    // alone got no hold at all) -- fall back to 0 pending sessions and still
-    // evaluate the recorded balance/purchases.
+    },
+    postCreditEffects: async ({ account_id, pack_id, session, purchase, context }) => {
     try {
         const postBalance = checkBalanceCap(account_id, 0, Date.now(), { tolerateMissingPendingSessions: true });
         const postDaily = checkDailyCap(account_id, 0, Date.now(), { tolerateMissingPendingSessions: true });
@@ -5212,42 +5056,29 @@ app.post('/webhook/stripe', async (c) => {
       vestReferrerCredits(account_id).catch(err => console.error('[referral] vestReferrerCredits error:', err.message));
     }
 
-    console.log(`[stripe] Credited account ${account_id}: +$${(PACKS[pack_id]?.price_usd || 0).toFixed(2)} (${pack_id})`);
-    return c.json({ received: true, processed: true, purchase_id: purchase.id });
-  } else if (event.type === 'charge.dispute.created') {
-    // AUD-CAC (spec §4, Part 2, test 21/26): freeze the disputed dollar lot.
-    const result = await handleDisputeCreated(event);
-    return c.json({ received: true, processed: result.matched });
-  } else if (event.type === 'charge.dispute.closed') {
-    // AUD-CAC (spec §4, Part 2, test 22/24): won → unfreeze; lost → remove
-    // the remainder and reverse every builder share it funded.
-    const result = await handleDisputeClosed(event, {
-      earnings,
-      saveEarnings: () => safeWrite(EARNINGS_FILE, earnings),
-      sendOpsAlert,
-    });
-    return c.json({ received: true, processed: result.matched });
-  } else if (event.type === 'charge.refunded') {
-    // AUD-CAC (spec §4, Part 2, test 23): behaves the same as a lost
-    // dispute — remove the remainder, reverse every share it funded.
-    const result = await handleChargeRefunded(event, {
-      earnings,
-      saveEarnings: () => safeWrite(EARNINGS_FILE, earnings),
-      sendOpsAlert,
-    });
-    return c.json({ received: true, processed: result.matched });
-  } else if (event.type === 'account.updated') {
-    // Stripe Connect: account status changed
-    const stripeAccount = event.data.object;
-    const auxiloAccountId = stripeAccount.metadata?.auxilo_account_id;
-    if (auxiloAccountId) {
-      console.log(`[stripe-connect] Account ${auxiloAccountId} updated: charges_enabled=${stripeAccount.charges_enabled}, payouts_enabled=${stripeAccount.payouts_enabled}`);
-    }
-    return c.json({ received: true, processed: true });
-  } else {
-    return c.json({ received: true, processed: false });
-  }
+
+    },
+    refundHandlers: { handleDisputeCreated, handleDisputeClosed, handleChargeRefunded },
+    getEarnings: () => earnings,
+    saveEarnings: () => { try { writeJSONAtomic(EARNINGS_FILE, earnings); } catch (error) { fatalFinancialStorage(error); } },
+    sendOpsAlert, onFatalStorage: fatalFinancialStorage,
 });
+async function handlePlatformWebhook(c, alias) {
+    if (!paymentsEnabled()) return c.json(paymentsDisabledBody(), 503);
+    try { assertActionAllowed('webhook'); } catch { return c.json({ code: 'STRIPE_MIGRATION_UNAVAILABLE' }, 503); }
+    const signature = c.req.header('stripe-signature');
+    if (!signature) return c.json({ error: 'Missing stripe-signature header' }, 400);
+    let rawBody, verified;
+    try {
+        rawBody = await c.req.text();
+        verified = stripePlatforms.verifyPlatformEvent(alias, rawBody, signature);
+    } catch { return c.json({ error: 'Invalid Stripe event signature or context' }, 400); }
+    const result = await stripeEventDispatcher.dispatch(verified.event, verified.context, crypto.createHash('sha256').update(rawBody).digest('hex'));
+    return c.json(result.body, result.status);
+}
+app.post('/webhook/stripe', c => handlePlatformWebhook(c, 'legacy'));
+app.post('/webhook/stripe/legacy', c => handlePlatformWebhook(c, 'legacy'));
+app.post('/webhook/stripe/auxilo_llc', c => handlePlatformWebhook(c, 'auxilo_llc'));
 
 // ── GET /account/purchases (Phase 0.4) ──────────────────────────────────────
 app.get('/account/purchases', requireAuth, (c) => {
@@ -5432,75 +5263,71 @@ function notePendingReviewEntries(count, context = {}) {
     .catch(() => { _pendingAlertNewCount += newCount; });
 }
 
-// POST /account/connect-stripe: onboard a Stripe Express connected account
+// POST /account/connect-stripe: durable, explicitly approved platform onboarding.
 app.post('/account/connect-stripe', requireAuth, async (c) => {
   const accountId = c.get('accountId');
-
-  // CREDITS-CONTROL PART 1 (SPEC-1 A2): close the dark Connect-onboarding
-  // surface a bare STRIPE_SECRET_KEY would otherwise open before the custodial
-  // payout rail itself re-opens. Same sentinel, same 503 shape as
-  // /withdraw/stripe below — in ADDITION to (not replacing) the getStripe()
-  // check that follows.
-  if (process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true') {
-    return c.json({
-      error: 'Withdrawals temporarily paused during non-custodial migration',
+  if (process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true') return c.json({
+    error: 'Withdrawals temporarily paused during non-custodial migration',
       code: 'withdraw_paused_noncustodial_migration',
-    }, 503);
-  }
-
-  // Check if Stripe is USABLE, not merely present (CREDITS-CONFIG-USABLE) —
-  // cheap, no account read, do before taking the lock.
+  }, 503);
+  if (!paymentsEnabled()) return c.json(paymentsDisabledBody(), 503);
   const { getStripeStatus: _getStripeStatusConnect } = require('./lib/stripe.js');
-  const connectStripeStatus = _getStripeStatusConnect();
-  if (!connectStripeStatus.configured) {
-    return c.json({ error: 'Stripe not configured', code: 'stripe_unusable', reason: connectStripeStatus.reason }, 503);
-  }
-
-  // Serialize read-modify-write on this account so a concurrent settings/link-wallet
-  // mutation cannot clobber the stripe_connect_id we are about to persist.
+  const controls = require('./lib/stripe-migration-controls');
+  const control = controls.getMigrationControl();
+  if (!control.ready) return c.json({ code: 'STRIPE_MIGRATION_UNAVAILABLE', error: 'Stripe configuration unavailable' }, 503);
+  const alias = control.intake_platform;
+  if (!alias) return c.json({ code: 'STRIPE_MIGRATION_UNAVAILABLE', error: 'Stripe onboarding is paused' }, 503);
+  const connectStripeStatus = alias === 'legacy' ? _getStripeStatusConnect() : require('./lib/stripe-platforms').getPlatformStatus(alias);
+  if (!connectStripeStatus.configured) return c.json({ error: 'Stripe not configured', code: 'stripe_unusable', reason: connectStripeStatus.reason }, 503);
   const releaseAccountLock = await acquireAccountLock(accountId);
   try {
+    const { createConnectAccount, createConnectOnboardingLink } = require('./lib/stripe.js');
+    const { getStripeConnectMapping, setStripeConnectMapping } = require('./lib/accounts');
+    const currentControl = controls.getMigrationControl();
+    if (!currentControl.ready || currentControl.generation !== control.generation || currentControl.intake_platform !== alias) return c.json({ code: 'STRIPE_MIGRATION_UNAVAILABLE', error: 'Stripe configuration changed' }, 503);
     const accts = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf8'));
     const account = accts[accountId];
     if (!account) return c.json({ error: 'Account not found' }, 404);
-
-    // Idempotent: if already connected, return existing
-    if (account.stripe_connect_id) {
+    if (!hasAcceptedCurrentTos(account)) return termsNotAcceptedResponse(c);
+    const { context } = await require('./lib/stripe-platforms').getVerifiedClient(alias);
+    const mapping = getStripeConnectMapping(accountId, context);
+    const store = require('./lib/stripe-connect-intents').createConnectIntentStore();
+    let intent = store.findForAccount(accountId, alias);
+    if (intent && ['prepared', 'submitted', 'unknown'].includes(intent.state)) return c.json({ code: 'CONNECT_RECONCILIATION_REQUIRED', error: 'Your earlier Stripe onboarding could not be confirmed.', attempt_id: intent.intent_id }, 409);
+    if (mapping && (!intent || intent.state === 'completed')) {
+      const status = await getConnectAccountStatus(mapping.connected_id, context);
+      return c.json({ message: 'Already connected', stripe_connect_id: mapping.connected_id, status });
+    }
+    if (account.stripe_connect_id && alias === 'legacy' && !mapping && !intent) return c.json({ code: 'CONNECT_MAPPING_UNRESOLVED', error: 'Existing Stripe connection requires reconciliation' }, 409);
+    const disposition = account.stripe_connect_dispositions?.[alias];
+    if (!disposition || disposition.disposition !== 'approved' || disposition.stripe_platform_account_id !== context.stripe_platform_account_id || typeof disposition.approval_ref !== 'string' || !disposition.approval_ref || typeof disposition.evidence_ref !== 'string' || !disposition.evidence_ref) return c.json({ code: 'CONNECT_MAPPING_UNAPPROVED', error: 'Stripe onboarding requires an approved platform disposition' }, 409);
+    const admittedControl = controls.assertActionAllowed('connect_creation');
+    if (admittedControl.generation !== control.generation || admittedControl.intake_platform !== alias) return c.json({ code: 'STRIPE_MIGRATION_UNAVAILABLE', error: 'Stripe configuration changed' }, 503);
+    if (!intent) {
+      intent = store.prepare({ account_id: accountId, context, idempotency_key: 'auxilo-connect-' + crypto.randomUUID(), approval_ref: disposition.approval_ref, evidence_ref: disposition.evidence_ref });
+      intent = store.transition(intent.intent_id, 'submitted');
       try {
-        const status = await getConnectAccountStatus(account.stripe_connect_id);
-        return c.json({
-          message: 'Already connected',
-          stripe_connect_id: account.stripe_connect_id,
-          status,
-        });
-      } catch {
-        // Account may have been deleted on Stripe side, fall through to create new
+        const result = await createConnectAccount(accountId, { context, idempotencyKey: intent.idempotency_key, intentId: intent.intent_id });
+        intent = store.transition(intent.intent_id, 'account_created', { connected_id: result.account_id });
+      } catch (error) {
+        // The submitted intent remains admission-blocking even if recording unknown fails.
+        try { store.transition(intent.intent_id, 'unknown'); } catch {}
+        if (error.financialStorageFailure) throw error;
+        return c.json({ code: 'CONNECT_RECONCILIATION_REQUIRED', error: 'Stripe onboarding outcome requires reconciliation.', attempt_id: intent.intent_id }, 409);
       }
     }
-
+    if (intent.state !== 'account_created' || intent.stripe_platform_account_id !== context.stripe_platform_account_id || intent.account_id !== accountId) return c.json({ code: 'CONNECT_RECONCILIATION_REQUIRED', error: 'Stripe onboarding identity requires reconciliation' }, 409);
+    await getConnectAccountStatus(intent.connected_id, context);
+    setStripeConnectMapping(accountId, context, intent.connected_id, disposition);
+    accounts = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf8'));
     const baseUrl = process.env.BASE_URL || `https://${c.req.header('host')}`;
-    try {
-      const result = await createConnectAccountLink(
-        accountId,
-        `${baseUrl}/account/connect-stripe/return`,
-        `${baseUrl}/account/connect-stripe/refresh`
-      );
-      // Persist Connect account ID
-      setStripeConnectId(accountId, result.account_id);
-      // Update in-memory accounts
-      accounts = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf8'));
-
-      return c.json({
-        url: result.url,
-        stripe_connect_id: result.account_id,
-      });
-    } catch (err) {
-      console.error('[stripe-connect] Failed to create Connect account:', err.message);
-      return c.json({ error: 'Failed to create Stripe Connect account' }, 500);
-    }
-  } finally {
-    releaseAccountLock();
-  }
+    const result = await createConnectOnboardingLink(intent.connected_id, `${baseUrl}/account/connect-stripe/return`, `${baseUrl}/account/connect-stripe/refresh`, context);
+    store.transition(intent.intent_id, 'completed');
+    return c.json({ url: result.url, stripe_connect_id: intent.connected_id });
+  } catch (error) {
+    if (error.financialStorageFailure) fatalFinancialStorage(error);
+    return c.json({ code: 'CONNECT_UNAVAILABLE', error: 'Stripe connection temporarily unavailable; no replacement account was created' }, 503);
+  } finally { releaseAccountLock(); }
 });
 
 // POST /withdraw/stripe — durable request identity; existing keys only read their outcome.
@@ -5528,11 +5355,9 @@ app.post('/withdraw/stripe', requireAuth, async (c) => {
       code: 'withdraw_paused_noncustodial_migration',
   }, 503);
   if (!ofacScreeningReady()) return c.json({ error: 'Sanctions screening unavailable' }, 503);
-  const { getStripeStatus: _getStripeStatusWithdraw } = require('./lib/stripe.js');
-  const withdrawStripeStatus = _getStripeStatusWithdraw();
-  if (!withdrawStripeStatus.configured) return c.json({ error: 'Stripe not configured', code: 'stripe_unusable', reason: withdrawStripeStatus.reason }, 503);
   const releaseAccountLock = await acquireAccountLock(accountId);
   let releaseEarningsLock = null;
+  let releasePlatformLock = null;
   let attempt = null;
   try {
     const repeated = stripeTransferStore.findByRequest(accountId, clientRequestKey);
@@ -5547,7 +5372,6 @@ app.post('/withdraw/stripe', requireAuth, async (c) => {
     if (!account) return c.json({ error: 'Account not found' }, 404);
     if (account.disabled_at) return c.json({ error: 'Account suspended' }, 403);
     if (!hasAcceptedCurrentTos(account)) return termsNotAcceptedResponse(c);
-    if (!account.stripe_connect_id) return c.json({ error: 'No Stripe account linked. Call POST /account/connect-stripe first.' }, 400);
     const { key: earningsKey } = resolveEarningsEntry(earnings, { account_id: accountId });
     releaseEarningsLock = await acquireEarningsLock(earningsKey);
     const locked = resolveEarningsEntry(earnings, { account_id: accountId });
@@ -5563,20 +5387,37 @@ app.post('/withdraw/stripe', requireAuth, async (c) => {
     const grossCents = Math.round(amount_usd * 100);
     const netAmountCents = grossCents - STRIPE_TRANSFER_FEE_CENTS;
     if (netAmountCents <= 0) return c.json({ error: 'Balance too low to cover withdrawal fee', fee_usd: STRIPE_TRANSFER_FEE_CENTS / 100, requested_usd: amount_usd }, 400);
-    const expectedAccountId = process.env.STRIPE_PLATFORM_ACCOUNT_ID;
-    const platform = stripeTransferStore.manifest.platforms.find(p => p.stripe_platform_account_id === expectedAccountId);
+    const admissionControl = assertActionAllowed('builder_transfer');
+    const assignment = loadPayoutAssignment(earningsKey);
+    const platform = stripeTransferStore.manifest.platforms.find(p => p.stripe_platform === assignment.stripe_platform && p.stripe_platform_account_id === assignment.stripe_platform_account_id);
     if (!platform) return c.json({ code: 'WITHDRAWAL_PLATFORM_UNVERIFIED' }, 503);
-    const context = await verifyStripeTransferContext({ expectedAccountId, platform: platform.stripe_platform });
+    releasePlatformLock = await acquirePlatformAdmissionLock(platform.stripe_platform);
+    const context = await verifyStripeTransferContext({ expectedAccountId: platform.stripe_platform_account_id, platform: platform.stripe_platform });
     if (context.livemode !== platform.livemode) return c.json({ code: 'WITHDRAWAL_PLATFORM_UNVERIFIED' }, 503);
-    const connectStatus = await getConnectAccountStatus(account.stripe_connect_id);
-    if (!connectStatus.charges_enabled) return c.json({ error: 'Stripe account onboarding incomplete' }, 400);
-    // Async identity reads cannot bypass a newly latched readiness/capability gate.
-    if (!paymentsEnabled() || process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true') return c.json(paymentsDisabledBody(), 503);
+    const mapping = require('./lib/accounts').getStripeConnectMapping(accountId, context);
+    if (!mapping) return c.json({ code: 'PAYOUT_ASSIGNMENT_REQUIRED' }, 503);
+    const connectStatus = await getConnectAccountStatus(mapping.connected_id, context);
+    if (!connectStatus.charges_enabled || !connectStatus.payouts_enabled) return c.json({ error: 'Stripe account onboarding incomplete' }, 400);
+    const client = stripePlatforms.assertVerifiedContext(context);
+    const balance = await client.balance.retrieve();
+    stripePlatforms.assertVerifiedContext(context);
+    const usd = balance && Array.isArray(balance.available) && balance.available.find(row => row.currency === 'usd');
+    if (balance?.livemode !== context.livemode || !usd || !Number.isSafeInteger(usd.amount) || usd.amount < 0) return c.json({ code: 'PAYOUT_CASH_UNVERIFIED' }, 503);
+    const outstanding = stripeTransferStore.all().filter(row => row.stripe_platform === context.stripe_platform && !['completed','confirmed_not_sent'].includes(row.state));
+    const reservedCents = outstanding.reduce((sum, row) => sum + row.net_amount_cents, assignment.reserved_cents || 0);
+    const currentControl = assertActionAllowed('builder_transfer');
+    if (currentControl.generation !== admissionControl.generation || !paymentsEnabled() || process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true') return c.json(paymentsDisabledBody(), 503);
     const lastBlock = stripePayoutBlock({ accountId, wallet: account.wallet, earningsKey });
     if (lastBlock) return c.json(lastBlock, stripeTransferStore.ready ? 409 : 503);
+    validatePayoutAssignment(assignment, { checkpointId: currentControl.checkpoint?.checkpoint_id,
+      approvalRevision: currentControl.payout_approval_revision, executionApprovalRef: currentControl.execution_approval_ref,
+      accountId, earningsKey, context, mapping, amountUsd: amount_usd, netCents: netAmountCents,
+      availableCents: usd.amount, reservedCents, assent: hasAcceptedCurrentTos(account), currentLedgerBalance: getWithdrawableBalance(locked.entry),
+      unknownAttempts: outstanding.some(row => row.account_id === accountId), holds: isAccountHeld(accountId) ? [getAccountHold(accountId)] : [],
+    });
     attempt = stripeTransferStore.prepare({ ...context, account_id: accountId,
       earnings_key_at_creation: earningsKey, wallet_at_creation: account.wallet || null,
-      client_request_key: clientRequestKey, stripe_connect_id: account.stripe_connect_id,
+      client_request_key: clientRequestKey, stripe_connect_id: mapping.connected_id,
       amount_usd, net_amount_cents: netAmountCents, currency: 'usd',
     }, { expectedOwnerGeneration: admittedGeneration });
     createWalEntry('withdraw_stripe_v2', { attempt_id: attempt.attempt_id, request_digest: attempt.request_digest });
@@ -5603,6 +5444,7 @@ app.post('/withdraw/stripe', requireAuth, async (c) => {
     if (attempt) return stripeAttemptReply(c, stripeTransferStore.get(attempt.attempt_id));
     return c.json({ error: 'Withdrawal cannot start until its platform and financial state are verified.', code: 'WITHDRAWAL_RECONCILIATION_REQUIRED' }, 503);
   } finally {
+    if (releasePlatformLock) releasePlatformLock();
     if (releaseEarningsLock) releaseEarningsLock();
     releaseAccountLock();
   }
@@ -5855,7 +5697,9 @@ app.post('/account/link-wallet', requireSessionOrApiKey(), async (c) => {
     // Work on a clone: legacy object marker keys on BOTH identities survive lazy merge.
     const migrated = lazyMigrateOnWalletLink(nextEarnings, result.wallet, accountId);
     try { writeJSONAtomic(EARNINGS_FILE, nextEarnings); } catch (error) { fatalFinancialStorage(error); }
-    earnings = nextEarnings;
+    // Publish synchronously after durability; queued reversals retain this map reference.
+    for (const key of Object.keys(earnings)) if (!Object.hasOwn(nextEarnings, key)) delete earnings[key];
+    Object.assign(earnings, nextEarnings);
     } finally {
       for (const release of releases.reverse()) release();
     }
@@ -6230,7 +6074,8 @@ app.get('/health', (c) => {
   // CREDITS-CONFIG-USABLE: stripe_configured now means probe-validated
   // usable, not merely present — see lib/stripe.js getStripeStatus(). A
   // cached read, no network call on the request path.
-  const stripeStatus = getStripeStatus();
+  const migrationStatus = getMigrationControl();
+  const stripeStatus = stripePlatforms.getPlatformStatus(migrationStatus.intake_platform || 'legacy');
   return c.json({
     status: 'ok',
     uptime: process.uptime(),
@@ -6256,7 +6101,9 @@ app.get('/health', (c) => {
     // stripe_configured are true. stripe_reason carries the machine-readable
     // cause when false (never key material); stripe_mode is 'test'/'live'/null
     // from the key prefix (safe — no secret material).
-    stripe_configured: stripeStatus.configured,
+    stripe_configured: stripeStatus.configured && migrationStatus.ready && migrationStatus.allow_checkout && checkoutIntents.ready,
+    stripe_migration: { ready: migrationStatus.ready, phase: migrationStatus.phase, checkout_ready: checkoutIntents.ready },
+    stripe_platforms: Object.fromEntries(['legacy', 'auxilo_llc'].map(alias => { const s = stripePlatforms.getPlatformStatus(alias); return [alias, { configured: s.configured, reason: s.reason, mode: s.mode }]; })),
     stripe_reason: stripeStatus.reason,
     stripe_mode: stripeStatus.mode,
     stripe_transfer_ready: stripeTransferStore.ready && !financialStorageFailed,

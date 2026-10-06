@@ -2244,7 +2244,7 @@
     "/withdraw/stripe": {
       "post": {
         "summary": "Withdraw pending earnings to Stripe Connect",
-        "description": "Pay out the withdrawable balance to the account's linked Stripe Connect account. Debits the same authoritative pending_balance as POST /withdraw. NOTE: paused during the non-custodial migration \u2014 returns 503 { code: 'withdraw_paused_noncustodial_migration' } unless CUSTODIAL_WITHDRAW_ENABLED=true. Requires session/API-key auth, prior acceptance of the current Terms (\u00a75.10 payee-agency), a completed Stripe Connect onboarding, and a minimum of $0.50. Requires a UUIDv4 Idempotency-Key scoped to the authenticated account. Reusing the key returns the original receipt or attempt status without a provider resend. Reusing it with a changed amount is a conflict. An unresolved attempt blocks new withdrawals on both rails. Check status after response loss; no automatic POST retry.",
+        "description": "Pay out the withdrawable balance to the account's linked Stripe Connect account. Debits the same authoritative pending_balance as POST /withdraw. NOTE: paused during the non-custodial migration — returns 503 { code: 'withdraw_paused_noncustodial_migration' } unless CUSTODIAL_WITHDRAW_ENABLED=true. Requires session/API-key auth, prior acceptance of the current Terms (§5.10 payee-agency), a completed Stripe Connect onboarding, and a minimum of $0.50. Requires a UUIDv4 Idempotency-Key scoped to the authenticated account. Reusing the key returns the original receipt or attempt status without a provider resend. Reusing it with a changed amount is a conflict. An unresolved attempt blocks new withdrawals on both rails. Check status after response loss; no automatic POST retry. New transfers additionally require an approved assignment for the earnings identity, a matching immutable platform destination, current approval/checkpoint evidence, and freshly verified available cash. Intake platform selection does not reassign earnings.",
         "operationId": "requestStripeWithdrawal",
         "tags": [
           "Account",
@@ -2295,7 +2295,7 @@
             "description": "Authentication required"
           },
           "403": {
-            "description": "Terms not accepted (code: TERMS_NOT_ACCEPTED \u2014 accept via POST /account/accept-terms and retry), account suspended, or sanctions block",
+            "description": "Terms not accepted (code: TERMS_NOT_ACCEPTED — accept via POST /account/accept-terms and retry), account suspended, or sanctions block",
             "content": {
               "application/json": {
                 "schema": {
@@ -3009,16 +3009,46 @@
             }
           },
           "503": {
-            "description": "Stripe not configured"
+            "description": "Payments paused, platform unavailable, or required migration/intent history is unavailable. No new session created."
+          },
+          "409": {
+            "description": "Earlier Checkout requires reconciliation. No new provider create occurred. The opaque attempt_id is a local reference.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "code",
+                    "error",
+                    "attempt_id"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "CHECKOUT_RECONCILIATION_REQUIRED"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "attempt_id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "description": "Creates at most one provider session for a durable local intent. A confirmed open retry reuses its stored URL. Unresolved creation on either platform blocks further funding for the account, even after local expiry or restart; no automatic resend occurs."
       }
     },
     "/webhook/stripe": {
       "post": {
-        "summary": "Stripe webhook endpoint \u2014 processes payment events (Phase 0.4)",
+        "summary": "Stripe webhook endpoint — processes payment events (Phase 0.4)",
         "operationId": "postWebhookStripe",
-        "description": "Receives Stripe webhook events. Verifies signature, processes checkout.session.completed events, and funds the account. Idempotent \u2014 safe to replay.",
+        "description": "Permanently bound to the legacy platform signing configuration. Shares durable receipt and object identity with /webhook/stripe/legacy. Financial completion is acknowledged only after mandatory writes; unresolved money events return a retryable failure.",
         "requestBody": {
           "required": true,
           "content": {
@@ -3057,6 +3087,9 @@
           },
           "400": {
             "description": "Invalid signature or malformed event"
+          },
+          "503": {
+            "description": "Payments frozen, migration state unavailable, or event requires reconciliation. Receipt remains incomplete or quarantined; retry is safe."
           }
         }
       }
@@ -6521,6 +6554,106 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/webhook/stripe/legacy": {
+      "post": {
+        "summary": "Platform-bound Stripe webhook: legacy",
+        "operationId": "postWebhookStripeLegacy",
+        "description": "Uses only the legacy signing configuration and object provenance. Cross-platform signatures and unsupported connected-account context are refused. Both legacy paths share one durable receipt namespace.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Raw Stripe webhook event payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Event received and processed (or already processed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "received": {
+                      "type": "boolean"
+                    },
+                    "processed": {
+                      "type": "boolean"
+                    },
+                    "already_processed": {
+                      "type": "boolean"
+                    },
+                    "purchase_id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid signature or malformed event"
+          },
+          "503": {
+            "description": "Payments frozen, migration state unavailable, or event requires reconciliation. Receipt remains incomplete or quarantined; retry is safe."
+          }
+        }
+      }
+    },
+    "/webhook/stripe/auxilo_llc": {
+      "post": {
+        "summary": "Platform-bound Stripe webhook: auxilo_llc",
+        "operationId": "postWebhookStripeAuxiloLlc",
+        "description": "Uses only the auxilo_llc signing configuration and object provenance. Cross-platform signatures and unsupported connected-account context are refused. Both legacy paths share one durable receipt namespace.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Raw Stripe webhook event payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Event received and processed (or already processed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "received": {
+                      "type": "boolean"
+                    },
+                    "processed": {
+                      "type": "boolean"
+                    },
+                    "already_processed": {
+                      "type": "boolean"
+                    },
+                    "purchase_id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid signature or malformed event"
+          },
+          "503": {
+            "description": "Payments frozen, migration state unavailable, or event requires reconciliation. Receipt remains incomplete or quarantined; retry is safe."
           }
         }
       }

@@ -471,19 +471,25 @@ describe('[ruling N2] the Checkout session expiry sits clear of Stripe\'s minimu
     delete require.cache[stripeModulePath];
     const stripeLibPath = require.resolve('../lib/stripe.js');
     delete require.cache[stripeLibPath];
+    const providerExpiry = Math.floor(Date.now() / 1000) + 2400;
     class FakeStripe {
       constructor() {
-        this.checkout = { sessions: { create: async () => ({ id: 'cs_n2_fake', url: 'https://checkout.stripe.test/n2', expires_at: 1234567890 }) } };
+        this.accounts = { retrieve: async () => ({ id: 'acct_1TCbMe0Jj0R41QQV' }) };
+        this.balance = { retrieve: async () => ({ livemode: false }) };
+        this.checkout = { sessions: { create: async request => ({ id: 'cs_n2_fake', object: 'checkout.session', mode: 'payment', livemode: false, amount_total: 1000, currency: 'usd', metadata: request.metadata, url: 'https://checkout.stripe.test/n2', expires_at: providerExpiry }) } };
       }
     }
     require.cache[stripeModulePath] = { id: stripeModulePath, filename: stripeModulePath, loaded: true, exports: FakeStripe };
     const priorKey = process.env.STRIPE_SECRET_KEY;
-    process.env.STRIPE_SECRET_KEY = 'sk_test_fake_for_this_suite_only';
+    process.env.STRIPE_SECRET_KEY = 'sk_test_' + 'n'.repeat(32);
     try {
       const freshStripeLib = require('../lib/stripe.js');
-      const result = await freshStripeLib.createCheckoutSession('acc_n2', 'starter', 'https://auxilo.test');
-      assert.equal(result.expires_at, 1234567890, 'the caller uses the expiry STRIPE confirmed, not a locally recomputed one');
+      freshStripeLib.__setStripeClientForTest(new FakeStripe());
+      const { context } = await require('../lib/stripe-platforms').getVerifiedClient('legacy');
+      const result = await freshStripeLib.createCheckoutSession('acc_n2', 'starter', 'https://auxilo.test', { context, idempotencyKey: 'n2-key', intentId: 'n2-intent' });
+      assert.equal(result.expires_at, providerExpiry, 'the caller uses the expiry STRIPE confirmed, not a locally recomputed one');
     } finally {
+      require('../lib/stripe-platforms').__setRegistryForTest();
       if (priorKey === undefined) delete process.env.STRIPE_SECRET_KEY; else process.env.STRIPE_SECRET_KEY = priorKey;
       delete require.cache[stripeLibPath];
       if (priorCacheEntry) require.cache[stripeModulePath] = priorCacheEntry; else delete require.cache[stripeModulePath];

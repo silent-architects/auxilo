@@ -44,10 +44,9 @@ const REPO = path.join(__dirname, '..');
 const { CURRENT_TOS_VERSION } = require('../lib/accounts.js');
 
 const SESSION_SECRET = 'fix-unit-money-webhook-test-session-secret';
-// Deliberately fails lib/stripe.js's getStripeConfigIssue() prefix check
-// (sk_test_ / sk_live_ / rk_) -- this keeps initStripeStatusProbing() from
-// ever scheduling a live probe against Stripe's API (see the file header).
-const FAKE_SECRET_KEY = 'not_a_real_stripe_key_format_placeholder_00000000';
+// Known test mode with deliberately malformed key length. The staged-only
+// registry below uses an explicit fake client; no test reaches Stripe's API.
+const FAKE_SECRET_KEY = 'sk_test_bad';
 const WEBHOOK_SECRET = 'whsec_' + 'f'.repeat(32);
 
 const BUYER_ID = 'acc_fum_buyer';
@@ -58,6 +57,8 @@ const LOTS_ACCOUNT_ID = 'acc_fum_lots';
 const CONTRIB_ID = 'acc_fum_contrib';
 const CONTRIB_WALLET = '0x' + '5'.repeat(40);
 const FIXED_AT = '2026-09-27T00:00:00.000Z';
+const platformContext = { stripe_platform: 'legacy', stripe_platform_account_id: 'acct_1TCbMe0Jj0R41QQV', mode: 'test', livemode: false };
+let originStore;
 
 // server.js loads earnings.json into an in-memory object ONCE at boot and
 // only ever writes it back on its own mutations -- a file write to
@@ -83,7 +84,7 @@ function fundedLotFixture(paymentIntent, originalUsd, unlocks) {
   });
   return {
     lot_id: 'lot_' + paymentIntent, kind: 'dollar_paid', purchase_id: 'pur_' + paymentIntent,
-    stripe_payment_intent: paymentIntent, purchased_at: FIXED_AT, last_activity_at: FIXED_AT,
+    ...platformContext, stripe_payment_intent: paymentIntent, purchased_at: FIXED_AT, last_activity_at: FIXED_AT,
     frozen: false, frozen_at: null, frozen_reason: null,
     original_usd: originalUsd, remaining_usd: originalUsd - spent, funded_unlocks,
   };
@@ -148,6 +149,14 @@ async function postJson(url, body, headers = {}) {
 }
 
 async function postWebhook(baseUrl, payloadObj) {
+  payloadObj = structuredClone(payloadObj);
+  payloadObj.livemode = false;
+  const obj = payloadObj.data.object;
+  obj.id ||= (payloadObj.type.startsWith('charge.dispute') ? 'dp_' : 'ch_') + obj.payment_intent;
+  if (payloadObj.type === 'checkout.session.completed') {
+    Object.assign(obj, { object: 'checkout.session', mode: 'payment', payment_status: 'paid', livemode: false, currency: 'usd', amount_total: obj.metadata.pack_id === 'pro' ? 10000 : obj.metadata.pack_id === 'growth' ? 2500 : 1000 });
+    if (!originStore.find(platformContext, 'checkout_session', obj.id)) originStore.record({ ...platformContext, object_kind: 'checkout_session', provider_id: obj.id, account_id: obj.metadata.account_id, evidence_ref: 'synthetic-paid-fixture', first_observed_at: FIXED_AT, provenance_version: 1 });
+  }
   const { payload, header } = signedWebhookEvent(payloadObj);
   const res = await fetch(`${baseUrl}/webhook/stripe`, {
     method: 'POST',
@@ -186,6 +195,28 @@ describe('FIX-UNIT-MONEY ruling L10: webhook branches + second cap check, ruling
       replacements: [],
     });
     dataDir = staged.dataDir;
+    const manifest = { checkpoint_id: 'synthetic-webhook', manifest_sha256: 'a'.repeat(64), inventory_complete: true, approval_ref: 'synthetic-approval' };
+    originStore = require('../lib/stripe-object-origins').initializeOrigins(path.join(dataDir, 'stripe-object-origins.json'), manifest);
+    require('../lib/stripe-event-receipts').initializeEventReceipts(path.join(dataDir, 'stripe-event-receipts.json'), manifest);
+    require('../lib/stripe-checkout-intents').initializeCheckoutIntents(path.join(dataDir, 'stripe-checkout-intents.json'), manifest);
+    fs.writeFileSync(path.join(dataDir, 'purchases.jsonl'), '');
+    // A staged-only provider fixture: no production module or environment bypass.
+    fs.appendFileSync(path.join(tmpDir, 'lib/stripe-platforms.js'), `
+const fakeDir = process.env.AUXILO_DATA_DIR;
+module.exports.__setRegistryForTest(module.exports.createPlatformRegistry({
+ env: {...process.env, STRIPE_SECRET_KEY: 'sk_test_' + 'f'.repeat(40)},
+ clientFactory: () => ({
+   accounts: { retrieve: async () => ({id:'acct_1TCbMe0Jj0R41QQV'}) },
+   balance: { retrieve: async () => ({livemode:false}) },
+   webhooks: require('stripe').webhooks,
+   checkout: { sessions: { create: async (params) => {
+     require('fs').appendFileSync(require('path').join(fakeDir, 'fake-provider-calls.jsonl'), JSON.stringify({account:params.metadata.account_id})+'\\n');
+     if(params.metadata.account_id.startsWith('acc_fum_par_')) throw Error('synthetic response lost');
+     return {id:'cs_fixture_'+params.metadata.auxilo_checkout_intent_id.replaceAll('-',''),object:'checkout.session',mode:'payment',payment_status:'unpaid',livemode:false,amount_total:params.line_items[0].price_data.unit_amount,currency:'usd',metadata:params.metadata,expires_at:params.expires_at,url:'https://checkout.example.test/synthetic'};
+   } } }
+ })
+}));
+`);
 
     const now = Date.now();
     const accounts = {
@@ -463,11 +494,9 @@ describe('FIX-UNIT-MONEY ruling L10: webhook branches + second cap check, ruling
     // A new $100 Pro pack would push the (pending + real) total to $2,000 --
     // still allowed (the balance cap check is "<=", not "<").
     const atCap = await postJson(`${baseUrl}/checkout/session`, { pack: 'pro' }, { Authorization: `Bearer ${token}` });
-    // This will proceed to the Stripe-usability check next (Stripe is
-    // deliberately unconfigured in this boot) and 503 there -- proving the
-    // cap check itself did NOT refuse it. Ruling M3: the reservation this
-    // request placed before that 503 is deleted on the failure, so it does
-    // not linger and double-count.
+    // The synthetic provider confirms this Checkout, proving exact-cap
+    // admission. A subsequent different pack is still checked against all
+    // pending sessions and cannot use the open-session retry shortcut.
     assert.notEqual(atCap.status, 400, 'exactly at the cap must not be refused by the cap check');
 
     // One more pending session pushes it over -- refused BEFORE any Stripe call.
@@ -542,24 +571,8 @@ describe('FIX-UNIT-MONEY ruling L10: webhook branches + second cap check, ruling
 
   it('[ruling M3] 50 REAL parallel POST /checkout/session requests each reserve or refuse under the SAME per-account lock the route uses, never crossing the cap', async (t) => {
     if (liveSkipReason) { t.skip(liveSkipReason); return; }
-    // NOTE on method: this staged boot deliberately keeps Stripe unusable
-    // (malformed key, ruling: no live probe, no network) so every request
-    // that PASSES the cap check clears its own reservation again on the
-    // very next line (the stripe_unusable 503 arm), all synchronously, with
-    // no real await gap the way a genuine Stripe round trip would leave.
-    // That collapses the race window this ruling closes back down to
-    // nothing observable over HTTP -- the reservation is created and
-    // cleared before a second concurrent request's continuation ever gets
-    // a turn, which is a property of THIS test harness (no live Stripe),
-    // not of the fix. The genuine 50-parallel/20-accepted proof therefore
-    // lives in test/fix-unit-money-2.test.js ("[ruling M3] acquireCheckoutLock
-    // serializes..."), calling the exact same acquireCheckoutLock /
-    // reservePendingSession / getPendingSessionsTotalUsd the route calls,
-    // with no clear-immediately step to erase the window. What THIS test
-    // proves instead, through the real route: firing 50 requests at once
-    // never leaves the pending-sessions ledger in a state that reports MORE
-    // than the $2,000 cap was ever counted for a single request, and every
-    // response is one of exactly the two documented outcomes.
+    // Simulate provider response loss after one call. The durable intent
+    // and reservation remain; all queued requests refuse without another call.
     const parAccount = 'acc_fum_par_' + crypto.randomBytes(4).toString('hex');
     const accounts = JSON.parse(fs.readFileSync(path.join(dataDir, 'accounts.json'), 'utf8'));
     accounts[parAccount] = {
@@ -574,14 +587,17 @@ describe('FIX-UNIT-MONEY ruling L10: webhook branches + second cap check, ruling
       postJson(`${baseUrl}/checkout/session`, { pack: 'pro' }, { Authorization: `Bearer ${token}` })));
     for (const r of results) {
       const isCapRefusal = r.status === 400 && r.body && r.body.code === 'BALANCE_CAP_EXCEEDED';
-      const isStripeUnusable = r.status === 503 && r.body && r.body.code === 'stripe_unusable';
+      const isStripeUnusable = [409,503].includes(r.status) && r.body && r.body.code === 'CHECKOUT_RECONCILIATION_REQUIRED';
       assert.ok(isCapRefusal || isStripeUnusable, `every response is one of the two documented outcomes, got ${r.status} ${JSON.stringify(r.body)}`);
       if (isCapRefusal) assert.ok(r.body.current_usd <= 2000, 'a refusal never reports counting past the cap for this single check');
     }
-    // No reservation is left dangling on the account once every request has
-    // resolved (every path -- accepted-then-503, or refused outright --
-    // ends with nothing counted for this account).
-    assert.equal(checkoutSessionsTotalFor(dataDir, parAccount), 0);
+    // The unresolved reservation remains until authoritative reconciliation.
+    assert.equal(checkoutSessionsTotalFor(dataDir, parAccount), 100, 'one unresolved provider attempt retains its reservation');
+    const calls = fs.readFileSync(path.join(dataDir, 'fake-provider-calls.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+    assert.equal(calls.filter(row => row.account === parAccount).length, 1, 'all repeated requests make zero additional provider writes');
+    const attempts = JSON.parse(fs.readFileSync(path.join(dataDir, 'stripe-checkout-intents.json'))).intents;
+    const ours = Object.values(attempts).filter(row => row.account_id === parAccount);
+    assert.equal(ours.length, 1); assert.equal(ours[0].state, 'unknown');
   });
 
   // ── ruling N7: a corrupt checkout-sessions.json refuses a NEW purchase, never a purchase already paid ──
@@ -613,7 +629,7 @@ describe('FIX-UNIT-MONEY ruling L10: webhook branches + second cap check, ruling
 
     // A NEW purchase is refused -- it never reaches Stripe.
     const newPurchase = await postJson(`${baseUrl}/checkout/session`, { pack: 'starter' }, { Authorization: `Bearer ${token}` });
-    assert.equal(newPurchase.status, 500, 'the corrupt file refuses the pre-check rather than silently reading as no pending sessions');
+    assert.equal(newPurchase.status, 503, 'the corrupt file refuses the pre-check rather than silently reading as no pending sessions');
 
     // The purchase already paid is untouched -- the balance the webhook
     // credited before the corruption is exactly what /account/credits still
