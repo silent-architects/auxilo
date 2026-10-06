@@ -50,7 +50,7 @@ const PLATFORM_WALLETS = [PLATFORM_WALLET, LEGACY_PLATFORM_WALLET];
 
 describe('1. Stripe payout kill-switch', () => {
   it('POST /withdraw/stripe returns 503 with the pause code when the flag is unset', () => {
-    const h = sliceHandler("app.post('/withdraw/stripe'", 1200);
+    const h = sliceHandler("app.post('/withdraw/stripe'", 12000).split("app.get('/account/stripe-transfer-attempts")[0];
     assert.ok(h.includes("process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true'"),
       'must gate on the same CUSTODIAL_WITHDRAW_ENABLED sentinel as the USDC rail');
     assert.ok(h.includes("code: 'withdraw_paused_noncustodial_migration'"),
@@ -60,14 +60,18 @@ describe('1. Stripe payout kill-switch', () => {
       'must return the specified error message');
   });
 
-  it('the kill-switch is BEFORE the auth/OFAC work (mirrors the USDC gate position)', () => {
-    const h = sliceHandler("app.post('/withdraw/stripe'", 1600);
+  it('owner replay precedes mutable flags, and new transfers remain behind custody and OFAC gates', () => {
+    const h = sliceHandler("app.post('/withdraw/stripe'", 12000).split("app.get('/account/stripe-transfer-attempts")[0];
+    const ownerAt = h.indexOf("c.get('accountId')");
+    const replayAt = h.indexOf('return stripeAttemptReply(c, replay)');
     const gateAt = h.indexOf('CUSTODIAL_WITHDRAW_ENABLED');
     const ofacAt = h.indexOf('ofacScreeningReady');
-    const acctAt = h.indexOf("c.get('accountId')");
-    assert.ok(gateAt !== -1 && ofacAt !== -1 && acctAt !== -1);
-    assert.ok(gateAt < ofacAt && gateAt < acctAt,
-      'the pause gate must run before any auth/screening work');
+    const prepareAt = h.indexOf('stripeTransferStore.prepare(');
+    const sendAt = h.indexOf('await createTransferToConnect(');
+    assert.ok([ownerAt, replayAt, gateAt, ofacAt, prepareAt, sendAt].every(at => at >= 0));
+    assert.ok(ownerAt < replayAt && replayAt < gateAt);
+    assert.ok(gateAt < ofacAt && ofacAt < prepareAt && prepareAt < sendAt,
+      'every new provider action must remain behind existing custody and sanctions gates');
   });
 });
 

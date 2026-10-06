@@ -3,6 +3,10 @@ const { serve } = require('@hono/node-server');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { createAttemptStore, normalizeRequestKey, requestDigest, publicStatus, markerFor } = require('./lib/stripe-transfer-attempts.js');
+const { loadEarningsPrimary, readJSONLStrict, writeJSONAtomic, appendJSONLOnce, normalizeMarkers, validatePrimaryHistory, digestJSON, syncDirectory } = require('./lib/stripe-transfer-persistence.js');
+const { verifyTransferEvidence } = require('./lib/stripe-transfer-reconcile.js');
+let financialStorageFailed = false;
 const https = require('https');
 const { isAddress } = require('viem');
 const { privateKeyToAccount } = require('viem/accounts'); // M-F: key validation
@@ -782,9 +786,16 @@ function loadDataFile(filepath, emptyDefault, critical) {
   }
 }
 
+// D0: authoritative primary only. No empty fallback and no backup restoration.
+let earnings;
+try { earnings = loadEarningsPrimary(EARNINGS_FILE); } catch (error) { fatalFinancialStorage(error); }
+let accounts = loadDataFile(ACCOUNTS_FILE, {}, true);
+const stripeTransferStore = createAttemptStore({
+  file: process.env.AUXILO_STRIPE_TRANSFER_ATTEMPTS_FILE || path.join(DATA_DIR, 'stripe-transfer-attempts.json'),
+  onFatalStorage: fatalFinancialStorage,
+});
+validateStripeTransferBoot();
 let learnings = loadDataFile(LEARNINGS_FILE, [], true);     // CRITICAL
-let earnings  = loadDataFile(EARNINGS_FILE, {}, true);      // CRITICAL
-let accounts  = loadDataFile(ACCOUNTS_FILE, {}, true);      // CRITICAL
 let verifiedWallets = loadDataFile(VERIFIED_WALLETS_FILE, {}, false); // NON-CRITICAL
 // Auto-verify the LIVE platform wallet ONLY (red-team rotation P1). verifiedWallets is a
 // KEY-CONTROL trust set (router-eligibility, link-wallet, withdraw) — the retired legacy
@@ -799,6 +810,143 @@ verifiedWallets[WALLET.toLowerCase()] = true;
 for (const lw of LEGACY_PLATFORM_WALLETS) delete verifiedWallets[lw.toLowerCase()];
 
 // walletChallenges removed — nonces are now in-memory via lib/eip712.js (SPEC-A3)
+
+// D0: storage errors stop the process before stale in-memory financial state can be served.
+function fatalFinancialStorage(error) {
+  financialStorageFailed = true;
+  console.error('[stripe-transfer] Fatal financial storage failure; reconciliation required');
+  process.exit(1);
+  throw error; // Test exit injection must not permit continued financial writes.
+}
+
+function stripeAttemptKeys(attempt) {
+  const owner = accounts[attempt.account_id];
+  const wallets = [attempt.wallet_at_creation, owner && owner.wallet].filter(Boolean).map(w => w.toLowerCase());
+  return [...new Set([attempt.account_id, attempt.earnings_key_at_creation,
+    ...wallets, ...wallets.map(w => earnings.__wallet_index && earnings.__wallet_index[w])].filter(Boolean))];
+}
+
+// A reviewed historical disposition binds the unchanged WAL bytes and exact receipt.
+// It permits retaining completed legacy history without inventing a new debit marker.
+function legacyStripeWalResolved(entry, receipts) {
+  const dispositions = stripeTransferStore.manifest && stripeTransferStore.manifest.resolved_legacy_wal;
+  if (!Array.isArray(dispositions) || !/^[A-Za-z0-9_-]+$/.test(entry.id || '')) return false;
+  const proof = dispositions.find(item => item.id === entry.id);
+  if (!proof) return false;
+  const directory = process.env.AUXILO_WAL_DIR || path.join(DATA_DIR, 'wal');
+  const bytes = fs.readFileSync(path.join(directory, entry.id + '.wal.json'));
+  if (crypto.createHash('sha256').update(bytes).digest('hex') !== proof.sha256) return false;
+  const rows = receipts || readJSONLStrict(WITHDRAWALS_FILE);
+  return rows.some(row => row.id === entry.payload.withdrawal_id && digestJSON(row) === proof.receipt_digest);
+}
+
+function validateStripeTransferBoot() {
+  if (stripeTransferStore.reason === 'attempt_store_corrupt') fatalFinancialStorage(stripeTransferStore.loadError);
+  // Read the raw directory: generic WAL recovery deliberately tolerates malformed files;
+  // financial admission cannot infer an empty inventory from that tolerance.
+  const walDirectory = process.env.AUXILO_WAL_DIR || path.join(DATA_DIR, 'wal');
+  let inventory = [];
+  try {
+    if (fs.existsSync(walDirectory)) {
+      inventory = fs.readdirSync(walDirectory).filter(f => f.endsWith('.wal.json')).map(f => {
+        const entry = JSON.parse(fs.readFileSync(path.join(walDirectory, f), 'utf8'));
+        if (!entry || typeof entry.id !== 'string' || !entry.payload || typeof entry.operation !== 'string') throw new Error('Invalid WAL inventory');
+        return entry;
+      });
+    }
+    const receipts = readJSONLStrict(WITHDRAWALS_FILE, { allowMissing: true });
+    validatePrimaryHistory({ earnings, attempts: stripeTransferStore.all(), receipts, resolveKeys: stripeAttemptKeys });
+    for (const entry of inventory) {
+      if (entry.operation === 'withdraw_stripe' && !legacyStripeWalResolved(entry, receipts)) stripeTransferStore.latch('legacy_history_requires_reconciliation');
+      if (entry.operation === 'withdraw_stripe_v2') {
+        const a = stripeTransferStore.get(entry.payload.attempt_id);
+        if (!a || a.request_digest !== entry.payload.request_digest) throw new Error('Attempt/WAL mismatch');
+      }
+    }
+    stripeTransferStore.checkIdentities(accounts, earnings);
+  } catch (error) {
+    // A corrupt primary/history cannot be replaced with a backup or replayed into a new debit.
+    fatalFinancialStorage(error);
+  }
+}
+
+function stripePayoutBlock({ accountId, wallet, earningsKey } = {}) {
+  if (financialStorageFailed || !stripeTransferStore.ready) {
+    return { error: 'Withdrawal reconciliation is required before payouts can continue.', code: 'WITHDRAWAL_RECONCILIATION_REQUIRED' };
+  }
+  const blocked = stripeTransferStore.blocking({ accountId, wallet, earningsKey,
+    resolveEarningsKey: id => resolveEarningsEntry(earnings, { account_id: id }).key }, accounts, earnings);
+  if (!blocked) return null;
+  return { error: 'Your withdrawal is being checked. Please check its status before starting another.',
+    code: 'WITHDRAWAL_IN_FLIGHT', ...(blocked.attempt_id ? { attempt_id: blocked.attempt_id,
+      status: blocked.state, status_url: `/account/stripe-transfer-attempts/${blocked.attempt_id}` } : {}) };
+}
+
+function stripeAttemptReply(c, attempt) {
+  if (attempt.state === 'completed') return c.json(attempt.receipt, 200);
+  if (attempt.state === 'confirmed_not_sent') return c.json({ code: 'WITHDRAWAL_NOT_SENT', ...publicStatus(attempt) }, 409);
+  return c.json({ code: 'WITHDRAWAL_RECONCILIATION_REQUIRED',
+    error: 'Your withdrawal is being checked. Please check its status before starting another.', ...publicStatus(attempt) }, 202);
+}
+
+// Caller owns the shared earnings lock; startup calls this synchronously before serving.
+// Provider sends are intentionally absent: a persisted attempt never grants send permission.
+function completeStripeTransferAttempt(attemptId) {
+  let attempt = stripeTransferStore.get(attemptId);
+  if (!attempt || attempt.historical || !['confirmed', 'ledger_applied', 'completed'].includes(attempt.state)) return null;
+  const resolved = resolveEarningsEntry(earnings, { account_id: attempt.account_id });
+  const marker = markerFor(attempt);
+  const markers = normalizeMarkers(resolved.entry && resolved.entry.processed_settlements);
+  if (attempt.state === 'completed') {
+    validatePrimaryHistory({ earnings, attempts: [attempt], receipts: readJSONLStrict(WITHDRAWALS_FILE), resolveKeys: stripeAttemptKeys });
+    return attempt.receipt;
+  }
+  if (!attempt.provider_evidence || !attempt.stripe_transfer_id) throw new Error('Confirmed evidence required');
+  if (attempt.state === 'ledger_applied' && !markers.includes(marker)) fatalFinancialStorage(new Error('Missing durable debit marker'));
+  if (!markers.includes(marker)) {
+    if (resolved.source === 'new' || getWithdrawableBalance(resolved.entry) + 0.000001 < attempt.amount_usd) {
+      stripeTransferStore.transition(attempt.attempt_id, attempt.generation, 'confirmed', { reconciliation_reason: 'insufficient_current_earnings' });
+      void sendOpsAlert('Stripe withdrawal requires reconciliation', 'A confirmed transfer cannot be applied to current earnings.', { category: 'stripe-transfer', omitHost: true });
+      return null;
+    }
+    const clone = structuredClone(resolved.entry);
+    debitWithdrawableBalance(clone, attempt.amount_usd);
+    clone.processed_settlements = [...markers, marker];
+    const nextEarnings = { ...earnings, [resolved.key]: clone };
+    try { writeJSONAtomic(EARNINGS_FILE, nextEarnings); } catch (error) { fatalFinancialStorage(error); }
+    earnings = nextEarnings; // Publish only after the debit and its marker are durably one write.
+  }
+  if (attempt.state === 'confirmed') {
+    const record = {
+      id: attempt.withdrawal_id, account_id: attempt.account_id, rail: 'stripe',
+      attempt_id: attempt.attempt_id, request_digest: attempt.request_digest,
+      amount_usd: attempt.amount_usd, amount_cents: attempt.amount_cents,
+      net_amount_usd: attempt.net_amount_usd, net_amount_cents: attempt.net_amount_cents,
+      stripe_fee_cents: attempt.stripe_fee_cents, stripe_transfer_id: attempt.stripe_transfer_id,
+      stripe_connect_id: attempt.stripe_connect_id, stripe_platform: attempt.stripe_platform,
+      stripe_platform_account_id: attempt.stripe_platform_account_id, timestamp: attempt.prepared_at,
+    };
+    const receipt = { transfer_id: attempt.stripe_transfer_id, amount_requested_usd: attempt.amount_usd,
+      fee_usd: attempt.fee_usd, amount_transferred_usd: attempt.net_amount_usd,
+      remaining_balance: Math.round(earnings[resolved.key].pending_balance * 100) / 100,
+      attempt_id: attempt.attempt_id, status: 'completed' };
+    attempt = stripeTransferStore.transition(attempt.attempt_id, attempt.generation, 'ledger_applied', {
+      receipt_record: record, receipt_digest: digestJSON(record), receipt,
+    });
+  }
+  try {
+    appendJSONLOnce(WITHDRAWALS_FILE, attempt.receipt_record, { key: 'attempt_id' });
+  } catch (error) {
+    if (error.financialStorageFailure) fatalFinancialStorage(error);
+    stripeTransferStore.latch('withdrawal_receipt_requires_reconciliation');
+    throw error;
+  }
+  attempt = stripeTransferStore.transition(attempt.attempt_id, attempt.generation, 'completed', {});
+  for (const wal of getPendingWalEntries()) {
+    if (wal.operation === 'withdraw_stripe_v2' && wal.payload.attempt_id === attemptId && wal.payload.request_digest === attempt.request_digest) commitWal(wal.id);
+  }
+  return attempt.receipt;
+}
 
 // ─── Device Code Login Store (Change 3) ────────────────────────────────────────────
 const DEVICE_CODE_TTL = 600_000; // 10 minutes
@@ -1553,7 +1701,7 @@ const requireSession = requireAuth; // alias used by /pipeline/* and /referral/*
 // aware) to hasMinScope.
 
 // ─── Write-Ahead Log (SPEC-A2 / C3) ────────────────────────────────────────
-const { createWalEntry, markStepComplete, updateWalPayload, commitWal, abortWal, getPendingWalEntries } = require('./lib/wal.js');
+const { createWalEntry, markStepComplete, updateWalPayload, commitWal, abortWal, getPendingWalEntries, walDir } = require('./lib/wal.js');
 
 // ─── WAL Crash Recovery (SPEC-A2 / C3) ─────────────────────────────────────
 const { acquireWalletLock, getActiveLockCount } = require('./lib/wallet-lock.js');
@@ -1584,6 +1732,7 @@ const {
     generatePurchaseId,
     createConnectAccountLink,
     createTransferToConnect,
+    verifyStripeTransferContext,
     getConnectAccountStatus,
     getStripeStatus,
     initStripeStatusProbing,
@@ -1849,6 +1998,8 @@ function recoverWalEntries() {
 
   for (const entry of pending) {
     try {
+      // Withdrawals have their own evidence-aware recovery below. Never erase them here.
+      if (['withdraw', 'withdraw_stripe', 'withdraw_stripe_v2'].includes(entry.operation)) continue;
       if (entry.operation === 'unlock') replayUnlock(entry);
       else if (entry.operation === 'pipeline_approve') replayPipelineApprove(entry);
       // IMPL-A2-01 fix: commitWal is INSIDE the try block — only reached if replay did not throw.
@@ -2235,6 +2386,23 @@ async function resolveStuckSettlements() {
         continue;
       }
 
+      // D0: wallet -> shared earnings lock covers the entire send and result write.
+      const releaseDaemonWallet = await acquireWalletLock(s.wallet.toLowerCase());
+      let releaseDaemonEarnings = null;
+      try {
+        const before = resolveEarningsEntry(earnings, { wallet: s.wallet.toLowerCase() });
+        releaseDaemonEarnings = await acquireEarningsLock(before.key);
+        const current = resolveEarningsEntry(earnings, { wallet: s.wallet.toLowerCase() });
+        const owner = Object.values(accounts).find(a => a && a.wallet && a.wallet.toLowerCase() === s.wallet.toLowerCase());
+        if (current.key !== before.key || !paymentsEnabled() || process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true' ||
+            stripePayoutBlock({ accountId: owner && owner.id, wallet: s.wallet, earningsKey: current.key })) continue;
+        if (!ofacScreeningReady() || checkOFAC(s.wallet) || !hasAcceptedCurrentTos(owner) || owner.disabled_at) continue;
+        let latest;
+        try {
+          const rows = readJSONLStrict(SETTLEMENTS_FILE, { validateDuplicateIds: false });
+          latest = rows.filter(row => row.id === s.id).at(-1);
+        } catch { continue; }
+        if (!latest || !['pending', 'retry'].includes(latest.status) || JSON.stringify(latest) !== JSON.stringify(s)) continue;
       // Under retry limit — attempt broadcast
       console.log(`[settlement-daemon] ${s.id}: attempt ${retryCount + 1}/${SETTLEMENT_MAX_RETRIES} for ${s.wallet}`);
       const result = await sendUSDC(s.wallet, s.amount);
@@ -2242,8 +2410,7 @@ async function resolveStuckSettlements() {
       if (result.status === 'confirmed') {
         // SPEC-P0.5: resolve via wallet index
         // IR-C-001 FIX: acquire wallet lock before mutating earnings
-        const releaseLock3 = await acquireWalletLock(s.wallet.toLowerCase());
-        try {
+        {
           const { key: eKeyS3, entry: entryS3, source: srcS3 } = resolveEarningsEntry(earnings, { wallet: s.wallet });
           if (srcS3 !== 'new') {
             entryS3.total_withdrawn = (entryS3.total_withdrawn || 0) + s.amount;
@@ -2251,8 +2418,6 @@ async function resolveStuckSettlements() {
             markProcessedSettlement(entryS3, s.id);
             safeWrite(EARNINGS_FILE, earnings);
           }
-        } finally {
-          releaseLock3();
         }
         appendSettlement({ ...s, status: 'settled', tx_hash: result.hash, settled_at: Date.now() });
         console.log(`[settlement-daemon] ${s.id}: settled tx=${result.hash}`);
@@ -2266,6 +2431,10 @@ async function resolveStuckSettlements() {
           last_attempt_at: Date.now(),
         });
         console.warn(`[settlement-daemon] ${s.id}: attempt failed (${result.error || result.status}), retry_count now ${retryCount + 1}`);
+      }
+      } finally {
+        if (releaseDaemonEarnings) releaseDaemonEarnings();
+        releaseDaemonWallet();
       }
     }
 
@@ -2508,50 +2677,18 @@ for (const entry of pendingWalEntries) {
       }
     }
   } else if (entry.operation === 'withdraw_stripe') {
-    // M-3: Stripe withdrawal WAL recovery. The transfer is sent with the
-    // withdrawal_id as Stripe's idempotencyKey, so a re-sent transfer can never
-    // move money twice. Here we reconcile the local ledger after a crash.
-    const { withdrawal_id, account_id, earnings_key, amount_usd, net_amount_cents, stripe_connect_id } = entry.payload;
-    const completed = entry.steps_completed || [];
-
-    // Did we already record this withdrawal on disk? (append is the last step.)
-    let alreadyAppended = false;
-    try {
-      if (fs.existsSync(WITHDRAWALS_FILE)) {
-        const lines = fs.readFileSync(WITHDRAWALS_FILE, 'utf8').split('\n').filter(Boolean);
-        alreadyAppended = lines.some(l => { try { return JSON.parse(l).id === withdrawal_id; } catch { return false; } });
-      }
-    } catch { /* treat as not appended */ }
-
-    if (completed.includes('earnings_deducted') && (completed.includes('withdrawal_appended') || alreadyAppended)) {
-      // Fully complete — nothing to do but clean up the WAL.
-      commitWal(entry.id);
-    } else if (completed.includes('earnings_deducted') && !alreadyAppended) {
-      // Balance was debited but the record never landed. Re-append it so the
-      // audit/history stays consistent (the debit already happened on disk).
-      console.log(`[WAL Recovery] Completing Stripe withdrawal record append for ${withdrawal_id}`);
-      fs.appendFileSync(WITHDRAWALS_FILE, JSON.stringify({
-        id: withdrawal_id,
-        account_id,
-        rail: 'stripe',
-        amount_usd,
-        net_amount_cents,
-        stripe_connect_id,
-        note: 'Recovered from WAL — earnings already deducted',
-        timestamp: new Date().toISOString(),
-      }) + '\n');
-      markStepComplete(entry.id, 'withdrawal_appended');
-      commitWal(entry.id);
-    } else {
-      // Crash before the balance was debited. The transfer's outcome is unknown,
-      // but the idempotencyKey makes a future user retry safe and non-duplicating.
-      // We deliberately do NOT auto-debit (we cannot prove the transfer landed)
-      // and do NOT auto-append. Clear the WAL; the balance is intact either way.
-      console.warn(
-        `[WAL Recovery] Stripe withdrawal ${withdrawal_id} (account ${account_id}, key ${earnings_key}) ` +
-        `interrupted before ledger debit. Balance left intact; transfer is idempotency-key protected.`
-      );
-      commitWal(entry.id);
+    // Legacy bytes are evidence, including an earnings_deducted step without a v2 marker.
+    if (!legacyStripeWalResolved(entry)) stripeTransferStore.latch('legacy_history_requires_reconciliation');
+  } else if (entry.operation === 'withdraw_stripe_v2') {
+    const attempt = stripeTransferStore.get(entry.payload.attempt_id);
+    if (!attempt || attempt.request_digest !== entry.payload.request_digest) fatalFinancialStorage(new Error('Attempt/WAL mismatch'));
+    // Only local completion is permitted; no provider call and no restoration of send permission.
+  }
+}
+if (stripeTransferStore.ready) {
+  for (const attempt of stripeTransferStore.all()) {
+    if (['confirmed', 'ledger_applied', 'completed'].includes(attempt.state) && !attempt.historical) {
+      try { completeStripeTransferAttempt(attempt.attempt_id); } catch (error) { fatalFinancialStorage(error); }
     }
   }
 }
@@ -5366,195 +5503,123 @@ app.post('/account/connect-stripe', requireAuth, async (c) => {
   }
 });
 
-// POST /withdraw/stripe — withdraw earnings to Stripe Connect
+// POST /withdraw/stripe — durable request identity; existing keys only read their outcome.
 app.post('/withdraw/stripe', requireAuth, async (c) => {
-  // PAYMENTS_ENABLED (Wave 2b): global kill switch, layered ABOVE the
-  // rail-specific sentinel below — it must hold even when the custodial rail
-  // is individually enabled.
+  const accountId = c.get('accountId');
+  let clientRequestKey;
+  try { clientRequestKey = normalizeRequestKey(c.req.header('Idempotency-Key')); } catch {
+    return c.json({ error: 'A UUIDv4 Idempotency-Key is required', code: 'WITHDRAWAL_REQUEST_ID_REQUIRED' }, 400);
+  }
+  let body;
+  try { body = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
+  const { amount_usd } = body || {};
+  if (typeof amount_usd !== 'number' || !Number.isFinite(amount_usd) || amount_usd <= 0) return c.json({ error: 'amount_usd must be a positive number' }, 400);
+  if (amount_usd < 0.50) return c.json({ error: 'Minimum withdrawal is $0.50' }, 400);
+  const digest = requestDigest(amount_usd);
+  const replay = stripeTransferStore.findByRequest(accountId, clientRequestKey);
+  if (replay) {
+    if (replay.request_digest !== digest) return c.json({ code: 'WITHDRAWAL_REQUEST_CONFLICT', error: 'This request ID is already bound to another amount.' }, 409);
+    return stripeAttemptReply(c, replay);
+  }
+  const admittedGeneration = stripeTransferStore.ownerGeneration(accountId);
   if (!paymentsEnabled()) return c.json(paymentsDisabledBody(), 503);
-  // R-01 KILL-SWITCH (R01-MT-02): the Stripe payout rail debits the SAME
-  // authoritative pending_balance the USDC rail debits (see debitWithdrawableBalance
-  // below) — so the moment Stripe is configured this is a live fiat custodial payout
-  // loop, the completed-transmission leg the migration exists to avoid. Gated by the
-  // SAME sentinel as the custodial USDC rail (POST /withdraw). Disabled by default
-  // until the non-custodial rail replaces it; to re-enable set CUSTODIAL_WITHDRAW_ENABLED=true.
-  if (process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true') {
-    return c.json({
+  if (process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true') return c.json({
       error: 'Withdrawals temporarily paused during non-custodial migration',
       code: 'withdraw_paused_noncustodial_migration',
-    }, 503);
-  }
-
-  // GOV-3: fail closed if sanctions screening has never loaded a list.
-  if (!ofacScreeningReady()) {
-    return c.json({ error: 'Sanctions screening unavailable' }, 503);
-  }
-  const accountId = c.get('accountId');
-  const accts = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf8'));
-  const account = accts[accountId];
-  if (!account) return c.json({ error: 'Account not found' }, 404);
-
-  // R-01 P0-3: withdrawal requires current-Terms acceptance (§5.10 payee-agency).
-  if (!hasAcceptedCurrentTos(account)) return termsNotAcceptedResponse(c);
-
-  // CREDITS-CONFIG-USABLE: usability, not presence.
+  }, 503);
+  if (!ofacScreeningReady()) return c.json({ error: 'Sanctions screening unavailable' }, 503);
   const { getStripeStatus: _getStripeStatusWithdraw } = require('./lib/stripe.js');
   const withdrawStripeStatus = _getStripeStatusWithdraw();
-  if (!withdrawStripeStatus.configured) {
-    return c.json({ error: 'Stripe not configured', code: 'stripe_unusable', reason: withdrawStripeStatus.reason }, 503);
-  }
-
-  if (!account.stripe_connect_id) {
-    return c.json({ error: 'No Stripe account linked. Call POST /account/connect-stripe first.' }, 400);
-  }
-
-  // Check Connect account status
-  let connectStatus;
-  try {
-    connectStatus = await getConnectAccountStatus(account.stripe_connect_id);
-  } catch (err) {
-    return c.json({ error: 'Could not verify Stripe Connect account status' }, 500);
-  }
-  if (!connectStatus.charges_enabled) {
-    return c.json({ error: 'Stripe account onboarding incomplete' }, 400);
-  }
-
-  let body;
-  try { body = await c.req.json(); } catch {
-    return c.json({ error: 'Invalid JSON body' }, 400);
-  }
-  const { amount_usd } = body || {};
-  if (!amount_usd || typeof amount_usd !== 'number' || amount_usd <= 0) {
-    return c.json({ error: 'amount_usd must be a positive number' }, 400);
-  }
-  if (amount_usd < 0.50) {
-    return c.json({ error: 'Minimum withdrawal is $0.50' }, 400);
-  }
-
-  // FIX 2: Acquire per-account lock BEFORE any balance read to prevent double-spend.
-  // Two simultaneous $50 requests on a $50 balance must queue, not race.
+  if (!withdrawStripeStatus.configured) return c.json({ error: 'Stripe not configured', code: 'stripe_unusable', reason: withdrawStripeStatus.reason }, 503);
   const releaseAccountLock = await acquireAccountLock(accountId);
-
-  // M-1: Resolve the earnings entry FIRST, then take a second lock keyed on the
-  // resolved earnings key. The USDC rail (POST /withdraw) takes the SAME shared
-  // earnings lock, so the two rails can no longer run concurrently against the
-  // same withdrawable balance even though they each have their own primary lock
-  // (account-id here, wallet-address there).
   let releaseEarningsLock = null;
+  let attempt = null;
   try {
-    // M-1: Unify on the single authoritative withdrawable balance.
-    // Previously this computed `total_contributor − sum(WITHDRAWALS_FILE)`, an
-    // independent ledger from the USDC rail's `pending_balance`, which let the
-    // same earned balance be withdrawn on both rails. Now both rails read and
-    // debit `pending_balance`. `total_contributor` is lifetime-gross only.
-    const { key: earningsKey, source: earningsSource } = resolveEarningsEntry(earnings, {
-      account_id: accountId,
-    });
-    if (earningsSource === 'new') {
-      return c.json({ error: 'No earnings found', available: 0 }, 400);
+    const repeated = stripeTransferStore.findByRequest(accountId, clientRequestKey);
+    if (repeated) {
+      if (repeated.request_digest !== digest) return c.json({ code: 'WITHDRAWAL_REQUEST_CONFLICT' }, 409);
+      return stripeAttemptReply(c, repeated);
     }
-
+    if (admittedGeneration !== stripeTransferStore.ownerGeneration(accountId)) return c.json({
+      code: 'WITHDRAWAL_STATE_CHANGED', ...publicStatus(stripeTransferStore.current(accountId)),
+    }, 409);
+    const account = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf8'))[accountId];
+    if (!account) return c.json({ error: 'Account not found' }, 404);
+    if (account.disabled_at) return c.json({ error: 'Account suspended' }, 403);
+    if (!hasAcceptedCurrentTos(account)) return termsNotAcceptedResponse(c);
+    if (!account.stripe_connect_id) return c.json({ error: 'No Stripe account linked. Call POST /account/connect-stripe first.' }, 400);
+    const { key: earningsKey } = resolveEarningsEntry(earnings, { account_id: accountId });
     releaseEarningsLock = await acquireEarningsLock(earningsKey);
-
-    // Re-resolve INSIDE the shared earnings lock so the balance is authoritative.
-    const { entry: earningsEntry, source: lockedSource } = resolveEarningsEntry(earnings, {
-      account_id: accountId,
-    });
-    if (lockedSource === 'new') {
-      return c.json({ error: 'No earnings found', available: 0 }, 400);
-    }
-
-    const available = getWithdrawableBalance(earningsEntry);
-    if (amount_usd > available + 0.000001) {
-      return c.json({ error: 'Insufficient balance', available: Math.round(available * 100) / 100 }, 400);
-    }
-
-    // FIX 1B: Stripe charges ~$0.25 per transfer — builder pays, platform does not absorb.
-    const STRIPE_TRANSFER_FEE_CENTS = 25; // $0.25
+    const locked = resolveEarningsEntry(earnings, { account_id: accountId });
+    if (locked.key !== earningsKey) return c.json({ code: 'WITHDRAWAL_STATE_CHANGED' }, 409);
+    const block = stripePayoutBlock({ accountId, wallet: account.wallet, earningsKey });
+    if (block) return c.json(block, stripeTransferStore.ready ? 409 : 503);
+    // A prior USDC broadcast also owns this balance until it resolves.
+    if (account.wallet && findUnresolvedSettlement(account.wallet.toLowerCase())) return c.json({ code: 'WITHDRAWAL_IN_FLIGHT', error: 'A withdrawal is still being resolved.' }, 409);
+    if (locked.source === 'new') return c.json({ error: 'No earnings found', available: 0 }, 400);
+    const available = getWithdrawableBalance(locked.entry);
+    if (amount_usd > available + 0.000001) return c.json({ error: 'Insufficient balance', available: Math.round(available * 100) / 100 }, 400);
+    const STRIPE_TRANSFER_FEE_CENTS = 25;
     const grossCents = Math.round(amount_usd * 100);
     const netAmountCents = grossCents - STRIPE_TRANSFER_FEE_CENTS;
-    if (netAmountCents <= 0) {
-      return c.json({
-        error: 'Balance too low to cover withdrawal fee',
-        fee_usd: STRIPE_TRANSFER_FEE_CENTS / 100,
-        requested_usd: amount_usd,
-      }, 400);
-    }
-
-    const netAmountUsd = netAmountCents / 100;
-    console.log(`[stripe-connect] Withdrawal fee: $${(STRIPE_TRANSFER_FEE_CENTS/100).toFixed(2)} | gross: $${amount_usd.toFixed(2)} | net: $${netAmountUsd.toFixed(2)}`);
-
-    // M-3: Generate & persist the withdrawal id BEFORE the transfer, and write a
-    // WAL intent. The id is passed to Stripe as the idempotencyKey so a retried
-    // or replayed transfer can never move money twice, and the WAL lets startup
-    // recovery complete the debit+record if we crash between transfer and append.
-    const withdrawalId = 'wd_' + crypto.randomUUID().replace(/-/g, '').slice(0, 12);
-
-    const stripeWalId = createWalEntry('withdraw_stripe', {
-      withdrawal_id: withdrawalId,
-      account_id: accountId,
-      earnings_key: earningsKey,
-      amount_usd,
-      net_amount_cents: netAmountCents,
-      stripe_connect_id: account.stripe_connect_id,
-    });
-
-    let transferResult;
+    if (netAmountCents <= 0) return c.json({ error: 'Balance too low to cover withdrawal fee', fee_usd: STRIPE_TRANSFER_FEE_CENTS / 100, requested_usd: amount_usd }, 400);
+    const expectedAccountId = process.env.STRIPE_PLATFORM_ACCOUNT_ID;
+    const platform = stripeTransferStore.manifest.platforms.find(p => p.stripe_platform_account_id === expectedAccountId);
+    if (!platform) return c.json({ code: 'WITHDRAWAL_PLATFORM_UNVERIFIED' }, 503);
+    const context = await verifyStripeTransferContext({ expectedAccountId, platform: platform.stripe_platform });
+    if (context.livemode !== platform.livemode) return c.json({ code: 'WITHDRAWAL_PLATFORM_UNVERIFIED' }, 503);
+    const connectStatus = await getConnectAccountStatus(account.stripe_connect_id);
+    if (!connectStatus.charges_enabled) return c.json({ error: 'Stripe account onboarding incomplete' }, 400);
+    // Async identity reads cannot bypass a newly latched readiness/capability gate.
+    if (!paymentsEnabled() || process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true') return c.json(paymentsDisabledBody(), 503);
+    const lastBlock = stripePayoutBlock({ accountId, wallet: account.wallet, earningsKey });
+    if (lastBlock) return c.json(lastBlock, stripeTransferStore.ready ? 409 : 503);
+    attempt = stripeTransferStore.prepare({ ...context, account_id: accountId,
+      earnings_key_at_creation: earningsKey, wallet_at_creation: account.wallet || null,
+      client_request_key: clientRequestKey, stripe_connect_id: account.stripe_connect_id,
+      amount_usd, net_amount_cents: netAmountCents, currency: 'usd',
+    }, { expectedOwnerGeneration: admittedGeneration });
+    createWalEntry('withdraw_stripe_v2', { attempt_id: attempt.attempt_id, request_digest: attempt.request_digest });
+    syncDirectory(walDir());
+    attempt = stripeTransferStore.transition(attempt.attempt_id, attempt.generation, 'submitted');
     try {
-      transferResult = await createTransferToConnect(
-        account.stripe_connect_id,
-        netAmountCents,
-        `Auxilo earnings withdrawal for ${accountId}`,
-        withdrawalId  // M-3: idempotency key
-      );
-    } catch (transferErr) {
-      // Transfer never succeeded (or its outcome is unknown). Do NOT debit the
-      // balance and do NOT record the withdrawal. The same idempotencyKey makes
-      // a future retry safe. Leave the WAL entry for recovery to reconcile.
-      console.error('[stripe-connect] Transfer failed:', transferErr.message);
-      commitWal(stripeWalId); // nothing was debited or appended — safe to clear
-      return c.json({ error: 'Transfer failed. Funds not sent.' }, 502);
+      const result = await createTransferToConnect(attempt.stripe_connect_id, attempt.net_amount_cents,
+        'Auxilo earnings withdrawal', attempt.idempotency_key, context,
+        { auxilo_transfer_attempt_id: attempt.attempt_id, auxilo_request_digest: attempt.request_digest });
+      const evidence = verifyTransferEvidence(attempt, result, context);
+      attempt = stripeTransferStore.transition(attempt.attempt_id, attempt.generation, 'confirmed', {
+        stripe_transfer_id: evidence.stripe_transfer_id, provider_evidence: evidence,
+      });
+    } catch (error) {
+      if (error.financialStorageFailure) fatalFinancialStorage(error);
+      attempt = stripeTransferStore.transition(attempt.attempt_id, attempt.generation, 'unknown', { last_error_code: 'PROVIDER_OUTCOME_UNKNOWN' });
+      void sendOpsAlert('Stripe withdrawal outcome unknown', 'A durable transfer attempt requires reconciliation. Payouts for its owner are held.', { category: 'stripe-transfer', omitHost: true });
+      return stripeAttemptReply(c, attempt);
     }
-
-    // M-1: Debit the SAME authoritative balance the USDC rail debits, under the
-    // shared earnings lock. debitWithdrawableBalance throws rather than overdraw.
-    debitWithdrawableBalance(earningsEntry, amount_usd);
-    safeWrite(EARNINGS_FILE, earnings);
-    markStepComplete(stripeWalId, 'earnings_deducted');
-
-    // Record withdrawal (record gross requested amount for audit/history).
-    const withdrawal = {
-      id: withdrawalId,
-      account_id: accountId,
-      rail: 'stripe',
-      amount_usd,
-      amount_cents: grossCents,
-      net_amount_usd: netAmountUsd,
-      net_amount_cents: netAmountCents,
-      stripe_fee_cents: STRIPE_TRANSFER_FEE_CENTS,
-      stripe_transfer_id: transferResult.transfer_id,
-      stripe_connect_id: account.stripe_connect_id,
-      timestamp: new Date().toISOString(),
-    };
-    fs.appendFileSync(WITHDRAWALS_FILE, JSON.stringify(withdrawal) + '\n');
-    markStepComplete(stripeWalId, 'withdrawal_appended');
-
-    commitWal(stripeWalId);
-
-    return c.json({
-      transfer_id: transferResult.transfer_id,
-      amount_requested_usd: amount_usd,
-      fee_usd: STRIPE_TRANSFER_FEE_CENTS / 100,
-      amount_transferred_usd: netAmountUsd,
-      remaining_balance: Math.round(earningsEntry.pending_balance * 100) / 100,
-    });
-  } catch (err) {
-    console.error('[stripe-connect] Withdrawal failed:', err.message);
-    return c.json({ error: 'Transfer failed' }, 500);
+    const receipt = completeStripeTransferAttempt(attempt.attempt_id);
+    return receipt ? c.json(receipt, 200) : stripeAttemptReply(c, stripeTransferStore.get(attempt.attempt_id));
+  } catch (error) {
+    if (error.financialStorageFailure) fatalFinancialStorage(error);
+    if (attempt) return stripeAttemptReply(c, stripeTransferStore.get(attempt.attempt_id));
+    return c.json({ error: 'Withdrawal cannot start until its platform and financial state are verified.', code: 'WITHDRAWAL_RECONCILIATION_REQUIRED' }, 503);
   } finally {
     if (releaseEarningsLock) releaseEarningsLock();
     releaseAccountLock();
   }
+});
+
+app.get('/account/stripe-transfer-attempts/current', requireAuth, (c) => {
+  c.header('Cache-Control', 'private, no-store');
+  const accountId = c.get('accountId');
+  if (!stripeTransferStore.ready) return c.json({ account_id: accountId, error: 'Withdrawal history requires reconciliation.', code: 'WITHDRAWAL_RECONCILIATION_REQUIRED' }, 503);
+  return c.json({ account_id: accountId, attempt: publicStatus(stripeTransferStore.current(accountId)) });
+});
+app.get('/account/stripe-transfer-attempts/:id', requireAuth, (c) => {
+  c.header('Cache-Control', 'private, no-store');
+  const accountId = c.get('accountId');
+  const attempt = stripeTransferStore.get(c.req.param('id'), accountId);
+  if (!attempt) return c.json({ error: 'Attempt not found' }, 404);
+  return c.json({ account_id: accountId, attempt: publicStatus(attempt) });
 });
 
 // ─── Phase 0.5: Account Wallet + Earnings Endpoints (SPEC-P0.5) ──────────────
@@ -5621,6 +5686,9 @@ app.post('/account/link-wallet', requireSessionOrApiKey(), async (c) => {
   if (!wallet || !isAddress(wallet)) {
     return c.json({ error: 'Valid wallet address required' }, 400);
   }
+
+  const earlyStripeBlock = stripePayoutBlock({ accountId, wallet });
+  if (earlyStripeBlock) return c.json(earlyStripeBlock, stripeTransferStore.ready ? 409 : 503);
 
   if (!signature) {
     // Step 1: no signature yet — issue the account-bound link challenge.
@@ -5735,13 +5803,28 @@ app.post('/account/link-wallet', requireSessionOrApiKey(), async (c) => {
   // loadAccounts->mutate->saveAccounts internally).
   const releaseAccountLock = await acquireAccountLock(accountId);
   try {
+    let result;
+    let cp2Written = false;
+    const releases = [];
+    try {
+      const keys = [...new Set([accountId, wallet.toLowerCase(),
+        resolveEarningsEntry(earnings, { account_id: accountId }).key,
+        resolveEarningsEntry(earnings, { wallet }).key])].sort();
+      for (const key of keys) releases.push(await acquireEarningsLock(key));
+      for (const key of keys) {
+        const block = stripePayoutBlock({ accountId, wallet, earningsKey: key });
+        if (block) return c.json(block, stripeTransferStore.ready ? 409 : 503);
+      }
+      const nextEarnings = structuredClone(earnings);
+      for (const key of keys) {
+        if (nextEarnings[key]) nextEarnings[key].processed_settlements = normalizeMarkers(nextEarnings[key].processed_settlements);
+      }
     // CP-2: persist the encrypted identity record BEFORE the link, snapshot
     // first — a failed link restores the prior state (deletes a new row,
     // re-installs a pre-existing one), so an identity row can never exist for
     // a failed link and a re-link 409 can never destroy a prior good record.
     // A store write failure throws here → 500 with NOTHING mutated.
     let cp2Prior = null;
-    let cp2Written = false;
     if (cp2Encrypted) {
       cp2Prior = identityVault.snapshotIdentity(accountId);
       identityVault.storeIdentity(accountId, cp2Encrypted);
@@ -5753,7 +5836,7 @@ app.post('/account/link-wallet', requireSessionOrApiKey(), async (c) => {
     // and (AUD19 MED-2) refuses platform wallets — the live platform wallet is
     // auto-verified at boot, so without the refusal any ToS-accepted account
     // could claim it and drain platform-attributed balances via the hooks below.
-    const result = linkWallet(accountId, wallet, verifiedWallets, PLATFORM_WALLETS);
+    result = linkWallet(accountId, wallet, verifiedWallets, PLATFORM_WALLETS);
     if (!result.success) {
       if (cp2Written) {
         try { identityVault.restoreIdentity(accountId, cp2Prior); } catch (cp2RestoreErr) {
@@ -5769,11 +5852,12 @@ app.post('/account/link-wallet', requireSessionOrApiKey(), async (c) => {
     invalidateCachedAccount('__accounts_map');
     invalidateCachedAccount(accountId);
 
-    // Lazy migrate any pre-existing wallet-keyed earnings entry to account-keyed
-    const migrated = lazyMigrateOnWalletLink(earnings, result.wallet, accountId);
-    if (migrated) {
-      safeWrite(EARNINGS_FILE, earnings);
-      console.log(`[p0.5] Lazy migrated wallet-keyed earnings to account ${accountId} on wallet link`);
+    // Work on a clone: legacy object marker keys on BOTH identities survive lazy merge.
+    const migrated = lazyMigrateOnWalletLink(nextEarnings, result.wallet, accountId);
+    try { writeJSONAtomic(EARNINGS_FILE, nextEarnings); } catch (error) { fatalFinancialStorage(error); }
+    earnings = nextEarnings;
+    } finally {
+      for (const release of releases.reverse()) release();
     }
 
     // CP-6 P1-B / AUD19-8(a): the accept-then-link ordering would otherwise STRAND held
@@ -6175,6 +6259,8 @@ app.get('/health', (c) => {
     stripe_configured: stripeStatus.configured,
     stripe_reason: stripeStatus.reason,
     stripe_mode: stripeStatus.mode,
+    stripe_transfer_ready: stripeTransferStore.ready && !financialStorageFailed,
+    stripe_transfer_unresolved: stripeTransferStore.all().filter(a => !['completed', 'confirmed_not_sent'].includes(a.state)).length,
     timestamp: new Date().toISOString()
   });
 });
@@ -11033,6 +11119,9 @@ app.post('/withdraw', async (c) => {
     return termsNotAcceptedResponse(c);
   }
 
+  const stripeBlock = stripePayoutBlock({ accountId: withdrawAccount && withdrawAccount.id, wallet: walletLower });
+  if (stripeBlock) return c.json(stripeBlock, stripeTransferStore.ready ? 409 : 503);
+
   // SPEC-P0.5: resolve via __wallet_index (account-keyed) or direct wallet key
   const { entry, source: withdrawSource } = resolveEarningsEntry(earnings, { wallet: walletLower });
   if (withdrawSource === 'new' || typeof entry.pending_balance !== 'number' || entry.pending_balance < 0.05) {
@@ -11068,6 +11157,21 @@ app.post('/withdraw', async (c) => {
     }, 409);
   }
 
+  // IMPL-A1-01 / IMPL-A1-02 fixes: use walletLower and entry.pending_balance!
+  const releaseLock = await acquireWalletLock(walletLower);
+
+  // M-1: also take the shared earnings lock keyed on the resolved earnings key,
+  // so this USDC rail serializes against the Stripe rail (POST /withdraw/stripe),
+  // which takes the same lock. Both rails debit the same pending_balance, so they
+  // must never run concurrently against the same entry.
+  const { key: usdcEarningsKey } = resolveEarningsEntry(earnings, { wallet: walletLower });
+  const releaseEarningsLock = await acquireEarningsLock(usdcEarningsKey);
+
+  try {
+    const lockedIdentity = resolveEarningsEntry(earnings, { wallet: walletLower });
+    if (lockedIdentity.key !== usdcEarningsKey) return c.json({ code: 'WITHDRAWAL_STATE_CHANGED' }, 409);
+    const lockedStripeBlock = stripePayoutBlock({ accountId: withdrawAccount && withdrawAccount.id, wallet: walletLower, earningsKey: usdcEarningsKey });
+    if (lockedStripeBlock) return c.json(lockedStripeBlock, stripeTransferStore.ready ? 409 : 503);
   // C7 FIX: Consume withdrawal nonce BEFORE verification
   const nonceData = consumeNonce(wallet);
   if (!nonceData || nonceData.action !== 'withdrawal') {
@@ -11090,17 +11194,7 @@ app.post('/withdraw', async (c) => {
     return c.json({ error: 'Signature verification failed' }, 400);
   }
 
-  // IMPL-A1-01 / IMPL-A1-02 fixes: use walletLower and entry.pending_balance!
-  const releaseLock = await acquireWalletLock(walletLower);
 
-  // M-1: also take the shared earnings lock keyed on the resolved earnings key,
-  // so this USDC rail serializes against the Stripe rail (POST /withdraw/stripe),
-  // which takes the same lock. Both rails debit the same pending_balance, so they
-  // must never run concurrently against the same entry.
-  const { key: usdcEarningsKey } = resolveEarningsEntry(earnings, { wallet: walletLower });
-  const releaseEarningsLock = await acquireEarningsLock(usdcEarningsKey);
-
-  try {
     // 2. Rate limit — burns on ALL attempts (AR-1 / AUDIT-04)
     const lastAttempt = lastWithdrawalAttempt[walletLower] || 0;
     const timeSinceLastAttempt = Date.now() - lastAttempt;

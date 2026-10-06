@@ -516,8 +516,8 @@ cd "${REPO_ROOT}"
 # CLIENT-CONNECT Part A: 9 registration/header tests + 1 tracked-file guard.
 # CLIENT-CONNECT Part B: 14 Windows tests + 1 rollback test + 1 tracked-file guard.
 # CLIENT-CONNECT review: +2 foreign node-hook ownership regression cases.
-# Integrated baseline 5058 + server 48 + client 28 = 5134.
-EXPECTED_TEST_COUNT=5134
+# D0: baseline 5134 + 131 transfer-safety tests + 8 tracked-file path guards = 5273.
+EXPECTED_TEST_COUNT=5273
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

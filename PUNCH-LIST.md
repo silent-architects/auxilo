@@ -20,6 +20,7 @@ These block real money. No exceptions. Source: SECURITY-AUDIT.md
 
 | # | Finding | Owner | Status |
 |---|---------|-------|--------|
+| D0-STRIPE-TRANSFER-SAFETY | Durable request identity, verified Stripe context, retained uncertain outcomes, atomic debit markers and receipts, guarded cross-rail recovery; offline historical reconciliation and status-driven dashboard. Existing payout flags stay unchanged. | TECH-PM / BUILD-1 | LOCAL ACCEPTANCE PASS — independent review, 5,273 discovered/5,266 passed/7 skipped, predeploy and security threshold pass after approved dependency patch. One transient render-test failure retained in delivery; isolated diagnostic and final gate passed. CI/merge/release pending. No deployment or live financial execution. |
 | C1 | Withdrawal race condition (double-withdrawal exploit) — add per-wallet async mutex | BUILD-1 → BUILD-2 | CLOSED — (A1) — deployed 86c77f2 |
 | C2 | No viem nonce management — nonce collision on concurrent TXs | BUILD-1 → BUILD-2 | CLOSED — (A0) — AUDIT-13 proof: T-A0-EDGE-004 |
 | C3 | Non-atomic dual write on unlock — crash between learnings/earnings writes | BUILD-1 → BUILD-2 | CLOSED — (A2) — deployed 86c77f2 |

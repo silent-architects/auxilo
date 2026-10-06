@@ -44,6 +44,87 @@
       }
     },
     "schemas": {
+      "StripeTransferReceipt": {
+        "type": "object",
+        "required": [
+          "attempt_id",
+          "status",
+          "transfer_id",
+          "amount_requested_usd",
+          "fee_usd",
+          "amount_transferred_usd",
+          "remaining_balance"
+        ],
+        "properties": {
+          "attempt_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed"
+            ]
+          },
+          "transfer_id": {
+            "type": "string"
+          },
+          "amount_requested_usd": {
+            "type": "number"
+          },
+          "fee_usd": {
+            "type": "number"
+          },
+          "amount_transferred_usd": {
+            "type": "number"
+          },
+          "remaining_balance": {
+            "type": "number",
+            "description": "Original recorded balance after this withdrawal; not a current balance query."
+          }
+        }
+      },
+      "StripeTransferAttemptStatus": {
+        "type": "object",
+        "required": [
+          "attempt_id",
+          "client_request_key",
+          "status",
+          "status_url",
+          "amount_usd"
+        ],
+        "properties": {
+          "attempt_id": {
+            "type": "string"
+          },
+          "client_request_key": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Null only for imported historical attempts without an original client key."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "prepared",
+              "submitted",
+              "unknown",
+              "confirmed",
+              "ledger_applied",
+              "completed",
+              "confirmed_not_sent"
+            ]
+          },
+          "status_url": {
+            "type": "string"
+          },
+          "amount_usd": {
+            "type": "number"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/StripeTransferReceipt"
+          }
+        }
+      },
       "ReviewDecisionProvenance": {
         "type": "object",
         "additionalProperties": false,
@@ -2018,10 +2099,152 @@
         }
       }
     },
+    "/account/stripe-transfer-attempts/current": {
+      "get": {
+        "summary": "Read own Stripe withdrawal attempt status",
+        "description": "Available while payout flags are off. No provider call or resend. Returns only owner status; no provider destination/platform information. Cache-Control: private, no-store. Current returns unresolved attempt, otherwise latest terminal attempt or null.",
+        "operationId": "getCurrentStripeTransferAttempt",
+        "tags": [
+          "Account",
+          "Payments"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner account and attempt status.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "account_id",
+                    "attempt"
+                  ],
+                  "properties": {
+                    "account_id": {
+                      "type": "string"
+                    },
+                    "attempt": {
+                      "type": "object",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/StripeTransferAttemptStatus"
+                        }
+                      ],
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "404": {
+            "description": "Unknown account or attempt, including an attempt owned by another account"
+          },
+          "503": {
+            "description": "Attempt history unavailable; new withdrawal remains blocked"
+          }
+        }
+      }
+    },
+    "/account/stripe-transfer-attempts/{id}": {
+      "get": {
+        "summary": "Read own Stripe withdrawal attempt status",
+        "description": "Available while payout flags are off. No provider call or resend. Returns only owner status; no provider destination/platform information. Cache-Control: private, no-store. Current returns unresolved attempt, otherwise latest terminal attempt or null.",
+        "operationId": "getStripeTransferAttempt",
+        "tags": [
+          "Account",
+          "Payments"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner account and attempt status.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "account_id",
+                    "attempt"
+                  ],
+                  "properties": {
+                    "account_id": {
+                      "type": "string"
+                    },
+                    "attempt": {
+                      "type": "object",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/StripeTransferAttemptStatus"
+                        }
+                      ],
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "404": {
+            "description": "Unknown account or attempt, including an attempt owned by another account"
+          },
+          "503": {
+            "description": "Attempt history unavailable; new withdrawal remains blocked"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/withdraw/stripe": {
       "post": {
         "summary": "Withdraw pending earnings to Stripe Connect",
-        "description": "Pay out the withdrawable balance to the account's linked Stripe Connect account. Debits the same authoritative pending_balance as POST /withdraw. NOTE: paused during the non-custodial migration \u2014 returns 503 { code: 'withdraw_paused_noncustodial_migration' } unless CUSTODIAL_WITHDRAW_ENABLED=true. Requires session/API-key auth, prior acceptance of the current Terms (\u00a75.10 payee-agency), a completed Stripe Connect onboarding, and a minimum of $0.50.",
+        "description": "Pay out the withdrawable balance to the account's linked Stripe Connect account. Debits the same authoritative pending_balance as POST /withdraw. NOTE: paused during the non-custodial migration \u2014 returns 503 { code: 'withdraw_paused_noncustodial_migration' } unless CUSTODIAL_WITHDRAW_ENABLED=true. Requires session/API-key auth, prior acceptance of the current Terms (\u00a75.10 payee-agency), a completed Stripe Connect onboarding, and a minimum of $0.50. Requires a UUIDv4 Idempotency-Key scoped to the authenticated account. Reusing the key returns the original receipt or attempt status without a provider resend. Reusing it with a changed amount is a conflict. An unresolved attempt blocks new withdrawals on both rails. Check status after response loss; no automatic POST retry.",
         "operationId": "requestStripeWithdrawal",
         "tags": [
           "Account",
@@ -2056,31 +2279,17 @@
         },
         "responses": {
           "200": {
-            "description": "Stripe payout initiated",
+            "description": "Completed transfer with durably recorded debit and receipt. A duplicate key returns this exact original response.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string"
-                    },
-                    "payout_id": {
-                      "type": "string"
-                    },
-                    "amount": {
-                      "type": "number"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
+                  "$ref": "#/components/schemas/StripeTransferReceipt"
                 }
               }
             }
           },
           "400": {
-            "description": "No Stripe account linked, onboarding incomplete, invalid amount, below minimum, or insufficient balance"
+            "description": "No Stripe account linked, onboarding incomplete, invalid amount, below minimum, or insufficient balance; missing or malformed Idempotency-Key returns WITHDRAWAL_REQUEST_ID_REQUIRED before provider action."
           },
           "401": {
             "description": "Authentication required"
@@ -2099,7 +2308,7 @@
             "description": "Account not found"
           },
           "503": {
-            "description": "Withdrawals paused during non-custodial migration, Stripe not configured, or sanctions screening unavailable",
+            "description": "Withdrawals paused during non-custodial migration, Stripe not configured, or sanctions screening unavailable; financial storage unready or authenticated Stripe platform/mode could not be verified.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2116,8 +2325,75 @@
                 }
               }
             }
+          },
+          "202": {
+            "description": "WITHDRAWAL_RECONCILIATION_REQUIRED: outcome or local completion is unresolved. Check status; never automatically resend.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "attempt_id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "status_url": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "WITHDRAWAL_REQUEST_CONFLICT (key reused with changed amount), WITHDRAWAL_IN_FLIGHT (unresolved withdrawal), WITHDRAWAL_STATE_CHANGED (concurrent admission changed), or WITHDRAWAL_NOT_SENT (terminal, authoritative resolution). Check returned status before an explicit new withdrawal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "attempt_id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "status_url": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Stable UUIDv4 for this logical withdrawal. Persist before POST and reuse only with the same amount. A distinct user action after terminal resolution starts a new key.",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+            }
+          }
+        ]
       }
     },
     "/account/delete-request": {
