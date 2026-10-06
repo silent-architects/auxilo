@@ -519,7 +519,9 @@ cd "${REPO_ROOT}"
 # D0: baseline 5134 + 131 transfer-safety tests + 8 tracked-file path guards = 5273.
 # STRIPE-ACCOUNT-MIGRATION: measured staged suite 5499; dual-platform durable
 # state, reconciliation/boot barriers, queued reversal and route regressions.
-EXPECTED_TEST_COUNT=5499
+# STRIPE-PRODUCTION-OPERATOR: measured staged suite 5549; shared pure planner,
+# explicit maintenance admission and real SIGKILL forward-recovery coverage.
+EXPECTED_TEST_COUNT=5549
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
