@@ -2644,6 +2644,7 @@
       }
 
       el.appendChild(pausedWrap);
+      renderStripeWithdrawalStatusControls(el);
       show('payout-content');
       return;
     }
@@ -2787,18 +2788,14 @@
       wBtn.className = 'btn btn-primary btn-sm';
       wBtn.id = 'withdraw-btn';
       wBtn.textContent = 'Withdraw';
+      wBtn.disabled = true;
       wBtn.style.marginBottom = '1px';
       wBtn.onclick = function () { doWithdraw(); };
       payoutRow.appendChild(wBtn);
 
-      var withdrawAlert = document.createElement('div');
-      withdrawAlert.id = 'withdraw-alert';
-      withdrawAlert.className = 'alert';
-      withdrawAlert.style.display = 'none';
-      withdrawAlert.style.marginTop = '12px';
-      withdrawWrap.appendChild(withdrawAlert);
     }
 
+    renderStripeWithdrawalStatusControls(el);
     show('payout-content');
   }
 
@@ -2844,49 +2841,184 @@
       });
   }
 
-  function doWithdraw() {
-    var amtEl = document.getElementById('withdraw-amount');
-    var amtVal = amtEl ? parseFloat(amtEl.value) : 0;
-    if (!amtVal || amtVal < 0.50) {
-      var a = document.getElementById('withdraw-alert');
-      if (a) { a.textContent = 'Minimum withdrawal is $0.50.'; a.className = 'alert alert-error'; a.style.display = ''; }
-      return;
-    }
-    var btn = document.getElementById('withdraw-btn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Processing...'; }
+  // D0: durable withdrawal request identity. Status checks never submit money.
+  var _stripeWithdrawal = { ready: false, owner: null, attempt: null, draft: null, acknowledged: null, session: null };
+  var _stripeWithdrawalRead = 0;
+  var STRIPE_PENDING_MESSAGE = 'Your withdrawal is being checked. Please check its status before starting another.';
 
-    apiFetch('/withdraw/stripe', {
+  function stripeWithdrawalMessage(text, success) {
+    var a = document.getElementById('withdraw-alert');
+    if (a) { a.textContent = text; a.className = success ? 'alert alert-success' : 'alert alert-info'; a.style.display = ''; }
+  }
+
+  function stripeWithdrawalControls() {
+    var state = _stripeWithdrawal;
+    var btn = document.getElementById('withdraw-btn');
+    if (btn) { btn.disabled = !state.ready; btn.textContent = 'Withdraw'; }
+    var terminal = state.attempt && (state.attempt.status === 'completed' || state.attempt.status === 'confirmed_not_sent');
+    var newBtn = document.getElementById('withdraw-new-btn');
+    if (newBtn) newBtn.style.display = terminal && state.statusVerified && !state.disagreement && !state.ready ? '' : 'none';
+    var checkBtn = document.getElementById('withdraw-status-btn');
+    if (checkBtn) checkBtn.style.display = state.ready && !state.draft ? 'none' : '';
+  }
+
+  function renderStripeWithdrawalStatusControls(el) {
+    var alert = document.createElement('div');
+    alert.id = 'withdraw-alert'; alert.className = 'alert'; alert.style.display = 'none';
+    el.appendChild(alert);
+    var check = document.createElement('button');
+    check.id = 'withdraw-status-btn'; check.className = 'btn btn-ghost btn-sm';
+    check.textContent = 'Check withdrawal status'; check.onclick = checkStripeWithdrawalStatus;
+    el.appendChild(check);
+    var fresh = document.createElement('button');
+    fresh.id = 'withdraw-new-btn'; fresh.className = 'btn btn-ghost btn-sm'; fresh.style.display = 'none';
+    fresh.textContent = 'Start a new withdrawal'; fresh.onclick = startNewStripeWithdrawal;
+    el.appendChild(fresh);
+    initializeStripeWithdrawal();
+  }
+
+  function readStripeWithdrawalDraft(owner) {
+    var raw = localStorage.getItem('auxilo_stripe_withdrawal:' + owner);
+    if (!raw) return null;
+    var draft = JSON.parse(raw);
+    if (!draft || draft.account_id !== owner
+        || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(draft.request_id || '')
+        || !Number.isFinite(draft.amount_usd) || draft.amount_usd < 0.50 || typeof draft.created_at !== 'string') {
+      throw new Error('Stored withdrawal identity is invalid');
+    }
+    return draft;
+  }
+
+  function displayStripeWithdrawalAttempt(attempt) {
+    if (attempt.status === 'completed' && attempt.receipt) {
+      var receipt = attempt.receipt;
+      stripeWithdrawalMessage('Withdrawal recorded: ' + receipt.transfer_id + '. Amount transferred: $' + Number(receipt.amount_transferred_usd).toFixed(2) + '.', true);
+    } else if (attempt.status === 'confirmed_not_sent') {
+      stripeWithdrawalMessage('This withdrawal was confirmed not sent. You may start a new withdrawal.');
+    } else {
+      stripeWithdrawalMessage(STRIPE_PENDING_MESSAGE);
+    }
+  }
+
+  function initializeStripeWithdrawal() {
+    _stripeWithdrawal.ready = false;
+    stripeWithdrawalControls();
+    return checkStripeWithdrawalStatus();
+  }
+
+  function checkStripeWithdrawalStatus() {
+    var read = ++_stripeWithdrawalRead;
+    var session = getToken();
+    _stripeWithdrawal.statusVerified = false;
+    _stripeWithdrawal.ready = false;
+    stripeWithdrawalControls();
+    return apiFetch('/account/stripe-transfer-attempts/current')
+      .then(function (r) { return r.json().then(function (data) { return { status: r.status, data: data }; }); })
+      .then(function (result) {
+        if (read !== _stripeWithdrawalRead || session !== getToken()) return;
+        if (result.status !== 200 || !result.data || typeof result.data.account_id !== 'string' || !Object.prototype.hasOwnProperty.call(result.data, 'attempt')) throw new Error('Status unavailable');
+        var owner = result.data.account_id;
+        var draft = readStripeWithdrawalDraft(owner);
+        var attempt = result.data.attempt;
+        var acknowledged = _stripeWithdrawal.owner === owner ? _stripeWithdrawal.acknowledged : null;
+        var disagreement = !!(draft && attempt && draft.request_id !== attempt.client_request_key);
+        _stripeWithdrawal = { ready: false, owner: owner, draft: draft, attempt: attempt, acknowledged: acknowledged, disagreement: disagreement, session: session, statusVerified: true };
+        if (disagreement) {
+          stripeWithdrawalMessage('Stored withdrawal details differ from the server record. Check withdrawal status before starting another.');
+        } else if (attempt && attempt.attempt_id !== acknowledged) {
+          displayStripeWithdrawalAttempt(attempt);
+        } else {
+          // Authoritative null permits explicit same-key first-send retry.
+          // This function itself never POSTs.
+          _stripeWithdrawal.ready = true;
+          if (draft) {
+            var amount = document.getElementById('withdraw-amount');
+            if (amount) amount.value = draft.amount_usd.toFixed(2);
+            stripeWithdrawalMessage('No accepted withdrawal is recorded. You can submit the saved request.');
+          }
+        }
+        stripeWithdrawalControls();
+      }).catch(function () {
+        if (read !== _stripeWithdrawalRead || session !== getToken()) return;
+        _stripeWithdrawal.ready = false;
+        stripeWithdrawalMessage('Withdrawal status is unavailable. Check its status before starting another.');
+        stripeWithdrawalControls();
+      });
+  }
+
+  function startNewStripeWithdrawal() {
+    var state = _stripeWithdrawal;
+    if (!state.owner || !state.statusVerified || state.disagreement || !state.attempt || state.session !== getToken()
+        || (state.attempt.status !== 'completed' && state.attempt.status !== 'confirmed_not_sent')) return;
+    try {
+      localStorage.removeItem('auxilo_stripe_withdrawal:' + state.owner);
+      state.draft = null; state.acknowledged = state.attempt.attempt_id; state.ready = true;
+      stripeWithdrawalMessage('Enter the amount for a new withdrawal.');
+    } catch (_) {
+      state.ready = false;
+      stripeWithdrawalMessage('Withdrawal storage is unavailable. No new request was started.');
+    }
+    stripeWithdrawalControls();
+  }
+
+  function doWithdraw() {
+    var state = _stripeWithdrawal;
+    if (!state.ready || !state.owner || state.session !== getToken()) return Promise.resolve();
+    var amtEl = document.getElementById('withdraw-amount');
+    var amtVal = state.draft ? state.draft.amount_usd : Number(amtEl ? amtEl.value : 0);
+    if (!Number.isFinite(amtVal) || amtVal < 0.50) {
+      stripeWithdrawalMessage('Minimum withdrawal is $0.50.');
+      return Promise.resolve();
+    }
+    try {
+      // Re-read to honor a draft another tab has already written for this owner.
+      var existing = readStripeWithdrawalDraft(state.owner);
+      if (existing && (!state.draft || existing.request_id !== state.draft.request_id)) {
+        state.ready = false;
+        stripeWithdrawalMessage(STRIPE_PENDING_MESSAGE); stripeWithdrawalControls();
+        return Promise.resolve();
+      }
+      if (!state.draft) {
+        if (typeof crypto === 'undefined' || typeof crypto.randomUUID !== 'function') throw new Error('Secure request identity unavailable');
+        state.draft = { request_id: crypto.randomUUID(), account_id: state.owner, amount_usd: amtVal, created_at: new Date().toISOString() };
+      }
+      localStorage.setItem('auxilo_stripe_withdrawal:' + state.owner, JSON.stringify(state.draft));
+    } catch (_) {
+      state.ready = false;
+      stripeWithdrawalMessage('Secure withdrawal storage is unavailable. No request was sent.'); stripeWithdrawalControls();
+      return Promise.resolve();
+    }
+    state.ready = false;
+    stripeWithdrawalControls();
+    return apiFetch('/withdraw/stripe', {
       method: 'POST',
-      body: JSON.stringify({ amount_usd: amtVal }),
-    })
-      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); })
+      headers: { 'Idempotency-Key': state.draft.request_id },
+      body: JSON.stringify({ amount_usd: state.draft.amount_usd }),
+    }).then(function (r) { return r.json().then(function (data) { return { status: r.status, data: data }; }); })
       .then(function (res) {
-        if (btn) { btn.disabled = false; btn.textContent = 'Withdraw'; }
-        var a = document.getElementById('withdraw-alert');
-        if (res.ok) {
-          if (a) { a.textContent = 'Withdrawal initiated. Funds will arrive in 1 to 2 business days.'; a.className = 'alert alert-success'; a.style.display = ''; }
-          // Refresh earnings after a short delay
-          setTimeout(loadEarnings, 1500);
-        } else if (res.status === 403 && res.data && res.data.code === 'TERMS_NOT_ACCEPTED') {
-          // S-3: a 403 is not a session that has ended. This route gates on
-          // Terms acceptance (R-01 5.10) -- surface the same clickwrap card
-          // the pack-purchase handler does (T-26).
+        if (state !== _stripeWithdrawal || state.session !== getToken()) return;
+        if (res.status === 200 && res.data.status === 'completed' && res.data.attempt_id) {
+          state.attempt = { attempt_id: res.data.attempt_id, client_request_key: state.draft.request_id, status: 'completed', receipt: res.data };
+          displayStripeWithdrawalAttempt(state.attempt);
+        } else if (res.status === 409 && res.data.code === 'WITHDRAWAL_NOT_SENT') {
+          state.attempt = { attempt_id: res.data.attempt_id, client_request_key: state.draft.request_id, status: 'confirmed_not_sent' };
+          displayStripeWithdrawalAttempt(state.attempt);
+        } else if (res.status === 202 || (res.status === 409 && (res.data.code === 'WITHDRAWAL_IN_FLIGHT' || res.data.code === 'WITHDRAWAL_STATE_CHANGED'))) {
+          stripeWithdrawalMessage(STRIPE_PENDING_MESSAGE);
+        } else if (res.status === 403 && res.data.code === 'TERMS_NOT_ACCEPTED') {
           show('terms-gate');
           var gateEl = document.getElementById('terms-gate');
           if (gateEl && gateEl.scrollIntoView) gateEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
           var readBtn = document.getElementById('terms-read-btn');
           if (readBtn && readBtn.focus) readBtn.focus();
+          stripeWithdrawalMessage('Accept the updated Terms, then check withdrawal status.');
         } else {
-          // Any other error (including any other 403) shows the server's
-          // message here and leaves the builder signed in -- a 401 is
-          // already handled once, upstream, by apiFetch.
-          if (a) { a.textContent = res.data.error || 'Withdrawal failed. Please try again.'; a.className = 'alert alert-error'; a.style.display = ''; }
+          stripeWithdrawalMessage(res.data.error || 'Check withdrawal status before starting another.');
         }
-      })
-      .catch(function () {
-        if (btn) { btn.disabled = false; btn.textContent = 'Withdraw'; }
-        var a = document.getElementById('withdraw-alert');
-        if (a) { a.textContent = 'Request failed. Check your connection.'; a.className = 'alert alert-error'; a.style.display = ''; }
+        stripeWithdrawalControls();
+      }).catch(function () {
+        if (state !== _stripeWithdrawal || state.session !== getToken()) return;
+        stripeWithdrawalMessage(STRIPE_PENDING_MESSAGE); stripeWithdrawalControls();
       });
   }
 

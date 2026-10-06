@@ -369,6 +369,10 @@ describe('BUILD-BRIEF-TERMS-SCROLL Part S: a session that has ended', { timeout:
           }),
         });
       });
+      // D0: reach the existing Terms response only after owner-status preflight.
+      await page.route('**/account/stripe-transfer-attempts/current', (route) => {
+        route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Cache-Control': 'private, no-store' }, body: JSON.stringify({ account_id: accountId, attempt: null }) });
+      });
       await page.route('**/withdraw/stripe', (route) => {
         route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ error: 'You must accept the current Terms of Service before this action.', code: 'TERMS_NOT_ACCEPTED' }) });
       });

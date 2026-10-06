@@ -72,7 +72,7 @@ describe('CS-1 structural: safeWrite() state is declared before its first caller
 });
 
 describe('CS-1 behavioral: fresh install seeds the catalog', () => {
-  it('cold start against an empty data dir seeds learnings.json', { timeout: 30_000 }, async (t) => {
+  it('cold catalog start with an explicitly initialized financial primary seeds learnings.json', { timeout: 30_000 }, async (t) => {
     // The server's runtime deps (hono etc.) are not in package.json — CI's
     // `npm ci` won't install them. Skip the boot there; structural guard above
     // still enforces the fix.
@@ -93,7 +93,7 @@ describe('CS-1 behavioral: fresh install seeds the catalog', () => {
     let child = null;
     try {
       // Stage a minimal app dir: real server.js + seed file, shared code and
-      // deps symlinked. data/ intentionally absent — the cold-start case.
+      // deps symlinked. The catalog is absent; D0 requires an initialized financial primary.
       for (const f of ['server.js', 'seed-knowledge.json', 'skills.json', 'openapi.json', 'package.json']) {
         const src = path.join(REPO_ROOT, f);
         if (fs.existsSync(src)) fs.copyFileSync(src, path.join(tmpDir, f));
@@ -103,6 +103,7 @@ describe('CS-1 behavioral: fresh install seeds the catalog', () => {
         if (fs.existsSync(src)) fs.symlinkSync(src, path.join(tmpDir, d));
       }
       fs.mkdirSync(path.join(tmpDir, 'data'));
+      fs.writeFileSync(path.join(tmpDir, 'data', 'earnings.json'), '{}\n', { flag: 'wx' });
       fs.symlinkSync(nodeModulesDir, path.join(tmpDir, 'node_modules'));
 
       const output = await new Promise((resolve, reject) => {

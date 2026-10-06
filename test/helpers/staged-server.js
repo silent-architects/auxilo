@@ -151,6 +151,9 @@ function stageServer({
 
   const dataDir = path.join(tmpDir, 'data');
   fs.mkdirSync(dataDir);
+  // D0 fixtures explicitly initialize an authoritative primary. Corruption/missing
+  // primary tests remove or replace this before boot; production never creates it.
+  fs.writeFileSync(path.join(dataDir, 'earnings.json'), '{}\n', { flag: 'wx' });
   const walDir = path.join(dataDir, 'wal');
   fs.mkdirSync(walDir);
   return { dataDir, walDir, serverPath };
