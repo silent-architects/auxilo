@@ -51,6 +51,7 @@ function uid() { return `acc_one_balance_${++seq}_${Math.random().toString(36).s
 const REPO_ROOT = path.join(__dirname, '..');
 const SERVER_SRC = fs.readFileSync(path.join(REPO_ROOT, 'server.js'), 'utf-8');
 const STRIPE_LIB_SRC = fs.readFileSync(path.join(REPO_ROOT, 'lib', 'stripe.js'), 'utf-8');
+const DISPATCH_SRC = fs.readFileSync(path.join(REPO_ROOT, 'lib', 'stripe-event-dispatch.js'), 'utf8');
 const CREDITS_SRC = fs.readFileSync(path.join(REPO_ROOT, 'lib', 'credits.js'), 'utf-8');
 
 // ─── F-1: the switch is gone; a pack purchase always creates a dollar lot ──
@@ -71,7 +72,7 @@ describe('F-1: the switch is gone, there is one model', () => {
   });
 
   it('createCheckoutSession takes no lot-kind argument and its description always states dollars added to the balance', () => {
-    assert.ok(STRIPE_LIB_SRC.includes('async function createCheckoutSession(accountId, packId, baseUrl) {'),
+    assert.ok(STRIPE_LIB_SRC.includes('async function createCheckoutSession(accountId, packId, baseUrl, { context, idempotencyKey, intentId } = {}) {'),
       'no 4th lotKind parameter remains');
     assert.ok(STRIPE_LIB_SRC.includes('const description = `$${pack.price_usd.toFixed(2)} added to your Auxilo balance`;'),
       'the description is always the dollar-balance wording, unconditionally');
@@ -90,10 +91,8 @@ describe('F-1: the switch is gone, there is one model', () => {
   });
 
   it('the webhook always calls addDollarLot for a completed checkout session — never a unit-lot branch', () => {
-    const start = SERVER_SRC.indexOf("event.type === 'checkout.session.completed'");
-    const end = SERVER_SRC.indexOf("'charge.dispute.created'", start);
-    const webhookBlock = SERVER_SRC.slice(start, end);
-    assert.ok(webhookBlock.includes("addDollarLot(account_id, 'dollar_paid', PACKS[pack_id]?.price_usd || 0"));
+    const webhookBlock = DISPATCH_SRC;
+    assert.ok(webhookBlock.includes("addDollarLot(owner,'dollar_paid',pack.price_usd"));
     assert.ok(!webhookBlock.includes('isDollarLot'), 'no branch on lot kind remains');
   });
 });
@@ -141,7 +140,7 @@ describe('F-3: no code path creates a unit lot (structural)', () => {
   });
 
   it('addDollarLot has exactly three call sites in server.js: the webhook and the two referral grants', () => {
-    const callSites = (SERVER_SRC.match(/await addDollarLot\(/g) || []).length;
+    const callSites = ((SERVER_SRC + DISPATCH_SRC).match(/await addDollarLot\(/g) || []).length;
     assert.equal(callSites, 3);
   });
 
@@ -185,11 +184,11 @@ describe('F-7: GET /account/credits and GET /account/purchases report dollars on
   });
 
   it('a new purchase record written by the webhook carries no unlocks_added or unit field', () => {
-    const start = SERVER_SRC.indexOf('const purchase = {');
-    const end = SERVER_SRC.indexOf('appendPurchase(purchase);', start);
-    const purchaseSrc = SERVER_SRC.slice(start, end);
+    const start = DISPATCH_SRC.indexOf('const purchase=');
+    const end = DISPATCH_SRC.indexOf('appendPurchase(purchase);', start);
+    const purchaseSrc = DISPATCH_SRC.slice(start, end);
     assert.ok(!purchaseSrc.includes('unlocks_added'));
-    assert.ok(purchaseSrc.includes('amount_usd: PACKS[pack_id]?.price_usd || 0,'));
+    assert.ok(purchaseSrc.includes('amount_usd:pack.price_usd,'));
   });
 
   it('a record left over from before, carrying unit fields, is reported as its dollar balance only', () => {

@@ -30,6 +30,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const purchaseFixture = fs.mkdtempSync(path.join(os.tmpdir(), 'ccp1-purchases-'));
+process.env.AUXILO_PURCHASES_FILE = path.join(purchaseFixture, 'purchases.jsonl');
+fs.writeFileSync(process.env.AUXILO_PURCHASES_FILE, '');
+after(() => fs.rmSync(purchaseFixture, { recursive: true, force: true }));
 const { SignJWT } = require('jose');
 const { reservePort, stageServer, bootServer, stopServer } = require('./helpers/staged-server');
 
@@ -120,13 +124,15 @@ describe('T3 createCheckoutSession: fake-Stripe call-args assertions', () => {
 
     class FakeStripe {
       constructor() {
+        this.accounts = { retrieve: async () => ({ id: 'acct_1TCbMe0Jj0R41QQV' }) };
+        this.balance = { retrieve: async () => ({ livemode: false }) };
         this.checkout = {
           sessions: {
             create: async (args) => {
               capturedArgs = args;
               // N2: Stripe's own confirmed expiry, echoed back exactly as
               // real Stripe would (seconds since epoch).
-              return { id: 'cs_test_fake123', url: 'https://checkout.stripe.test/fake123', expires_at: Math.floor(Date.now() / 1000) + 35 * 60 };
+              return { id: 'cs_test_fake123', object: 'checkout.session', mode: 'payment', livemode: false, amount_total: 1000, currency: 'usd', metadata: args.metadata, url: 'https://checkout.stripe.test/fake123', expires_at: Math.floor(Date.now() / 1000) + 35 * 60 };
             },
           },
         };
@@ -154,7 +160,8 @@ describe('T3 createCheckoutSession: fake-Stripe call-args assertions', () => {
     process.env.STRIPE_SECRET_KEY = 'sk_test_fake_for_this_suite_only';
     try {
       const stripeLib = require('../lib/stripe.js');
-      const result = await stripeLib.createCheckoutSession('acc_test_ccp1', 'starter', 'https://auxilo.test');
+      const context = await stripeLib.verifyStripeTransferContext({ platform: 'legacy' });
+      const result = await stripeLib.createCheckoutSession('acc_test_ccp1', 'starter', 'https://auxilo.test', { context, idempotencyKey: 'synthetic-checkout-key', intentId: 'synthetic-intent' });
       assert.deepEqual(Object.keys(result).sort(), ['expires_at', 'session_id', 'url'].sort());
       assert.equal(result.url, 'https://checkout.stripe.test/fake123');
       assert.equal(result.session_id, 'cs_test_fake123');
@@ -214,8 +221,8 @@ describe('T4 dark-safe rendering: no purchase button/disclosures without stripe_
 
 describe('T5 /health: stripe_configured field', () => {
   it('is derived from getStripeStatus() (usability, not bare presence), plus reason + mode', () => {
-    const h = sliceAt(SERVER_SRC, "app.get('/health', (c) => {", 2200);
-    assert.ok(h.includes('stripe_configured: stripeStatus.configured,'));
+    const h = sliceAt(SERVER_SRC, "app.get('/health', (c) => {", 6000);
+    assert.ok(h.includes('stripe_configured: stripeStatus.configured && migrationStatus.ready && migrationStatus.allow_checkout && checkoutIntents.ready,'));
     assert.ok(h.includes('stripe_reason: stripeStatus.reason,'));
     assert.ok(h.includes('stripe_mode: stripeStatus.mode,'));
     assert.ok(h.includes('payments_enabled: paymentsEnabled(),'));
@@ -271,7 +278,7 @@ describe('T7 /checkout/session: current-Terms-acceptance gate', () => {
     const paymentsIdx = h.indexOf('if (!paymentsEnabled())');
     const termsIdx = h.indexOf('if (!hasAcceptedCurrentTos(checkoutAccount))');
     const packIdx = h.indexOf('const { pack } = body');
-    const createIdx = h.indexOf('createCheckoutSession(');
+    const createIdx = h.indexOf('createSession: createCheckoutSession');
     assert.notEqual(paymentsIdx, -1);
     assert.notEqual(termsIdx, -1, 'no existing hasAcceptedCurrentTos gate reached this route before this change');
     assert.ok(paymentsIdx < termsIdx, 'PAYMENTS_ENABLED must be checked first (global kill switch)');
@@ -279,16 +286,13 @@ describe('T7 /checkout/session: current-Terms-acceptance gate', () => {
     assert.ok(packIdx < createIdx);
     assert.ok(h.includes('return termsNotAcceptedResponse(c);'));
   });
-  it('gates on Stripe usability (CREDITS-CONFIG-USABLE) after pack validation, before session creation', () => {
+  it('requires verified platform context before session creation', () => {
     const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 7000);
-    const packIdx = h.indexOf('const { pack } = body');
-    const stripeIdx = h.indexOf('if (!stripeStatus.configured)');
-    const createIdx = h.indexOf('createCheckoutSession(');
-    assert.notEqual(stripeIdx, -1, 'checkout/session must gate on Stripe usability, not presence');
-    assert.ok(packIdx < stripeIdx && stripeIdx < createIdx,
-      'usability check must run after pack validation and before session creation');
-    assert.ok(h.includes("code: 'stripe_unusable',"));
-    assert.ok(h.includes('reason: stripeStatus.reason,'));
+    assert.ok(h.indexOf('const { pack } = body') < h.indexOf('createCheckoutAdmission({'));
+    assert.ok(h.includes('stripePlatforms.getVerifiedClient(alias)'));
+    const admission = fs.readFileSync(path.join(REPO_ROOT, 'lib/stripe-checkout-admission.js'), 'utf8');
+    assert.ok(admission.indexOf('await d.getContext(') < admission.indexOf('await d.createSession('));
+    assert.ok(h.includes("code: error.code || 'stripe_unusable'"));
   });
   // AUD-CAC: the two purchase caps (spec §2, ruling L6) sit between pack
   // validation and the Stripe-usability check, always checked regardless of
@@ -308,18 +312,15 @@ describe('T7 /checkout/session: current-Terms-acceptance gate', () => {
   // admin route clears an account hold..."). These ordering/wiring checks
   // stay as a fast source-level regression guard for where the checks sit
   // relative to each other, not as the only proof they work.
-  it('checks the balance cap and the daily purchase cap after pack validation, before Stripe usability [AUD-CAC]', () => {
+  it('checks both caps under durable admission before provider creation [AUD-CAC]', () => {
     const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 7000);
-    const packIdx = h.indexOf('const { pack } = body');
-    const balanceIdx = h.indexOf('checkBalanceCap(accountId, packPrice)');
-    const dailyIdx = h.indexOf('checkDailyCap(accountId, packPrice)');
-    const stripeIdx = h.indexOf('if (!stripeStatus.configured)');
-    assert.notEqual(balanceIdx, -1, 'the balance cap must be checked');
-    assert.notEqual(dailyIdx, -1, 'the daily purchase cap must be checked');
-    assert.ok(packIdx < balanceIdx && balanceIdx < dailyIdx && dailyIdx < stripeIdx,
-      'both caps must be checked after pack validation and before the Stripe usability probe');
-    assert.ok(h.includes("code: 'BALANCE_CAP_EXCEEDED',"));
-    assert.ok(h.includes("code: 'DAILY_PURCHASE_CAP_EXCEEDED',"));
+    assert.ok(h.includes("[checkBalanceCap, 'BALANCE_CAP_EXCEEDED']"));
+    assert.ok(h.includes("[checkDailyCap, 'DAILY_PURCHASE_CAP_EXCEEDED']"));
+    assert.ok(h.includes('const result = check(id, price)'));
+    assert.ok(h.includes('if (!result.ok)'));
+    const admission = fs.readFileSync(path.join(REPO_ROOT, 'lib/stripe-checkout-admission.js'), 'utf8');
+    assert.ok(admission.indexOf('d.checkCaps(accountId,amountUsd)') < admission.indexOf('await d.createSession('));
+    assert.ok(admission.indexOf('d.intents.blocking(accountId)') < admission.indexOf('d.checkCaps(accountId,amountUsd)'));
   });
   it('refuses a held account before pack validation, with a 403 and code ACCOUNT_HELD [AUD-CAC]', () => {
     const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 7000);
@@ -383,6 +384,8 @@ describe('T9 webhook idempotency: isSessionProcessed (unchanged behavior, re-ass
       queries_added: 400,
       unlocks_added: 80,
       stripe_session_id: sid,
+      stripe_platform: 'legacy',
+      stripe_platform_account_id: 'acct_1TCbMe0Jj0R41QQV',
       stripe_payment_intent: null,
       timestamp: new Date().toISOString(),
     });
@@ -640,7 +643,7 @@ describe('T14 behavioral: real server boot', () => {
       });
       assert.equal(acceptedRes.status, 503, 'a Terms-accepted account must still be refused while Stripe is unconfigured — STOP gate e');
       const acceptedBody = await acceptedRes.json();
-      assert.equal(acceptedBody.error, 'Payment system unavailable');
+      assert.equal(acceptedBody.error, 'Checkout requires verified payment and reconciliation state.');
 
       // ── POST /account/connect-stripe: real paused-rail 503 ──────────
       const connectRes = await fetch(`${baseUrl}/account/connect-stripe`, {
@@ -731,7 +734,8 @@ describe('T16 CREDITS-QUERIES-RESIDUAL: packs grant dollars only', () => {
   // webhook branch — addPurchasedCredits is deleted; the webhook always
   // calls addDollarLot (test/credits-one-balance.test.js).
   it('the webhook no longer destructures/parses pack_queries', () => {
-    const h = sliceAt(SERVER_SRC, "event.type === 'checkout.session.completed'", 2800);
+    const h = fs.readFileSync(path.join(REPO_ROOT, 'lib/stripe-event-dispatch.js'), 'utf8');
+    assert.ok(h.includes('async function checkout('));
     assert.ok(!h.includes('pack_queries'), 'pack_queries must not be read from the webhook metadata anymore');
   });
 
@@ -740,21 +744,21 @@ describe('T16 CREDITS-QUERIES-RESIDUAL: packs grant dollars only', () => {
   // was STILL present; F-7 removes it too — a purchase record carries the
   // dollar amount only.
   it('the purchase record written to purchases.jsonl carries no unit field, dollars only', () => {
-    const h = sliceAt(SERVER_SRC, 'const purchase = {', 400);
+    const dispatcher = fs.readFileSync(path.join(REPO_ROOT, 'lib/stripe-event-dispatch.js'), 'utf8');
+    const h = sliceAt(dispatcher, 'const purchase=existingPurchase||{', 500);
     assert.ok(!h.includes('queries_added'), 'new purchase records must not carry queries_added');
     assert.ok(!h.includes('unlocks_added'), 'new purchase records must not carry unlocks_added');
-    assert.ok(h.includes('amount_usd: PACKS[pack_id]?.price_usd || 0,'));
+    assert.ok(h.includes('amount_usd:pack.price_usd,'));
   });
 
   // RETIRED (credits-as-cash follow-up): 'the credited-account server log
   // line no longer mentions queries' pinned the old "+N unlocks" log
   // wording — a purchase credits a dollar amount now, not an unlock count.
-  it('the credited-account server log line reports the dollar amount, never queries or unlocks', () => {
-    const h = sliceAt(SERVER_SRC, '[stripe] Credited account', 200);
-    assert.ok(!/queries/i.test(h), 'the log line must not claim a queries grant anymore');
-    assert.ok(!/unlocks/i.test(h), 'the log line must not claim an unlocks grant anymore');
-    assert.ok(h.includes('+$${(PACKS[pack_id]?.price_usd || 0).toFixed(2)} (${pack_id})'),
-      'the log line must report the dollar amount and pack id');
+  it('the credited-dollar operation grants the canonical pack dollars and no unit amount', () => {
+    const dispatcher = fs.readFileSync(path.join(REPO_ROOT, 'lib/stripe-event-dispatch.js'), 'utf8');
+    const h = sliceAt(dispatcher, "await addDollarLot(owner,'dollar_paid',pack.price_usd,", 300);
+    assert.ok(!/queries|unlocks/.test(h));
+    assert.ok(h.includes('stripe_platform:context.stripe_platform'));
   });
 
   // RETIRED (credits-as-cash follow-up): the old test asserted

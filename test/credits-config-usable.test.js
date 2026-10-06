@@ -64,9 +64,10 @@ function setValidFormatEnv() {
 
 function fakeStripeClient(behavior) {
   return {
+    accounts: { retrieve: async () => ({ id: 'acct_1TCbMe0Jj0R41QQV' }) },
     balance: {
       retrieve: async () => {
-        if (behavior === 'success') return { object: 'balance', available: [] };
+        if (behavior === 'success') return { object: 'balance', available: [], livemode: false };
         if (behavior === 'auth-fail') {
           const err = new Error('Invalid API Key provided');
           err.type = 'StripeAuthenticationError';
@@ -369,7 +370,8 @@ describe('notifyStripeCheckoutAttempt: immediate reprobe on the first attempt af
 
     let calls = 0;
     __setStripeClientForTest({
-      balance: { retrieve: async () => { calls += 1; return { object: 'balance' }; } },
+      accounts: { retrieve: async () => ({ id: 'acct_1TCbMe0Jj0R41QQV' }) },
+      balance: { retrieve: async () => { calls += 1; return { object: 'balance', livemode: false }; } },
     });
 
     notifyStripeCheckoutAttempt(); // consumes the arm, triggers 1 reprobe
@@ -403,6 +405,7 @@ describe('notifyStripeCheckoutAttempt: immediate reprobe on the first attempt af
 
     let calls = 0;
     __setStripeClientForTest({
+      accounts: { retrieve: async () => ({ id: 'acct_1TCbMe0Jj0R41QQV' }) },
       balance: { retrieve: async () => { calls += 1; const e = new Error('bad'); e.type = 'StripeAuthenticationError'; throw e; } },
     });
     notifyStripeCheckoutAttempt();
@@ -424,9 +427,9 @@ describe('notifyStripeCheckoutAttempt: immediate reprobe on the first attempt af
 
 describe('/health wiring: stripe_configured/stripe_reason/stripe_mode from getStripeStatus()', () => {
   it('reads the cached usability status, not process.env.STRIPE_SECRET_KEY presence', () => {
-    const h = sliceAt(SERVER_SRC, "app.get('/health', (c) => {", 2200);
-    assert.ok(h.includes('const stripeStatus = getStripeStatus();'));
-    assert.ok(h.includes('stripe_configured: stripeStatus.configured,'));
+    const h = sliceAt(SERVER_SRC, "app.get('/health', (c) => {", 6000);
+    assert.ok(h.includes("const stripeStatus = stripePlatforms.getPlatformStatus(migrationStatus.intake_platform || 'legacy');"));
+    assert.ok(h.includes('stripe_configured: stripeStatus.configured && migrationStatus.ready && migrationStatus.allow_checkout && checkoutIntents.ready,'));
     assert.ok(h.includes('stripe_reason: stripeStatus.reason,'));
     assert.ok(h.includes('stripe_mode: stripeStatus.mode,'));
     assert.ok(!/stripe_configured:\s*!!process\.env\.STRIPE_SECRET_KEY/.test(h),
@@ -446,13 +449,14 @@ describe('/checkout/session wiring: fails closed on usability with a machine-rea
   // FIX-UNIT-MONEY-2 M3 (2026-09-27): widened again, to 7000 — the caps now
   // run under a per-account lock with a reservation recorded before the
   // Stripe call (see T7's comment for the same widening).
-  it('gates on stripeStatus.configured and returns code + reason in the 503 body', () => {
+  it('requires explicit verified platform context and returns a machine-readable refusal', () => {
     const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 7000);
-    assert.ok(h.includes('notifyStripeCheckoutAttempt();'), 'must arm/trigger the reprobe on every attempt');
-    assert.ok(h.includes('const stripeStatus = getStripeStatus();'));
-    assert.ok(h.includes('if (!stripeStatus.configured)'));
-    assert.ok(h.includes("code: 'stripe_unusable',"));
-    assert.ok(h.includes('reason: stripeStatus.reason,'));
+    assert.ok(h.includes('createCheckoutAdmission({'));
+    assert.ok(h.includes('stripePlatforms.getVerifiedClient(alias)'));
+    assert.ok(h.includes("code: error.code || 'stripe_unusable'"));
+    const admission = fs.readFileSync(path.join(__dirname, '../lib/stripe-checkout-admission.js'), 'utf8');
+    assert.ok(admission.indexOf('await d.getContext(') < admission.indexOf('await d.createSession('));
+    assert.ok(admission.includes('d.intents.blocking(accountId)'));
   });
 });
 
@@ -474,11 +478,11 @@ describe('/account/connect-stripe + /withdraw/stripe: no bare getStripe() presen
     assert.ok(!/if \(!getStripe\(\)\)/.test(h), 'the old presence-only literal must be gone from this route');
   });
 
-  it('/withdraw/stripe gates on getStripeStatus().configured', () => {
-    const h = sliceAt(SERVER_SRC, "app.post('/withdraw/stripe', requireAuth", 2200);
-    assert.ok(h.includes('_getStripeStatusWithdraw()'));
-    assert.ok(h.includes('if (!withdrawStripeStatus.configured)'));
-    assert.ok(!/if \(!getStripe\(\)\)/.test(h), 'the old presence-only literal must be gone from this route');
+  it('/withdraw/stripe verifies the explicitly assigned source platform before transfer', () => {
+    const h = sliceAt(SERVER_SRC, "app.post('/withdraw/stripe', requireAuth", 13000);
+    assert.ok(h.includes('verifyStripeTransferContext({ expectedAccountId: platform.stripe_platform_account_id, platform: platform.stripe_platform })'));
+    assert.ok(h.indexOf('verifyStripeTransferContext({ expectedAccountId: platform.stripe_platform_account_id, platform: platform.stripe_platform })') < h.indexOf('await createTransferToConnect('));
+    assert.ok(!/if \(!getStripe\(\)\)/.test(h));
   });
 
   it('no route handler in server.js still contains the bare presence literal', () => {

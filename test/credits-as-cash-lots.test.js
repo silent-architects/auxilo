@@ -24,6 +24,7 @@ process.env.AUXILO_CREDITS_FILE = path.join(TMP_DIR, 'credits.json');
 process.env.AUXILO_UNLOCK_ATTRIBUTION_FILE = path.join(TMP_DIR, 'unlock-attribution.json');
 process.env.AUXILO_ACCOUNT_HOLDS_FILE = path.join(TMP_DIR, 'account-holds.json');
 process.env.AUXILO_PURCHASES_FILE = path.join(TMP_DIR, 'purchases.jsonl');
+fs.writeFileSync(process.env.AUXILO_PURCHASES_FILE, '');
 
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -454,7 +455,7 @@ describe('purchase caps: balance cap and daily cap', () => {
   it('[test 14] daily purchase cap refuses a purchase that would push the trailing-24h total over $2,000', () => {
     const id = uid();
     const now = Date.now();
-    appendPurchase({ id: 'pur_a', account_id: id, pack_id: 'pro', amount_usd: 1950, stripe_session_id: 'cs_a', stripe_payment_intent: null, timestamp: new Date(now - 60_000).toISOString() });
+    appendPurchase({ stripe_platform: 'legacy', stripe_platform_account_id: 'acct_1TCbMe0Jj0R41QQV', id: 'pur_a', account_id: id, pack_id: 'pro', amount_usd: 1950, stripe_session_id: 'cs_a', stripe_payment_intent: null, timestamp: new Date(now - 60_000).toISOString() });
     const check = checkDailyCap(id, 100, now); // 1950 + 100 = 2050, over the cap
     assert.equal(check.ok, false);
     assert.equal(check.current, 1950);
@@ -463,7 +464,7 @@ describe('purchase caps: balance cap and daily cap', () => {
   it('a purchase older than 24h does not count toward the daily cap', () => {
     const id = uid();
     const now = Date.now();
-    appendPurchase({ id: 'pur_b', account_id: id, pack_id: 'pro', amount_usd: 1950, stripe_session_id: 'cs_b', stripe_payment_intent: null, timestamp: new Date(now - 25 * 60 * 60 * 1000).toISOString() });
+    appendPurchase({ stripe_platform: 'legacy', stripe_platform_account_id: 'acct_1TCbMe0Jj0R41QQV', id: 'pur_b', account_id: id, pack_id: 'pro', amount_usd: 1950, stripe_session_id: 'cs_b', stripe_payment_intent: null, timestamp: new Date(now - 25 * 60 * 60 * 1000).toISOString() });
     const check = checkDailyCap(id, 25, now);
     assert.equal(check.ok, true);
     assert.equal(check.current, 0);
@@ -541,14 +542,14 @@ describe('structural: a balance can never move between accounts [test 17]', () =
       // plain paid/promo totals.
       'async function refundDollarDraw(accountId, draws)',
       'async function recordLotFunding(accountId, draws, info)',
-      'async function freezeDollarLot(accountId, paymentIntent, reason)',
-      'async function unfreezeDollarLot(accountId, paymentIntent)',
+      'async function freezeDollarLot(accountId, paymentIntent, reason, context)',
+      'async function unfreezeDollarLot(accountId, paymentIntent, context)',
       // FIX-UNIT-MONEY H1: amount-aware (ruling H1) -- a third parameter,
       // defaulted to Infinity (capped at the lot's own original_usd), so a
       // 2-argument call still means "full removal", today's behavior.
-      'async function removeDollarLotRemainder(accountId, paymentIntent, amountUsd = Infinity)',
+      'async function removeDollarLotRemainder(accountId, paymentIntent, amountUsd = Infinity, context)',
       'async function finalizePendingReversals(accountId, lotId)',
-      'async function stampDisputeStatus(accountId, paymentIntent, disputeId, status)',
+      'async function stampDisputeStatus(accountId, paymentIntent, disputeId, status, context)',
     ];
     for (const sig of mutators) {
       assert.ok(CREDITS_SRC.includes(sig), `expected exact signature not found: ${sig}`);
@@ -608,11 +609,12 @@ describe('structural: a balance can never be loaded from a crypto payment [test 
   // the count is now three, none of them crypto or router code. The
   // three-call-site count is also proved in test/credits-one-balance.test.js.
   it('addDollarLot has exactly three call sites in server.js — the webhook and the two referral grants — never loaded from crypto', () => {
-    const callSites = (SERVER_SRC.match(/await addDollarLot\(/g) || []).length;
-    assert.equal(callSites, 3, 'addDollarLot must have exactly three call sites');
+    const dispatcher = fs.readFileSync(path.join(__dirname, '../lib/stripe-event-dispatch.js'), 'utf8');
+    const callSites = (SERVER_SRC.match(/await addDollarLot\(/g) || []).length + (dispatcher.match(/await addDollarLot\(/g) || []).length;
+    assert.equal(callSites, 3, 'addDollarLot must have exactly three call sites across dispatcher and referrals');
     const webhookStart = SERVER_SRC.indexOf("app.post('/webhook/stripe'");
     const webhookEnd = SERVER_SRC.indexOf("app.get('/account/purchases'");
-    const webhookSlice = SERVER_SRC.slice(webhookStart, webhookEnd);
+    const webhookSlice = dispatcher;
     assert.equal((webhookSlice.match(/await addDollarLot\(/g) || []).length, 1,
       'exactly one of the three call sites sits inside the webhook route');
     // None of the three sites sits inside verifyPaymentOrReject or the

@@ -2,6 +2,8 @@
 const { test, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const stripe = require('../lib/stripe');
+const definitions = { ...require('../lib/stripe-platforms').PLATFORM_DEFINITIONS, legacy: { ...require('../lib/stripe-platforms').PLATFORM_DEFINITIONS.legacy, account_id: 'acct_fixture_platform' } };
+const inject = client => stripe.__setStripeClientForTest(client, definitions);
 const saved = { key: process.env.STRIPE_SECRET_KEY, account: process.env.STRIPE_PLATFORM_ACCOUNT_ID };
 const metadata = { auxilo_transfer_attempt_id: '1caea589-25f4-4c0d-88a1-a074aa456701', auxilo_request_digest: 'a'.repeat(64) };
 let calls;
@@ -18,7 +20,7 @@ beforeEach(() => {
   process.env.STRIPE_SECRET_KEY = 'sk_test_' + 'f'.repeat(40);
   process.env.STRIPE_PLATFORM_ACCOUNT_ID = 'acct_fixture_platform';
   calls = { identity: [], create: [] };
-  stripe.__setStripeClientForTest(client());
+  inject(client());
 });
 afterEach(() => {
   stripe.__resetStripeStatusForTest();
@@ -39,33 +41,32 @@ test('D16 authenticates current platform and binds immutable mode/client generat
   assert.equal(calls.create.length, 0);
 });
 test('D16 wrong authenticated identity blocks create', async () => {
-  stripe.__setStripeClientForTest(client({ accounts: { retrieve: async () => ({ id: 'acct_other_fixture' }) } }));
+  inject(client({ accounts: { retrieve: async () => ({ id: 'acct_other_fixture' }) } }));
   await assert.rejects(verify(), /identity/i); assert.equal(calls.create.length, 0);
 });
 test('D16 failed authenticated identity read blocks create', async () => {
-  stripe.__setStripeClientForTest(client({ accounts: { retrieve: async () => { throw new Error('fixture unavailable'); } } }));
+  inject(client({ accounts: { retrieve: async () => { throw new Error('fixture unavailable'); } } }));
   await assert.rejects(verify()); assert.equal(calls.create.length, 0);
 });
 test('D16 test/live balance mismatch blocks create', async () => {
-  stripe.__setStripeClientForTest(client({ balance: { retrieve: async () => ({ livemode: true }) } }));
+  inject(client({ balance: { retrieve: async () => ({ livemode: true }) } }));
   await assert.rejects(verify(), /mode/i); assert.equal(calls.create.length, 0);
 });
 test('D16 unknown platform alias and missing expected identity fail closed', async () => {
   await assert.rejects(stripe.verifyStripeTransferContext({ platform: 'unknown', expectedAccountId: 'acct_fixture_platform' }));
-  delete process.env.STRIPE_PLATFORM_ACCOUNT_ID;
-  await assert.rejects(stripe.verifyStripeTransferContext({ platform: 'legacy' }));
+  await assert.rejects(stripe.verifyStripeTransferContext({ platform: 'legacy', expectedAccountId: 'acct_unknown_fixture' }));
   assert.equal(calls.create.length, 0);
 });
 test('D16 credential drift after preparation blocks send on original and replacement client', async () => {
   const ctx = await verify();
   process.env.STRIPE_SECRET_KEY = 'sk_test_' + 'g'.repeat(40);
   await assert.rejects(send(ctx), /context|configuration/i);
-  stripe.__setStripeClientForTest(client());
+  inject(client());
   await assert.rejects(send(ctx), /context|configuration/i);
   assert.equal(calls.create.length, 0);
 });
 test('D16 drift during identity read fails closed before prepared context exists', async () => {
-  stripe.__setStripeClientForTest(client({ accounts: { retrieve: async () => { process.env.STRIPE_SECRET_KEY += 'changed'; return { id: 'acct_fixture_platform' }; } } }));
+  inject(client({ accounts: { retrieve: async () => { process.env.STRIPE_SECRET_KEY += 'changed'; return { id: 'acct_fixture_platform' }; } } }));
   await assert.rejects(verify(), /context|configuration/i); assert.equal(calls.create.length, 0);
 });
 test('D16 serialized/forged context cannot authorize a transfer', async () => {
@@ -88,12 +89,12 @@ test('D01 missing stable key or correlation refuses provider invocation', async 
   assert.equal(calls.create.length, 0);
 });
 test('D02 partial response cannot become confirmed evidence and create is never retried', async () => {
-  stripe.__setStripeClientForTest(client({ transfers: { create: async () => { calls.create.push({}); return { id: 'tr_fixture', object: 'transfer' }; } } }));
+  inject(client({ transfers: { create: async () => { calls.create.push({}); return { id: 'tr_fixture', object: 'transfer' }; } } }));
   await assert.rejects(send(await verify()), /evidence/i); assert.equal(calls.create.length, 1);
 });
 test('D02 mismatched financial fields, mode or correlation cannot become confirmed evidence', async () => {
   for (const patch of [{ amount: 999 }, { destination: 'acct_wrong_fixture' }, { currency: 'eur' }, { livemode: true }, { metadata: {} }]) {
-    stripe.__setStripeClientForTest(client({ transfers: { create: async (p) => { calls.create.push({}); return { id: 'tr_fixture', object: 'transfer', amount: p.amount, destination: p.destination, currency: p.currency, livemode: false, metadata: p.metadata, ...patch }; } } }));
+    inject(client({ transfers: { create: async (p) => { calls.create.push({}); return { id: 'tr_fixture', object: 'transfer', amount: p.amount, destination: p.destination, currency: p.currency, livemode: false, metadata: p.metadata, ...patch }; } } }));
     await assert.rejects(send(await verify()), /evidence/i);
   }
   assert.equal(calls.create.length, 5);

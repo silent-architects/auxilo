@@ -26,6 +26,7 @@ process.env.AUXILO_CREDITS_FILE = path.join(TMP_DIR, 'credits.json');
 process.env.AUXILO_ACCOUNT_HOLDS_FILE = path.join(TMP_DIR, 'account-holds.json');
 process.env.AUXILO_HOLD_CLEAR_LOG_FILE = path.join(TMP_DIR, 'hold-clear-log.jsonl');
 process.env.AUXILO_PURCHASES_FILE = path.join(TMP_DIR, 'purchases.jsonl');
+fs.writeFileSync(process.env.AUXILO_PURCHASES_FILE, ''); // Explicit empty historical purchase inventory.
 process.env.AUXILO_CHECKOUT_SESSIONS_FILE = path.join(TMP_DIR, 'checkout-sessions.json');
 process.env.AUXILO_UNLOCK_COUNTER_GATE_FILE = path.join(TMP_DIR, 'unlock-counter-gate.json');
 delete process.env.RESEND_API_KEY;

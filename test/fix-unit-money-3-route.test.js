@@ -29,7 +29,7 @@ const REPO = path.join(__dirname, '..');
 const { CURRENT_TOS_VERSION } = require('../lib/accounts.js');
 
 const SESSION_SECRET = 'fix-unit-money-3-route-test-session-secret';
-const FAKE_SECRET_KEY = 'not_a_real_stripe_key_format_placeholder_00000000';
+const FAKE_SECRET_KEY = 'sk_test_bad'; // Known test mode; too short to permit API probes.
 const WEBHOOK_SECRET = 'whsec_' + 'e'.repeat(32);
 const FIXED_AT = '2026-09-27T00:00:00.000Z';
 
@@ -41,7 +41,10 @@ function signedWebhookEvent(payloadObj) {
   return { payload, header };
 }
 
+let migrationFixtureDir;
+const migrationFixture = require('./helpers/stripe-migration-fixture');
 async function postWebhook(baseUrl, payloadObj) {
+  migrationFixture.prepareEvent(migrationFixtureDir, payloadObj);
   const { payload, header } = signedWebhookEvent(payloadObj);
   const res = await fetch(`${baseUrl}/webhook/stripe`, {
     method: 'POST',
@@ -92,6 +95,7 @@ describe('FIX-UNIT-MONEY-3 ruling N17: post-credit webhook bookkeeping never fai
       replacements: [],
     });
     dataDir = staged.dataDir;
+    migrationFixtureDir = dataDir;
 
     writeJson(path.join(dataDir, 'learnings.json'), []);
     writeJson(path.join(dataDir, 'accounts.json'), {});
@@ -99,6 +103,7 @@ describe('FIX-UNIT-MONEY-3 ruling N17: post-credit webhook bookkeeping never fai
     writeJson(path.join(dataDir, 'credits.json'), {});
     writeJson(path.join(dataDir, 'purchase-ledger.json'), {});
 
+    migrationFixture.initialize(dataDir);
     const boot = await bootServer({
       tmpDir, port,
       env: {

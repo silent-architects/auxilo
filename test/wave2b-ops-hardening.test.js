@@ -261,14 +261,16 @@ describe('payments-switch: server gates (all five money-movement surfaces)', () 
   });
 
   it('checkout session + stripe webhook are gated before side effects', () => {
-    const co = slice("app.post('/checkout/session'", "app.post('/webhook/stripe'");
+    const co = slice("app.post('/checkout/session'", 'const stripeEventReceipts');
     assert.ok(co.indexOf('if (!paymentsEnabled())') !== -1);
-    assert.ok(co.indexOf('if (!paymentsEnabled())') < co.indexOf('createCheckoutSession('));
-    const wh = slice("app.post('/webhook/stripe'", "app.get('/account/purchases'");
+    assert.ok(co.indexOf('if (!paymentsEnabled())') < co.indexOf('await admission('));
+    const wh = slice('async function handlePlatformWebhook(', "app.get('/account/purchases'");
     const gate = wh.indexOf('if (!paymentsEnabled())');
-    assert.ok(gate !== -1 && gate < wh.indexOf('verifyWebhookSignature('),
-      'webhook gate sits before signature work — 503 makes Stripe retry (self-healing)');
-    assert.ok(gate < wh.indexOf('addDollarLot('), 'no credits granted while disabled');
+    assert.ok(gate !== -1 && gate < wh.indexOf('verifyPlatformEvent('));
+    assert.ok(gate < wh.indexOf('stripeEventDispatcher.dispatch('), 'no event effect while disabled');
+    for (const route of ['/webhook/stripe', '/webhook/stripe/legacy', '/webhook/stripe/auxilo_llc']) {
+      assert.ok(wh.includes("app.post('" + route + "', c => handlePlatformWebhook(c,"));
+    }
   });
 
   it('both withdraw rails are gated ABOVE the custodial sentinel', () => {

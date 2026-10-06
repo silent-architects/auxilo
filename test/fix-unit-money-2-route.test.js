@@ -35,7 +35,7 @@ const REPO = path.join(__dirname, '..');
 const { CURRENT_TOS_VERSION } = require('../lib/accounts.js');
 
 const SESSION_SECRET = 'fix-unit-money-2-route-test-session-secret';
-const FAKE_SECRET_KEY = 'not_a_real_stripe_key_format_placeholder_00000000';
+const FAKE_SECRET_KEY = 'sk_test_bad'; // Known test mode; too short to permit API probes.
 const WEBHOOK_SECRET = 'whsec_' + 'a'.repeat(32);
 
 const CONTRIB_ID = 'acc_fum2_contrib';
@@ -90,7 +90,10 @@ function creditsRecord(lots) {
 
 function writeJson(file, value) { fs.writeFileSync(file, JSON.stringify(value, null, 2)); }
 
+let migrationFixtureDir;
+const migrationFixture = require('./helpers/stripe-migration-fixture');
 async function postWebhook(baseUrl, payloadObj) {
+  migrationFixture.prepareEvent(migrationFixtureDir, payloadObj);
   const payload = JSON.stringify(payloadObj);
   const header = Stripe.webhooks.generateTestHeaderString({ payload, secret: WEBHOOK_SECRET });
   const res = await fetch(`${baseUrl}/webhook/stripe`, {
@@ -130,6 +133,7 @@ describe('FIX-UNIT-MONEY-2 route-level: ruling N1 (partial refund then unlock), 
       replacements: [],
     });
     dataDir = staged.dataDir;
+    migrationFixtureDir = dataDir;
 
     const now = Date.now();
     const accounts = {
@@ -152,6 +156,7 @@ describe('FIX-UNIT-MONEY-2 route-level: ruling N1 (partial refund then unlock), 
       [X1_BUYER_ID]: creditsRecord([lotFixture('pi_fum2_x1', 50)]),
     });
 
+    migrationFixture.initialize(dataDir);
     const boot = await bootServer({
       tmpDir, port,
       env: {
