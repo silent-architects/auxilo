@@ -1,3 +1,5 @@
+const historyCoverage = require('./lib/stripe-history-coverage');
+historyCoverage.assertHistoryCoverageBoot();
 const { Hono } = require('hono');
 const { serve } = require('@hono/node-server');
 const fs = require('fs');
@@ -186,6 +188,21 @@ if (!process.env.SESSION_SECRET) {
 process.umask(0o077);
 
 const app = new Hono();
+const HISTORY_WEBHOOK_PATHS = new Set(['/webhook/stripe', '/webhook/stripe/legacy', '/webhook/stripe/auxilo_llc']);
+function historyUnavailableBody() {
+  return { code: 'HISTORICAL_COVERAGE_UNKNOWN', error: 'Financial operations are paused while historical records are reconciled.', processed: false };
+}
+// This precedes authentication bookkeeping, account mutations and body allocation.
+app.use('*', async (c, next) => {
+  if (historyCoverage.historyFinancialBlocked()) {
+    const unsafe = !['GET', 'HEAD', 'OPTIONS'].includes(c.req.method);
+    const signedWebhook = c.req.method === 'POST' && HISTORY_WEBHOOK_PATHS.has(c.req.path);
+    const freeDiscovery = c.req.method === 'POST' && ['/discover', '/knowledge'].includes(c.req.path);
+    const mutatingRead = ['/account/credits', '/auth/verify', '/referral/link'].includes(c.req.path);
+    if ((unsafe && !signedWebhook && !freeDiscovery) || mutatingRead) return c.json(historyUnavailableBody(), 503);
+  }
+  return next();
+});
 
 // Host-normalization: collapse the www hostname to the apex domain.
 // Fly serves both auxilo.io and www.auxilo.io against this same app (see
@@ -266,6 +283,8 @@ app.use('*', async (c, next) => {
 const MAX_BODY_SIZE = 100 * 1024; // 100KB — generous for all Auxilo routes
 app.use('*', async (c, next) => {
   if (c.req.method === 'POST' || c.req.method === 'PUT' || c.req.method === 'PATCH') {
+    // Quarantine reads its actual byte stream with a hard bound below.
+    if (HISTORY_WEBHOOK_PATHS.has(c.req.path) && historyCoverage.historyFinancialBlocked()) return next();
     let cap = c.req.path === '/extract' ? 262144 : MAX_BODY_SIZE;
     if (c.req.path === '/pipeline/upload') cap = 262144; // LLM ingestion, like /extract
     // Cheap pre-check of the advertised Content-Length.
@@ -850,6 +869,8 @@ function legacyStripeWalResolved(entry, receipts) {
 
 function validateStripeTransferBoot() {
   if (stripeTransferStore.reason === 'attempt_store_corrupt') fatalFinancialStorage(stripeTransferStore.loadError);
+  // A completed overlay preserves the checkpoint; absent D0 inventory remains UNKNOWN.
+  if (historyCoverage.historyFinancialBlocked()) return;
   // Read the raw directory: generic WAL recovery deliberately tolerates malformed files;
   // financial admission cannot infer an empty inventory from that tolerance.
   const walDirectory = process.env.AUXILO_WAL_DIR || path.join(DATA_DIR, 'wal');
@@ -879,6 +900,7 @@ function validateStripeTransferBoot() {
 }
 
 function stripePayoutBlock({ accountId, wallet, earningsKey } = {}) {
+  if (historyCoverage.historyFinancialBlocked()) return historyUnavailableBody();
   if (financialStorageFailed || !stripeTransferStore.ready) {
     return { error: 'Withdrawal reconciliation is required before payouts can continue.', code: 'WITHDRAWAL_RECONCILIATION_REQUIRED' };
   }
@@ -994,6 +1016,7 @@ setInterval(() => {
 // Phase 0.5: Account-keyed earnings migration (SPEC-P0.5 §3.1)
 // Runs after both earnings + accounts are loaded. Idempotent + atomic.
 // The old inline migration (defaults only) is superseded by this call.
+if (!historyCoverage.historyFinancialBlocked()) {
 migrateEarningsToAccountKeyed(earnings, accounts, DATA_DIR);
 
 // AC-1: One-time pipeline-owner repair. Fixes legacy pipeline learnings whose
@@ -1105,6 +1128,8 @@ try {
     console.log('[M-B] Earnings validation passed — no discrepancies found.');
   }
 }
+
+} // Preserve UNKNOWN financial state before any migration or corrective mutation.
 
 // On first startup, seed from seed-knowledge.json if learnings is empty
 // G1_RAW_READ_ALLOW:3 — startup seed decision is an internal store check.
@@ -1538,6 +1563,7 @@ function hasUnlockEvent(eventId) {
  * Safe: writes archive first, verifies, then rewrites active file.
  */
 function compactSettlements() {
+  if (historyCoverage.historyFinancialBlocked()) return;
   try {
     if (!fs.existsSync(SETTLEMENTS_FILE)) return;
 
@@ -2006,6 +2032,7 @@ function replayPipelineApprove(entry) {
  * On failure the WAL entry is left on disk for manual inspection.
  */
 function recoverWalEntries() {
+  if (historyCoverage.historyFinancialBlocked()) return;
   const pending = getPendingWalEntries();
   if (pending.length === 0) return;
   console.log(`[wal-recovery] Found ${pending.length} pending WAL entries. Replaying...`);
@@ -2052,6 +2079,7 @@ function recoverWalEntries() {
  * it is never lost, only delayed.
  */
 function completePendingReversalsAtBoot() {
+  if (historyCoverage.historyFinancialBlocked()) return;
   let pendingLots;
   try {
     pendingLots = findAllLotsWithPendingReversal();
@@ -2135,6 +2163,7 @@ function refundDebitedSettlement(entry, s) {
 let processingResolverRunning = false; // AUD19-16: reentrancy guard (startup + hourly tail-call)
 
 async function resolveProcessingSettlements() {
+  if (historyCoverage.historyFinancialBlocked()) return;
   if (processingResolverRunning) return;
   processingResolverRunning = true;
   try {
@@ -2275,6 +2304,7 @@ function releaseOrphanedReservation(wallet, amount, settlementId = null) {
  * IMPL-A2-04: uses total_withdrawn (not withdrawn — that field does not exist).
  */
 function runConsistencyCheck() {
+  if (historyCoverage.historyFinancialBlocked()) return;
   for (const [w, entry] of Object.entries(earnings)) {
     // SPEC-P0.5: skip metadata keys (e.g. __wallet_index)
     if (w.startsWith('__')) continue;
@@ -2299,6 +2329,7 @@ let settlementDaemonRunning = false;
  * IMPL-A2-05: missing created_at defaults to Date.now() (treat as new, not ancient).
  */
 async function resolveStuckSettlements() {
+  if (historyCoverage.historyFinancialBlocked()) return;
   if (settlementDaemonRunning) {
     console.log('[settlement-daemon] Already running, skipping execution.');
     return;
@@ -2575,6 +2606,7 @@ function savePipelines() {
 //          — earnings state must be consistent before we touch on-chain state.
 const _startupBegin = Date.now();
 
+if (!historyCoverage.historyFinancialBlocked()) {
 recoverWalEntries();       // 1a. WAL crash recovery (SPEC-A2 C3)
 completePendingReversalsAtBoot(); // 1a2. N19: finish any reversal WAL recovery left pending
 
@@ -2707,6 +2739,8 @@ if (stripeTransferStore.ready) {
   }
 }
 
+} // Retain every pending WAL/attempt for explicit reconciliation.
+
 // Phase 2: Independent async startup tasks — run in parallel (AU-6)
 // resolveProcessingSettlements and resolveStuckSettlements target disjoint settlement
 // statuses and can safely run concurrently.
@@ -2714,7 +2748,7 @@ if (stripeTransferStore.ready) {
 // so it runs AFTER both recovery functions complete. This eliminates the race where
 // compactSettlements could rename SETTLEMENTS_FILE while a recovery function is still
 // appending to it, silently discarding appended data.
-Promise.all([
+if (!historyCoverage.historyFinancialBlocked()) Promise.all([
   // 2a. Legacy processing/processing_timeout recovery (SPEC-A0)
   resolveProcessingSettlements()
     .then(() => runConsistencyCheck())
@@ -2742,9 +2776,9 @@ console.log(`[startup] Startup time to server-ready: ${Date.now() - _startupBegi
 // format passes, runs in the background) + a 10-minute reprobe interval.
 // /health and the checkout route read the cached result only — no network
 // call ever sits on a request path.
-initStripeStatusProbing();
+if (!historyCoverage.historyFinancialBlocked()) initStripeStatusProbing();
 
-setInterval(() => resolveStuckSettlements().catch((err) => {
+if (!historyCoverage.historyFinancialBlocked()) setInterval(() => resolveStuckSettlements().catch((err) => {
   // Non-critical: periodic daemon tick failed. Will retry on next interval.
   console.error('[settlement-daemon] Interval tick failed:', err.message, err.stack);
 }), SETTLEMENT_DAEMON_INTERVAL_MS); // AUDIT-06: hourly
@@ -3089,6 +3123,7 @@ function rescreenLinkedWallets() {
     results.hits++;
     results.suspended.push(accountId);
     logOFACBlock(account.wallet, 'rescreen-sweep');
+    if (historyCoverage.historyFinancialBlocked()) continue;
     account.disabled_at = new Date().toISOString();
     account.disabled_reason = 'ofac_rescreen_hit';
     dirty = true;
@@ -3650,7 +3685,7 @@ function optionalAuth() {
                 c.set('authMethod', 'api_key');
                 c.set('keyLabel', result.key_label || 'default');
                 // Update last_used_at (best-effort)
-                if (result.key_index >= 0) {
+                if (result.key_index >= 0 && !historyCoverage.historyFinancialBlocked()) {
                     try {
                         const _accts = loadAccounts();
                         const _acct  = _accts[result.accountId];
@@ -4933,6 +4968,7 @@ app.post('/auth/device/authorize', async (c) => {
 
 // ── GET /account/credits (Phase 0.3) ──────────────────────────────────────
 app.get('/account/credits', requireAuth, (c) => {
+    if (historyCoverage.historyFinancialBlocked()) return c.json(historyUnavailableBody(), 503);
     const accountId = c.get('accountId');
     const status = getCreditStatus(accountId);
     return c.json(status);
@@ -5063,7 +5099,45 @@ const stripeEventDispatcher = require('./lib/stripe-event-dispatch').createStrip
     saveEarnings: () => { try { writeJSONAtomic(EARNINGS_FILE, earnings); } catch (error) { fatalFinancialStorage(error); } },
     sendOpsAlert, onFatalStorage: fatalFinancialStorage,
 });
+async function readQuarantinedWebhookBody(c) {
+    const cap = 512 * 1024;
+    const advertised = Number(c.req.header('content-length') || 0);
+    if (advertised > cap) throw Object.assign(new Error('BODY_TOO_LARGE'), { status: 413 });
+    const reader = c.req.raw.body && c.req.raw.body.getReader();
+    if (!reader) return '';
+    const chunks = []; let length = 0;
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            length += value.byteLength;
+            if (length > cap) {
+                await reader.cancel().catch(() => {});
+                throw Object.assign(new Error('BODY_TOO_LARGE'), { status: 413 });
+            }
+            chunks.push(Buffer.from(value));
+        }
+        return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks, length));
+    } finally { reader.releaseLock(); }
+}
 async function handlePlatformWebhook(c, alias) {
+    if (historyCoverage.historyFinancialBlocked()) {
+        const signature = c.req.header('stripe-signature');
+        if (!signature) return c.json({ error: 'Missing stripe-signature header' }, 400);
+        let rawBody, verified;
+        try {
+            rawBody = await readQuarantinedWebhookBody(c);
+            verified = stripePlatforms.verifyPlatformEvent(alias, rawBody, signature);
+        } catch (error) {
+            return c.json({ error: error.status === 413 ? 'Request body too large' : 'Invalid Stripe event signature or context' }, error.status === 413 ? 413 : 400);
+        }
+        try {
+            const captured = historyCoverage.captureVerifiedEvent({ rawBody, event: verified.event, context: verified.context });
+            return c.json({ ...historyUnavailableBody(), durably_recorded: captured.durably_recorded === true, event_id: verified.event.id }, 503);
+        } catch {
+            return c.json({ ...historyUnavailableBody(), durably_recorded: false }, 503);
+        }
+    }
     if (!paymentsEnabled()) return c.json(paymentsDisabledBody(), 503);
     try { assertActionAllowed('webhook'); } catch { return c.json({ code: 'STRIPE_MIGRATION_UNAVAILABLE' }, 503); }
     const signature = c.req.header('stripe-signature');
@@ -5173,6 +5247,7 @@ function acquireAccountLock(accountId) {
 // GET /account/earnings (self-healing on every balance read), and
 // POST /account/link-wallet (post-migration; route is terms-gated).
 async function sweepHeldEarnings(accountId) {
+  if (historyCoverage.historyFinancialBlocked()) return 0;
   if (!accountId) return 0;
   const acct = loadAccounts()[accountId];
   // Authoritative read + fail-closed: no account or agency not in force → never move money.
@@ -5808,7 +5883,7 @@ app.get('/account/earnings', requireSessionOrApiKey('earnings-read'), async (c) 
   });
 
   const hasWallet = !!(account.wallet);
-  const canWithdraw = hasWallet && source !== 'new' && (entry.pending_balance || 0) > 0;
+  const canWithdraw = !historyCoverage.historyFinancialBlocked() && hasWallet && source !== 'new' && (entry.pending_balance || 0) > 0;
 
   if (source === 'new') {
     // No earnings yet — return zero state. The held bucket is surfaced in BOTH
@@ -5832,7 +5907,7 @@ app.get('/account/earnings', requireSessionOrApiKey('earnings-read'), async (c) 
       // FB-2: both custodial payout rails are paused when the kill-switch is unset (launch
       // default). Surfaced so the dashboard form + MCP earnings tool are server-authoritative
       // about the pause instead of advertising a cash-out that 503s.
-      payouts_paused: process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true',
+      payouts_paused: historyCoverage.historyFinancialBlocked() || process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true',
       message: 'No earnings recorded yet',
     });
   }
@@ -5866,7 +5941,7 @@ app.get('/account/earnings', requireSessionOrApiKey('earnings-read'), async (c) 
     // FB-2: never advertise can_withdraw while the custodial payout kill-switch is engaged
     // (launch default) — both rails 503 until CUSTODIAL_WITHDRAW_ENABLED is set.
     can_withdraw: canWithdraw && process.env.CUSTODIAL_WITHDRAW_ENABLED === 'true',
-    payouts_paused: process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true',
+    payouts_paused: historyCoverage.historyFinancialBlocked() || process.env.CUSTODIAL_WITHDRAW_ENABLED !== 'true',
   });
 });
 
@@ -6106,7 +6181,7 @@ app.get('/health', (c) => {
     stripe_platforms: Object.fromEntries(['legacy', 'auxilo_llc'].map(alias => { const s = stripePlatforms.getPlatformStatus(alias); return [alias, { configured: s.configured, reason: s.reason, mode: s.mode }]; })),
     stripe_reason: stripeStatus.reason,
     stripe_mode: stripeStatus.mode,
-    stripe_transfer_ready: stripeTransferStore.ready && !financialStorageFailed,
+    stripe_transfer_ready: stripeTransferStore.ready && !financialStorageFailed && !historyCoverage.historyFinancialBlocked(),
     stripe_transfer_unresolved: stripeTransferStore.all().filter(a => !['completed', 'confirmed_not_sent'].includes(a.state)).length,
     timestamp: new Date().toISOString()
   });
