@@ -524,7 +524,7 @@ cd "${REPO_ROOT}"
 # Persisted-plan correction: two additional canonical reload / CLI tests.
 # SERVING-UNKNOWN-HISTORY: measured staged suite after reviewed serving guards,
 # typed overlay operator, durable quarantine and explicit capture recovery.
-EXPECTED_TEST_COUNT=5604
+EXPECTED_TEST_COUNT=5607
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
