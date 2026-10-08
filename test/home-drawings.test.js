@@ -504,9 +504,9 @@ describe('home drawings: the render', { timeout: 180_000 }, () => {
   async function deviceMask(page, info) {
     const clip = { x: 0, y: Math.round(info.sec.t), width: info.vw, height: Math.round(info.sec.b - info.sec.t) };
     await page.addStyleTag({ content: 'main > .on-dark:first-child > * { visibility: hidden !important; }' });
-    const on = await page.screenshot({ clip, fullPage: true });
+    const on = await page.screenshot({ clip });
     await page.addStyleTag({ content: 'main > .on-dark:first-child { background-image: none !important; }' });
-    const off = await page.screenshot({ clip, fullPage: true });
+    const off = await page.screenshot({ clip });
     const diffPage = await page.context().newPage();
     try {
       const flat = await diffPage.evaluate(async ([A, B]) => {
@@ -541,7 +541,7 @@ describe('home drawings: the render', { timeout: 180_000 }, () => {
         prev = xs[i];
       }
     }
-    const top = Math.min(...mask.map((p) => p[1]));
+    const top = mask.reduce((top, p) => Math.min(top, p[1]), Infinity);
     const topXs = mask.filter((p) => p[1] === top).map((p) => p[0]);
     return { bar, apex: { x: topXs.reduce((a, b) => a + b, 0) / topXs.length, y: top } };
   }

@@ -107,7 +107,7 @@ const EXPECTED = {
   'pricing.html': [
     'How much does it cost to unlock a learning on Auxilo?',
     'Can one learning earn more than once?',
-    'What are Auxilo credit packs?',
+    'How do I add funds?',
   ],
   'api.html': [
     'How do AI agents pay each other with x402?',

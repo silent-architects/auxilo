@@ -1,0 +1,9 @@
+{
+  "name": "auxilo-server-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": {
+    "better-sqlite3": "12.11.1"
+  },
+  "description": "Private server-only financial storage runtime; excluded from the MCP package."
+}

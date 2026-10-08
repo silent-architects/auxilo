@@ -195,7 +195,7 @@ describe('T4 dark-safe rendering: no purchase button/disclosures without stripe_
     for (const tag of btnMatches) {
       assert.ok(tag.includes('style="display:none"'), `button must default hidden: ${tag}`);
     }
-    assert.ok(PRICING_HTML.includes("data.payments_enabled === true && data.stripe_configured === true"));
+    assert.ok(PRICING_HTML.includes("(data.payments_enabled === true || data.financial_epoch?.funding_available === true) && data.stripe_configured === true"));
     assert.ok(PRICING_HTML.includes("document.querySelectorAll('.pack-buy-btn').forEach"));
   });
   it('pricing.html: the disclosure block also defaults hidden', () => {
@@ -203,7 +203,7 @@ describe('T4 dark-safe rendering: no purchase button/disclosures without stripe_
   });
   it('dashboard.html: pack rows are built with buttons hidden until checkStripeConfigured() confirms both flags', () => {
     assert.ok(DASHBOARD_HTML.includes("btn.style.display = 'none'; // dark-safe default"));
-    assert.ok(DASHBOARD_HTML.includes('_stripeReady = !!(data && data.payments_enabled === true && data.stripe_configured === true)'));
+    assert.ok(DASHBOARD_HTML.includes('_stripeReady = !!(data && (data.payments_enabled === true || data.financial_epoch?.funding_available === true) && data.stripe_configured === true)'));
   });
   it('neither page fires a checkout POST from a hidden/unrevealed button (buttons are the only trigger, gated by the same visibility check)', () => {
     // The purchase functions themselves do not re-check stripe_configured (a
@@ -222,7 +222,7 @@ describe('T4 dark-safe rendering: no purchase button/disclosures without stripe_
 describe('T5 /health: stripe_configured field', () => {
   it('is derived from getStripeStatus() (usability, not bare presence), plus reason + mode', () => {
     const h = sliceAt(SERVER_SRC, "app.get('/health', (c) => {", 6000);
-    assert.ok(h.includes('stripe_configured: stripeStatus.configured && migrationStatus.ready && migrationStatus.allow_checkout && checkoutIntents.ready,'));
+    assert.ok(h.includes('stripe_configured: prospectiveEpoch ? stripeStatus.configured && checkoutIntents.ready : stripeStatus.configured && migrationStatus.ready && migrationStatus.allow_checkout && checkoutIntents.ready,'));
     assert.ok(h.includes('stripe_reason: stripeStatus.reason,'));
     assert.ok(h.includes('stripe_mode: stripeStatus.mode,'));
     assert.ok(h.includes('payments_enabled: paymentsEnabled(),'));
@@ -275,7 +275,7 @@ describe('T7 /checkout/session: current-Terms-acceptance gate', () => {
   // markers below.
   it('gates on hasAcceptedCurrentTos before pack validation / session creation, after paymentsEnabled', () => {
     const h = sliceAt(SERVER_SRC, "app.post('/checkout/session', requireAuth", 7000);
-    const paymentsIdx = h.indexOf('if (!paymentsEnabled())');
+    const paymentsIdx = h.indexOf("if (!paymentsEnabled('funding'))");
     const termsIdx = h.indexOf('if (!hasAcceptedCurrentTos(checkoutAccount))');
     const packIdx = h.indexOf('const { pack } = body');
     const createIdx = h.indexOf('createSession: createCheckoutSession');

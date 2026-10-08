@@ -511,7 +511,7 @@ describe('[the LOW finding, L-a] reconcile-ledgers.js measures spend from the pa
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe('[the LOW finding, L-c] the unlock path saves earnings unconditionally after an on-the-spot reversal', () => {
-  it('server.js no longer guards the on-the-spot save behind `if (totalReversed > 0)`', () => {
+  it('server.js no longer guards the on-the-spot save behind `if (totalReversed > 0)`', async () => {
     const source = fs.readFileSync(path.join(REPO, 'server.js'), 'utf8');
     assert.doesNotMatch(
       source,
@@ -519,21 +519,22 @@ describe('[the LOW finding, L-c] the unlock path saves earnings unconditionally 
       'L-c: the save must never be conditioned on totalReversed -- a racing delivery can have already applied the same entry id in memory (totalReversed 0) while its own save never reached disk',
     );
 
-    // The fixed call site: inside the unlock handler's needsReversal
-    // branch, `await reverseCreditLotFunding(...)` is followed (within a
-    // small window, allowing only comments between them) by an
-    // UNCONDITIONAL safeWrite(EARNINGS_FILE, earnings), before
-    // finalizePendingReversals runs.
+    // Execute the exact save segment: both legacy and fenced prospective
+    // writers must persist even when the reversal reports zero new amount.
     const anchor = source.indexOf('fundResult.needsReversal.length > 0');
     assert.ok(anchor > 0, 'the on-the-spot reversal branch must still exist');
-    const window = source.slice(anchor, anchor + 1200);
-    assert.match(window, /await reverseCreditLotFunding\(earnings, fundResult\.needsReversal\)/);
-    assert.match(
-      window,
-      /await reverseCreditLotFunding\(earnings, fundResult\.needsReversal\);(?:\s*\/\/[^\n]*\n|\s*\n)*\s*safeWrite\(EARNINGS_FILE, earnings\);/,
-      'L-c: safeWrite must run right after the reversal, unconditionally (only comments/whitespace between them)',
-    );
-    assert.match(window, /finalizePendingReversals\(buyerAccountId, affectedLotId\)/);
+    const start=source.indexOf('const { totalReversed }',anchor),end=source.indexOf('const affectedLotIds',start);
+    assert.ok(start>anchor&&end>start,'bounded reversal/save segment must exist');
+    const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
+    const run=new AsyncFunction('reverseCreditLotFunding','earnings','fundResult','prospectiveMoney','require','walId','safeWrite','EARNINGS_FILE',source.slice(start,end));
+    const earnings={},fundResult={needsReversal:[{id:'exact'}]},capability={};
+    for(const fenced of [false,true])for(const totalReversed of [0,1]){
+      const events=[],recoveryWal={beginEarningsContinuation(id,rows){assert.equal(id,'wal');assert.equal(rows,fundResult.needsReversal);events.push('fence');return capability;},writeEarnings(id,cap,write){assert.equal(id,'wal');assert.equal(cap,capability);events.push('protected-write');write();}};
+      await run(async(value,rows)=>{assert.equal(value,earnings);assert.equal(rows,fundResult.needsReversal);events.push('reverse');return {totalReversed};},earnings,fundResult,fenced?{failureControl:{}}:null,name=>{assert.equal(name,'./lib/wal');return recoveryWal;},'wal',(file,value)=>{assert.equal(file,'earnings');assert.equal(value,earnings);events.push('save');},'earnings');
+      assert.deepEqual(events,fenced?['reverse','fence','protected-write','save']:['reverse','save']);
+    }
+    assert.match(source.slice(end,end+600),/finalizePendingReversals\(buyerAccountId, affectedLotId\)/);
+
   });
 
   it('the underlying mechanism: reverseOneFundedUnlock reports found:true (finalizable) even when the entry\'s id was already applied and nothing new was reversed', async () => {

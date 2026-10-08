@@ -82,11 +82,11 @@
         },
         "hasOfferCatalog": {
           "@type": "OfferCatalog",
-          "name": "Auxilo credit packs",
+          "name": "Auxilo funding amounts",
           "itemListElement": [
-            { "@type": "Offer", "name": "Starter", "price": "10.00", "priceCurrency": "USD", "description": "Adds $10 to your balance. Your balance never expires." },
-            { "@type": "Offer", "name": "Growth", "price": "25.00", "priceCurrency": "USD", "description": "Adds $25 to your balance. Your balance never expires." },
-            { "@type": "Offer", "name": "Pro", "price": "100.00", "priceCurrency": "USD", "description": "Adds $100 to your balance. Your balance never expires." }
+            { "@type": "Offer", "name": "Add funds $10", "price": "10.00", "priceCurrency": "USD", "description": "Adds $10 to your balance. Your balance never expires." },
+            { "@type": "Offer", "name": "Add funds $25", "price": "25.00", "priceCurrency": "USD", "description": "Adds $25 to your balance. Your balance never expires." },
+            { "@type": "Offer", "name": "Add funds $100", "price": "100.00", "priceCurrency": "USD", "description": "Adds $100 to your balance. Your balance never expires." }
           ]
         }
       },
@@ -112,10 +112,10 @@
           },
           {
             "@type": "Question",
-            "name": "What are Auxilo credit packs?",
+            "name": "How do I add funds?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Credit packs fund your account by card. Starter adds $10 to your balance, Growth $25 and Pro $100. An unlock takes the listed price from your balance, which never expires."
+              "text": "Add $10, $25 or $100 to your account by card, dollar for dollar. An unlock takes the listed price from your balance, which never expires."
             }
           }
         ]
@@ -754,7 +754,7 @@
         <div class="payment-methods">
           <div class="payment-method-card">
             <span class="pm-title">API Key + Balance</span>
-            <p>The default path. Create an account with your email, fund it with a credit pack, generate an API key, and start discovering. No crypto required.</p>
+            <p>The default path. Create an account with your email, add funds, generate an API key, and start discovering. No crypto required.</p>
           </div>
           <div class="payment-method-card">
             <span class="pm-title">x402 Micropayments</span>
@@ -779,33 +779,33 @@
          unchanged. The intro paragraph's trailing "Credits never expire."
          is cut per spec (the free-tier note directly below still states
          it) — a deletion, no new copy. -->
-    <h3 id="credits-heading">Credit Packs</h3>
+    <h3 id="credits-heading">Add Funds</h3>
     <p class="section-intro">For builders and agents who'd rather authenticate with an API key than use x402. Fund your account once and unlock as you go. An unlock takes the listed price from your balance.</p>
 
-    <div class="pricing-packs" aria-label="Credit pack options">
+    <div class="pricing-packs" aria-label="Funding amounts">
       <div class="pack-card">
-        <p class="pack-name">Starter</p>
-        <p class="pack-price">$10<span>/pack</span></p>
+        <p class="pack-name">Add funds</p>
+        <p class="pack-price">$10</p>
         <p class="pack-detail">
           Adds $10 to your balance.
         </p>
-        <button type="button" class="btn-primary pack-buy-btn" data-pack="starter" style="display:none" onclick="auxiloBuyCredits('starter')">Buy pack</button>
+        <button type="button" class="btn-primary pack-buy-btn" data-pack="starter" style="display:none" onclick="auxiloBuyCredits('starter')">Add funds</button>
       </div>
       <div class="pack-card">
-        <p class="pack-name">Growth</p>
-        <p class="pack-price">$25<span>/pack</span></p>
+        <p class="pack-name">Add funds</p>
+        <p class="pack-price">$25</p>
         <p class="pack-detail">
           Adds $25 to your balance.
         </p>
-        <button type="button" class="btn-primary pack-buy-btn" data-pack="growth" style="display:none" onclick="auxiloBuyCredits('growth')">Buy pack</button>
+        <button type="button" class="btn-primary pack-buy-btn" data-pack="growth" style="display:none" onclick="auxiloBuyCredits('growth')">Add funds</button>
       </div>
       <div class="pack-card">
-        <p class="pack-name">Pro</p>
-        <p class="pack-price">$100<span>/pack</span></p>
+        <p class="pack-name">Add funds</p>
+        <p class="pack-price">$100</p>
         <p class="pack-detail">
           Adds $100 to your balance.
         </p>
-        <button type="button" class="btn-primary pack-buy-btn" data-pack="pro" style="display:none" onclick="auxiloBuyCredits('pro')">Buy pack</button>
+        <button type="button" class="btn-primary pack-buy-btn" data-pack="pro" style="display:none" onclick="auxiloBuyCredits('pro')">Add funds</button>
       </div>
     </div>
 
@@ -819,6 +819,7 @@
       <p class="purchase-stripe-badge">Powered by Stripe</p>
     </div>
 
+<div id="prospective-purchase-disclosures" class="purchase-disclosures" hidden><p>Add funds dollar for dollar. You can request a return of eligible unused paid funds to the original payment method. Available earned margin covers verified costs first; any uncovered cost and the amount returned are shown before you confirm.</p><p>Review the <a href="/terms">Terms of Service</a> before adding funds. Prices are in USD.</p></div>
     <div class="free-tier" role="note">
       <div class="ft-text">
         Your balance pays only for unlocks, and it never expires.
@@ -947,11 +948,11 @@
       </div>
       <div class="faq-item">
         <button class="faq-question" aria-expanded="false" onclick="toggleFaq(this)">
-          <span>What are Auxilo credit packs?</span>
+          <span>How do I add funds?</span>
           <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <div class="faq-answer">
-          <div class="faq-answer-inner">Credit packs fund your account by card. Starter adds $10 to your balance, Growth $25 and Pro $100. An unlock takes the listed price from your balance, which never expires.</div>
+          <div class="faq-answer-inner">Add $10, $25 or $100 to your account by card, dollar for dollar. An unlock takes the listed price from your balance, which never expires.</div>
         </div>
       </div>
     </div>
@@ -1027,10 +1028,10 @@
   fetch('/health')
     .then(function (r) { return r.json(); })
     .then(function (data) {
-      if (data && data.payments_enabled === true && data.stripe_configured === true) {
+      if (data && (data.payments_enabled === true || data.financial_epoch?.funding_available === true) && data.stripe_configured === true) {
         document.querySelectorAll('.pack-buy-btn').forEach(function (btn) { btn.style.display = ''; });
         var disclosures = document.getElementById('purchase-disclosures');
-        if (disclosures) disclosures.style.display = '';
+        if (data.financial_epoch?.funding_available) { document.getElementById('prospective-purchase-disclosures').hidden = false; } else if (disclosures) disclosures.style.display = '';
       }
     })
     .catch(function () { /* stays dark-safe: no button, no disclosures */ });
@@ -1056,7 +1057,7 @@
           window.location = res.data.url;
           return;
         }
-        if (btn) { btn.disabled = false; btn.textContent = 'Buy pack'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Add funds'; }
         // CREDITS-CONTROL PART 1 micro-fix (should-fix 2): the Terms clickwrap
         // gate lives on the dashboard, not here — route there instead of a
         // dead-end alert with no way to accept (no new strings).
@@ -1067,7 +1068,7 @@
         window.alert((res.data && res.data.error) || 'Could not start checkout. Please try again.');
       })
       .catch(function () {
-        if (btn) { btn.disabled = false; btn.textContent = 'Buy pack'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Add funds'; }
         window.alert('Could not start checkout. Check your connection and try again.');
       });
   };

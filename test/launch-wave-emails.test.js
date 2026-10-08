@@ -486,7 +486,7 @@ describe('LAUNCH-WAVE-EMAILS: source-inspection wiring checks', () => {
     const verify = slice(ACCOUNTS_SRC, "app.get('/auth/verify'", "app.post('/account/api-keys'");
     const createIdx = verify.indexOf('findOrCreateAccount(matchedEntry.email)');
     const hookIdx = verify.indexOf("if (created && process.env.WELCOME_EMAIL_ENABLED === 'true')");
-    const jwtIdx = verify.indexOf('signJwt(accountId, matchedEntry.email)');
+    const jwtIdx = verify.indexOf('signJwt(accountId, verifiedEmail)');
     assert.ok(createIdx !== -1 && hookIdx > createIdx);
     assert.ok(jwtIdx > hookIdx);
     const hookBlock = verify.slice(hookIdx, jwtIdx);
@@ -764,7 +764,7 @@ describe('LAUNCH-WAVE-EMAILS: withAccountLock concurrency guard (PM defect #3)',
 describe('LAUNCH-WAVE-EMAILS: welcome dev-mode log hygiene (PM defect #4, source pin)', () => {
   it('lib/accounts.js redacts the email in the welcome dev-mode log line, the same way the earning-digest dev-mode line already does', () => {
     const accountsSrc = fs.readFileSync(path.join(ROOT, 'lib', 'accounts.js'), 'utf8');
-    assert.match(accountsSrc, /Welcome email skipped \(dev mode\) for \$\{email_\.redactEmail\(matchedEntry\.email\)\}/);
+    assert.match(accountsSrc, /Welcome email skipped \(dev mode\) for \$\{email_\.redactEmail\(verifiedEmail\)\}/);
     assert.doesNotMatch(accountsSrc, /Welcome email skipped \(dev mode\) for \$\{matchedEntry\.email\}/,
       'the un-redacted form must not survive');
   });

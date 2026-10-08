@@ -1281,7 +1281,13 @@
       .credit-pack-row { flex-wrap: wrap; }
       .credit-pack-row > div:first-child { flex: 1 1 100%; }
     }
-  </style>
+  #funds-return-panel form { display:grid; gap:12px; max-width:480px; }
+#funds-return-panel input, #funds-return-panel select { width:100%; min-width:0; padding:12px; color:var(--ivory); background:var(--charcoal); border:1px solid var(--slate); }
+#funds-return-panel dl { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px 16px; }
+#funds-return-panel dd { margin:0; text-align:right; }
+#funds-return-panel button { margin:8px 12px 8px 0; white-space:normal; }
+#funds-return-panel :focus-visible { outline:2px solid var(--ivory); outline-offset:3px; }
+</style>
 </head>
 <body>
 
@@ -1578,6 +1584,7 @@
       <div id="credits-content" style="display:none">
         <div id="credit-balance-line">—</div>
         <div id="credit-balance-frozen" style="display:none;font-size:13px;color:var(--slate);margin-top:2px"></div>
+        <p id="legacy-balance-status" hidden></p>
         <div id="credit-balance-sub">Your balance never expires.</div>
         <p style="font-size:13px;color:var(--ivory);margin-bottom:2px">Your agent spends it through an API key you generate.</p>
         <p style="font-size:13px;color:var(--slate);margin-bottom:20px">An unlock takes the listed price from your balance.</p>
@@ -1591,6 +1598,9 @@
         </div>
       </div>
     </div>
+
+<div id="prospective-purchase-disclosures" class="purchase-disclosures" hidden><p>Add funds dollar for dollar. You can request a return of eligible unused paid funds to the original payment method. Available earned margin covers verified costs first; any uncovered cost and the amount returned are shown before you confirm.</p><p>Review the <a href="/terms">Terms of Service</a> before adding funds. Prices are in USD.</p></div>
+    <section id="funds-return-panel" class="dash-card" hidden aria-labelledby="funds-return-title"></section>
 
     <!-- Purchase history -->
     <div class="dash-card">
@@ -1657,6 +1667,7 @@
   </div>
 </footer>
 
+<script src="/dashboard-funds-return.js?v=666ccc62"></script>
 <script src="/dashboard-review.js?v=67818a67"></script>
 <script src="/dashboard-clean-lane.js?v=3307467f"></script>
 <script>
@@ -1695,6 +1706,7 @@
     // it -- closing the dialog restores both.
     var termsOverlay = document.getElementById('terms-dialog-overlay');
     if (termsOverlay && termsOverlay.style.display !== 'none' && window.closeTermsDialog) window.closeTermsDialog();
+    window.AuxiloFundsReturn?.stop();
     clearToken();
     showLoginScreen(); // hides dash-view and clears login-alert
     showAlert('login-alert', 'Your session ended. Sign in again.', 'info');
@@ -1867,6 +1879,7 @@
     // the poll's own pending timer outright, so it never even fires again.
     _sessionEndedHandled = true;
     if (_creditPollTimeoutId !== null) { clearTimeout(_creditPollTimeoutId); _creditPollTimeoutId = null; }
+    window.AuxiloFundsReturn?.stop();
     clearToken();
     showLoginScreen();
   };
@@ -1890,6 +1903,7 @@
     loadEarnings();
     loadApiKeys();
     loadPurchases();
+    window.AuxiloFundsReturn?.init({api:apiFetch});
     loadCredits();          // CREDITS-CONTROL PART 1: balance + pack controls
     loadAccountSettings();  // LW3: extraction mode (pending empty-state copy) + unlock-email setting
     window.loadPendingQueue(); // LW3 (replaces the old badge-only loader): same-cost call, full triage renders directly
@@ -4285,6 +4299,8 @@
     var total = data && data.credit_balance && typeof data.credit_balance.total_usd === 'number'
       ? data.credit_balance.total_usd : null;
     _creditsBalanceCache = total;
+    var legacy = document.getElementById('legacy-balance-status');
+    if (legacy) { legacy.hidden = !data?.legacy_restricted; legacy.textContent = data?.legacy_restricted ? 'Restricted historical balance: ' + fmt(data.legacy_restricted.balance_usd || 0) + (data.legacy_restricted.units ? ' and ' + data.legacy_restricted.units + ' legacy units' : '') + '. Unavailable for new spending or returns.' : ''; }
     // One balance, in dollars, never adjacent to the Earnings card's numbers (GOV-2 A6).
     line.textContent = total !== null ? fmt(total) : '—';
 
@@ -4331,13 +4347,13 @@
       right.style.gap = '12px';
       var price = document.createElement('span');
       price.className = 'cpr-price';
-      price.textContent = '$' + p.price_usd + '/pack'; // textContent -- safe
+      price.textContent = '$' + p.price_usd; // textContent -- safe
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'btn btn-primary btn-sm credit-buy-btn pack-buy-btn';
       btn.setAttribute('data-pack', p.id);
       btn.style.display = 'none'; // dark-safe default; checkStripeConfigured() reveals it
-      btn.textContent = 'Buy pack';
+      btn.textContent = 'Add funds';
       btn.onclick = function () { auxiloBuyCredits(p.id, btn); };
       right.appendChild(price);
       right.appendChild(btn);
@@ -4349,18 +4365,15 @@
   }
 
   function checkStripeConfigured() {
-    if (_stripeReady) {
-      document.querySelectorAll('#credits-content .pack-buy-btn').forEach(function (b) { b.style.display = ''; });
-      show('purchase-disclosures');
-      return;
-    }
     fetch('/health')
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        _stripeReady = !!(data && data.payments_enabled === true && data.stripe_configured === true);
+        _stripeReady = !!(data && (data.payments_enabled === true || data.financial_epoch?.funding_available === true) && data.stripe_configured === true);
+        document.querySelectorAll('#credits-content .pack-buy-btn').forEach(function (b) { b.style.display = _stripeReady ? '' : 'none'; });
+        if (!_stripeReady) { hide('purchase-disclosures'); document.getElementById('prospective-purchase-disclosures').hidden = true; }
         if (_stripeReady) {
           document.querySelectorAll('#credits-content .pack-buy-btn').forEach(function (b) { b.style.display = ''; });
-          show('purchase-disclosures');
+          if (data.financial_epoch?.funding_available) { hide('purchase-disclosures'); document.getElementById('prospective-purchase-disclosures').hidden = false; } else show('purchase-disclosures');
         }
       })
       .catch(function () { /* stays dark-safe: no button, no disclosures */ });
@@ -4379,7 +4392,7 @@
           window.location = res.data.url;
           return;
         }
-        if (btn) { btn.disabled = false; btn.textContent = 'Buy pack'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Add funds'; }
         // CREDITS-CONTROL PART 1 micro-fix (should-fix 2): a TERMS_NOT_ACCEPTED
         // 403 has a real route to resolution on this page — the existing
         // #terms-gate clickwrap card — so surface that instead of a dead-end
@@ -4395,7 +4408,7 @@
         showAlert('dash-alert', (res.data && res.data.error) || 'Could not start checkout. Please try again.', 'error');
       })
       .catch(function () {
-        if (btn) { btn.disabled = false; btn.textContent = 'Buy pack'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Add funds'; }
         showAlert('dash-alert', 'Could not start checkout. Check your connection and try again.', 'error');
       });
   };

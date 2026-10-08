@@ -11,8 +11,8 @@
 //                                                            upload (Tigris)
 //
 // Object layout in the bucket:
-//   daily/auxilo-data-<UTC-timestamp>.tar.gz.enc    (pruned after 30 days)
-//   weekly/auxilo-data-<ISO-week>.tar.gz.enc        (pruned after 84 days)
+//   daily/auxilo-data-<UTC-timestamp>.tar.gz.enc    (expires within 7 days of source cut)
+//   weekly/auxilo-data-<ISO-week>.tar.gz.enc        (inherits the same source expiry)
 //   freshness/latest.json                           (monitoring marker)
 //
 // Encrypted file format:  "AUXBKUP1" (8B) ‖ IV (12B) ‖ ciphertext ‖ GCM tag (16B)
@@ -42,8 +42,8 @@ const HEADER_LEN = MAGIC.length + IV_LEN;
 const DAILY_PREFIX = 'daily/';
 const WEEKLY_PREFIX = 'weekly/';
 const MARKER_KEY = 'freshness/latest.json';
-const DAILY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;   // 30 days
-const WEEKLY_RETENTION_MS = 84 * 24 * 60 * 60 * 1000;  // 12 weeks
+const DAILY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;    // published seven-day maximum
+const WEEKLY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;   // promotion never renews expiry
 const CYCLE_TIMEOUT_MS = 15 * 60 * 1000;               // watchdog
 
 // Paths under the data dir excluded from the archive:
@@ -213,6 +213,8 @@ class Meter extends Transform {
 
 /** Row counts for the freshness marker + restore-drill integrity check. */
 function readCounts(dataDir) {
+  const cp=require('../lib/money-checkpoint');
+  if(fs.existsSync(path.join(dataDir,cp.MANIFEST))){const manifest=cp.validateCheckpoint(fs.realpathSync(dataDir));return cp.withCheckpointContents(dataDir,manifest,readCounts);}
   const counts = {};
   const spec = [
     ['learnings', 'learnings.json'],
@@ -220,7 +222,8 @@ function readCounts(dataDir) {
   ];
   for (const [name, file] of spec) {
     try {
-      const parsed = JSON.parse(fs.readFileSync(path.join(dataDir, file), 'utf8'));
+      const epoch=name==='accounts'&&fs.existsSync(path.join(dataDir,'financial-epoch.json'))?require('../lib/financial-epoch').resolveRuntimeEpoch({root:dataDir}):null;
+      const parsed = JSON.parse(fs.readFileSync(epoch?require('../lib/financial-epoch').pathFor('accounts',epoch):path.join(dataDir,file),'utf8'));
       counts[name] = Array.isArray(parsed)
         ? parsed.length
         : Object.keys(parsed).filter((k) => !k.startsWith('__')).length;
@@ -273,6 +276,19 @@ async function listAllObjects(send, bucket, prefix) {
   return out;
 }
 
+// Initialized finance always archives a validated immutable cut. Keep one cut
+// across failed uploads; do not fall back to tar of live participants.
+async function backupSource(config,deps,now){
+ const initialized=fs.existsSync(path.join(config.dataDir,'financial-epoch.json'))||fs.existsSync(path.join(config.dataDir,'financial-epochs'));
+ if(!initialized)return{directory:config.dataDir,checkpoint:null};
+ const cp=require('../lib/money-checkpoint'),pending=path.join(config.dataDir,'.money-checkpoint-pending.json');let result;
+ if(fs.existsSync(pending)){const row=JSON.parse(fs.readFileSync(pending,'utf8'));const directory=cp.checkpointDirectory(config.dataDir,row.checkpoint_id),manifest=cp.validateCheckpoint(directory,{now:now.getTime()});if(manifest.checksum!==row.digest)throw Error('CHECKPOINT_PENDING_CONFLICT');result={...row,directory,manifest};}
+ else{result=await(deps.requestCheckpoint||cp.requestMoneyCheckpoint)({root:config.dataDir});const directory=cp.checkpointDirectory(config.dataDir,result.checkpoint_id),manifest=cp.validateCheckpoint(directory,{now:now.getTime()});if(manifest.checksum!==result.digest)throw Error('CHECKPOINT_RESPONSE_MISMATCH');result={...result,directory,manifest};require('../lib/stripe-transfer-persistence').writeJSONAtomic(pending,{checkpoint_id:result.checkpoint_id,digest:result.digest});}
+ if(Date.parse(result.manifest.expires_at)<=now.getTime()+CYCLE_TIMEOUT_MS)throw Error('CHECKPOINT_UPLOAD_EXPIRY_TOO_CLOSE');
+ return{directory:result.directory,checkpoint:result,pending};
+}
+async function pruneCheckpointVersions(send,bucket,now){let keyMarker,versionMarker;const doomed=[];for(const prefix of[DAILY_PREFIX,WEEKLY_PREFIX]){keyMarker=undefined;versionMarker=undefined;do{const page=await send(cmd('ListObjectVersionsCommand',{Bucket:bucket,Prefix:prefix,KeyMarker:keyMarker,VersionIdMarker:versionMarker}));for(const version of page.Versions||[]){if(!version.VersionId||!version.Key)throw Error('BACKUP_VERSION_INVENTORY_INVALID');const head=await send(cmd('HeadObjectCommand',{Bucket:bucket,Key:version.Key,VersionId:version.VersionId}));const expiry=Date.parse(head.Metadata?.expires_at);if(Number.isFinite(expiry)&&expiry<=now.getTime())doomed.push({Key:version.Key,VersionId:version.VersionId});}if(page.IsTruncated&&(!page.NextKeyMarker||!page.NextVersionIdMarker))throw Error('BACKUP_VERSION_INVENTORY_INCOMPLETE');keyMarker=page.IsTruncated?page.NextKeyMarker:undefined;versionMarker=page.IsTruncated?page.NextVersionIdMarker:undefined;}while(keyMarker);}for(let i=0;i<doomed.length;i+=1000){const result=await send(cmd('DeleteObjectsCommand',{Bucket:bucket,Delete:{Objects:doomed.slice(i,i+1000),Quiet:false}}));if(result.Errors?.length)throw Error('BACKUP_VERSION_DELETE_FAILED');}return doomed;}
+
 // ── The cycle ─────────────────────────────────────────────────────────────
 
 /**
@@ -289,33 +305,32 @@ async function runBackupCycle(config, deps = {}) {
   if (typeof send !== 'function') throw new Error('runBackupCycle: deps.send is required');
 
   // 1. Row counts BEFORE the tar so marker counts describe this snapshot.
-  const counts = readCounts(config.dataDir);
+  const archiveSource = await backupSource(config,deps,now);
+  const counts = readCounts(archiveSource.directory);
   log(`counts: learnings=${counts.learnings} accounts=${counts.accounts}`);
 
   // 2. tar (streaming). busybox tar on prod, bsdtar on macOS — flags shared.
-  const tarArgs = ['-czf', '-', ...TAR_EXCLUDES.map((p) => `--exclude=${p}`), '-C', config.dataDir, '.'];
-  const spawnTar = deps.spawnTar || (() => spawn('tar', tarArgs, { stdio: ['ignore', 'pipe', 'pipe'] }));
-  const tar = spawnTar();
-  let tarStderr = '';
-  if (tar.stderr) tar.stderr.on('data', (d) => { tarStderr += d.toString().slice(0, 2000); });
-  const tarExit = new Promise((resolve, reject) => {
-    tar.on('error', reject);
-    tar.on('close', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`tar exited ${code}: ${tarStderr.trim()}`));
-    });
-  });
-
-  // 3. encrypt + meter + upload (single streaming pipeline).
-  const meter = new Meter();
-  Readable.from(encryptGen(tar.stdout, config.keyHex)).pipe(meter);
-  const objectKey = buildDailyKey(now);
+  let plaintext,tarExit=Promise.resolve();
+  if(archiveSource.checkpoint)plaintext=require('../lib/money-checkpoint').checkpointBackupStream(archiveSource.directory);
+  else {
+    const tarArgs = ['-czf', '-', ...TAR_EXCLUDES.map((p) => `--exclude=${p}`), '-C', archiveSource.directory, '.'];
+    const spawnTar = deps.spawnTar || (() => spawn('tar', tarArgs, { stdio: ['ignore', 'pipe', 'pipe'] }));
+    const tar = spawnTar();let tarStderr='';
+    if(tar.stderr)tar.stderr.on('data',d=>{tarStderr+=d.toString().slice(0,2000);});
+    tarExit=new Promise((resolve,reject)=>{tar.on('error',reject);tar.on('close',code=>code===0?resolve():reject(new Error(`tar exited ${code}: ${tarStderr.trim()}`)));});
+    plaintext=tar.stdout;
+  }
+  const meter=new Meter(),encrypted=Readable.from(encryptGen(plaintext,config.keyHex));
+  encrypted.on('error',error=>meter.destroy(error));encrypted.pipe(meter);
+  const cutTime = archiveSource.checkpoint ? new Date(archiveSource.checkpoint.manifest.cut_at) : now;
+  const objectKey = buildDailyKey(cutTime);
   log(`uploading ${objectKey}`);
   await upload(s3ForUpload, {
     Bucket: config.bucket,
     Key: objectKey,
     Body: meter,
     ContentType: 'application/octet-stream',
+    Metadata: {cut_at:cutTime.toISOString(),expires_at:archiveSource.checkpoint?.manifest.expires_at||new Date(cutTime.getTime()+DAILY_RETENTION_MS).toISOString(),...(archiveSource.checkpoint?{checkpoint_id:archiveSource.checkpoint.checkpoint_id,checkpoint_digest:archiveSource.checkpoint.digest}:{})},
   });
   await tarExit; // surface a tar failure even though upload completed
   const bytes = meter.bytes;
@@ -330,7 +345,7 @@ async function runBackupCycle(config, deps = {}) {
   log('upload verified (HEAD size match)');
 
   // 5. Weekly promotion — first successful daily of each ISO week.
-  const weeklyKey = buildWeeklyKey(now);
+  const weeklyKey = buildWeeklyKey(cutTime);
   let weeklyPromoted = false;
   let weeklyExists = false;
   try {
@@ -362,6 +377,7 @@ async function runBackupCycle(config, deps = {}) {
     bytes,
     sha256,
     counts,
+    ...(archiveSource.checkpoint ? {checkpoint_id:archiveSource.checkpoint.checkpoint_id,checkpoint_digest:archiveSource.checkpoint.digest,cut_at:archiveSource.checkpoint.manifest.cut_at,expires_at:archiveSource.checkpoint.manifest.expires_at} : {}),
   };
   await send(cmd('PutObjectCommand', {
     Bucket: config.bucket,
@@ -385,7 +401,8 @@ async function runBackupCycle(config, deps = {}) {
     log(`pruned ${doomed.length} expired object(s)`);
   }
 
-  return { objectKey, bytes, sha256, counts, weeklyPromoted, pruned: doomed };
+  let prunedVersions=[];if(archiveSource.checkpoint){prunedVersions=await pruneCheckpointVersions(send,config.bucket,now);fs.unlinkSync(archiveSource.pending);require('../lib/stripe-transfer-persistence').syncDirectory(config.dataDir);fs.rmSync(archiveSource.directory,{recursive:true});require('../lib/stripe-transfer-persistence').syncDirectory(path.dirname(archiveSource.directory));}
+  return { objectKey, bytes, sha256, counts, weeklyPromoted, pruned: doomed,prunedVersions };
 }
 
 // ── CLI entry ─────────────────────────────────────────────────────────────
@@ -421,6 +438,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  backupSource,pruneCheckpointVersions,
   MAGIC,
   MARKER_KEY,
   DAILY_PREFIX,

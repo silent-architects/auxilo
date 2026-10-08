@@ -20,6 +20,15 @@
 const fs = require('fs');
 const path = require('path');
 const APP = process.env.APP_DIR || '/app';
+// A standalone catalog writer cannot join the running financial coordinator.
+// Refuse before participant imports, model calls, backups or financial reads.
+if (process.argv.includes('--apply')) {
+  const roots = [path.join(APP, 'data'), process.env.AUXILO_DATA_DIR, process.env.AUXILO_LEARNINGS_FILE && path.dirname(process.env.AUXILO_LEARNINGS_FILE)].filter(Boolean);
+  if (roots.some(root => fs.existsSync(path.join(root, 'financial-epoch.json')) || fs.existsSync(path.join(root, 'financial-epochs')))) {
+    throw Object.assign(new Error('EPOCH_COORDINATED_CATALOG_WRITE_REQUIRED'), {code:'EPOCH_COORDINATED_CATALOG_WRITE_REQUIRED'});
+  }
+}
+
 const { classifySensitivity } = require(path.join(APP, 'lib/content-sensitivity.js'));
 const { classifySensitivityLLM, combineSensitivity, isLlmSensitivityEnabled } = require(path.join(APP, 'lib/content-sensitivity-llm.js'));
 const { isPublicationTrusted } = require(path.join(APP, 'lib/publication-authority.js'));

@@ -173,11 +173,11 @@ node server.js       # the HTTP API
 node mcp-server.js   # the MCP server (stdio)
 ```
 
-The live API runs on [Fly.io](https://fly.io) from the repo `Dockerfile`.
+The live API runs on [Fly.io](https://fly.io) from the repo `Dockerfile`. The prospective financial server uses a separate pinned native dependency in `server-runtime/`; the Docker build compiles it for Node 20 Alpine. Root package installation and the published MCP client do not include that dependency. Use the Dockerfile for the Linux financial runtime and its ownership tests.
 
 ### One machine
 
-The money ledgers are guarded by locks held in memory in one running process. The server is meant to run as one machine with one data volume. Do not run a second machine against the same data, and do not start an overlapping deploy where the old and new process both run against the same files at once — the locks on one machine cannot see or coordinate with a second one, so two processes writing the same ledger files at the same time can corrupt them or double-spend a balance. This must not change until the ledgers move to a shared store that more than one process can safely coordinate through.
+Run the server in one process on one machine with one data volume. Legacy ledgers use process-local locks. An initialized prospective epoch additionally requires a retained Linux filesystem lock before participant imports and uses one SQLite handle under that ownership. These controls do not authorize multiple machines or an overlapping deployment against the same financial files. A process that cannot obtain or retain ownership must not write.
 
 ## Links
 
@@ -189,3 +189,17 @@ The money ledgers are guarded by locks held in memory in one running process. Th
 ## License
 
 MIT
+
+### Prospective financial epochs
+
+A prepared financial epoch conserves historical originals and starts with all admissions disabled. Funding, spending, buyer returns and reconciliation have separate capabilities; enabling one does not enable historical payouts. `lib/financial-epoch.js` confines financial participants to the active epoch. `lib/money-writer-lock.js` requires an exclusive retained Linux flock before participant imports. `lib/money-control.js` serializes journal and participant receipts. Provider calls execute outside that coordinator.
+
+The dashboard supports adding $10, $25 or $100 dollar for dollar. When the exact published policy and return capability are enabled, a buyer can quote eligible unused new funds for return to the original payment method. Quotes distinguish balance retired, verified uncovered cost, cash and fractional residue. A permanent request key survives uncertain responses; canonical reconciliation determines completion. Contributor withdrawals and historical balances remain separately restricted.
+
+The prospective journal uses an immutable JSON descriptor and a separately initialized SQLite database with DELETE journaling and EXTRA synchronization. Runtime startup does not create a missing database or migrate a legacy journal. Unused quote storage, retained financial history and protected completion space require a measured capacity profile before new financial admission; that acceptance remains open for this source build.
+
+`scripts/financial-epoch.js`, `scripts/money-checkpoint.js`, `scripts/money-restore.js` and `scripts/money-lifecycle.js` contain the explicit offline control interfaces and input validation. Use the running writer’s coordinated checkpoint, preserve inherited copy expiry, and restore into an empty target with reconciliation required. Never treat a raw live file copy as a consistent financial checkpoint. Lifecycle conflicts block the affected subject and do not claim completed deletion.
+
+Atomic physical restoration requires an externally selected checkpoint digest and an explicit, target-bound engineering disk allowance. It preserves financial records, replaces physical reserve identities under stopped-writer ownership, and verifies the SQL and both workspace/capacity controls before clearing the capacity barrier. Completed restoration remains `reconcile_only`; provider reconciliation and lifecycle barriers remain separate. Retry authentication streams the trusted archive, and only an authenticated prepared request may finish physical recovery after its original expiry without renewing it. Insufficient SQLite headroom refuses the restore without advancing the financial cut. These local implementation checks do not establish an accepted production capacity envelope, a full-capacity resumption guarantee, or the 10,000-cycle lifecycle gate.
+
+This source build does not authorize activation. Release requires reviewed code and Linux evidence, scoped verified cost/cash evidence, a consistent checkpoint and conservation rehearsal, exact approved Terms/Privacy replacement and notice/effective-date evidence, plus explicit deployment/activation authority. An old policy acceptance cannot enroll historical principal into the prospective epoch.

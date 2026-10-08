@@ -540,7 +540,8 @@ describe('structural: a balance can never move between accounts [test 17]', () =
       // FIX-UNIT-MONEY M1: refundDollarDraw now restores onto the SAME lots
       // the money was drawn from (a `draws` array), not fresh lots from
       // plain paid/promo totals.
-      'async function refundDollarDraw(accountId, draws)',
+      'async function refundDollarDraw(accountId, draws, options={})',
+      'function refundDollarDrawSync(accountId, draws, {compensationCapability}={})',
       'async function recordLotFunding(accountId, draws, info)',
       'async function freezeDollarLot(accountId, paymentIntent, reason, context)',
       'async function unfreezeDollarLot(accountId, paymentIntent, context)',

@@ -50,6 +50,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install server-only SQLite source dependency
+        working-directory: server-runtime
+        run: npm ci --ignore-scripts
+      - name: Apply reviewed strict SQLite temporary-file routing
+        run: node scripts/patch-money-sqlite.js server-runtime/node_modules/better-sqlite3/deps/sqlite3/sqlite3.c
+      - name: Build only the pinned SQLite addon
+        working-directory: server-runtime/node_modules/better-sqlite3
+        run: node "$(dirname "$(command -v node)")/../lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js" rebuild --release
+
       # tests/test-mobile-nav-overlay.js Tier-2 (DR-1 regression, PUNCH-LIST
       # §31) needs a real Chromium to drive -- installed here, not committed.
       - name: Install Playwright Chromium
@@ -92,6 +101,10 @@ jobs:
       - name: Audit for high/critical vulnerabilities
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Audit server-only pinned dependency
+        working-directory: server-runtime
+        run: npm audit --omit=dev --audit-level=high
+
   windows-client:
     name: Windows client regression
     runs-on: windows-latest
@@ -123,3 +136,62 @@ jobs:
           } finally {
             Remove-Item -Recurse -Force $testHome
           }
+
+  money-linux-contract:
+    name: Linux financial ownership and checkpoint contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install JavaScript fixture dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Build the actual Alpine production image
+        run: docker build --build-arg GIT_SHA="${{ github.sha }}" -t auxilo-money-contract .
+      - name: Verify strict SQLite runtime and commit boundary as nonroot
+        run: |
+          docker run --rm --network none --user 1000:1000 --read-only --cpus=1 --memory=512m --tmpfs /tmp:rw,mode=1777,size=256m -e HOME=/tmp -e AUXILO_HOME=/tmp -e AUXILO_RUNNER_AUTOUPDATE=0 -v "$PWD/node_modules:/app/node_modules:ro" --entrypoint node auxilo-money-contract --test --test-concurrency=1 test/money-sqlite-runtime.test.js test/money-sqlite-commit-native.test.js test/money-atomic-commit-native.test.js test/money-spend-flow-native.test.js test/money-sqlite-temp.test.js test/money-scratch-allocation.test.js test/money-atomic-crash-native.test.js test/money-query-no-spill.test.js test/money-workspace.test.js test/provider-scan-workspace.test.js test/money-shared-liability.test.js test/money-workspace-layout.test.js test/money-quote-operational.test.js test/money-quote-operational-native.test.js test/money-quote-operational-crash-native.test.js test/money-quote-operational-preservation.test.js test/money-failure-inspection-native.test.js test/money-compensation-native.test.js
+      - name: Verify signed checkout returns and participant flows on native SQLite
+        run: |
+          proof="$(mktemp -d)"
+          trap 'sudo rm -rf "$proof"' EXIT
+          sudo chown 1000:1000 "$proof"
+          sudo chmod 0700 "$proof"
+          docker run --rm --network none --user 1000:1000 --read-only --cpus=1 --memory=512m --tmpfs /tmp:rw,mode=1777,size=32m -e TMPDIR=/financial-proof -e HOME=/financial-proof -e AUXILO_HOME=/financial-proof -e AUXILO_RUNNER_AUTOUPDATE=0 -v "$proof:/financial-proof:rw" -v "$PWD/node_modules:/app/node_modules:ro" --entrypoint node auxilo-money-contract --test --test-concurrency=1 test/provider-returns-capacity.test.js test/stripe-epoch-events-integration.test.js test/money-compensation-server-native.test.js test/money-recovery-periodic-native.test.js test/money-atomic-restore-native.test.js test/money-atomic-restore-capacity-native.test.js test/money-atomic-restore-negative-native.test.js test/money-atomic-restore-flow-native.test.js
+      - name: Verify settlement and checkpoint after quote partition exhaustion
+        run: |
+          proof="$(mktemp -d)"
+          trap 'sudo rm -rf "$proof"' EXIT
+          sudo chown 1000:1000 "$proof"
+          sudo chmod 0700 "$proof"
+          docker run --rm --network none --user 1000:1000 --read-only --cpus=1 --memory=512m --tmpfs /tmp:rw,mode=1777,size=32m -e TMPDIR=/financial-proof -e HOME=/financial-proof -e AUXILO_HOME=/financial-proof -e AUXILO_RUNNER_AUTOUPDATE=0 -e AUXILO_CAPACITY_QUOTE_PARTITION_FULL=1 -v "$proof:/financial-proof:rw" -v "$PWD/node_modules:/app/node_modules:ro" --entrypoint node auxilo-money-contract --test --test-concurrency=1 test/provider-returns-capacity.test.js
+      - name: Verify nonzero spend and original-share correction on native SQLite
+        run: |
+          proof="$(mktemp -d)"
+          trap 'sudo rm -rf "$proof"' EXIT
+          sudo chown 1000:1000 "$proof"
+          sudo chmod 0700 "$proof"
+          docker run --rm --network none --user 1000:1000 --read-only --cpus=1 --memory=512m --tmpfs /tmp:rw,mode=1777,size=32m -e TMPDIR=/financial-proof -e HOME=/financial-proof -e AUXILO_HOME=/financial-proof -e AUXILO_RUNNER_AUTOUPDATE=0 -e AUXILO_CAPACITY_ORIGINAL_SHARE_COMPACT=1 -v "$proof:/financial-proof:rw" -v "$PWD/node_modules:/app/node_modules:ro" --entrypoint node auxilo-money-contract --test --test-concurrency=1 test/provider-returns-capacity.test.js
+      - name: Verify packaged retained-descriptor flock and financial fixtures
+        run: |
+          docker run --rm --network none --cpus=1 --memory=512m -v "$PWD/test:/app/test:ro" -v "$PWD/node_modules:/app/node_modules:ro" --entrypoint /bin/sh auxilo-money-contract -c '
+            /usr/bin/flock --version &&
+            export HOME=/tmp/money-test-home AUXILO_HOME=/tmp/money-test-home USERPROFILE=/tmp/money-test-home APPDATA=/tmp/money-test-home/appdata LOCALAPPDATA=/tmp/money-test-home/local AUXILO_RUNNER_AUTOUPDATE=0 AUXILO_NO_NOTIFY=1 &&
+            mkdir -p "$HOME" &&
+            export AUXILO_SQLITE_TMPDIR="$HOME/sqlite-temp" &&
+            mkdir -m 0700 "$AUXILO_SQLITE_TMPDIR" &&
+            node --test test/money-writer-lock.test.js test/financial-epoch-*.test.js test/money-checkpoint.test.js test/money-lifecycle.test.js test/money-control-performance.test.js test/money-checkpoint-spend.test.js
+          '
+      - name: Verify real ENOSPC inside a bounded disposable filesystem
+        run: |
+          docker run --rm --network none --cpus=1 --memory=512m --tmpfs /capacity-proof:rw,size=64m,mode=0700 -v "$PWD/test:/app/test:ro" --entrypoint node -e HOME=/tmp/money-test-home -e AUXILO_HOME=/tmp/money-test-home -e AUXILO_RUNNER_AUTOUPDATE=0 -e AUXILO_CAPACITY_ENOSPC_ROOT=/capacity-proof -e AUXILO_SQLITE_TMPDIR=/capacity-proof auxilo-money-contract --test test/money-capacity-enospc.test.js
+      - name: Record isolated Linux storage measurements
+        run: docker run --rm --network none --cpus=1 --memory=512m -e AUXILO_SQLITE_TMPDIR=/tmp --entrypoint node auxilo-money-contract scripts/benchmark-money-control.js > money-linux-storage.json
+      - name: Preserve measured proof and explicit remaining performance work
+        uses: actions/upload-artifact@v4
+        with:
+          name: money-linux-storage
+          path: money-linux-storage.json

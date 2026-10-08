@@ -531,7 +531,7 @@ describe('AUD19-16: lib/wal.js updateWalPayload (behavioral)', () => {
 
 describe('GTM-9: unlock-event log (source)', () => {
   it('separate append-only file — never folded into the settlements state machine', () => {
-    assert.ok(SERVER_SRC.includes("const UNLOCK_EVENTS_FILE = path.join(DATA_DIR, 'unlock-events.jsonl');"));
+    assert.ok(SERVER_SRC.includes("const UNLOCK_EVENTS_FILE = financialEpoch.resolveParticipantPath('unlock_events', {legacyPath: path.join(DATA_DIR, 'unlock-events.jsonl')});"));
     assert.ok(!compactSlice().includes('UNLOCK_EVENTS_FILE'),
       'compactSettlements must never touch the event log');
     const ap = slice('function appendUnlockEvent(event)', 'function hasUnlockEvent');

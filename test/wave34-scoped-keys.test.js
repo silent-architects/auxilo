@@ -454,7 +454,7 @@ describe('T9b dualAuthDynamic behavioral (kills mutation M3)', () => {
       'paymentsEnabled', 'paymentsDisabledBody', 'validateApiKey', 'hasMinScope',
       'loadAccounts', 'saveAccounts', 'deductCredit', 'x402Router',
       '_routerAccepts', '_custodialAccepts', 'verifyPaymentOrReject',
-      fnSrc + '\nreturn dualAuthDynamic;'
+      'const prospectiveEpoch = null;\n' + fnSrc + '\nreturn dualAuthDynamic;'
     );
     const dualAuthDynamic = factory(
       /* paymentsEnabled */      () => true,

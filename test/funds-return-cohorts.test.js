@@ -1,0 +1,7 @@
+'use strict';
+const test=require('node:test');const assert=require('node:assert/strict');
+const {assertEligibleReturnSource}=require('../lib/funds-return');
+const epoch={epoch_id:'epoch1',binding_digest:'digest',platform:'auxilo_llc',platform_account_id:'acct_llc',livemode:false};
+function source(){return {...epoch,id:'s1',accountId:'buyer',charge_id:'ch_a',payment_intent_id:'pi_a',currency:'usd',amountMicros:10000000,spentMicros:0,retiredMicros:0,created_at:1000,policy:{version:'v1',effective_at:900,accepted_at:950,acknowledged:true,evidence_ref:'consent'},provenance:{verified:true,intent_id:'ci',origin_id:'oi',purchase_id:'p',lot_id:'l',receipt_digest:'hash'}};}
+test('only exact prospective cohort and acknowledged prior assent qualifies',()=>{assert.doesNotThrow(()=>assertEligibleReturnSource(source(),epoch,'buyer'));for(const mutate of [s=>s.epoch_id='old',s=>s.binding_digest='forged',s=>s.platform='legacy',s=>s.livemode=true,s=>s.policy.accepted_at=1001,s=>s.policy.effective_at=1001,s=>s.policy.acknowledged=false,s=>s.provenance.intent_id=null,s=>s.provenance.verified=false,s=>s.frozen=true,s=>s.currency='eur']){const s=source();mutate(s);assert.throws(()=>assertEligibleReturnSource(s,epoch,'buyer'));}});
+test('legacy principal, promo, missing source and foreign owner do not become refund authority',()=>{for(const s of [undefined,{...source(),kind:'promo'},{...source(),accountId:'other'},{...source(),amountMicros:0}])assert.throws(()=>assertEligibleReturnSource(s,epoch,'buyer'));});

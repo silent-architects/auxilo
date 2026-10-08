@@ -16,6 +16,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 DATA_DIR="$PROJECT_DIR/data"
+if [ -e "$DATA_DIR/financial-epoch.json" ] || [ -d "$DATA_DIR/financial-epochs" ] || [ -e "$DATA_DIR/money-control.json" ]; then
+  echo "[backup] Unsupported for initialized financial epoch; use the checkpoint backup runner." >&2
+  exit 1
+fi
 BACKUP_DIR="$DATA_DIR/backups"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 BACKUP_FILENAME="auxilo-backup-${TIMESTAMP}.tar.gz"

@@ -85,11 +85,11 @@ describe('SITE-RESTRUCTURE-W3 item C — /pricing 9 -> 6 sections', () => {
     ]);
   });
 
-  it('"Value Tiers" and "Credit Packs" survive as h3s, not h2s', () => {
+  it('"Value Tiers" and "Add Funds" survive as h3s, not h2s', () => {
     assert.equal(pricing.match(/<h2[^>]*>Value Tiers<\/h2>/), null);
-    assert.equal(pricing.match(/<h2[^>]*>Credit Packs<\/h2>/), null);
+    assert.equal(pricing.match(/<h2[^>]*>Add Funds<\/h2>/), null);
     assert.match(pricing, /<h3[^>]*id="tiers-heading"[^>]*>Value Tiers<\/h3>/);
-    assert.match(pricing, /<h3[^>]*id="credits-heading"[^>]*>Credit Packs<\/h3>/);
+    assert.match(pricing, /<h3[^>]*id="credits-heading"[^>]*>Add Funds<\/h3>/);
   });
 
   it('"The Numbers" heading and section element are gone entirely (build comments may still name the retired id in prose)', () => {
@@ -124,14 +124,14 @@ describe('SITE-RESTRUCTURE-W3 item C — /pricing 9 -> 6 sections', () => {
     assert.match(section[0], /<table class="value-tiers-table">/);
   });
 
-  it('"Credit Packs" now lives inside #for-agents-pricing, below Payment Methods', () => {
+  it('"Add Funds" now lives inside #for-agents-pricing, below Payment Methods', () => {
     const section = pricing.match(/<section id="for-agents-pricing"[\s\S]*?<\/section>/);
     assert.ok(section, 'expected #for-agents-pricing section');
-    assert.match(section[0], /<h3[^>]*id="credits-heading"[^>]*>Credit Packs<\/h3>/);
+    assert.match(section[0], /<h3[^>]*id="credits-heading"[^>]*>Add Funds<\/h3>/);
     const paymentIdx = section[0].indexOf('Payment Methods');
-    const packsIdx = section[0].indexOf('Credit Packs');
+    const packsIdx = section[0].indexOf('Add Funds');
     assert.ok(paymentIdx !== -1 && packsIdx !== -1 && paymentIdx < packsIdx,
-      'Credit Packs must sit below Payment Methods within the section');
+      'Add Funds must sit below Payment Methods within the section');
   });
 
   // Design rebuild: the grounds are the design system's classes. The dark hero opens the page,
@@ -164,11 +164,11 @@ describe('SITE-RESTRUCTURE-W3 item C — /pricing 9 -> 6 sections', () => {
     }
   });
 
-  it('the three "Buy pack" pack buttons are present, byte-identical to their pre-move markup except the credits-as-cash C-30 label (real money — same assertion agent/w3-a\'s ASK-WAVE-B guard made before item C)', () => {
+  it('the three "Add funds" pack buttons are present, byte-identical to their pre-move markup except the credits-as-cash C-30 label (real money — same assertion agent/w3-a\'s ASK-WAVE-B guard made before item C)', () => {
     const buttons = [
-      '<button type="button" class="btn-primary pack-buy-btn" data-pack="starter" style="display:none" onclick="auxiloBuyCredits(\'starter\')">Buy pack</button>',
-      '<button type="button" class="btn-primary pack-buy-btn" data-pack="growth" style="display:none" onclick="auxiloBuyCredits(\'growth\')">Buy pack</button>',
-      '<button type="button" class="btn-primary pack-buy-btn" data-pack="pro" style="display:none" onclick="auxiloBuyCredits(\'pro\')">Buy pack</button>',
+      '<button type="button" class="btn-primary pack-buy-btn" data-pack="starter" style="display:none" onclick="auxiloBuyCredits(\'starter\')">Add funds</button>',
+      '<button type="button" class="btn-primary pack-buy-btn" data-pack="growth" style="display:none" onclick="auxiloBuyCredits(\'growth\')">Add funds</button>',
+      '<button type="button" class="btn-primary pack-buy-btn" data-pack="pro" style="display:none" onclick="auxiloBuyCredits(\'pro\')">Add funds</button>',
     ];
     for (const btn of buttons) {
       assert.equal(pricing.split(btn).length - 1, 1, `expected exactly one occurrence of: ${btn}`);
