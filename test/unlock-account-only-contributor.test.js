@@ -159,6 +159,10 @@ describe('EMFR A1: Balance unlock of an account-only contributor (staged live se
       env: {
         ...process.env,
         NODE_ENV: 'test',
+        // Safe standalone, not only under the isolated suite runner: the child
+        // never resolves the operator's real home.
+        HOME: tmpDir,
+        AUXILO_HOME: tmpDir,
         WALLET_PRIVATE_KEY: `0x${'11'.repeat(32)}`,
         SESSION_SECRET: 'emfr-a1-test-session-secret',
         CONTENT_MODERATION_ENABLED: 'false',
