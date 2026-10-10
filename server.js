@@ -9825,7 +9825,7 @@ app.get('/knowledge/:id', async (c) => {
   if (earningsSource === 'new') {
     earnings[resolvedEarningsKey] = initEarningsEntry(contribAccountId, contribWallet);
     // If wallet-keyed new entry, also update wallet index if account is known
-    if (contribAccountId) {
+    if (contribAccountId && contribWallet) {
       setWalletIndex(earnings, contribWallet.toLowerCase(), contribAccountId);
     }
   }
