@@ -25,8 +25,8 @@ function world(t, { wals = [['wal_1', 'spend_1']], retiring = true, pools = [], 
     spends.set(spendId, spend);
     fs.writeFileSync(path.join(dir, walId + '.wal.json'), JSON.stringify(walFor(walId, spend, patch)));
   }
-  const ctx = { getSpend: id => spends.get(id), hasPool: id => pools.includes(id), earnings: { sha256: HEX('e'), identity }, compensationWalId, restoredEntryFor: restored };
-  const evaluate = () => A.evaluateObligations({ wals: A.readWalFiles(dir), retiring, ctx, epochId: EPOCH, earnings: { sha256: HEX('e'), bytes: 4096, identity } });
+  const ctx = { getSpend: id => spends.get(id), hasPool: id => pools.includes(id), earnings: () => ({ sha256: HEX('e'), bytes: 4096, identity }), compensationWalId, restoredEntryFor: restored };
+  const evaluate = () => A.evaluateObligations({ wals: A.readWalFiles(dir), retiring, ctx, epochId: EPOCH });
   return { dir, ctx, spends, evaluate };
 }
 const entry = (patch = {}) => ({ walId: 'wal_1', walFileSha256: HEX('1'), walPayloadDigest: HEX('2'), fenceDigest: HEX('3'), spendId: 'spend_1', spendDigest: HEX('4'), drawVectorDigest: HEX('5'), earningsBeforeDigest: HEX('e'), originalIdentity: { dev: 7, ino: 70 }, predecessorEquivalenceDigest: null, ...patch });
