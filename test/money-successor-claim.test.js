@@ -263,3 +263,27 @@ test('assertRestoredContinuationIdentity: no restore binding or an unreadable re
     assert.throws(() => R.assertRestoredContinuationIdentity({ epoch: { financial_dir: '/nonexistent', legacy_root: '/nonexistent' }, writer: {}, root }), error => error.code === 'COMPENSATION_ACCRUAL_CONFLICT' && error.check === 'NO_RESTORE_BINDING' && !Object.keys(error).includes('check'));
   }
 });
+
+function controlFile(t, { restoreId, claim, sequence = 0 }) {
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'foreign-claim-')));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'money-atomic-restore-control.bin'), body = { schema: 1, protocol: 'atomic_restore_v1', sequence, restoreId, phase: 'initializing', control: { dev: 1, ino: 1 }, ...(claim ? { claim } : {}) };
+  const bytes = Buffer.alloc(R.SLOT * 2);
+  R.encodeControl(body).copy(bytes, (sequence % 2) * R.SLOT);
+  fs.writeFileSync(file, bytes, { mode: 0o600 });
+  return { dir, file, digest: crypto.createHash('sha256').update(bytes).digest('hex') };
+}
+test('a foreign restore control carrying a claim is RESTORE_CLAIM_CONFLICT even when its physical identity does not match (a copied file); own, claim-less, predecessor and unreadable files pass (D2.2)', t => {
+  const claim = { schema: 1, state: 'recorded', restoreId: HEX('b'), generationId: HEX('1'), initializationDigest: HEX('5'), checkpointDigest: HEX('c'), successorDigest: HEX('6') };
+  const mine = { requestId: HEX('a') }, check = (f, archived = {}) => R.assertNoForeignClaim({ files: [f.file], allowance: mine, archived });
+  const foreign = controlFile(t, { restoreId: HEX('b'), claim });
+  assert.throws(() => check(foreign), code('RESTORE_CLAIM_CONFLICT'));
+  assert.throws(() => check(foreign, {}), code('RESTORE_CLAIM_CONFLICT'));
+  assert.doesNotThrow(() => check(controlFile(t, { restoreId: HEX('a'), claim })), 'this restore\'s own control is not foreign');
+  assert.doesNotThrow(() => check(controlFile(t, { restoreId: HEX('b') })), 'a foreign control without a claim keeps today\'s behaviour (ignored)');
+  const predecessor = controlFile(t, { restoreId: HEX('b'), claim });
+  assert.doesNotThrow(() => check(predecessor, { [path.basename(predecessor.file)]: undefined, 'money-atomic-restore-control.bin': { digest: predecessor.digest } }), 'a predecessor copied from the checkpoint archive is exempt');
+  assert.doesNotThrow(() => R.assertNoForeignClaim({ files: [path.join(foreign.dir, 'absent.bin')], allowance: mine, archived: {} }));
+  fs.writeFileSync(foreign.file, Buffer.alloc(R.SLOT * 2), { mode: 0o600 });
+  assert.doesNotThrow(() => check(foreign), 'unreadable bytes are not evidence of a claim');
+});
