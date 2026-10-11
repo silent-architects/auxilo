@@ -253,12 +253,29 @@ test('6.11a retirement is explicit only: the ordinary checkpoint leaves the sour
   const refused = N.worker({ mode: 'retire', root: located.root, approvalRef: '' });
   assert.equal(refused.error.code, 'CHECKPOINT_RETIRE_APPROVAL_REQUIRED');
   assert.deepEqual(N.workerOk({ mode: 'control', root: located.root }).control, before);
-  // The socket op never retires either: its strict key set refuses extra keys and other ops, and a granted checkpoint is ordinary.
-  const viaSocket = N.workerOk({ mode: 'socket', root: located.root });
-  assert.equal(viaSocket.retired, false);
-  assert.equal(viaSocket.completionGuaranteed, false);
-  assert.equal(viaSocket.extra.error, 'CHECKPOINT_REQUEST_INVALID', 'a retire key on the socket is refused');
-  assert.equal(viaSocket.wrongOp.error, 'CHECKPOINT_REQUEST_INVALID');
+  // The real socket handler of the staged server, with the EMPTY lifecycle fixture (no authoritative lifecycle control was ever recorded). It must answer
+  // with a COMPLETE response: a closed socket or an empty reply FAILS this test (a finding), and nothing here fabricates one. With an empty lifecycle the only
+  // complete answer the handler can give is the documented refusal (lib/money-lifecycle.js validateLifecycleControl -> AUTHORITATIVE_LIFECYCLE_REQUIRED, reached
+  // through createCheckpoint's assertLifecycleForCheckpoint); a success would need an authoritative control.
+  const raw = (body) => new Promise((resolve, reject) => {
+    const c = require('node:net').createConnection(path.join(located.root, '.money-control.sock')); let out = '';
+    c.setTimeout(12000, () => c.destroy(new Error('SOCKET_TIMEOUT')));
+    c.on('connect', () => c.write(body + '\n')); c.on('data', d => { out += d; }); c.on('end', () => resolve(out)); c.on('error', reject);
+  });
+  const stage = await N.stage(box, 'socket-server', located.root), started = await N.boot(stage);
+  try {
+    const reply = await raw(JSON.stringify({ op: 'checkpoint', request_id: 'empty-lifecycle' }));
+    assert.notEqual(reply, '', 'FINDING: the real socket handler CLOSED the connection without a reply on the empty lifecycle fixture');
+    const parsed = JSON.parse(reply);
+    if (parsed.error !== undefined) assert.equal(parsed.error, 'AUTHORITATIVE_LIFECYCLE_REQUIRED', 'the only complete refusal an empty lifecycle may produce: ' + reply);
+    else { assert.equal(typeof parsed.digest, 'string'); assert.equal(parsed.completion_guaranteed, false); }
+    assert.equal(JSON.parse(await raw(JSON.stringify({ op: 'checkpoint', request_id: 'r1', retire: true, approvalRef: 'approval:socket' }))).error, 'CHECKPOINT_REQUEST_INVALID', 'a retire key on the socket is refused with a complete reply');
+    assert.equal(JSON.parse(await raw(JSON.stringify({ op: 'retire', request_id: 'r2' }))).error, 'CHECKPOINT_REQUEST_INVALID');
+  } finally { await N.stopServer(started.child); }
+  // Success path: the same handler, in process, with a SUPPLIED authoritative lifecycle control (clearly not the empty fixture).
+  const supplied = N.workerOk({ mode: 'socket', root: located.root });
+  assert.equal(supplied.retired, false);
+  assert.equal(supplied.completionGuaranteed, false);
   assert.deepEqual(N.workerOk({ mode: 'control', root: located.root }).control, before, 'the socket op left the control bytes identical');
 });
 
