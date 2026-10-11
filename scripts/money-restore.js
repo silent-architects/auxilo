@@ -7,8 +7,14 @@ async function main(argv) {
   const input = JSON.parse(fs.readFileSync(file));
   if (!path.isAbsolute(input.targetRoot||'') || !input.execution_approval_ref) throw Error('Explicit approved offline restore required');
   if(input.mode==='capacity') {
-    const writer=lock.acquireMoneyWriter({root:input.targetRoot});
-    try{return await cp.restoreCheckpointCapacity({targetRoot:input.targetRoot,writer,checkpointDir:input.checkpointDir,expectedCheckpointDigest:input.expected_checkpoint_digest,expectedBarrierDigest:input.expected_barrier_digest,authoritativeLifecycle:input.authoritativeLifecycle,executionApprovalRef:input.execution_approval_ref,restoreAllowance:input.restore_allowance});}finally{writer.close();}
+    // A2: an explicit successor_claim names the retired source; the operator tool, not the archive, holds the source writer.
+    const claim=input.successor_claim;
+    if(claim!==undefined&&(Object.keys(claim||{}).sort().join()!=='sourceRoot'||!path.isAbsolute(claim.sourceRoot||'')||path.resolve(claim.sourceRoot)!==claim.sourceRoot||claim.sourceRoot===input.targetRoot))throw Error('Explicit absolute successor_claim.sourceRoot required');
+    const writer=lock.acquireMoneyWriter({root:input.targetRoot});let sourceWriter;
+    try{
+      if(claim)sourceWriter=lock.acquireMoneyWriter({root:claim.sourceRoot});
+      return await cp.restoreCheckpointCapacity({targetRoot:input.targetRoot,writer,checkpointDir:input.checkpointDir,expectedCheckpointDigest:input.expected_checkpoint_digest,expectedBarrierDigest:input.expected_barrier_digest,authoritativeLifecycle:input.authoritativeLifecycle,executionApprovalRef:input.execution_approval_ref,restoreAllowance:input.restore_allowance,...(claim?{successorClaim:{sourceRoot:claim.sourceRoot,sourceWriter}}:{})});
+    }finally{try{sourceWriter?.close();}finally{writer.close();}}
   }
   if(input.mode && input.mode!=='restore')throw Error('Unknown restore mode');
   if(!path.isAbsolute(input.checkpointDir||''))throw Error('Explicit checkpoint directory required');
