@@ -150,3 +150,10 @@ test('inspectEarningsContinuation is read-only and re-derives the failed check f
   const entry = JSON.parse(before.wal); entry.accrualFence.state = 'write_started'; fs.writeFileSync(x.walFile(id), JSON.stringify(entry));
   assert.equal(x.wal.inspectEarningsContinuation(id).check, 'FENCE');
 });
+
+test('a planted not_started WAL that names no real spend cannot be resolved as a recovery anchor, so the post-compensation scan of the exact fallback cannot go idle (6.10b: 503 with the refund done)', t => {
+  const x = fixture(t), planted = { id: 'planted_open_1', operation: 'unlock', payload: { funding_source: 'credit_pack' }, accrualFence: { schema: 1, state: 'not_started', spendId: 'spend_planted', spendDigest: '0'.repeat(64), earningsBeforeDigest: '1'.repeat(64), earningsFileIdentity: { dev: 1, ino: 2 } }, steps_completed: ['update_learnings'], created_at: 1 };
+  fs.writeFileSync(path.join(x.files.wal, 'planted_open_1.wal.json'), JSON.stringify(planted), { mode: 0o600 });
+  assert.deepEqual(x.wal.scanRecoveryWals({ limit: 10 }).items.map(i => i.id), ['planted_open_1'], 'the scan lists it');
+  assert.throws(() => x.wal.readRecoveryProof('planted_open_1', { store: { getSpend: () => undefined, getSourceByLot: () => ({ id: 's' }) }, epoch: x.runtime.epoch }), error => /AUTHORITY|SPEND_RECEIPT_REQUIRED/.test(error.code), 'the anchor cannot be read');
+});

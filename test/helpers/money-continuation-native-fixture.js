@@ -139,7 +139,15 @@ async function retire({ root, approvalRef = 'approval:a2-retire', via = 'live', 
   } finally { f.money.store.close(); f.writer.close(); }
 }
 // claim: 'source' passes the held source writer; 'none' offers no source at all.
-async function restore({ root, target, checkpointDir, digest, claim = 'source', claimRoot, crashAfter, tag = 'a2', onlyStage, resume = false }) {
+// The request id derives from the barrier digest, so every restart of the SAME restore must pass the barrier digest of its first run:
+// after completion the published barrier differs, and a request built from it is a different (foreign) restore of that target.
+function allowanceFor({ target, manifest, digest, barrierDigest, tag }) {
+  const api = require('../../lib/money-atomic-restore'), MiB = 1048576;
+  const base = { schema: 1, checkpointDigest: digest, bindingDigest: manifest.binding_digest, profileDigest: manifest.atomic_capacity_cut.profileDigest, databaseSchema: 3, barrierDigest, permanentBoundBytes: 4 * MiB, publicationBoundBytes: MiB, maxGrowthPages: 64, maxNetOccupiedPages: 64, evidenceRef: 'SYNTHETIC A2 native: new free engineering bytes, not admission-funded recovery estate' };
+  const executionApprovalRef = 'explicit-test-only-a2-' + tag;
+  return { executionApprovalRef, restoreAllowance: { ...base, requestId: api.deriveRestoreRequestId({ targetRoot: target, executionApprovalRef, restoreAllowance: base }) } };
+}
+async function restore({ root, target, checkpointDir, digest, claim = 'source', claimRoot, crashAfter, tag = 'a2', onlyStage, resume = false, barrierDigest }) {
   const cp = require('../../lib/money-checkpoint'), api = require('../../lib/money-atomic-restore'), lock = require('../../lib/money-writer-lock'), p = require('../../lib/stripe-transfer-persistence');
   const manifest = cp.validateCheckpointEnvelope(checkpointDir);
   if (!resume) fs.mkdirSync(target, { mode: 0o700 });
@@ -150,13 +158,13 @@ async function restore({ root, target, checkpointDir, digest, claim = 'source', 
     if (!resume) cp.restoreCheckpoint({ checkpointDir, targetRoot: target, writer: targetWriter, authoritativeLifecycle: LIFECYCLE, expectedCheckpointDigest: digest });
     if (onlyStage === true) return { staged: true };
     const barrier = p.readJSONStrict(path.join(target, cp.RESTORE));
-    const base = { schema: 1, checkpointDigest: digest, bindingDigest: manifest.binding_digest, profileDigest: manifest.atomic_capacity_cut.profileDigest, databaseSchema: 3, barrierDigest: barrier.checksum, permanentBoundBytes: 4 * MiB, publicationBoundBytes: MiB, maxGrowthPages: 64, maxNetOccupiedPages: 64, evidenceRef: 'SYNTHETIC A2 native: new free engineering bytes, not admission-funded recovery estate' };
-    const executionApprovalRef = 'explicit-test-only-a2-' + tag, restoreAllowance = { ...base, requestId: api.deriveRestoreRequestId({ targetRoot: target, executionApprovalRef, restoreAllowance: base }) };
+    const { executionApprovalRef, restoreAllowance } = allowanceFor({ target, manifest, digest, barrierDigest: barrierDigest || barrier.checksum, tag });
     if (claim === 'source') sourceWriter = lock.acquireMoneyWriter({ root: claimRoot || root });
-    return await cp.restoreCheckpointCapacity({
-      targetRoot: target, writer: targetWriter, checkpointDir, expectedCheckpointDigest: digest, expectedBarrierDigest: barrier.checksum, authoritativeLifecycle: LIFECYCLE, executionApprovalRef, restoreAllowance, afterStep: hook(crashAfter),
+    const outcome = await cp.restoreCheckpointCapacity({
+      targetRoot: target, writer: targetWriter, checkpointDir, expectedCheckpointDigest: digest, expectedBarrierDigest: barrierDigest || barrier.checksum, authoritativeLifecycle: LIFECYCLE, executionApprovalRef, restoreAllowance, afterStep: hook(crashAfter),
       ...(claim === 'source' ? { successorClaim: { sourceRoot: claimRoot || root, sourceWriter } } : {})
     });
+    return { ...outcome, request: { barrierDigest: barrierDigest || barrier.checksum } };
   } finally { try { sourceWriter?.close(); } finally { targetWriter?.close(); } }
 }
 const SLOT = 65536;
@@ -201,7 +209,7 @@ function withRawFailure(root, snapshotFn) {
 function forgePlan({ target, field, value, recompute = false }) {
   const p = require('../../lib/stripe-transfer-persistence'), e = require('../../lib/financial-epoch');
   const binding = JSON.parse(fs.readFileSync(path.join(target, e.BINDING_FILE))), dir = path.join(target, 'financial-epochs', binding.identity.epoch_id), slots = restoreControlSlots(dir), top = slots.rows[0];
-  const plan = structuredClone(top.body.plan); const keys = field.split('.'); let at = plan; for (const k of keys.slice(0, -1)) at = at[k]; at[keys.at(-1)] = value;
+  const plan = structuredClone(top.body.plan); const keys = field.replace(/^plan\./, '').split('.'); let at = plan; for (const k of keys.slice(0, -1)) at = at[k]; at[keys.at(-1)] = value;
   if (recompute) { const { planDigest, ...rest } = plan; plan.planDigest = p.digestJSON(rest); }
   const body = { ...top.body, plan }, encoded = Buffer.from(p.canonicalJSON({ ...body, checksum: p.digestJSON(body) })), padded = Buffer.alloc(SLOT);
   assert.ok(encoded.length < SLOT);
@@ -245,6 +253,20 @@ async function lease({ root }) {
     return events;
   } finally { f.money.store.close(); f.writer.close(); }
 }
+// The checkpoint socket in-process, with a supplied lifecycle control (the staged server has no authoritative lifecycle record, and its
+// socket handler would die reading one). Proves the socket op never retires and its strict key set refuses anything else.
+async function socketCheckpoint({ root }) {
+  const net = require('node:net'), cp = require('../../lib/money-checkpoint'), f = openSource(root);
+  const server = cp.startMoneyCheckpointServer({ epoch: f.epoch, writer: f.writer, coordinator: f.money, sourceSha: 'a'.repeat(40), lifecycleControl: LIFECYCLE });
+  try {
+    await new Promise(resolve => server.once('listening', resolve));
+    const viaSocket = await cp.requestMoneyCheckpoint({ root });
+    const raw = body => new Promise((resolve, reject) => { const c = net.createConnection(path.join(root, '.money-control.sock')); let out = ''; c.on('connect', () => c.write(body + '\n')); c.on('data', d => { out += d; }); c.on('end', () => resolve(JSON.parse(out))); c.on('error', reject); });
+    const extra = await raw(JSON.stringify({ op: 'checkpoint', request_id: 'r1', retire: true, approvalRef: 'approval:socket' }));
+    const wrongOp = await raw(JSON.stringify({ op: 'retire', request_id: 'r2' }));
+    return { retired: Object.hasOwn(viaSocket.manifest, 'sourceRetirement'), completionGuaranteed: viaSocket.completion_guaranteed, extra, wrongOp };
+  } finally { await new Promise(resolve => server.close(resolve)); f.money.store.close(); f.writer.close(); }
+}
 function transition({ root, patch }) {
   const lock = require('../../lib/money-writer-lock'), e = require('../../lib/financial-epoch'), op = require('../../lib/financial-epoch-operator'), writer = lock.acquireMoneyWriter({ root });
   try {
@@ -264,10 +286,10 @@ const gateLine = output => (String(output).match(/\[money-recovery\] gate=CONTIN
 
 if (require.main === module) {
   const r = JSON.parse(process.env.EMFR_A2_WORKER);
-  const modes = { retire, restore, contexts, lease, transition, 'reconcile-barrier': reconcileBarrier, control: ({ root }) => readControls(root), forge: forgePlan, swap: ({ target, name }) => swapInode(target, name) };
+  const modes = { retire, restore, socket: socketCheckpoint, contexts, lease, transition, 'reconcile-barrier': reconcileBarrier, control: ({ root }) => readControls(root), forge: forgePlan, swap: ({ target, name }) => swapInode(target, name) };
   Promise.resolve().then(() => (modes[r.mode] || (() => assert.fail('unknown worker mode ' + r.mode)))(r)).then(value => { process.stdout.write('A2_RESULT ' + JSON.stringify(value ?? null) + '\n'); }).catch(error => { process.stdout.write('A2_ERROR ' + JSON.stringify({ code: error.code, message: error.message, check: error.check }) + '\n'); process.exitCode = 2; });
 }
-module.exports = { readControls, restoreControlSlots, rawFailureControl, withRawFailure, SKIP, LIFECYCLE, CRASH_EXIT, MiB, crashedSource, coldBoot, stage, boot, snapshot, worker, workerAsync, workerOk, admittedWorker, run, gateLine, json, admitted, stopServer };
+module.exports = { forgePlan, allowanceFor, readControls, restoreControlSlots, rawFailureControl, withRawFailure, SKIP, LIFECYCLE, CRASH_EXIT, MiB, crashedSource, coldBoot, stage, boot, snapshot, worker, workerAsync, workerOk, admittedWorker, run, gateLine, json, admitted, stopServer };
 
 // ---- shared assertions ----------------------------------------------------------------------------------------------
 // The owed unlock completed exactly once (the stamped F-WAL positive assertions, restated for any restored target).

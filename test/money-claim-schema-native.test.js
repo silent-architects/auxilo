@@ -31,8 +31,12 @@ test('D2.4a crash immediately after the recorded-state write and BEFORE continua
   assert.ok(after.plan.successorClaim, 'plan.successorClaim is non-null');
   assert.equal(after.plan.successorClaim.successorDigest, claimBefore.successorDigest);
   assert.equal(after.plan.successorClaim.initializationDigest, claimBefore.initializationDigest);
-  const again = N.workerOk({ mode: 'restore', root: f.root, target, ...checkpointOf(cut), resume: true });
+  // A restart after completion must present the restore's ORIGINAL barrier digest: the published barrier yields a different request id,
+  // and a different request against a completed claimed target is (correctly) a foreign claim, RESTORE_CLAIM_CONFLICT.
+  const again = N.workerOk({ mode: 'restore', root: f.root, target, ...checkpointOf(cut), resume: true, barrierDigest: resumed.request.barrierDigest });
   assert.equal(again.successor.state, 'claimed', 'a second restart is a no-op');
+  const foreign = N.worker({ mode: 'restore', root: f.root, target, ...checkpointOf(cut), resume: true });
+  assert.equal(foreign.error?.code, 'RESTORE_CLAIM_CONFLICT', 'a request built from the published barrier is another restore: its claim is refused');
   assert.deepEqual(f.control(target).restore.plan, after.plan);
   const boots = [await f.coldBoot(target, 'boot-a'), await f.coldBoot(target, 'boot-b')];
   assert.deepEqual(boots.map(b => b.booted), [true, true], boots.map(b => b.output).join('\n'));

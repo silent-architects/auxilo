@@ -51,3 +51,33 @@ test('withRawFailure reads the failure control BEFORE the snapshot opens the run
   assert.deepEqual(seen.wals, []);
   assert.equal(N.rawFailureControl(x.root).state, 'recovery_scan', 'the residue is real on disk; the next read would see it');
 });
+
+// ---- second native round: 6.3 forge path, D2.4a restart allowance -----------------------------------------------------
+test('forgePlan: a dotted path that starts with "plan." (and may index arrays) rewrites the highest slot under a valid checksum; recompute re-seals planDigest', t => {
+  const x = syntheticEpoch(t), fixed = path.join(x.dir, 'money-atomic-restore-control.bin');
+  const { planDigest, ...rest } = { schema: 1, checkpointDigest: HEX('1'), restoreId: HEX('a'), successorClaim: { successorDigest: HEX('2') }, continuationEarnings: { entries: [{ spendDigest: HEX('3') }] }, planDigest: HEX('9') };
+  writeRestoreControl(fixed, restoreBody({ phase: 'complete', plan: { ...rest, planDigest: p.digestJSON(rest) } }));
+  const plan = () => N.readControls(x.root).restore.plan;
+  const before = plan();
+  N.forgePlan({ target: x.root, field: 'plan.checkpointDigest', value: HEX('b'), recompute: false });
+  assert.equal(plan().checkpointDigest, HEX('b'));
+  assert.equal(plan().planDigest, before.planDigest, 'stale planDigest: the plan no longer matches its own digest');
+  N.forgePlan({ target: x.root, field: 'plan.successorClaim.successorDigest', value: HEX('c'), recompute: true });
+  const { planDigest: sealed, ...body } = plan();
+  assert.equal(plan().successorClaim.successorDigest, HEX('c'));
+  assert.equal(sealed, p.digestJSON(body), 'recomputed planDigest: only the SQL binding can refuse it');
+  N.forgePlan({ target: x.root, field: 'plan.continuationEarnings.entries.0.spendDigest', value: HEX('d'), recompute: true });
+  assert.equal(plan().continuationEarnings.entries[0].spendDigest, HEX('d'));
+  assert.equal(N.restoreControlSlots(x.dir).rows[0].body.phase, 'complete', 'the slot is still valid and current');
+});
+test('allowanceFor: the request id is a function of the barrier digest, so a restart after completion must reuse the ORIGINAL barrier digest', t => {
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'allowance-')));
+  fs.chmodSync(dir, 0o700);
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const manifest = { binding_digest: HEX('b'), atomic_capacity_cut: { profileDigest: HEX('c') } };
+  const first = N.allowanceFor({ target: dir, manifest, digest: HEX('d'), barrierDigest: HEX('1'), tag: 'x' });
+  assert.equal(N.allowanceFor({ target: dir, manifest, digest: HEX('d'), barrierDigest: HEX('1'), tag: 'x' }).restoreAllowance.requestId, first.restoreAllowance.requestId, 'deterministic');
+  assert.notEqual(N.allowanceFor({ target: dir, manifest, digest: HEX('d'), barrierDigest: HEX('2'), tag: 'x' }).restoreAllowance.requestId, first.restoreAllowance.requestId, 'the published barrier of a completed restore yields a DIFFERENT request: a foreign claim on that target');
+  assert.equal(first.restoreAllowance.barrierDigest, HEX('1'));
+  assert.equal(first.executionApprovalRef, 'explicit-test-only-a2-x');
+});
