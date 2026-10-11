@@ -42,7 +42,8 @@ function admittedWorker(request) {
   const line = r.stdout.split('\n').find(x => x.startsWith('ADMITTED_RESULT '));
   return line ? JSON.parse(line.slice(16)) : undefined;
 }
-const snapshot = (root, walId) => withRawFailure(root, () => admittedWorker({ mode: 'snapshot', root, walId }));
+// The stamped helper's snapshot captures the persisted failure control BEFORE it opens the runtime (and fails on invalid evidence).
+const snapshot = (root, walId) => admittedWorker({ mode: 'snapshot', root, walId });
 
 // ---- the crash server (copied from the stamped F-WAL test so both crash at the same exact point) -------------------
 async function stage(box, name, root, { crash = false } = {}) {
