@@ -13,7 +13,11 @@ async function main(argv) {
     const writer=lock.acquireMoneyWriter({root:input.targetRoot});let sourceWriter;
     try{
       if(claim)sourceWriter=lock.acquireMoneyWriter({root:claim.sourceRoot});
-      return await cp.restoreCheckpointCapacity({targetRoot:input.targetRoot,writer,checkpointDir:input.checkpointDir,expectedCheckpointDigest:input.expected_checkpoint_digest,expectedBarrierDigest:input.expected_barrier_digest,authoritativeLifecycle:input.authoritativeLifecycle,executionApprovalRef:input.execution_approval_ref,restoreAllowance:input.restore_allowance,...(claim?{successorClaim:{sourceRoot:claim.sourceRoot,sourceWriter}}:{})});
+      const result=await cp.restoreCheckpointCapacity({targetRoot:input.targetRoot,writer,checkpointDir:input.checkpointDir,expectedCheckpointDigest:input.expected_checkpoint_digest,expectedBarrierDigest:input.expected_barrier_digest,authoritativeLifecycle:input.authoritativeLifecycle,executionApprovalRef:input.execution_approval_ref,restoreAllowance:input.restore_allowance,...(claim?{successorClaim:{sourceRoot:claim.sourceRoot,sourceWriter}}:{})});
+      // The restore itself completed, but an operator who asked for the successor claim must not read a refusal as success.
+      const state=claim&&result?.successor?.state;
+      if(state==='refused'||state==='withheld')throw Object.assign(Error(state==='refused'?'SUCCESSOR_REFUSED':'SUCCESSOR_WITHHELD'),{code:state==='refused'?'SUCCESSOR_REFUSED':'SUCCESSOR_WITHHELD',exitCode:state==='refused'?3:4,successorCode:result.successor.code,result});
+      return result;
     }finally{try{sourceWriter?.close();}finally{writer.close();}}
   }
   if(input.mode && input.mode!=='restore')throw Error('Unknown restore mode');
@@ -36,7 +40,8 @@ async function main(argv) {
     writer.close();
   }
 }
-if(require.main===module)main(process.argv.slice(2)).then(result=>console.log(JSON.stringify(result)),error=>{console.error(JSON.stringify({error:error.code||error.message}));process.exitCode=1;});
+const exitCodeFor=error=>Number.isInteger(error?.exitCode)&&error.exitCode>0?error.exitCode:1;
+if(require.main===module)main(process.argv.slice(2)).then(result=>console.log(JSON.stringify(result)),error=>{console.error(JSON.stringify({error:error.code||error.message,...(error.successorCode?{successor_code:error.successorCode}:{}),...(error.result?{result:error.result}:{})}));process.exitCode=exitCodeFor(error);});
 module.exports = {
-  main
+  main, exitCodeFor
 };

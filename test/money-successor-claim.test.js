@@ -287,3 +287,47 @@ test('a foreign restore control carrying a claim is RESTORE_CLAIM_CONFLICT even 
   fs.writeFileSync(foreign.file, Buffer.alloc(R.SLOT * 2), { mode: 0o600 });
   assert.doesNotThrow(() => check(foreign), 'unreadable bytes are not evidence of a claim');
 });
+
+// ---- review fix 2: the refusal code survives a completed retry ------------------------------------------------
+test('successorSummary carries a known refusal code; refusalOutcome re-derives it read-only on a retry from the source record', t => {
+  const w = sourceWorld(t), t1 = targetFor(w, 'a'), t2 = targetFor(w, 'b', HEX('d'));
+  resolve(w, t1, slot());
+  const refusedPlan = { continuationWithheld: 'SUCCESSOR_REFUSED', successorClaim: null };
+  assert.deepEqual(R.successorSummary(refusedPlan, t2.manifest, { code: 'SUCCESSOR_ALREADY_CLAIMED' }), { successor: { state: 'refused', code: 'SUCCESSOR_ALREADY_CLAIMED' } });
+  assert.deepEqual(R.successorSummary(refusedPlan, t2.manifest), { successor: { state: 'refused' } }, 'the plan alone does not store the code');
+  const bytes = fs.readFileSync(w.controlFile);
+  const base = { plan: refusedPlan, manifest: t2.manifest, claimInput: w.input(), allowance: t2.allowance, initializationDigest: t2.initializationDigest, readMetadata: w.readMetadata };
+  assert.deepEqual(R.refusalOutcome(base), { code: 'SUCCESSOR_ALREADY_CLAIMED' });
+  assert.deepEqual(fs.readFileSync(w.controlFile), bytes, 'read-only');
+  assert.equal(R.refusalOutcome({ ...base, claimInput: undefined }), null, 'no source offered on the retry: no code, no guess');
+  assert.equal(R.refusalOutcome({ ...base, plan: { ...refusedPlan, continuationWithheld: 'SUCCESSOR_ABSENT' } }), null);
+  assert.equal(R.refusalOutcome({ ...base, readMetadata: () => { throw Error('busy'); } }), null, 'an unreadable source yields no code');
+  const winner = { ...base, manifest: t1.manifest, allowance: t1.allowance, initializationDigest: t1.initializationDigest };
+  assert.equal(R.refusalOutcome(winner), null, 'the winner is not refused');
+  const copy = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'refusal-copy-')));
+  t.after(() => fs.rmSync(copy, { recursive: true, force: true }));
+  fs.cpSync(w.root, copy, { recursive: true });
+  assert.deepEqual(R.refusalOutcome({ ...base, claimInput: { sourceRoot: copy, sourceWriter: lock.injectMoneyWriter({ root: copy, assertOwned: () => true }) } }), { code: 'SOURCE_IDENTITY_MISMATCH' });
+});
+
+// ---- review fix 3: readCompletedRestore audits the stored claim (Addendum 2 D2.2) -------------------------------
+test('auditCompletedClaim: no claim is fine; a valid claim agrees with the plan; an invalid, foreign or disagreeing stored claim is reported', () => {
+  const claim = { schema: 1, state: 'recorded', restoreId: HEX('a'), generationId: HEX('1'), initializationDigest: HEX('5'), checkpointDigest: HEX('c'), successorDigest: HEX('6') };
+  const plan = { checkpointDigest: HEX('c'), successorClaim: { generationId: HEX('1'), restoreId: HEX('a'), initializationDigest: HEX('5'), successorDigest: HEX('6') } };
+  const body = { restoreId: HEX('a'), initializationDigest: HEX('5'), plan, claim };
+  assert.equal(R.auditCompletedClaim({ ...body, claim: undefined }), true, 'ordinary restores carry no claim');
+  assert.equal(R.auditCompletedClaim(body), true);
+  assert.equal(R.auditCompletedClaim({ ...body, plan: { ...plan, successorClaim: null }, claim: { ...claim, state: 'intent', successorDigest: null } }), true, 'a refused plan may keep its intent record');
+  const bad = (patch, expected, planPatch = {}) => assert.throws(() => R.auditCompletedClaim({ ...body, plan: { ...plan, ...planPatch }, claim: patch === null ? null : { ...claim, ...patch } }), error => error.code === expected, JSON.stringify(patch));
+  const { initializationDigest, ...missing } = claim;
+  assert.throws(() => R.auditCompletedClaim({ ...body, claim: missing }), error => error.code === 'RESTORE_CLAIM_INVALID', 'the exact A2.3 defect: a recorded claim missing initializationDigest');
+  bad({ extra: 1 }, 'RESTORE_CLAIM_INVALID');
+  bad({ state: 'other' }, 'RESTORE_CLAIM_INVALID');
+  bad({ restoreId: HEX('b') }, 'RESTORE_CLAIM_CONFLICT');
+  bad({ initializationDigest: HEX('0') }, 'RESTORE_CLAIM_CONFLICT');
+  bad({ checkpointDigest: HEX('0') }, 'RESTORE_CLAIM_CONFLICT');
+  bad({ generationId: HEX('0') }, 'RESTORE_CLAIM_CONFLICT');
+  bad({ state: 'intent', successorDigest: null }, 'RESTORE_CLAIM_CONFLICT');
+  bad({ successorDigest: HEX('0') }, 'RESTORE_CLAIM_CONFLICT');
+  bad(null, 'RESTORE_CLAIM_INVALID');
+});

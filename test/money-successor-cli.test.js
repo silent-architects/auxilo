@@ -61,3 +61,33 @@ test('checkpoint tool: retire mode needs an input file and an approval, takes th
   assert.deepEqual(closed, ['store', 'writer']);
   await assert.rejects(tool.main([root, 'bogus']), /Expected request, validate or retire/);
 });
+
+// ---- review fix 1: a refused or withheld claim must not look like success -------------------------------------
+const claimRequest = (f, extra = {}) => ({ mode: 'capacity', targetRoot: path.join(f.root, 'target'), execution_approval_ref: 'explicit-synthetic', checkpointDir: path.join(f.root, 'cp'), successor_claim: { sourceRoot: path.join(f.root, 'source') }, ...extra });
+test('restore tool: a refused successor claim exits non-zero with its own code and the successor refusal code, and still releases both writers', async t => {
+  const f = restoreTool(t, async () => ({ state: 'reconcile_only', successor: { state: 'refused', code: 'SUCCESSOR_ALREADY_CLAIMED' } }));
+  await assert.rejects(f.main([f.file(claimRequest(f))]), error => {
+    assert.equal(error.code, 'SUCCESSOR_REFUSED');
+    assert.equal(error.successorCode, 'SUCCESSOR_ALREADY_CLAIMED');
+    assert.equal(error.result.state, 'reconcile_only', 'the restore itself completed and is reported');
+    assert.equal(error.exitCode, 3);
+    return true;
+  });
+  assert.equal(f.closed.length, 2);
+});
+test('restore tool: a withheld successor claim exits with a distinct non-zero code', async t => {
+  const f = restoreTool(t, async () => ({ state: 'reconcile_only', successor: { state: 'withheld' } }));
+  await assert.rejects(f.main([f.file(claimRequest(f))]), error => error.code === 'SUCCESSOR_WITHHELD' && error.exitCode === 4 && error.successorCode === undefined);
+});
+test('restore tool: claimed (with or without an owed unlock) and a restore that asked for no claim succeed; the exit mapping is distinct per outcome', async t => {
+  for (const successor of [{ state: 'claimed', continuation: 'minted' }, { state: 'claimed', continuation: 'none_owed' }]) {
+    const f = restoreTool(t, async () => ({ state: 'reconcile_only', successor }));
+    assert.deepEqual((await f.main([f.file(claimRequest(f))])).successor, successor);
+  }
+  const plain = restoreTool(t, async () => ({ state: 'reconcile_only', successor: { state: 'absent' } }));
+  await plain.main([plain.file({ ...claimRequest(plain), successor_claim: undefined })]);
+  const tool = require('../scripts/money-restore');
+  assert.equal(tool.exitCodeFor({ exitCode: 3 }), 3);
+  assert.equal(tool.exitCodeFor({ exitCode: 4 }), 4);
+  assert.equal(tool.exitCodeFor(new Error('x')), 1);
+});
