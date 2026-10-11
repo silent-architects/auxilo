@@ -64,7 +64,7 @@ test('claimed is lifted only when the activation reports lifted (reconciled barr
 });
 
 // ---- wiring inside lib/money-control.js -----------------------------------------------------------------------
-function harness(t, { status = 'none', retired = false, retiredAfter = Infinity, failure = {} } = {}) {
+function harness(t, { status = 'none', retired = false, retiredAfter = Infinity, failure = {}, blocked = false } = {}) {
   const x = syntheticEpoch(t), epoch = { epoch_id: 'epoch-a2', binding_digest: x.binding.binding_digest, financial_dir: x.dir, legacy_root: x.root, activation_revision: 0 };
   const log = [], state = { status, retired, step: 0 };
   const gate = {
@@ -73,7 +73,7 @@ function harness(t, { status = 'none', retired = false, retiredAfter = Infinity,
   };
   const noted = [];
   const manager = {
-    assertNewEffectAllowed() {}, assertRecoveryAllowed() { return true; }, status: () => ({ state: 'idle' }), statusDetail: () => ({ anchor: { kind: 'spend', id: 'spend_1' } }), resolveCompletedFailure() {}, scanRecoveryPage() {}, beginRecoveryScan() {},
+    assertNewEffectAllowed() { if (blocked) throw Object.assign(Error('FINANCIAL_RECOVERY_REQUIRED'), { code: 'FINANCIAL_RECOVERY_REQUIRED' }); }, assertRecoveryAllowed() { return true; }, status: () => ({ state: 'idle' }), statusDetail: () => ({ anchor: { kind: 'spend', id: 'spend_1' } }), resolveCompletedFailure() {}, scanRecoveryPage() {}, beginRecoveryScan() {},
     noteFailure(input) { noted.push(input); return failure.result ?? { state: 'failure_pending' }; }
   };
   const anchors = { revalidate: c => c, describe: c => c.descriptor, restore: c => c, isResolved: () => false };
@@ -200,4 +200,12 @@ test('operator gate: a retired source refuses every capability transition', t =>
   const binding = syntheticBinding(), paused = { schema_version: 2, binding_digest: binding.binding_digest, epoch_id: binding.identity.epoch_id, generation: 5, state: 'paused', capabilities: Object.fromEntries(real.CAPABILITIES.map(k => [k, false])), evidence: {}, retirement: real.buildRetirement(retirementIdentity({ retiredAtGeneration: 5 })) };
   const o = operatorFor(t, { control: real.seal(paused) });
   for (const patch of [{ funding: true }, { reconcile: true }, { funding: false }]) assert.throws(() => transition(o, patch), code('EPOCH_RETIRED'), JSON.stringify(patch));
+});
+
+// ---- the real order of refusals on a held successor (first native A1.5a/b/c run) --------------------------------------------
+test('order of refusals: an unclaimed successor whose failure control is NOT idle (an owed WAL is pending) still gets EPOCH_SUCCESSOR_UNCLAIMED at context entry and at anchor registration; only an anchor-less BOOT entry meets the failure control first', async t => {
+  const h = harness(t, { status: 'unclaimed', blocked: true });
+  await assert.rejects(h.control.withMoneyControl({ kind: 'reconcile' }, () => 1), code('EPOCH_SUCCESSOR_UNCLAIMED'), 'E1 precedes the failure-control check');
+  assert.throws(() => h.control.withMoneyBootControl({}, () => 1), code('FINANCIAL_RECOVERY_REQUIRED'), 'boot ENTRY is not a successor gate point (v3 A1.2); without an anchor the failure control answers first');
+  assert.throws(() => h.control.withMoneyBootControl({ recoveryAnchor: h.cap('spend_1'), action: 'persist_result' }, ctx => ctx.registerRecoveryAnchor(h.cap('spend_1'), { action: 'persist_result' })), code('EPOCH_SUCCESSOR_UNCLAIMED'), 'E2: with the held anchor named, the participant-effect path meets the successor gate');
 });

@@ -65,3 +65,40 @@ test('rollback: pre-A2 failure control rejects a slot carrying CONTINUATION_AUTH
   const oldManager = failureFixture(t, { lock: base.load('money-writer-lock.js'), fc: base.load('money-failure-control.js'), anchor: base.load('money-recovery-anchor.js') });
   assert.throws(() => oldManager.open().noteFailure({ anchor: oldManager.cap, reason: 'CONTINUATION_AUTHORITY_REQUIRED', phase: 'boot_recovery', cutStatus: 'verified' }), { code: 'FAILURE_CONTROL_SCHEMA' }, 'the baseline does not know the reason at all');
 });
+
+// ---- EMFR_BASELINE_LIB_DIR: a host-extracted baseline for runners that have no git ------------------------------------
+const { execFileSync } = require('node:child_process');
+function extractBaseline(t) {
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'baseline-override-')));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  execFileSync('tar', ['-x', '-C', dir], { input: execFileSync('git', ['archive', BASELINE, 'lib'], { cwd: path.resolve(__dirname, '..'), maxBuffer: 256 * 1024 * 1024 }) });
+  return path.join(dir, 'lib');
+}
+function withEnv(value, fn) {
+  const prior = process.env.EMFR_BASELINE_LIB_DIR;
+  if (value === undefined) delete process.env.EMFR_BASELINE_LIB_DIR; else process.env.EMFR_BASELINE_LIB_DIR = value;
+  try { return fn(); } finally { if (prior === undefined) delete process.env.EMFR_BASELINE_LIB_DIR; else process.env.EMFR_BASELINE_LIB_DIR = prior; }
+}
+test('EMFR_BASELINE_LIB_DIR loads the host-extracted baseline after a whole-tree hash check, without spawning git', t => {
+  const lib = extractBaseline(t), realPath = process.env.PATH;
+  process.env.PATH = '/nonexistent';
+  try {
+    const base = withEnv(lib, () => materializeBaseline(t));
+    assert.notEqual(base.lib, lib, 'a private copy gets its own node_modules link; the mount stays read-only');
+    assert.equal(base.load('financial-epoch.js').validateControl.length, 2);
+    assert.ok(fs.existsSync(path.join(base.dir, 'node_modules')));
+  } finally { process.env.PATH = realPath; }
+  assert.equal(fs.readdirSync(lib).length > 50, true);
+});
+test('EMFR_BASELINE_LIB_DIR refuses a wrong baseline: a changed file, an extra file, a missing file, a missing directory', t => {
+  const refuse = (mutate, pattern) => { const lib = extractBaseline(t); mutate(lib); assert.throws(() => withEnv(lib, () => materializeBaseline(t)), pattern); };
+  refuse(lib => fs.appendFileSync(path.join(lib, 'wal.js'), '\n// changed'), /BASELINE_HASH_MISMATCH/);
+  refuse(lib => fs.writeFileSync(path.join(lib, 'extra.js'), 'x'), /BASELINE_HASH_MISMATCH/);
+  refuse(lib => fs.rmSync(path.join(lib, 'wal.js')), /BASELINE_HASH_MISMATCH/);
+  refuse(lib => fs.rmSync(path.join(lib, 'financial-epoch.js')), /BASELINE_(HASH_MISMATCH|UNAVAILABLE)/);
+  assert.throws(() => withEnv(path.join(os.tmpdir(), 'no-such-baseline-dir'), () => materializeBaseline(t)), /BASELINE_UNAVAILABLE/);
+});
+test('without the override the baseline still comes from git and is verified the same way', t => {
+  const base = withEnv(undefined, () => materializeBaseline(t));
+  assert.equal(typeof base.load('money-failure-control.js').openFailureControl, 'function');
+});

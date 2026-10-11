@@ -42,7 +42,7 @@ function admittedWorker(request) {
   const line = r.stdout.split('\n').find(x => x.startsWith('ADMITTED_RESULT '));
   return line ? JSON.parse(line.slice(16)) : undefined;
 }
-const snapshot = (root, walId) => admittedWorker({ mode: 'snapshot', root, walId });
+const snapshot = (root, walId) => withRawFailure(root, () => admittedWorker({ mode: 'snapshot', root, walId }));
 
 // ---- the crash server (copied from the stamped F-WAL test so both crash at the same exact point) -------------------
 async function stage(box, name, root, { crash = false } = {}) {
@@ -160,8 +160,16 @@ async function restore({ root, target, checkpointDir, digest, claim = 'source', 
   } finally { try { sourceWriter?.close(); } finally { targetWriter?.close(); } }
 }
 const SLOT = 65536;
+// While a restore is initializing (or crashed before publishing) the live control is .stage-restore-control-<id>; the fixed file is
+// then either absent or a PREDECESSOR copy. Once published, the fixed file is the control.
+function activeRestoreControlFile(dir) {
+  const staged = fs.readdirSync(dir).filter(n => n.startsWith('.stage-restore-control-')).sort();
+  return staged.length ? path.join(dir, staged[0]) : path.join(dir, 'money-atomic-restore-control.bin');
+}
 function restoreControlSlots(dir) {
-  const p = require('../../lib/stripe-transfer-persistence'), file = path.join(dir, 'money-atomic-restore-control.bin'), bytes = fs.readFileSync(file), rows = [];
+  const p = require('../../lib/stripe-transfer-persistence'), file = activeRestoreControlFile(dir);
+  if (!fs.existsSync(file)) return { file, bytes: Buffer.alloc(0), rows: [] };
+  const bytes = fs.readFileSync(file), rows = [];
   for (let i = 0; i < 2; i++) { const raw = bytes.subarray(i * SLOT, (i + 1) * SLOT), end = raw.indexOf(0); if (end < 1) continue; const { checksum, ...body } = JSON.parse(raw.subarray(0, end)); if (p.digestJSON(body) === checksum) rows.push({ index: i, body }); }
   rows.sort((a, b) => b.body.sequence - a.body.sequence);
   return { file, bytes, rows };
@@ -169,10 +177,25 @@ function restoreControlSlots(dir) {
 function readControls(root) {
   const e = require('../../lib/financial-epoch'), binding = JSON.parse(fs.readFileSync(path.join(root, e.BINDING_FILE))), dir = path.join(root, 'financial-epochs', binding.identity.epoch_id);
   const out = { control: JSON.parse(fs.readFileSync(path.join(dir, e.CONTROL_FILE))), financialDir: dir };
-  if (fs.existsSync(path.join(dir, 'money-atomic-restore-control.bin'))) { const top = restoreControlSlots(dir).rows[0]?.body; out.restore = top && { phase: top.phase, restoreId: top.restoreId, claim: top.claim ?? null, plan: top.plan, sequence: top.sequence, bodyBytes: JSON.stringify(top).length }; }
+  { const top = restoreControlSlots(dir).rows[0]?.body; out.restore = top && { phase: top.phase, restoreId: top.restoreId, claim: top.claim ?? null, plan: top.plan, sequence: top.sequence, bodyBytes: JSON.stringify(top).length }; }
   const fc = path.join(dir, 'money-first-failure-control.bin');
   if (fs.existsSync(fc)) { const bytes = fs.readFileSync(fc), p = require('../../lib/stripe-transfer-persistence'); const rows = []; for (let i = 0; i < 2; i++) { const raw = bytes.subarray(i * 4096, (i + 1) * 4096), end = raw.indexOf(0); if (end < 1) continue; const { checksum, ...body } = JSON.parse(raw.subarray(0, end)); if (p.digestJSON(body) === checksum) rows.push(body); } rows.sort((a, b) => b.sequence - a.sequence); out.failure = rows[0] ?? null; }
   return out;
+}
+// The failure control as the SERVER left it: parsed from the raw file (2 x 4096 B slots, highest valid sequence, checksum verified).
+// Opening a runtime starts a recovery scan (initializeMoneyRuntime -> beginRecoveryScan) and would overwrite an idle state.
+function rawFailureControl(root) {
+  const p = require('../../lib/stripe-transfer-persistence'), binding = JSON.parse(fs.readFileSync(path.join(root, 'financial-epoch.json'))), file = path.join(root, 'financial-epochs', binding.identity.epoch_id, 'money-first-failure-control.bin');
+  if (!fs.existsSync(file)) return null;
+  const bytes = fs.readFileSync(file), rows = [];
+  for (let i = 0; i < 2; i++) { const raw = bytes.subarray(i * 4096, (i + 1) * 4096), end = raw.indexOf(0); if (end < 1) continue; try { const { checksum, ...body } = JSON.parse(raw.subarray(0, end)); if (p.digestJSON(body) === checksum) rows.push(body); } catch {} }
+  rows.sort((a, b) => b.sequence - a.sequence);
+  return rows[0] ?? null;
+}
+// Reads the failure control BEFORE the snapshot function opens the runtime, then reports that state in the snapshot.
+function withRawFailure(root, snapshotFn) {
+  const failure = rawFailureControl(root), state = snapshotFn();
+  return failure ? { ...state, failure } : state;
 }
 // Forge the highest restore-control slot with a VALID slot checksum. recompute=true also recomputes planDigest (so only the SQL binding can refuse it).
 function forgePlan({ target, field, value, recompute = false }) {
@@ -202,7 +225,10 @@ async function contexts({ root, spendId }) {
     const attempt = async (name, fn) => { try { await fn(); out[name] = { ok: true }; } catch (error) { out[name] = { code: error.code || error.message }; } };
     for (const kind of ['reconcile', 'funding', 'spend', 'buyer_return']) await attempt(kind, () => m.withMoneyControl({ kind }, () => 1));
     for (const action of ['persist_result', 'participant_effect', 'boot_recovery', 'compensate']) {
-      await attempt('anchor_' + action, () => m.withMoneyBootControl({}, ctx => { ctx.registerRecoveryAnchor(m.recoveryAnchors.resolveCommittedAnchor({ kind: 'spend', id: spendId, accountId: 'buyer' }), { action }); }));
+      // Name the held anchor at boot entry (as the server's own recovery does). Without it the failure control answers first, which is
+      // correct and unrelated to the successor gate: a successor with an owed WAL legitimately holds failure_pending.
+      const anchor = m.recoveryAnchors.resolveCommittedAnchor({ kind: 'spend', id: spendId, accountId: 'buyer' });
+      await attempt('anchor_' + action, () => m.withMoneyBootControl({ recoveryAnchor: anchor, action }, ctx => { ctx.registerRecoveryAnchor(anchor, { action }); }));
     }
     out.failure = m.failureControl.statusDetail();
     return out;
@@ -241,7 +267,7 @@ if (require.main === module) {
   const modes = { retire, restore, contexts, lease, transition, 'reconcile-barrier': reconcileBarrier, control: ({ root }) => readControls(root), forge: forgePlan, swap: ({ target, name }) => swapInode(target, name) };
   Promise.resolve().then(() => (modes[r.mode] || (() => assert.fail('unknown worker mode ' + r.mode)))(r)).then(value => { process.stdout.write('A2_RESULT ' + JSON.stringify(value ?? null) + '\n'); }).catch(error => { process.stdout.write('A2_ERROR ' + JSON.stringify({ code: error.code, message: error.message, check: error.check }) + '\n'); process.exitCode = 2; });
 }
-module.exports = { SKIP, LIFECYCLE, CRASH_EXIT, MiB, crashedSource, coldBoot, stage, boot, snapshot, worker, workerAsync, workerOk, admittedWorker, run, gateLine, json, admitted, stopServer };
+module.exports = { readControls, restoreControlSlots, rawFailureControl, withRawFailure, SKIP, LIFECYCLE, CRASH_EXIT, MiB, crashedSource, coldBoot, stage, boot, snapshot, worker, workerAsync, workerOk, admittedWorker, run, gateLine, json, admitted, stopServer };
 
 // ---- shared assertions ----------------------------------------------------------------------------------------------
 // The owed unlock completed exactly once (the stamped F-WAL positive assertions, restated for any restored target).
