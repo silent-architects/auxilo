@@ -273,7 +273,7 @@ const gateLine = output => (String(output).match(/\[money-recovery\] gate=CONTIN
 if (require.main === module) {
   const r = JSON.parse(process.env.EMFR_A2_WORKER);
   const modes = { retire, restore, socket: socketCheckpoint, contexts, lease, transition, 'reconcile-barrier': reconcileBarrier, control: ({ root }) => readControls(root), forge: forgePlan, swap: ({ target, name }) => swapInode(target, name) };
-  Promise.resolve().then(() => (modes[r.mode] || (() => assert.fail('unknown worker mode ' + r.mode)))(r)).then(value => { process.stdout.write('A2_RESULT ' + JSON.stringify(value ?? null) + '\n'); }).catch(error => { process.stdout.write('A2_ERROR ' + JSON.stringify({ code: error.code, message: error.message, check: error.check }) + '\n'); process.exitCode = 2; });
+  Promise.resolve().then(() => (modes[r.mode] || (() => assert.fail('unknown worker mode ' + r.mode)))(r)).then(value => { process.stdout.write('A2_RESULT ' + JSON.stringify(value ?? null) + '\n'); }).catch(error => { process.stdout.write('A2_ERROR ' + JSON.stringify({ code: error.code, message: error.message, check: error.check, reason: error.reason }) + '\n'); process.exitCode = 2; });
 }
 module.exports = { forgePlan, allowanceFor, readControls, restoreControlSlots, SKIP, LIFECYCLE, CRASH_EXIT, MiB, crashedSource, coldBoot, stage, boot, snapshot, worker, workerAsync, workerOk, admittedWorker, run, gateLine, json, admitted, stopServer };
 

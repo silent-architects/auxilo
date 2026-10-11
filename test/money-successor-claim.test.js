@@ -331,3 +331,45 @@ test('auditCompletedClaim: no claim is fine; a valid claim agrees with the plan;
   bad({ successorDigest: HEX('0') }, 'RESTORE_CLAIM_CONFLICT');
   bad(null, 'RESTORE_CLAIM_INVALID');
 });
+
+// ---- closure item 4 (A2.5-held-resume): a deterministic fault after the claim is HELD, never a cleared claim --------------------
+function targetWorld(t) {
+  const x = syntheticEpoch(t), earningsBytes = Buffer.from('{"maker":{}}\n'), walBytes = Buffer.from(JSON.stringify({ id: 'wal_1', operation: 'unlock', payload: {}, steps_completed: [] }));
+  fs.writeFileSync(path.join(x.dir, 'earnings.json'), earningsBytes, { mode: 0o600 });
+  fs.mkdirSync(path.join(x.dir, 'wal'), { mode: 0o700 });
+  fs.writeFileSync(path.join(x.dir, 'wal', 'wal_1.wal.json'), walBytes, { mode: 0o600 });
+  const st = fs.statSync(path.join(x.dir, 'earnings.json')), sha = b => crypto.createHash('sha256').update(b).digest('hex');
+  const E = { walId: 'wal_1', walFileSha256: sha(walBytes), walPayloadDigest: HEX('2'), fenceDigest: HEX('3'), spendId: 'spend_1', spendDigest: HEX('4'), drawVectorDigest: HEX('5'), earningsBeforeDigest: sha(earningsBytes), originalIdentity: { dev: 1, ino: 2 }, predecessorEquivalenceDigest: HEX('6') };
+  const S = A.validateContinuationEarnings({ schema: 1, participant: 'earnings', relativePath: 'financial-epochs/epoch-a2/earnings.json', sha256: sha(earningsBytes), bytes: earningsBytes.length, sourceIdentity: { dev: 9, ino: 9, uid: 1, mode: 0o600, nlink: 1 }, entries: [E] }, { epochId: 'epoch-a2' });
+  return { ...x, S, earningsBytes, earningsFile: path.join(x.dir, 'earnings.json'), walFile: path.join(x.dir, 'wal', 'wal_1.wal.json'), st };
+}
+const mintInput = (tw, w, target, claimResult) => ({ manifest: { ...target.manifest, atomic_capacity_cut: { continuationEarnings: tw.S } }, targetRoot: tw.root, dir: tw.dir, allowance: { ...target.allowance, bindingDigest: HEX('b') }, expectedBarrierDigest: HEX('d'), epochId: 'epoch-a2', claimResult });
+test('A2.5-held-resume: a deterministic fault after the claim is RESTORE_SUCCESSOR_HELD; the claim and the source successor stay with this target; the same target resumes and mints identically; another target is refused', t => {
+  const w = sourceWorld(t), tw = targetWorld(t), t1 = targetFor(w, 'a'), t2 = targetFor(w, 'b', HEX('d')), s1 = slot();
+  const claimed = resolve(w, t1, s1);
+  assert.equal(claimed.state, 'claimed');
+  const claimBefore = structuredClone(s1.claim), successorBytes = fs.readFileSync(w.controlFile), writes = s1.writes.length;
+  const good = R.mintContinuation(mintInput(tw, w, t1, claimed));
+  assert.equal(good.role.dev, tw.st.dev);
+  assert.equal(good.role.ino, tw.st.ino);
+  const mintedHash = hash(good.target);
+  assert.equal(hash(R.mintContinuation(mintInput(tw, w, t1, claimed)).target), mintedHash, 'minting is deterministic, so a resume mints the same record');
+  // the controlled bad target identity (equal inode, changed bytes) -> HELD with the reason, in both fault shapes
+  for (const [name, file, original] of [['earnings bytes', tw.earningsFile, tw.earningsBytes], ['WAL bytes', tw.walFile, fs.readFileSync(tw.walFile)]]) {
+    fs.writeFileSync(file, Buffer.concat([original, Buffer.from(' ')]));
+    assert.throws(() => R.mintContinuation(mintInput(tw, w, t1, claimed)), error => error.code === 'RESTORE_SUCCESSOR_HELD' && error.reason === 'RESTORE_CONTINUATION_IDENTITY', name);
+    assert.deepEqual(s1.claim, claimBefore, name + ': the claim is never cleared or rewritten');
+    assert.equal(s1.writes.length, writes, name + ': nothing was persisted');
+    assert.deepEqual(fs.readFileSync(w.controlFile), successorBytes, name + ': the source successor still names this target');
+    assert.deepEqual(resolve(w, t2, slot()), { state: 'refused', code: 'SUCCESSOR_ALREADY_CLAIMED' }, name + ': a different target is refused while this one is held');
+    assert.equal(resolve(w, t1, s1).state, 'claimed', name + ': the held target\'s claim still resumes');
+    fs.writeFileSync(file, original); // the fault is corrected (same inode)
+  }
+  assert.equal(hash(R.mintContinuation(mintInput(tw, w, t1, claimed)).target), mintedHash, 'after the fix the SAME target mints exactly the record it would have minted');
+  fs.rmSync(tw.walFile);
+  assert.throws(() => R.mintContinuation(mintInput(tw, w, t1, claimed)), error => error.code === 'RESTORE_SUCCESSOR_HELD', 'a missing file is held, not a cleared claim');
+});
+test('mintContinuation: no obligation (S null) mints nothing; a claim that was refused never reaches it', t => {
+  const w = sourceWorld(t), tw = targetWorld(t), t1 = targetFor(w, 'a');
+  assert.equal(R.mintContinuation({ ...mintInput(tw, w, t1, { state: 'claimed' }), manifest: { ...t1.manifest, atomic_capacity_cut: { continuationEarnings: null } } }), null);
+});
