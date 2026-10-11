@@ -60,8 +60,10 @@ function persistedFailureControl(root){
   try{
    const raw=bytes.subarray(i*4096,(i+1)*4096),end=raw.indexOf(0);if(end<1||raw.subarray(end).some(x=>x!==0))continue;
    const{checksum,...body}=JSON.parse(raw.subarray(0,end).toString('utf8'));if(p.digestJSON(body)!==checksum)continue;
-   if(Object.keys(body).length!==keys.length||keys.some(k=>!Object.hasOwn(body,k))||body.schema!==1||!Number.isSafeInteger(body.sequence)||body.sequence<0)throw bad('FAILURE_CONTROL_EVIDENCE_INVALID','slot '+i+' schema');
+   if(Object.keys(body).length!==keys.length||keys.some(k=>!Object.hasOwn(body,k))||body.schema!==1||!Number.isSafeInteger(body.sequence)||body.sequence<0||!['idle','failure_pending','compensation_requested','recovery_scan'].includes(body.state))throw bad('FAILURE_CONTROL_EVIDENCE_INVALID','slot '+i+' schema');
    if(body.epoch_id!==binding.identity.epoch_id||body.binding_digest!==binding.binding_digest||body.database_id!==databaseId)throw bad('FAILURE_CONTROL_EVIDENCE_INVALID','slot '+i+' identity');
+   // A checksum-valid slot must also satisfy the runtime's per-state rules (lib/money-failure-control.js validateBody). Refusal, never a fallback to the older slot.
+   try{require('../../lib/money-failure-control').validateBody(body);}catch(error){throw bad('FAILURE_CONTROL_EVIDENCE_INVALID','slot '+i+' state/body '+(error.code||error.message));}
    valid.push({body,checksum});
   }catch(error){if(error.code==='FAILURE_CONTROL_EVIDENCE_INVALID')throw error;}
  }

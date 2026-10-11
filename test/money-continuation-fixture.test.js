@@ -27,31 +27,6 @@ test('readControls: while a restore is initializing the control is the staged fi
   assert.equal(N.readControls(x.root).restore.restoreId, HEX('9'), 'once published the fixed file is the control');
   assert.equal(N.readControls(x.root).restore.claim, null);
 });
-test('rawFailureControl: highest valid sequence wins, a torn or corrupt slot is ignored, absence is null', t => {
-  const x = syntheticEpoch(t), file = path.join(x.dir, 'money-first-failure-control.bin');
-  assert.equal(N.rawFailureControl(x.root), null);
-  const slot = body => { const out = Buffer.alloc(4096); Buffer.from(JSON.stringify({ ...body, checksum: p.digestJSON(body) })).copy(out); return out; };
-  const idle = { sequence: 4, state: 'idle', reason: null }, scan = { sequence: 5, state: 'recovery_scan', reason: 'RECOVERY_REQUIRED' };
-  fs.writeFileSync(file, Buffer.concat([slot(scan), slot(idle)]), { mode: 0o600 });
-  assert.equal(N.rawFailureControl(x.root).state, 'recovery_scan');
-  const torn = Buffer.concat([slot(scan), slot(idle)]); torn.write('BROKEN', 0);
-  assert.equal(N.rawFailureControl(x.root).state === 'recovery_scan', true, 'file not rewritten yet');
-  fs.writeFileSync(file, torn);
-  assert.equal(N.rawFailureControl(x.root).state, 'idle');
-  fs.writeFileSync(file, Buffer.alloc(8192));
-  assert.equal(N.rawFailureControl(x.root), null);
-});
-test('withRawFailure reads the failure control BEFORE the snapshot opens the runtime, so the snapshot\'s own scan start is not reported (strict idle kept)', t => {
-  const x = syntheticEpoch(t), file = path.join(x.dir, 'money-first-failure-control.bin');
-  const slot = body => { const out = Buffer.alloc(4096); Buffer.from(JSON.stringify({ ...body, checksum: p.digestJSON(body) })).copy(out); return out; };
-  fs.writeFileSync(file, Buffer.concat([slot({ sequence: 2, state: 'idle', reason: null }), Buffer.alloc(4096)]), { mode: 0o600 });
-  const snapshotOpensRuntime = () => { fs.writeFileSync(file, Buffer.concat([Buffer.alloc(4096), slot({ sequence: 3, state: 'recovery_scan', reason: 'RECOVERY_REQUIRED' })])); return { wals: [], failure: { state: 'recovery_scan' } }; };
-  const seen = N.withRawFailure(x.root, snapshotOpensRuntime);
-  assert.equal(seen.failure.state, 'idle', 'the state the server left, not the residue');
-  assert.deepEqual(seen.wals, []);
-  assert.equal(N.rawFailureControl(x.root).state, 'recovery_scan', 'the residue is real on disk; the next read would see it');
-});
-
 // ---- second native round: 6.3 forge path, D2.4a restart allowance -----------------------------------------------------
 test('forgePlan: a dotted path that starts with "plan." (and may index arrays) rewrites the highest slot under a valid checksum; recompute re-seals planDigest', t => {
   const x = syntheticEpoch(t), fixed = path.join(x.dir, 'money-atomic-restore-control.bin');

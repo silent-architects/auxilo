@@ -71,7 +71,7 @@ test('wrong identity is refused: epoch, binding, database; unknown keys and a br
   const a = w.body(5), b = w.body(6, { previousSlotDigest: HEX('9') });
   w.write(w.encode(b), w.encode(a));
   assert.throws(() => h.persistedFailureControl(w.root), error => /chain/.test(error.message), 'slot 6 does not chain to slot 5');
-  w.write(w.encode(w.body(5)), w.encode(w.body(5, { state: 'recovery_scan' })));
+  w.write(w.encode(w.body(5)), w.encode(scanBody(w, 5, HEX('1'))));
   assert.throws(() => h.persistedFailureControl(w.root), error => /chain/.test(error.message), 'same sequence, different content');
 });
 test('missing or short evidence fails the snapshot with a clear code, and nothing is written', t => {
@@ -80,4 +80,64 @@ test('missing or short evidence fails the snapshot with a clear code, and nothin
   fs.writeFileSync(w.file, Buffer.alloc(4096));
   assert.throws(() => h.persistedFailureControl(w.root), code('FAILURE_CONTROL_EVIDENCE_INVALID'));
   assert.equal(fs.statSync(w.file).size, 4096, 'read-only');
+});
+
+// ---- closure item 1: a checksum-VALID but semantically INVALID slot is refused, never skipped for an older slot ----------------
+const fc = require('../lib/money-failure-control');
+function states(w) {
+  const anchor = { schema: 1, kind: 'spend', id: 'spend_1', continuation: null, namespace: null, observationId: null, immutableDigest: HEX('a'), accountDigest: null, sourceDigest: null, epoch_id: w.x.binding.identity.epoch_id, binding_digest: w.x.binding.binding_digest, database_id: w.databaseId };
+  const scan = { schema: 1, phase: 'submitted_checkout', afterSequence: null, afterId: null, cutRevision: 1, walManifestDigest: null };
+  const comp = { spendId: 'spend_1', spendDigest: HEX('b'), walId: null, walPayloadDigest: null, earningsBeforeDigest: HEX('c'), earningsFileIdentity: { dev: 1, ino: 2 }, drawVectorDigest: HEX('d'), noAccrualProofDigest: HEX('e') };
+  return {
+    valid: {
+      idle: {},
+      failure_pending: { state: 'failure_pending', reason: 'CONTINUATION_AUTHORITY_REQUIRED', phase: 'boot_recovery', anchor, cutStatus: 'verified' },
+      recovery_scan: { state: 'recovery_scan', reason: 'RECOVERY_REQUIRED', phase: 'boot_recovery', cutStatus: 'verified', scan },
+      compensation_requested: { state: 'compensation_requested', reason: 'FAILED_DELIVERY_RECONCILIATION_REQUIRED', phase: 'compensate', anchor, cutStatus: 'verified', compensation: comp }
+    },
+    invalid: {
+      'idle with a reason': { reason: 'RECOVERY_REQUIRED' },
+      'idle with an anchor': { anchor },
+      'idle with a scan': { scan },
+      'failure_pending without an anchor': { state: 'failure_pending', reason: 'RECOVERY_REQUIRED', phase: 'boot_recovery', cutStatus: 'verified' },
+      'failure_pending without a reason': { state: 'failure_pending', phase: 'boot_recovery', anchor, cutStatus: 'verified' },
+      'failure_pending carrying a scan': { state: 'failure_pending', reason: 'RECOVERY_REQUIRED', phase: 'boot_recovery', anchor, cutStatus: 'verified', scan },
+      'unknown reason': { state: 'failure_pending', reason: 'CALLER_INVENTED', phase: 'boot_recovery', anchor, cutStatus: 'verified' },
+      'recovery_scan without a scan': { state: 'recovery_scan', reason: 'RECOVERY_REQUIRED', phase: 'boot_recovery', cutStatus: 'verified' },
+      'recovery_scan with an unknown phase': { state: 'recovery_scan', reason: 'RECOVERY_REQUIRED', phase: 'boot_recovery', cutStatus: 'verified', scan: { ...scan, phase: 'elsewhere' } },
+      'compensation_requested without a compensation': { state: 'compensation_requested', reason: 'FAILED_DELIVERY_RECONCILIATION_REQUIRED', phase: 'compensate', anchor, cutStatus: 'verified' },
+      'compensation_requested for a dispatch anchor': { state: 'compensation_requested', reason: 'FAILED_DELIVERY_RECONCILIATION_REQUIRED', phase: 'compensate', anchor: { ...anchor, kind: 'dispatch_operation' }, cutStatus: 'verified', compensation: comp },
+      'unknown state': { state: 'maybe' }
+    }
+  };
+}
+test('every runtime-valid state shape is accepted by the capture (the semantic check is not stricter than the runtime)', t => {
+  const w = world(t); w.x = w;
+  for (const [name, patch] of Object.entries(states(w).valid)) {
+    w.write(null, w.encode(w.body(3, patch)));
+    assert.equal(h.persistedFailureControl(w.root).state, patch.state || 'idle', name);
+    assert.doesNotThrow(() => fc.validateBody(w.body(3, patch)), name);
+  }
+});
+test('a checksum-valid but semantically invalid slot is REFUSED even when an older valid slot exists; it is never skipped', t => {
+  const w = world(t); w.x = w;
+  const older = w.body(6);
+  for (const [name, patch] of Object.entries(states(w).invalid)) {
+    const newest = w.body(7, { ...patch, previousSlotDigest: w.checksum(older) });
+    assert.notEqual(w.checksum(newest), undefined);
+    w.write(w.encode(newest), w.encode(older));
+    assert.throws(() => h.persistedFailureControl(w.root), error => error.code === 'FAILURE_CONTROL_EVIDENCE_INVALID', name + ' (newest, older valid)');
+    w.write(w.encode(older), w.encode(newest));
+    assert.throws(() => h.persistedFailureControl(w.root), error => error.code === 'FAILURE_CONTROL_EVIDENCE_INVALID', name + ' (other position)');
+    if (name !== 'unknown state') assert.throws(() => fc.validateBody(newest), name + ' is also refused by the runtime validator itself'); // the state set is checked by select(), mirrored in the capture
+  }
+});
+test('a torn (checksum-invalid) newest slot still falls back to the valid older one, and the older state is reported', t => {
+  const w = world(t); w.x = w;
+  const older = w.body(6, states(w).valid.failure_pending), newest = w.encode(w.body(7, { ...states(w).valid.recovery_scan, previousSlotDigest: w.checksum(older) }));
+  newest.write('TORN', 3);
+  w.write(newest, w.encode(older));
+  const got = h.persistedFailureControl(w.root);
+  assert.equal(got.sequence, 6);
+  assert.equal(got.state, 'failure_pending');
 });

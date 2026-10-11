@@ -191,21 +191,6 @@ function readControls(root) {
   if (fs.existsSync(fc)) { const bytes = fs.readFileSync(fc), p = require('../../lib/stripe-transfer-persistence'); const rows = []; for (let i = 0; i < 2; i++) { const raw = bytes.subarray(i * 4096, (i + 1) * 4096), end = raw.indexOf(0); if (end < 1) continue; const { checksum, ...body } = JSON.parse(raw.subarray(0, end)); if (p.digestJSON(body) === checksum) rows.push(body); } rows.sort((a, b) => b.sequence - a.sequence); out.failure = rows[0] ?? null; }
   return out;
 }
-// The failure control as the SERVER left it: parsed from the raw file (2 x 4096 B slots, highest valid sequence, checksum verified).
-// Opening a runtime starts a recovery scan (initializeMoneyRuntime -> beginRecoveryScan) and would overwrite an idle state.
-function rawFailureControl(root) {
-  const p = require('../../lib/stripe-transfer-persistence'), binding = JSON.parse(fs.readFileSync(path.join(root, 'financial-epoch.json'))), file = path.join(root, 'financial-epochs', binding.identity.epoch_id, 'money-first-failure-control.bin');
-  if (!fs.existsSync(file)) return null;
-  const bytes = fs.readFileSync(file), rows = [];
-  for (let i = 0; i < 2; i++) { const raw = bytes.subarray(i * 4096, (i + 1) * 4096), end = raw.indexOf(0); if (end < 1) continue; try { const { checksum, ...body } = JSON.parse(raw.subarray(0, end)); if (p.digestJSON(body) === checksum) rows.push(body); } catch {} }
-  rows.sort((a, b) => b.sequence - a.sequence);
-  return rows[0] ?? null;
-}
-// Reads the failure control BEFORE the snapshot function opens the runtime, then reports that state in the snapshot.
-function withRawFailure(root, snapshotFn) {
-  const failure = rawFailureControl(root), state = snapshotFn();
-  return failure ? { ...state, failure } : state;
-}
 // Forge the highest restore-control slot with a VALID slot checksum. recompute=true also recomputes planDigest (so only the SQL binding can refuse it).
 function forgePlan({ target, field, value, recompute = false }) {
   const p = require('../../lib/stripe-transfer-persistence'), e = require('../../lib/financial-epoch');
@@ -290,7 +275,7 @@ if (require.main === module) {
   const modes = { retire, restore, socket: socketCheckpoint, contexts, lease, transition, 'reconcile-barrier': reconcileBarrier, control: ({ root }) => readControls(root), forge: forgePlan, swap: ({ target, name }) => swapInode(target, name) };
   Promise.resolve().then(() => (modes[r.mode] || (() => assert.fail('unknown worker mode ' + r.mode)))(r)).then(value => { process.stdout.write('A2_RESULT ' + JSON.stringify(value ?? null) + '\n'); }).catch(error => { process.stdout.write('A2_ERROR ' + JSON.stringify({ code: error.code, message: error.message, check: error.check }) + '\n'); process.exitCode = 2; });
 }
-module.exports = { forgePlan, allowanceFor, readControls, restoreControlSlots, rawFailureControl, withRawFailure, SKIP, LIFECYCLE, CRASH_EXIT, MiB, crashedSource, coldBoot, stage, boot, snapshot, worker, workerAsync, workerOk, admittedWorker, run, gateLine, json, admitted, stopServer };
+module.exports = { forgePlan, allowanceFor, readControls, restoreControlSlots, SKIP, LIFECYCLE, CRASH_EXIT, MiB, crashedSource, coldBoot, stage, boot, snapshot, worker, workerAsync, workerOk, admittedWorker, run, gateLine, json, admitted, stopServer };
 
 // ---- shared assertions ----------------------------------------------------------------------------------------------
 // The owed unlock completed exactly once (the stamped F-WAL positive assertions, restated for any restored target).
