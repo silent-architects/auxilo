@@ -31,3 +31,70 @@ test('empty lifecycle record: a complete AUTHORITATIVE_LIFECYCLE_REQUIRED reply,
   assert.equal(fs.existsSync(path.join(x.root, '.money-checkpoints')), false, 'no checkpoint directory was created');
   assert.equal(JSON.parse(fs.readFileSync(x.controlFile)).retirement, undefined);
 });
+
+// ---- amendment: every handler failure is a complete reply, the busy flag always resets, and the socket stays usable -------------
+function rig(t, { provider, lease } = {}) {
+  const x = syntheticEpoch(t), writer = lock.injectMoneyWriter({ root: x.root, assertOwned: () => true }), state = { provider: provider || (() => undefined), lease: lease || (() => { throw Error('lease not expected'); }) };
+  const server = cp.startMoneyCheckpointServer({ epoch: { legacy_root: x.root }, writer, coordinator: { maintenanceLease: fn => state.lease(fn) }, sourceSha: 'a'.repeat(40), lifecycleControl: () => state.provider() });
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const stderr = [], realWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = chunk => { stderr.push(String(chunk)); return true; };
+  t.after(() => { process.stderr.write = realWrite; });
+  return { x, state, stderr, ready: new Promise(resolve => server.once('listening', resolve)), request: id => ask(x.root, JSON.stringify({ op: 'checkpoint', request_id: id })) };
+}
+const good = { schema_version: 1, rule_version: 'synthetic', approval_ref: 'synthetic', deletion_barrier: { sequence: 0, hash: 'a'.repeat(64) }, seals: [], records: [], holds: [] };
+const complete = reply => { assert.notEqual(reply, '', 'a reply, never a silent close'); assert.equal(reply.endsWith('\n'), true, 'newline-terminated'); assert.equal(reply.indexOf('\n'), reply.length - 1, 'exactly one line'); return JSON.parse(reply); };
+
+test('a synchronous lifecycle-provider throw is a complete error reply, the busy flag resets, the diagnostic names the exception, and the socket stays usable', async t => {
+  const r = rig(t), before = fs.readFileSync(r.x.controlFile);
+  await r.ready;
+  r.state.provider = () => { throw Object.assign(new Error('provider exploded: blank lifecycle'), { code: 'EMPTY_FINANCIAL_PRIMARY' }); };
+  assert.deepEqual(complete(await r.request('sync-1')), { error: 'EMPTY_FINANCIAL_PRIMARY' });
+  const line = r.stderr.find(l => l.startsWith('CHECKPOINT_SOCKET_ERROR '));
+  assert.ok(line, 'the handler writes the exception to stderr before closing');
+  const detail = JSON.parse(line.slice('CHECKPOINT_SOCKET_ERROR '.length));
+  assert.equal(detail.code, 'EMPTY_FINANCIAL_PRIMARY');
+  assert.equal(detail.message, 'provider exploded: blank lifecycle');
+  assert.match(detail.stack, /provider exploded/);
+  assert.ok(detail.stack.length <= 2000, 'bounded');
+  r.state.provider = () => { throw new Error('no code on this one'); };
+  assert.deepEqual(complete(await r.request('sync-2')), { error: 'CHECKPOINT_FAILED' }, 'an error without a code keeps the existing mapping');
+  r.state.provider = () => undefined;
+  assert.deepEqual(complete(await r.request('after-1')), { error: 'AUTHORITATIVE_LIFECYCLE_REQUIRED' }, 'not CHECKPOINT_BUSY: the flag was reset');
+  assert.deepEqual(complete(await ask(r.x.root, JSON.stringify({ op: 'checkpoint', request_id: 'x', retire: true }))), { error: 'CHECKPOINT_REQUEST_INVALID' }, 'existing request validation is unchanged');
+  assert.deepEqual(fs.readFileSync(r.x.controlFile), before, 'source control bytes unchanged');
+});
+test('an asynchronous checkpoint rejection is the same complete reply and leaves the socket usable', async t => {
+  const r = rig(t, { provider: () => good }), before = fs.readFileSync(r.x.controlFile);
+  await r.ready;
+  r.state.lease = () => Promise.reject(Object.assign(new Error('maintenance lease refused'), { code: 'MAINTENANCE_REFUSED' }));
+  assert.deepEqual(complete(await r.request('async-1')), { error: 'MAINTENANCE_REFUSED' });
+  assert.match(r.stderr.join(''), /CHECKPOINT_SOCKET_ERROR .*MAINTENANCE_REFUSED/);
+  r.state.lease = () => Promise.reject(new Error('uncoded'));
+  assert.deepEqual(complete(await r.request('async-2')), { error: 'CHECKPOINT_FAILED' });
+  r.state.provider = () => undefined;
+  assert.deepEqual(complete(await r.request('after-2')), { error: 'AUTHORITATIVE_LIFECYCLE_REQUIRED' });
+  assert.deepEqual(fs.readFileSync(r.x.controlFile), before);
+  assert.equal(fs.existsSync(path.join(r.x.root, '.money-checkpoints')), false, 'no checkpoint was published by any failed request');
+});
+test('a result that cannot be serialized does not escape the handler either: complete error reply and the flag resets', async t => {
+  const r = rig(t, { provider: () => good });
+  await r.ready;
+  r.state.lease = () => { const loop = {}; loop.self = loop; return loop; };
+  const first = complete(await r.request('ser-1'));
+  assert.equal(typeof first.error, 'string');
+  r.state.provider = () => undefined;
+  assert.deepEqual(complete(await r.request('after-3')), { error: 'AUTHORITATIVE_LIFECYCLE_REQUIRED' });
+});
+test('concurrent requests are still refused with CHECKPOINT_BUSY, and the flag resets after the held request fails', async t => {
+  const r = rig(t, { provider: () => good });
+  await r.ready;
+  let release; r.state.lease = () => new Promise((_, reject) => { release = () => reject(Object.assign(new Error('held then failed'), { code: 'HELD_FAILED' })); });
+  const held = r.request('held');
+  await new Promise(resolve => setTimeout(resolve, 100));
+  assert.deepEqual(complete(await r.request('second')), { error: 'CHECKPOINT_BUSY' });
+  release();
+  assert.deepEqual(complete(await held), { error: 'HELD_FAILED' });
+  r.state.provider = () => undefined;
+  assert.deepEqual(complete(await r.request('third')), { error: 'AUTHORITATIVE_LIFECYCLE_REQUIRED' });
+});

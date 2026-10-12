@@ -265,10 +265,18 @@ test('6.11a retirement is explicit only: the ordinary checkpoint leaves the sour
   const stage = await N.stage(box, 'socket-server', located.root), started = await N.boot(stage);
   try {
     const reply = await raw(JSON.stringify({ op: 'checkpoint', request_id: 'empty-lifecycle' }));
-    assert.notEqual(reply, '', 'FINDING: the real socket handler CLOSED the connection without a reply on the empty lifecycle fixture');
+    const captured = () => (started.getOutput?.() || '').split('\n').filter(l => l.includes('CHECKPOINT_SOCKET_ERROR ') || /uncaught|Error:/i.test(l)).join(' | ');
+    assert.notEqual(reply, '', 'FINDING: the real socket handler CLOSED the connection without a reply on the empty lifecycle fixture. Server-side exception: ' + captured());
+    assert.equal(reply.endsWith('\n'), true, 'a complete newline-terminated line: ' + JSON.stringify(reply));
     const parsed = JSON.parse(reply);
-    if (parsed.error !== undefined) assert.equal(parsed.error, 'AUTHORITATIVE_LIFECYCLE_REQUIRED', 'the only complete refusal an empty lifecycle may produce: ' + reply);
-    else { assert.equal(typeof parsed.digest, 'string'); assert.equal(parsed.completion_guaranteed, false); }
+    if (parsed.error !== undefined) {
+      // Accepted ONLY when it is the real underlying refusal: the handler's own diagnostic must name the same code. Anything else is surfaced as the failure.
+      const line = (started.getOutput?.() || '').split('\n').filter(l => l.startsWith('CHECKPOINT_SOCKET_ERROR ')).at(-1);
+      assert.ok(line, 'no CHECKPOINT_SOCKET_ERROR diagnostic for the error reply ' + reply);
+      const detail = JSON.parse(line.slice('CHECKPOINT_SOCKET_ERROR '.length));
+      assert.equal(parsed.error, 'AUTHORITATIVE_LIFECYCLE_REQUIRED', 'the empty lifecycle fixture was refused for a DIFFERENT reason: ' + JSON.stringify(detail));
+      assert.equal(detail.code, 'AUTHORITATIVE_LIFECYCLE_REQUIRED', 'underlying exception: ' + JSON.stringify(detail));
+    } else { assert.equal(typeof parsed.digest, 'string'); assert.equal(parsed.completion_guaranteed, false); }
     assert.equal(JSON.parse(await raw(JSON.stringify({ op: 'checkpoint', request_id: 'r1', retire: true, approvalRef: 'approval:socket' }))).error, 'CHECKPOINT_REQUEST_INVALID', 'a retire key on the socket is refused with a complete reply');
     assert.equal(JSON.parse(await raw(JSON.stringify({ op: 'retire', request_id: 'r2' }))).error, 'CHECKPOINT_REQUEST_INVALID');
   } finally { await N.stopServer(started.child); }
