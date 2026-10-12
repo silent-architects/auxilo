@@ -1077,6 +1077,7 @@ Test-first unit BUILD-SPEC-EMFR-ACCEPTANCE-PROBE-001 run natively by the Fable T
 | EAP-7 | Spec §5 C4 mixed paid/promo positive acceptance. | P2 | Epoch | UNPROVED — no supported active-epoch promo writer identified in source; production inventory not read. |
 | EAP-8 | Candidate checkout deleted by Codex thread archive (10:41) and restored from APFS snapshot; candidate committed locally as 811a344 so it is tool-independent. | P1 | TECH-PM | DONE 2026-10-08; Tyler ruled re-home: `git worktree move` to `~/.auxilo/emfr-candidate` (12:08), both manifests zero drift after the move, native runner repointed; safety tarball beside the records. |
 | EAP-9 | Whole-candidate integration: count pin 5604 update in the same commit as added tests, CI, audits, then separately authorized rollout and financial activation. | P1 | TECH-PM | OPEN. |
+| EAP-10 | Candidate production defect found by the A2 socket amendment: server.js:5241 currentLifecycleControl calls the unbound identifier readJSONStrict (line 828 uses the qualified require), so every checkpoint-socket request on the candidate server throws a code-less ReferenceError (mapped to CHECKPOINT_FAILED after a6a0b5a; closed the socket silently before). Introduced in 811a344, absent on main. | P1 | Provider + TECH-PM | OPEN 2026-10-11 — native proof emfr-probe-native-a2-socket-01; one-identifier fix proposed to the Money PM as an A2-completion or separate candidate amendment; no production change made. |
 
 ## Counts
 
