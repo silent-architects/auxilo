@@ -98,3 +98,31 @@ test('concurrent requests are still refused with CHECKPOINT_BUSY, and the flag r
   r.state.provider = () => undefined;
   assert.deepEqual(complete(await r.request('third')), { error: 'AUTHORITATIVE_LIFECYCLE_REQUIRED' });
 });
+
+// ---- the staged server's own lifecycle provider (server.js currentLifecycleControl), extracted verbatim and run with a real lifecycle file ----------
+// The provider used a bare readJSONStrict that server.js never binds (ReferenceError, code-less, CHECKPOINT_FAILED). It must read through
+// lib/stripe-transfer-persistence exactly as server.js loadDataFile does. No production behaviour is exercised beyond that one read.
+function serverProvider(file) {
+  const vm = require('node:vm'), { createRequire } = require('node:module'), serverFile = path.join(__dirname, '..', 'server.js');
+  const source = fs.readFileSync(serverFile, 'utf8'), match = source.match(/function currentLifecycleControl\(\) \{\n[\s\S]*?\n\}\n/);
+  assert.ok(match, 'server.js defines currentLifecycleControl');
+  const sandbox = { prospectiveEpoch: { epoch_id: 'fresh-1' }, financialEpoch: { pathFor: (name, epoch) => { assert.equal(name, 'lifecycle'); assert.equal(epoch.epoch_id, 'fresh-1'); return file; } }, require: createRequire(serverFile) };
+  vm.runInNewContext(match[0] + '\nthis.provider = currentLifecycleControl;', sandbox);
+  return sandbox.provider;
+}
+test('server.js lifecycle provider is bound: no authoritative control is a complete AUTHORITATIVE_LIFECYCLE_REQUIRED reply, a laid-down one is returned and valid', async t => {
+  const persistence = require('../lib/stripe-transfer-persistence'), x = syntheticEpoch(t), file = path.join(x.root, 'financial-lifecycle.json');
+  fs.writeFileSync(file, JSON.stringify({ binding_digest: 'b'.repeat(64), blocked_accounts: {}, conflicts: {}, epoch_id: 'fresh-1', schema_version: 1 }) + '\n');
+  const provider = serverProvider(file);
+  assert.doesNotThrow(() => provider(), 'the provider reads the lifecycle file; it must not throw a ReferenceError');
+  assert.equal(provider(), undefined, 'the empty fixture has no authoritative_control');
+  const r = rig(t, { provider });
+  await r.ready;
+  assert.deepEqual(complete(await r.request('bound-1')), { error: 'AUTHORITATIVE_LIFECYCLE_REQUIRED' });
+  const line = r.stderr.find(l => l.startsWith('CHECKPOINT_SOCKET_ERROR '));
+  assert.equal(JSON.parse(line.slice('CHECKPOINT_SOCKET_ERROR '.length)).code, 'AUTHORITATIVE_LIFECYCLE_REQUIRED');
+  // The shape production writes (lib/financial-epoch-operator.js transitionEpoch): state.authoritative_control = the lifecycle evidence.
+  const state = persistence.readJSONStrict(file); state.authoritative_control = structuredClone(good); persistence.writeJSONAtomic(file, state);
+  assert.deepEqual(provider(), good);
+  assert.doesNotThrow(() => require('../lib/money-lifecycle').validateLifecycleControl(provider()));
+});

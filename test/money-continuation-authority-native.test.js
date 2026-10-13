@@ -271,14 +271,38 @@ test('6.11a retirement is explicit only: the ordinary checkpoint leaves the sour
     assert.notEqual(reply, '', 'FINDING: the real socket handler CLOSED the connection without a reply on the empty lifecycle fixture. Server diagnostic: ' + diagnostics());
     assert.equal(reply.endsWith('\n'), true, 'a complete newline-terminated line: ' + JSON.stringify(reply) + ' | server diagnostic: ' + diagnostics());
     const parsed = JSON.parse(reply);
-    if (parsed.error !== undefined) {
-      // Accepted ONLY when it is the real underlying refusal: the handler's own diagnostic must name the same code. Anything else is surfaced as the failure.
-      const line = (started.getOutput?.() || '').split('\n').filter(l => l.startsWith('CHECKPOINT_SOCKET_ERROR ')).at(-1);
-      assert.ok(line, 'no CHECKPOINT_SOCKET_ERROR diagnostic for the error reply ' + reply);
-      const detail = JSON.parse(line.slice('CHECKPOINT_SOCKET_ERROR '.length));
-      assert.equal(parsed.error, 'AUTHORITATIVE_LIFECYCLE_REQUIRED', 'the empty lifecycle fixture was refused for a DIFFERENT reason (reply ' + reply.trim() + '). Server exception: code=' + detail.code + ' message=' + detail.message + ' stack=' + String(detail.stack).split('\n').slice(0, 4).join(' <- '));
-      assert.equal(detail.code, 'AUTHORITATIVE_LIFECYCLE_REQUIRED', 'underlying exception: ' + JSON.stringify(detail));
-    } else { assert.equal(typeof parsed.digest, 'string', 'success reply without a digest: ' + reply + ' | ' + diagnostics()); assert.equal(parsed.completion_guaranteed, false); }
+    // Missing authority: the documented refusal, complete and newline-terminated, and the handler's own diagnostic names the same code.
+    const line = (started.getOutput?.() || '').split('\n').filter(l => l.startsWith('CHECKPOINT_SOCKET_ERROR ')).at(-1);
+    assert.ok(line, 'no CHECKPOINT_SOCKET_ERROR diagnostic for the reply ' + reply);
+    const detail = JSON.parse(line.slice('CHECKPOINT_SOCKET_ERROR '.length));
+    assert.equal(parsed.error, 'AUTHORITATIVE_LIFECYCLE_REQUIRED', 'the empty lifecycle fixture was refused for a DIFFERENT reason (reply ' + reply.trim() + '). Server exception: code=' + detail.code + ' message=' + detail.message + ' stack=' + String(detail.stack).split('\n').slice(0, 4).join(' <- '));
+    assert.equal(detail.code, 'AUTHORITATIVE_LIFECYCLE_REQUIRED', 'underlying exception: ' + JSON.stringify(detail));
+    assert.deepEqual(N.workerOk({ mode: 'control', root: located.root }).control, before, 'the refused request left the control bytes identical');
+    // Success: lay down a valid synthetic authoritative_control in the fixture's lifecycle file, in the shape production writes (lib/financial-epoch-operator.js
+    // transitionEpoch: state.authoritative_control = the lifecycle evidence), then ask the same running server for an ordinary checkpoint.
+    const persistence = require('../lib/stripe-transfer-persistence'), cp = require('../lib/money-checkpoint');
+    const lifecycleFile = path.join(N.workerOk({ mode: 'control', root: located.root }).financialDir, 'financial-lifecycle.json');
+    const state = persistence.readJSONStrict(lifecycleFile);
+    assert.equal(state.authoritative_control, undefined, 'the fixture starts without an authoritative control');
+    state.authoritative_control = structuredClone(N.LIFECYCLE);
+    persistence.writeJSONAtomic(lifecycleFile, state);
+    const granted = await cp.requestMoneyCheckpoint({ root: located.root });
+    assert.equal(typeof granted.checkpoint_id, 'string', 'a granted checkpoint: ' + JSON.stringify(granted) + ' | server diagnostic: ' + diagnostics());
+    assert.equal(granted.completion_guaranteed, false);
+    assert.equal(Object.hasOwn(granted.manifest, 'sourceRetirement'), false, 'an ordinary socket checkpoint carries no sourceRetirement');
+    assert.equal(granted.retirement, undefined);
+    // The same server stays usable: a second complete, newline-terminated, successful reply from a distinct checkpoint.
+    const again = await raw(JSON.stringify({ op: 'checkpoint', request_id: 'second' }));
+    assert.equal(again.endsWith('\n'), true, 'a complete second reply: ' + JSON.stringify(again) + ' | server diagnostic: ' + diagnostics());
+    const second = JSON.parse(again);
+    assert.equal(second.error, undefined, 'the socket server remained usable: ' + again + ' | server diagnostic: ' + diagnostics());
+    assert.equal(typeof second.checkpoint_id, 'string');
+    assert.notEqual(second.checkpoint_id, granted.checkpoint_id);
+    assert.equal(second.completion_guaranteed, false);
+    const after = N.workerOk({ mode: 'control', root: located.root }).control;
+    assert.deepEqual(after, before, 'control bytes unchanged across the refusal and both grants');
+    assert.equal(after.retirement, undefined, 'no retirement record');
+    assert.equal(after.successorOf, undefined, 'no successor');
     assert.equal(JSON.parse(await raw(JSON.stringify({ op: 'checkpoint', request_id: 'r1', retire: true, approvalRef: 'approval:socket' }))).error, 'CHECKPOINT_REQUEST_INVALID', 'a retire key on the socket is refused with a complete reply');
     assert.equal(JSON.parse(await raw(JSON.stringify({ op: 'retire', request_id: 'r2' }))).error, 'CHECKPOINT_REQUEST_INVALID');
   } finally { await N.stopServer(started.child); }

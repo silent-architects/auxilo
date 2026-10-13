@@ -5238,7 +5238,7 @@ function currentFinancialEvidence() {
   return financialEpoch.requireEpoch(current).control.financial_evidence || {};
 }
 function currentLifecycleControl() {
-  return prospectiveEpoch ? readJSONStrict(financialEpoch.pathFor('lifecycle', prospectiveEpoch)).authoritative_control : null;
+  return prospectiveEpoch ? require('./lib/stripe-transfer-persistence').readJSONStrict(financialEpoch.pathFor('lifecycle', prospectiveEpoch)).authoritative_control : null;
 }
 const fundsReturnModule = require('./lib/funds-return');
 const fundsReturnProvider = prospectiveEpoch ? fundsReturnModule.createStripeRefundProvider({
