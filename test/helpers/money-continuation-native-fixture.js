@@ -10,7 +10,7 @@ const fs = require('node:fs'), path = require('node:path'), assert = require('no
 const admitted = require('./money-admitted-restore-fixture'), { stageServer, reservePort, bootServer, stopServer } = require('./staged-server');
 const ROOT = path.resolve(__dirname, '..', '..'), SELF = __filename, ADMITTED = path.join(__dirname, 'money-admitted-restore-fixture.js'), MiB = 1048576;
 const LIFECYCLE = Object.freeze({ schema_version: 1, rule_version: 'a2-native-v1', approval_ref: 'synthetic', deletion_barrier: { sequence: 0, hash: 'a'.repeat(64) }, seals: [], records: [], holds: [] });
-const CRASH_EXIT = 79, SKIP = process.platform !== 'linux' ? 'requires patched Linux runtime and owned diagnostic volume' : false;
+const CRASH_EXIT = 79, SKIP = !(process.platform === 'linux' && /^[a-f0-9-]{36}$/.test(process.env.AUXILO_PROBE_VOLUME_ID || '')) ? 'requires the owned Linux diagnostic volume (AUXILO_PROBE_VOLUME_ID)' : false;
 const json = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 
 // ---- child-process workers ---------------------------------------------------------------------------------------
