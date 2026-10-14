@@ -356,6 +356,9 @@ describe('[ruling N6] a resolved dispute clears a dispute_hold only when the hol
     resetCreditsFile();
     const H = makeHarness();
     await credits.addDollarLot('n6_buyer', 'dollar_paid', 10, { stripe_payment_intent: 'pi_n6a' });
+    // Lots spend oldest first and the timestamp has millisecond resolution, with a random lot_id as the tie-break. On a fast runner both lots land in the
+    // same millisecond, so which lot the unlock spends was a coin flip. Make pi_n6a strictly older so the test controls the order it asserts on.
+    for (const start = Date.now(); Date.now() === start;);
     await credits.addDollarLot('n6_buyer', 'dollar_paid', 10, { stripe_payment_intent: 'pi_n6b' });
     // pi_n6a: spend more than half, so its dispute places the hold.
     await H.unlock('n6_buyer', 'L1', 'bN6', 6);
