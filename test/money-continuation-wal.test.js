@@ -27,7 +27,15 @@ function fixture(t, { assertContinuation } = {}) {
   const create = () => wal.createWalEntry('unlock', { funding_source: 'credit_pack', purchaser_account_id: 'buyer', dollar_draws: draws }, { preWalCapability: wal.createPreWalPhase({ spendId: 'spend' }) });
   const walFile = id => path.join(files.wal, id + '.wal.json');
   // A restored target: same bytes, a different inode (copy then rename over).
-  const moveInode = () => { const bytes = fs.readFileSync(files.earnings); fs.rmSync(files.earnings); fs.writeFileSync(files.earnings, bytes); };
+  // The replacement is created BEFORE the original is removed (write beside it, then rename over it), so the two inodes are alive together and cannot share a
+  // number. The earlier remove-then-write let Linux (ext4, tmpfs) hand the freed inode number straight to the new file: same dev and ino, so the reader
+  // correctly saw the live identity and the "new inode" cases never reached the restore proof. macOS does not reuse numbers that fast, which hid it.
+  const moveInode = () => {
+    const before = fs.statSync(files.earnings), bytes = fs.readFileSync(files.earnings), beside = files.earnings + '.moved';
+    fs.writeFileSync(beside, bytes); fs.renameSync(beside, files.earnings);
+    const after = fs.statSync(files.earnings);
+    assert.notEqual(after.ino, before.ino, 'the fixture must really present a new inode');
+  };
   return { dir, files, wal, spend, calls, create, walFile, moveInode, runtime, setRoot: v => { root = v; }, draws, ctx, restore };
 }
 
