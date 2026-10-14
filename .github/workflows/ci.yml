@@ -40,6 +40,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A2: the old-binary refusal tests materialize the pinned baseline with `git archive 6653298 lib`,
+          # so the commit must be fetchable; the default shallow checkout cannot see it.
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -143,6 +147,10 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A2: the old-binary refusal tests materialize the pinned baseline with `git archive 6653298 lib`,
+          # so the commit must be fetchable; the default shallow checkout cannot see it.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '20'

@@ -7,8 +7,18 @@ async function main(argv) {
   const input = JSON.parse(fs.readFileSync(file));
   if (!path.isAbsolute(input.targetRoot||'') || !input.execution_approval_ref) throw Error('Explicit approved offline restore required');
   if(input.mode==='capacity') {
-    const writer=lock.acquireMoneyWriter({root:input.targetRoot});
-    try{return await cp.restoreCheckpointCapacity({targetRoot:input.targetRoot,writer,checkpointDir:input.checkpointDir,expectedCheckpointDigest:input.expected_checkpoint_digest,expectedBarrierDigest:input.expected_barrier_digest,authoritativeLifecycle:input.authoritativeLifecycle,executionApprovalRef:input.execution_approval_ref,restoreAllowance:input.restore_allowance});}finally{writer.close();}
+    // A2: an explicit successor_claim names the retired source; the operator tool, not the archive, holds the source writer.
+    const claim=input.successor_claim;
+    if(claim!==undefined&&(Object.keys(claim||{}).sort().join()!=='sourceRoot'||!path.isAbsolute(claim.sourceRoot||'')||path.resolve(claim.sourceRoot)!==claim.sourceRoot||claim.sourceRoot===input.targetRoot))throw Error('Explicit absolute successor_claim.sourceRoot required');
+    const writer=lock.acquireMoneyWriter({root:input.targetRoot});let sourceWriter;
+    try{
+      if(claim)sourceWriter=lock.acquireMoneyWriter({root:claim.sourceRoot});
+      const result=await cp.restoreCheckpointCapacity({targetRoot:input.targetRoot,writer,checkpointDir:input.checkpointDir,expectedCheckpointDigest:input.expected_checkpoint_digest,expectedBarrierDigest:input.expected_barrier_digest,authoritativeLifecycle:input.authoritativeLifecycle,executionApprovalRef:input.execution_approval_ref,restoreAllowance:input.restore_allowance,...(claim?{successorClaim:{sourceRoot:claim.sourceRoot,sourceWriter}}:{})});
+      // The restore itself completed, but an operator who asked for the successor claim must not read a refusal as success.
+      const state=claim&&result?.successor?.state;
+      if(state==='refused'||state==='withheld')throw Object.assign(Error(state==='refused'?'SUCCESSOR_REFUSED':'SUCCESSOR_WITHHELD'),{code:state==='refused'?'SUCCESSOR_REFUSED':'SUCCESSOR_WITHHELD',exitCode:state==='refused'?3:4,successorCode:result.successor.code,result});
+      return result;
+    }finally{try{sourceWriter?.close();}finally{writer.close();}}
   }
   if(input.mode && input.mode!=='restore')throw Error('Unknown restore mode');
   if(!path.isAbsolute(input.checkpointDir||''))throw Error('Explicit checkpoint directory required');
@@ -30,7 +40,8 @@ async function main(argv) {
     writer.close();
   }
 }
-if(require.main===module)main(process.argv.slice(2)).then(result=>console.log(JSON.stringify(result)),error=>{console.error(JSON.stringify({error:error.code||error.message}));process.exitCode=1;});
+const exitCodeFor=error=>Number.isInteger(error?.exitCode)&&error.exitCode>0?error.exitCode:1;
+if(require.main===module)main(process.argv.slice(2)).then(result=>console.log(JSON.stringify(result)),error=>{console.error(JSON.stringify({error:error.code||error.message,...(error.successorCode?{successor_code:error.successorCode}:{}),...(error.result?{result:error.result}:{})}));process.exitCode=exitCodeFor(error);});
 module.exports = {
-  main
+  main, exitCodeFor
 };
