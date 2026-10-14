@@ -192,9 +192,11 @@ test('a re-run or replacement refuses to publish a record for a source that move
   const f = fixture(t);
   await f.cp.createRetiringCheckpoint({ ...f.base(), approvalRef: 'approval:retire-1' });
   f.boot();
-  const db = path.join(f.dir, 'money-control.sqlite'), bytes = fs.readFileSync(db);
-  fs.rmSync(db);
-  fs.writeFileSync(db, bytes, { mode: 0o600 });
+  const db = path.join(f.dir, 'money-control.sqlite'), bytes = fs.readFileSync(db), inoBefore = fs.statSync(db).ino;
+  // Same bytes on a NEW inode: write the replacement beside the original and rename it over, so both inodes exist together (remove-then-write lets Linux
+  // reuse the freed inode number, which left the source unmoved).
+  fs.writeFileSync(db + '.moved', bytes, { mode: 0o600 }); fs.renameSync(db + '.moved', db);
+  assert.notEqual(fs.statSync(db).ino, inoBefore, 'the fixture must really present a moved source');
   await assert.rejects(f.cp.createRetiringCheckpoint({ ...f.base(), approvalRef: 'approval:retire-1' }), code('CHECKPOINT_RETIRE_IDENTITY_CHANGED'));
 });
 test('a retired source runs maintenance only: a prepared spend with a receipt refuses CHECKPOINT_RETIRED_PENDING_ACK and nothing is acknowledged', async t => {
