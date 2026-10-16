@@ -113,14 +113,14 @@ describe('STATUS-CREDIT-PURCHASES 2: static source checks', () => {
   });
 
   it('the new row sits immediately after the x402 Payments row in source order', () => {
-    const x402Idx = STATUS_HTML.indexOf('Micropayment processing on Base (USDC)');
+    const x402Idx = STATUS_HTML.indexOf('x402 micropayments on Base (USDC) are paused');
     const creditsIdx = STATUS_HTML.indexOf(`<span class="component-name">${LABEL}</span>`);
-    const payoutsIdx = STATUS_HTML.indexOf('<span class="component-name">Builder Payouts</span>');
+    const payoutsIdx = STATUS_HTML.indexOf('<span class="component-name">Payments and payouts</span>');
     assert.notEqual(x402Idx, -1);
     assert.notEqual(creditsIdx, -1);
     assert.notEqual(payoutsIdx, -1);
     assert.ok(x402Idx < creditsIdx, 'x402 row precedes the Credit Purchases row');
-    assert.ok(creditsIdx < payoutsIdx, 'Credit Purchases row precedes the Builder Payouts row');
+    assert.ok(creditsIdx < payoutsIdx, 'Credit Purchases row precedes the Payments and payouts row');
     // No other component-row boundary between x402's row and the new row.
     const between = STATUS_HTML.slice(x402Idx, creditsIdx);
     assert.equal((between.match(/<div class="component-row">/g) || []).length, 1,
@@ -220,11 +220,11 @@ describe('STATUS-CREDIT-PURCHASES 3: served /status carries the row', { timeout:
     const descCount = body.split(DESC).length - 1;
     assert.equal(descCount, 1, 'served page: Credit Purchases description appears exactly once');
 
-    const x402Idx = body.indexOf('Micropayment processing on Base (USDC)');
+    const x402Idx = body.indexOf('x402 micropayments on Base (USDC) are paused');
     const creditsIdx = body.indexOf(`<span class="component-name">${LABEL}</span>`);
-    const payoutsIdx = body.indexOf('<span class="component-name">Builder Payouts</span>');
+    const payoutsIdx = body.indexOf('<span class="component-name">Payments and payouts</span>');
     assert.ok(x402Idx > -1 && x402Idx < creditsIdx && creditsIdx < payoutsIdx,
-      'served page: row order is x402 -> Credit Purchases -> Builder Payouts');
+      'served page: row order is x402 -> Credit Purchases -> Payments and payouts');
 
     assert.ok(!body.includes('stripe_reason'), 'served page never renders stripe_reason');
     assert.ok(!body.includes('stripe_mode'), 'served page never renders stripe_mode');

@@ -25,7 +25,7 @@ const R2 = "Funds spent on an Unlock are final and non-refundable, as Section 7.
 const R3 = "When Auxilo publishes that returns are available for your account's funding period, you may request the return of eligible unused paid funding. Eligible means: funds you paid by card through Auxilo's current payment account, in US dollars, that were never spent on an Unlock, are not promotional, are not restricted by a dispute, reversal or hold, and belong to the funding period for which returns are published. Funding from before the published period is not eligible under this Section; its treatment is governed by the terms that applied when it was purchased and by applicable law. A return is quoted before it is requested. The quote applies the eligible verified processing and return costs first, covered first from eligible realized net margin; where that margin does not cover them, the quote states the one permitted uncovered shortfall, without markup, and the exact amount that would reach the original payment method, and you may decline. Fractional balances are preserved exactly. Returns go only to the original payment method of the funding being returned, never to another card, account or wallet, and only up to the amount of that payment that remains unused. When you confirm a request, the quoted amount is reserved and is no longer spendable while the return is in progress. If the payment provider confirms the return, the reserved amount is settled as returned and leaves your balance. If the provider definitively fails the return, Auxilo restores to your balance exactly the entitlement its records and the provider's evidence support. While the provider's result is unresolved, the reserved amount stays held, is not spendable, and is shown to you as held; Auxilo does not treat it as returned or as restored until the result is verified. Auxilo may decline a request while a payment is disputed, while recovery of its records is in progress, or where the provider cannot accept the request.";
 const R4 = "A withdrawal or return under Section 7.7 concerns unused paid funding only; it is not a refund of an Unlock and never reverses a completed Unlock.";
 const PAUSED_LINE = 'Adding funds is paused during the migration; see the status page.';
-const STATUS_SENTENCE = 'Adding funds, paid unlocks and contributor withdrawals are paused while Auxilo completes its financial-records migration. Discovery, free reads and account access remain available. Recorded balances are preserved.';
+const STATUS_SENTENCE = 'Adding funds, paid unlocks and contributor withdrawals are paused while Auxilo completes its financial-records migration. Discovery and free reads remain available. Recorded balances are preserved.';
 
 const TOS = read('docs', 'TERMS-OF-SERVICE.md');
 const slice = (from, to) => TOS.slice(TOS.indexOf(from), TOS.indexOf(to));
@@ -63,6 +63,7 @@ describe('funds-return a3: R1 terminology (Credit Packs to Added Funds)', () => 
     assert.match(TOS, /"Added Funds" are Balance added under Section 7\.1/);
     assert.match(TOS, /The part of a Balance that was added by Added Funds paid for with money\./);
     assert.match(slice('**Limits.**', '### 7.2 Credit Terms'), /Added Funds/);
+    assert.ok(slice('**Limits.**', '### 7.2 Credit Terms').includes('if the funds you added by purchase in the preceding 24 hours, including that addition,'));
     assert.match(slice('### 7.6', '### 7.7'), /a payment for Added Funds/);
     assert.match(TOS, /Money a Consumer pays as Added Funds is received by Auxilo in its own right/);
   });
@@ -149,15 +150,46 @@ describe('funds-return a3: served copy', () => {
 describe('funds-return a3: paused availability copy', () => {
   it('status.html carries the approved component sentence and no longer says buyer payments are unaffected', () => {
     const html = read('public', 'status.html');
-    assert.ok(html.includes('<span class="component-desc">' + STATUS_SENTENCE + '</span>'));
+    assert.ok(html.includes('<span class="component-name">Payments and payouts</span>\n        <span class="component-desc">' + STATUS_SENTENCE + '</span>'));
     assert.ok(!html.includes('buyer payments are unaffected'));
+    assert.ok(!html.includes('account access remain available'), 'the paused overlay answers 503 on register, magic-link, verify, credits and referral routes');
+    assert.ok(!html.includes('<span class="component-name">Builder Payouts</span>'), 'row renamed');
   });
 
-  for (const page of ['api', 'for-agents', 'how-it-works']) {
-    it(page + '.html carries the paused line exactly once, with no "never expire" or "nothing is charged" promise in it', () => {
+  it('status.html no longer shows the Marketplace and x402 rows as plainly Operational while paid unlock, submission and x402 answer 503', () => {
+    const html = read('public', 'status.html');
+    assert.ok(html.includes('<span class="component-desc">Discovery and free reads are operational. Paid unlocks and submission are paused during the migration.</span>\n        <span class="badge degraded">Partial</span>'));
+    assert.ok(html.includes('<span class="component-desc">x402 micropayments on Base (USDC) are paused during the migration.</span>\n        <span class="badge degraded">Paused</span>'));
+    assert.ok(!html.includes('Submit, search, and unlock agent learnings'));
+    assert.ok(!/migration[^<]*(by|until|within|in \d)/i.test(html.match(/Paid unlocks and submission are paused[^<]*/)[0]), 'no timing promise');
+  });
+
+  const SERVED_PAUSED = {
+    'for-agents': '<p class="auth-desc">Create an account, add funds, and generate an API key. It works with any HTTP client and follows the auth pattern you already know. ' + PAUSED_LINE + '</p>',
+    'how-it-works': '<p>The common path. Create an account, add funds, and each unlock deducts from your balance. No crypto required. Good for predictable budgets and teams that want a single bill. ' + PAUSED_LINE + '</p>',
+    'api': '<td data-label="API key + balance" role="cell">$10, $25, $100. ' + PAUSED_LINE + '</td>',
+  };
+  for (const page of Object.keys(SERVED_PAUSED)) {
+    it(page + '.html serves the paused line exactly once, as plain text inside the existing element (no link, no new element)', () => {
       const html = read('public', page + '.html');
       assert.equal(html.split(PAUSED_LINE).length - 1, 1);
-      assert.ok(!/nothing is charged|never expire/i.test(PAUSED_LINE));
+      assert.ok(html.includes(SERVED_PAUSED[page]), 'exact served markup');
+      assert.ok(!/nothing is charged|never expire/i.test(html.slice(html.indexOf(PAUSED_LINE) - 40, html.indexOf(PAUSED_LINE) + PAUSED_LINE.length + 10)));
+    });
+  }
+
+  it('llms.txt carries the paused line beside both add-funds lines', () => {
+    const t = read('public', 'llms.txt');
+    assert.equal(t.split(PAUSED_LINE).length - 1, 2);
+    assert.ok(t.includes('add funds $10 / $25 / $100, balance never expires. ' + PAUSED_LINE));
+    assert.ok(t.includes('pays listed prices and never expires. ' + PAUSED_LINE));
+  });
+
+  for (const page of ['pricing', 'dashboard']) {
+    it(page + '.html hidden prospective disclosure is conditional on published returns and says Unlock purchases are final', () => {
+      const html = read('public', page + '.html');
+      assert.ok(html.includes('Add funds dollar for dollar. Unlock purchases are final. When returns are published for your funding period, you can request a return of eligible unused paid funds to the original payment method.'));
+      assert.ok(!html.includes('Add funds dollar for dollar. You can request a return'));
     });
   }
 });

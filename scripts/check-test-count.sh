@@ -537,7 +537,8 @@ cd "${REPO_ROOT}"
 # TERMS-FUNDS-RETURN-A3 commit 3 (7.2 no-cash-value bullet excepts Section 7.7): +1. 7026 + 1 = 7027.
 # TERMS-FUNDS-RETURN-A3 commit 4 (served copy: pricing, dashboard, llms.txt): +3 in test/terms-funds-return-a3.test.js. 7027 + 3 = 7030.
 # TERMS-FUNDS-RETURN-A3 commit 5 (paused availability copy: status.html, api, for-agents, how-it-works): +4 in test/terms-funds-return-a3.test.js. 7030 + 4 = 7034.
-EXPECTED_TEST_COUNT=7034
+# TERMS-FUNDS-RETURN-A3 review fixes: +4 in test/terms-funds-return-a3.test.js (status Marketplace/x402 rows, llms.txt paused lines, two prospective-disclosure pages; the paused-line tests now assert served markup). 7034 + 4 = 7038.
+EXPECTED_TEST_COUNT=7038
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
