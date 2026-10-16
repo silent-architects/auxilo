@@ -1,8 +1,8 @@
 # Terms of Service
 
 **Effective Date: March 17, 2026**
-**Last Updated: September 27, 2026**
-**Current Amendment: `2026-09-27-credit-balance-a2`, effective September 27, 2026.** These Terms, as amended by it, govern your use of the Platform from that date. This amendment id is the acceptance version of record.
+**Last Updated: October 16, 2026**
+**Current Amendment: `2026-10-16-funds-return-a3`, effective October 16, 2026.** These Terms, as amended by it, govern your use of the Platform from that date. This amendment id is the acceptance version of record.
 **Amendment `2026-07-04-payee-agency-a1` — Payment-Collection Agency (Section 5.10), effective July 11, 2026.** The payment-collection agency in Section 5.10 was added by this amendment and applies only on and after its effective date shown above (July 11, 2026); it does not apply retroactively to the original March 17, 2026 Effective Date or to any Builder Share received before the amendment's effective date.
 **Amendment `2026-09-06-clean-lane-b1` — Standing Publication Consent (Section 5.9.3(g)), Non-Material, posted September 6, 2026.** This amendment added subsection (g) to Section 5.9.3, with conforming edits to Section 4.1 and to the opening paragraph of Section 5.9.3. It is a Non-Material change under Section 17: it imposes no new obligation, the feature it describes is off by default, and it takes effect for an account only on that Builder's separate affirmative activation. The Current Amendment id above (the acceptance version of record) is unchanged.
 **Amendment `2026-09-06-dark-path-b2` — Dormant Upload Path (Section 5.8) and Retraction-Window Basis (Section 5.9.4(a)), Non-Material, posted September 6, 2026.** This amendment bounds the Section 5.8 conversation-upload clause to a pipeline that exists in Auxilo's software but is disabled and not in operation, with a conforming edit to the opening paragraph of Section 5.9, and states in Section 5.9.4(a) the date from which the seven-day retraction window runs for each way a Learning may be published. It is a Non-Material change under Section 17: it imposes no new obligation, adds and removes no right, and conforms these Terms to the Platform's existing behavior. The Current Amendment id above (the acceptance version of record) is unchanged.
@@ -728,4 +728,4 @@ Section headings are for convenience and reference only and shall not affect the
 
 ---
 
-*These Terms of Service were last updated on September 27, 2026. Current amendment: 2026-09-27-credit-balance-a2.*
+*These Terms of Service were last updated on October 16, 2026. Current amendment: 2026-10-16-funds-return-a3.*

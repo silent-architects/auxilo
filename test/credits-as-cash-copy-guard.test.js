@@ -199,6 +199,6 @@ describe('credits-as-cash guard 4: Terms carries the new defined terms and its v
     const current = /Current Amendment: `([^`]+)`/.exec(TOS);
     assert.ok(current, 'Current Amendment banner present');
     assert.equal(current[1], CURRENT_TOS_VERSION, 'Terms header version equals the server constant');
-    assert.equal(CURRENT_TOS_VERSION, '2026-09-27-credit-balance-a2', 'CURRENT_TOS_VERSION is the register C revision-3 version string');
+    assert.equal(CURRENT_TOS_VERSION, '2026-10-16-funds-return-a3', 'CURRENT_TOS_VERSION is the funds-return a3 version string (was the register C revision-3 string 2026-09-27-credit-balance-a2 until the a3 amendment)');
   });
 });

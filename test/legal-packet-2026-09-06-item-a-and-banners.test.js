@@ -57,7 +57,7 @@ describe('Legal Packet 2026-09-06: Item A (Privacy §7.5) + Terms banner lines c
     // Only one "Current Amendment:" line, and it is the current one.
     assert.equal((TOS.match(/Current Amendment: `/g) || []).length, 1, 'only one "Current Amendment:" line');
     const current = /Current Amendment: `([^`]+)`/.exec(TOS);
-    assert.equal(current[1], '2026-09-27-credit-balance-a2', 'acceptance version is the credit-as-cash amendment (revision 3)');
+    assert.equal(current[1], '2026-10-16-funds-return-a3', 'acceptance version is the funds-return a3 amendment (was credit-balance-a2)');
   });
 
   it('the byo-provider-c1 banner line keeps the same four-sentence form as clean-lane-b1 / dark-path-b2', () => {
@@ -68,14 +68,14 @@ describe('Legal Packet 2026-09-06: Item A (Privacy §7.5) + Terms banner lines c
     assert.match(line[0].trim(), shape, 'banner line for byo-provider-c1 follows the shared sentence form');
   });
 
-  it('the footer "last updated" line reads September 27, 2026 (credits-as-cash, revision 3), the stale September 6 line is gone', () => {
+  it('the footer "last updated" line reads October 16, 2026 (funds-return a3), the stale September 6 line is gone', () => {
     assert.equal(
       (TOS.match(/were last updated on September 6, 2026/g) || []).length,
       0,
       'old footer date must be gone (positive control: 1 before, 0 after)'
     );
     assert.equal(
-      (TOS.match(/were last updated on September 27, 2026/g) || []).length,
+      (TOS.match(/were last updated on October 16, 2026/g) || []).length,
       1,
       'new footer date must appear exactly once (positive control: 0 before, 1 after)'
     );
