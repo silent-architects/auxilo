@@ -533,7 +533,8 @@ cd "${REPO_ROOT}"
 # TERMS-FUNDS-RETURN-A3 (2026-10-16), commit 1 (version bump 2026-10-16-funds-return-a3): +1 in
 # test/fix-unit-money.test.js (a2 acceptor keeps payee agency, is re-prompted), +2 in the new
 # test/terms-funds-return-a3.test.js (version of record), +1 tracked-file path-guard entry for the new file. 7012 + 4 = 7016.
-EXPECTED_TEST_COUNT=7016
+# TERMS-FUNDS-RETURN-A3 commit 2 (Terms R1-R5, Section 7.7): +10 in test/terms-funds-return-a3.test.js. 7016 + 10 = 7026.
+EXPECTED_TEST_COUNT=7026
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

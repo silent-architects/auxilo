@@ -45,3 +45,76 @@ describe('funds-return a3: version of record', () => {
     assert.ok(!TOS.includes('2026-09-27-credit-balance-a2`, effective'), 'the a2 banner no longer claims to be current');
   });
 });
+
+describe('funds-return a3: R1 terminology (Credit Packs to Added Funds)', () => {
+  it('Section 7.1 names Added Funds and keeps the bridge sentence', () => {
+    const s71 = slice('### 7.1 Payment Methods', '### 7.2 Credit Terms');
+    assert.ok(s71.includes('**Added Funds.** A registered user may add funds of $10, $25, or $100 through the card payment methods offered at checkout (previously described as a credit pack; the two terms mean the same balance).'));
+    assert.ok(!/Credit Packs/.test(TOS), 'no "Credit Packs" heading survives');
+  });
+
+  it('the only remaining "credit pack" in the Terms is the bridge sentence (positive control: it is found once)', () => {
+    const hits = TOS.match(/credit packs?/gi) || [];
+    assert.equal(hits.length, 1, 'exactly the bridge sentence');
+    assert.ok(TOS.includes('previously described as a credit pack'));
+  });
+
+  it('later references use Added Funds: definitions, 7.1 limits, 7.2, 7.6 and 5.10(c)', () => {
+    assert.match(TOS, /"Added Funds" are Balance added under Section 7\.1/);
+    assert.match(TOS, /The part of a Balance that was added by Added Funds paid for with money\./);
+    assert.match(slice('**Limits.**', '### 7.2 Credit Terms'), /Added Funds/);
+    assert.match(slice('### 7.6', '### 7.7'), /a payment for Added Funds/);
+    assert.match(TOS, /Money a Consumer pays as Added Funds is received by Auxilo in its own right/);
+  });
+});
+
+describe('funds-return a3: R2 non-refundable bullet', () => {
+  it('Section 7.2 carries the two approved sentences verbatim and the old bullet is gone', () => {
+    const s72 = slice('### 7.2 Credit Terms', '### 7.3 Transaction Finality');
+    assert.ok(s72.includes(R2));
+    assert.ok(!s72.includes('Credits are **non-refundable** except as these Terms provide.'));
+  });
+});
+
+describe('funds-return a3: R3 Section 7.7', () => {
+  it('7.7 follows 7.6 and precedes Section 8, with no renumbering of Section 8 onward', () => {
+    const i76 = TOS.indexOf('### 7.6 Refunds, Reversals, and Disputes');
+    const i77 = TOS.indexOf('### 7.7 Withdrawal or Return of Unused Paid Funding');
+    const i8 = TOS.indexOf('## 8. Intellectual Property');
+    assert.ok(i76 !== -1 && i77 !== -1 && i8 !== -1);
+    assert.ok(i76 < i77 && i77 < i8);
+    assert.equal((TOS.match(/^### 7\.7 /gm) || []).length, 1);
+  });
+
+  it('7.7 body is the approved v2 text verbatim', () => {
+    const body = slice('### 7.7 Withdrawal or Return of Unused Paid Funding', '## 8. Intellectual Property');
+    assert.ok(body.includes(R3));
+  });
+
+  it('7.7 states no number and carries no brand-rule words (positive control: the check finds "Unlock" in the same body)', () => {
+    const body = slice('### 7.7 Withdrawal or Return of Unused Paid Funding', '## 8. Intellectual Property');
+    assert.ok(/Unlock/.test(body), 'positive control');
+    assert.ok(!/\bshare\b/i.test(body));
+    assert.ok(!/\bmarketplace\b/i.test(body));
+    assert.ok(!/\$\d/.test(body), 'the quote is the number');
+  });
+
+  it('the horizontal-rule count of the Terms is unchanged (wave-e3 pins 21)', () => {
+    assert.equal(TOS.split('\n').filter((l) => l.trim() === '---').length, 21);
+  });
+});
+
+describe('funds-return a3: R4 and R5 cross-references', () => {
+  it('7.3 carries the R4 sentence', () => {
+    assert.ok(slice('### 7.3 Transaction Finality', '### 7.4 Blockchain Transactions').includes(R4));
+  });
+
+  it('7.6 and 14.3 cross-reference 7.7 without restricting existing rights', () => {
+    const s76 = slice('### 7.6', '### 7.7');
+    assert.match(s76, /Section 7\.7/);
+    assert.match(s76, /does not limit this Section/);
+    const s143 = slice('### 14.3 Effect of Termination', '### 14.4 Survival');
+    assert.match(s143, /Section 7\.7/);
+    assert.match(s143, /does not limit/);
+  });
+});
