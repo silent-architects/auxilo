@@ -362,7 +362,7 @@ The Platform supports two payment methods:
 
 - Funds spent on an Unlock are final and non-refundable, as Section 7.3 provides. Unused Added Funds that were paid by card are not refundable except as the Return of Unused Paid Funding in Section 7.7 provides, as Sections 7.6 and 14 provide, and where applicable law requires a refund or cash payment of a remaining Paid Balance, which Auxilo will make on your written request to hello@auxilo.io.
 - Credits are **non-transferable**. They cannot be sent, sold, assigned, or given to another account, and cannot be combined with another account's Credits.
-- Credits have no cash value outside the Platform and cannot be withdrawn or redeemed for currency, except where applicable law requires it. They can be used only to pay for Unlocks on the Platform, cannot pay for anything else, including an x402 payment or any fee, and earn no interest.
+- Credits have no cash value outside the Platform and cannot be withdrawn or redeemed for currency, except as Section 7.7 provides or where applicable law requires it. They can be used only to pay for Unlocks on the Platform, cannot pay for anything else, including an x402 payment or any fee, and earn no interest.
 - Credits **do not expire**, and Auxilo charges no fee for holding them or for inactivity. If applicable unclaimed property law requires Auxilo to report and deliver a remaining Paid Balance to a government authority after a period of inactivity, Auxilo will do so, and you may then claim its value from that authority.
 - Promotional Balance has no cash value and is never refunded or paid out.
 - Auxilo may change prices and amounts for Added Funds with 30 days' notice. No change reduces a Balance already held in an account.

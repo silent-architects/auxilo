@@ -74,6 +74,11 @@ describe('funds-return a3: R2 non-refundable bullet', () => {
     assert.ok(s72.includes(R2));
     assert.ok(!s72.includes('Credits are **non-refundable** except as these Terms provide.'));
   });
+
+  it('the no-cash-value bullet no longer contradicts 7.7: it excepts Section 7.7 as well as applicable law (builder reconciliation, flagged for counsel)', () => {
+    const s72 = slice('### 7.2 Credit Terms', '### 7.3 Transaction Finality');
+    assert.ok(s72.includes('cannot be withdrawn or redeemed for currency, except as Section 7.7 provides or where applicable law requires it.'));
+  });
 });
 
 describe('funds-return a3: R3 Section 7.7', () => {
