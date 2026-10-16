@@ -1,0 +1,5 @@
+"use strict";
+const{test}=require('node:test'),assert=require('node:assert/strict'),fs=require('fs'),path=require('path');const{boot}=require('./helpers/financial-epoch-fixture'),e=require('../lib/financial-epoch');
+test('mutating copied account leaves legacy bytes; old missing financial files stay missing',t=>{const{root,epoch}=boot(t),file=path.join(root,'accounts.json'),before=fs.readFileSync(file);fs.writeFileSync(e.pathFor('accounts',epoch),JSON.stringify({new:{email:'new@example.invalid'}}));assert.deepEqual(fs.readFileSync(file),before);assert.equal(fs.existsSync(path.join(root,'earnings.json')),false);assert.equal(e.resolveRuntimeEpoch({root}).epoch_id,epoch.epoch_id);});
+test('legacy journal corruption and original drift fail runtime closed',t=>{const{root}=boot(t);fs.writeFileSync(path.join(root,'stripe-history-coverage-journal.json'),'{}');assert.throws(()=>e.resolveRuntimeEpoch({root}),/HISTORY_COVERAGE_REQUIRED/);});
+test('legacy WAL may not acquire unobserved transactions after bootstrap',t=>{const{root}=boot(t);fs.writeFileSync(path.join(root,'wal','new.wal.json'),'{}');assert.throws(()=>e.resolveRuntimeEpoch({root}),/LEGACY_WAL_CHANGED/);});

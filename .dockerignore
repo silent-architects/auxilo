@@ -2,6 +2,7 @@
 # Runtime data lives on the Fly volume, not in the image.
 
 node_modules
+**/node_modules
 data
 *.log
 deploy-output.txt

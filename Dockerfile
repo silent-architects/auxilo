@@ -9,13 +9,27 @@
 # local state into the image. Runtime data lives on the Fly volume mounted
 # at /app/data (see fly.toml [[mounts]]).
 
+# Server-only native dependency. Root/MCP installs remain free of SQLite.
+# Install lifecycle scripts remain disabled; only this pinned addon's source
+# build is invoked, against headers in the same Node20 image used at runtime.
+FROM node:20-alpine AS money-native-build
+RUN apk add --no-cache python3 make g++
+WORKDIR /native
+COPY server-runtime/package.json server-runtime/package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+# Pin the reviewed Unix VFS change: required temp directory, never fallback.
+COPY scripts/patch-money-sqlite.js /native/patch-money-sqlite.js
+RUN node /native/patch-money-sqlite.js /native/node_modules/better-sqlite3/deps/sqlite3/sqlite3.c
+WORKDIR /native/node_modules/better-sqlite3
+RUN node /usr/local/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js rebuild --release --nodedir=/usr/local
+
 FROM node:20-alpine AS base
 
 # curl   — required for HEALTHCHECK
 # tini   — PID 1, signal handling + zombie reaping
 # su-exec — drop-privileges helper used by the entrypoint to chown-then-
 #          exec-as-node (cheaper than gosu, statically linked)
-RUN apk add --no-cache curl tini su-exec
+RUN apk add --no-cache curl tini su-exec flock && test -x /usr/bin/flock
 
 WORKDIR /app
 
@@ -33,6 +47,8 @@ RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 # Copy the rest of the repo AFTER deps. .dockerignore keeps data/,
 # node_modules/, *.log, .git, and the deploy-*.js helpers out.
 COPY . .
+COPY --from=money-native-build /native/node_modules /app/server-runtime/node_modules
+RUN node -e 'const D=require("./server-runtime/node_modules/better-sqlite3");const d=new D(":memory:");if(d.prepare("select sqlite_version() v").get().v!=="3.53.2")throw Error("Unexpected SQLite runtime");if(d.prepare("SELECT sqlite_compileoption_used(?) n").get("AUXILO_STRICT_TEMP").n!==1)throw Error("Missing strict SQLite temp routing");d.close()'
 
 # LW-17: COPY preserves local file modes. model_config.json once shipped as
 # 0600 root:root while the server runs de-privileged as `node` — the config

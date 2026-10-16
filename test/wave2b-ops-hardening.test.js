@@ -252,7 +252,7 @@ describe('payments-switch: flag semantics + body shape', () => {
 describe('payments-switch: server gates (all five money-movement surfaces)', () => {
   it('dualAuthDynamic is gated at the top (credit deduct + x402 settle + 402 minting)', () => {
     const h = slice('async function dualAuthDynamic(', 'const MIN_UNLOCK_PRICE');
-    const gate = h.indexOf('if (!paymentsEnabled())');
+    const gate = h.indexOf("if (!paymentsEnabled(prospectiveEpoch ? 'spend' : undefined))");
     const deduct = h.indexOf('await deductCredit(');
     assert.ok(gate !== -1 && deduct !== -1 && gate < deduct,
       'gate must precede the credit deduction');
@@ -262,14 +262,14 @@ describe('payments-switch: server gates (all five money-movement surfaces)', () 
 
   it('checkout session + stripe webhook are gated before side effects', () => {
     const co = slice("app.post('/checkout/session'", 'const stripeEventReceipts');
-    assert.ok(co.indexOf('if (!paymentsEnabled())') !== -1);
-    assert.ok(co.indexOf('if (!paymentsEnabled())') < co.indexOf('await admission('));
+    assert.ok(co.indexOf("if (!paymentsEnabled('funding'))") !== -1);
+    assert.ok(co.indexOf("if (!paymentsEnabled('funding'))") < co.indexOf('await admission('));
     const wh = slice('async function handlePlatformWebhook(', "app.get('/account/purchases'");
     const gate = wh.indexOf('if (!paymentsEnabled())');
     assert.ok(gate !== -1 && gate < wh.lastIndexOf('verifyPlatformEvent('), 'normal dispatch keeps payment gate before verification');
     assert.ok(wh.indexOf('verifyPlatformEvent(') < wh.indexOf('captureVerifiedEvent('), 'paused forward capture still requires a verified signature');
     assert.ok(wh.indexOf('captureVerifiedEvent(') < gate, 'paused capture returns without entering normal dispatch');
-    assert.ok(gate < wh.indexOf('stripeEventDispatcher.dispatch('), 'no event effect while disabled');
+    assert.ok(gate < wh.lastIndexOf('stripeEventDispatcher.dispatch('), 'legacy dispatch remains gated; prospective reconciliation has separate authority');
     for (const route of ['/webhook/stripe', '/webhook/stripe/legacy', '/webhook/stripe/auxilo_llc']) {
       assert.ok(wh.includes("app.post('" + route + "', c => handlePlatformWebhook(c,"));
     }

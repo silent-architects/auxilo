@@ -42,8 +42,8 @@ const REPO = path.join(__dirname, '..');
 const STATUS_HTML = fs.readFileSync(path.join(REPO, 'public', 'status.html'), 'utf8');
 
 const LABEL = 'Credit Purchases';
-// credits-as-cash (register C, row C-53, revision 3): the new fact, plainly.
-const DESC = "Credit packs bought through Stripe add their price to the buyer's balance.";
+// Prospective funding and return status stay distinct from historical balances.
+const DESC = "Stripe funding adds the amount paid to the buyer's balance. When enabled, eligible unused new funding can be returned to the original payment method; the dashboard shows the quote and request status. Historical balances and contributor payouts are separate.";
 
 // ─── Helpers (mirrors test/credits-e2e-findings.test.js) ──────────────────
 

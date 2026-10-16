@@ -221,7 +221,7 @@ describe('recordTosAcceptance', () => {
 
 const SERVER_SRC = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf-8');
 
-function sliceHandler(marker, span = 3500) {
+function sliceHandler(marker, span = 5500) {
   const i = SERVER_SRC.indexOf(marker);
   assert.notEqual(i, -1, `handler not found: ${marker}`);
   return SERVER_SRC.slice(i, i + span);

@@ -40,3 +40,5 @@ Documentation and source that also ship publicly, by location:
 ---
 
 *Maintainer policy: this public index maps only what ships in the public repo. Business-sensitive docs are maintained in the private canon's `docs/INDEX.md` — do not republish them here. When a published doc is added or superseded, update this table.*
+
+Prospective financial epoch, return and recovery source contracts are described in `README.md` under “Prospective financial epochs”; operator entry points live in `scripts/financial-epoch.js`, `money-checkpoint.js`, `money-restore.js` and `money-lifecycle.js`. This source contract does not replace the served legal policies.

@@ -465,7 +465,7 @@
               },
               "amount_paid_usd": {
                 "type": "number",
-                "description": "The Paid Balance portion actually drawn for this Unlock (AUD19-2 accrual basis) — the basis the builder's earnings are calculated on. 0 on a free owner self-unlock, and 0 when the Unlock was funded entirely from Promotional Balance, even though the account's Balance was debited the full Listed Price.",
+                "description": "The Paid Balance portion actually drawn for this Unlock (AUD19-2 accrual basis) \u2014 the basis the builder's earnings are calculated on. 0 on a free owner self-unlock, and 0 when the Unlock was funded entirely from Promotional Balance, even though the account's Balance was debited the full Listed Price.",
                 "example": 0.05
               },
               "contributor_earned_usd": {
@@ -577,7 +577,7 @@
           },
           "price_usd": {
             "type": "number",
-            "description": "Pack price in USD. The pack adds exactly this amount to the buyer's Balance, in US dollars — one dollar of Balance for each dollar paid."
+            "description": "Pack price in USD. The pack adds exactly this amount to the buyer's Balance, in US dollars \u2014 one dollar of Balance for each dollar paid."
           }
         }
       },
@@ -840,6 +840,221 @@
     }
   },
   "paths": {
+    "/account/funds-return/sources": {
+      "get": {
+        "tags": [
+          "Account"
+        ],
+        "summary": "List eligible prospective funding and reserved amounts",
+        "description": "Prospective verified funding only, when enabled. Historical balances are excluded. This is a session-only buyer return to the original payment method; contributor withdrawals use separate rails. All monetary fields are integer USD microunits (1 USD = 1000000).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canonical operation or quote status; pending or unknown never means returned."
+          },
+          "401": {
+            "description": "JWT session required."
+          },
+          "409": {
+            "description": "Unavailable evidence, changed quote or reconciliation required."
+          },
+          "503": {
+            "description": "Capability unavailable."
+          }
+        },
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "description": "Opaque nextCursor from the previous page. Each page contains at most 100 funding sources.",
+            "schema": {
+              "type": "string",
+              "maxLength": 1024,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            }
+          }
+        ]
+      }
+    },
+    "/account/funds-return/quote": {
+      "post": {
+        "tags": [
+          "Account"
+        ],
+        "summary": "Quote exact gross debit, uncovered cost, cash and fractional residue",
+        "description": "Prospective verified funding only, when enabled. Historical balances are excluded. This is a session-only buyer return to the original payment method; contributor withdrawals use separate rails. All monetary fields are integer USD microunits (1 USD = 1000000).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canonical operation or quote status; pending or unknown never means returned."
+          },
+          "401": {
+            "description": "JWT session required."
+          },
+          "409": {
+            "description": "Unavailable evidence, changed quote or reconciliation required."
+          },
+          "503": {
+            "description": "Capability unavailable."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "sourceId",
+                  "maxGrossMicros"
+                ],
+                "properties": {
+                  "sourceId": {
+                    "type": "string"
+                  },
+                  "maxGrossMicros": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match the service origin."
+          }
+        ]
+      }
+    },
+    "/account/funds-return/confirm": {
+      "post": {
+        "tags": [
+          "Account"
+        ],
+        "summary": "Confirm a quote using one permanent request key",
+        "description": "Prospective verified funding only, when enabled. Historical balances are excluded. This is a session-only buyer return to the original payment method; contributor withdrawals use separate rails. All monetary fields are integer USD microunits (1 USD = 1000000).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canonical operation or quote status; pending or unknown never means returned."
+          },
+          "401": {
+            "description": "JWT session required."
+          },
+          "409": {
+            "description": "Unavailable evidence, changed quote or reconciliation required."
+          },
+          "503": {
+            "description": "Capability unavailable."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "quoteId",
+                  "quoteHash"
+                ],
+                "properties": {
+                  "quoteId": {
+                    "type": "string"
+                  },
+                  "quoteHash": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match the service origin."
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "UUID v4 persisted before first submission. Reuse exactly after timeout or refresh; never replace an uncertain request."
+          }
+        ]
+      }
+    },
+    "/account/funds-return/{operationId}": {
+      "get": {
+        "tags": [
+          "Account"
+        ],
+        "summary": "Read the authenticated owner\u2019s existing return status",
+        "description": "Prospective verified funding only, when enabled. Historical balances are excluded. This is a session-only buyer return to the original payment method; contributor withdrawals use separate rails. All monetary fields are integer USD microunits (1 USD = 1000000).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canonical operation or quote status; pending or unknown never means returned."
+          },
+          "401": {
+            "description": "JWT session required."
+          },
+          "409": {
+            "description": "Unavailable evidence, changed quote or reconciliation required."
+          },
+          "503": {
+            "description": "Capability unavailable."
+          }
+        },
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/": {
       "get": {
         "summary": "Service info",
@@ -932,7 +1147,7 @@
                     },
                     "catalog_size": {
                       "type": "integer",
-                      "description": "DR-5 (2026-07-20): canonical visible-catalog count — same predicate as GET /knowledge/stats.learnings_count. Was skills.length before the fix."
+                      "description": "DR-5 (2026-07-20): canonical visible-catalog count \u2014 same predicate as GET /knowledge/stats.learnings_count. Was skills.length before the fix."
                     },
                     "skills_catalog_size": {
                       "type": "integer",
@@ -1254,7 +1469,7 @@
                   },
                   "extraction_model": {
                     "type": "object",
-                    "description": "EXTRACT-PER-CLIENT W1 PART C: optional, additive provenance stamp naming which local model provider extracted this learning (background extraction clients only). Malformed input is treated as absent, never a 400. Owner-only — never returned on a buyer-facing learning envelope. A provider not on the server's clean-lane calibration allowlist always routes to the review lane, regardless of quality score or standing consent.",
+                    "description": "EXTRACT-PER-CLIENT W1 PART C: optional, additive provenance stamp naming which local model provider extracted this learning (background extraction clients only). Malformed input is treated as absent, never a 400. Owner-only \u2014 never returned on a buyer-facing learning envelope. A provider not on the server's clean-lane calibration allowlist always routes to the review lane, regardless of quality score or standing consent.",
                     "properties": {
                       "provider": {
                         "type": "string",
@@ -1539,16 +1754,22 @@
                     },
                     "total_contributors": {
                       "type": "integer",
-                      "description": "STATS-TRUTH: distinct contributor identities over the visible catalog — contributor_account_id when present, else the lowercased contributor_wallet; a row with neither counts as the single platform identity."
+                      "description": "STATS-TRUTH: distinct contributor identities over the visible catalog \u2014 contributor_account_id when present, else the lowercased contributor_wallet; a row with neither counts as the single platform identity."
                     },
                     "top_learnings": {
                       "type": "array",
                       "items": {
                         "type": "object",
                         "properties": {
-                          "id": { "type": "string" },
-                          "title": { "type": "string" },
-                          "score": { "type": "number" },
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "score": {
+                            "type": "number"
+                          },
                           "unlocks": {
                             "type": "integer",
                             "description": "STATS-TRUTH: this learning's credited unlock events in the per-unlock ledger; OMITTED when the ledger is unreadable."
@@ -1578,7 +1799,9 @@
             "name": "wallet",
             "in": "path",
             "required": true,
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1592,18 +1815,32 @@
                     "content_advisory": {
                       "$ref": "#/components/schemas/UntrustedPreviewAdvisory"
                     },
-                    "total_learnings": { "type": "integer" },
-                    "avg_price": { "type": "number" },
-                    "price_distribution": { "type": "object" },
+                    "total_learnings": {
+                      "type": "integer"
+                    },
+                    "avg_price": {
+                      "type": "number"
+                    },
+                    "price_distribution": {
+                      "type": "object"
+                    },
                     "top_earning_learnings": {
                       "type": "array",
                       "items": {
                         "type": "object",
                         "properties": {
-                          "id": { "type": "string" },
-                          "title": { "type": "string" },
-                          "price": { "type": "number" },
-                          "unlocks_30d": { "type": "integer" }
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "price": {
+                            "type": "number"
+                          },
+                          "unlocks_30d": {
+                            "type": "integer"
+                          }
                         }
                       }
                     }
@@ -1616,7 +1853,9 @@
             "description": "No public learnings found for this wallet",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Error" }
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           }
@@ -2244,7 +2483,7 @@
     "/withdraw/stripe": {
       "post": {
         "summary": "Withdraw pending earnings to Stripe Connect",
-        "description": "Pay out the withdrawable balance to the account's linked Stripe Connect account. Debits the same authoritative pending_balance as POST /withdraw. NOTE: paused during the non-custodial migration — returns 503 { code: 'withdraw_paused_noncustodial_migration' } unless CUSTODIAL_WITHDRAW_ENABLED=true. Requires session/API-key auth, prior acceptance of the current Terms (§5.10 payee-agency), a completed Stripe Connect onboarding, and a minimum of $0.50. Requires a UUIDv4 Idempotency-Key scoped to the authenticated account. Reusing the key returns the original receipt or attempt status without a provider resend. Reusing it with a changed amount is a conflict. An unresolved attempt blocks new withdrawals on both rails. Check status after response loss; no automatic POST retry. New transfers additionally require an approved assignment for the earnings identity, a matching immutable platform destination, current approval/checkpoint evidence, and freshly verified available cash. Intake platform selection does not reassign earnings.",
+        "description": "Pay out the withdrawable balance to the account's linked Stripe Connect account. Debits the same authoritative pending_balance as POST /withdraw. NOTE: paused during the non-custodial migration \u2014 returns 503 { code: 'withdraw_paused_noncustodial_migration' } unless CUSTODIAL_WITHDRAW_ENABLED=true. Requires session/API-key auth, prior acceptance of the current Terms (\u00a75.10 payee-agency), a completed Stripe Connect onboarding, and a minimum of $0.50. Requires a UUIDv4 Idempotency-Key scoped to the authenticated account. Reusing the key returns the original receipt or attempt status without a provider resend. Reusing it with a changed amount is a conflict. An unresolved attempt blocks new withdrawals on both rails. Check status after response loss; no automatic POST retry. New transfers additionally require an approved assignment for the earnings identity, a matching immutable platform destination, current approval/checkpoint evidence, and freshly verified available cash. Intake platform selection does not reassign earnings.",
         "operationId": "requestStripeWithdrawal",
         "tags": [
           "Account",
@@ -2295,7 +2534,7 @@
             "description": "Authentication required"
           },
           "403": {
-            "description": "Terms not accepted (code: TERMS_NOT_ACCEPTED — accept via POST /account/accept-terms and retry), account suspended, or sanctions block",
+            "description": "Terms not accepted (code: TERMS_NOT_ACCEPTED \u2014 accept via POST /account/accept-terms and retry), account suspended, or sanctions block",
             "content": {
               "application/json": {
                 "schema": {
@@ -2401,27 +2640,48 @@
         "summary": "Request account deletion",
         "description": "Starts deletion with either an authenticated email confirmation or a fresh wallet signature. Wallet-only requests return proof requirements without revealing whether an account exists.",
         "operationId": "requestAccountDeletion",
-        "tags": ["Account"],
+        "tags": [
+          "Account"
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["method"],
+                "required": [
+                  "method"
+                ],
                 "properties": {
-                  "method": { "type": "string", "enum": ["email", "wallet"] },
-                  "wallet": { "type": "string", "description": "Required when method is wallet." }
+                  "method": {
+                    "type": "string",
+                    "enum": [
+                      "email",
+                      "wallet"
+                    ]
+                  },
+                  "wallet": {
+                    "type": "string",
+                    "description": "Required when method is wallet."
+                  }
                 }
               }
             }
           }
         },
         "responses": {
-          "200": { "description": "Email confirmation sent or a delete-account EIP-712 challenge returned" },
-          "400": { "description": "Invalid request" },
-          "401": { "description": "Authentication required for the email method" },
-          "403": { "description": "Authenticated caller requested a wallet not linked to its account" }
+          "200": {
+            "description": "Email confirmation sent or a delete-account EIP-712 challenge returned"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Authentication required for the email method"
+          },
+          "403": {
+            "description": "Authenticated caller requested a wallet not linked to its account"
+          }
         }
       }
     },
@@ -2429,36 +2689,79 @@
       "get": {
         "summary": "Render email deletion confirmation",
         "operationId": "renderAccountDeletionConfirmation",
-        "tags": ["Account"],
-        "parameters": [{ "name": "token", "in": "query", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "Confirmation form" }, "400": { "description": "Invalid confirmation link" } }
+        "tags": [
+          "Account"
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Confirmation form"
+          },
+          "400": {
+            "description": "Invalid confirmation link"
+          }
+        }
       },
       "post": {
         "summary": "Confirm and execute account deletion",
         "description": "Consumes a single-use deletion email token or validates a fresh delete-account wallet signature, then deletes live-store data and returns retention notices.",
         "operationId": "confirmAccountDeletion",
-        "tags": ["Account"],
+        "tags": [
+          "Account"
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["method"],
+                "required": [
+                  "method"
+                ],
                 "properties": {
-                  "method": { "type": "string", "enum": ["email", "wallet"] },
-                  "token": { "type": "string", "description": "Required for email confirmation." },
-                  "wallet": { "type": "string", "description": "Required for wallet confirmation." },
-                  "signature": { "type": "string", "description": "Fresh EIP-712 signature with action delete-account." }
+                  "method": {
+                    "type": "string",
+                    "enum": [
+                      "email",
+                      "wallet"
+                    ]
+                  },
+                  "token": {
+                    "type": "string",
+                    "description": "Required for email confirmation."
+                  },
+                  "wallet": {
+                    "type": "string",
+                    "description": "Required for wallet confirmation."
+                  },
+                  "signature": {
+                    "type": "string",
+                    "description": "Fresh EIP-712 signature with action delete-account."
+                  }
                 }
               }
             }
           }
         },
         "responses": {
-          "200": { "description": "Deletion completed; returns deleted counts, completion time, backup expiry, and any retained-record notice" },
-          "400": { "description": "Invalid confirmation body" },
-          "401": { "description": "Expired, consumed, or invalid proof" }
+          "200": {
+            "description": "Deletion completed; returns deleted counts, completion time, backup expiry, and any retained-record notice"
+          },
+          "400": {
+            "description": "Invalid confirmation body"
+          },
+          "401": {
+            "description": "Expired, consumed, or invalid proof"
+          }
         }
       }
     },
@@ -2617,7 +2920,7 @@
     "/account/credits": {
       "get": {
         "summary": "View Balance for the authenticated account",
-        "description": "Returns the authenticated account's Balance: paid_usd (Paid Balance, added by credit packs), promo_usd (Promotional Balance, added by a grant), total_usd (the spendable sum of the two — excludes frozen_usd), and frozen_usd (Balance a payment dispute has frozen, reported separately and never included in total_usd or in any refusal message). Requires session authentication.",
+        "description": "Returns the authenticated account's Balance: paid_usd (Paid Balance, added by credit packs), promo_usd (Promotional Balance, added by a grant), total_usd (the spendable sum of the two \u2014 excludes frozen_usd), and frozen_usd (Balance a payment dispute has frozen, reported separately and never included in total_usd or in any refusal message). Requires session authentication.",
         "operationId": "getAccountCredits",
         "tags": [
           "Account",
@@ -2641,11 +2944,11 @@
                       "properties": {
                         "paid_usd": {
                           "type": "number",
-                          "description": "Paid Balance — added by credit packs paid for with money."
+                          "description": "Paid Balance \u2014 added by credit packs paid for with money."
                         },
                         "promo_usd": {
                           "type": "number",
-                          "description": "Promotional Balance — added by a grant, at no charge."
+                          "description": "Promotional Balance \u2014 added by a grant, at no charge."
                         },
                         "total_usd": {
                           "type": "number",
@@ -3046,7 +3349,7 @@
     },
     "/webhook/stripe": {
       "post": {
-        "summary": "Stripe webhook endpoint — processes payment events (Phase 0.4)",
+        "summary": "Stripe webhook endpoint \u2014 processes payment events (Phase 0.4)",
         "operationId": "postWebhookStripe",
         "description": "Permanently bound to the legacy platform signing configuration. Shares durable receipt and object identity with /webhook/stripe/legacy. Financial completion is acknowledged only after mandatory writes; unresolved money events return a retryable failure.",
         "requestBody": {
@@ -3222,7 +3525,9 @@
           }
         },
         "responses": {
-          "410": {"description": "Server-side extraction is disabled; code extraction_client_side. Extract locally and submit draft learnings to POST /learn. This is the response the endpoint gives today; the 200 schema documents the dormant path."},
+          "410": {
+            "description": "Server-side extraction is disabled; code extraction_client_side. Extract locally and submit draft learnings to POST /learn. This is the response the endpoint gives today; the 200 schema documents the dormant path."
+          },
           "200": {
             "description": "Extraction completed",
             "content": {
@@ -3712,7 +4017,7 @@
                   "standing_consent_ack_at": {
                     "type": "string",
                     "format": "date-time",
-                    "description": "CLEAN-LANE-FLIP Phase B (notice hardening): the account's acknowledgement cursor for standing-consent publications. Set it to now from the dashboard's 'I've reviewed these' button; GET /account/clean-lane then counts only clean-lane publishes created after it (unacknowledged_publications). Must be an ISO 8601 date-time and not in the future (400 beyond a 5-minute clock-skew allowance); a value inside that allowance but ahead of the server clock is clamped to the server's now on store, so the cursor can never sit in the future. This PATCH is the only thing that moves the cursor — nothing clears the unread count implicitly, and no email is sent."
+                    "description": "CLEAN-LANE-FLIP Phase B (notice hardening): the account's acknowledgement cursor for standing-consent publications. Set it to now from the dashboard's 'I've reviewed these' button; GET /account/clean-lane then counts only clean-lane publishes created after it (unacknowledged_publications). Must be an ISO 8601 date-time and not in the future (400 beyond a 5-minute clock-skew allowance); a value inside that allowance but ahead of the server clock is clamped to the server's now on store, so the cursor can never sit in the future. This PATCH is the only thing that moves the cursor \u2014 nothing clears the unread count implicitly, and no email is sent."
                   }
                 }
               }

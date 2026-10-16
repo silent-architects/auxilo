@@ -138,20 +138,20 @@ describe('T2-T4: planPrune', () => {
   const now = Date.parse('2026-07-19T12:00:00Z');
   const daysAgo = (n) => new Date(now - n * 86400000);
 
-  test('T2: daily window — 29d kept, 31d deleted', () => {
+  test('T2: daily window — 6d kept, 8d deleted', () => {
     const objects = [
-      { Key: runner.buildDailyKey(daysAgo(29)) },
-      { Key: runner.buildDailyKey(daysAgo(31)) },
+      { Key: runner.buildDailyKey(daysAgo(6)) },
+      { Key: runner.buildDailyKey(daysAgo(8)) },
     ];
     const doomed = runner.planPrune(objects, now);
-    assert.deepStrictEqual(doomed, [runner.buildDailyKey(daysAgo(31))]);
+    assert.deepStrictEqual(doomed, [runner.buildDailyKey(daysAgo(8))]);
   });
 
-  test('T3: weekly window — 83d kept, 85d deleted; prefixes independent', () => {
-    const weeklyOld = { Key: 'weekly/auxilo-data-' + runner.utcStamp(daysAgo(85)) + '.tar.gz.enc' };
-    const weeklyOk = { Key: 'weekly/auxilo-data-' + runner.utcStamp(daysAgo(83)) + '.tar.gz.enc' };
-    // A daily-aged object under weekly/ must use the WEEKLY window (35d < 84d -> kept).
-    const weeklyDailyAge = { Key: 'weekly/auxilo-data-' + runner.utcStamp(daysAgo(35)) + '.tar.gz.enc' };
+  test('T3: weekly window — 6d kept, 8d deleted; no weekly extension', () => {
+    const weeklyOld = { Key: 'weekly/auxilo-data-' + runner.utcStamp(daysAgo(8)) + '.tar.gz.enc' };
+    const weeklyOk = { Key: 'weekly/auxilo-data-' + runner.utcStamp(daysAgo(6)) + '.tar.gz.enc' };
+    // Both prefixes use the same maximum seven-day source lifetime.
+    const weeklyDailyAge = { Key: 'weekly/auxilo-data-' + runner.utcStamp(daysAgo(5)) + '.tar.gz.enc' };
     const doomed = runner.planPrune([weeklyOld, weeklyOk, weeklyDailyAge], now);
     assert.deepStrictEqual(doomed, [weeklyOld.Key]);
   });
@@ -393,3 +393,8 @@ describe('T14: validateExtractedDir', () => {
     assert.strictEqual(res.ok, true, JSON.stringify(res.errors));
   });
 });
+
+test('EMFR failed upload reuses immutable checkpoint and weekly metadata inherits expiry',async t=>{
+ const fixture=require('./helpers/financial-epoch-fixture').boot(t),cp=require('../lib/money-checkpoint');const control={schema_version:1,rule_version:'fixture',approval_ref:'fixture',deletion_barrier:{sequence:0,hash:'a'.repeat(64)},seals:[],records:[],holds:[]};let cuts=0;const now=new Date();const requestCheckpoint=async()=>{cuts++;return cp.createMoneyCheckpoint({...fixture,coordinator:{maintenanceLease:fn=>require('../lib/money-control-store').openMoneyStore(fixture).maintenanceLease(fn)},sourceSha:'a'.repeat(40),lifecycleControl:control,clock:()=>now.getTime()});};const first=makeMockS3();await assert.rejects(runner.runBackupCycle(baseConfig(fixture.root),{send:first.send,upload:async(s,p)=>{await collect(p.Body);throw Error('UPLOAD_LOST')},requestCheckpoint,now,log:quiet}),/UPLOAD_LOST/);assert.equal(cuts,1);const markerPath=path.join(fixture.root,'.money-checkpoint-pending.json');assert.ok(fs.existsSync(markerPath));const mock=makeMockS3({ListObjectVersionsCommand:()=>({Versions:[],IsTruncated:false})});await runner.runBackupCycle(baseConfig(fixture.root),{send:mock.send,upload:mock.upload,requestCheckpoint,now,log:quiet});assert.equal(cuts,1);assert.equal(fs.existsSync(markerPath),false);const metadata=mock.state.uploads[0].params.Metadata;assert.equal(Date.parse(metadata.expires_at)-Date.parse(metadata.cut_at),7*86400000);const copy=mock.state.calls.find(c=>c.name==='CopyObjectCommand');assert.equal(copy.input.MetadataDirective,undefined);const marker=JSON.parse(mock.state.calls.find(c=>c.name==='PutObjectCommand').input.Body);assert.equal(marker.checkpoint_id,metadata.checkpoint_id);assert.equal(marker.expires_at,metadata.expires_at);
+});
+test('EMFR versions are deleted by exact version identity and unknown expiry remains unresolved',async()=>{const calls=[],now=new Date('2026-10-07T00:00:00Z');const send=async c=>{calls.push(c);if(c.constructor.name==='ListObjectVersionsCommand')return{Versions:c.input.Prefix==='daily/'?[{Key:'daily/a',VersionId:'v1'},{Key:'daily/b',VersionId:'v2'}]:[],IsTruncated:false};if(c.constructor.name==='HeadObjectCommand')return{Metadata:c.input.VersionId==='v1'?{expires_at:'2026-10-06T00:00:00Z'}:{}};if(c.constructor.name==='DeleteObjectsCommand')return{Deleted:c.input.Delete.Objects};throw Error('unexpected')};const gone=await runner.pruneCheckpointVersions(send,'fixture',now);assert.deepEqual(gone,[{Key:'daily/a',VersionId:'v1'}]);assert.deepEqual(calls.find(c=>c.constructor.name==='DeleteObjectsCommand').input.Delete.Objects,gone);});

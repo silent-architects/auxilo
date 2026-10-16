@@ -1,3 +1,11 @@
+// EMFR: ownership precedes every participant import, including WAL initialization.
+const financialEpoch = require('./lib/financial-epoch');
+const epochRoot = process.env.AUXILO_DATA_DIR || require('path').join(__dirname, 'data');
+const epochPresent = require('fs').existsSync(require('path').join(epochRoot, 'financial-epoch.json')) || require('fs').existsSync(require('path').join(epochRoot, 'financial-epochs'));
+const moneyWriter = epochPresent ? require('./lib/money-writer-lock').acquireMoneyWriter({root: epochRoot}) : null;
+const prospectiveEpoch = financialEpoch.resolveRuntimeEpoch({root: epochRoot, writer: moneyWriter});
+const moneyControl = require('./lib/money-control');
+const prospectiveMoney = prospectiveEpoch ? moneyControl.initializeMoneyRuntime({epoch: prospectiveEpoch, writer: moneyWriter}) : null;
 const historyCoverage = require('./lib/stripe-history-coverage');
 historyCoverage.assertHistoryCoverageBoot();
 const { Hono } = require('hono');
@@ -192,6 +200,20 @@ const HISTORY_WEBHOOK_PATHS = new Set(['/webhook/stripe', '/webhook/stripe/legac
 function historyUnavailableBody() {
   return { code: 'HISTORICAL_COVERAGE_UNKNOWN', error: 'Financial operations are paused while historical records are reconciled.', processed: false };
 }
+function prospectiveRouteAction(method, pathname) {
+  const route = method + ' ' + pathname;
+  if (route === 'POST /checkout/session') return 'funding';
+  if (method === 'GET' && /^\/knowledge\/[^/]+$/.test(pathname)) return 'spend';
+  if (method === 'POST' && ['/account/funds-return/quote', '/account/funds-return/confirm'].includes(pathname)) return 'buyer_return';
+  if (method === 'GET' && (/^\/account\/funds-return\/[^/]+$/.test(pathname) || ['/account/credits', '/account/purchases', '/account/earnings'].includes(pathname))) return 'status';
+  const identity = new Set(['POST /auth/magic-link', 'GET /auth/verify', 'POST /auth/device', 'GET /auth/device/status', 'GET /auth/device/verify', 'POST /auth/device/authorize', 'GET /account/api-keys', 'POST /account/api-keys', 'POST /account/api-keys/rotate', 'GET /account/dashboard', 'GET /account/terms-status', 'GET /account/settings', 'PATCH /account/settings', 'POST /account/accept-terms', 'POST /account/delete-request', 'GET /account/delete-confirm', 'POST /account/delete-confirm']);
+  if (identity.has(route) || (method === 'DELETE' && /^\/account\/api-keys\/[^/]+$/.test(pathname))) return 'identity';
+  return null;
+}
+// EMFR route allowlist end
+function requireProspectiveAction(action, accountId, source) {
+  financialEpoch.assertProspectiveAllowed({action, epoch: prospectiveEpoch, expectedRevision: prospectiveEpoch.activation_revision, accountId, source});
+}
 // This precedes authentication bookkeeping, account mutations and body allocation.
 app.use('*', async (c, next) => {
   if (historyCoverage.historyFinancialBlocked()) {
@@ -199,7 +221,24 @@ app.use('*', async (c, next) => {
     const signedWebhook = c.req.method === 'POST' && HISTORY_WEBHOOK_PATHS.has(c.req.path);
     const freeDiscovery = c.req.method === 'POST' && ['/discover', '/knowledge'].includes(c.req.path);
     const mutatingRead = ['/account/credits', '/auth/verify', '/referral/link'].includes(c.req.path);
-    if ((unsafe && !signedWebhook && !freeDiscovery) || mutatingRead) return c.json(historyUnavailableBody(), 503);
+    const action = prospectiveEpoch && prospectiveRouteAction(c.req.method, c.req.path);
+    if (action) {
+      if (action !== 'status' && action !== 'spend' && !(c.req.method === 'POST' && c.req.path === '/account/funds-return/confirm')) {
+        try { requireProspectiveAction(action); }
+        catch (error) { return c.json({code: error.code || 'EPOCH_CAPABILITY_DISABLED', error: 'This operation is currently unavailable.'}, 503); }
+      }
+    } else if ((unsafe && !signedWebhook && !freeDiscovery) || mutatingRead) return c.json(historyUnavailableBody(), 503);
+  }
+  return next();
+});
+
+app.use('*', async (c, next) => {
+  if (!prospectiveEpoch) return next();
+  const action = prospectiveRouteAction(c.req.method, c.req.path);
+  const segmentedIdentity = ['/auth/magic-link', '/auth/verify', '/account/delete-request', '/account/delete-confirm'];
+  if (action === 'spend' || (action === 'identity' && !segmentedIdentity.includes(c.req.path))) {
+    await moneyControl.runInMoneyContext(async () => { await next(); }, {kind: action});
+    return;
   }
   return next();
 });
@@ -243,7 +282,7 @@ app.use('*', async (c, next) => {
   if (origin && isOriginAllowed(origin)) {
     c.header('Access-Control-Allow-Origin', origin);
     c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Api-Key');
+    c.header('Access-Control-Allow-Headers', c.req.path.startsWith('/account/funds-return/') ? 'Content-Type, Authorization, Idempotency-Key' : 'Content-Type, Authorization, X-Api-Key');
     c.header('Access-Control-Max-Age', '86400');
   }
   if (c.req.method === 'OPTIONS') return c.text('', 204);
@@ -286,6 +325,7 @@ app.use('*', async (c, next) => {
     // Quarantine reads its actual byte stream with a hard bound below.
     if (HISTORY_WEBHOOK_PATHS.has(c.req.path) && historyCoverage.historyFinancialBlocked()) return next();
     let cap = c.req.path === '/extract' ? 262144 : MAX_BODY_SIZE;
+    if (c.req.path.startsWith('/account/funds-return/')) cap = 1024;
     if (c.req.path === '/pipeline/upload') cap = 262144; // LLM ingestion, like /extract
     // Cheap pre-check of the advertised Content-Length.
     const contentLength = parseInt(c.req.header('content-length') || '0', 10);
@@ -297,7 +337,25 @@ app.use('*', async (c, next) => {
     // Read the bytes once and enforce a hard ceiling on the ACTUAL size; Hono
     // caches the body so a later c.req.json()/text() in the handler reuses it.
     try {
-      const raw = await c.req.arrayBuffer();
+      let raw;
+      if (c.req.path.startsWith('/account/funds-return/')) {
+        const reader = c.req.raw.body?.getReader();
+        const chunks = []; let size = 0;
+        if (reader) {
+          try {
+            while (true) {
+              const {done, value} = await reader.read();
+              if (done) break;
+              size += value.byteLength;
+              if (size > cap) { await reader.cancel(); return c.json({error:'Request body too large', max_bytes:cap}, 413); }
+              chunks.push(value);
+            }
+          } finally { reader.releaseLock(); }
+        }
+        const bytes = Buffer.concat(chunks);
+        raw = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+        c.req.bodyCache.arrayBuffer = Promise.resolve(raw);
+      } else raw = await c.req.arrayBuffer();
       if (raw.byteLength > cap) {
         return c.json({ error: 'Request body too large', max_bytes: cap }, 413);
       }
@@ -471,11 +529,11 @@ try {
 const queryLog = { total: 0, byCategory: {}, bySkill: {} };
 
 // ─── Persistent Storage ─────────────────────────────────────────────
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = process.env.AUXILO_DATA_DIR || path.join(__dirname, 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-const WITHDRAWALS_FILE = path.join(DATA_DIR, 'withdrawals.jsonl');
-const RESERVATIONS_FILE = path.join(DATA_DIR, 'reservations.json');
+const WITHDRAWALS_FILE = financialEpoch.resolveParticipantPath('withdrawals', {legacyPath: path.join(DATA_DIR, 'withdrawals.jsonl')});
+const RESERVATIONS_FILE = financialEpoch.resolveParticipantPath('reservations', {legacyPath: path.join(DATA_DIR, 'reservations.json')});
 
 // WAL-TDZ: this block must be initialized BEFORE Startup Wiring — WAL recovery at module load calls appendSettlement → invalidateCachedSettlement.
 // ─── AU-7: In-Memory Cache (accounts + settlements) ─────────────────────────
@@ -558,11 +616,11 @@ let cleanupRunning = false; // M-G: prevent concurrent backup cleanup
 
 const LEARNINGS_FILE = path.join(DATA_DIR, 'learnings.json');
 const RATINGS_FILE = path.join(DATA_DIR, 'ratings.jsonl');
-const EARNINGS_FILE = path.join(DATA_DIR, 'earnings.json');
-const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');
-const VERIFIED_WALLETS_FILE = path.join(DATA_DIR, 'verified-wallets.json');
+const EARNINGS_FILE = financialEpoch.resolveParticipantPath('earnings', {legacyPath: path.join(DATA_DIR, 'earnings.json')});
+const ACCOUNTS_FILE = financialEpoch.resolveParticipantPath('accounts', {legacyPath: path.join(DATA_DIR, 'accounts.json')});
+const VERIFIED_WALLETS_FILE = financialEpoch.resolveParticipantPath('verified_wallets', {legacyPath: path.join(DATA_DIR, 'verified-wallets.json')});
 // WALLET_CHALLENGES_FILE removed — nonces are now in-memory via lib/eip712.js (SPEC-A3)
-const SETTLEMENTS_FILE = path.join(DATA_DIR, 'settlements.jsonl');
+const SETTLEMENTS_FILE = financialEpoch.resolveParticipantPath('settlements', {legacyPath: path.join(DATA_DIR, 'settlements.jsonl')});
 const SETTLEMENT_COMPACTION_THRESHOLD = 1000; // M-C: lines before compaction triggers
 // GTM-9 (Wave-4.4 groundwork): per-unlock event rows — timestamp, learning id,
 // accrual basis, funding source. Powers the /earnings trailing-30-day proof.
@@ -572,16 +630,16 @@ const SETTLEMENT_COMPACTION_THRESHOLD = 1000; // M-C: lines before compaction tr
 // compaction garbage-collect them. This file is append-only, never compacted.
 // NO buyer PII: no purchaser account/IP/UA — only what settlements/earnings
 // already store (contributor payee identity + amounts).
-const UNLOCK_EVENTS_FILE = path.join(DATA_DIR, 'unlock-events.jsonl');
+const UNLOCK_EVENTS_FILE = financialEpoch.resolveParticipantPath('unlock_events', {legacyPath: path.join(DATA_DIR, 'unlock-events.jsonl')});
 const RATE_LIMITS_FILE = path.join(DATA_DIR, 'rate-limits.json'); // M-A: persisted rate limit state
-const STAGED_KEY_FILE  = path.join(DATA_DIR, 'staged-key.json');  // M-F: pending key rotation
-const DELETION_LOG_FILE = path.join(DATA_DIR, 'deletion-log.jsonl');
+const STAGED_KEY_FILE  = financialEpoch.resolveParticipantPath('staged_key', {legacyPath: path.join(DATA_DIR, 'staged-key.json')});  // M-F: pending key rotation
+const DELETION_LOG_FILE = financialEpoch.resolveParticipantPath('deletion_log', {legacyPath: path.join(DATA_DIR, 'deletion-log.jsonl')});
 
 // S21-1: Persistent x402 transaction hash deduplication store.
 // Append-only file recording every accepted tx hash — prevents replay attacks where
 // a valid on-chain payment is resubmitted across endpoints or after LRU cache expiry.
 // At 66 bytes per hash + newline, 1M transactions = ~66MB — acceptable.
-const DEDUP_FILE = path.join(DATA_DIR, 'tx-hashes.log');
+const DEDUP_FILE = financialEpoch.resolveParticipantPath('tx_hashes', {legacyPath: path.join(DATA_DIR, 'tx-hashes.log')});
 const consumedTxHashes = new Set();
 
 // Load existing tx hashes on startup
@@ -687,7 +745,7 @@ function isReportRateLimited(ip) {
 // the key and apply it to the environment BEFORE tx-manager initialises its
 // module-level constants.  On success the file is deleted; on failure it is
 // renamed to .failed for forensics.
-if (fs.existsSync(STAGED_KEY_FILE)) {
+if (!prospectiveEpoch && fs.existsSync(STAGED_KEY_FILE)) {
   try {
     const staged = JSON.parse(fs.readFileSync(STAGED_KEY_FILE, 'utf8'));
     if (!staged || !staged.private_key || typeof staged.private_key !== 'string') {
@@ -767,6 +825,7 @@ function attemptBackupRestore(filepath, label) {
  * @returns {*} Parsed data or default
  */
 function loadDataFile(filepath, emptyDefault, critical) {
+  if (prospectiveEpoch && filepath.startsWith(prospectiveEpoch.financial_dir + path.sep)) return require('./lib/stripe-transfer-persistence').readJSONStrict(filepath);
   const label = path.basename(filepath);
 
   // File doesn't exist — not corruption, just first run
@@ -817,8 +876,8 @@ try {
 let earnings;
 try { earnings = loadEarningsPrimary(EARNINGS_FILE); } catch (error) { fatalFinancialStorage(error); }
 let accounts = loadDataFile(ACCOUNTS_FILE, {}, true);
-const stripeTransferStore = createAttemptStore({
-  file: process.env.AUXILO_STRIPE_TRANSFER_ATTEMPTS_FILE || path.join(DATA_DIR, 'stripe-transfer-attempts.json'),
+const stripeTransferStore = prospectiveEpoch ? Object.freeze({ready:false, reason:'CONTRIBUTOR_RAIL_UNAVAILABLE', all:() => [], get:() => null}) : createAttemptStore({
+  file: financialEpoch.resolveParticipantPath('stripe_transfer_attempts', {envOverride:process.env.AUXILO_STRIPE_TRANSFER_ATTEMPTS_FILE, legacyPath:path.join(DATA_DIR, 'stripe-transfer-attempts.json')}),
   onFatalStorage: fatalFinancialStorage,
 });
 validateStripeTransferBoot();
@@ -1222,6 +1281,12 @@ function redactIp(ip) {
 }
 
 function safeWrite(filepath, data) {
+  if (prospectiveEpoch && filepath.startsWith(prospectiveEpoch.financial_dir + path.sep)) {
+    moneyControl.assertParticipantWrite(filepath);
+    require('./lib/wal').assertEarningsWrite(filepath);
+    try { return writeJSONAtomic(filepath, data); }
+    catch (error) { moneyControl.poisonMoneyRuntime(error); throw error; }
+  }
   const tmp = filepath + '.tmp';
   const strData = JSON.stringify(data, null, 2);
   writeAndSync(tmp, strData);
@@ -1416,7 +1481,18 @@ function pruneExpiredDeletionTosRecords(now = new Date()) {
   return dueIds.size;
 }
 
-async function executeAccountDeletion({ accountId = null, wallet = null, method }) {
+async function executeAccountDeletion({accountId = null, wallet = null, method}) {
+  if (!prospectiveEpoch) return executeAccountDeletionInner({accountId,wallet,method});
+  return moneyControl.runInMoneyContext(async ctx => {
+    // Keep dependency inspection and participant deletion in the same ownership
+    // interval. The helper joins this opaque context instead of queueing twice.
+    const joined = {withMoneyControl: async (_options, fn) => fn(ctx)};
+    const disposition = await require('./lib/money-lifecycle').requestAccountDeletion({epoch:prospectiveEpoch, writer:moneyWriter, coordinator:joined, accountId, requestedAt:new Date().toISOString(), authoritativeControl:currentLifecycleControl()});
+    if (!disposition.allowed) return disposition;
+    return executeAccountDeletionInner({accountId,wallet,method});
+  }, {kind:'account-deletion', accounts:accountId ? [accountId] : []});
+}
+async function executeAccountDeletionInner({ accountId = null, wallet = null, method }) {
   return withDeletionExecutionLock(async () => {
     const currentAccounts = loadAccounts();
     const account = accountId ? currentAccounts[accountId] : null;
@@ -1525,6 +1601,7 @@ async function executeAccountDeletion({ accountId = null, wallet = null, method 
 let settlementAppendCount = 0; // M-C: track appends for compaction trigger
 
 function appendSettlement(s) {
+  moneyControl.assertParticipantWrite(SETTLEMENTS_FILE);
   fs.appendFileSync(SETTLEMENTS_FILE, JSON.stringify(s) + '\n');
   // S20-F1 FIX: Invalidate the settlement cache for this wallet so that
   // GET /contributor/:wallet/settlements doesn't serve stale data after a write.
@@ -1544,7 +1621,11 @@ function appendSettlement(s) {
 // replay-time duplicate scan below. `ts` is the unlocked_at stored in the WAL
 // payload, so a replayed row is byte-identical to the live one.
 function appendUnlockEvent(event) {
-  fs.appendFileSync(UNLOCK_EVENTS_FILE, JSON.stringify(event) + '\n');
+  moneyControl.assertParticipantWrite(UNLOCK_EVENTS_FILE);
+  if (prospectiveEpoch) {
+    try { appendJSONLOnce(UNLOCK_EVENTS_FILE, event, {key:'id'}); }
+    catch (error) { moneyControl.poisonMoneyRuntime(error); throw error; }
+  } else fs.appendFileSync(UNLOCK_EVENTS_FILE, JSON.stringify(event) + '\n');
 }
 
 // Replay-time guard: true when an event row with this id is already on disk
@@ -1607,7 +1688,7 @@ function compactSettlements() {
 
     // Step 1: Write archive (append if today's archive exists)
     const dateStr = new Date().toISOString().split('T')[0];
-    const archiveFile = path.join(DATA_DIR, `settlements-archive-${dateStr}.jsonl`);
+    const archiveFile = path.join(prospectiveEpoch ? financialEpoch.pathFor('settlement_archives', prospectiveEpoch) : DATA_DIR, `settlements-archive-${dateStr}.jsonl`);
     const archiveContent = completed.map(s => JSON.stringify(s)).join('\n') + '\n';
     fs.appendFileSync(archiveFile, archiveContent);
 
@@ -1853,6 +1934,7 @@ function replayUnlock(entry) {
 
   // learnings write succeeded; earnings write may or may not have completed.
   if (!steps.includes('update_earnings')) {
+    if(prospectiveMoney?.failureControl && (!entry.accrualFence || entry.accrualFence.state!=='not_started'))throw new Error('FAILED_DELIVERY_RECONCILIATION_REQUIRED');
     console.log(`[wal-recovery] ${entry.id}: replaying missed earnings credit for ${builder_wallet}`);
 
     // SPEC-P0.5: resolve via account_id (new WAL entries) or wallet (legacy)
@@ -1910,7 +1992,8 @@ function replayUnlock(entry) {
     earningsEntry.by_learning[learning_id].platform += platform_earned;
     earningsEntry.by_learning[learning_id].unlocks += 1;
 
-    safeWrite(EARNINGS_FILE, earnings);
+    if(prospectiveMoney?.failureControl){const recoveryWal=require('./lib/wal'),cap=recoveryWal.beginEarningsWrite(entry.id);recoveryWal.writeEarnings(entry.id,cap,()=>safeWrite(EARNINGS_FILE,earnings));markStepComplete(entry.id,'update_earnings');}
+    else safeWrite(EARNINGS_FILE, earnings);
     console.log(`[wal-recovery] ${entry.id}: earnings replayed (+${contributor_earned.toFixed(6)} USDC to ${resolvedKey})`);
   }
 
@@ -2605,8 +2688,97 @@ function savePipelines() {
 // Phase 1: WAL crash recovery (MUST run synchronously before async settlement ops)
 //          — earnings state must be consistent before we touch on-chain state.
 const _startupBegin = Date.now();
+// Each recovery transaction handles one typed local anchor. Provider-required
+// or ambiguous evidence stays gated; no provider I/O runs in this driver.
+function assertRecoveryProgress(before,after) {
+  const fail=()=>{throw Object.assign(new Error('RECOVERY_PROGRESS_REQUIRED'),{code:'RECOVERY_PROGRESS_REQUIRED'});};
+  const key=x=>JSON.stringify({state:x.state,anchor:x.anchor,compensation:x.compensation,scan:x.scan});
+  if(key(before)===key(after))fail();
+  if(before.state==='recovery_scan'&&after.state==='recovery_scan'){
+    const a=before.scan,b=after.scan,phases=['submitted_checkout','dispatch_operation','verified_capture','pending_source','projection','spend','canceled_wal','final'];
+    if(b.cutRevision<a.cutRevision)fail();
+    if(b.cutRevision===a.cutRevision){
+      const ai=phases.indexOf(a.phase),bi=phases.indexOf(b.phase);
+      if(ai<0||bi<0||bi<ai)fail();
+      if(ai===bi){
+        if(a.walManifestDigest&&a.walManifestDigest!==b.walManifestDigest)fail();
+        const advanced=a.afterId===null&&b.afterId!==null||a.afterId!==null&&b.afterId!==null&&(b.afterSequence>a.afterSequence||b.afterSequence===a.afterSequence&&b.afterId>a.afterId);
+        if(!advanced&&!(a.walManifestDigest===null&&b.walManifestDigest!==null))fail();
+      }
+    }
+  }
+}
+function hasPendingUnlockFundingReversal(entry) {
+  const accountId=entry.payload?.purchaser_account_id;
+  if(!accountId)return false;
+  const account=loadCredits()[accountId];
+  return (account?.dollar_lots||[]).some(lot=>(lot.funded_unlocks||[]).some(row=>row.unlock_id===entry.id&&row.pending_reversal===true));
+}
+function recoverProspectiveLocalAtBoot() {
+  const manager=prospectiveMoney.failureControl,recoveryWal=require('./lib/wal');
+  while(true){
+    let status=manager.status();
+    if(status.state==='recovery_scan'){prospectiveMoney.scanFailureRecoveryPageSync({limit:100});assertRecoveryProgress(status,manager.status());continue;}
+    if(status.state==='idle')return;
+    if(status.state==='compensation_requested'){
+      const anchor=prospectiveMoney.recoveryAnchors.restore(status.anchor);
+      prospectiveMoney.withMoneyBootControl({recoveryAnchor:anchor,action:'compensate'},()=>{
+        recoveryWal.completeCompensationSync(manager.resumeCompensation());
+        earnings=loadEarningsPrimary(EARNINGS_FILE);learnings=loadDataFile(LEARNINGS_FILE,[],true);
+      });assertRecoveryProgress(status,manager.status());continue;
+    }
+    if(status.state!=='failure_pending'||!['spend','projection','unlock_wal'].includes(status.anchor?.kind))return;
+    const anchor=prospectiveMoney.recoveryAnchors.restore(status.anchor);
+    let resolved=false;
+    prospectiveMoney.withMoneyBootControl({recoveryAnchor:anchor,action:'boot_recovery'},ctx=>{
+      let entry=null;
+      if(status.anchor.kind==='projection'){
+        const projection=ctx.getProjection(status.anchor.id);
+        if(projection.participant==='credits')require('./lib/credits').applyMoneyProjectionSync(projection);
+        else if(projection.participant==='earnings')require('./lib/earnings').applyMoneyEarningsProjectionSync(projection);
+        else throw new Error('PROJECTION_PARTICIPANT_UNAVAILABLE');
+      }else if(status.anchor.kind==='spend'){
+        const spend=require('./lib/credits').recoverMoneySpendReceiptSync({spendId:status.anchor.id});ctx.flush();
+        if(spend.state==='acknowledged'){
+          const matches=getPendingWalEntries().filter(x=>x.accrualFence?.spendId===spend.id);
+          if(matches.length!==1)return;entry=matches[0];
+        }
+      }else entry=recoveryWal.readRecoveryWal(status.anchor.id);
+      if(entry){
+        if(entry.operation!=='unlock'||!entry.steps_completed.includes('update_learnings')||!entry.accrualFence||entry.accrualFence.state==='write_started'&&!entry.steps_completed.includes('update_earnings'))return;
+        // Crossed accrual requires its existing reversal authority; keep the
+        // selected WAL and gate intact before any replay side effect.
+        if(hasPendingUnlockFundingReversal(entry))return;
+        replayUnlock(entry);
+        if(hasPendingUnlockFundingReversal(entry))return;
+        commitWal(entry.id);
+      }
+      ctx.flush();
+      if(prospectiveMoney.recoveryAnchors.isResolved(anchor)){manager.resolveFirst({anchor});resolved=true;}
+    });
+    const after=manager.status();
+    if(!resolved&&after.state==='failure_pending')return;
+    assertRecoveryProgress(status,after);
+  }
+}
+if(prospectiveMoney?.failureControl)recoverProspectiveLocalAtBoot();
+if (prospectiveMoney && (!prospectiveMoney.failureControl || prospectiveMoney.failureControl.status().available)) prospectiveMoney.withMoneyBootControl(ctx => {
+  require('./lib/credits').recoverMoneySpendReceiptsSync();
+  for (const projection of ctx.pendingProjections()) {
+    if (projection.participant === 'credits') require('./lib/credits').applyMoneyProjectionSync(projection);
+    else if (projection.participant === 'earnings') require('./lib/earnings').applyMoneyEarningsProjectionSync(projection);
+    else throw new Error('PROJECTION_PARTICIPANT_UNAVAILABLE');
+  }
+  for (const entry of getPendingWalEntries()) {
+    if(prospectiveMoney.failureControl){const anchor=prospectiveMoney.recoveryAnchors.resolveCommittedAnchor({kind:'unlock_wal',id:entry.id});ctx.registerRecoveryAnchor(anchor,{action:'boot_recovery'});}
+    if (entry.operation !== 'unlock') throw new Error('EPOCH_WAL_OPERATION_UNAVAILABLE');
+    replayUnlock(entry);
+    commitWal(entry.id);
+  }
+  earnings = loadEarningsPrimary(EARNINGS_FILE);
+});
 
-if (!historyCoverage.historyFinancialBlocked()) {
+if (!prospectiveMoney && !historyCoverage.historyFinancialBlocked()) {
 recoverWalEntries();       // 1a. WAL crash recovery (SPEC-A2 C3)
 completePendingReversalsAtBoot(); // 1a2. N19: finish any reversal WAL recovery left pending
 
@@ -2777,6 +2949,11 @@ console.log(`[startup] Startup time to server-ready: ${Date.now() - _startupBegi
 // /health and the checkout route read the cached result only — no network
 // call ever sits on a request path.
 if (!historyCoverage.historyFinancialBlocked()) initStripeStatusProbing();
+else if (prospectiveEpoch && Object.values(prospectiveEpoch.capabilities).some(Boolean)) {
+  const probeProspective = () => stripePlatforms.probePlatform(prospectiveEpoch.platform).catch(() => {});
+  probeProspective();
+  setInterval(probeProspective, 600000).unref();
+}
 
 if (!historyCoverage.historyFinancialBlocked()) setInterval(() => resolveStuckSettlements().catch((err) => {
   // Non-critical: periodic daemon tick failed. Will retry on next interval.
@@ -3710,9 +3887,10 @@ async function dualAuthDynamic(c, price_usd, description, creditType, requiredSc
     // invites a payment we would then refuse, so refuse first). Free
     // reads/search never route through here; gating the top gates exactly the
     // paid surface.
-    if (!paymentsEnabled()) {
+    if (!paymentsEnabled(prospectiveEpoch ? 'spend' : undefined)) {
         return c.json(paymentsDisabledBody(), 503);
     }
+    if (prospectiveEpoch && (c.req.header('X-Payment') || (!c.req.header('X-API-Key') && !(c.req.header('Authorization') || '').startsWith('Bearer ')))) return c.json({code:'LEGACY_FINANCIAL_ROUTE_DISABLED', error:'Only eligible prepaid funds are available for this purchase.'}, 503);
     // Fix: X-API-Key takes precedence; Authorization: Bearer is the fallback
     let apiKey = c.req.header('X-API-Key');
     if (!apiKey) {
@@ -3760,6 +3938,7 @@ async function dualAuthDynamic(c, price_usd, description, creditType, requiredSc
             // price from the account's dollar balance, paid before promotional.
             const creditResult = await deductCredit(result.accountId, creditType, price_usd);
             if (!creditResult.success) {
+                if (prospectiveEpoch) return c.json({code:'INSUFFICIENT_ELIGIBLE_FUNDS', error:'Add eligible funds before purchasing this learning.', credits:creditResult.status}, 402);
                 // AUD19-5 (§3.3-2): include the x402 accepts[] challenge so a
                 // keyed-but-exhausted agent can fall back to per-call payment
                 // without a second round trip. Entry mirrors the challenge
@@ -3794,6 +3973,7 @@ async function dualAuthDynamic(c, price_usd, description, creditType, requiredSc
             c.set('creditPaidDrawn', creditResult.paid_drawn);
             c.set('creditPromoDrawn', creditResult.promo_drawn);
             c.set('creditDollarDraws', creditResult.draws);
+            if(creditResult.preWalCapability)c.set('creditPreWalCapability',creditResult.preWalCapability);
             // N18 (the one LOW finding, "count in-flight draws as newest"):
             // mark these draws in flight on their lots right away -- a
             // refund or lost dispute's excess must treat a draw that is
@@ -4272,7 +4452,7 @@ app.post('/account/delete-request', async (c) => {
       return c.json({ error: 'Too many deletion confirmation requests. Please wait 15 minutes.' }, 429);
     }
     const preview = deletionPreviewDetails(account, resolved.accountId, account.wallet);
-    const token = issuePurposeMagicLink(account.email, 'delete-account');
+    const token = await moneyControl.runInMoneyContext(() => issuePurposeMagicLink(account.email, 'delete-account'), {kind:'identity', accounts:[resolved.accountId]});
     const baseUrl = process.env.BASE_URL || `https://${c.req.header('host')}`;
     await sendDeletionConfirmation(account.email, `${baseUrl}/account/delete-confirm?token=${encodeURIComponent(token)}`);
     return c.json({
@@ -4325,7 +4505,7 @@ app.get('/account/delete-confirm', (c) => {
   const token = c.req.query('token');
   if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return c.text('Invalid or expired deletion confirmation link.', 400);
   c.header('Cache-Control', 'no-store');
-  return c.html(`<!doctype html><html><head><meta charset="utf-8"><title>Confirm account deletion</title></head><body><main><h1>Confirm account deletion</h1><p>This permanently removes your account data from live Auxilo systems.</p><form method="post" action="/account/delete-confirm"><input type="hidden" name="method" value="email"><input type="hidden" name="token" value="${token}"><button type="submit">Confirm account deletion</button></form></main></body></html>`);
+  return c.html(`<!doctype html><html><head><meta charset="utf-8"><title>Confirm account deletion</title></head><body><main><h1>Confirm account deletion</h1><p>Confirm your account deletion request.</p><form method="post" action="/account/delete-confirm"><input type="hidden" name="method" value="email"><input type="hidden" name="token" value="${token}"><button type="submit">Confirm account deletion</button></form></main></body></html>`);
 });
 
 app.post('/account/delete-confirm', async (c) => {
@@ -4344,7 +4524,7 @@ app.post('/account/delete-confirm', async (c) => {
   if (!body || !['email', 'wallet'].includes(body.method)) return c.json({ error: 'method must be "email" or "wallet"' }, 400);
 
   if (body.method === 'email') {
-    const confirmation = consumePurposeMagicLink(body.token, 'delete-account');
+    const confirmation = await moneyControl.runInMoneyContext(() => consumePurposeMagicLink(body.token, 'delete-account'), {kind:'identity'});
     if (!confirmation) return c.json({ error: 'Invalid or expired deletion confirmation' }, 401);
     const email = normalizedEmail(confirmation.email);
     const match = Object.entries(loadAccounts()).find(([, account]) => normalizedEmail(account.email) === email);
@@ -4968,9 +5148,13 @@ app.post('/auth/device/authorize', async (c) => {
 
 // ── GET /account/credits (Phase 0.3) ──────────────────────────────────────
 app.get('/account/credits', requireAuth, (c) => {
-    if (historyCoverage.historyFinancialBlocked()) return c.json(historyUnavailableBody(), 503);
+    if (historyCoverage.historyFinancialBlocked() && !prospectiveEpoch) return c.json(historyUnavailableBody(), 503);
     const accountId = c.get('accountId');
     const status = getCreditStatus(accountId);
+    if (prospectiveEpoch) {
+      const legacy = require('./lib/legacy-financial-view').legacyFinancialView(accountId, prospectiveEpoch);
+      return c.json({...status, epoch_id: prospectiveEpoch.epoch_id, legacy_restricted: {balance_usd: legacy.restricted_balance_usd, units: legacy.restricted_legacy_units}, funds_return_available: prospectiveEpoch.capabilities.buyer_return});
+    }
     return c.json(status);
 });
 
@@ -4979,9 +5163,10 @@ app.post('/checkout/session', requireAuth, async (c) => {
     // PAYMENTS_ENABLED (Wave 2b): no Stripe sessions minted while payments
     // are globally disabled — a session minted now would complete into a
     // webhook we are refusing.
-    if (!paymentsEnabled()) return c.json(paymentsDisabledBody(), 503);
+    if (!paymentsEnabled('funding')) return c.json(paymentsDisabledBody(), 503);
 
     const accountId = c.get('accountId');
+    if (prospectiveEpoch) { try { requireProspectiveAction('funding', accountId); } catch(error) { return c.json({code:error.code, error:'New funding is unavailable for this account.'}, 409); } }
 
     // GOV-2 A3 (blocking, CREDITS-CONTROL PART 1): a credit purchase is a
     // Terms-bound transaction (§7.1/§7.2/§7.3 — non-refundable, no cash value,
@@ -5024,6 +5209,7 @@ app.post('/checkout/session', requireAuth, async (c) => {
 
     try {
         const admission = createCheckoutAdmission({
+            epoch:prospectiveEpoch, coordinator:prospectiveMoney,
             intents: checkoutIntents, lock: acquireCheckoutLock,
             control: () => { if (!paymentsEnabled()) throw new Error('PAYMENTS_DISABLED'); return assertActionAllowed('checkout'); },
             getContext: async alias => (await stripePlatforms.getVerifiedClient(alias)).context,
@@ -5045,12 +5231,111 @@ app.post('/checkout/session', requireAuth, async (c) => {
     }
 });
 
+function currentFinancialEvidence() {
+  if (!prospectiveEpoch) return {};
+  const current = financialEpoch.resolveRuntimeEpoch({root:epochRoot});
+  if (current.activation_revision !== prospectiveEpoch.activation_revision) throw Object.assign(new Error('EPOCH_CONTROL_CONFLICT'), {code:'EPOCH_CONTROL_CONFLICT'});
+  return financialEpoch.requireEpoch(current).control.financial_evidence || {};
+}
+function currentLifecycleControl() {
+  return prospectiveEpoch ? require('./lib/stripe-transfer-persistence').readJSONStrict(financialEpoch.pathFor('lifecycle', prospectiveEpoch)).authoritative_control : null;
+}
+const fundsReturnModule = require('./lib/funds-return');
+const fundsReturnProvider = prospectiveEpoch ? fundsReturnModule.createStripeRefundProvider({
+  registry:stripePlatforms, epoch:prospectiveEpoch,
+  originalCostContract:source => currentFinancialEvidence().original_cost_contract?.[source.id],
+  refundCostContract:source => currentFinancialEvidence().refund_cost_contract?.[source.id],
+}) : null;
+const fundsReturnService = prospectiveEpoch ? fundsReturnModule.createFundsReturnService({
+  epoch:prospectiveEpoch, store:prospectiveMoney.store, coordinator:prospectiveMoney, provider:fundsReturnProvider,
+  collectLiquidity:fundsReturnModule.createStripeLiquidityCollector({registry:stripePlatforms, epoch:prospectiveEpoch, store:prospectiveMoney.store, readEvidence:() => currentFinancialEvidence().liquidity}),
+}) : null;
+async function applyMoneyParticipantProjection(projection) {
+  if (projection.participant === 'credits') return require('./lib/credits').applyMoneyProjectionSync(projection);
+  if (projection.participant === 'earnings') {
+    const receipt = require('./lib/earnings').applyMoneyEarningsProjectionSync(projection);
+    earnings = loadEarningsPrimary(EARNINGS_FILE);
+    return receipt;
+  }
+  throw Object.assign(new Error('PROJECTION_PARTICIPANT_UNAVAILABLE'), {code:'PROJECTION_PARTICIPANT_UNAVAILABLE'});
+}
+async function applyPendingMoneyProjections(accountId) {
+  if (!prospectiveMoney) return;
+  await moneyControl.runInMoneyContext(async ctx => {
+    for (const projection of ctx.pendingProjections({accountId})) {
+      await applyMoneyParticipantProjection(projection);
+    }
+  }, {kind:'reconcile', accounts:accountId ? [accountId] : []});
+}
+// EMFR buyer HTTP begin
+function fundsReturnError(c, error) {
+  const code = error.code || 'RETURN_UNAVAILABLE';
+  const status = code === 'RETURN_NOT_FOUND' ? 404 : code === 'RETURN_CSRF_REQUIRED' ? 403 : code === 'RETURN_INVALID_REQUEST' ? 400 : 409;
+  return c.json({code, error:'The requested return could not be confirmed. Check its status before trying again.'}, status);
+}
+async function readFundsReturnRequest(c, fields) {
+  const fail = code => { throw Object.assign(new Error(code), {code}); };
+  const expectedOrigin = new URL(process.env.BASE_URL || 'https://auxilo.io').origin;
+  if (c.req.header('Origin') !== expectedOrigin) fail('RETURN_CSRF_REQUIRED');
+  if (!(c.req.header('Content-Type') || '').toLowerCase().startsWith('application/json')) fail('RETURN_INVALID_REQUEST');
+  const raw = await c.req.text();
+  if (Buffer.byteLength(raw) > 1024) fail('RETURN_INVALID_REQUEST');
+  let body; try { body = JSON.parse(raw); } catch { fail('RETURN_INVALID_REQUEST'); }
+  if (!body || Array.isArray(body) || Object.keys(body).some(key => !fields.includes(key))) fail('RETURN_INVALID_REQUEST');
+  return body;
+}
+async function fundsReturnOwner(c, next) {
+  c.header('Cache-Control', 'no-store');
+  if (!loadAccounts()[c.get('accountId')]) return c.json({code:'RETURN_NOT_FOUND'}, 404);
+  if (!fundsReturnService || !prospectiveEpoch) return c.json({code:'RETURN_UNAVAILABLE'}, 503);
+  return next();
+}
+app.get('/account/funds-return/sources', requireAuth, fundsReturnOwner, async c => {
+  try {
+    const after = c.req.query('after');
+    if (after !== undefined && (after.length > 1024 || !/^[A-Za-z0-9_-]+$/.test(after))) return c.json({code:'INVALID_SOURCE_CURSOR'}, 400);
+    const page = await fundsReturnService.sourcePage({accountId:c.get('accountId'), after:after || null, limit:100});
+    return c.json({accountId:c.get('accountId'), sources:page.items, nextCursor:page.nextCursor});
+  }
+  catch(error) { return fundsReturnError(c,error); }
+});
+app.post('/account/funds-return/quote', requireAuth, fundsReturnOwner, async c => {
+  try {
+    const body = await readFundsReturnRequest(c, ['sourceId','maxGrossMicros']);
+    requireProspectiveAction('buyer_return', c.get('accountId'));
+    return c.json(await fundsReturnService.quote({accountId:c.get('accountId'), sourceId:body.sourceId, maxGrossMicros:body.maxGrossMicros}));
+  } catch(error) { return fundsReturnError(c,error); }
+});
+app.post('/account/funds-return/confirm', requireAuth, fundsReturnOwner, async c => {
+  try {
+    const body = await readFundsReturnRequest(c, ['quoteId','quoteHash']);
+    const clientRequestKey = c.req.header('Idempotency-Key');
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientRequestKey || '')) throw Object.assign(new Error('RETURN_INVALID_REQUEST'),{code:'RETURN_INVALID_REQUEST'});
+    const operation = await fundsReturnService.confirm({accountId:c.get('accountId'), quoteId:body.quoteId, quoteHash:body.quoteHash, clientRequestKey});
+    await applyPendingMoneyProjections(c.get('accountId'));
+    return c.json(await fundsReturnService.status({accountId:c.get('accountId'), operationId:operation.id}));
+  } catch(error) { return fundsReturnError(c,error); }
+});
+app.get('/account/funds-return/:operationId', requireAuth, fundsReturnOwner, async c => {
+  try { return c.json(await fundsReturnService.status({accountId:c.get('accountId'), operationId:c.req.param('operationId')})); }
+  catch(error) { return fundsReturnError(c,error); }
+});
+// EMFR buyer HTTP end
+
 // ── POST /webhook/stripe (Phase 0.4 — Stripe Webhook) ──────────────────────
 // IMPORTANT: This route must receive the raw body for signature verification.
 // Hono's default JSON parsing must be bypassed.
 const stripeEventReceipts = require('./lib/stripe-event-receipts').createEventReceiptStore();
 const stripeOrigins = require('./lib/stripe-object-origins').createOriginStore();
+const reconcileEpochFinancialEvent = prospectiveEpoch ? require('./lib/stripe-refund-handlers').createEpochFinancialEventHandler({epoch:prospectiveEpoch, store:prospectiveMoney.store, coordinator:prospectiveMoney, provider:fundsReturnProvider, returnService:fundsReturnService, applyProjection:applyMoneyParticipantProjection}) : null;
 const stripeEventDispatcher = require('./lib/stripe-event-dispatch').createStripeEventDispatcher({
+    reconcileFinancialEvent:reconcileEpochFinancialEvent,
+    postCreditLocal:({account_id}) => {
+      const balance = checkBalanceCap(account_id, 0);
+      const daily = checkDailyCap(account_id, 0);
+      if (!balance.ok || !daily.ok) holdAccount(account_id, 'cap_overage', {balance_usd:balance.current, daily_usd:daily.current});
+    },
+    epoch:prospectiveEpoch, coordinator:prospectiveMoney,
     receipts: stripeEventReceipts, origins: stripeOrigins, checkoutIntents, packs: PACKS,
     getAccounts: loadAccounts, addDollarLot, appendPurchase, isSessionProcessed, getPurchases: getPurchasesForAccount,
     clearPending: (sessionId, context) => {
@@ -5132,7 +5417,23 @@ async function handlePlatformWebhook(c, alias) {
             return c.json({ error: error.status === 413 ? 'Request body too large' : 'Invalid Stripe event signature or context' }, error.status === 413 ? 413 : 400);
         }
         try {
-            const captured = historyCoverage.captureVerifiedEvent({ rawBody, event: verified.event, context: verified.context });
+            let captured;
+            await moneyControl.runInMoneyContext(async () => {
+              captured = await historyCoverage.captureVerifiedEvent({rawBody, event:verified.event, context:verified.context});
+            }, {kind:'event-capture'});
+            if (prospectiveEpoch) {
+              const rawDigest = crypto.createHash('sha256').update(rawBody).digest('hex');
+              const classified = financialEpoch.classifyEpochEvent({event:verified.event, context:verified.context, rawDigest, epoch:prospectiveEpoch});
+              if (classified.eligible && !captured.conflict) {
+                await moneyControl.runInMoneyContext(() => financialEpoch.recordEpochEventDisposition({epoch:prospectiveEpoch, writer:moneyWriter, event:verified.event, context:verified.context, rawDigest, disposition:'eligible'}), {kind:'event-disposition'});
+                const result = await stripeEventDispatcher.dispatch(verified.event, verified.context, rawDigest);
+                await applyPendingMoneyProjections();
+                const effect = stripeEventReceipts.get(verified.context.stripe_platform, verified.event.id);
+                if (effect?.state === 'completed') await moneyControl.runInMoneyContext(() => financialEpoch.recordEpochEventDisposition({epoch:prospectiveEpoch, writer:moneyWriter, event:verified.event, context:verified.context, rawDigest, disposition:'applied', effectReceiptId:effect.receipt_id}), {kind:'event-disposition'});
+                return c.json({...result.body, durably_recorded:true}, result.status);
+              }
+              await moneyControl.runInMoneyContext(() => financialEpoch.recordEpochEventDisposition({epoch:prospectiveEpoch, writer:moneyWriter, event:verified.event, context:verified.context, rawDigest, disposition:'restricted'}), {kind:'event-disposition'});
+            }
             return c.json({ ...historyUnavailableBody(), durably_recorded: captured.durably_recorded === true, event_id: verified.event.id }, 503);
         } catch {
             return c.json({ ...historyUnavailableBody(), durably_recorded: false }, 503);
@@ -6150,7 +6451,10 @@ app.get('/health', (c) => {
   // usable, not merely present — see lib/stripe.js getStripeStatus(). A
   // cached read, no network call on the request path.
   const migrationStatus = getMigrationControl();
-  const stripeStatus = stripePlatforms.getPlatformStatus(migrationStatus.intake_platform || 'legacy');
+  const stripeStatus = stripePlatforms.getPlatformStatus(prospectiveEpoch?.platform || migrationStatus.intake_platform || 'legacy');
+  const policyPublished = prospectiveEpoch?.policy_evidence?.published === true && prospectiveEpoch.policy_evidence.policy_version === CURRENT_TOS_VERSION;
+  const capacityStatus = prospectiveEpoch ? prospectiveMoney.capacityStatus({amountMicros:moneyControl.toMicros(Math.min(...Object.values(PACKS).map(pack=>pack.price_usd)))}) : null;
+  const prospectiveFunding = !!(prospectiveEpoch && policyPublished && paymentsEnabled('funding') && stripeStatus.configured && checkoutIntents.ready && capacityStatus.newAdmissionAvailable);
   return c.json({
     status: 'ok',
     uptime: process.uptime(),
@@ -6168,6 +6472,7 @@ app.get('/health', (c) => {
     // Wave 2b: effective global payment-switch state (observability — an
     // operator or monitor can see the pause without probing a paid endpoint).
     payments_enabled: paymentsEnabled(),
+    financial_epoch: prospectiveEpoch ? {funding_available:prospectiveFunding, capacity_available:capacityStatus.newAdmissionAvailable, capacity_reason:capacityStatus.reason, buyer_return_available:policyPublished && paymentsEnabled('buyer_return'), spend_available:paymentsEnabled('spend'), policy_published:policyPublished} : null,
     // CREDITS-CONTROL PART 1 (SPEC-1 A3) / CREDITS-CONFIG-USABLE: whether
     // Stripe is actually usable — secret key + webhook secret pass format
     // validation AND a live authenticated probe succeeded — independent of
@@ -6176,7 +6481,7 @@ app.get('/health', (c) => {
     // stripe_configured are true. stripe_reason carries the machine-readable
     // cause when false (never key material); stripe_mode is 'test'/'live'/null
     // from the key prefix (safe — no secret material).
-    stripe_configured: stripeStatus.configured && migrationStatus.ready && migrationStatus.allow_checkout && checkoutIntents.ready,
+    stripe_configured: prospectiveEpoch ? stripeStatus.configured && checkoutIntents.ready : stripeStatus.configured && migrationStatus.ready && migrationStatus.allow_checkout && checkoutIntents.ready,
     stripe_migration: { ready: migrationStatus.ready, phase: migrationStatus.phase, checkout_ready: checkoutIntents.ready },
     stripe_platforms: Object.fromEntries(['legacy', 'auxilo_llc'].map(alias => { const s = stripePlatforms.getPlatformStatus(alias); return [alias, { configured: s.configured, reason: s.reason, mode: s.mode }]; })),
     stripe_reason: stripeStatus.reason,
@@ -8462,6 +8767,10 @@ function termsNotAcceptedResponse(c) {
 app.get('/account/terms-status', requireSessionOrApiKey('read'), (c) => {
   const account = loadAccounts()[c.get('accountId')];
   if (!account) return c.json({ error: 'Account not found' }, 404);
+  if (prospectiveEpoch) {
+    let consent = null; try { consent = financialEpoch.policyConsent(c.get('accountId'), prospectiveEpoch); } catch {}
+    return c.json({...getTosStatus(account), financial_policy:{version:prospectiveEpoch.policy_ref, published:prospectiveEpoch.policy_evidence?.published === true && prospectiveEpoch.policy_ref === CURRENT_TOS_VERSION, effective_at:prospectiveEpoch.policy_evidence?.effective_at || null, accepted:!!consent}}, 200);
+  }
   return c.json(getTosStatus(account), 200);
 });
 
@@ -8500,6 +8809,14 @@ app.post('/account/accept-terms', requireSessionOrApiKey('contribute'), async (c
       code: 'AFFIRMATION_REQUIRED',
       current_tos_version: CURRENT_TOS_VERSION,
     }, 400);
+  }
+
+  if (prospectiveEpoch) {
+    try {
+      const consent = await require('./lib/tos-acceptance-log').recordProspectiveConsent({epoch:prospectiveEpoch, accountId, version, affirmed:agree});
+      invalidateCachedAccount(accountId);
+      return c.json({success:true, version:consent.policy_version, accepted_at:consent.accepted_at, effective_at:consent.effective_at, consent_id:consent.consent_id});
+    } catch(error) { return c.json({code:error.code || 'CONSENT_PERSISTENCE_FAILED', error:'Policy acceptance could not be confirmed. Funding remains unavailable.'}, 409); }
   }
 
   const ip = getClientIp(c);
@@ -9704,6 +10021,7 @@ app.get('/knowledge/:id', async (c) => {
   // tracked so a failed delivery can cancel the WAL, roll the in-memory
   // ledger back, and restore the drawn balance in the same request.
   let walId = null;
+  const _learningRecoveryBefore=prospectiveMoney?.failureControl ? require('./lib/wal').captureLearningState(learning) : null;
   const _rb = {
     qualityUnlocks: learning.quality.unlocks || 0,
     unlocksTotal: learning.quality.unlocks_total || 0,
@@ -9907,6 +10225,7 @@ app.get('/knowledge/:id', async (c) => {
 
   walId = createWalEntry('unlock', {
     learning_id: id,
+    ...(_learningRecoveryBefore ? {learningRecovery:require('./lib/wal').createLearningRecovery(id,_learningRecoveryBefore,learning)} : {}),
     builder_wallet: contribWallet,
     contributor_account_id: contribAccountId,
     unlock_price: UNLOCK_PRICE,
@@ -9936,12 +10255,15 @@ app.get('/knowledge/:id', async (c) => {
     // (replayUnlock / lib/credits.js replayLotFundingFromWalEntry), rather
     // than losing the funding record for good.
     dollar_draws: (fundingSource === 'credit_pack') ? (c.get('creditDollarDraws') || []) : [],
-  });
+  }, {preWalCapability:c.get('creditPreWalCapability')});
 
   safeWrite(LEARNINGS_FILE, learnings);
   markStepComplete(walId, 'update_learnings');
 
-  safeWrite(EARNINGS_FILE, earnings);
+  if(prospectiveMoney?.failureControl && fundingSource==='credit_pack'){
+    const recoveryWal=require('./lib/wal'),capability=recoveryWal.beginEarningsWrite(walId);
+    recoveryWal.writeEarnings(walId,capability,()=>safeWrite(EARNINGS_FILE,earnings));
+  }else safeWrite(EARNINGS_FILE, earnings);
   markStepComplete(walId, 'update_earnings');
 
   // GTM-9: per-unlock event row at the WAL-protected commit point. Crash-safe
@@ -10013,7 +10335,10 @@ app.get('/knowledge/:id', async (c) => {
         // Reversals mark the entry durably done below while earnings.json
         // never received the change -- gating on totalReversed > 0 was
         // gating on the wrong thing.
-        safeWrite(EARNINGS_FILE, earnings);
+        if(prospectiveMoney?.failureControl){
+          const recoveryWal=require('./lib/wal'),capability=recoveryWal.beginEarningsContinuation(walId,fundResult.needsReversal);
+          recoveryWal.writeEarnings(walId,capability,()=>safeWrite(EARNINGS_FILE,earnings));
+        }else safeWrite(EARNINGS_FILE, earnings);
         const affectedLotIds = [...new Set(fundResult.needsReversal.map(e => e.lot_id))];
         for (const affectedLotId of affectedLotIds) {
           await finalizePendingReversals(buyerAccountId, affectedLotId);
@@ -10042,9 +10367,11 @@ app.get('/knowledge/:id', async (c) => {
   // Best-effort + fire-and-forget (F4: async under the ledger's write mutex):
   // a ledger write failure must never fail a paid delivery.
   if (buyerAccountId) {
-    recordPurchase(buyerAccountId, id).catch((e) => {
+    const entitlement = recordPurchase(buyerAccountId, id).catch((e) => {
       console.error('[LW-7] purchase-ledger write failed (unlock path):', e && e.message);
+      if (prospectiveEpoch) throw e;
     });
+    if (prospectiveEpoch) await entitlement;
   }
 
   // LW-13 / LW-16: strip moderation-internal fields from the buyer-facing unlock response
@@ -10148,6 +10475,30 @@ app.get('/knowledge/:id', async (c) => {
     // residual, out of scope per BUILD-SPEC-WAVE1).
     if (fundingSource !== 'credit_pack' || !buyerAccountId) {
       throw deliveryErr;
+    }
+
+    if(prospectiveMoney?.failureControl){
+      const recoveryWal=require('./lib/wal'),manager=prospectiveMoney.failureControl,ctx=moneyControl.assertMoneyContext();
+      let anchor,creditRestored=false;
+      try {
+        ctx.flush();
+        const ids=[...new Set((c.get('creditDollarDraws')||[]).map(d=>d.spend_id).filter(Boolean))];
+        if(ids.length!==1)throw new Error('SPEND_RECEIPT_REQUIRED');
+        anchor=prospectiveMoney.recoveryAnchors.resolveCommittedAnchor({kind:'spend',id:ids[0],accountId:buyerAccountId});
+        const capability=manager.requestCompensation({spendCapability:anchor,...(walId?{walCapability:recoveryWal.resolveWalCapability(walId)}:{preWalCapability:c.get('creditPreWalCapability')})});
+        recoveryWal.completeCompensationSync(capability);creditRestored=true;
+        // Catalog lock is held. Reload only after the exact durable correction;
+        // no financial earnings subtraction occurs on this no-accrual path.
+        earnings=loadEarningsPrimary(EARNINGS_FILE);learnings=loadDataFile(LEARNINGS_FILE,[],true);
+        if(countersCredited)unrecordUnlockCounterGate(buyerAccountId,id);
+        if(isFromSearch)searchSourceCache.set(discoveryCacheKey,cachedAt);
+        while(manager.status().state==='recovery_scan'){const before=manager.status();manager.scanRecoveryPage({limit:100});assertRecoveryProgress(before,manager.status());}
+        return c.json({error:'Unlock delivery failed — your credit has been refunded. Please retry.',code:'DELIVERY_FAILED_CREDIT_REFUNDED',credit_refunded:true},500);
+      }catch(recoveryError){
+        try {if(anchor)manager.noteFailure({anchor,reason:'FAILED_DELIVERY_RECONCILIATION_REQUIRED',phase:'compensate',cutStatus:'unverified'});}catch{}
+        console.error('[money-recovery] failed delivery remains pending:',recoveryError.code||recoveryError.message);
+        return c.json({error:'Financial recovery is required before this operation can continue.',code:'FINANCIAL_RECOVERY_REQUIRED',credit_refunded:creditRestored},503);
+      }
     }
 
     // Credit arm — the buyer's balance was debited with no content
@@ -10855,6 +11206,7 @@ const EARNING_EMAILS_OFF_TOKEN_TTL_MS = 60 * 24 * 60 * 60 * 1000; // 60 days
 // process; a second concurrent call for an account already in flight is a
 // silent no-op (see lib/earning-notifications.js).
 async function sendEarningDigestForAccount(accountId) {
+  if (historyCoverage.historyFinancialBlocked()) return; // Epoch queue is fresh; no legacy sender activation.
   await earningNotifications.withAccountLock(accountId, async () => {
     try {
       // Review findings H3/M1: the due check and the item list are both
@@ -10938,7 +11290,7 @@ async function flushDueEarningDigests() {
 }
 
 // Only started when the flag is on — a dark feature runs no interval at all.
-if (process.env.EARNING_NOTIFICATIONS_ENABLED === 'true') {
+if (!historyCoverage.historyFinancialBlocked() && process.env.EARNING_NOTIFICATIONS_ENABLED === 'true') {
   const _earningDigestInterval = setInterval(
     () => flushDueEarningDigests().catch((e) => console.error('[earning-digest] sweep error:', e && e.message)),
     60 * 60 * 1000
@@ -14498,6 +14850,55 @@ app.get('/referral/stats', requireSession, (c) => {
 app.all('*', (c) => {
   return c.json({ error: 'Not found', message: `No endpoint at ${c.req.method} ${c.req.path}`, help: 'See GET /api for all available endpoints' }, 404);
 });
+
+// Prepared epochs serve status, while recovery never retries a provider POST.
+let moneyReconcileRunning = false;
+let moneyReconcileCursor = null;
+async function reconcileProspectiveMoney() {
+  if (!prospectiveMoney || moneyReconcileRunning || !prospectiveEpoch.capabilities.reconcile) return;
+  moneyReconcileRunning = true;
+  try {
+    const manager=prospectiveMoney.failureControl;
+    if(manager?.status().state==='recovery_scan')await prospectiveMoney.scanFailureRecoveryPage({limit:100});
+    const status=manager?.status();
+    if(status&&status.state!=='idle'){
+      if(status.state==='failure_pending'&&status.anchor?.kind==='projection'){
+        const selected=prospectiveMoney.store.getProjection(status.anchor.id);
+        if(!selected||digestJSON(selected.owner)!==status.anchor.accountDigest)throw Object.assign(new Error('RECOVERY_ANCHOR_SCOPE_MISMATCH'),{code:'RECOVERY_ANCHOR_SCOPE_MISMATCH'});
+        const anchor=prospectiveMoney.recoveryAnchors.restore(status.anchor);
+        await prospectiveMoney.withMoneyControl({kind:'reconcile',accounts:[selected.owner],recoveryAnchor:anchor,action:'participant_effect'},async ctx=>{
+          const projection=ctx.getProjection(status.anchor.id);
+          if(!projection||projection.owner!==selected.owner||digestJSON(projection.owner)!==status.anchor.accountDigest)throw Object.assign(new Error('RECOVERY_ANCHOR_SCOPE_MISMATCH'),{code:'RECOVERY_ANCHOR_SCOPE_MISMATCH'});
+          await applyMoneyParticipantProjection(projection);
+        });
+      }else if(status.state==='failure_pending'&&status.anchor?.kind==='dispatch_operation'){
+        const operation=prospectiveMoney.store.getOperation(status.anchor.id);
+        if(operation?.type==='buyer_return')await fundsReturnService.reconcile({operationId:operation.id});
+      }
+      // Each tick advances only its selected work. The next tick resumes any
+      // resulting scan; ambiguous/local compensation anchors remain gated.
+      return;
+    }
+    const pending = prospectiveMoney.store.listPendingOperations({after:moneyReconcileCursor, limit:25});
+    for (const operation of pending.items) {
+      if (operation.type !== 'buyer_return') continue;
+      try { await fundsReturnService.reconcile({operationId:operation.id}); }
+      catch (error) {
+        if (prospectiveMoney.store.uncertain) throw error;
+        console.error('[money-reconcile-operation]', operation.id, error.code || 'RECONCILIATION_REQUIRED');
+      }
+    }
+    moneyReconcileCursor = pending.nextCursor || null;
+    await reconcileEpochFinancialEvent.reconcilePending({limit:25});
+    await applyPendingMoneyProjections();
+  } finally { moneyReconcileRunning = false; }
+}
+if (prospectiveEpoch) {
+  const sourceSha = financialEpoch.requireEpoch(prospectiveEpoch).binding.identity.candidate_sha;
+  require('./lib/money-checkpoint').startMoneyCheckpointServer({epoch:prospectiveEpoch, writer:moneyWriter, coordinator:prospectiveMoney, sourceSha, lifecycleControl:currentLifecycleControl});
+  setInterval(() => reconcileProspectiveMoney().catch(error => console.error('[money-reconcile]', error.code || 'RECONCILIATION_REQUIRED')), 30000).unref();
+  setImmediate(() => reconcileProspectiveMoney().catch(error => console.error('[money-reconcile]', error.code || 'RECONCILIATION_REQUIRED')));
+}
 
 // ─── Start ───────────────────────────────────────────────────────────
 const PORT = 3000;

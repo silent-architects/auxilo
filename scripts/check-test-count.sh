@@ -525,7 +525,12 @@ cd "${REPO_ROOT}"
 # SERVING-UNKNOWN-HISTORY: measured staged suite after reviewed serving guards,
 # typed overlay operator, durable quarantine and explicit capture recovery.
 # A1 null-wallet guard: +3 A1 tests + 1 per-file sweep entry for the new test file (sweep enumerates git ls-files, so run the suite with the file committed).
-EXPECTED_TEST_COUNT=5608
+# EMFR-PROSPECTIVE integration (candidate 6893af7 merged with origin/main 6597e1e): measured staged suite 6763. Candidate alone is 6759, which is 1155 over the old 5604 pin; A1's +4 (3 tests + 1 sweep entry) brings it to 6763.
+# EMFR A2 (codex/emfr-a2-build 336389e merged): +247 measured (6763 -> 7010): the A2 pure-JS suites, the native suites' discovered tests and per-file sweep entries,
+# including the four formerly untracked probe files (F-WAL test, admitted-restore fixture, compensation admission, compensation server negative) now tracked.
+# Count stability: test/money-quote-operational-native.test.js owns two subtests that a skipped parent never registered, so macOS discovered 7010 and Linux 7012.
+# The parent now always runs and each subtest carries the skip, so every platform discovers 7012.
+EXPECTED_TEST_COUNT=7012
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

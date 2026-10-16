@@ -428,8 +428,8 @@ describe('notifyStripeCheckoutAttempt: immediate reprobe on the first attempt af
 describe('/health wiring: stripe_configured/stripe_reason/stripe_mode from getStripeStatus()', () => {
   it('reads the cached usability status, not process.env.STRIPE_SECRET_KEY presence', () => {
     const h = sliceAt(SERVER_SRC, "app.get('/health', (c) => {", 6000);
-    assert.ok(h.includes("const stripeStatus = stripePlatforms.getPlatformStatus(migrationStatus.intake_platform || 'legacy');"));
-    assert.ok(h.includes('stripe_configured: stripeStatus.configured && migrationStatus.ready && migrationStatus.allow_checkout && checkoutIntents.ready,'));
+    assert.ok(h.includes("const stripeStatus = stripePlatforms.getPlatformStatus(prospectiveEpoch?.platform || migrationStatus.intake_platform || 'legacy');"));
+    assert.ok(h.includes('stripe_configured: prospectiveEpoch ? stripeStatus.configured && checkoutIntents.ready : stripeStatus.configured && migrationStatus.ready && migrationStatus.allow_checkout && checkoutIntents.ready,'));
     assert.ok(h.includes('stripe_reason: stripeStatus.reason,'));
     assert.ok(h.includes('stripe_mode: stripeStatus.mode,'));
     assert.ok(!/stripe_configured:\s*!!process\.env\.STRIPE_SECRET_KEY/.test(h),

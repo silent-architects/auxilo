@@ -148,6 +148,12 @@ function stageServer({
   }
   fs.statSync(nodeModulesDir);
   fs.symlinkSync(nodeModulesDir, path.join(tmpDir, 'node_modules'));
+  // The server-only native runtime is excluded from the MCP package. Fixtures
+  // use the current host's built addon; container proofs build their own ABI.
+  const serverRuntime = path.join(repoRoot, 'server-runtime');
+  if (fs.existsSync(serverRuntime) && !fs.existsSync(path.join(tmpDir, 'server-runtime'))) {
+    fs.symlinkSync(serverRuntime, path.join(tmpDir, 'server-runtime'));
+  }
 
   const dataDir = path.join(tmpDir, 'data');
   fs.mkdirSync(dataDir);

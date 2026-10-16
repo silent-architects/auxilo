@@ -40,9 +40,10 @@ const {
  * Validate an extracted /app/data tree against the marker.
  * Returns { ok, errors: [..], checked: { json, jsonl } }.
  */
-function validateExtractedDir(dir, marker) {
+function validatePlainDir(dir, marker) {
   const errors = [];
   const checked = { json: 0, jsonl: 0 };
+
 
   const walk = (d) => {
     for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
@@ -51,7 +52,7 @@ function validateExtractedDir(dir, marker) {
         walk(p);
         continue;
       }
-      if (!entry.isFile()) continue;
+      if (!entry.isFile()) {errors.push(`${path.relative(dir,p)}: special file refused`);continue;}
       if (entry.name.endsWith('.json')) {
         checked.json += 1;
         try {
@@ -61,7 +62,7 @@ function validateExtractedDir(dir, marker) {
         }
       } else if (entry.name.endsWith('.jsonl')) {
         checked.jsonl += 1;
-        const lines = fs.readFileSync(p, 'utf8').split('\n');
+        const raw=fs.readFileSync(p,'utf8');if(raw&&!raw.endsWith('\n'))errors.push(`${path.relative(dir,p)}: torn JSONL record`);const lines = raw.split('\n');
         for (let i = 0; i < lines.length; i++) {
           const line = lines[i].trim();
           if (!line) continue;
@@ -95,6 +96,24 @@ function validateExtractedDir(dir, marker) {
   return { ok: errors.length === 0, errors, checked };
 }
 
+function validateExtractedDir(dir,marker) {
+  const cp=require('../lib/money-checkpoint');
+  if(marker?.checkpoint_id||fs.existsSync(path.join(dir,cp.MANIFEST))||fs.existsSync(path.join(dir,'financial-epoch.json'))){
+    try {const manifest=cp.validateCheckpoint(fs.realpathSync(dir));if(marker?.checkpoint_digest!==manifest.checksum)throw Error('CHECKPOINT_MARKER_BINDING_REQUIRED');return cp.withCheckpointContents(dir,manifest,root=>validatePlainDir(root,marker));}
+    catch(error){return {ok:false,errors:['financial checkpoint: '+error.message],checked:{json:0,jsonl:0}};}
+  }
+  return validatePlainDir(dir,marker);
+}
+async function decryptCheckpointBackup({source,keyHex,workDir}) {
+  const cp=require('../lib/money-checkpoint'),envelope=path.join(workDir,'authenticated-envelope'),destination=path.join(workDir,'checkpoint');
+  async function* bounded(){let size=0;for await(const chunk of decryptGen(source,keyHex)){size+=chunk.length;if(size>cp.MAX_BACKUP_BYTES)throw Error('CHECKPOINT_ENVELOPE_SIZE');yield chunk;}}
+  try {
+    // No manifest parsing or extraction occurs before GCM authentication finishes.
+    await pipeline(Readable.from(bounded()),fs.createWriteStream(envelope,{flags:'wx',mode:0o600}));
+    fs.mkdirSync(destination,{mode:0o700});return cp.unpackCheckpointEnvelope(envelope,destination);
+  } finally {if(fs.existsSync(envelope))fs.unlinkSync(envelope);}
+}
+
 // ── Drill ─────────────────────────────────────────────────────────────────
 
 async function bodyToBuffer(body) {
@@ -119,13 +138,18 @@ async function main() {
   // 1. Marker.
   const markerRes = await s3.send(new GetObjectCommand({ Bucket: config.bucket, Key: MARKER_KEY }));
   const marker = JSON.parse((await bodyToBuffer(markerRes.Body)).toString('utf8'));
+  if(marker.expires_at&&Date.parse(marker.expires_at)<=Date.now())throw Error('CHECKPOINT_EXPIRED');
   const ageMin = Math.round((Date.now() - Date.parse(marker.generated_at)) / 60000);
   console.log(`[drill] marker: ${marker.object_key} generated ${marker.generated_at} (${ageMin} min ago), ` +
     `${marker.bytes} bytes, counts=${JSON.stringify(marker.counts)}`);
 
   // 2. Download + decrypt + extract in one streamed pass.
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'auxilo-restore-drill-'));
+  try {
   const objRes = await s3.send(new GetObjectCommand({ Bucket: config.bucket, Key: marker.object_key }));
+  let extracted=workDir;
+  if(marker.checkpoint_id)extracted=await decryptCheckpointBackup({source:objRes.Body,keyHex:config.keyHex,workDir});
+  else {
   const tar = spawn('tar', ['-xzf', '-', '-C', workDir], { stdio: ['pipe', 'inherit', 'inherit'] });
   const tarExit = new Promise((resolve, reject) => {
     tar.on('error', reject);
@@ -135,22 +159,29 @@ async function main() {
   await tarExit;
   console.log(`[drill] decrypted + extracted to ${workDir}`);
 
+  }
+
   // 3. Validate.
-  const result = validateExtractedDir(workDir, marker);
+  const result = validateExtractedDir(extracted, marker);
   console.log(`[drill] validated ${result.checked.json} .json + ${result.checked.jsonl} .jsonl files`);
   if (!result.ok) {
     for (const e of result.errors) console.error(`[drill] FAIL: ${e}`);
-    process.exit(1);
+    throw Error('BACKUP_RESTORE_VALIDATION_FAILED');
   }
 
   console.log('[drill] PASS — backup is decryptable, parseable, and counts match the marker');
+  if (keep && marker.checkpoint_id) throw Error('Financial restore drill scratch may not be retained; use complete offline restore');
   if (keep) {
     console.log(`[drill] extracted tree kept at: ${workDir} (restore procedure: docs/RUNBOOK.md §4)`);
   } else {
     fs.rmSync(workDir, { recursive: true, force: true });
   }
-  process.exit(0);
+  return result;
+  } finally {
+    if (!keep || marker.checkpoint_id) fs.rmSync(workDir, {recursive:true,force:true});
+  }
 }
+
 
 if (require.main === module) {
   main().catch((err) => {
@@ -159,4 +190,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { validateExtractedDir };
+module.exports = { validateExtractedDir, decryptCheckpointBackup };

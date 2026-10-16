@@ -335,7 +335,7 @@ describe('BOT-08/09/10/15/16: llms.txt content guards', () => {
 
   it('contains the credits-as-cash C-67 credit-pack clarification', () => {
     assert.ok(
-      llmsTxt.includes('- Credit packs add $10 (Starter), $25 (Growth) or $100 (Pro) to a balance that pays listed prices and never expires.'),
+      llmsTxt.includes('- Add funds of $10, $25 or $100 to a balance that pays listed prices and never expires.'),
       'C-67 line must be present verbatim'
     );
   });
