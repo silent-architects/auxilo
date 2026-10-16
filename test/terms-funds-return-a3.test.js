@@ -123,3 +123,25 @@ describe('funds-return a3: R4 and R5 cross-references', () => {
     assert.match(s143, /does not limit/);
   });
 });
+
+describe('funds-return a3: served copy', () => {
+  for (const page of ['pricing', 'dashboard']) {
+    it(page + '.html: the non-refundable sentence is aligned to R2/R3', () => {
+      const html = read('public', page + '.html');
+      assert.ok(!html.includes('Credits are non-refundable except as these Terms provide.'));
+      assert.ok(!html.includes('including that credits are non-refundable and do not expire'));
+      assert.match(html, /including that Unlock purchases are final and credits do not expire\./);
+      assert.match(html, /Unused funds that were paid by card are not refundable except as the Terms provide, including the return of unused paid funding when returns are published for your funding period/);
+      assert.match(html, /Unlock purchases are final and non-refundable\./);
+      assert.ok(!html.includes('All transactions on the Platform are final.'));
+      assert.ok(html.includes('cannot be withdrawn or redeemed for currency, except as the Terms provide or where applicable law requires it.'));
+    });
+  }
+
+  it('llms.txt: returns are conditional on publication and a confirmed return is held, not spendable, until the provider result is verified', () => {
+    const t = read('public', 'llms.txt');
+    assert.ok(t.includes('when returns are published for your funding period'));
+    assert.match(t, /A confirmed return is held, not spendable, until the provider result is verified\./);
+    assert.ok(t.includes('Earned margin covers verified costs first; a quote shows any uncovered cost'), 'existing sentence kept');
+  });
+});
