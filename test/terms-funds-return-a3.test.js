@@ -145,3 +145,19 @@ describe('funds-return a3: served copy', () => {
     assert.ok(t.includes('Earned margin covers verified costs first; a quote shows any uncovered cost'), 'existing sentence kept');
   });
 });
+
+describe('funds-return a3: paused availability copy', () => {
+  it('status.html carries the approved component sentence and no longer says buyer payments are unaffected', () => {
+    const html = read('public', 'status.html');
+    assert.ok(html.includes('<span class="component-desc">' + STATUS_SENTENCE + '</span>'));
+    assert.ok(!html.includes('buyer payments are unaffected'));
+  });
+
+  for (const page of ['api', 'for-agents', 'how-it-works']) {
+    it(page + '.html carries the paused line exactly once, with no "never expire" or "nothing is charged" promise in it', () => {
+      const html = read('public', page + '.html').split('<a href="/status">status page</a>').join('status page');
+      assert.equal(html.split(PAUSED_LINE).length - 1, 1);
+      assert.ok(!/nothing is charged|never expire/i.test(PAUSED_LINE));
+    });
+  }
+});

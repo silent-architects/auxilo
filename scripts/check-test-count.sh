@@ -536,7 +536,8 @@ cd "${REPO_ROOT}"
 # TERMS-FUNDS-RETURN-A3 commit 2 (Terms R1-R5, Section 7.7): +10 in test/terms-funds-return-a3.test.js. 7016 + 10 = 7026.
 # TERMS-FUNDS-RETURN-A3 commit 3 (7.2 no-cash-value bullet excepts Section 7.7): +1. 7026 + 1 = 7027.
 # TERMS-FUNDS-RETURN-A3 commit 4 (served copy: pricing, dashboard, llms.txt): +3 in test/terms-funds-return-a3.test.js. 7027 + 3 = 7030.
-EXPECTED_TEST_COUNT=7030
+# TERMS-FUNDS-RETURN-A3 commit 5 (paused availability copy: status.html, api, for-agents, how-it-works): +4 in test/terms-funds-return-a3.test.js. 7030 + 4 = 7034.
+EXPECTED_TEST_COUNT=7034
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
