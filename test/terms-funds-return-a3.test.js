@@ -155,7 +155,7 @@ describe('funds-return a3: paused availability copy', () => {
 
   for (const page of ['api', 'for-agents', 'how-it-works']) {
     it(page + '.html carries the paused line exactly once, with no "never expire" or "nothing is charged" promise in it', () => {
-      const html = read('public', page + '.html').split('<a href="/status">status page</a>').join('status page');
+      const html = read('public', page + '.html');
       assert.equal(html.split(PAUSED_LINE).length - 1, 1);
       assert.ok(!/nothing is charged|never expire/i.test(PAUSED_LINE));
     });
