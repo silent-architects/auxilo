@@ -530,7 +530,15 @@ cd "${REPO_ROOT}"
 # including the four formerly untracked probe files (F-WAL test, admitted-restore fixture, compensation admission, compensation server negative) now tracked.
 # Count stability: test/money-quote-operational-native.test.js owns two subtests that a skipped parent never registered, so macOS discovered 7010 and Linux 7012.
 # The parent now always runs and each subtest carries the skip, so every platform discovers 7012.
-EXPECTED_TEST_COUNT=7012
+# TERMS-FUNDS-RETURN-A3 (2026-10-16), commit 1 (version bump 2026-10-16-funds-return-a3): +1 in
+# test/fix-unit-money.test.js (a2 acceptor keeps payee agency, is re-prompted), +2 in the new
+# test/terms-funds-return-a3.test.js (version of record), +1 tracked-file path-guard entry for the new file. 7012 + 4 = 7016.
+# TERMS-FUNDS-RETURN-A3 commit 2 (Terms R1-R5, Section 7.7): +10 in test/terms-funds-return-a3.test.js. 7016 + 10 = 7026.
+# TERMS-FUNDS-RETURN-A3 commit 3 (7.2 no-cash-value bullet excepts Section 7.7): +1. 7026 + 1 = 7027.
+# TERMS-FUNDS-RETURN-A3 commit 4 (served copy: pricing, dashboard, llms.txt): +3 in test/terms-funds-return-a3.test.js. 7027 + 3 = 7030.
+# TERMS-FUNDS-RETURN-A3 commit 5 (paused availability copy: status.html, api, for-agents, how-it-works): +4 in test/terms-funds-return-a3.test.js. 7030 + 4 = 7034.
+# TERMS-FUNDS-RETURN-A3 review fixes: +4 in test/terms-funds-return-a3.test.js (status Marketplace/x402 rows, llms.txt paused lines, two prospective-disclosure pages; the paused-line tests now assert served markup). 7034 + 4 = 7038.
+EXPECTED_TEST_COUNT=7038
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"

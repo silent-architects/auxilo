@@ -208,7 +208,7 @@ describe('legal renderer: code spans (R2-4/R3-2/R3-7)', { timeout: 240_000 }, ()
     const html = await fetch(`${realBoot.baseUrl}/terms`).then((r) => r.text());
     const m = html.match(/Current Amendment:\s*<code>([^<]+)<\/code>/);
     assert.ok(m, 'expected "Current Amendment: <code>...</code>" in the served HTML');
-    assert.ok(/^[\w.-]+$/.test(m[1]), 'the code element carries the bare amendment id, e.g. 2026-09-27-credit-balance-a2');
+    assert.ok(/^[\w.-]+$/.test(m[1]), 'the code element carries the bare amendment id, e.g. 2026-10-16-funds-return-a3');
   });
 
   it('R3-7: every heading id on /terms is unchanged from what production serves (real docs/, no history)', async (t) => {

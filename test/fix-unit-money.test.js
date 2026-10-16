@@ -85,11 +85,19 @@ describe('[ruling L11] a corrupt data file is refused, not read as empty', () =>
 
 // ─── Ruling T1: payee-agency stays in force across the version bump ───────
 
-describe('[ruling T1] PAYEE_AGENCY_VERSIONS holds both the July and the credit-balance version', () => {
+describe('[ruling T1] PAYEE_AGENCY_VERSIONS holds the July, credit-balance and funds-return versions', () => {
   const { CURRENT_TOS_VERSION, isPayeeAgencyInForce, hasAcceptedCurrentTos } = require('../lib/accounts.js');
 
-  it('CURRENT_TOS_VERSION is the credit-balance amendment', () => {
-    assert.equal(CURRENT_TOS_VERSION, '2026-09-27-credit-balance-a2');
+  it('CURRENT_TOS_VERSION is the funds-return a3 amendment', () => {
+    assert.equal(CURRENT_TOS_VERSION, '2026-10-16-funds-return-a3');
+  });
+
+  it('a builder who accepted the PREVIOUS credit-balance a2 version keeps the agency in force but is re-prompted for the current Terms', () => {
+    const account = { accepted_at: Date.now(), tos_version: '2026-09-27-credit-balance-a2' };
+    assert.equal(isPayeeAgencyInForce(account), true,
+      'the a3 bump must not quarantine a2 acceptors: their payee agency stays in force (PAYEE_AGENCY_VERSIONS lists a2 explicitly)');
+    assert.equal(hasAcceptedCurrentTos(account), false,
+      'hasAcceptedCurrentTos is false for an a2 acceptor, so the Terms dialog re-prompts (click to read, scroll to the end, Accept)');
   });
 
   it('a builder who accepted the EARLIER payee-agency version still has the agency in force (their learnings still unlock)', () => {
