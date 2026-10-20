@@ -530,7 +530,9 @@ cd "${REPO_ROOT}"
 # including the four formerly untracked probe files (F-WAL test, admitted-restore fixture, compensation admission, compensation server negative) now tracked.
 # Count stability: test/money-quote-operational-native.test.js owns two subtests that a skipped parent never registered, so macOS discovered 7010 and Linux 7012.
 # The parent now always runs and each subtest carries the skip, so every platform discovers 7012.
-EXPECTED_TEST_COUNT=7012
+# EMFR EAP-5 repair R1 (BUILD-SPEC-EMFR-EAP5-REPAIR-2026-10-19): test/money-capacity-refusal.test.js registers 15 tests on every platform, plus 1 per-file
+# sweep entry once tracked: measured 7028 on the staged tree (macOS, native cases skipped).
+EXPECTED_TEST_COUNT=7028
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
