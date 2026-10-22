@@ -51,14 +51,18 @@ function closeServer(server) {
   return new Promise((resolve) => server.close(() => resolve()));
 }
 
+// The two binds run one after the other. On Linux a dual-stack `::` listener
+// also holds the IPv4 port, so binding 127.0.0.1 while it is open always fails
+// with EADDRINUSE; macOS allows both at once. Claim files, not the probe, keep
+// concurrent test files apart, so the gap between the two binds is acceptable.
 async function probePort(port = 0) {
   const wide = await listenOnce(port);
   if (wide.error) return { error: wide.error };
+  await closeServer(wide.server);
 
   const loopback = await listenOnce(wide.port, '127.0.0.1');
-  if (loopback.server) await closeServer(loopback.server);
-  await closeServer(wide.server);
   if (loopback.error) return { error: loopback.error };
+  await closeServer(loopback.server);
   return { port: wide.port };
 }
 
