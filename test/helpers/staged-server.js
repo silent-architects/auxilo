@@ -9,6 +9,7 @@
 
 const fs = require('node:fs');
 const net = require('node:net');
+const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 
@@ -20,50 +21,141 @@ const WALLET_SOURCE = /^const WALLET = '0x[0-9a-fA-F]{40}';$/m;
 const WALLET_STAGED = "const WALLET = '0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A';";
 const PORT_SOURCE = 'const PORT = 3000;';
 const CLOSED_CHILDREN = new WeakSet();
+const PORT_SOURCE_LINE = /^const PORT = \d+;$/m;
+const PORT_CLAIM_DIR = path.join(os.tmpdir(), 'auxilo-staged-server-ports');
+const PORT_CLAIM_TTL_MS = 30 * 60_000;
+const MAX_RESERVE_ATTEMPTS = 50;
+const PORT_CLAIM_WRITE_WINDOW_MS = 10_000;
+const OWN_PORT_CLAIMS = new Set();
+let claimExitHookInstalled = false;
 
 function listenError(error, code) {
   return Boolean(error && error.code === code && error.syscall === 'listen');
 }
 
-function reservePort() {
-  return new Promise((resolve, reject) => {
+// Binds the port the way the staged server does (no host, so all interfaces)
+// and also on 127.0.0.1, because the tests reach the server there and a
+// loopback-only listener (a mock server) would otherwise answer in its place.
+// A 127.0.0.1-only probe cannot see a live `::` listener, which is what every
+// other staged server is.
+function listenOnce(port, host) {
+  return new Promise((resolve) => {
     const server = net.createServer();
-    let settled = false;
-
-    const settle = (callback, value) => {
-      if (settled) return;
-      settled = true;
-      callback(value);
-    };
-
-    server.once('error', (error) => {
-      if (listenError(error, 'EPERM')) {
-        settle(resolve, {
-          type: 'skip',
-          skipReason: BOOT_SANDBOX_SKIP_REASON,
-        });
-        return;
-      }
-      settle(reject, error);
-    });
-
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') {
-        server.close(() => settle(reject, new Error('reserved server did not expose a TCP port')));
-        return;
-      }
-
-      const { port } = address;
-      server.close((error) => {
-        if (error) {
-          settle(reject, error);
-          return;
-        }
-        settle(resolve, { port });
-      });
-    });
+    server.once('error', (error) => resolve({ error }));
+    const onListening = () => resolve({ server, port: server.address().port });
+    if (host === undefined) server.listen(port, onListening);
+    else server.listen(port, host, onListening);
   });
+}
+
+function closeServer(server) {
+  return new Promise((resolve) => server.close(() => resolve()));
+}
+
+// The two binds run one after the other. On Linux a dual-stack `::` listener
+// also holds the IPv4 port, so binding 127.0.0.1 while it is open always fails
+// with EADDRINUSE; macOS allows both at once. Claim files, not the probe, keep
+// concurrent test files apart, so the gap between the two binds is acceptable.
+async function probePort(port = 0) {
+  const wide = await listenOnce(port);
+  if (wide.error) return { error: wide.error };
+  await closeServer(wide.server);
+
+  const loopback = await listenOnce(wide.port, '127.0.0.1');
+  if (loopback.error) return { error: loopback.error };
+  await closeServer(loopback.server);
+  return { port: wide.port };
+}
+
+async function isPortFree(port) {
+  const result = await probePort(port);
+  if (!result.error) return true;
+  if (listenError(result.error, 'EADDRINUSE')) return false;
+  throw result.error;
+}
+
+function pidAlive(pid) {
+  if (!Number.isInteger(pid) || pid < 1) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === 'EPERM';
+  }
+}
+
+function releaseOwnPortClaims() {
+  for (const file of OWN_PORT_CLAIMS) {
+    try {
+      fs.unlinkSync(file);
+    } catch {
+      // already gone
+    }
+  }
+  OWN_PORT_CLAIMS.clear();
+}
+
+// The OS hands the same free port to whichever process asks next, and a test
+// file may wait seconds between reserving a port and the server binding it.
+// A claim file per port, owned by the reserving process, keeps concurrent test
+// files off each other's ports. It is best effort: if the claim directory is
+// unusable the reservation still stands on the probe alone.
+function claimPort(port) {
+  const file = path.join(PORT_CLAIM_DIR, String(port));
+  try {
+    fs.mkdirSync(PORT_CLAIM_DIR, { recursive: true });
+  } catch {
+    return true;
+  }
+
+  for (let pass = 0; pass < 2; pass += 1) {
+    try {
+      fs.writeFileSync(file, String(process.pid), { flag: 'wx' });
+      OWN_PORT_CLAIMS.add(file);
+      if (!claimExitHookInstalled) {
+        claimExitHookInstalled = true;
+        process.on('exit', releaseOwnPortClaims);
+      }
+      return true;
+    } catch (error) {
+      if (error.code !== 'EEXIST') return true;
+    }
+
+    let owner;
+    let ageMs;
+    try {
+      owner = Number(fs.readFileSync(file, 'utf8'));
+      ageMs = Date.now() - fs.statSync(file).mtimeMs;
+    } catch {
+      continue;
+    }
+    // `wx` creates the file before the pid is written, so a claim whose pid is
+    // not readable yet is a live claim in that window, not a stale one.
+    const ownerKnown = Number.isInteger(owner) && owner > 0;
+    if (!ownerKnown && ageMs < PORT_CLAIM_WRITE_WINDOW_MS) return false;
+    if (ownerKnown && pidAlive(owner) && ageMs < PORT_CLAIM_TTL_MS) return false;
+    try {
+      fs.unlinkSync(file);
+    } catch {
+      // another process reclaimed it first
+    }
+  }
+  return false;
+}
+
+async function reservePort() {
+  for (let attempt = 0; attempt < MAX_RESERVE_ATTEMPTS; attempt += 1) {
+    const result = await probePort(0);
+    if (result.error) {
+      if (listenError(result.error, 'EPERM')) {
+        return { type: 'skip', skipReason: BOOT_SANDBOX_SKIP_REASON };
+      }
+      if (listenError(result.error, 'EADDRINUSE')) continue;
+      throw result.error;
+    }
+    if (claimPort(result.port)) return { port: result.port };
+  }
+  throw new Error(`could not reserve a free port after ${MAX_RESERVE_ATTEMPTS} attempts`);
 }
 
 function countMatches(source, search) {
@@ -302,6 +394,31 @@ function bootError(classification, attempt, output, cause) {
   return error;
 }
 
+// A retry after EADDRINUSE must not reuse the port: whatever holds it (usually
+// another test's live server) is not going away. Re-stage the server on a
+// fresh port; callers must read the port from the returned `port`/`baseUrl`.
+async function restageOnFreshPort({ tmpDir, port, env }) {
+  const reservation = await reservePort();
+  if (reservation.skipReason) return reservation;
+
+  const serverPath = path.join(tmpDir, 'server.js');
+  const staged = replaceExactlyOnce(fs.readFileSync(serverPath, 'utf8'), {
+    name: 'staged server port',
+    search: PORT_SOURCE_LINE,
+    replace: `const PORT = ${reservation.port};`,
+  });
+  fs.writeFileSync(serverPath, staged);
+
+  const oldPort = new RegExp(`(?<![0-9])${port}(?![0-9])`, 'g');
+  const nextEnv = {};
+  for (const [key, value] of Object.entries(env)) {
+    nextEnv[key] = typeof value === 'string'
+      ? value.replace(oldPort, String(reservation.port))
+      : value;
+  }
+  return { port: reservation.port, env: nextEnv };
+}
+
 async function bootServer({
   tmpDir,
   port,
@@ -317,13 +434,15 @@ async function bootServer({
     throw new TypeError('maxAttempts must be a positive integer');
   }
 
+  let bootPort = port;
+  let bootEnv = env;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const result = await runBootAttempt({ tmpDir, port, env, timeoutMs });
+    const result = await runBootAttempt({ tmpDir, port: bootPort, env: bootEnv, timeoutMs });
     if (result.ready) {
       return {
         child: result.child,
-        port,
-        baseUrl: `http://127.0.0.1:${port}`,
+        port: bootPort,
+        baseUrl: `http://127.0.0.1:${bootPort}`,
         output: result.output,
         getOutput: result.getOutput,
         attempts: attempt,
@@ -344,6 +463,17 @@ async function bootServer({
 
     if (classification.type === 'retry' && attempt < maxAttempts) {
       await delay(retryDelayMs);
+      let fresh;
+      try {
+        fresh = await restageOnFreshPort({ tmpDir, port: bootPort, env: bootEnv });
+      } catch (error) {
+        throw bootError(classification, attempt, result.output, error);
+      }
+      if (fresh.skipReason) {
+        return { type: 'skip', skipReason: fresh.skipReason, output: result.output, attempts: attempt };
+      }
+      bootPort = fresh.port;
+      bootEnv = fresh.env;
       continue;
     }
 
@@ -356,7 +486,9 @@ async function bootServer({
 module.exports = {
   BOOT_SANDBOX_SKIP_REASON,
   bootServer,
+  claimPort,
   classifyBootFailure,
+  isPortFree,
   reservePort,
   stageServer,
   stopServer,

@@ -16,6 +16,7 @@ function spendFor() {
   const intent = { id: 'spend_1', accountId: 'buyer', draws: [{ sourceId: 'source_1', amountMicros: 50000 }], participantDraws };
   return { ...intent, intent, digest: hash(intent), state: 'acknowledged' };
 }
+const NOW = Date.parse('2026-10-11T12:00:00.000Z'); // fixed test clock: checkpoint expiry is judged against it, never the real clock
 function fixture(t, { atomic = true, withWal = true, compensationStage = false } = {}) {
   const x = syntheticEpoch(t);
   const spend = spendFor(), earningsBytes = Buffer.from('{"maker":{}}\n');
@@ -53,7 +54,7 @@ function fixture(t, { atomic = true, withWal = true, compensationStage = false }
   const cp = proxyquire('../lib/money-checkpoint', { './financial-epoch': fe, './money-atomic-restore': restoreStub });
   const coordinator = { maintenanceLease: fn => fn({ store }) };
   const boot = () => { state.runtimeControl = hash(real.readEpochControl(x.root).control); };
-  const base = () => ({ epoch, writer: x.writer, coordinator, sourceSha: SOURCE_SHA, lifecycleControl: lifecycle, clock: () => Date.parse('2026-10-11T12:00:00.000Z') });
+  const base = () => ({ epoch, writer: x.writer, coordinator, sourceSha: SOURCE_SHA, lifecycleControl: lifecycle, clock: () => NOW });
   const manifestOf = result => p.readJSONStrict(path.join(x.root, '.money-checkpoints', result.checkpoint_id, 'money-checkpoint-manifest.json'));
   const archivedControl = result => {
     const dir = path.join(x.root, '.money-checkpoints', result.checkpoint_id), manifest = manifestOf(result);
@@ -62,7 +63,7 @@ function fixture(t, { atomic = true, withWal = true, compensationStage = false }
     return found;
   };
   const controlBytes = () => fs.readFileSync(x.controlFile);
-  return { ...x, epoch, spend, state, store, cp, base, boot, manifestOf, archivedControl, controlBytes, spends, earningsStat, walRow: () => 'financial-epochs/' + EPOCH + '/wal/wal_1.wal.json' };
+  return { ...x, epoch, spend, state, store, cp, now: NOW, base, boot, manifestOf, archivedControl, controlBytes, spends, earningsStat, walRow: () => 'financial-epochs/' + EPOCH + '/wal/wal_1.wal.json' };
 }
 
 test('the ordinary entry point never retires: control bytes identical, no sourceRetirement, WAL listed SOURCE_NOT_RETIRING, result reports the open obligation', async t => {
@@ -76,7 +77,7 @@ test('the ordinary entry point never retires: control bytes identical, no source
   assert.deepEqual(m.atomic_capacity_cut.unresolvedObligations, { count: 1, truncated: false, items: [{ walId: 'wal_1', spendId: 'spend_1', fenceState: 'not_started', continuation: 'none', reason: 'SOURCE_NOT_RETIRING' }] });
   assert.equal(result.unresolved_obligations, 1);
   assert.equal(result.completion_guaranteed, false);
-  assert.equal(f.cp.validateCheckpointEnvelope(path.join(f.root, '.money-checkpoints', result.checkpoint_id)).checksum, m.checksum);
+  assert.equal(f.cp.validateCheckpointEnvelope(path.join(f.root, '.money-checkpoints', result.checkpoint_id), { now: f.now }).checksum, m.checksum);
   assert.ok(f.state.calls.includes('cut:ordinary'));
 });
 test('createRetiringCheckpoint without a valid approvalRef refuses before any write', async t => {
@@ -127,7 +128,7 @@ test('S0-S3 in order: retire after the semantic snapshot and cut, the archive ca
   assert.equal(m.atomic_capacity_cut.completionGuaranteed, false);
   assert.equal(result.retirement.generation_id, P.generationId);
   assert.equal(result.unresolved_obligations, 1);
-  assert.equal(f.cp.validateCheckpointEnvelope(path.join(f.root, '.money-checkpoints', result.checkpoint_id)).checksum, m.checksum);
+  assert.equal(f.cp.validateCheckpointEnvelope(path.join(f.root, '.money-checkpoints', result.checkpoint_id), { now: f.now }).checksum, m.checksum);
   assert.deepEqual(real.validateRetirement(R), R);
 });
 test('an ordinary checkpoint of a retired source is refused, and a mismatching approvalRef cannot re-run it', async t => {
