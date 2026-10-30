@@ -25,6 +25,7 @@ const PORT_SOURCE_LINE = /^const PORT = \d+;$/m;
 const PORT_CLAIM_DIR = path.join(os.tmpdir(), 'auxilo-staged-server-ports');
 const PORT_CLAIM_TTL_MS = 30 * 60_000;
 const MAX_RESERVE_ATTEMPTS = 50;
+const PORT_CLAIM_WRITE_WINDOW_MS = 10_000;
 const OWN_PORT_CLAIMS = new Set();
 let claimExitHookInstalled = false;
 
@@ -128,7 +129,11 @@ function claimPort(port) {
     } catch {
       continue;
     }
-    if (pidAlive(owner) && ageMs < PORT_CLAIM_TTL_MS) return false;
+    // `wx` creates the file before the pid is written, so a claim whose pid is
+    // not readable yet is a live claim in that window, not a stale one.
+    const ownerKnown = Number.isInteger(owner) && owner > 0;
+    if (!ownerKnown && ageMs < PORT_CLAIM_WRITE_WINDOW_MS) return false;
+    if (ownerKnown && pidAlive(owner) && ageMs < PORT_CLAIM_TTL_MS) return false;
     try {
       fs.unlinkSync(file);
     } catch {

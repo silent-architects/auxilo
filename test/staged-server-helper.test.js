@@ -94,6 +94,23 @@ it('classifies staged-server boot outcomes without hiding real failures', async 
   const claimed = ports[0];
   assert.equal(claimPort(claimed), false, 'a port claimed by a live process cannot be claimed again');
 
+  // Stale-owner cleanup. A claim whose pid is not written yet is live inside the
+  // write window and stale after it; a claim owned by a dead pid is reclaimed.
+  const claimDir = path.join(os.tmpdir(), 'auxilo-staged-server-ports');
+  const fakePort = 60000 + (process.pid % 5000);
+  const claimFile = path.join(claimDir, String(fakePort));
+  fs.mkdirSync(claimDir, { recursive: true });
+  fs.rmSync(claimFile, { force: true });
+  fs.writeFileSync(claimFile, '');
+  assert.equal(claimPort(fakePort), false, 'a fresh claim whose pid is not yet written is live');
+  const old = new Date(Date.now() - 60_000);
+  fs.utimesSync(claimFile, old, old);
+  assert.equal(claimPort(fakePort), true, 'an unreadable claim older than the write window is stale');
+  const dead = require('node:child_process').spawnSync(process.execPath, ['-e', '0']).pid;
+  fs.writeFileSync(claimFile, String(dead));
+  assert.equal(claimPort(fakePort), true, 'a claim owned by a dead pid is reclaimed');
+  fs.rmSync(claimFile, { force: true });
+
   // A retry after EADDRINUSE moves to a fresh port instead of repeating the
   // collision (the first holder never goes away).
   const busy = await hold();
