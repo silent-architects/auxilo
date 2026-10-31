@@ -467,11 +467,11 @@ describe('BUILD-BRIEF-TERMS-SCROLL Part S: a session that has ended', { timeout:
       // pair waits on a REAL, unmocked /terms fetch + render, so under a
       // heavily loaded full-suite run (many concurrent staged servers and
       // browsers) it is given a generous timeout rather than Playwright's
-      // 30s default -- the assertions themselves are unchanged.
-      await page.waitForFunction(() => {
-        const r = document.getElementById('terms-scroll-region');
-        return r && r.scrollHeight > 0;
-      }, null, { timeout: 60_000 });
+      // 30s default -- the assertions themselves are unchanged. The wait is
+      // on the end marker the import appends last: the empty region's own
+      // padding already gives it a scrollHeight above 0, so scrolling before
+      // the Terms arrive leaves Accept disabled for good.
+      await page.waitForSelector('#terms-end-marker', { state: 'attached', timeout: 60_000 });
       await page.evaluate(() => {
         const r = document.getElementById('terms-scroll-region');
         r.scrollTop = r.scrollHeight;
