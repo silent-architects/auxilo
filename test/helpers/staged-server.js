@@ -22,7 +22,8 @@ const WALLET_STAGED = "const WALLET = '0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2
 const PORT_SOURCE = 'const PORT = 3000;';
 const CLOSED_CHILDREN = new WeakSet();
 const PORT_SOURCE_LINE = /^const PORT = \d+;$/m;
-const PORT_CLAIM_DIR = path.join(os.tmpdir(), 'auxilo-staged-server-ports');
+// On the owned rig volume TMPDIR is the measured filesystem, which its suites require to stay empty, so claims go to tmpfs there.
+const PORT_CLAIM_DIR = path.join(process.env.AUXILO_PROBE_VOLUME_ID ? '/tmp' : os.tmpdir(), 'auxilo-staged-server-ports');
 const PORT_CLAIM_TTL_MS = 30 * 60_000;
 const MAX_RESERVE_ATTEMPTS = 50;
 const PORT_CLAIM_WRITE_WINDOW_MS = 10_000;
