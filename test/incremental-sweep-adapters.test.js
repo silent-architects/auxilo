@@ -49,14 +49,14 @@ describe('offsetCapable flags (D3)', () => {
     }
   });
 
-  it('antigravity and generic-jsonl stay false (whole-file 80% JSON probe is not a per-line property)', () => {
-    assert.equal(new AntigravitySource().offsetCapable, false);
-    assert.equal(new GenericJsonlSource({ id: 'cursor' }).offsetCapable, false);
+  it('antigravity and generic-jsonl are capable once the one-time probe passes (builder 2)', () => {
+    assert.equal(new AntigravitySource().offsetCapable, true);
+    assert.equal(new GenericJsonlSource({ id: 'cursor' }).offsetCapable, true);
   });
 
-  it('rewritten-JSON and SQLite adapters stay false in this builder (builder 2 owns hashes/rowid)', () => {
+  it('rewritten-JSON (hashes) and SQLite (rowid) adapters are capable (builder 2)', () => {
     for (const A of [ClineSource, ContinueSource, GeminiCliSource, DevinSource]) {
-      assert.equal(new A().offsetCapable, false, A.id);
+      assert.equal(new A().offsetCapable, true, A.id);
     }
   });
 });
