@@ -33,6 +33,7 @@ const path = require('path');
 const os = require('os');
 const { TranscriptSource } = require('./source.interface');
 const { normalizeRole, extractText } = require('./generic-jsonl');
+const { installHashesContract } = require('./segment-reader');
 
 /** Per-platform VS Code-family user-data roots (any-of detection). */
 function vscodeUserDirs(homeDir, platform, env) {
@@ -57,6 +58,8 @@ class ClineSource extends TranscriptSource {
 
   constructor(config = {}) {
     super(config);
+    /** Injectable fs for the incremental document reader (tests). */
+    this.fsImpl = config.fsImpl || null;
     const homeDir = config.homeDir || os.homedir();
     const platform = config.platform || process.platform;
     const env = config.env || process.env;
@@ -121,20 +124,9 @@ class ClineSource extends TranscriptSource {
       return this._refuse(filePath, 'not valid JSON');
     }
 
-    // Probe: an ARRAY of {role, content} message objects (Anthropic format).
-    if (!Array.isArray(parsed)) return this._refuse(filePath, 'not a messages array');
-    const messageLike = parsed.filter((m) => m && typeof m === 'object' && m.role !== undefined && m.content !== undefined);
-    if (parsed.length === 0 || messageLike.length === 0) {
-      return this._refuse(filePath, 'no role/content messages');
-    }
-
-    const turns = [];
-    for (const m of messageLike) {
-      const role = normalizeRole(m.role);
-      if (!role) continue; // system / tool roles — skip
-      const text = extractText(m.content);
-      if (text && text.trim().length > 0) turns.push(`[${role}]: ${text}`);
-    }
+    const r = this.turnsFromDocument(parsed);
+    if (r.refuse) return this._refuse(filePath, r.refuse);
+    const turns = r.turns;
 
     return {
       transcript: turns.join('\n\n'),
@@ -147,6 +139,34 @@ class ClineSource extends TranscriptSource {
     };
   }
 
+  /**
+   * Normalize a parsed document into `[role]: text` turns, or {refuse:reason}
+   * when the strict format probe rejects it. Shared by readSession and the
+   * incremental 'hashes' reader so both see exactly the same turns.
+   */
+  turnsFromDocument(parsed) {
+    // Probe: an ARRAY of {role, content} message objects (Anthropic format).
+    if (!Array.isArray(parsed)) return { refuse: 'not a messages array' };
+    const messageLike = parsed.filter((m) => m && typeof m === 'object' && m.role !== undefined && m.content !== undefined);
+    if (parsed.length === 0 || messageLike.length === 0) {
+      return { refuse: 'no role/content messages' };
+    }
+
+    const turns = [];
+    for (const m of messageLike) {
+      const role = normalizeRole(m.role);
+      if (!role) continue; // system / tool roles — skip
+      const text = extractText(m.content);
+      if (text && text.trim().length > 0) turns.push(`[${role}]: ${text}`);
+    }
+    return { turns };
+  }
+
+  /** Session id for a history path (single-transcript incremental mode). */
+  sessionIdForPath(filePath) {
+    return `${this.type}-${path.basename(path.dirname(filePath))}`;
+  }
+
   /** Single log line + null per the UC §5 fail-silent rule. */
   _refuse(filePath, reason) {
     process.stderr.write(`[${this.type}] format probe refused ${filePath} (${reason}) — skipping\n`);
@@ -156,5 +176,8 @@ class ClineSource extends TranscriptSource {
   /** No hook surface — poll-based via the sweeper (UC-3 P-class). */
   async registerSessionEndHook(cb) { return null; }
 }
+
+// INCREMENTAL-SWEEP D3b: state kind 'hashes' (rewritten JSON document).
+installHashesContract(ClineSource);
 
 module.exports = { ClineSource, vscodeUserDirs };

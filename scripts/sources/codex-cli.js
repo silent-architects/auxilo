@@ -26,7 +26,10 @@ const os = require('os');
 const { TranscriptSource } = require('./source.interface');
 
 const DEFAULT_QUIESCENCE_MS = 30 * 60 * 1000;
-const UUID_AT_END_RE = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i;
+const UUID_AT_END_RE = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl(?:\.zst)?$/i;
+// Rollout files only: rollout-*.jsonl, or rollout-*.jsonl.zst once Codex compresses a finished
+// rollout. Nothing else under ~/.codex (shell_snapshots, generated_images, *.sqlite, ...) matches.
+const ROLLOUT_NAME_RE = /^rollout-.*\.jsonl(?:\.zst)?$/i;
 
 function resolveQuiescenceMs(env = process.env) {
   const raw = env && env.AUXILO_CODEX_QUIESCENCE_MS;
@@ -55,7 +58,7 @@ function listRollouts(root, recursive) {
       found.push(...listRollouts(filePath, true));
       continue;
     }
-    if (entry.isFile() && /^rollout-.*\.jsonl$/i.test(entry.name)) found.push(filePath);
+    if (entry.isFile() && ROLLOUT_NAME_RE.test(entry.name)) found.push(filePath);
   }
   return found;
 }
@@ -100,6 +103,41 @@ function toolOutputItems(payload) {
     if (typeof output.output === 'string') return [output.output];
   }
   return [];
+}
+
+/**
+ * One parsed rollout record -> transcript turn, or null. Shared by readSession
+ * and the incremental segment reader so both normalize identically.
+ */
+function recordToTurn(record) {
+  if (!record || record.type !== 'response_item') return null;
+  const payload = record.payload;
+  if (!payload || typeof payload !== 'object') return null;
+
+  if (payload.type === 'message') {
+    const role = payload.role === 'user'
+      ? 'User'
+      : payload.role === 'assistant'
+        ? 'Assistant'
+        : null;
+    if (!role) return null;
+    const text = textContentItems(payload.content).join('\n').trim();
+    return text ? `${role}: ${text}` : null;
+  }
+
+  if (payload.type === 'custom_tool_call') {
+    const name = oneLine(payload.name || payload.tool_name || payload.tool || 'unknown');
+    const args = oneLine(payload.arguments).slice(0, 500);
+    return `Tool: ${name}${args ? ` ${args}` : ''}`;
+  }
+
+  if (payload.type === 'custom_tool_call_output') {
+    const items = toolOutputItems(payload)
+      .map((item) => String(item).slice(0, 2000))
+      .filter(Boolean);
+    return items.length > 0 ? `Tool result: ${items.join('\n')}` : null;
+  }
+  return null;
 }
 
 class CodexCliSource extends TranscriptSource {
@@ -155,6 +193,49 @@ class CodexCliSource extends TranscriptSource {
     );
   }
 
+  /** INCREMENTAL-SWEEP: append-only JSONL (plain or zstd-compressed), offset-resumable. */
+  get offsetCapable() { return true; }
+
+  sessionIdForPath(filePath) { return rolloutSessionId(filePath); }
+
+  /** A zstd rollout cannot be read by the whole-file readSession; it must stream. */
+  requiresIncremental(sessionRef) {
+    return /\.zst$/i.test(String((sessionRef && sessionRef.path) || ''));
+  }
+
+  /** One rollout line -> turn, or null. session_meta and non-response items yield null. */
+  parseLine(line) {
+    try {
+      const record = JSON.parse(line);
+      return record && typeof record === 'object' ? recordToTurn(record) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Same user-thread gate readSession applies (first record must be a
+   * session_meta with thread_source 'user'), evaluated on the first line only
+   * so an incremental read never has to see the head again.
+   */
+  async probeSession(sessionRef) {
+    try {
+      const { readFirstLine, codecFor } = require('./segment-reader');
+      const res = await readFirstLine(sessionRef.path, codecFor(sessionRef.path), this._readerDeps || {});
+      if (res.unsupported) return { ok: false, reason: res.unsupported, unsupported: true };
+      if (!res.line) return { ok: false, reason: 'first record unreadable' };
+      let record;
+      try { record = JSON.parse(res.line); } catch { return { ok: false, reason: 'first record is not JSON' }; }
+      if (!record || record.type !== 'session_meta') return { ok: false, reason: 'first record is not session_meta' };
+      const meta = record.payload;
+      if (!meta || typeof meta !== 'object') return { ok: false, reason: 'session_meta payload missing' };
+      if (meta.thread_source !== 'user') return { ok: false, reason: 'non-user thread' };
+      return { ok: true };
+    } catch {
+      return { ok: false, reason: 'unreadable rollout' };
+    }
+  }
+
   async readSession(sessionRef) {
     try {
       return await this._readSession(sessionRef);
@@ -168,6 +249,9 @@ class CodexCliSource extends TranscriptSource {
 
   _readSession(sessionRef) {
     const filePath = sessionRef && sessionRef.path;
+    if (/\.zst$/i.test(String(filePath || ''))) {
+      return this._refuse(filePath, 'compressed rollout requires the incremental reader');
+    }
     let raw;
     try {
       raw = fs.readFileSync(filePath, 'utf8');
@@ -203,35 +287,8 @@ class CodexCliSource extends TranscriptSource {
 
     const turns = [];
     for (const record of records) {
-      if (record.type !== 'response_item') continue;
-      const payload = record.payload;
-      if (!payload || typeof payload !== 'object') continue;
-
-      if (payload.type === 'message') {
-        const role = payload.role === 'user'
-          ? 'User'
-          : payload.role === 'assistant'
-            ? 'Assistant'
-            : null;
-        if (!role) continue;
-        const text = textContentItems(payload.content).join('\n').trim();
-        if (text) turns.push(`${role}: ${text}`);
-        continue;
-      }
-
-      if (payload.type === 'custom_tool_call') {
-        const name = oneLine(payload.name || payload.tool_name || payload.tool || 'unknown');
-        const args = oneLine(payload.arguments).slice(0, 500);
-        turns.push(`Tool: ${name}${args ? ` ${args}` : ''}`);
-        continue;
-      }
-
-      if (payload.type === 'custom_tool_call_output') {
-        const items = toolOutputItems(payload)
-          .map((item) => String(item).slice(0, 2000))
-          .filter(Boolean);
-        if (items.length > 0) turns.push(`Tool result: ${items.join('\n')}`);
-      }
+      const turn = recordToTurn(record);
+      if (turn !== null) turns.push(turn);
     }
 
     return {
@@ -265,4 +322,6 @@ module.exports = {
   DEFAULT_QUIESCENCE_MS,
   resolveQuiescenceMs,
   rolloutSessionId,
+  recordToTurn,
+  ROLLOUT_NAME_RE,
 };

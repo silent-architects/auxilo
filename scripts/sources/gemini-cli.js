@@ -35,6 +35,7 @@ const path = require('path');
 const os = require('os');
 const { TranscriptSource } = require('./source.interface');
 const { normalizeRole } = require('./generic-jsonl');
+const { installHashesContract } = require('./segment-reader');
 
 /** Extract user-visible text from a Gemini Content `parts` array. */
 function textFromParts(parts) {
@@ -53,6 +54,8 @@ class GeminiCliSource extends TranscriptSource {
 
   constructor(config = {}) {
     super(config);
+    /** Injectable fs for the incremental document reader (tests). */
+    this.fsImpl = config.fsImpl || null;
     /** @type {string} Root dir for Gemini CLI per-project temp data */
     this.dataDir = config.dataDir || path.join(os.homedir(), '.gemini', 'tmp');
   }
@@ -127,6 +130,27 @@ class GeminiCliSource extends TranscriptSource {
       return this._refuse(filePath, 'not valid JSON');
     }
 
+    const r = this.turnsFromDocument(parsed);
+    if (r.refuse) return this._refuse(filePath, r.refuse);
+    const turns = r.turns;
+
+    return {
+      transcript: turns.join('\n\n'),
+      metadata: {
+        sessionId: sessionRef.sessionId,
+        source: 'gemini-cli',
+        mtime: sessionRef.mtime,
+        bytes: sessionRef.bytes,
+      },
+    };
+  }
+
+  /**
+   * Normalize a parsed session into `[role]: text` turns, or {refuse:reason}
+   * when the strict format probe rejects it. Shared by readSession and the
+   * incremental 'hashes' reader.
+   */
+  turnsFromDocument(parsed) {
     const turns = [];
 
     if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.messages)) {
@@ -143,7 +167,7 @@ class GeminiCliSource extends TranscriptSource {
       const history = Array.isArray(parsed) ? parsed
         : (parsed && Array.isArray(parsed.history)) ? parsed.history
         : null;
-      if (!history) return this._refuse(filePath, 'no messages/history array');
+      if (!history) return { refuse: 'no messages/history array' };
 
       for (const c of history) {
         if (!c || typeof c !== 'object') continue;
@@ -153,16 +177,12 @@ class GeminiCliSource extends TranscriptSource {
         if (text && text.trim().length > 0) turns.push(`[${role}]: ${text}`);
       }
     }
+    return { turns };
+  }
 
-    return {
-      transcript: turns.join('\n\n'),
-      metadata: {
-        sessionId: sessionRef.sessionId,
-        source: 'gemini-cli',
-        mtime: sessionRef.mtime,
-        bytes: sessionRef.bytes,
-      },
-    };
+  /** Session id for a chat path: <project_hash>-<basename> (single-transcript incremental mode). */
+  sessionIdForPath(filePath) {
+    return `${path.basename(path.dirname(path.dirname(filePath)))}-${path.basename(filePath, '.json')}`;
   }
 
   /** Single log line + null per the UC §5 fail-silent rule. */
@@ -174,5 +194,8 @@ class GeminiCliSource extends TranscriptSource {
   /** Hook wiring (Gemini settings.json hooks) is the installer's job. */
   async registerSessionEndHook(cb) { return null; }
 }
+
+// INCREMENTAL-SWEEP D3b: state kind 'hashes' (rewritten JSON document).
+installHashesContract(GeminiCliSource);
 
 module.exports = { GeminiCliSource };

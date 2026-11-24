@@ -373,6 +373,14 @@ async function cmdSetup(flags) {
       } catch (err) {
         console.error(`  ✗ Hook registration SKIPPED — ${err.message}`);
       }
+      try {
+        const pre = installer.registerClaudeCodePreCompactHook(HOME);
+        console.log(pre.changed
+          ? `  ✓ Claude Code PreCompact hook registered (${pre.hookCmd})`
+          : '  ✓ Claude Code PreCompact hook already registered (no changes)');
+      } catch (err) {
+        console.error(`  ✗ PreCompact hook registration SKIPPED — ${err.message}`);
+      }
     }
 
     // UC-1: capture hooks for every other chosen client that supports one.
@@ -402,6 +410,14 @@ async function cmdSetup(flags) {
       }
     } catch (err) {
       console.error(`  ✗ Claude Code hook cleanup SKIPPED — ${err.message}`);
+    }
+    try {
+      const removedPre = installer.removeClaudeCodePreCompactHook(HOME);
+      if (removedPre.changed) {
+        console.log(`  ✓ Removed pre-existing Claude Code PreCompact capture hook (${removedPre.removed.join(', ')})`);
+      }
+    } catch (err) {
+      console.error(`  ✗ Claude Code PreCompact cleanup SKIPPED — ${err.message}`);
     }
     try {
       const allClients = installer.detectClients(HOME); // clean beyond the chosen set

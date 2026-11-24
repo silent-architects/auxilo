@@ -32,6 +32,7 @@ const path = require('path');
 const os = require('os');
 const { TranscriptSource } = require('./source.interface');
 const { normalizeRole, extractText } = require('./generic-jsonl');
+const { installHashesContract } = require('./segment-reader');
 
 class ContinueSource extends TranscriptSource {
   static id = 'continue';
@@ -40,6 +41,8 @@ class ContinueSource extends TranscriptSource {
 
   constructor(config = {}) {
     super(config);
+    /** Injectable fs for the incremental document reader (tests). */
+    this.fsImpl = config.fsImpl || null;
     /** @type {string} Sessions dir */
     this.sessionsDir = config.sessionsDir ||
       path.join(config.homeDir || os.homedir(), '.continue', 'sessions');
@@ -101,20 +104,9 @@ class ContinueSource extends TranscriptSource {
       return this._refuse(filePath, 'not valid JSON');
     }
 
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Array.isArray(parsed.history)) {
-      return this._refuse(filePath, 'no history array');
-    }
-
-    const turns = [];
-    for (const item of parsed.history) {
-      if (!item || typeof item !== 'object') continue;
-      // New shape nests the message; older items ARE the message.
-      const msg = (item.message && typeof item.message === 'object') ? item.message : item;
-      const role = normalizeRole(msg.role);
-      if (!role) continue;
-      const text = extractText(msg.content);
-      if (text && text.trim().length > 0) turns.push(`[${role}]: ${text}`);
-    }
+    const r = this.turnsFromDocument(parsed);
+    if (r.refuse) return this._refuse(filePath, r.refuse);
+    const turns = r.turns;
 
     return {
       transcript: turns.join('\n\n'),
@@ -127,6 +119,29 @@ class ContinueSource extends TranscriptSource {
     };
   }
 
+  /**
+   * Normalize a parsed session into `[role]: text` turns, or {refuse:reason}
+   * when the strict format probe rejects it. Shared by readSession and the
+   * incremental 'hashes' reader.
+   */
+  turnsFromDocument(parsed) {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Array.isArray(parsed.history)) {
+      return { refuse: 'no history array' };
+    }
+
+    const turns = [];
+    for (const item of parsed.history) {
+      if (!item || typeof item !== 'object') continue;
+      // New shape nests the message; older items ARE the message.
+      const msg = (item.message && typeof item.message === 'object') ? item.message : item;
+      const role = normalizeRole(msg.role);
+      if (!role) continue;
+      const text = extractText(msg.content);
+      if (text && text.trim().length > 0) turns.push(`[${role}]: ${text}`);
+    }
+    return { turns };
+  }
+
   /** Single log line + null per the UC §5 fail-silent rule. */
   _refuse(filePath, reason) {
     process.stderr.write(`[continue] format probe refused ${filePath} (${reason}) — skipping\n`);
@@ -136,5 +151,8 @@ class ContinueSource extends TranscriptSource {
   /** No hook surface — poll-based via the sweeper (UC-3 P-class). */
   async registerSessionEndHook(cb) { return null; }
 }
+
+// INCREMENTAL-SWEEP D3b: state kind 'hashes' (rewritten JSON document).
+installHashesContract(ContinueSource);
 
 module.exports = { ContinueSource };

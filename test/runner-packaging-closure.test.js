@@ -160,6 +160,12 @@ describe('Runner packaging closure', () => {
       // sources-dir enumeration in computeClosure.
       'scripts/sources/claude-code.js',
       'scripts/sources/cline.js',
+      // INCREMENTAL-SWEEP: reached by runner.js (static requires) and the segment reader
+      // (lazily required by the adapter base class); both must ship and be copied.
+      'lib/session-offsets.js',
+      'lib/ledger-merge.js',
+      'lib/incremental-sweep.js',
+      'scripts/sources/segment-reader.js',
       'scripts/prompts/index.js',
       'scripts/prompts/extraction.v1.js',
     ]) {

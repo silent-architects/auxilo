@@ -119,6 +119,28 @@ class OpenClawSource extends TranscriptSource {
     return results;
   }
 
+  _turnOf(line) {
+    try {
+      const msg = JSON.parse(line);
+      const role = msg.role || msg.type || 'unknown';
+      const text = typeof msg.content === 'string'
+        ? msg.content
+        : (msg.content && msg.content[0]?.text) || JSON.stringify(msg.content || '');
+      return `[${role}]: ${text}`;
+    } catch {
+      return null; // malformed line
+    }
+  }
+
+  /** INCREMENTAL-SWEEP: append-only JSONL (header line + messages), offset-resumable. */
+  get offsetCapable() { return true; }
+
+  /** The header (first non-blank line of the file) is never a turn. */
+  parseLine(line, ctx) {
+    if (ctx && ctx.isFirstRecord) return null;
+    return this._turnOf(line);
+  }
+
   /**
    * Read a session transcript. Skip first (metadata) line per spec §4.3.
    * Convert messages into "ROLE: text" format.
@@ -135,16 +157,8 @@ class OpenClawSource extends TranscriptSource {
     // First line is session metadata per spec §4.3 — skip it
     const turns = [];
     for (let i = 1; i < lines.length; i++) {
-      try {
-        const msg = JSON.parse(lines[i]);
-        const role = msg.role || msg.type || 'unknown';
-        const text = typeof msg.content === 'string'
-          ? msg.content
-          : (msg.content && msg.content[0]?.text) || JSON.stringify(msg.content || '');
-        turns.push(`[${role}]: ${text}`);
-      } catch {
-        // Skip malformed lines
-      }
+      const turn = this._turnOf(lines[i]);
+      if (turn !== null) turns.push(turn);
     }
 
     return {
