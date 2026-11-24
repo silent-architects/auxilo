@@ -70,10 +70,12 @@ const TRANSCRIPT_KEYS = ['transcript_path', 'transcriptPath', 'transcript', 'cha
 const MAX_TRANSCRIPT_BYTES = 25 * 1024 * 1024;
 
 /**
- * INCREMENTAL-SWEEP (D7): an over-cap transcript from an offset-capable
- * adapter is NOT refused. The runner reads it in bounded segments from the
- * stored offset (`--incremental`), so the whole-file OOM concern behind the
- * 25MB gate does not apply. Non-capable adapters keep the refusal.
+ * INCREMENTAL-SWEEP (D7): an over-25MB transcript from an offset-capable
+ * adapter is NOT refused. The runner is started with `--incremental
+ * --max-segments 3`, which forces incremental handling at ANY size (it never
+ * reads the file whole): at most three segments per run, starting at the stored
+ * offset, or by the first-sight rules when nothing is stored; the remainder is
+ * flagged backlog for the sweep. Non-capable adapters keep the refusal.
  */
 const INCREMENTAL_MAX_SEGMENTS = 3;
 
