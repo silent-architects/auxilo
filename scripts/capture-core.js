@@ -69,6 +69,61 @@ const TRANSCRIPT_KEYS = ['transcript_path', 'transcriptPath', 'transcript', 'cha
  */
 const MAX_TRANSCRIPT_BYTES = 25 * 1024 * 1024;
 
+/**
+ * INCREMENTAL-SWEEP (D7): an over-cap transcript from an offset-capable
+ * adapter is NOT refused. The runner reads it in bounded segments from the
+ * stored offset (`--incremental`), so the whole-file OOM concern behind the
+ * 25MB gate does not apply. Non-capable adapters keep the refusal.
+ */
+const INCREMENTAL_MAX_SEGMENTS = 3;
+
+/**
+ * True iff the adapter registered under `sourceId` is offset-capable. Unknown
+ * ids map to the generic-jsonl fallback (what the runner instantiates for
+ * them). Any load failure answers false, so the refusal stays the default.
+ * `loadClass` is injectable for tests.
+ */
+function sourceIsOffsetCapable(sourceId, opts = {}) {
+  try {
+    const loadClass = opts.loadClass || defaultLoadSourceClass;
+    const Class = loadClass(sourceId);
+    if (!Class) return false;
+    const inst = Class.id ? new Class() : new Class({ id: sourceId });
+    return inst.offsetCapable === true;
+  } catch { return false; }
+}
+
+function defaultLoadSourceClass(sourceId) {
+  const dir = path.join(__dirname, 'sources');
+  const { TranscriptSource } = require('./sources/source.interface.js');
+  const skip = new Set(['source.interface.js', 'generic-jsonl.js', 'segment-reader.js']);
+  for (const f of fs.readdirSync(dir).filter(n => n.endsWith('.js') && !skip.has(n)).sort()) {
+    let mod;
+    try { mod = require(path.join(dir, f)); } catch { continue; }
+    for (const exported of Object.values(mod || {})) {
+      if (typeof exported === 'function' && exported.prototype instanceof TranscriptSource &&
+          exported.id === sourceId) return exported;
+    }
+  }
+  return require('./sources/generic-jsonl.js').GenericJsonlSource;
+}
+
+/**
+ * Decide how to run the runner for a transcript of `size` bytes. Pure.
+ *  - size <= MAX_TRANSCRIPT_BYTES: whole-file run (unchanged).
+ *  - over the gate and adapter offset-capable: incremental run.
+ *  - over the gate otherwise: refuse (GOV-3 M3 stays).
+ * @returns {{action:'whole'|'incremental'|'refuse', args:string[]}}
+ */
+function planRunnerArgs({ runnerPath, transcriptPath, source, size, offsetCapable }) {
+  const base = [runnerPath, '--transcript', transcriptPath, '--source', source];
+  if (size <= MAX_TRANSCRIPT_BYTES) return { action: 'whole', args: base };
+  if (offsetCapable) {
+    return { action: 'incremental', args: [...base, '--incremental', '--max-segments', String(INCREMENTAL_MAX_SEGMENTS)] };
+  }
+  return { action: 'refuse', args: [] };
+}
+
 /** GOV-3 M4: transcripts are text artifacts — gate on plausible extensions. */
 const TRANSCRIPT_EXTS = Object.freeze(['.jsonl', '.json', '.md', '.txt']);
 
@@ -182,11 +237,18 @@ async function main() {
   let stat;
   try { stat = fs.statSync(transcriptPath); } catch { return; }
   if (!stat.isFile()) return;
-  if (stat.size > MAX_TRANSCRIPT_BYTES) return; // GOV-3 M3: local-OOM guard
 
   // 4. Runner resolution — relative to OUR location (P1-13).
   const runnerPath = args.runner || path.join(__dirname, 'runner.js');
   if (!fs.existsSync(runnerPath)) return;
+
+  // GOV-3 M3 local-OOM guard, relaxed only for offset-capable adapters, which
+  // the runner reads in bounded segments (INCREMENTAL-SWEEP D7).
+  const plan = planRunnerArgs({
+    runnerPath, transcriptPath, source: args.source, size: stat.size,
+    offsetCapable: stat.size > MAX_TRANSCRIPT_BYTES ? sourceIsOffsetCapable(args.source) : false,
+  });
+  if (plan.action === 'refuse') return;
 
   // 5. Spawn detached. stdout → /dev/null (LW-17 double-write), stderr →
   //    extract.log for crash capture. Never export AUXILO_EXTRACTING.
@@ -200,8 +262,7 @@ async function main() {
     stderrFd = fs.openSync(path.join(auxiloDir, 'extract.log'), 'a');
   } catch { /* fall back to ignore — fail-silent */ }
 
-  const child = spawn(process.execPath,
-    [runnerPath, '--transcript', transcriptPath, '--source', args.source],
+  const child = spawn(process.execPath, plan.args,
     { detached: true, stdio: ['ignore', 'ignore', stderrFd], env, ...(process.platform === 'win32' ? { windowsHide: true } : {}) });
   child.on('error', () => { /* fail-silent */ });
   child.unref();
@@ -220,6 +281,9 @@ module.exports = {
   TRANSCRIPT_KEYS,
   TRANSCRIPT_EXTS,
   MAX_TRANSCRIPT_BYTES,
+  INCREMENTAL_MAX_SEGMENTS,
+  planRunnerArgs,
+  sourceIsOffsetCapable,
 };
 
 if (require.main === module) {
