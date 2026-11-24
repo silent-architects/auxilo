@@ -406,6 +406,168 @@ async function forwardOnlyStateOffset(sessionRef, opts = {}) {
   return headStateFor(headRes.head, offset, codec);
 }
 
+// ─── Whole-document state (kind 'hashes', ERRATUM-1 D3b) ─────────────────────
+//
+// For adapters whose transcript is ONE rewritten JSON document (cline, roo-code,
+// continue, gemini-cli). The adapter supplies `turnsFromDocument(parsed)` ->
+// {turns:[string]} | {refuse:reason}; this engine hashes each normalized turn
+// (sha256, 16 hex), remembers which were handled, and extracts only the unseen
+// ones in document order. An edited message hashes differently, so it counts as
+// new. The k-th occurrence of an identical turn is keyed sha256(hash#k) so a
+// NEW repeat of an old message ("ok") is not mistaken for the old one.
+
+const HASH_SEEN_CAP = 20000;
+const HASH_HEX_LEN = 16;
+const OVERSIZE_DOCUMENT = 'oversize_document';
+const INVALID_JSON_DOCUMENT = 'invalid_json_document';
+const FORMAT_REFUSED = 'format_probe_refused';
+
+function hash16(s) {
+  return crypto.createHash('sha256').update(s).digest('hex').slice(0, HASH_HEX_LEN);
+}
+
+/** Per-turn keys: sha256 prefix, with an occurrence suffix for repeated turns. */
+function turnKeys(turns) {
+  const counts = new Map();
+  return turns.map((t) => {
+    const h = hash16(t);
+    const k = counts.get(h) || 0;
+    counts.set(h, k + 1);
+    return k === 0 ? h : hash16(`${h}#${k}`);
+  });
+}
+
+function hashesDeps(adapter, opts) {
+  const fsImpl = opts.fsImpl || adapter.fsImpl || fs;
+  let maxBytes = opts.maxBytes;
+  if (!(maxBytes > 0)) maxBytes = require('./source.interface').resolveMaxSessionBytes();
+  return { fsImpl, maxBytes };
+}
+
+/**
+ * Load + parse the document. Returns {turns, keys, docSha} or exactly one of
+ * {unsupported:reason} (oversize / invalid JSON / unreadable: transient, never
+ * marked) or {refuse:reason} (valid JSON, wrong shape: permanent).
+ */
+function loadDocument(adapter, sessionRef, opts) {
+  const { fsImpl, maxBytes } = hashesDeps(adapter, opts);
+  const p = sessionRef && sessionRef.path;
+  if (!p) return { unsupported: 'no_path' };
+  let size;
+  try { size = fsImpl.statSync(p).size; } catch { return { unsupported: 'document_unreadable' }; }
+  if (size > maxBytes) return { unsupported: OVERSIZE_DOCUMENT };
+  let buf;
+  try { buf = fsImpl.readFileSync(p); } catch { return { unsupported: 'document_unreadable' }; }
+  if (buf.length > maxBytes) return { unsupported: OVERSIZE_DOCUMENT };
+  let parsed;
+  try { parsed = JSON.parse(buf.toString('utf-8')); } catch { return { unsupported: INVALID_JSON_DOCUMENT }; }
+  const r = adapter.turnsFromDocument(parsed);
+  if (!r || r.refuse) return { refuse: (r && r.refuse) || 'unrecognised document' };
+  return { turns: r.turns, keys: turnKeys(r.turns), docSha: sha256Hex(buf).slice(0, HASH_HEX_LEN) };
+}
+
+function hashesStateOf(seen, docSha, truncatedSticky) {
+  let out = seen;
+  let truncated = Boolean(truncatedSticky);
+  if (out.length > HASH_SEEN_CAP) { out = out.slice(-HASH_SEEN_CAP); truncated = true; }
+  const st = { kind: 'hashes', seen: out.slice(), docSha };
+  if (truncated) st.truncated = true;
+  return st;
+}
+
+function priorHashes(state) {
+  return state && state.kind === 'hashes' && Array.isArray(state.seen) ? state : null;
+}
+
+async function probeHashesSession(adapter, sessionRef, opts = {}) {
+  const doc = loadDocument(adapter, sessionRef, opts);
+  if (doc.unsupported) return { ok: false, unsupported: true, reason: doc.unsupported };
+  if (doc.refuse) return { ok: false, reason: `${FORMAT_REFUSED}: ${doc.refuse}` };
+  return { ok: true };
+}
+
+async function readNewSegmentsHashes(adapter, sessionRef, state, opts = {}) {
+  const prior = priorHashes(state);
+  const keep = prior || null;
+  const doc = loadDocument(adapter, sessionRef, opts);
+  if (doc.unsupported) return { segments: [], state: keep, caughtUp: false, unsupported: doc.unsupported };
+  if (doc.refuse) return { segments: [], state: keep, caughtUp: false, unsupported: FORMAT_REFUSED };
+
+  const charBudget = opts.charBudget > 0 ? opts.charBudget : DEFAULT_CHAR_BUDGET;
+  const maxSegments = opts.maxSegments > 0 ? opts.maxSegments : DEFAULT_MAX_SEGMENTS;
+  const seenSet = new Set(prior ? prior.seen : []);
+  const truncatedSticky = Boolean(prior && prior.truncated);
+
+  // After a cap overflow the oldest keys are gone; everything before the first
+  // retained key (in document order) is treated as handled, so a long session is
+  // not re-extracted from its start.
+  let anchor = 0;
+  if (truncatedSticky) {
+    const first = doc.keys.findIndex((k) => seenSet.has(k));
+    anchor = first < 0 ? 0 : first;
+  }
+
+  const running = prior ? prior.seen.slice() : [];
+  const segments = [];
+  let cur = [];
+  let curLen = 0;
+  let curIdx = [];
+  let consumedAll = true;
+
+  const flush = () => {
+    for (const i of curIdx) running.push(doc.keys[i]);
+    segments.push({
+      text: cur.join(SEGMENT_SEPARATOR),
+      startOffset: curIdx[0],
+      endOffset: curIdx[curIdx.length - 1] + 1,
+      linesSkippedOversize: 0,
+      nextState: hashesStateOf(running, doc.docSha, truncatedSticky),
+    });
+    cur = []; curLen = 0; curIdx = [];
+  };
+
+  for (let i = anchor; i < doc.turns.length; i++) {
+    if (seenSet.has(doc.keys[i])) continue;
+    let t = doc.turns[i];
+    if (t.length > charBudget) t = t.slice(0, charBudget);
+    if (cur.length > 0 && curLen + SEGMENT_SEPARATOR.length + t.length > charBudget) {
+      flush();
+      if (segments.length >= maxSegments) { consumedAll = false; break; }
+    }
+    curLen += (cur.length > 0 ? SEGMENT_SEPARATOR.length : 0) + t.length;
+    cur.push(t);
+    curIdx.push(i);
+  }
+  if (consumedAll && cur.length > 0) flush();
+
+  const finalState = segments.length > 0
+    ? segments[segments.length - 1].nextState
+    : hashesStateOf(running, doc.docSha, truncatedSticky);
+  return { segments, state: finalState, caughtUp: consumedAll };
+}
+
+async function forwardOnlyStateHashes(adapter, sessionRef, opts = {}) {
+  const doc = loadDocument(adapter, sessionRef, opts);
+  if (doc.unsupported) return { unsupported: doc.unsupported };
+  if (doc.refuse) return { unsupported: FORMAT_REFUSED };
+  return hashesStateOf(doc.keys, doc.docSha, false);
+}
+
+/**
+ * Install the 'hashes' contract on an adapter class. The adapter must define
+ * `turnsFromDocument(parsed)` and `sessionIdForPath(p)`. These sessions are
+ * routed through the incremental path on first sight (requiresIncremental) so
+ * a growing or edited document is extracted by unseen message, never by its
+ * first 30,000 characters again.
+ */
+function installHashesContract(Class) {
+  Object.defineProperty(Class.prototype, 'offsetCapable', { get() { return true; }, configurable: true });
+  Class.prototype.requiresIncremental = function requiresIncremental() { return true; };
+  Class.prototype.probeSession = function probeSession(ref) { return probeHashesSession(this, ref, {}); };
+  Class.prototype.readNewSegments = function readNewSegments(ref, state, opts) { return readNewSegmentsHashes(this, ref, state, opts || {}); };
+  Class.prototype.forwardOnlyState = function forwardOnlyState(ref, opts) { return forwardOnlyStateHashes(this, ref, opts || {}); };
+}
+
 module.exports = {
   readSegments,
   readNewSegmentsOffset,
@@ -414,6 +576,13 @@ module.exports = {
   readHead,
   codecFor,
   headStateFor,
+  installHashesContract,
+  readNewSegmentsHashes,
+  forwardOnlyStateHashes,
+  probeHashesSession,
+  turnKeys,
+  HASH_SEEN_CAP,
+  OVERSIZE_DOCUMENT,
   DEFAULT_CHAR_BUDGET,
   DEFAULT_MAX_LINE_BYTES,
   DEFAULT_MAX_SEGMENTS,
