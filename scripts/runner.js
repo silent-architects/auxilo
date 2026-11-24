@@ -48,6 +48,10 @@ const { hasAuxiloSessionEndHook } = require('../lib/hook-status.js');
 const { sendOpsAlert: defaultSendOpsAlert } = require('../lib/ops-alert.js');
 const { TranscriptSource } = require('./sources/source.interface.js');
 const { GenericJsonlSource } = require('./sources/generic-jsonl.js');
+const { resolveMaxSessionBytes } = require('./sources/source.interface.js');
+const { createOffsetStore } = require('../lib/session-offsets.js');
+const { saveLedgerMerged } = require('../lib/ledger-merge.js');
+const incremental = require('../lib/incremental-sweep.js');
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -121,7 +125,7 @@ const SKIP_ALERT_MIN_INTERVAL_MS = 20 * 60 * 60 * 1000;
 // (fail-silent degradation, UC §5). Duplicate ids: first file wins
 // (alphabetical), so a rogue copy can't shadow an established adapter.
 
-const SOURCE_REGISTRY_EXCLUDE = new Set(['source.interface.js', 'generic-jsonl.js']);
+const SOURCE_REGISTRY_EXCLUDE = new Set(['source.interface.js', 'generic-jsonl.js', 'segment-reader.js']);
 
 function loadSources() {
   const dir = path.join(__dirname, 'sources');
@@ -164,6 +168,7 @@ function parseArgs(argv) {
     installHooks: false, installSweeper: false, installDigest: false, status: false,
     transcript: null, flushPending: false,
     force: false, verbose: false,
+    incremental: false, maxSegments: null,
   };
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === '--dry-run') args.dryRun = true;
@@ -174,6 +179,11 @@ function parseArgs(argv) {
     else if (argv[i] === '--flush-pending') args.flushPending = true;
     else if (argv[i] === '--force') args.force = true;
     else if (argv[i] === '--verbose') args.verbose = true;
+    else if (argv[i] === '--incremental') args.incremental = true;
+    else if (argv[i] === '--max-segments' && argv[i + 1]) {
+      const n = Number(argv[++i]);
+      args.maxSegments = Number.isInteger(n) && n > 0 ? n : null;
+    }
     else if (argv[i] === '--source' && argv[i + 1]) { args.source = argv[++i]; }
     else if (argv[i] === '--session' && argv[i + 1]) { args.session = argv[++i]; }
     else if (argv[i] === '--transcript' && argv[i + 1]) { args.transcript = argv[++i]; }
@@ -212,11 +222,12 @@ function loadLedger() {
   }
 }
 
+// INCREMENTAL-SWEEP D5: lock-protected merge-on-write. The sweep holds a stale
+// in-memory ledger for a long time; re-reading under a lock and merging means a
+// mark a hook-fired runner wrote meanwhile (and the highWater it advanced) is
+// kept, not overwritten. The caller's object is updated to the merged result.
 function saveLedger(ledger) {
-  fs.mkdirSync(path.dirname(LEDGER_PATH), { recursive: true });
-  const tmp = LEDGER_PATH + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(ledger, null, 2), 'utf-8');
-  fs.renameSync(tmp, LEDGER_PATH);
+  saveLedgerMerged(LEDGER_PATH, ledger, { log });
 }
 
 function ledgerHighWater(ledger, sourceId) {
@@ -907,6 +918,10 @@ function sweeperManifest(repoRoot = path.resolve(__dirname, '..')) {
     ['lib/similarity.js', 'lib/similarity.js', 0o644],
     ['lib/hook-status.js', 'lib/hook-status.js', 0o644],
     ['lib/ops-alert.js', 'lib/ops-alert.js', 0o644],
+    // INCREMENTAL-SWEEP: offsets store (+ file lock), ledger merge-on-write, per-session incremental logic.
+    ['lib/session-offsets.js', 'lib/session-offsets.js', 0o644],
+    ['lib/ledger-merge.js', 'lib/ledger-merge.js', 0o644],
+    ['lib/incremental-sweep.js', 'lib/incremental-sweep.js', 0o644],
     ['config/near-duplicate.json', 'config/near-duplicate.json', 0o644],
     // Client-side extraction (2026-07-02) — required by the sweep path since /extract went 410.
     // Missing from this manifest until 2026-07-19: installed sweepers crashed with
@@ -1192,6 +1207,55 @@ function scrubAndVerify(transcript) {
 
 // ─── Main ───────────────────────────────────────────────────────────────────
 
+// ─── Incremental extraction wiring (INCREMENTAL-SWEEP D4) ───────────────────
+//
+// For offset-capable adapters (see TranscriptSource.offsetCapable) a session
+// over AUXILO_MAX_SESSION_BYTES (or one the whole-file reader cannot read, such
+// as a Codex .jsonl.zst) is extracted in segments instead of being skipped.
+// The decision and persistence logic lives in lib/incremental-sweep.js; this
+// only binds the runner's real scrub/ledger/extract/queue functions to it.
+
+function incrementalFileSize(filePath) {
+  try { return fs.statSync(filePath).size; } catch { return null; }
+}
+
+function buildIncrementalContext(args, extractionOutcomes, extractionResultLines) {
+  const store = createOffsetStore({ filePath: path.join(AUXILO_DIR, 'offsets.json'), home: os.homedir() });
+  const stats = incremental.newStats();
+  const opts = {
+    dryRun: args.dryRun,
+    maxSegments: incremental.resolveMaxSegments(process.env, args.maxSegments),
+    charBudget: MAX_CHARS,
+    minChars: MIN_CHARS,
+    capBytes: resolveMaxSessionBytes(),
+  };
+  const deps = {
+    statSize: incrementalFileSize,
+    scrubAndVerify,
+    sha256: (text) => crypto.createHash('sha256').update(text).digest('hex'),
+    ledgerHas,
+    ledgerMark,
+    saveLedger,
+    writeQueueFile,
+    deleteQueueFile,
+    postExtract,
+    isSkippedExtraction,
+    recordRealExtractionCompletion,
+    onOutcome: (detailed, sessionFile) => {
+      extractionOutcomes.push(detailed);
+      extractionResultLines.push((consecutiveSkips) => renderExtractionResult(detailed, {
+        consecutiveSkips,
+        sessionFile,
+        indent: '  ',
+      }));
+    },
+    log,
+    accountTag: DIGEST_ACCOUNT,
+    captureVisibilityPrivate: CAPTURE_VISIBILITY === 'private',
+  };
+  return { store, stats, opts, deps };
+}
+
 async function main() {
   const args = parseArgs(process.argv);
 
@@ -1334,6 +1398,36 @@ async function main() {
     };
 
     log(`[runner] Single-file mode: ${transcriptPath} (${stat.size} bytes)`);
+
+    // INCREMENTAL-SWEEP: `--transcript <path> --incremental [--max-segments N]`
+    // extracts the segments since the stored state for this session, then
+    // persists it. Sessions that stay on the whole-file path (adapter not
+    // offset-capable, or under the cap with no stored state) fall through to the
+    // normal single-file flow below, unchanged.
+    if (args.incremental) {
+      if (!source.offsetCapable) {
+        log(`[runner] --incremental ignored: source ${source.type} is not offset-capable; using the whole-file path`);
+      } else {
+        const incRef = { ...sessionRef, sessionId: source.sessionIdForPath(transcriptPath) };
+        const ctx = buildIncrementalContext(args, extractionOutcomes, extractionResultLines);
+        const ledger = loadLedger();
+        let result;
+        try {
+          result = await incremental.processSession({
+            source, sessionRef: incRef, ledger, store: ctx.store, stats: ctx.stats, opts: ctx.opts, deps: ctx.deps,
+          });
+        } catch (err) {
+          log(`[runner] ✗ Incremental extraction failed: ${err.message}`);
+          process.exit(1);
+        }
+        if (result.handled) {
+          await finishExtractionRun();
+          notifyHeld(ctx.stats.held);
+          log(`[runner] Incremental: mode=${result.mode} incremental_segments=${ctx.stats.incrementalSegments} processed=${ctx.stats.processed} skipped=${ctx.stats.skipped} retained=${ctx.stats.retained} failed=${ctx.stats.failed} offset_resets=${ctx.stats.offsetResets}`);
+          process.exit(ctx.stats.failed > 0 ? 1 : 0);
+        }
+      }
+    }
 
     let transcriptData;
     try {
@@ -1491,6 +1585,7 @@ async function main() {
   }
 
   const ledger = loadLedger();
+  const inc = buildIncrementalContext(args, extractionOutcomes, extractionResultLines);
   let totalDiscovered = 0;
   let totalProcessed = 0;
   let totalSkipped = 0;
@@ -1512,6 +1607,19 @@ async function main() {
       continue;
     }
 
+    // INCREMENTAL-SWEEP: sessions whose stored state is not caught up (a backlog
+    // left by the per-sweep segment cap, or a transient failure) are candidates
+    // regardless of the mtime / highWater filter.
+    if (source.offsetCapable) {
+      const { refs, gone } = incremental.collectBacklog(
+        inc.store, source.type, new Set(sessions.map(s => s.sessionId)), incrementalFileSize
+      );
+      for (const id of gone) {
+        if (!args.dryRun) inc.store.update(source.type, id, { more: false });
+      }
+      sessions = sessions.concat(refs);
+    }
+
     // Filter to specific session if requested
     if (args.session) {
       sessions = sessions.filter(s => s.sessionId === args.session);
@@ -1522,6 +1630,23 @@ async function main() {
 
     for (const sessionRef of sessions) {
       log(`[runner]   Processing ${sessionRef.sessionId} (${sessionRef.bytes} bytes)...`);
+
+      // INCREMENTAL-SWEEP D4: offset-capable adapters take the segmented path for
+      // sessions over the cap (and for sessions that already have a stored state).
+      // Sessions under the cap with no state fall through to the unchanged path.
+      if (source.offsetCapable) {
+        let incResult;
+        try {
+          incResult = await incremental.processSession({
+            source, sessionRef, ledger, store: inc.store, stats: inc.stats, opts: inc.opts, deps: inc.deps,
+          });
+        } catch (err) {
+          log(`[runner]   Incremental error for ${sessionRef.sessionId}: ${err.message}`);
+          inc.stats.failed += 1;
+          continue;
+        }
+        if (incResult.handled) continue;
+      }
 
       // Read transcript (N1: capped — base-adapter path enforces
       // AUXILO_MAX_SESSION_BYTES before any byte is read)
@@ -1648,9 +1773,20 @@ async function main() {
   for (const [sourceType, count] of refusedBySource) {
     log(`[runner] ${sourceType}: ${count} refused (non-user/format)`);
   }
+  totalProcessed += inc.stats.processed;
+  totalSkipped += inc.stats.skipped;
+  totalExtractionRetained += inc.stats.retained;
+  totalFailed += inc.stats.failed;
+  totalHeld += inc.stats.held;
   saveLedger(ledger);
   await finishExtractionRun();
-  log(`[runner] Summary: ${totalDiscovered} discovered, ${totalProcessed} processed, ${totalSkipped} skipped (${totalOversize} oversize), ${totalExtractionRetained} retained (extraction skipped), ${totalFailed} failed`);
+  log(`[runner] Summary: ${totalDiscovered} discovered, ${totalProcessed} processed, ${totalSkipped} skipped (${totalOversize} oversize), ${totalExtractionRetained} retained (extraction skipped), ${totalFailed} failed, incremental_segments=${inc.stats.incrementalSegments} backlog_sessions=${inc.stats.backlogSessions}`);
+  for (const [reason, count] of Object.entries(inc.stats.unsupported)) {
+    console.error(`[runner] incremental_unsupported=${count} reason=${reason} (not skipped silently; sessions left unmarked)`);
+  }
+  if (inc.stats.offsetResets > 0) {
+    log(`[runner] offset_reset=${inc.stats.offsetResets}`);
+  }
   if (totalOversize > 0) {
     console.error(`[runner] oversize_skipped=${totalOversize} (sessions above AUXILO_MAX_SESSION_BYTES were skipped, not read)`);
   }
@@ -1669,6 +1805,7 @@ module.exports = {
   renderExtractionStatus, renderExtractionResult,
   installHooks, installSweeper, installDigest, printStatus, scrubAndVerify, enumerateActiveSources,
   loadSources, SOURCES, sweeperManifest, submitLearnings, notifyHeld,
+  buildIncrementalContext,
   resolveCaptureVisibility, postExtract, postExtractDetailed,
   KILL_SWITCH_PATH, PENDING_DIR, LEDGER_PATH, EXTRACTION_SKIP_STATE_PATH,
 };

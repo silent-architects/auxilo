@@ -426,7 +426,7 @@ describe('N1 — adapter read-size cap', () => {
     assert.equal(resolveMaxSessionBytes({ AUXILO_MAX_SESSION_BYTES: '4096' }), 4096);
   });
 
-  it('N1-4: runner sweep skips the oversize session with a counted stderr line, processes the sibling', () => {
+  it('N1-4: runner sweep extracts an oversize claude-code session in segments (INCREMENTAL-SWEEP) and still processes the under-cap sibling', () => {
     const home = tmpdir('aux-w5c-n1sweep-');
     try {
       const projDir = path.join(home, '.claude', 'projects', 'proj');
@@ -435,11 +435,13 @@ describe('N1 — adapter read-size cap', () => {
       fs.mkdirSync(path.join(home, '.auxilo'), { recursive: true });
       fs.writeFileSync(path.join(home, '.auxilo', 'autonomous-enabled'), 'enabled\n'); // sentinel
 
-      // Oversize garbage (8KB > 4KB cap) + valid under-cap sibling (>MIN_CHARS text).
-      fs.writeFileSync(path.join(projDir, 'zz-big.jsonl'), 'G'.repeat(8192));
+      // Oversize valid JSONL (3 x ~2.3KB turns = ~7KB > 4KB cap) + valid under-cap sibling (>MIN_CHARS text).
+      // claude-code is offset-capable, so the oversize session is no longer skipped: it is read
+      // from offset 0 in segments (dry run: counted, nothing persisted).
       const text = 'The quick brown fox jumps over the lazy dog. '.repeat(50); // ~2250 chars
-      fs.writeFileSync(path.join(projDir, 'aa-small.jsonl'),
-        JSON.stringify({ type: 'user', message: { role: 'user', content: text } }) + '\n');
+      const turn = JSON.stringify({ type: 'user', message: { role: 'user', content: text } }) + '\n';
+      fs.writeFileSync(path.join(projDir, 'zz-big.jsonl'), turn.repeat(3));
+      fs.writeFileSync(path.join(projDir, 'aa-small.jsonl'), turn);
 
       const env = { ...process.env, HOME: home, AUXILO_MAX_SESSION_BYTES: '4096', AUXILO_NO_NOTIFY: '1' };
       delete env.AUXILO_EXTRACTING;
@@ -447,13 +449,14 @@ describe('N1 — adapter read-size cap', () => {
         [RUNNER_PATH, '--source', 'claude-code', '--dry-run', '--force'],
         { env, encoding: 'utf-8', timeout: 30000 });
 
-      assert.equal(res.status, 0,
-        `oversize is a SKIP, not a failure\nstdout:\n${res.stdout}\nstderr:\n${res.stderr}`);
-      assert.match(res.stderr, /SKIPPED oversize session zz-big/,
-        'oversize skip must land on stderr with the session id');
-      assert.match(res.stderr, /oversize_skipped=1/);
+      assert.equal(res.status, 0, `stdout:\n${res.stdout}\nstderr:\n${res.stderr}`);
+      assert.doesNotMatch(res.stderr, /SKIPPED oversize session zz-big/,
+        'an offset-capable adapter must not skip an oversize session any more');
+      assert.match(res.stdout, /\[DRY RUN\] Would extract locally from \d+ scrubbed chars \(segment 0-/,
+        'the oversize session is extracted by segment');
       assert.match(res.stdout, /\[DRY RUN\]/, 'the under-cap sibling still processes');
-      assert.match(res.stdout, /1 oversize/, 'sweep summary counts oversize skips');
+      assert.match(res.stdout, /0 oversize/, 'nothing is counted as an oversize skip for an offset-capable source');
+      assert.match(res.stdout, /incremental_segments=1 backlog_sessions=0/, 'sweep summary reports incremental counters');
     } finally {
       rmrf(home);
     }
