@@ -56,6 +56,8 @@ Every bulk decision prints the exact selection and requires you to type its coun
 
 Private extraction is opt-in: set `AUXILO_CAPTURE_VISIBILITY=private`, or set `"capture_visibility": "private"` in `~/.auxilo/credentials.json`. It can retain reusable non-technical candidates in your owner-only lane while preserving the same mandatory local sensitivity scrub and dedup pipeline. With the setting absent, extraction remains public-destined and technical-only.
 
+Long sessions are read in pieces. For sources that support it (Claude Code, Codex including compressed `.jsonl.zst` rollouts, Copilot CLI, Antigravity, OpenClaw, Cline, Roo Code, Continue, Gemini CLI and Devin), the sweep remembers how far it got in each session (`~/.auxilo/offsets.json`) and extracts only what was added since, so a session past the size cap is no longer dropped whole. `AUXILO_MAX_SEGMENTS_PER_SESSION` (default 3) limits how many pieces one session yields per pass; the rest waits for the next pass. Claude Code also runs this on its PreCompact event. Sessions with an existing record start from where they are now, not from the beginning, and a single turn over 30,000 characters is still cut to its start. Rewritten-JSON sources (Cline, Roo Code, Continue, Gemini CLI) still skip a document over `AUXILO_MAX_SESSION_BYTES`.
+
 Extraction off? Your agent can still contribute in-session: tell it to submit a learning with the `auxilo_contribute` tool.
 
 ## Per-client setup

@@ -532,7 +532,13 @@ cd "${REPO_ROOT}"
 # The parent now always runs and each subtest carries the skip, so every platform discovers 7012.
 # EMFR EAP-5 repair R1 (BUILD-SPEC-EMFR-EAP5-REPAIR-2026-10-19): test/money-capacity-refusal.test.js registers 15 tests on every platform, plus 1 per-file
 # sweep entry once tracked: measured 7028 on the staged tree (macOS, native cases skipped).
-EXPECTED_TEST_COUNT=7028
+# INCREMENTAL-SWEEP (codex/incremental-sweep, UNMEASURED against the full suite; Tyler runs it): 7028 + 141 + 9 = 7178.
+# 141 = tests measured with each file run alone: offsets-store 18 + segment-reader 20 + adapters 13 + runner-logic 32 + docs 20 + devin 16 + hook 22.
+# 9 = per-file entries added by test/no-local-paths-guard.test.js, which sweeps `git ls-files test/ scripts/`: seven new test files,
+# test/helpers/incremental-mem-fs.js and scripts/sources/segment-reader.js (the spec's "+1 per test file" undercounts by two).
+# Net change inside edited existing files: 0, counted statically (wave5c-client-closures N1-4 was renamed one-for-one; runner-packaging-closure
+# gained list entries inside an existing loop, no new it()). If the full suite disagrees, re-derive from the per-file counts above first.
+EXPECTED_TEST_COUNT=7178
 # ──────────────────────────────────────────────────────────────────────────
 
 echo "── check-test-count: running the node:test suite (test/*.test.js) ──"
