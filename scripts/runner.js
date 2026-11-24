@@ -50,7 +50,7 @@ const { TranscriptSource } = require('./sources/source.interface.js');
 const { GenericJsonlSource } = require('./sources/generic-jsonl.js');
 const { resolveMaxSessionBytes } = require('./sources/source.interface.js');
 const { createOffsetStore } = require('../lib/session-offsets.js');
-const { saveLedgerMerged } = require('../lib/ledger-merge.js');
+const { saveLedgerMerged, refreshLedgerFromDisk } = require('../lib/ledger-merge.js');
 const incremental = require('../lib/incremental-sweep.js');
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -1216,7 +1216,10 @@ function scrubAndVerify(transcript) {
 // only binds the runner's real scrub/ledger/extract/queue functions to it.
 
 function incrementalFileSize(filePath) {
-  try { return fs.statSync(filePath).size; } catch { return null; }
+  try {
+    const st = fs.statSync(filePath);
+    return st.isFile() ? st.size : null; // a FIFO/device/dir is never read
+  } catch { return null; }
 }
 
 function buildIncrementalContext(args, extractionOutcomes, extractionResultLines) {
@@ -1234,6 +1237,7 @@ function buildIncrementalContext(args, extractionOutcomes, extractionResultLines
     scrubAndVerify,
     sha256: (text) => crypto.createHash('sha256').update(text).digest('hex'),
     ledgerHas,
+    refreshLedger: (ledger) => refreshLedgerFromDisk(LEDGER_PATH, ledger),
     ledgerMark,
     saveLedger,
     writeQueueFile,
@@ -1410,6 +1414,9 @@ async function main() {
       } else {
         const incRef = { ...sessionRef, sessionId: source.sessionIdForPath(transcriptPath) };
         const ctx = buildIncrementalContext(args, extractionOutcomes, extractionResultLines);
+        // A hook-fired single transcript is NEVER read whole: first-sight rules apply
+        // at any size (a 25-128MB file would otherwise fall to the whole-file read).
+        ctx.opts.incrementalForced = true;
         const ledger = loadLedger();
         let result;
         try {
@@ -1423,9 +1430,13 @@ async function main() {
         if (result.handled) {
           await finishExtractionRun();
           notifyHeld(ctx.stats.held);
-          log(`[runner] Incremental: mode=${result.mode} incremental_segments=${ctx.stats.incrementalSegments} processed=${ctx.stats.processed} skipped=${ctx.stats.skipped} retained=${ctx.stats.retained} failed=${ctx.stats.failed} offset_resets=${ctx.stats.offsetResets}`);
+          log(`[runner] Incremental: mode=${result.mode} incremental_segments=${ctx.stats.incrementalSegments} processed=${ctx.stats.processed} skipped=${ctx.stats.skipped} retained=${ctx.stats.retained} failed=${ctx.stats.failed} offset_resets=${ctx.stats.offsetResets} session_locked=${ctx.stats.sessionLocked} transient_retained=${ctx.stats.transientRetained}`);
           process.exit(ctx.stats.failed > 0 ? 1 : 0);
         }
+        // Not handled can only mean the whole-file path; under --incremental that
+        // read is exactly what the hook guard must not do. Exit without reading.
+        log('[runner] --incremental: session not handled incrementally; not reading the file whole');
+        process.exit(0);
       }
     }
 
@@ -1541,6 +1552,14 @@ async function main() {
     for (const qf of pending) {
       try {
         const payload = JSON.parse(fs.readFileSync(qf, 'utf-8'));
+        // A segment the ledger already has (a hook or sweep submitted it) is not
+        // submitted again; the stale queue file is dropped.
+        if (payload.sha && payload.source && payload.sessionId
+            && ledgerHas(loadLedger(), payload.source, payload.sessionId, payload.sha)) {
+          log(`[runner]   Pending ${path.basename(qf)} already in ledger; dropped without resubmitting`);
+          deleteQueueFile(qf);
+          continue;
+        }
         const sessionFile = payload.session_basename || payload.sessionId || path.basename(qf);
         const detailed = await postExtract(
           payload.transcript, payload.sessionId, payload.source, payload.scrubReport,
@@ -1586,6 +1605,8 @@ async function main() {
 
   const ledger = loadLedger();
   const inc = buildIncrementalContext(args, extractionOutcomes, extractionResultLines);
+  // Global per-sweep budget (AUXILO_MAX_SEGMENTS_PER_SWEEP, default 30) across all sessions.
+  inc.opts.budget = { remaining: incremental.resolveSweepSegmentBudget(process.env) };
   let totalDiscovered = 0;
   let totalProcessed = 0;
   let totalSkipped = 0;
@@ -1618,6 +1639,8 @@ async function main() {
         if (!args.dryRun) inc.store.update(source.type, id, { more: false });
       }
       sessions = sessions.concat(refs);
+      inc.stats.backlogDiscovered += refs.length;
+      sessions = incremental.orderForSweep(inc.store, source.type, sessions);
     }
 
     // Filter to specific session if requested
@@ -1780,7 +1803,14 @@ async function main() {
   totalHeld += inc.stats.held;
   saveLedger(ledger);
   await finishExtractionRun();
-  log(`[runner] Summary: ${totalDiscovered} discovered, ${totalProcessed} processed, ${totalSkipped} skipped (${totalOversize} oversize), ${totalExtractionRetained} retained (extraction skipped), ${totalFailed} failed, incremental_segments=${inc.stats.incrementalSegments} backlog_sessions=${inc.stats.backlogSessions}`);
+  log(`[runner] Summary: ${totalDiscovered} discovered, ${totalProcessed} processed, ${totalSkipped} skipped (${totalOversize} oversize), ${totalExtractionRetained} retained (extraction skipped), ${totalFailed} failed, incremental_segments=${inc.stats.incrementalSegments} backlog_sessions=${inc.stats.backlogSessions} discovered_from_backlog=${inc.stats.backlogDiscovered} session_locked=${inc.stats.sessionLocked} transient_retained=${inc.stats.transientRetained}`);
+  if (inc.stats.budgetDeferred > 0) {
+    log(`[runner] sweep_segment_budget_exhausted backlog_sessions=${inc.stats.budgetDeferred}`);
+    console.error(`[runner] sweep_segment_budget_exhausted backlog_sessions=${inc.stats.budgetDeferred} (AUXILO_MAX_SEGMENTS_PER_SWEEP; the rest continues next pass)`);
+  }
+  if (inc.stats.transientRetained > 0) {
+    console.error(`[runner] transient_retained=${inc.stats.transientRetained} (source temporarily unreadable; state not advanced, retried next pass)`);
+  }
   for (const [reason, count] of Object.entries(inc.stats.unsupported)) {
     console.error(`[runner] incremental_unsupported=${count} reason=${reason} (not skipped silently; sessions left unmarked)`);
   }

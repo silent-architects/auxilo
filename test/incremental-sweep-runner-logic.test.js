@@ -216,7 +216,7 @@ describe('processSession: transient failure never advances (D4)', () => {
     assert.deepEqual(h.ledger.sources.fake.sessions, {});
     assert.equal(h.stats.retained, 1);
     assert.equal(h.stats.incrementalSegments, 1, 'stops at the first transient failure');
-    assert.ok(!h.order.includes('dequeue'), 'queue file is retained');
+    assert.ok(h.order.includes('dequeue'), 'the queue file this run wrote is removed (F6), so --flush-pending cannot resubmit it');
   });
 
   it('a thrown upload error is transient too', async () => {

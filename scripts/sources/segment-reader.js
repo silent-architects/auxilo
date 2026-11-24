@@ -32,6 +32,7 @@ const DEFAULT_MAX_LINE_BYTES = 32 * 1024 * 1024;
 const DEFAULT_MAX_SEGMENTS = 3;
 const HEAD_BYTES = 4096;
 const ZST_UNSUPPORTED = 'zst_requires_node_22_15';
+const NOT_REGULAR_FILE = 'not_regular_file';
 const SEGMENT_SEPARATOR = '\n\n';
 const NL = 0x0a;
 
@@ -51,6 +52,12 @@ function sha256Hex(buf) {
 function openDecoded(filePath, codec, fromOffset, deps = {}) {
   const fsImpl = deps.fsImpl || fs;
   const zlibImpl = deps.zlibImpl || zlib;
+  // A stored path can later name a FIFO, device or directory: a read of one can
+  // block forever. Only regular files are read (stat; fakes without isFile pass).
+  try {
+    const st = fsImpl.statSync(filePath);
+    if (st && typeof st.isFile === 'function' && !st.isFile()) return { unsupported: NOT_REGULAR_FILE };
+  } catch { /* missing: the stream's own error path reports it as before */ }
   if (codec === 'zst') {
     if (typeof zlibImpl.createZstdDecompress !== 'function') return { unsupported: ZST_UNSUPPORTED };
     const raw = fsImpl.createReadStream(filePath);
@@ -342,6 +349,15 @@ async function readNewSegmentsOffset(adapter, sessionRef, state, opts = {}) {
     if (resetReason) fromOffset = 0;
   }
 
+  // A reset on a session that was already extracted (or began forward-only) must
+  // not re-extract it from byte 0: restart at the current end instead.
+  const forwardOnlyReset = async () => {
+    const st = await forwardOnlyStateOffset(sessionRef, { fsImpl: deps.fsImpl, zlibImpl: deps.zlibImpl });
+    if (st.unsupported) return { segments: [], state: prior || base, caughtUp: false, unsupported: st.unsupported };
+    return { segments: [], state: st, caughtUp: true, resetReason, resetForwardOnly: true };
+  };
+  if (resetReason && opts.resetPolicy === 'forward-only') return forwardOnlyReset();
+
   const run = async (from) => {
     const outcome = {};
     const segs = [];
@@ -363,6 +379,7 @@ async function readNewSegmentsOffset(adapter, sessionRef, state, opts = {}) {
   let { outcome, segs } = await run(fromOffset);
   if (outcome.offsetBeyondEof) {
     resetReason = resetReason || 'offset_beyond_eof';
+    if (opts.resetPolicy === 'forward-only') return forwardOnlyReset();
     fromOffset = 0;
     ({ outcome, segs } = await run(0));
   }

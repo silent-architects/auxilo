@@ -379,7 +379,9 @@ class DevinSource extends TranscriptSource {
 
     let cursor = prior ? prior.highWater : 0;
     let resetReason = null;
-    if (cursor > (maxPos === null ? 0 : maxPos)) { resetReason = 'highwater_beyond_max'; cursor = 0; }
+    // The mark is past the DB's current max (rows deleted or the DB replaced):
+    // clamp to the current end; never re-read from 0 (that re-extracts the session).
+    if (cursor > (maxPos === null ? 0 : maxPos)) { resetReason = 'highwater_beyond_max'; cursor = maxPos === null ? 0 : maxPos; }
 
     const segments = [];
     let cur = [];
@@ -439,6 +441,20 @@ class DevinSource extends TranscriptSource {
     const finalState = { kind: 'rowid', highWater: finalHigh };
     if (segments.length > 0) segments[segments.length - 1].nextState = { kind: 'rowid', highWater: finalHigh };
     return { segments, state: finalState, caughtUp, resetReason };
+  }
+
+  /**
+   * Cheap "nothing new" probe: the main DB file's size/mtime lag the WAL, so a
+   * session can look unchanged while rows are pending. True only when
+   * MAX(position) equals the stored high-water; any error answers false.
+   */
+  async isUnchanged(sessionRef, state) {
+    const dbPath = sessionRef && sessionRef.path;
+    if (!dbPath || !state || state.kind !== 'rowid') return false;
+    const res = this._selectRows(dbPath, 'SELECT MAX(position) AS m FROM messages');
+    if (!res.rows) return false;
+    const m = res.rows.length > 0 && res.rows[0] ? safeInt(Number(res.rows[0].m)) : null;
+    return (m === null ? 0 : m) === state.highWater;
   }
 
   /** Everything currently in the DB counts as handled: highWater = current max position. */

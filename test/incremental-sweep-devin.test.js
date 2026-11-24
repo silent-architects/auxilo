@@ -150,12 +150,21 @@ describe('devin rowid: only rows past highWater', () => {
     assert.equal(joined, rows.map((r) => `[user]: ${String(r.position).repeat(40)}`).join('\n\n'));
   });
 
-  it('a highWater beyond the table max (db recreated) resets to a full re-read', async () => {
-    const rows = [row(1, 'user_message', 'fresh')];
+  it('a highWater beyond the table max (db recreated) clamps to the current max, never re-reads from 0 (F4)', async () => {
+    const rows = [row(1, 'user_message', 'fresh'), row(2, 'agent_message', 'reply')];
     const { adapter } = devin(rows);
     const res = await adapter.readNewSegments(REF, { kind: 'rowid', highWater: 99 }, OPTS);
     assert.equal(res.resetReason, 'highwater_beyond_max');
-    assert.equal(texts(res), '[user]: fresh');
+    assert.equal(texts(res), '');
+    assert.deepEqual(res.state, { kind: 'rowid', highWater: 2 });
+    assert.equal(res.caughtUp, true);
+  });
+
+  it('isUnchanged compares MAX(position) with the stored mark and is false on a busy DB (F5)', async () => {
+    const { adapter } = devin([row(1, 'user_message', 'a'), row(2, 'user_message', 'b')]);
+    assert.equal(await adapter.isUnchanged(REF, { kind: 'rowid', highWater: 2 }), true);
+    assert.equal(await adapter.isUnchanged(REF, { kind: 'rowid', highWater: 1 }), false);
+    assert.equal(await adapter.isUnchanged(REF, { kind: 'offset', offset: 2 }), false);
   });
 });
 
