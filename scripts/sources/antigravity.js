@@ -29,7 +29,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { TranscriptSource } = require('./source.interface');
-const { normalizeJsonlLines, probeJsonl } = require('./generic-jsonl');
+const { normalizeJsonlLines, normalizeJsonlLine, probeJsonl, probeJsonlSession } = require('./generic-jsonl');
 
 class AntigravitySource extends TranscriptSource {
   static id = 'antigravity';
@@ -38,6 +38,8 @@ class AntigravitySource extends TranscriptSource {
 
   constructor(config = {}) {
     super(config);
+    /** Injectable fs for the one-time probe (tests). */
+    this.fsImpl = config.fsImpl || null;
     /** @type {string} Root brain dir holding per-conversation artifacts */
     this.dataDir = config.dataDir || path.join(os.homedir(), '.gemini', 'antigravity', 'brain');
   }
@@ -122,6 +124,21 @@ class AntigravitySource extends TranscriptSource {
         bytes: sessionRef.bytes,
       },
     };
+  }
+
+  /** INCREMENTAL-SWEEP: append-only JSONL, offset-resumable once the one-time probe passes. */
+  get offsetCapable() { return true; }
+
+  /** Same per-line normalization readSession applies (single source of truth). */
+  parseLine(line) { return normalizeJsonlLine(line); }
+
+  /** The whole-file 80% JSON probe, done once on entry to incremental mode. */
+  async probeSession(sessionRef) { return probeJsonlSession(this, sessionRef); }
+
+  /** Session id for a log path: <conversation>-<basename> (single-transcript incremental mode). */
+  sessionIdForPath(filePath) {
+    const conv = path.basename(path.dirname(path.dirname(path.dirname(filePath))));
+    return `${conv}-${path.basename(filePath, '.jsonl')}`;
   }
 
   /** Hook wiring (Antigravity hooks.json, Stop event) is the installer's job. */
