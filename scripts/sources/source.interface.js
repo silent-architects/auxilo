@@ -74,6 +74,15 @@ class TranscriptSource {
   /** @type {string} Semantic version of this adapter */
   static version = '0.0.0';
 
+  /**
+   * INCREMENTAL-SWEEP: true when this adapter can extract only what is new in a
+   * session since a stored per-session state (see readNewSegments). Default
+   * false: such adapters keep today's whole-session read and the
+   * AUXILO_MAX_SESSION_BYTES cap.
+   * @type {boolean}
+   */
+  get offsetCapable() { return false; }
+
   constructor(config = {}) {
     /** @type {string} Instance-level reference to the source type */
     this.type = this.constructor.id || config.type || 'abstract';
@@ -143,6 +152,74 @@ class TranscriptSource {
       throw new SessionTooLargeError(sessionRef, bytes === null ? -1 : bytes, maxBytes);
     }
     return this.readSession(sessionRef);
+  }
+
+  // ─── Incremental extraction contract (INCREMENTAL-SWEEP D2/D3/D3b) ────────
+  //
+  // offsetCapable adapters implement the uniform contract below. `state` is an
+  // opaque per-session value kept in lib/session-offsets.js:
+  //   {kind:'offset', offset, headSha, headLen, codec}  append-only JSONL
+  //   {kind:'hashes', seen:[16-hex...], docSha}          rewritten JSON documents
+  //   {kind:'rowid',  highWater}                         SQLite
+  // The runner treats every kind identically: scrub -> extract -> submit each
+  // segment, persist segment.nextState only after the segment is terminally
+  // handled, never advance on a transient failure.
+
+  /**
+   * Line parser for append-only JSONL adapters (kind 'offset'): turn one
+   * complete line into a text turn, or null to skip it. `ctx.isFirstRecord` is
+   * true for the first non-blank line of the file when reading from offset 0.
+   * @param {string} line
+   * @param {{isFirstRecord:boolean}} ctx
+   * @returns {string|null}
+   */
+  parseLine(line, ctx) { return null; }
+
+  /**
+   * Cheap gate run before a session first enters incremental mode (e.g. Codex
+   * refuses non-user threads). Return {ok:false, reason} to refuse.
+   * @returns {Promise<{ok:boolean, reason?:string}>}
+   */
+  async probeSession(sessionRef) { return { ok: true }; }
+
+  /**
+   * True when this session cannot be read by the whole-file readSession at any
+   * size (e.g. a compressed Codex rollout), so the runner must use the
+   * incremental path regardless of the size cap.
+   */
+  requiresIncremental(sessionRef) { return false; }
+
+  /** Session id for a transcript path (single-transcript incremental mode). */
+  sessionIdForPath(filePath) {
+    const base = require('path').basename(filePath);
+    return base.replace(/\.[^.]*$/, '');
+  }
+
+  /**
+   * Read what is new since `state`.
+   * @param {object} sessionRef
+   * @param {object|null} state  opaque stored state, or null on first read
+   * @param {{charBudget:number, maxSegments:number, maxBytes?:number}} opts
+   * @returns {Promise<{segments:Array<{text:string,nextState:object}>, state:object,
+   *   caughtUp:boolean, resetReason?:string, unsupported?:string}>}
+   *   `state` is the state after ALL returned segments; `unsupported` carries a
+   *   machine-readable reason (never a silent skip) and returns no segments.
+   */
+  async readNewSegments(sessionRef, state, opts = {}) {
+    if (!this.offsetCapable) {
+      return { segments: [], state: state || null, caughtUp: false, unsupported: 'not_incremental_capable' };
+    }
+    return require('./segment-reader').readNewSegmentsOffset(this, sessionRef, state, opts);
+  }
+
+  /**
+   * First-sight forward-only state: everything currently present counts as
+   * already handled, so only future additions are extracted. Returns a state
+   * object, or {unsupported}.
+   */
+  async forwardOnlyState(sessionRef, opts = {}) {
+    if (!this.offsetCapable) return { unsupported: 'not_incremental_capable' };
+    return require('./segment-reader').forwardOnlyStateOffset(sessionRef, opts);
   }
 
   /**

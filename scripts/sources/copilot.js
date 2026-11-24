@@ -122,6 +122,57 @@ class CopilotSource extends TranscriptSource {
     );
   }
 
+  /**
+   * One events.jsonl line -> {turn, selectedModel, sessionId, assistantModel}
+   * or null for a malformed / non-object line. Shared by readSession and the
+   * incremental segment reader (parseLine).
+   */
+  _parseEvent(line) {
+    let event;
+    try {
+      event = JSON.parse(line);
+    } catch {
+      return null; // one malformed line is skipped, not fatal to the session
+    }
+    if (!event || typeof event !== 'object') return null;
+    const data = event.data;
+    const type = event.type;
+    const out = { turn: null, selectedModel: null, sessionId: null, assistantModel: null };
+
+    if (type === 'session.start') {
+      if (data && typeof data.selectedModel === 'string' && data.selectedModel) out.selectedModel = data.selectedModel;
+      if (data && typeof data.sessionId === 'string' && data.sessionId) out.sessionId = data.sessionId;
+      return out;
+    }
+
+    if (type === 'user.message') {
+      if (data && typeof data.content === 'string' && data.content.length > 0) out.turn = `[user]: ${data.content}`;
+      return out;
+    }
+
+    if (type === 'assistant.message') {
+      if (data && typeof data.model === 'string' && data.model) out.assistantModel = data.model;
+      // Empty content = a pure tool-call turn (data.toolRequests[] carries
+      // the call instead) — no text to extract, not an empty turn.
+      if (data && typeof data.content === 'string' && data.content.length > 0) out.turn = `[assistant]: ${data.content}`;
+      return out;
+    }
+
+    // Every other type (session.*, hook.*, tool.*, system.message, the
+    // assistant.turn_start/turn_end markers, session.usage_checkpoint,
+    // session.shutdown, and anything not yet observed) is deliberately
+    // ignored — not conversation content.
+    return out;
+  }
+
+  /** INCREMENTAL-SWEEP: append-only events.jsonl, offset-resumable. */
+  get offsetCapable() { return true; }
+
+  parseLine(line) {
+    const parsed = this._parseEvent(line);
+    return parsed ? parsed.turn : null;
+  }
+
   async readSession(sessionRef) {
     try {
       return this._readSession(sessionRef);
@@ -151,49 +202,12 @@ class CopilotSource extends TranscriptSource {
 
     for (const line of raw.split(/\r?\n/)) {
       if (!line.trim()) continue;
-      let event;
-      try {
-        event = JSON.parse(line);
-      } catch {
-        continue; // one malformed line is skipped, not fatal to the session
-      }
-      if (!event || typeof event !== 'object') continue;
-      const data = event.data;
-      const type = event.type;
-
-      if (type === 'session.start') {
-        if (data && typeof data.selectedModel === 'string' && data.selectedModel) {
-          selectedModel = data.selectedModel;
-        }
-        if (data && typeof data.sessionId === 'string' && data.sessionId) {
-          sessionId = data.sessionId;
-        }
-        continue;
-      }
-
-      if (type === 'user.message') {
-        if (data && typeof data.content === 'string' && data.content.length > 0) {
-          turns.push(`[user]: ${data.content}`);
-        }
-        continue;
-      }
-
-      if (type === 'assistant.message') {
-        if (data && typeof data.model === 'string' && data.model) {
-          lastAssistantModel = data.model;
-        }
-        // Empty content = a pure tool-call turn (data.toolRequests[] carries
-        // the call instead) — no text to extract, not an empty turn.
-        if (data && typeof data.content === 'string' && data.content.length > 0) {
-          turns.push(`[assistant]: ${data.content}`);
-        }
-        continue;
-      }
-
-      // Every other type (session.*, hook.*, tool.*, system.message, the
-      // assistant.turn_start/turn_end markers, session.usage_checkpoint,
-      // session.shutdown, and anything not yet observed) is deliberately
-      // ignored — not conversation content.
+      const parsed = this._parseEvent(line);
+      if (!parsed) continue;
+      if (parsed.selectedModel) selectedModel = parsed.selectedModel;
+      if (parsed.sessionId) sessionId = parsed.sessionId;
+      if (parsed.assistantModel) lastAssistantModel = parsed.assistantModel;
+      if (parsed.turn !== null) turns.push(parsed.turn);
     }
 
     if (turns.length === 0) return null;

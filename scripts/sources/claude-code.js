@@ -102,6 +102,44 @@ class ClaudeCodeSource extends TranscriptSource {
     return results;
   }
 
+  /** INCREMENTAL-SWEEP: append-only JSONL, offset-resumable. */
+  get offsetCapable() { return true; }
+
+  /**
+   * One JSONL line -> `[role]: text` turn, or null (malformed / meta type / no
+   * text). The single source of truth for both readSession and the segment reader.
+   */
+  parseLine(line) {
+    try {
+      const entry = JSON.parse(line);
+      // Skip meta types — they don't contribute to the conversation
+      if (entry.type && !['user', 'assistant', 'system'].includes(entry.type)) return null;
+
+      const role = entry.message?.role || entry.role || entry.type || 'unknown';
+      const raw = entry.message?.content ?? entry.content;
+      if (raw == null) return null;
+
+      let text = '';
+      if (typeof raw === 'string') {
+        text = raw;
+      } else if (Array.isArray(raw)) {
+        // Concatenate text-like blocks. Skip tool_use/tool_result payloads
+        // and thinking blocks (internal reasoning, not conversation).
+        text = raw
+          .filter(b => b && (b.type === 'text' || b.type === 'input_text' || typeof b.text === 'string'))
+          .map(b => b.text || '')
+          .filter(Boolean)
+          .join('\n');
+      } else if (typeof raw === 'object' && typeof raw.text === 'string') {
+        text = raw.text;
+      }
+
+      return text.trim().length > 0 ? `[${role}]: ${text}` : null;
+    } catch {
+      return null; // malformed line
+    }
+  }
+
   /**
    * Read a session transcript. JSONL → plain "ROLE: text" blocks.
    */
@@ -122,36 +160,8 @@ class ClaudeCodeSource extends TranscriptSource {
     // We want user + assistant text content only, concatenated in order.
     const turns = [];
     for (const line of lines) {
-      try {
-        const entry = JSON.parse(line);
-        // Skip meta types — they don't contribute to the conversation
-        if (entry.type && !['user', 'assistant', 'system'].includes(entry.type)) continue;
-
-        const role = entry.message?.role || entry.role || entry.type || 'unknown';
-        const raw = entry.message?.content ?? entry.content;
-        if (raw == null) continue;
-
-        let text = '';
-        if (typeof raw === 'string') {
-          text = raw;
-        } else if (Array.isArray(raw)) {
-          // Concatenate text-like blocks. Skip tool_use/tool_result payloads
-          // and thinking blocks (internal reasoning, not conversation).
-          text = raw
-            .filter(b => b && (b.type === 'text' || b.type === 'input_text' || typeof b.text === 'string'))
-            .map(b => b.text || '')
-            .filter(Boolean)
-            .join('\n');
-        } else if (typeof raw === 'object' && typeof raw.text === 'string') {
-          text = raw.text;
-        }
-
-        if (text.trim().length > 0) {
-          turns.push(`[${role}]: ${text}`);
-        }
-      } catch {
-        // Skip malformed lines
-      }
+      const turn = this.parseLine(line);
+      if (turn !== null) turns.push(turn);
     }
 
     return {
